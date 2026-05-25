@@ -79,6 +79,64 @@ function diagLeaseSheet() {
   }
 }
 
+// 카테고리별 행수 내역: 원본행 / 업체명 없어 제외 / 완전중복 병합 / 최종 고유건
+function diagSyncCounts() {
+  for (const cat of CATEGORIES) {
+    const cfg = CONFIG[cat];
+    if (!cfg || cfg.kakaoOnly) continue;
+
+    let src;
+    try { src = openSpreadsheet(cfg); } catch (e) { Logger.log(cat + ': 원본 열기 실패 ' + e); continue; }
+
+    const sheets = [];
+    if (cfg.sheets && cfg.sheets.length) {
+      cfg.sheets.forEach(function (n) { sheets.push(src.getSheetByName(n)); });
+    } else if (cfg.gid != null) {
+      src.getSheets().forEach(function (s) { if (s.getSheetId() === cfg.gid) sheets.push(s); });
+    }
+
+    let total = 0, blank = 0, kept = 0;
+    const keys = {};
+
+    for (const sh of sheets) {
+      if (!sh) continue;
+      const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+      if (lastRow <= cfg.headerRow) continue;
+
+      const rawH = sh.getRange(cfg.headerRow, 1, 1, lastCol).getValues()[0];
+      const hmap = {};
+      for (let c = 0; c < rawH.length; c++) {
+        const k = normalizeHeader_(rawH[c]);
+        if (k && hmap[k] === undefined) hmap[k] = c;
+      }
+      const ci = function (name) { const i = hmap[normalizeHeader_(name)]; return i === undefined ? -1 : i; };
+
+      const vI = ci(cfg.vendorCol);
+      const fI = cfg.vendorColFallback ? ci(cfg.vendorColFallback) : -1;
+      const data = sh.getRange(cfg.headerRow + 1, 1, lastRow - cfg.headerRow, lastCol).getValues();
+
+      for (const row of data) {
+        total++;
+        let v = vI !== -1 ? String(row[vI] || '').trim() : '';
+        if (!v && fI !== -1) v = String(row[fI] || '').trim();
+        if (!v) { blank++; continue; }
+        kept++;
+        const obj = {};
+        for (const colName of cfg.displayCols) {
+          const idx = ci(colName);
+          let val = idx === -1 ? '' : row[idx];
+          if (val instanceof Date) val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
+          obj[colName] = val;
+        }
+        keys[dupKey_(cat, v, obj)] = true;
+      }
+    }
+
+    const unique = Object.keys(keys).length;
+    Logger.log(cat + ': 원본행=' + total + ' / 업체명없어제외=' + blank + ' / 완전중복병합=' + (kept - unique) + ' / 최종=' + unique);
+  }
+}
+
 function diagAccess() {
   const targets = [];
   targets.push(['인덱스 시트', INDEX_SS_ID]);
