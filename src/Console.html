@@ -105,6 +105,8 @@
     .slot-status.ok { color: #059669; }
     .slot-status.err { color: #dc2626; }
     .bgstatus { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
+    #stopBtn { margin-top: 10px; width: 100%; padding: 12px; font-size: 14px; font-weight: 700; color: #fff; background: #dc2626; border: 0; border-radius: 10px; cursor: pointer; }
+    #stopBtn:hover { background: #b91c1c; }
     #upBtn { margin-top: 16px; width: 100%; padding: 13px; font-size: 15px; font-weight: 700; color: #fff; background: var(--brand); border: 0; border-radius: 10px; cursor: pointer; }
     #upBtn:hover { background: var(--brand-d); }
     #upBtn:disabled { background: #9bb6e8; cursor: default; }
@@ -214,6 +216,7 @@
               <div id="bgStatus" class="bgstatus" style="display:none"></div>
               <div id="uploadAreas" class="loading"><span class="spin"></span>불러오는 중…</div>
               <button id="upBtn" onclick="runAll()" style="display:none">전체 처리</button>
+              <button id="stopBtn" onclick="stopAll()" style="display:none">⛔ 처리 중지</button>
               <div id="upResult"></div>
             </div>
           </div>
@@ -417,6 +420,7 @@
 
     if (queuedAny) {
       await gasRun('kakaoStartWorker', []);
+      document.getElementById('stopBtn').style.display = 'block';
       upShow('ok',
         '백그라운드 처리 시작 ✓  (AS 즉시 추가 ' + nf(totalAdded) + '건)\n' +
         '이제 창을 닫거나 폰을 꺼도 서버에서 끝까지 처리됩니다.\n' +
@@ -430,6 +434,21 @@
     }
   }
 
+  function stopAll() {
+    if (!confirm('진행 중인 백그라운드 처리를 중지할까요?\n(이미 추가된 행은 남습니다)')) return;
+    var sb = document.getElementById('stopBtn');
+    sb.disabled = true;
+    upShow('ok', '중지 요청 중… (현재 배치 끝나면 멈춥니다)');
+    google.script.run
+      .withSuccessHandler(function () {
+        upShow('ok', '중지 요청됨 ✓ 잠시 후 멈춥니다.\n잘못 올린 영역은 관리자에게 "초기화" 요청하거나 통합탭에서 해당 _출처 행을 지우세요.');
+        sb.style.display = 'none';
+        document.getElementById('upBtn').disabled = false;
+      })
+      .withFailureHandler(function (err) { sb.disabled = false; upShow('err', '중지 실패: ' + err.message); })
+      .kakaoStopAll();
+  }
+
   // 백그라운드 큐 상태 폴링 (창을 다시 열어도 동작)
   function startPolling() {
     if (POLLING) return;
@@ -441,6 +460,7 @@
       .withSuccessHandler(function (res) {
         if (res && res.ok) {
           renderBgStatus(res.jobs);
+          document.getElementById('stopBtn').style.display = res.active ? 'block' : 'none';
           res.jobs.forEach(function (j) {
             var s = JOB_MAP[j.jobId];
             if (!s) return;
@@ -450,6 +470,7 @@
           });
           if (!res.active) {
             POLLING = false;
+            document.getElementById('stopBtn').style.display = 'none';
             document.getElementById('upBtn').disabled = false;
             if (res.jobs.length) upShow('ok', '백그라운드 처리 완료 ✓\n(통합 탭은 다음 동기화 때 반영됩니다)');
             return;

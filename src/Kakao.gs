@@ -293,6 +293,15 @@ function kakaoWorker() {
     const tmp = ss.getSheetByName(KAKAO_TMP_TAB);
 
     while (Date.now() - startTime < BUDGET_MS) {
+      // 중지 요청 확인 (kakaoStopAll이 플래그를 세움)
+      if (props.getProperty('KAKAO_STOP')) {
+        props.deleteProperty('KAKAO_STOP');
+        props.deleteProperty(KAKAO_QUEUE_PROP);
+        deleteWorkerTriggers_();
+        if (tmp) tmp.clear();
+        Logger.log('kakaoWorker: 중지 요청으로 종료');
+        return;
+      }
       let queue = JSON.parse(props.getProperty(KAKAO_QUEUE_PROP) || '[]');
       let job = null;
       for (let i = 0; i < queue.length; i++) {
@@ -351,6 +360,62 @@ function kakaoQueueStatus() {
   const active = jobs.some(function (j) { return j.status !== 'done' && j.status !== 'error'; });
   const allDone = jobs.length > 0 && !active;
   return { ok: true, jobs: jobs, active: active, allDone: allDone };
+}
+
+// 진행 중인 백그라운드 업로드를 즉시 중지 (워커가 다음 배치에서 종료)
+function kakaoStopAll() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('KAKAO_STOP', '1');
+  props.deleteProperty(KAKAO_QUEUE_PROP);
+  deleteWorkerTriggers_();
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const tmp = ss.getSheetByName(KAKAO_TMP_TAB);
+    if (tmp) tmp.clear();
+  } catch (e) {}
+  return { ok: true, stopped: true };
+}
+
+// 잘못 올린 영역 되돌리기: 해당 방(roomType)으로 들어온 카톡 행 삭제 + 처리기록 초기화
+// (AI 영역 전용. AS는 원문시트라 별도)
+function resetKakaoRoom(roomType) {
+  try {
+    const src = KAKAO_SOURCES[roomType];
+    if (!src) return { ok: false, error: '알 수 없는 방: ' + roomType };
+    const cat = src.category;
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sheet = ss.getSheetByName(MASTER_TABS[cat] || cat);
+    let deleted = 0;
+
+    if (sheet && sheet.getLastRow() >= 2) {
+      const lastCol = sheet.getLastColumn();
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+      const sIdx = headers.indexOf('_출처');
+      if (sIdx !== -1) {
+        const prefix = '카톡:' + roomType;
+        const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
+        const keep = data.filter(r => String(r[sIdx] || '').indexOf(prefix) !== 0);
+        deleted = data.length - keep.length;
+        sheet.getRange(2, 1, data.length, lastCol).clearContent();
+        if (keep.length) sheet.getRange(2, 1, keep.length, lastCol).setValues(keep);
+      }
+    }
+
+    // 처리기록(_kakao_seen)에서 해당 방 제거
+    const seenSh = ss.getSheetByName(KAKAO_SEEN_TAB);
+    let seenRemoved = 0;
+    if (seenSh && seenSh.getLastRow() >= 2) {
+      const sdata = seenSh.getRange(2, 1, seenSh.getLastRow() - 1, 2).getValues();
+      const keep = sdata.filter(r => String(r[0]) !== roomType);
+      seenRemoved = sdata.length - keep.length;
+      seenSh.getRange(2, 1, sdata.length, 2).clearContent();
+      if (keep.length) seenSh.getRange(2, 1, keep.length, 2).setValues(keep);
+    }
+
+    return { ok: true, room: roomType, cat: cat, deletedRows: deleted, seenRemoved: seenRemoved };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
 }
 
 // ── 메시지 단위 중복 추적 (전체 TXT 재업로드 시 새 메시지만 처리) ──
