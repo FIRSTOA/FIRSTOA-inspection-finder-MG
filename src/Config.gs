@@ -17,8 +17,8 @@ const INDEX_DATA = '_idx_data';
 const INDEX_META = '_idx_meta';
 
 // === 통합시트(원본 통합 DB) 위치 ===
-// 전용 통합시트 링크를 받으면 이 값만 교체하면 된다. 기본은 인덱스와 동일 스프레드시트.
-const MASTER_SS_ID = INDEX_SS_ID;
+// 사람이 읽는 정규 통합 DB. 인덱스(_idx_*)와 분리된 전용 스프레드시트.
+const MASTER_SS_ID = '1qA9l4Xu2P8wQyNTJU_jgUq-zbKNb-_-4TtIsHs9rtDI';
 
 const CATEGORIES = ['불만', '미수', '초과', 'PC확장성', '복합기확장성', 'AS', '업체정보', '임대현황표', '재계약', '해지방어', '경영지원'];
 
