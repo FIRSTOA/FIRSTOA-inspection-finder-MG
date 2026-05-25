@@ -294,24 +294,41 @@
     var reader = new FileReader();
     reader.onload = function (ev) {
       var text = decodeUpload(ev.target.result);
-      upShow('ok', '적재 중… (대용량 AI 추출은 몇 분 걸릴 수 있습니다)');
+      upShow('ok', '분석 준비 중…');
       google.script.run
         .withSuccessHandler(function (res) {
-          btn.disabled = false;
-          if (res && res.ok) {
-            upShow('ok',
-              '완료 ✓\n탭: ' + res.tab + '  (방식: ' + res.mode + ')\n' +
-              '파싱 메시지: ' + res.parsed + '건\n추출 레코드: ' + res.records + '건\n' +
-              '신규 추가: ' + res.added + '건 / 중복 제외: ' + res.skipped + '건');
-          } else {
-            upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
-          }
+          if (!res || !res.ok) { btn.disabled = false; upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류')); return; }
+          runBatch(res, { added: 0, skipped: 0, records: 0 }, 0);
         })
         .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
-        .ingestKakaoUpload(room, team, text);
+        .kakaoUploadStart(room, team, text);
     };
     reader.onerror = function () { btn.disabled = false; upShow('err', '파일 읽기 실패'); };
     reader.readAsArrayBuffer(fileInput.files[0]);
+  }
+
+  // 배치 반복 처리 (멈춤 방지 + 진행률 표시)
+  function runBatch(meta, acc, i) {
+    var btn = document.getElementById('upBtn');
+    if (i >= meta.batches) {
+      btn.disabled = false;
+      upShow('ok',
+        '완료 ✓\n탭: ' + meta.tab + '  (방식: ' + meta.mode + ')\n' +
+        '총 메시지: ' + nf(meta.total) + '건\n추출 레코드: ' + nf(acc.records) + '건\n' +
+        '신규 추가: ' + nf(acc.added) + '건 / 중복 제외: ' + nf(acc.skipped) + '건');
+      return;
+    }
+    var pct = Math.round(i / meta.batches * 100);
+    upShow('ok', '처리 중… ' + (i + 1) + '/' + meta.batches + ' 배치 (' + pct + '%)  ·  추가 ' + nf(acc.added) + '건' +
+      (meta.mode === 'ai' ? '\nAI 추출이라 배치당 몇 초씩 걸립니다. 창을 닫지 마세요.' : ''));
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (!res || !res.ok) { btn.disabled = false; upShow('err', '배치 ' + (i + 1) + ' 실패: ' + (res && res.error ? res.error : '오류')); return; }
+        acc.added += (res.added || 0); acc.skipped += (res.skipped || 0); acc.records += (res.records || 0);
+        runBatch(meta, acc, i + 1);
+      })
+      .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '배치 ' + (i + 1) + ' 오류: ' + err.message + '\n(여기까지 추가 ' + nf(acc.added) + '건은 저장됨)'); })
+      .kakaoUploadBatch(i);
   }
 
   // 카톡 내보내기 인코딩 자동 판별 (PC=UTF-16, 모바일=UTF-8). BOM 기준.

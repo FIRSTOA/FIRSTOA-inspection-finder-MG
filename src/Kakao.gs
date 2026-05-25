@@ -39,21 +39,44 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
   const cat = src.category;
   if (!CONFIG[cat]) return { ok: false, error: '카테고리 미정의: ' + cat };
 
-  const messages = parseKakaoMessages_(txtContent);
+  let messages = parseKakaoMessages_(txtContent);
   if (!messages.length) {
     const head = String(txtContent || '').slice(0, 100).replace(/\n/g, '⏎');
     return { ok: false, error: '카톡 메시지 파싱 결과 0건 (수신 ' + String(txtContent || '').length + '자, 시작: "' + head + '")' };
   }
+  messages = filterKakaoMessages_(messages);
 
   const records = src.mode === 'rule'
     ? extractKakaoByRule_(cat, messages)
     : extractKakaoWithAI_(cat, messages, src.aiHint);
 
+  const r = appendKakaoRecords_(cat, roomType, teamLabel, records);
+  return {
+    ok: true, tab: r.tab, mode: src.mode,
+    parsed: messages.length, records: records.length,
+    added: r.added, skipped: r.skipped
+  };
+}
+
+// 사진/이모티콘/시스템 안내 등 추출 가치 없는 메시지 제거 (토큰·시간 절감)
+const KAKAO_NOISE = /^(사진( ?\d+장)?|동영상|이모티콘|음성메시지|보이스톡.*|페이스톡.*|삭제된 메시지입니다\.?|채팅방 관리자가.*)$/;
+function filterKakaoMessages_(messages) {
+  return messages.filter(function (m) {
+    const t = String(m.text || '').trim();
+    if (t.length < 2) return false;
+    if (KAKAO_NOISE.test(t)) return false;
+    return true;
+  });
+}
+
+// 추출된 레코드를 통합 탭에 중복 제거하며 추가. (시트의 현재 dupKey를 매번 다시 읽어 배치 간 중복도 거른다)
+function appendKakaoRecords_(cat, roomType, teamLabel, records) {
   const masterSs = SpreadsheetApp.openById(MASTER_SS_ID);
   const tabName = MASTER_TABS[cat] || cat;
   const sheet = ensureMasterTab_(masterSs, cat, tabName);
   const existing = loadDupKeys_(sheet);
   const headerCols = masterHeaders_(cat);
+  const srcLabel = '카톡:' + roomType + (teamLabel ? '(' + teamLabel + ')' : '');
 
   const newRows = [];
   for (const rec of records) {
@@ -65,7 +88,6 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
     existing[key] = true;
 
     const outRow = CONFIG[cat].displayCols.map(c => (obj[c] == null ? '' : obj[c]));
-    const srcLabel = '카톡:' + roomType + (teamLabel ? '(' + teamLabel + ')' : '');
     outRow.push(vendor, srcLabel, rec.raw || '', new Date(), key);
     newRows.push(outRow);
   }
@@ -74,16 +96,93 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
     const start = sheet.getLastRow() + 1;
     sheet.getRange(start, 1, newRows.length, headerCols.length).setValues(newRows);
   }
+  return { added: newRows.length, skipped: records.length - newRows.length, tab: tabName };
+}
 
-  return {
-    ok: true,
-    tab: tabName,
-    mode: src.mode,
-    parsed: messages.length,
-    records: records.length,
-    added: newRows.length,
-    skipped: records.length - newRows.length
-  };
+// ── 큰 파일용 청크 업로드 (멈춤/시간초과 방지) ──
+const KAKAO_TMP_TAB = '_kakao_tmp';
+
+// 1단계: 파싱·필터 후 임시 시트에 저장, 배치 수 반환
+function kakaoUploadStart(roomType, teamLabel, content) {
+  try {
+    const src = KAKAO_SOURCES[roomType];
+    if (!src) return { ok: false, error: '알 수 없는 카톡방 유형: ' + roomType };
+    const cat = src.category;
+    if (!CONFIG[cat]) return { ok: false, error: '카테고리 미정의: ' + cat };
+    if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
+
+    let messages = parseKakaoMessages_(String(content));
+    if (!messages.length) {
+      const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
+      return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
+    }
+    messages = filterKakaoMessages_(messages);
+    if (!messages.length) return { ok: false, error: '유효 메시지 0건 (사진/이모티콘 등만 있음)' };
+
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let tmp = ss.getSheetByName(KAKAO_TMP_TAB);
+    if (!tmp) { tmp = ss.insertSheet(KAKAO_TMP_TAB); tmp.hideSheet(); }
+    tmp.clear();
+    tmp.getRange(1, 1, 1, 3).setValues([['date', 'author', 'text']]);
+    const rows = messages.map(m => [m.date || '', m.author || '', m.text || '']);
+    const B = 5000;
+    for (let i = 0; i < rows.length; i += B) {
+      const slice = rows.slice(i, i + B);
+      tmp.getRange(2 + i, 1, slice.length, 3).setValues(slice);
+    }
+
+    const size = src.mode === 'rule' ? 1000 : KAKAO_AI_BATCH * 2;
+    const batches = Math.ceil(messages.length / size);
+    const job = {
+      roomType: roomType, teamLabel: teamLabel || '', cat: cat, mode: src.mode,
+      total: messages.length, size: size, batches: batches, ts: Date.now()
+    };
+    PropertiesService.getScriptProperties().setProperty('KAKAO_JOB', JSON.stringify(job));
+
+    return { ok: true, total: messages.length, batches: batches, mode: src.mode, tab: MASTER_TABS[cat] || cat };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// 2단계: 배치 단위로 추출·적재 (클라이언트가 0..batches-1 반복 호출)
+function kakaoUploadBatch(batchIndex) {
+  try {
+    const jobStr = PropertiesService.getScriptProperties().getProperty('KAKAO_JOB');
+    if (!jobStr) return { ok: false, error: '진행 중인 업로드 작업이 없습니다. 다시 시작하세요.' };
+    const job = JSON.parse(jobStr);
+
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const tmp = ss.getSheetByName(KAKAO_TMP_TAB);
+    if (!tmp) return { ok: false, error: '임시 데이터 없음. 다시 시작하세요.' };
+
+    const remaining = job.total - batchIndex * job.size;
+    if (remaining <= 0) return { ok: true, done: true, added: 0, skipped: 0, records: 0, tab: MASTER_TABS[job.cat] || job.cat, mode: job.mode };
+
+    const n = Math.min(job.size, remaining);
+    const vals = tmp.getRange(2 + batchIndex * job.size, 1, n, 3).getValues();
+    const messages = vals.map(r => ({ date: r[0], author: r[1], text: r[2] }));
+
+    const src = KAKAO_SOURCES[job.roomType];
+    const records = job.mode === 'rule'
+      ? extractKakaoByRule_(job.cat, messages)
+      : extractKakaoWithAI_(job.cat, messages, src && src.aiHint);
+
+    const r = appendKakaoRecords_(job.cat, job.roomType, job.teamLabel, records);
+
+    const done = (batchIndex + 1) >= job.batches;
+    if (done) {
+      try { tmp.clear(); } catch (e) {}
+      PropertiesService.getScriptProperties().deleteProperty('KAKAO_JOB');
+    }
+    return {
+      ok: true, done: done, processed: n, total: job.total,
+      records: records.length, added: r.added, skipped: r.skipped,
+      tab: r.tab, mode: job.mode
+    };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
 }
 
 // 규칙 기반 (AS 등 양식 메시지): "라벨: 값" 줄에서 업체명 + 표시컬럼을 뽑는다.
