@@ -10,15 +10,14 @@
  *      └─ doGet() search / detail
  */
 
-// === 인덱스(검색 캐시) 스프레드시트 ===
-const INDEX_SS_ID = '1ThRMARJpHlBk9W0J807W3QPvfsZ5mSBQn1kQ8o2rDY8';
+// === 통합시트 + 인덱스 위치 ===
+// 통합 탭(카테고리별 정규 DB)과 검색 인덱스(_idx_*)를 모두 "퍼스트전산 DB 통합시트"에 둔다.
+// (기존 GAS통합서칭 시트는 더 이상 사용하지 않음 → 삭제 가능)
+const MASTER_SS_ID = '1qA9l4Xu2P8wQyNTJU_jgUq-zbKNb-_-4TtIsHs9rtDI';
+const INDEX_SS_ID = MASTER_SS_ID;
 const INDEX_VENDORS = '_idx_vendors';
 const INDEX_DATA = '_idx_data';
 const INDEX_META = '_idx_meta';
-
-// === 통합시트(원본 통합 DB) 위치 ===
-// 사람이 읽는 정규 통합 DB. 인덱스(_idx_*)와 분리된 전용 스프레드시트.
-const MASTER_SS_ID = '1qA9l4Xu2P8wQyNTJU_jgUq-zbKNb-_-4TtIsHs9rtDI';
 
 const CATEGORIES = ['불만', '미수', '초과', 'PC확장성', '복합기확장성', 'AS', '업체정보', '임대현황표', '재계약', '해지방어', '경영지원'];
 
