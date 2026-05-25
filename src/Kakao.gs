@@ -573,8 +573,8 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
   const cfg = CONFIG[cat];
   const cols = cfg.displayCols;
 
-  // 레코드 스키마: 업체명(필수) + 원문근거 + 표시컬럼(선택은 nullable). strict 모드는 모든 키를 required에 둬야 함.
-  const props = { '업체명': { type: 'string' }, '원문근거': { type: ['string', 'null'] } };
+  // 레코드 스키마: 업체명(필수) + 표시컬럼(선택은 nullable). strict 모드는 모든 키를 required에 둬야 함.
+  const props = { '업체명': { type: 'string' } };
   for (const c of cols) props[c] = { type: ['string', 'null'] };
   const schema = {
     type: 'object',
@@ -584,7 +584,7 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
         items: {
           type: 'object',
           properties: props,
-          required: ['업체명', '원문근거'].concat(cols),
+          required: ['업체명'].concat(cols),
           additionalProperties: false
         }
       }
@@ -642,7 +642,7 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
     if (!vendor) continue;
     const obj = {};
     for (const c of cols) if (!isBlankVal_(r[c])) obj[c] = r[c];
-    out.push({ vendor: vendor, obj: obj, raw: isBlankVal_(r['원문근거']) ? '' : String(r['원문근거']) });
+    out.push({ vendor: vendor, obj: obj, raw: obj['원문'] || '' });
   }
   return out;
 }
@@ -681,7 +681,7 @@ function buildExtractSystemPrompt_(cat, cols, hint) {
     '- 사실 정보(연락처·날짜·금액·담당자·기종·코드 등): 대화에 실제로 있는 값만 쓰고 없으면 null. 지어내지 마라.',
     '- 분류·유형·항목·감정·요약·분석 성격의 항목(예: 불만유형, 불만항목, 고객감정상태, AI_*, 사실확인, 대안제시, 재발방지 등): 대화 내용을 근거로 네가 적극적으로 판단해 채워라. 명시돼 있지 않아도 맥락으로 추론 가능하면 채운다. 근거가 전혀 없을 때만 null.',
     '- 빈 값은 반드시 JSON null 로 두고 "null","없음" 같은 글자를 값으로 쓰지 마라.',
-    '- "원문근거" 항목에는, 이 레코드를 만든 근거가 된 카톡 원문 메시지를 요약하지 말고 그대로(가능하면 [날짜]·작성자 포함) 넣어라. 사람이 "무슨 내용에서 뽑았는지" 확인하는 용도다.'
+    '- 항목에 "원문"이 있으면, 그 레코드의 근거가 된 카톡 원문 메시지를 요약하지 말고 그대로(가능하면 작성자 포함) 넣어라. 사람이 "무슨 내용에서 뽑았는지" 확인하는 용도이므로 절대 null로 두지 마라.'
   ];
   if (hint) lines.push(hint);
   lines.push('결과는 records 배열로만 반환한다.');

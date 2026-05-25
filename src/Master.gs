@@ -146,8 +146,43 @@ function ensureMasterTab_(ss, cat, tabName) {
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, headerCols.length).setValues([headerCols]);
     sheet.setFrozenRows(1);
+    return sheet;
   }
+
+  // 헤더(displayCols)가 바뀌었으면 기존 데이터를 이름 기준으로 재정렬 (컬럼 추가/순서 변경 안전 반영)
+  const curCols = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const same = curCols.length === headerCols.length && headerCols.every((h, i) => curCols[i] === h);
+  if (!same) reconcileHeaders_(sheet, curCols, headerCols);
   return sheet;
+}
+
+// 기존 데이터를 헤더 이름 기준으로 새 헤더 순서에 맞춰 재배치 (신규 컬럼은 빈칸)
+function reconcileHeaders_(sheet, oldHeaders, newHeaders) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const data = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+
+  const idx = {};
+  oldHeaders.forEach((h, i) => { if (h && idx[h] === undefined) idx[h] = i; });
+
+  const remapped = data.map(row =>
+    newHeaders.map(h => {
+      const i = idx[h];
+      return (i === undefined || i >= row.length) ? '' : row[i];
+    })
+  );
+
+  sheet.clear();
+  sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+  sheet.setFrozenRows(1);
+  if (remapped.length) {
+    const BATCH = 10000;
+    for (let i = 0; i < remapped.length; i += BATCH) {
+      const slice = remapped.slice(i, i + BATCH);
+      sheet.getRange(2 + i, 1, slice.length, newHeaders.length).setValues(slice);
+    }
+  }
+  Logger.log('헤더 재정렬: "' + sheet.getName() + '" ' + oldHeaders.length + '→' + newHeaders.length + '열, ' + remapped.length + '행');
 }
 
 function loadDupKeys_(sheet) {
