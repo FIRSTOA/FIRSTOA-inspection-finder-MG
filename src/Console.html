@@ -86,6 +86,11 @@
     .btn-line { background: #fff; color: var(--ink); border-color: var(--line); }
     .btn-line:hover { border-color: #cbd5e1; background: #f8fafc; }
 
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .chip { padding: 9px 18px; font-size: 14px; font-weight: 600; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: var(--muted); cursor: pointer; transition: all .12s; font-family: inherit; }
+    .chip:hover { border-color: var(--brand); }
+    .chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
     .masterbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; background: linear-gradient(135deg,#1d4ed8,#2563eb); border-radius: 14px; color: #fff; margin-bottom: 22px; box-shadow: var(--shadow); }
     .masterbar .t { font-size: 13px; opacity: .85; }
     .masterbar .n { font-size: 18px; font-weight: 700; margin-top: 2px; }
@@ -190,8 +195,13 @@
             <div class="bd pad">
               <label for="room">카톡방 유형</label>
               <select id="room"></select>
-              <label for="team">담당팀 (선택)</label>
-              <input type="text" id="team" placeholder="예: A / B / C / D">
+              <label>담당팀 (복수 선택 가능, 선택)</label>
+              <div id="teamChips" class="chips">
+                <button type="button" class="chip" data-team="A" onclick="toggleChip(this)">A</button>
+                <button type="button" class="chip" data-team="B" onclick="toggleChip(this)">B</button>
+                <button type="button" class="chip" data-team="C" onclick="toggleChip(this)">C</button>
+                <button type="button" class="chip" data-team="D" onclick="toggleChip(this)">D</button>
+              </div>
               <label for="file">TXT 파일</label>
               <input type="file" id="file" accept=".txt,text/plain">
               <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량은 시간이 걸릴 수 있습니다.</div>
@@ -281,9 +291,15 @@
   // 업로드
   function upShow(cls, msg) { var r = document.getElementById('upResult'); r.className = cls; r.textContent = msg; r.style.display = 'block'; }
 
+  function toggleChip(el) { el.classList.toggle('on'); }
+  function getTeams() {
+    var on = document.querySelectorAll('#teamChips .chip.on');
+    return Array.prototype.map.call(on, function (c) { return c.getAttribute('data-team'); }).join(',');
+  }
+
   function doUpload() {
     var room = document.getElementById('room').value;
-    var team = document.getElementById('team').value.trim();
+    var team = getTeams();
     var fileInput = document.getElementById('file');
     if (!fileInput.files.length) { upShow('err', 'TXT 파일을 선택하세요.'); return; }
 
