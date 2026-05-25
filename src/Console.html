@@ -216,6 +216,7 @@
 
 <script>
   var TITLES = { 1: '대시보드', 2: '원본 DB', 3: '카톡 업로드' };
+  var ROOM_MODE = {};
 
   function showTab(n) {
     [1,2,3].forEach(function (i) {
@@ -268,12 +269,15 @@
     document.getElementById('sources').innerHTML = s;
 
     // 탭3 드롭다운
+    ROOM_MODE = {};
     var sel = document.getElementById('room');
     sel.innerHTML = '';
     data.kakaoTypes.forEach(function (t) {
+      ROOM_MODE[t.type] = t.mode;
+      var label = t.mode === 'asform' ? '양식 → AS시트' : (t.mode === 'rule' ? '양식' : 'AI');
       var o = document.createElement('option');
       o.value = t.type;
-      o.textContent = t.type + ' (' + (t.mode === 'rule' ? '양식' : 'AI') + ')';
+      o.textContent = t.type + ' (' + label + ')';
       sel.appendChild(o);
     });
   }
@@ -310,6 +314,27 @@
     var reader = new FileReader();
     reader.onload = function (ev) {
       var text = decodeUpload(ev.target.result);
+
+      // AS는 전용 양식 파서로 AS 원문시트에 직접 적재
+      if (ROOM_MODE[room] === 'asform') {
+        upShow('ok', 'AS 양식 추출·적재 중…');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            btn.disabled = false;
+            if (res && res.ok) {
+              upShow('ok',
+                '완료 ✓\n적재처: ' + res.tab + '\n파싱 메시지: ' + nf(res.parsed) + '건\n' +
+                'AS 양식: ' + nf(res.records) + '건\n신규 추가: ' + nf(res.added) + '건 / 중복 제외: ' + nf(res.skipped) + '건\n' +
+                '(통합 AS 탭은 다음 동기화 때 반영됩니다)');
+            } else {
+              upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
+            }
+          })
+          .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
+          .ingestASFormsUpload(text);
+        return;
+      }
+
       upShow('ok', '분석 준비 중…');
       google.script.run
         .withSuccessHandler(function (res) {

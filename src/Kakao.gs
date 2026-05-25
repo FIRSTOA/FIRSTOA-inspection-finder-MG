@@ -14,7 +14,6 @@
 // 카톡방 유형 → 대상 통합 카테고리 + 추출 방식 (+ AI 힌트)
 const KAKAO_SOURCES = {
   '불만':     { category: '불만',     mode: 'ai' },
-  'AS':       { category: 'AS',       mode: 'rule' },
   '미수':     { category: '미수',     mode: 'ai' },
   '재계약':   {
     category: '재계약', mode: 'ai',
@@ -25,6 +24,7 @@ const KAKAO_SOURCES = {
   '해지방어': { category: '해지방어', mode: 'ai' },
   '경영지원': { category: '경영지원', mode: 'ai' }
 };
+// 주: AS는 AI 경로가 아니라 전용 양식 파서(ingestASFormsUpload)로 AS 원문시트에 직접 적재한다.
 
 // 카톡 AI 추출 모델. GPT-5 계열은 호출부(callOpenAIExtract_)가 자동으로 파라미터를 맞춘다.
 const KAKAO_AI_MODEL = 'gpt-5.4-mini';
@@ -238,6 +238,123 @@ function appendSeenHashes_(room, hashes) {
   }
   const rows = hashes.map(h => [room, h]);
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, 2).setValues(rows);
+}
+
+// ── AS 전용: 카톡 "구분:AS" 양식을 규칙 파싱해 AS 원문시트에 직접 적재 (AI 미사용) ──
+// 흐름: 카톡 TXT → 양식 추출 → AS 원문시트 입력 → (동기화 시) 통합 AS 탭으로 미러
+function ingestASFormsUpload(content) {
+  try {
+    if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
+    const messages = parseKakaoMessages_(String(content));
+    if (!messages.length) {
+      const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
+      return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
+    }
+    const records = extractASForms_(messages);
+    if (!records.length) return { ok: false, error: 'AS 양식(구분:AS) 메시지를 찾지 못했습니다.', parsed: messages.length };
+    const r = appendASToSheet_(records);
+    return { ok: true, tab: 'AS 원문시트', parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function extractASForms_(messages) {
+  const out = [];
+  for (const m of messages) {
+    const content = m.text || '';
+    if (content.indexOf('구분: AS') < 0 && content.indexOf('구분:AS') < 0 &&
+        content.indexOf('구분: A/S') < 0 && content.indexOf('구분:A/S') < 0) continue;
+
+    const f = extractASFields_(content);
+    const vendor = f['업체명'];
+    if (!vendor || vendor.length < 2 || vendor === '부서명 :' || vendor === '부서명:') continue;
+
+    out.push({
+      'AS날짜': m.date || '',
+      '작성자': String(m.author || '').replace(/님$/, ''),
+      '업체명': vendor,
+      '지역': f['지역'] || '',
+      '등급': f['등급'] || '',
+      '모델명': f['모델명'] || '',
+      '시리얼넘버': f['시리얼넘버'] || '',
+      '자산기번': f['자산기번'] || '',
+      '내용': f['내용'] || '',
+      '처리내용': f['처리내용'] || ''
+    });
+  }
+  return out;
+}
+
+function extractASFields_(content) {
+  const f = {};
+  f['업체명'] = extractASField_(content, '업체명', false);
+  f['지역'] = extractASField_(content, '지역', false);
+  f['모델명'] = extractASField_(content, '모델명', false);
+  f['시리얼넘버'] = extractASField_(content, '시리얼넘버', false);
+  f['자산기번'] = extractASField_(content, '자산기번', false);
+  f['내용'] = extractASField_(content, '내용', true);
+  f['처리내용'] = extractASField_(content, '처리내용', true);
+
+  const gm = content.match(/등급\s*:?\s*\(?\s*([^),\n\r]+?)\s*[,)\r\n]/);
+  if (gm) {
+    const v = gm[1].trim();
+    if (v && v !== '1 , 2 , 3' && v !== '1,2,3' && !/^\d?\s*,\s*\d/.test(v)) f['등급'] = v;
+  }
+  return f;
+}
+
+function extractASField_(content, label, multiline) {
+  const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    '(?:^|[\\r\\n])' + escLabel + '\\s*:?\\s*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?:|-{5,}|※|\\d+\\.\\s*[가-힣]+:))',
+    ''
+  );
+  const match = content.match(pattern);
+  if (!match) return '';
+  const val = match[1].trim();
+  if (!val) return '';
+  if (/^(부서명|지역|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|특이사항)\s*:?\s*$/.test(val)) return '';
+  return multiline ? val : val.split('\n')[0].trim();
+}
+
+function appendASToSheet_(records) {
+  const cfg = CONFIG['AS'];
+  const ss = SpreadsheetApp.openById(cfg.ssId);
+  const sheet = ss.getSheetByName(cfg.sheets[0]);
+  if (!sheet) return { added: 0, skipped: records.length, error: 'AS 시트 없음' };
+
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  const keyCols = ['AS날짜', '업체명', '시리얼넘버', '모델명', '작성자'];
+  const norm = v => (v instanceof Date) ? Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd') : String(v || '').trim();
+  const keyOf = o => keyCols.map(k => norm(o[k])).join('|');
+
+  const existing = {};
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const idx = {};
+    keyCols.forEach(k => { idx[k] = headers.indexOf(k); });
+    const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    for (const row of data) {
+      const o = {};
+      keyCols.forEach(k => { o[k] = idx[k] >= 0 ? row[idx[k]] : ''; });
+      existing[keyOf(o)] = true;
+    }
+  }
+
+  const newRows = [];
+  for (const rec of records) {
+    const k = keyOf(rec);
+    if (existing[k]) continue;
+    existing[k] = true;
+    newRows.push(headers.map(h => (rec[h] != null ? rec[h] : '')));
+  }
+
+  if (newRows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, lastCol).setValues(newRows);
+  }
+  return { added: newRows.length, skipped: records.length - newRows.length };
 }
 
 // 규칙 기반 (AS 등 양식 메시지): "라벨: 값" 줄에서 업체명 + 표시컬럼을 뽑는다.

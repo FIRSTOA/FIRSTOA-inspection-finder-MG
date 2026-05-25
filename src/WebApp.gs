@@ -43,9 +43,11 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// 업로드 화면용: 지원 카톡방 유형 목록
+// 업로드 화면용: 지원 카톡방 유형 목록 (AS는 전용 양식 파서로 별도 처리)
 function getKakaoRoomTypes() {
-  return Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
+  const list = Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
+  list.unshift({ type: 'AS', mode: 'asform' });
+  return list;
 }
 
 // 관리 콘솔용 데이터: 마스터 링크 + 카테고리별 원본/통합 링크·건수 + 카톡방 목록
