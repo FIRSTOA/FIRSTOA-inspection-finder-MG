@@ -51,6 +51,8 @@ const CONFIG = {
     headerRow: 2,
     vendorCol: '업체명',
     metaFields: { date: '날짜' },
+    // 카톡(LLM) 적재 시 시트와 겹침 방지용 중복키: 업체명 + 날짜
+    dedupKeyFields: ['날짜'],
     displayCols: [
       '날짜', '작성자', '접수/처리', '등급',
       '거래처담당자', '거래처연락처',
@@ -241,9 +243,10 @@ function normalizeHeader_(s) {
 }
 
 // 같은 업체 + 같은 표시값이면 동일 레코드로 간주 (시트/카톡 병합 시 중복 제거 키)
+// dedupKeyFields가 있으면 그 항목만으로 키를 만든다 (예: 불만 = 업체명+날짜).
 function dupKey_(cat, vendor, obj) {
   var parts = [String(vendor || '').trim()];
-  var cols = CONFIG[cat].displayCols;
+  var cols = CONFIG[cat].dedupKeyFields || CONFIG[cat].displayCols;
   for (var i = 0; i < cols.length; i++) {
     var v = obj[cols[i]];
     parts.push(v == null ? '' : String(v).trim());
