@@ -40,7 +40,10 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
   if (!CONFIG[cat]) return { ok: false, error: '카테고리 미정의: ' + cat };
 
   const messages = parseKakaoMessages_(txtContent);
-  if (!messages.length) return { ok: false, error: '카톡 메시지 파싱 결과 0건' };
+  if (!messages.length) {
+    const head = String(txtContent || '').slice(0, 100).replace(/\n/g, '⏎');
+    return { ok: false, error: '카톡 메시지 파싱 결과 0건 (수신 ' + String(txtContent || '').length + '자, 시작: "' + head + '")' };
+  }
 
   const records = src.mode === 'rule'
     ? extractKakaoByRule_(cat, messages)

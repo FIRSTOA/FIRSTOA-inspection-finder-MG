@@ -92,7 +92,7 @@ function getConsoleData() {
 function ingestKakaoUpload(roomType, teamLabel, content) {
   try {
     if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
-    return ingestKakaoTxt(roomType, teamLabel || '', String(content));
+    return ingestKakaoTxt(roomType, String(content), teamLabel || '');
   } catch (err) {
     return { ok: false, error: err.toString() };
   }
