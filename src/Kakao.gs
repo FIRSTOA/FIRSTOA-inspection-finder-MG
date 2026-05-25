@@ -26,9 +26,9 @@ const KAKAO_SOURCES = {
   '경영지원': { category: '경영지원', mode: 'ai' }
 };
 
-// 카톡 AI 추출 모델. 분류·요약 품질이 중요하면 'gpt-4o'(권장), 비용 최소화는 'gpt-4o-mini'.
-const KAKAO_AI_MODEL = 'gpt-4o';
-const KAKAO_AI_MAX_TOKENS = 12000;
+// 카톡 AI 추출 모델. GPT-5 계열은 호출부(callOpenAIExtract_)가 자동으로 파라미터를 맞춘다.
+const KAKAO_AI_MODEL = 'gpt-5.4-mini';
+const KAKAO_AI_MAX_TOKENS = 16000;
 const KAKAO_AI_BATCH = 40; // 한 번에 보내는 메시지 수
 
 function ingestKakaoTxt(roomType, txtContent, teamLabel) {
@@ -323,8 +323,6 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
 
   const payload = {
     model: KAKAO_AI_MODEL,
-    temperature: 0,
-    max_tokens: KAKAO_AI_MAX_TOKENS,
     messages: [
       { role: 'system', content: buildExtractSystemPrompt_(cat, cols, hint) },
       { role: 'user', content: userText }
@@ -334,6 +332,13 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
       json_schema: { name: 'kakao_records', strict: true, schema: schema }
     }
   };
+  // GPT-5/o 계열은 max_completion_tokens 사용 + temperature 고정(기본값만 허용)
+  if (/^(gpt-5|o\d)/.test(KAKAO_AI_MODEL)) {
+    payload.max_completion_tokens = KAKAO_AI_MAX_TOKENS;
+  } else {
+    payload.max_tokens = KAKAO_AI_MAX_TOKENS;
+    payload.temperature = 0;
+  }
 
   const res = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post',
