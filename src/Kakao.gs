@@ -231,6 +231,8 @@ function parseKakaoMessages_(txt) {
   const dateBar = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/;
   const mobile = /^\[([^\]]+)\]\s*\[(?:오전|오후)?\s*\d{1,2}:\d{2}\]\s*([\s\S]*)$/;
   const pc = /^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(?:오전|오후)?\s*\d{1,2}:\d{2},\s*([^:]+?)\s*:\s*([\s\S]*)$/;
+  // 2024년 1월 5일 오후 3:24, 홍길동 : 내용  (iOS 등 "년월일 + 이름:내용" 한 줄 형식)
+  const ymd = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(?:오전|오후)?\s*\d{1,2}:\d{2},\s*([^:]+?)\s*:\s*([\s\S]*)$/;
 
   const out = [];
   let curDate = '';
@@ -243,6 +245,13 @@ function parseKakaoMessages_(txt) {
     const pcm = line.match(pc);
     if (pcm) {
       last = { date: pcm[1] + '-' + pad2_(pcm[2]) + '-' + pad2_(pcm[3]), author: pcm[4].trim(), text: pcm[5].trim() };
+      out.push(last);
+      continue;
+    }
+
+    const ym = line.match(ymd);
+    if (ym) {
+      last = { date: ym[1] + '-' + pad2_(ym[2]) + '-' + pad2_(ym[3]), author: ym[4].trim(), text: ym[5].trim() };
       out.push(last);
       continue;
     }
