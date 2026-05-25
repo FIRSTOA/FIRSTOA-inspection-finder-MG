@@ -3,137 +3,261 @@
 <head>
   <base target="_top">
   <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <style>
+    :root {
+      --bg: #f8fafc; --panel: #ffffff; --line: #e8edf3;
+      --ink: #0f172a; --muted: #64748b; --faint: #94a3b8;
+      --brand: #2563eb; --brand-d: #1d4ed8; --brand-soft: #eef4ff;
+      --side: #0b1220; --side-2: #111c30; --side-ink: #cbd5e1; --side-active: #1e3a8a;
+      --ok-bg:#ecfdf5; --ok-bd:#a7f3d0; --ok-ink:#065f46;
+      --err-bg:#fef2f2; --err-bd:#fecaca; --err-ink:#991b1b;
+      --shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.06);
+    }
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; margin: 0; color: #1a202c; background: #f7fafc; }
-    header { background: #2b6cb0; color: #fff; padding: 16px 20px; }
-    header h1 { font-size: 18px; margin: 0; }
-    header p { font-size: 12px; margin: 4px 0 0; opacity: .85; }
-    .tabs { display: flex; background: #fff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 5; }
-    .tabs button { flex: 1; padding: 14px 8px; font-size: 14px; font-weight: 600; border: 0; background: none; color: #718096; cursor: pointer; border-bottom: 3px solid transparent; }
-    .tabs button.active { color: #2b6cb0; border-bottom-color: #2b6cb0; }
-    main { max-width: 760px; margin: 0 auto; padding: 18px; }
-    .panel { display: none; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.01em;
+    }
+    .app { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .side { width: 248px; background: var(--side); color: var(--side-ink); flex-shrink: 0; display: flex; flex-direction: column; }
+    .brand { padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .brand .logo { display: flex; align-items: center; gap: 10px; }
+    .brand .mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg,#3b82f6,#1d4ed8); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 15px; }
+    .brand .name { font-weight: 700; color: #fff; font-size: 15px; line-height: 1.2; }
+    .brand .sub { font-size: 11px; color: var(--faint); margin-top: 2px; }
+    nav { padding: 14px 12px; flex: 1; }
+    nav .grp { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #5b6b82; padding: 10px 12px 6px; }
+    nav button { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px; margin: 2px 0; border: 0; background: none; color: var(--side-ink); font-size: 14px; font-weight: 500; border-radius: 9px; cursor: pointer; text-align: left; transition: background .12s, color .12s; }
+    nav button:hover { background: var(--side-2); color: #fff; }
+    nav button.active { background: var(--side-active); color: #fff; }
+    nav button svg { width: 18px; height: 18px; flex-shrink: 0; opacity: .9; }
+    .side .foot { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,.07); font-size: 11px; color: var(--faint); }
+
+    /* Main */
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar { background: var(--panel); border-bottom: 1px solid var(--line); padding: 0 28px; height: 62px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    .topbar h1 { font-size: 17px; font-weight: 700; margin: 0; }
+    .userchip { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; }
+    .userchip .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+    .content { padding: 26px 28px 60px; max-width: 1080px; width: 100%; }
+
+    .panel { display: none; animation: fade .18s ease; }
     .panel.active { display: block; }
-    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
-    .card h2 { font-size: 15px; margin: 0 0 10px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #edf2f7; vertical-align: top; }
-    th { color: #718096; font-weight: 600; font-size: 12px; }
-    td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    a.btn, button.btn { display: inline-block; padding: 6px 12px; font-size: 13px; font-weight: 600; border-radius: 6px; text-decoration: none; cursor: pointer; border: 0; }
-    .btn-primary { background: #2b6cb0; color: #fff; }
-    .btn-ghost { background: #edf2f7; color: #2b6cb0; }
-    .big { display: block; width: 100%; text-align: center; padding: 14px; font-size: 16px; }
-    .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #edf2f7; color: #4a5568; margin-left: 6px; }
-    .tag.kakao { background: #fef3c7; color: #92400e; }
-    .muted { color: #a0aec0; }
-    .sheets { color: #4a5568; font-size: 12px; }
-    label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; }
-    select, input[type=text] { width: 100%; padding: 10px; font-size: 15px; border: 1px solid #cbd5e0; border-radius: 6px; }
-    input[type=file] { margin-top: 6px; }
-    #upBtn { margin-top: 20px; width: 100%; padding: 13px; font-size: 16px; font-weight: 600; color: #fff; background: #2b6cb0; border: 0; border-radius: 6px; cursor: pointer; }
-    #upBtn:disabled { background: #9bb6d2; }
-    #upResult { margin-top: 18px; padding: 13px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; display: none; }
-    #upResult.ok { background: #e6f4ea; border: 1px solid #b7e1c4; }
-    #upResult.err { background: #fdecea; border: 1px solid #f5c2bd; }
-    .hint { color: #a0aec0; font-size: 12px; margin-top: 4px; }
-    .loading { text-align: center; color: #a0aec0; padding: 30px; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    /* KPI */
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+    .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); }
+    .kpi .l { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+    .kpi .v { font-size: 26px; font-weight: 800; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    .kpi .v small { font-size: 13px; font-weight: 600; color: var(--faint); margin-left: 3px; }
+
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin-bottom: 18px; overflow: hidden; }
+    .card .hd { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+    .card .hd h2 { font-size: 14.5px; font-weight: 700; margin: 0; }
+    .card .hd .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .card .bd { padding: 6px 8px 8px; }
+    .card .bd.pad { padding: 20px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    tr:last-child td { border-bottom: 0; }
+    th { color: var(--faint); font-weight: 600; font-size: 11.5px; letter-spacing: .03em; text-transform: uppercase; }
+    tbody tr:hover { background: #fbfcfe; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+    .catname { font-weight: 600; }
+
+    .badge { display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+    .badge.sheet { background: var(--brand-soft); color: var(--brand-d); }
+    .badge.kakao { background: #fff7ed; color: #c2410c; }
+    .muted { color: var(--faint); }
+    .sheets { color: var(--muted); font-size: 12.5px; }
+
+    a.btn, button.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 13px; font-weight: 600; border-radius: 8px; text-decoration: none; cursor: pointer; border: 1px solid transparent; transition: all .12s; font-family: inherit; }
+    .btn-primary { background: var(--brand); color: #fff; }
+    .btn-primary:hover { background: var(--brand-d); }
+    .btn-soft { background: var(--brand-soft); color: var(--brand-d); }
+    .btn-soft:hover { background: #e0ebff; }
+    .btn-line { background: #fff; color: var(--ink); border-color: var(--line); }
+    .btn-line:hover { border-color: #cbd5e1; background: #f8fafc; }
+
+    .masterbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; background: linear-gradient(135deg,#1d4ed8,#2563eb); border-radius: 14px; color: #fff; margin-bottom: 22px; box-shadow: var(--shadow); }
+    .masterbar .t { font-size: 13px; opacity: .85; }
+    .masterbar .n { font-size: 18px; font-weight: 700; margin-top: 2px; }
+    .masterbar a { background: rgba(255,255,255,.16); color:#fff; backdrop-filter: blur(4px); }
+    .masterbar a:hover { background: rgba(255,255,255,.26); }
+
+    label { display: block; font-weight: 600; margin: 18px 0 7px; font-size: 13.5px; }
+    select, input[type=text] { width: 100%; padding: 11px 12px; font-size: 14.5px; border: 1px solid #cbd5e1; border-radius: 9px; font-family: inherit; background: #fff; color: var(--ink); }
+    select:focus, input[type=text]:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    input[type=file] { margin-top: 6px; font-size: 13px; }
+    #upBtn { margin-top: 22px; width: 100%; padding: 13px; font-size: 15px; font-weight: 700; color: #fff; background: var(--brand); border: 0; border-radius: 10px; cursor: pointer; transition: background .12s; }
+    #upBtn:hover { background: var(--brand-d); }
+    #upBtn:disabled { background: #9bb6e8; cursor: default; }
+    #upResult { margin-top: 18px; padding: 14px 16px; border-radius: 10px; font-size: 13.5px; white-space: pre-wrap; display: none; line-height: 1.55; }
+    #upResult.ok { background: var(--ok-bg); border: 1px solid var(--ok-bd); color: var(--ok-ink); }
+    #upResult.err { background: var(--err-bg); border: 1px solid var(--err-bd); color: var(--err-ink); }
+    .hint { color: var(--faint); font-size: 12.5px; margin-top: 6px; line-height: 1.5; }
+    .loading { text-align: center; color: var(--faint); padding: 36px; font-size: 13.5px; }
+    .spin { display:inline-block; width:16px; height:16px; border:2px solid #dbe3ee; border-top-color: var(--brand); border-radius:50%; animation: sp .7s linear infinite; vertical-align:-3px; margin-right:8px; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+
+    @media (max-width: 760px) {
+      .app { flex-direction: column; }
+      .side { width: 100%; flex-direction: row; align-items: center; overflow-x: auto; }
+      .brand { border: 0; padding: 12px 14px; }
+      .brand .sub { display: none; }
+      nav { display: flex; padding: 8px; }
+      nav .grp, .side .foot { display: none; }
+      nav button { width: auto; white-space: nowrap; }
+      .content { padding: 18px 16px 50px; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .topbar { padding: 0 16px; }
+      .masterbar { flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>퍼스트전산 통합 DB</h1>
-    <p id="userline">데이터 중앙 관리 콘솔</p>
-  </header>
-
-  <nav class="tabs">
-    <button id="t1" class="active" onclick="showTab(1)">통합시트</button>
-    <button id="t2" onclick="showTab(2)">원본 DB</button>
-    <button id="t3" onclick="showTab(3)">카톡 업로드</button>
-  </nav>
-
-  <main>
-    <!-- 탭 1: 통합시트 -->
-    <section id="p1" class="panel active">
-      <div class="card">
-        <h2>통합(마스터) 시트</h2>
-        <a id="masterLink" class="btn btn-primary big" href="#" target="_blank">통합시트 열기</a>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="logo">
+          <div class="mark">F</div>
+          <div>
+            <div class="name">퍼스트전산</div>
+            <div class="sub">통합 DB 콘솔</div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <h2>카테고리별 현황</h2>
-        <div id="catCounts" class="loading">불러오는 중…</div>
-      </div>
-    </section>
+      <nav>
+        <div class="grp">관리</div>
+        <button id="t1" class="active" onclick="showTab(1)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          대시보드
+        </button>
+        <button id="t2" onclick="showTab(2)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+          원본 DB
+        </button>
+        <button id="t3" onclick="showTab(3)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+          카톡 업로드
+        </button>
+      </nav>
+      <div class="foot">© 퍼스트전산</div>
+    </aside>
 
-    <!-- 탭 2: 원본 DB -->
-    <section id="p2" class="panel">
-      <div class="card">
-        <h2>원본 DB 목록</h2>
-        <div id="sources" class="loading">불러오는 중…</div>
+    <div class="main">
+      <div class="topbar">
+        <h1 id="pageTitle">대시보드</h1>
+        <div class="userchip"><span class="dot"></span><span id="userline">연결됨</span></div>
       </div>
-    </section>
 
-    <!-- 탭 3: 카톡 업로드 -->
-    <section id="p3" class="panel">
-      <div class="card">
-        <h2>카톡 TXT 업로드</h2>
-        <p class="hint">카카오톡 대화 내보내기(.txt)를 올리면 해당 영역 DB에 누적됩니다.</p>
-        <label for="room">카톡방 유형</label>
-        <select id="room"></select>
-        <label for="team">담당팀 (선택)</label>
-        <input type="text" id="team" placeholder="예: A / B / C / D">
-        <label for="file">TXT 파일</label>
-        <input type="file" id="file" accept=".txt,text/plain">
-        <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량은 시간이 걸릴 수 있습니다.</div>
-        <button id="upBtn" onclick="doUpload()">업로드 &amp; 적재</button>
-        <div id="upResult"></div>
+      <div class="content">
+        <!-- 탭1 대시보드 -->
+        <section id="p1" class="panel active">
+          <div class="masterbar">
+            <div>
+              <div class="t">통합(마스터) 시트</div>
+              <div class="n" id="masterName">불러오는 중…</div>
+            </div>
+            <a id="masterLink" class="btn" href="#" target="_blank">시트 열기 &nbsp;→</a>
+          </div>
+          <div class="kpis" id="kpis"></div>
+          <div class="card">
+            <div class="hd"><div><h2>카테고리별 현황</h2><div class="desc">통합시트에 적재된 영역별 레코드 수</div></div></div>
+            <div class="bd"><div id="catCounts" class="loading"><span class="spin"></span>불러오는 중…</div></div>
+          </div>
+        </section>
+
+        <!-- 탭2 원본 DB -->
+        <section id="p2" class="panel">
+          <div class="card">
+            <div class="hd"><div><h2>원본 DB 목록</h2><div class="desc">미러링 중인 원본 구글시트 — 클릭하면 원본으로 이동</div></div></div>
+            <div class="bd"><div id="sources" class="loading"><span class="spin"></span>불러오는 중…</div></div>
+          </div>
+        </section>
+
+        <!-- 탭3 카톡 업로드 -->
+        <section id="p3" class="panel">
+          <div class="card" style="max-width:560px">
+            <div class="hd"><div><h2>카톡 TXT 업로드</h2><div class="desc">대화 내보내기(.txt)를 올리면 해당 영역 DB에 누적됩니다</div></div></div>
+            <div class="bd pad">
+              <label for="room">카톡방 유형</label>
+              <select id="room"></select>
+              <label for="team">담당팀 (선택)</label>
+              <input type="text" id="team" placeholder="예: A / B / C / D">
+              <label for="file">TXT 파일</label>
+              <input type="file" id="file" accept=".txt,text/plain">
+              <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량은 시간이 걸릴 수 있습니다.</div>
+              <button id="upBtn" onclick="doUpload()">업로드 &amp; 적재</button>
+              <div id="upResult"></div>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
 <script>
-  var DATA = null;
+  var TITLES = { 1: '대시보드', 2: '원본 DB', 3: '카톡 업로드' };
 
   function showTab(n) {
     [1,2,3].forEach(function (i) {
       document.getElementById('t' + i).className = (i === n ? 'active' : '');
       document.getElementById('p' + i).className = 'panel' + (i === n ? ' active' : '');
     });
+    document.getElementById('pageTitle').textContent = TITLES[n];
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function nf(n) { return (Number(n) || 0).toLocaleString(); }
 
   function render(data) {
-    DATA = data;
     if (data.user) document.getElementById('userline').textContent = data.user;
-
+    document.getElementById('masterName').textContent = data.master.name;
     document.getElementById('masterLink').href = data.master.url;
-    document.getElementById('masterLink').textContent = '통합시트 열기 — ' + esc(data.master.name);
 
-    // 탭1: 카테고리별 건수
-    var rows = '<table><tr><th>카테고리</th><th>통합 탭</th><th class="num">건수</th></tr>';
+    var totalRec = 0, sheetCnt = 0, kakaoCnt = 0;
     data.categories.forEach(function (c) {
-      var tab = c.tabUrl ? '<a class="btn btn-ghost" href="' + c.tabUrl + '" target="_blank">' + esc(c.tabName) + '</a>' : '<span class="muted">미생성</span>';
-      var tag = c.kakaoOnly ? '<span class="tag kakao">카톡</span>' : '';
-      rows += '<tr><td>' + esc(c.cat) + tag + '</td><td>' + tab + '</td><td class="num">' + (c.count || 0).toLocaleString() + '</td></tr>';
+      totalRec += (Number(c.count) || 0);
+      if (c.kakaoOnly) kakaoCnt++; else sheetCnt++;
+    });
+
+    document.getElementById('kpis').innerHTML =
+      kpi('전체 레코드', nf(totalRec) + '<small>건</small>') +
+      kpi('카테고리', data.categories.length + '<small>개</small>') +
+      kpi('원본 연동 DB', sheetCnt + '<small>개</small>') +
+      kpi('카톡 전용', kakaoCnt + '<small>개</small>');
+
+    // 탭1 표
+    var rows = '<table><tr><th>카테고리</th><th>유형</th><th>통합 탭</th><th class="num">건수</th></tr>';
+    data.categories.forEach(function (c) {
+      var tab = c.tabUrl ? '<a class="btn btn-soft" href="' + c.tabUrl + '" target="_blank">' + esc(c.tabName) + '</a>' : '<span class="muted">미생성</span>';
+      var badge = c.kakaoOnly ? '<span class="badge kakao">카톡</span>' : '<span class="badge sheet">시트연동</span>';
+      rows += '<tr><td class="catname">' + esc(c.cat) + '</td><td>' + badge + '</td><td>' + tab + '</td><td class="num">' + nf(c.count) + '</td></tr>';
     });
     rows += '</table>';
     document.getElementById('catCounts').innerHTML = rows;
 
-    // 탭2: 원본 DB 링크
+    // 탭2 표
     var s = '<table><tr><th>카테고리</th><th>원본 시트</th><th>대상 시트</th></tr>';
     data.categories.forEach(function (c) {
       var open = c.kakaoOnly
-        ? '<span class="muted">카톡 전용</span>'
-        : (c.srcUrl ? '<a class="btn btn-ghost" href="' + c.srcUrl + '" target="_blank">원본 열기</a>' : '<span class="muted">미연결</span>');
+        ? '<span class="muted">카톡 전용 (원본 시트 없음)</span>'
+        : (c.srcUrl ? '<a class="btn btn-line" href="' + c.srcUrl + '" target="_blank">원본 열기 ↗</a>' : '<span class="muted">미연결</span>');
       var sheets = (c.sheets && c.sheets.length) ? esc(c.sheets.join(', ')) : '<span class="muted">-</span>';
-      s += '<tr><td>' + esc(c.cat) + '</td><td>' + open + '</td><td class="sheets">' + sheets + '</td></tr>';
+      s += '<tr><td class="catname">' + esc(c.cat) + '</td><td>' + open + '</td><td class="sheets">' + sheets + '</td></tr>';
     });
     s += '</table>';
     document.getElementById('sources').innerHTML = s;
 
-    // 탭3: 카톡방 드롭다운
+    // 탭3 드롭다운
     var sel = document.getElementById('room');
     sel.innerHTML = '';
     data.kakaoTypes.forEach(function (t) {
@@ -144,18 +268,18 @@
     });
   }
 
+  function kpi(l, v) { return '<div class="kpi"><div class="l">' + l + '</div><div class="v">' + v + '</div></div>'; }
+
   function loadFail(err) {
-    document.getElementById('catCounts').innerHTML = '<span class="muted">불러오기 실패: ' + esc(err && err.message) + '</span>';
-    document.getElementById('sources').innerHTML = '<span class="muted">불러오기 실패</span>';
+    var m = '<span class="muted">불러오기 실패: ' + esc(err && err.message) + '</span>';
+    document.getElementById('catCounts').innerHTML = m;
+    document.getElementById('sources').innerHTML = m;
   }
 
   google.script.run.withSuccessHandler(render).withFailureHandler(loadFail).getConsoleData();
 
-  // ── 업로드 ──
-  function upShow(cls, msg) {
-    var r = document.getElementById('upResult');
-    r.className = cls; r.textContent = msg; r.style.display = 'block';
-  }
+  // 업로드
+  function upShow(cls, msg) { var r = document.getElementById('upResult'); r.className = cls; r.textContent = msg; r.style.display = 'block'; }
 
   function doUpload() {
     var room = document.getElementById('room').value;
