@@ -13,6 +13,9 @@ function syncAllToMaster() {
 function syncCategoryToMaster(cat) {
   const cfg = CONFIG[cat];
   if (!cfg) return { ok: false, error: '알 수 없는 카테고리: ' + cat };
+  if (cfg.kakaoOnly || (!cfg.ssId && !cfg.ssNameLatest)) {
+    return { ok: true, skipped: '카톡 전용 (시트 원본 없음)' };
+  }
 
   const masterSs = SpreadsheetApp.openById(MASTER_SS_ID);
   const tabName = MASTER_TABS[cat] || cat;

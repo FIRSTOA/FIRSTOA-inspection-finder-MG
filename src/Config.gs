@@ -20,7 +20,7 @@ const INDEX_META = '_idx_meta';
 // 전용 통합시트 링크를 받으면 이 값만 교체하면 된다. 기본은 인덱스와 동일 스프레드시트.
 const MASTER_SS_ID = INDEX_SS_ID;
 
-const CATEGORIES = ['불만', '미수', '초과', 'PC확장성', '복합기확장성', 'AS', '업체정보'];
+const CATEGORIES = ['불만', '미수', '초과', 'PC확장성', '복합기확장성', 'AS', '업체정보', '재계약', '해지방어', '경영지원'];
 
 const SLOW_CATEGORIES = ['업체정보'];
 
@@ -32,7 +32,10 @@ const MASTER_TABS = {
   PC확장성: 'PC확장성',
   복합기확장성: '복합기확장성',
   AS: 'AS',
-  업체정보: '임대리스트'
+  업체정보: '임대리스트',
+  재계약: '재계약',
+  해지방어: '해지방어',
+  경영지원: '경영지원'
 };
 
 // 통합 탭에서 displayCols 뒤에 붙는 관리용 헬퍼 컬럼
@@ -163,6 +166,32 @@ const CONFIG = {
       '누적방식 (월/분/반/년)',
       '미수금액'
     ]
+  },
+
+  // ── 카톡 전용 카테고리 (시트 원본 없음, 카톡 TXT로만 적재) ──
+  // displayCols는 임시값. 실제 헤더/시트를 받으면 교체하면 AI 추출이 자동으로 맞춰 채운다.
+  재계약: {
+    kakaoOnly: true,
+    sheets: [],
+    vendorCol: '업체명',
+    metaFields: { date: '날짜' },
+    displayCols: ['날짜', '담당팀', '진행상황', '내용', '결과']
+  },
+
+  해지방어: {
+    kakaoOnly: true,
+    sheets: [],
+    vendorCol: '업체명',
+    metaFields: { date: '날짜' },
+    displayCols: ['날짜', '담당팀', '해지사유', '방어전략', '진행상황', '결과', '내용']
+  },
+
+  경영지원: {
+    kakaoOnly: true,
+    sheets: [],
+    vendorCol: '업체명',
+    metaFields: { date: '날짜' },
+    displayCols: ['날짜', '담당팀', '요청유형', '내용', '처리결과']
   }
 };
 
