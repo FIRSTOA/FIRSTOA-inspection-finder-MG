@@ -17,9 +17,15 @@ const KAKAO_SOURCES = {
   '미수':     { category: '미수',     mode: 'ai' },
   '재계약':   {
     category: '재계약', mode: 'ai',
-    aiHint: '이 방에는 초과료 청구·사용량 안내 내용과 재계약 관련 내용이 섞여 있다. ' +
-            '재계약/재약정/계약연장/무상서비스 협의 등 재계약 관련 건만 추출하고, ' +
-            '단순 초과료 청구·안내 건은 제외하라(초과 데이터는 별도 시트에서 관리됨).'
+    aiHint: '★중요: 이 방에는 "초과료 청구/사용량 안내" 메시지와 "재계약" 메시지가 섞여 있다. ' +
+            '재계약/재약정/계약연장/계약만료/무상서비스 협의 등 "계약"에 관한 건만 레코드로 만들어라. ' +
+            '아래에 해당하면 재계약과 무관하므로 레코드를 만들지 말고 반드시 건너뛴다(누락 허용):\n' +
+            '  · 초과료 금액 발생/청구, 평균/당월 초과료 안내\n' +
+            '  · 사용량·매수 안내, 명세서/세금계산서 SMS·이메일 발송 완료 안내\n' +
+            '제외 예시(이런 메시지는 레코드 0개): "3개월 누적업체로 평균 초과료 256,000원인 업체인데 ' +
+            '당월 초과료 318,000원 발생. 명세서 SMS와 이메일 발송 완료." ' +
+            '→ 초과료 안내일 뿐 재계약 내용이 없으므로 건너뛴다. ' +
+            '메시지에 계약(재계약/연장/만료/약정) 의사가 명시적으로 없으면 만들지 마라.'
   },
   '해지방어': { category: '해지방어', mode: 'ai' },
   '경영지원': { category: '경영지원', mode: 'ai' }
@@ -567,8 +573,8 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
   const cfg = CONFIG[cat];
   const cols = cfg.displayCols;
 
-  // 레코드 스키마: 업체명(필수) + 표시컬럼(선택은 nullable). strict 모드는 모든 키를 required에 둬야 함.
-  const props = { '업체명': { type: 'string' } };
+  // 레코드 스키마: 업체명(필수) + 원문근거 + 표시컬럼(선택은 nullable). strict 모드는 모든 키를 required에 둬야 함.
+  const props = { '업체명': { type: 'string' }, '원문근거': { type: ['string', 'null'] } };
   for (const c of cols) props[c] = { type: ['string', 'null'] };
   const schema = {
     type: 'object',
@@ -578,7 +584,7 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
         items: {
           type: 'object',
           properties: props,
-          required: ['업체명'].concat(cols),
+          required: ['업체명', '원문근거'].concat(cols),
           additionalProperties: false
         }
       }
@@ -636,7 +642,7 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
     if (!vendor) continue;
     const obj = {};
     for (const c of cols) if (!isBlankVal_(r[c])) obj[c] = r[c];
-    out.push({ vendor: vendor, obj: obj, raw: '' });
+    out.push({ vendor: vendor, obj: obj, raw: isBlankVal_(r['원문근거']) ? '' : String(r['원문근거']) });
   }
   return out;
 }
@@ -674,7 +680,8 @@ function buildExtractSystemPrompt_(cat, cols, hint) {
     '항목 작성 규칙:',
     '- 사실 정보(연락처·날짜·금액·담당자·기종·코드 등): 대화에 실제로 있는 값만 쓰고 없으면 null. 지어내지 마라.',
     '- 분류·유형·항목·감정·요약·분석 성격의 항목(예: 불만유형, 불만항목, 고객감정상태, AI_*, 사실확인, 대안제시, 재발방지 등): 대화 내용을 근거로 네가 적극적으로 판단해 채워라. 명시돼 있지 않아도 맥락으로 추론 가능하면 채운다. 근거가 전혀 없을 때만 null.',
-    '- 빈 값은 반드시 JSON null 로 두고 "null","없음" 같은 글자를 값으로 쓰지 마라.'
+    '- 빈 값은 반드시 JSON null 로 두고 "null","없음" 같은 글자를 값으로 쓰지 마라.',
+    '- "원문근거" 항목에는, 이 레코드를 만든 근거가 된 카톡 원문 메시지를 요약하지 말고 그대로(가능하면 [날짜]·작성자 포함) 넣어라. 사람이 "무슨 내용에서 뽑았는지" 확인하는 용도다.'
   ];
   if (hint) lines.push(hint);
   lines.push('결과는 records 배열로만 반환한다.');
