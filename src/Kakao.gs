@@ -347,6 +347,8 @@ function kakaoQueueStatus() {
   return { ok: true, jobs: jobs, active: active, allDone: allDone };
 }
 
+// ── 메시지 단위 중복 추적 (전체 TXT 재업로드 시 새 메시지만 처리) ──
+const KAKAO_SEEN_TAB = '_kakao_seen';
 
 function msgHash_(room, m) {
   const raw = room + '|' + (m.date || '') + '|' + (m.author || '') + '|' + (m.text || '');
