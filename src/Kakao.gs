@@ -366,6 +366,22 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
   return out;
 }
 
+// 내 OpenAI 계정에서 사용 가능한 모델 ID 목록 출력 (실행 후 로그 확인)
+// → 여기 나온 gpt-... ID 중 원하는 걸 KAKAO_AI_MODEL 에 넣으면 된다.
+function listOpenAIModels() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
+  if (!apiKey) { Logger.log('OPENAI_API_KEY 미설정'); return; }
+  const res = UrlFetchApp.fetch('https://api.openai.com/v1/models', {
+    method: 'get',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) { Logger.log('오류 ' + res.getResponseCode() + ': ' + res.getContentText()); return; }
+  const data = JSON.parse(res.getContentText());
+  const ids = (data.data || []).map(m => m.id).filter(id => /^(gpt|o\d|chatgpt)/.test(id)).sort();
+  Logger.log('사용 가능한 모델 ' + ids.length + '개:\n' + ids.join('\n'));
+}
+
 // AI가 빈 값으로 채우는 표현들("null", "없음" 등)을 빈칸으로 정규화
 function isBlankVal_(v) {
   if (v == null) return true;
