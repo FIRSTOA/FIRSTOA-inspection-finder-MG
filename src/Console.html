@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; margin: 0; color: #1a202c; background: #f7fafc; }
+    header { background: #2b6cb0; color: #fff; padding: 16px 20px; }
+    header h1 { font-size: 18px; margin: 0; }
+    header p { font-size: 12px; margin: 4px 0 0; opacity: .85; }
+    .tabs { display: flex; background: #fff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 5; }
+    .tabs button { flex: 1; padding: 14px 8px; font-size: 14px; font-weight: 600; border: 0; background: none; color: #718096; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tabs button.active { color: #2b6cb0; border-bottom-color: #2b6cb0; }
+    main { max-width: 760px; margin: 0 auto; padding: 18px; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+    .card h2 { font-size: 15px; margin: 0 0 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #edf2f7; vertical-align: top; }
+    th { color: #718096; font-weight: 600; font-size: 12px; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    a.btn, button.btn { display: inline-block; padding: 6px 12px; font-size: 13px; font-weight: 600; border-radius: 6px; text-decoration: none; cursor: pointer; border: 0; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-ghost { background: #edf2f7; color: #2b6cb0; }
+    .big { display: block; width: 100%; text-align: center; padding: 14px; font-size: 16px; }
+    .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #edf2f7; color: #4a5568; margin-left: 6px; }
+    .tag.kakao { background: #fef3c7; color: #92400e; }
+    .muted { color: #a0aec0; }
+    .sheets { color: #4a5568; font-size: 12px; }
+    label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; }
+    select, input[type=text] { width: 100%; padding: 10px; font-size: 15px; border: 1px solid #cbd5e0; border-radius: 6px; }
+    input[type=file] { margin-top: 6px; }
+    #upBtn { margin-top: 20px; width: 100%; padding: 13px; font-size: 16px; font-weight: 600; color: #fff; background: #2b6cb0; border: 0; border-radius: 6px; cursor: pointer; }
+    #upBtn:disabled { background: #9bb6d2; }
+    #upResult { margin-top: 18px; padding: 13px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; display: none; }
+    #upResult.ok { background: #e6f4ea; border: 1px solid #b7e1c4; }
+    #upResult.err { background: #fdecea; border: 1px solid #f5c2bd; }
+    .hint { color: #a0aec0; font-size: 12px; margin-top: 4px; }
+    .loading { text-align: center; color: #a0aec0; padding: 30px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>퍼스트전산 통합 DB</h1>
+    <p id="userline">데이터 중앙 관리 콘솔</p>
+  </header>
+
+  <nav class="tabs">
+    <button id="t1" class="active" onclick="showTab(1)">통합시트</button>
+    <button id="t2" onclick="showTab(2)">원본 DB</button>
+    <button id="t3" onclick="showTab(3)">카톡 업로드</button>
+  </nav>
+
+  <main>
+    <!-- 탭 1: 통합시트 -->
+    <section id="p1" class="panel active">
+      <div class="card">
+        <h2>통합(마스터) 시트</h2>
+        <a id="masterLink" class="btn btn-primary big" href="#" target="_blank">통합시트 열기</a>
+      </div>
+      <div class="card">
+        <h2>카테고리별 현황</h2>
+        <div id="catCounts" class="loading">불러오는 중…</div>
+      </div>
+    </section>
+
+    <!-- 탭 2: 원본 DB -->
+    <section id="p2" class="panel">
+      <div class="card">
+        <h2>원본 DB 목록</h2>
+        <div id="sources" class="loading">불러오는 중…</div>
+      </div>
+    </section>
+
+    <!-- 탭 3: 카톡 업로드 -->
+    <section id="p3" class="panel">
+      <div class="card">
+        <h2>카톡 TXT 업로드</h2>
+        <p class="hint">카카오톡 대화 내보내기(.txt)를 올리면 해당 영역 DB에 누적됩니다.</p>
+        <label for="room">카톡방 유형</label>
+        <select id="room"></select>
+        <label for="team">담당팀 (선택)</label>
+        <input type="text" id="team" placeholder="예: A / B / C / D">
+        <label for="file">TXT 파일</label>
+        <input type="file" id="file" accept=".txt,text/plain">
+        <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량은 시간이 걸릴 수 있습니다.</div>
+        <button id="upBtn" onclick="doUpload()">업로드 &amp; 적재</button>
+        <div id="upResult"></div>
+      </div>
+    </section>
+  </main>
+
+<script>
+  var DATA = null;
+
+  function showTab(n) {
+    [1,2,3].forEach(function (i) {
+      document.getElementById('t' + i).className = (i === n ? 'active' : '');
+      document.getElementById('p' + i).className = 'panel' + (i === n ? ' active' : '');
+    });
+  }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function render(data) {
+    DATA = data;
+    if (data.user) document.getElementById('userline').textContent = data.user;
+
+    document.getElementById('masterLink').href = data.master.url;
+    document.getElementById('masterLink').textContent = '통합시트 열기 — ' + esc(data.master.name);
+
+    // 탭1: 카테고리별 건수
+    var rows = '<table><tr><th>카테고리</th><th>통합 탭</th><th class="num">건수</th></tr>';
+    data.categories.forEach(function (c) {
+      var tab = c.tabUrl ? '<a class="btn btn-ghost" href="' + c.tabUrl + '" target="_blank">' + esc(c.tabName) + '</a>' : '<span class="muted">미생성</span>';
+      var tag = c.kakaoOnly ? '<span class="tag kakao">카톡</span>' : '';
+      rows += '<tr><td>' + esc(c.cat) + tag + '</td><td>' + tab + '</td><td class="num">' + (c.count || 0).toLocaleString() + '</td></tr>';
+    });
+    rows += '</table>';
+    document.getElementById('catCounts').innerHTML = rows;
+
+    // 탭2: 원본 DB 링크
+    var s = '<table><tr><th>카테고리</th><th>원본 시트</th><th>대상 시트</th></tr>';
+    data.categories.forEach(function (c) {
+      var open = c.kakaoOnly
+        ? '<span class="muted">카톡 전용</span>'
+        : (c.srcUrl ? '<a class="btn btn-ghost" href="' + c.srcUrl + '" target="_blank">원본 열기</a>' : '<span class="muted">미연결</span>');
+      var sheets = (c.sheets && c.sheets.length) ? esc(c.sheets.join(', ')) : '<span class="muted">-</span>';
+      s += '<tr><td>' + esc(c.cat) + '</td><td>' + open + '</td><td class="sheets">' + sheets + '</td></tr>';
+    });
+    s += '</table>';
+    document.getElementById('sources').innerHTML = s;
+
+    // 탭3: 카톡방 드롭다운
+    var sel = document.getElementById('room');
+    sel.innerHTML = '';
+    data.kakaoTypes.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t.type;
+      o.textContent = t.type + ' (' + (t.mode === 'rule' ? '양식' : 'AI') + ')';
+      sel.appendChild(o);
+    });
+  }
+
+  function loadFail(err) {
+    document.getElementById('catCounts').innerHTML = '<span class="muted">불러오기 실패: ' + esc(err && err.message) + '</span>';
+    document.getElementById('sources').innerHTML = '<span class="muted">불러오기 실패</span>';
+  }
+
+  google.script.run.withSuccessHandler(render).withFailureHandler(loadFail).getConsoleData();
+
+  // ── 업로드 ──
+  function upShow(cls, msg) {
+    var r = document.getElementById('upResult');
+    r.className = cls; r.textContent = msg; r.style.display = 'block';
+  }
+
+  function doUpload() {
+    var room = document.getElementById('room').value;
+    var team = document.getElementById('team').value.trim();
+    var fileInput = document.getElementById('file');
+    if (!fileInput.files.length) { upShow('err', 'TXT 파일을 선택하세요.'); return; }
+
+    var btn = document.getElementById('upBtn');
+    btn.disabled = true;
+    upShow('ok', '읽는 중…');
+
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      upShow('ok', '적재 중… (대용량 AI 추출은 몇 분 걸릴 수 있습니다)');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          if (res && res.ok) {
+            upShow('ok',
+              '완료 ✓\n탭: ' + res.tab + '  (방식: ' + res.mode + ')\n' +
+              '파싱 메시지: ' + res.parsed + '건\n추출 레코드: ' + res.records + '건\n' +
+              '신규 추가: ' + res.added + '건 / 중복 제외: ' + res.skipped + '건');
+          } else {
+            upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
+          }
+        })
+        .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
+        .ingestKakaoUpload(room, team, ev.target.result);
+    };
+    reader.onerror = function () { btn.disabled = false; upShow('err', '파일 읽기 실패'); };
+    reader.readAsText(fileInput.files[0], 'UTF-8');
+  }
+</script>
+</body>
+</html>

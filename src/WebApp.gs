@@ -4,7 +4,14 @@
  */
 
 function doGet(e) {
-  const action0 = (e.parameter.action || 'search').toLowerCase();
+  const action0 = (e.parameter.action || 'console').toLowerCase();
+
+  // 관리 콘솔 (메인 화면)
+  if (action0 === 'console') {
+    return HtmlService.createHtmlOutputFromFile('Console')
+      .setTitle('퍼스트전산 통합 DB')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
 
   // 카톡 TXT 업로드 화면 (HTML)
   if (action0 === 'upload') {
@@ -39,6 +46,46 @@ function doGet(e) {
 // 업로드 화면용: 지원 카톡방 유형 목록
 function getKakaoRoomTypes() {
   return Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
+}
+
+// 관리 콘솔용 데이터: 마스터 링크 + 카테고리별 원본/통합 링크·건수 + 카톡방 목록
+function getConsoleData() {
+  const masterSs = SpreadsheetApp.openById(MASTER_SS_ID);
+  const masterUrl = 'https://docs.google.com/spreadsheets/d/' + MASTER_SS_ID + '/edit';
+  const meta = getIndexMeta();
+
+  const categories = CATEGORIES.map(function (cat) {
+    const cfg = CONFIG[cat] || {};
+    const tabName = MASTER_TABS[cat] || cat;
+    const tab = masterSs.getSheetByName(tabName);
+    const tabUrl = tab ? masterUrl + '#gid=' + tab.getSheetId() : '';
+
+    let srcUrl = '';
+    if (!cfg.kakaoOnly) {
+      try { srcUrl = 'https://docs.google.com/spreadsheets/d/' + resolveSsId(cfg) + '/edit'; } catch (e) {}
+    }
+
+    let sheets = [];
+    if (cfg.sheets && cfg.sheets.length) sheets = cfg.sheets.slice();
+    else if (cfg.gid != null) sheets = ['gid=' + cfg.gid];
+
+    return {
+      cat: cat,
+      kakaoOnly: !!cfg.kakaoOnly,
+      tabName: tabName,
+      tabUrl: tabUrl,
+      count: Number(meta['count_' + cat] || 0),
+      srcUrl: srcUrl,
+      sheets: sheets
+    };
+  });
+
+  return {
+    master: { name: masterSs.getName(), url: masterUrl },
+    categories: categories,
+    kakaoTypes: getKakaoRoomTypes(),
+    user: (function () { try { return Session.getActiveUser().getEmail() || ''; } catch (e) { return ''; } })()
+  };
 }
 
 // 업로드 화면에서 호출 (google.script.run). TXT 내용을 받아 적재.
