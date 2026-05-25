@@ -32,8 +32,19 @@ function syncCategoryToMaster(cat) {
   const headerCols = masterHeaders_(cat);
   const newRows = [];
 
-  for (const sheetName of cfg.sheets) {
-    const sh = src.getSheetByName(sheetName);
+  // 원본 시트 목록: sheets(이름) 우선, 없으면 gid로 해석
+  const sources = [];
+  if (cfg.sheets && cfg.sheets.length) {
+    for (const nm of cfg.sheets) sources.push({ name: nm, sheet: src.getSheetByName(nm) });
+  } else if (cfg.gid != null) {
+    for (const s of src.getSheets()) {
+      if (s.getSheetId() === cfg.gid) sources.push({ name: s.getName(), sheet: s });
+    }
+  }
+
+  for (const srcItem of sources) {
+    const sheetName = srcItem.name;
+    const sh = srcItem.sheet;
     if (!sh) {
       Logger.log('  시트 없음: ' + sheetName);
       continue;
@@ -43,9 +54,20 @@ function syncCategoryToMaster(cat) {
     const lastCol = sh.getLastColumn();
     if (lastRow <= cfg.headerRow) continue;
 
-    const headers = sh.getRange(cfg.headerRow, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
-    const vIdx = headers.indexOf(cfg.vendorCol);
-    const fIdx = cfg.vendorColFallback ? headers.indexOf(cfg.vendorColFallback) : -1;
+    // 공백/줄바꿈 무시 매칭: 정규화 헤더 → 열 인덱스(최초 출현)
+    const rawHeaders = sh.getRange(cfg.headerRow, 1, 1, lastCol).getValues()[0];
+    const hmap = {};
+    for (let c = 0; c < rawHeaders.length; c++) {
+      const k = normalizeHeader_(rawHeaders[c]);
+      if (k && hmap[k] === undefined) hmap[k] = c;
+    }
+    const colIdx = name => {
+      const i = hmap[normalizeHeader_(name)];
+      return i === undefined ? -1 : i;
+    };
+
+    const vIdx = colIdx(cfg.vendorCol);
+    const fIdx = cfg.vendorColFallback ? colIdx(cfg.vendorColFallback) : -1;
     if (vIdx === -1 && fIdx === -1) {
       Logger.log('  vendorCol 못찾음: ' + cfg.vendorCol);
       continue;
@@ -60,7 +82,7 @@ function syncCategoryToMaster(cat) {
 
       const obj = {};
       for (const colName of cfg.displayCols) {
-        const idx = headers.indexOf(colName);
+        const idx = colIdx(colName);
         let v = idx === -1 ? '' : row[idx];
         if (v instanceof Date) v = Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd');
         obj[colName] = v;
