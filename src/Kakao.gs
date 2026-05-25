@@ -242,7 +242,7 @@ function appendSeenHashes_(room, hashes) {
 
 // ── AS 전용: 카톡 "구분:AS" 양식을 규칙 파싱해 AS 원문시트에 직접 적재 (AI 미사용) ──
 // 흐름: 카톡 TXT → 양식 추출 → AS 원문시트 입력 → (동기화 시) 통합 AS 탭으로 미러
-function ingestASFormsUpload(content) {
+function ingestASFormsUpload(content, regionFallback) {
   try {
     if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
     const messages = parseKakaoMessages_(String(content));
@@ -250,7 +250,7 @@ function ingestASFormsUpload(content) {
       const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
       return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
     }
-    const records = extractASForms_(messages);
+    const records = extractASForms_(messages, regionFallback || '');
     if (!records.length) return { ok: false, error: 'AS 양식(구분:AS) 메시지를 찾지 못했습니다.', parsed: messages.length };
     const r = appendASToSheet_(records);
     return { ok: true, tab: 'AS 원문시트', parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
@@ -259,12 +259,19 @@ function ingestASFormsUpload(content) {
   }
 }
 
-function extractASForms_(messages) {
+// "구분" 값에 AS가 포함되면 AS 양식으로 본다.
+// 예: 구분:AS / 구분: AS,점검 / 구분 :AS/점검 / 점검 구분: A/S … 모두 인식
+function isASForm_(content) {
+  const m = String(content).match(/구분\s*[:：]\s*([^\n\r]{0,40})/);
+  if (!m) return false;
+  return /A\s*\/?\s*S/i.test(m[1]);
+}
+
+function extractASForms_(messages, regionFallback) {
   const out = [];
   for (const m of messages) {
     const content = m.text || '';
-    if (content.indexOf('구분: AS') < 0 && content.indexOf('구분:AS') < 0 &&
-        content.indexOf('구분: A/S') < 0 && content.indexOf('구분:A/S') < 0) continue;
+    if (!isASForm_(content)) continue;
 
     const f = extractASFields_(content);
     const vendor = f['업체명'];
@@ -274,7 +281,7 @@ function extractASForms_(messages) {
       'AS날짜': m.date || '',
       '작성자': String(m.author || '').replace(/님$/, ''),
       '업체명': vendor,
-      '지역': f['지역'] || '',
+      '지역': f['지역'] || regionFallback || '',
       '등급': f['등급'] || '',
       '모델명': f['모델명'] || '',
       '시리얼넘버': f['시리얼넘버'] || '',

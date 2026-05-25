@@ -91,6 +91,20 @@
     .chip:hover { border-color: var(--brand); }
     .chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 
+    .area { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .area-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; margin-bottom: 10px; }
+    .slot { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px dashed var(--line); }
+    .slot:first-of-type { border-top: 0; }
+    .slot-team { width: 42px; flex-shrink: 0; font-weight: 700; font-size: 13px; color: var(--brand-d); }
+    .slot-pick { padding: 7px 13px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; font-family: inherit; flex-shrink: 0; }
+    .slot-pick:hover { border-color: var(--brand); }
+    .slot-pick.has { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-d); }
+    .slot-name { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .slot-status { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--faint); white-space: nowrap; }
+    .slot-status.run { color: var(--brand); }
+    .slot-status.ok { color: #059669; }
+    .slot-status.err { color: #dc2626; }
+
     .masterbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; background: linear-gradient(135deg,#1d4ed8,#2563eb); border-radius: 14px; color: #fff; margin-bottom: 22px; box-shadow: var(--shadow); }
     .masterbar .t { font-size: 13px; opacity: .85; }
     .masterbar .n { font-size: 18px; font-weight: 700; margin-top: 2px; }
@@ -190,22 +204,11 @@
 
         <!-- 탭3 카톡 업로드 -->
         <section id="p3" class="panel">
-          <div class="card" style="max-width:560px">
-            <div class="hd"><div><h2>카톡 TXT 업로드</h2><div class="desc">대화 내보내기(.txt)를 올리면 해당 영역 DB에 누적됩니다</div></div></div>
+          <div class="card">
+            <div class="hd"><div><h2>카톡 TXT 업로드</h2><div class="desc">영역별로 파일을 붙이고 [전체 처리]를 누르면 순서대로 적재됩니다 (붙인 것만 처리)</div></div></div>
             <div class="bd pad">
-              <label for="room">카톡방 유형</label>
-              <select id="room"></select>
-              <label>담당팀 (복수 선택 가능, 선택)</label>
-              <div id="teamChips" class="chips">
-                <button type="button" class="chip" data-team="A" onclick="toggleChip(this)">A</button>
-                <button type="button" class="chip" data-team="B" onclick="toggleChip(this)">B</button>
-                <button type="button" class="chip" data-team="C" onclick="toggleChip(this)">C</button>
-                <button type="button" class="chip" data-team="D" onclick="toggleChip(this)">D</button>
-              </div>
-              <label for="file">TXT 파일</label>
-              <input type="file" id="file" accept=".txt,text/plain">
-              <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량은 시간이 걸릴 수 있습니다.</div>
-              <button id="upBtn" onclick="doUpload()">업로드 &amp; 적재</button>
+              <div id="uploadAreas" class="loading"><span class="spin"></span>불러오는 중…</div>
+              <button id="upBtn" onclick="runAll()" style="display:none">전체 처리</button>
               <div id="upResult"></div>
             </div>
           </div>
@@ -217,6 +220,15 @@
 <script>
   var TITLES = { 1: '대시보드', 2: '원본 DB', 3: '카톡 업로드' };
   var ROOM_MODE = {};
+  // 영역별 업로드 슬롯(팀/지역). 빈 문자열 = 단일 파일.
+  var AREA_SLOTS = {
+    'AS':     ['A', 'B', 'C', 'D'],
+    '불만':    ['AB', 'CD'],
+    '미수':    ['A', 'B', 'C', 'D'],
+    '재계약':  ['A', 'B', 'C', 'D'],
+    '해지방어': [''],
+    '경영지원': ['']
+  };
 
   function showTab(n) {
     [1,2,3].forEach(function (i) {
@@ -268,18 +280,37 @@
     s += '</table>';
     document.getElementById('sources').innerHTML = s;
 
-    // 탭3 드롭다운
+    // 탭3 업로드 영역
     ROOM_MODE = {};
-    var sel = document.getElementById('room');
-    sel.innerHTML = '';
-    data.kakaoTypes.forEach(function (t) {
-      ROOM_MODE[t.type] = t.mode;
-      var label = t.mode === 'asform' ? '양식 → AS시트' : (t.mode === 'rule' ? '양식' : 'AI');
-      var o = document.createElement('option');
-      o.value = t.type;
-      o.textContent = t.type + ' (' + label + ')';
-      sel.appendChild(o);
+    data.kakaoTypes.forEach(function (t) { ROOM_MODE[t.type] = t.mode; });
+    renderUploadAreas(data.kakaoTypes);
+  }
+
+  function renderUploadAreas(types) {
+    var host = document.getElementById('uploadAreas');
+    var html = '';
+    types.forEach(function (t) {
+      var slots = AREA_SLOTS[t.type] || [''];
+      var badge = t.mode === 'asform' ? '<span class="badge sheet">양식→AS시트</span>'
+                : '<span class="badge kakao">AI</span>';
+      html += '<div class="area">';
+      html += '<div class="area-head">' + esc(t.type) + ' ' + badge + '</div>';
+      slots.forEach(function (team, i) {
+        var id = 'slot_' + t.type + '_' + i;
+        var teamLabel = team ? team : '단일';
+        html += '<div class="slot" data-area="' + esc(t.type) + '" data-team="' + esc(team) + '" data-mode="' + t.mode + '">'
+          + '<span class="slot-team">' + esc(teamLabel) + '</span>'
+          + '<button type="button" class="slot-pick" onclick="pickFile(\'' + id + '\')">파일 선택</button>'
+          + '<span class="slot-name">없음</span>'
+          + '<span class="slot-status">대기</span>'
+          + '<input type="file" id="' + id + '" accept=".txt,text/plain" style="display:none" onchange="onPick(this)">'
+          + '</div>';
+      });
+      html += '</div>';
     });
+    host.className = '';
+    host.innerHTML = html;
+    document.getElementById('upBtn').style.display = 'block';
   }
 
   function kpi(l, v) { return '<div class="kpi"><div class="l">' + l + '</div><div class="v">' + v + '</div></div>'; }
@@ -295,86 +326,96 @@
   // 업로드
   function upShow(cls, msg) { var r = document.getElementById('upResult'); r.className = cls; r.textContent = msg; r.style.display = 'block'; }
 
-  function toggleChip(el) { el.classList.toggle('on'); }
-  function getTeams() {
-    var on = document.querySelectorAll('#teamChips .chip.on');
-    return Array.prototype.map.call(on, function (c) { return c.getAttribute('data-team'); }).join(',');
+  // 파일 선택
+  function pickFile(id) { document.getElementById(id).click(); }
+  function onPick(input) {
+    var slot = input.closest('.slot');
+    var pick = slot.querySelector('.slot-pick');
+    var name = slot.querySelector('.slot-name');
+    if (input.files.length) {
+      slot._file = input.files[0];
+      pick.classList.add('has');
+      name.textContent = input.files[0].name;
+      setStatus(slot, '', '대기');
+    } else {
+      slot._file = null; pick.classList.remove('has'); name.textContent = '없음';
+    }
+  }
+  function setStatus(slot, cls, msg) {
+    var s = slot.querySelector('.slot-status');
+    s.className = 'slot-status' + (cls ? ' ' + cls : '');
+    s.textContent = msg;
   }
 
-  function doUpload() {
-    var room = document.getElementById('room').value;
-    var team = getTeams();
-    var fileInput = document.getElementById('file');
-    if (!fileInput.files.length) { upShow('err', 'TXT 파일을 선택하세요.'); return; }
+  // google.script.run → Promise
+  function gasRun(fn, args) {
+    return new Promise(function (resolve, reject) {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn].apply(google.script.run, args);
+    });
+  }
+  // 파일 → 디코딩된 텍스트
+  function readDecoded(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function (ev) { resolve(decodeUpload(ev.target.result)); };
+      reader.onerror = function () { reject(new Error('파일 읽기 실패')); };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  async function runAll() {
+    var slots = Array.prototype.slice.call(document.querySelectorAll('#uploadAreas .slot'))
+      .filter(function (s) { return s._file; });
+    if (!slots.length) { upShow('err', '파일을 하나 이상 선택하세요.'); return; }
 
     var btn = document.getElementById('upBtn');
     btn.disabled = true;
-    upShow('ok', '읽는 중…');
+    upShow('ok', '처리 시작… (' + slots.length + '개 파일, 순서대로 진행)');
+    var totalAdded = 0, failed = 0;
 
-    var reader = new FileReader();
-    reader.onload = function (ev) {
-      var text = decodeUpload(ev.target.result);
+    for (var k = 0; k < slots.length; k++) {
+      var slot = slots[k];
+      var area = slot.getAttribute('data-area');
+      var team = slot.getAttribute('data-team') || '';
+      var mode = slot.getAttribute('data-mode');
+      var who = area + (team ? '(' + team + ')' : '');
+      try {
+        setStatus(slot, 'run', '읽는 중…');
+        var text = await readDecoded(slot._file);
 
-      // AS는 전용 양식 파서로 AS 원문시트에 직접 적재
-      if (ROOM_MODE[room] === 'asform') {
-        upShow('ok', 'AS 양식 추출·적재 중…');
-        google.script.run
-          .withSuccessHandler(function (res) {
-            btn.disabled = false;
-            if (res && res.ok) {
-              upShow('ok',
-                '완료 ✓\n적재처: ' + res.tab + '\n파싱 메시지: ' + nf(res.parsed) + '건\n' +
-                'AS 양식: ' + nf(res.records) + '건\n신규 추가: ' + nf(res.added) + '건 / 중복 제외: ' + nf(res.skipped) + '건\n' +
-                '(통합 AS 탭은 다음 동기화 때 반영됩니다)');
-            } else {
-              upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
-            }
-          })
-          .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
-          .ingestASFormsUpload(text);
-        return;
-      }
-
-      upShow('ok', '분석 준비 중…');
-      google.script.run
-        .withSuccessHandler(function (res) {
-          if (!res || !res.ok) { btn.disabled = false; upShow('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류')); return; }
-          if (!res.batches) {
-            btn.disabled = false;
-            upShow('ok', '새로 추가할 메시지가 없습니다 ✓\n(' + nf(res.scanned || 0) + '건 모두 이미 처리됨)');
-            return;
+        if (mode === 'asform') {
+          setStatus(slot, 'run', '양식 추출 중…');
+          var r = await gasRun('ingestASFormsUpload', [text, team]);
+          if (!r || !r.ok) throw new Error(r && r.error ? r.error : '실패');
+          setStatus(slot, 'ok', '완료 +' + nf(r.added) + ' (중복 ' + nf(r.skipped) + ')');
+          totalAdded += (r.added || 0);
+        } else {
+          setStatus(slot, 'run', '준비 중…');
+          var start = await gasRun('kakaoUploadStart', [area, team, text]);
+          if (!start || !start.ok) throw new Error(start && start.error ? start.error : '실패');
+          if (!start.batches) { setStatus(slot, 'ok', '새 메시지 없음'); continue; }
+          var acc = { added: 0, skipped: 0 };
+          for (var i = 0; i < start.batches; i++) {
+            setStatus(slot, 'run', '처리 중 ' + (i + 1) + '/' + start.batches);
+            var b = await gasRun('kakaoUploadBatch', [i]);
+            if (!b || !b.ok) throw new Error(b && b.error ? b.error : '배치 실패');
+            acc.added += (b.added || 0); acc.skipped += (b.skipped || 0);
           }
-          runBatch(res, { added: 0, skipped: 0, records: 0 }, 0);
-        })
-        .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
-        .kakaoUploadStart(room, team, text);
-    };
-    reader.onerror = function () { btn.disabled = false; upShow('err', '파일 읽기 실패'); };
-    reader.readAsArrayBuffer(fileInput.files[0]);
-  }
-
-  // 배치 반복 처리 (멈춤 방지 + 진행률 표시)
-  function runBatch(meta, acc, i) {
-    var btn = document.getElementById('upBtn');
-    if (i >= meta.batches) {
-      btn.disabled = false;
-      upShow('ok',
-        '완료 ✓\n탭: ' + meta.tab + '  (방식: ' + meta.mode + ')\n' +
-        '총 메시지: ' + nf(meta.total) + '건\n추출 레코드: ' + nf(acc.records) + '건\n' +
-        '신규 추가: ' + nf(acc.added) + '건 / 중복 제외: ' + nf(acc.skipped) + '건');
-      return;
+          setStatus(slot, 'ok', '완료 +' + nf(acc.added) + ' (중복 ' + nf(acc.skipped) + ')');
+          totalAdded += acc.added;
+        }
+      } catch (err) {
+        failed++;
+        setStatus(slot, 'err', '실패: ' + (err && err.message ? err.message : err));
+      }
+      upShow('ok', '진행 중… ' + (k + 1) + '/' + slots.length + ' 완료  ·  누적 추가 ' + nf(totalAdded) + '건');
     }
-    var pct = Math.round(i / meta.batches * 100);
-    upShow('ok', '처리 중… ' + (i + 1) + '/' + meta.batches + ' 배치 (' + pct + '%)  ·  추가 ' + nf(acc.added) + '건' +
-      (meta.mode === 'ai' ? '\nAI 추출이라 배치당 몇 초씩 걸립니다. 창을 닫지 마세요.' : ''));
-    google.script.run
-      .withSuccessHandler(function (res) {
-        if (!res || !res.ok) { btn.disabled = false; upShow('err', '배치 ' + (i + 1) + ' 실패: ' + (res && res.error ? res.error : '오류')); return; }
-        acc.added += (res.added || 0); acc.skipped += (res.skipped || 0); acc.records += (res.records || 0);
-        runBatch(meta, acc, i + 1);
-      })
-      .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '배치 ' + (i + 1) + ' 오류: ' + err.message + '\n(여기까지 추가 ' + nf(acc.added) + '건은 저장됨)'); })
-      .kakaoUploadBatch(i);
+
+    btn.disabled = false;
+    upShow(failed ? 'err' : 'ok',
+      (failed ? '일부 실패 ' : '전체 완료 ✓ ') + '신규 추가 ' + nf(totalAdded) + '건' +
+      (failed ? ' / 실패 ' + failed + '건 (위 항목별 상태 확인)' : '') +
+      '\n(통합 탭은 다음 동기화 때 반영됩니다)');
   }
 
   // 카톡 내보내기 인코딩 자동 판별 (PC=UTF-16, 모바일=UTF-8). BOM 기준.
