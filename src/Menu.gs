@@ -17,21 +17,25 @@ function onOpen() {
     .addToUi();
 }
 
-// 매일 자동 새로고침 트리거 (refreshAll = 시트→마스터→인덱스). 기본 새벽 5시.
+// 자동 새로고침 트리거:
+//  - 매일 새벽 5시: refreshDaily (대용량 임대 시트 제외)
+//  - 월요일 새벽 4시: refreshLease (임대리스트·임대현황표 재동기화)
 function installDailyTrigger() {
   removeDailyTriggers();
-  ScriptApp.newTrigger('refreshAll').timeBased().everyDays(1).atHour(5).create();
-  Logger.log('매일 새벽 5시 refreshAll 트리거 생성됨');
+  ScriptApp.newTrigger('refreshDaily').timeBased().everyDays(1).atHour(5).create();
+  ScriptApp.newTrigger('refreshLease').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create();
+  Logger.log('트리거 생성: 매일 5시 refreshDaily(임대 제외) + 월요일 4시 refreshLease(임대)');
   return { ok: true };
 }
 
 function removeDailyTriggers() {
+  const handlers = ['refreshAll', 'refreshDaily', 'refreshLease'];
   const triggers = ScriptApp.getProjectTriggers();
   let n = 0;
   for (const t of triggers) {
-    if (t.getHandlerFunction() === 'refreshAll') { ScriptApp.deleteTrigger(t); n++; }
+    if (handlers.indexOf(t.getHandlerFunction()) !== -1) { ScriptApp.deleteTrigger(t); n++; }
   }
-  Logger.log('refreshAll 트리거 ' + n + '개 제거됨');
+  Logger.log('자동 새로고침 트리거 ' + n + '개 제거됨');
   return { ok: true, removed: n };
 }
 

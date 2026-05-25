@@ -3,9 +3,25 @@
  * 인덱스는 통합 탭에서 파생되는 검색 캐시이므로, 통합 탭이 단일 진실원천이다.
  */
 
-// 전체 파이프라인: 시트 → 마스터 → 인덱스
+// 전체 파이프라인: 시트 → 마스터 → 인덱스 (수동 전체 실행용)
 function refreshAll() {
   const sync = syncAllToMaster();
+  const index = rebuildIndex();
+  return { sync: sync, index: index };
+}
+
+// 매일 자동: 대용량 임대 시트는 건너뛰고 동기화 후 인덱스 재생성
+// (임대 데이터는 마스터에 남아 있어 검색에는 계속 포함됨)
+function refreshDaily() {
+  const sync = syncAllToMaster(LEASE_CATEGORIES);
+  const index = rebuildIndex();
+  return { sync: sync, index: index };
+}
+
+// 주 1회(월요일) 자동: 임대리스트·임대현황표만 원본 재동기화 후 인덱스 재생성
+function refreshLease() {
+  const sync = {};
+  for (const cat of LEASE_CATEGORIES) sync[cat] = syncCategoryToMaster(cat);
   const index = rebuildIndex();
   return { sync: sync, index: index };
 }

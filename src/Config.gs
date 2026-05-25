@@ -23,6 +23,9 @@ const CATEGORIES = ['불만', '미수', '초과', 'PC확장성', '복합기확�
 
 const SLOW_CATEGORIES = ['업체정보'];
 
+// 대용량 임대 시트: 매일이 아니라 월요일 새벽에만 원본 재동기화 (검색 인덱스에는 항상 포함)
+const LEASE_CATEGORIES = ['업체정보', '임대현황표'];
+
 // 카테고리 → 통합시트 탭 이름
 const MASTER_TABS = {
   불만: '불만',

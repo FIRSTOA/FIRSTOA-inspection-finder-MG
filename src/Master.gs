@@ -3,9 +3,13 @@
  * 통합 탭은 사람이 그대로 읽는 정규 DB이며, 인덱스(_idx_*)는 여기서 파생된다.
  */
 
-function syncAllToMaster() {
+function syncAllToMaster(skipCats) {
+  const skip = Array.isArray(skipCats) ? skipCats : [];
   const res = {};
-  for (const cat in CONFIG) res[cat] = syncCategoryToMaster(cat);
+  for (const cat in CONFIG) {
+    if (skip.indexOf(cat) !== -1) { res[cat] = { ok: true, skipped: '이번 실행 제외' }; continue; }
+    res[cat] = syncCategoryToMaster(cat);
+  }
   Logger.log('syncAllToMaster: ' + JSON.stringify(res));
   return res;
 }
