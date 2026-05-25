@@ -169,12 +169,13 @@ const CONFIG = {
     ]
   },
 
-  // 임대현황표(교체) — gid=0 첫 시트. headerRow는 추정값(라이브 시트로 검증 필요).
+  // 임대현황표(교체) — "공통_납품철수교체현황표"의 gid=0 "전체데이터" 시트.
+  // 1행=숫자, 2행="납품 내역" 제목, 3행=실제 헤더 → headerRow=3.
   // 헤더 매칭은 공백/줄바꿈을 무시(normalizeHeader_)하므로 줄바꿈 포함 헤더도 잡힌다.
   임대현황표: {
     ssId: '1Lb1g7yLHbVuXt537abhM1K2ROOoUVjPVVnIChQWSJVg',
     gid: 0,
-    headerRow: 1,
+    headerRow: 3,
     vendorCol: '업체명',
     metaFields: { date: '납품일', region: '지역' },
     displayCols: [
