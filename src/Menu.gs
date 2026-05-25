@@ -61,21 +61,27 @@ function clearCache() {
 }
 
 function diagAccess() {
-  const ids = {
-    '인덱스/통합 시트': INDEX_SS_ID,
-    '미수': '1gc5bcv6GuJ0PV1iXpu0CLBwiAoLJYdBaPqRQCqn4yHU',
-    '초과/업체정보': '1YySH2gK0ZUth4872zCy3pzp1zu8ZM7yAXopvyfTnp-0',
-    'PC확장성': '1Q0u_ok6s3o7_qnSFyDW632zkspV_MqttRnFQ4uurmpg',
-    '복합기확장성': '10850TfeSvd0Z1iiI1ycCyGskGRPXicRUd1_Xx996QKQ',
-    'AS': '1-AcARUVMzSY4ln6jRhf751AJ60pTVf-4BAOBhec4hUo'
-  };
+  const targets = [];
+  targets.push(['인덱스 시트', INDEX_SS_ID]);
+  targets.push(['통합(마스터) 시트 ★쓰기대상', MASTER_SS_ID]);
 
-  for (const name in ids) {
+  for (const cat of CATEGORIES) {
+    const cfg = CONFIG[cat];
+    if (!cfg || cfg.kakaoOnly) continue;
     try {
-      const ss = SpreadsheetApp.openById(ids[name]);
+      targets.push(['원본:' + cat, resolveSsId(cfg)]);
+    } catch (e) {
+      Logger.log('FAIL 원본:' + cat + ' (ssId 해석 실패): ' + e.message);
+    }
+  }
+
+  for (const t of targets) {
+    const name = t[0], id = t[1];
+    try {
+      const ss = SpreadsheetApp.openById(id);
       Logger.log('OK ' + name + ': "' + ss.getName() + '" / 시트 ' + ss.getSheets().length + '개');
     } catch (e) {
-      Logger.log('FAIL ' + name + ': ' + e.message);
+      Logger.log('FAIL ' + name + ' (' + id + '): ' + e.message);
     }
   }
 }
