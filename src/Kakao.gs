@@ -201,8 +201,152 @@ function kakaoUploadBatch(batchIndex) {
   }
 }
 
-// ── 메시지 단위 중복 추적 (전체 TXT 재업로드 시 새 메시지만 처리) ──
-const KAKAO_SEEN_TAB = '_kakao_seen';
+// ── 백그라운드 큐: 창을 닫아도 구글 서버가 트리거로 끝까지 처리 ──
+const KAKAO_QUEUE_PROP = 'KAKAO_QUEUE';
+
+// AI 영역 1개 파일을 대기열에 등록(파싱·필터·중복제외 후 임시시트에 적재). AS는 별도(즉시) 처리.
+function kakaoEnqueue(roomType, teamLabel, content) {
+  try {
+    const src = KAKAO_SOURCES[roomType];
+    if (!src) return { ok: false, error: '알 수 없는 카톡방 유형: ' + roomType };
+    const cat = src.category;
+    if (!CONFIG[cat]) return { ok: false, error: '카테고리 미정의: ' + cat };
+    if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
+
+    let messages = parseKakaoMessages_(String(content));
+    if (!messages.length) return { ok: false, error: '파싱 0건' };
+    messages = filterKakaoMessages_(messages);
+
+    const seen = loadSeenHashes_(roomType);
+    const fresh = [];
+    for (const m of messages) {
+      const h = msgHash_(roomType, m);
+      if (seen[h]) continue;
+      seen[h] = true;
+      fresh.push([m.date || '', m.author || '', m.text || '', h]);
+    }
+    if (!fresh.length) return { ok: true, total: 0, batches: 0, scanned: messages.length };
+
+    const props = PropertiesService.getScriptProperties();
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let tmp = ss.getSheetByName(KAKAO_TMP_TAB);
+    if (!tmp) { tmp = ss.insertSheet(KAKAO_TMP_TAB); tmp.hideSheet(); }
+
+    let queue = JSON.parse(props.getProperty(KAKAO_QUEUE_PROP) || '[]');
+    const anyPending = queue.some(j => j.status !== 'done' && j.status !== 'error');
+    if (!anyPending) { queue = []; tmp.clear(); tmp.getRange(1, 1, 1, 4).setValues([['date', 'author', 'text', 'hash']]); }
+    if (tmp.getLastRow() < 1) tmp.getRange(1, 1, 1, 4).setValues([['date', 'author', 'text', 'hash']]);
+
+    const startRow = tmp.getLastRow() + 1;
+    const B = 5000;
+    for (let i = 0; i < fresh.length; i += B) {
+      const s = fresh.slice(i, i + B);
+      tmp.getRange(startRow + i, 1, s.length, 4).setValues(s);
+    }
+
+    const size = KAKAO_AI_BATCH * 2;
+    const batches = Math.ceil(fresh.length / size);
+    const jobId = 'J' + Date.now() + Math.floor(Math.random() * 1000);
+    queue.push({
+      jobId: jobId, roomType: roomType, teamLabel: teamLabel || '', cat: cat,
+      total: fresh.length, size: size, batches: batches, startRow: startRow,
+      done: 0, added: 0, skipped: 0, attempts: 0, status: 'pending'
+    });
+    props.setProperty(KAKAO_QUEUE_PROP, JSON.stringify(queue));
+    return { ok: true, jobId: jobId, total: fresh.length, batches: batches, scanned: messages.length };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function kakaoStartWorker() {
+  scheduleWorker_(5 * 1000);
+  return { ok: true };
+}
+
+function scheduleWorker_(afterMs) {
+  deleteWorkerTriggers_();
+  ScriptApp.newTrigger('kakaoWorker').timeBased().after(afterMs || 1000).create();
+}
+
+function deleteWorkerTriggers_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'kakaoWorker') ScriptApp.deleteTrigger(t);
+  });
+}
+
+// 트리거로 실행: 대기열을 시간 예산 안에서 처리하고, 남으면 다음 트리거 예약
+function kakaoWorker() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return; // 이미 다른 워커 실행 중
+  try {
+    const startTime = Date.now();
+    const BUDGET_MS = 5 * 60 * 1000; // 5분 (실행 한도 대비 여유)
+    const props = PropertiesService.getScriptProperties();
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const tmp = ss.getSheetByName(KAKAO_TMP_TAB);
+
+    while (Date.now() - startTime < BUDGET_MS) {
+      let queue = JSON.parse(props.getProperty(KAKAO_QUEUE_PROP) || '[]');
+      let job = null;
+      for (let i = 0; i < queue.length; i++) {
+        if (queue[i].status !== 'done' && queue[i].status !== 'error') { job = queue[i]; break; }
+      }
+      if (!job) { deleteWorkerTriggers_(); if (tmp) tmp.clear(); return; } // 전부 완료
+      if (!tmp) { return; }
+
+      try {
+        job.status = 'running';
+        const remaining = job.total - job.done * job.size;
+        const n = Math.min(job.size, remaining);
+        const rowStart = job.startRow + job.done * job.size;
+        const vals = tmp.getRange(rowStart, 1, n, 4).getValues();
+        const messages = vals.map(function (r) { return { date: r[0], author: r[1], text: r[2] }; });
+        const hashes = vals.map(function (r) { return r[3]; });
+
+        const src = KAKAO_SOURCES[job.roomType];
+        const records = extractKakaoWithAI_(job.cat, messages, src && src.aiHint);
+        const r = appendKakaoRecords_(job.cat, job.roomType, job.teamLabel, records);
+        appendSeenHashes_(job.roomType, hashes);
+
+        job.done += 1;
+        job.added += r.added;
+        job.skipped += r.skipped;
+        if (job.done >= job.batches) job.status = 'done';
+        props.setProperty(KAKAO_QUEUE_PROP, JSON.stringify(queue));
+      } catch (be) {
+        job.attempts = (job.attempts || 0) + 1;
+        job.lastError = String(be);
+        if (job.attempts >= 3) job.status = 'error';
+        props.setProperty(KAKAO_QUEUE_PROP, JSON.stringify(queue));
+        scheduleWorker_(30 * 1000);
+        return;
+      }
+    }
+    scheduleWorker_(20 * 1000); // 예산 초과 → 이어서
+  } catch (e) {
+    Logger.log('kakaoWorker 오류: ' + e);
+    scheduleWorker_(60 * 1000);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function kakaoQueueStatus() {
+  const props = PropertiesService.getScriptProperties();
+  const queue = JSON.parse(props.getProperty(KAKAO_QUEUE_PROP) || '[]');
+  const jobs = queue.map(function (j) {
+    return {
+      jobId: j.jobId, roomType: j.roomType, teamLabel: j.teamLabel,
+      batches: j.batches, done: j.done, added: j.added, skipped: j.skipped,
+      status: j.status, lastError: j.lastError || ''
+    };
+  });
+  const active = jobs.some(function (j) { return j.status !== 'done' && j.status !== 'error'; });
+  const allDone = jobs.length > 0 && !active;
+  return { ok: true, jobs: jobs, active: active, allDone: allDone };
+}
+
 
 function msgHash_(room, m) {
   const raw = room + '|' + (m.date || '') + '|' + (m.author || '') + '|' + (m.text || '');

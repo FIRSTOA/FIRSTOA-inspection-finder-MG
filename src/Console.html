@@ -104,6 +104,10 @@
     .slot-status.run { color: var(--brand); }
     .slot-status.ok { color: #059669; }
     .slot-status.err { color: #dc2626; }
+    .bgstatus { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
+    #upBtn { margin-top: 16px; width: 100%; padding: 13px; font-size: 15px; font-weight: 700; color: #fff; background: var(--brand); border: 0; border-radius: 10px; cursor: pointer; }
+    #upBtn:hover { background: var(--brand-d); }
+    #upBtn:disabled { background: #9bb6e8; cursor: default; }
 
     .masterbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; background: linear-gradient(135deg,#1d4ed8,#2563eb); border-radius: 14px; color: #fff; margin-bottom: 22px; box-shadow: var(--shadow); }
     .masterbar .t { font-size: 13px; opacity: .85; }
@@ -207,6 +211,7 @@
           <div class="card">
             <div class="hd"><div><h2>카톡 TXT 업로드</h2><div class="desc">영역별로 파일을 붙이고 [전체 처리]를 누르면 순서대로 적재됩니다 (붙인 것만 처리)</div></div></div>
             <div class="bd pad">
+              <div id="bgStatus" class="bgstatus" style="display:none"></div>
               <div id="uploadAreas" class="loading"><span class="spin"></span>불러오는 중…</div>
               <button id="upBtn" onclick="runAll()" style="display:none">전체 처리</button>
               <div id="upResult"></div>
@@ -311,6 +316,7 @@
     host.className = '';
     host.innerHTML = html;
     document.getElementById('upBtn').style.display = 'block';
+    startPolling(); // 진행 중인 백그라운드 작업이 있으면 표시
   }
 
   function kpi(l, v) { return '<div class="kpi"><div class="l">' + l + '</div><div class="v">' + v + '</div></div>'; }
@@ -363,6 +369,9 @@
     });
   }
 
+  var JOB_MAP = {};   // jobId -> slot (현재 세션)
+  var POLLING = false;
+
   async function runAll() {
     var slots = Array.prototype.slice.call(document.querySelectorAll('#uploadAreas .slot'))
       .filter(function (s) { return s._file; });
@@ -370,52 +379,100 @@
 
     var btn = document.getElementById('upBtn');
     btn.disabled = true;
-    upShow('ok', '처리 시작… (' + slots.length + '개 파일, 순서대로 진행)');
-    var totalAdded = 0, failed = 0;
+    upShow('ok', '처리 준비 중…');
+    var totalAdded = 0, failed = 0, queuedAny = false;
 
     for (var k = 0; k < slots.length; k++) {
       var slot = slots[k];
       var area = slot.getAttribute('data-area');
       var team = slot.getAttribute('data-team') || '';
       var mode = slot.getAttribute('data-mode');
-      var who = area + (team ? '(' + team + ')' : '');
       try {
         setStatus(slot, 'run', '읽는 중…');
         var text = await readDecoded(slot._file);
 
         if (mode === 'asform') {
+          // AS는 빠르므로 즉시 처리
           setStatus(slot, 'run', '양식 추출 중…');
           var r = await gasRun('ingestASFormsUpload', [text, team]);
           if (!r || !r.ok) throw new Error(r && r.error ? r.error : '실패');
           setStatus(slot, 'ok', '완료 +' + nf(r.added) + ' (중복 ' + nf(r.skipped) + ')');
           totalAdded += (r.added || 0);
         } else {
-          setStatus(slot, 'run', '준비 중…');
-          var start = await gasRun('kakaoUploadStart', [area, team, text]);
-          if (!start || !start.ok) throw new Error(start && start.error ? start.error : '실패');
-          if (!start.batches) { setStatus(slot, 'ok', '새 메시지 없음'); continue; }
-          var acc = { added: 0, skipped: 0 };
-          for (var i = 0; i < start.batches; i++) {
-            setStatus(slot, 'run', '처리 중 ' + (i + 1) + '/' + start.batches);
-            var b = await gasRun('kakaoUploadBatch', [i]);
-            if (!b || !b.ok) throw new Error(b && b.error ? b.error : '배치 실패');
-            acc.added += (b.added || 0); acc.skipped += (b.skipped || 0);
-          }
-          setStatus(slot, 'ok', '완료 +' + nf(acc.added) + ' (중복 ' + nf(acc.skipped) + ')');
-          totalAdded += acc.added;
+          // AI는 백그라운드 대기열에 등록
+          setStatus(slot, 'run', '대기열 등록 중…');
+          var q = await gasRun('kakaoEnqueue', [area, team, text]);
+          if (!q || !q.ok) throw new Error(q && q.error ? q.error : '실패');
+          if (!q.batches) { setStatus(slot, 'ok', '새 메시지 없음'); continue; }
+          slot._jobId = q.jobId;
+          JOB_MAP[q.jobId] = slot;
+          queuedAny = true;
+          setStatus(slot, 'run', '대기 중 (0/' + q.batches + ')');
         }
       } catch (err) {
         failed++;
         setStatus(slot, 'err', '실패: ' + (err && err.message ? err.message : err));
       }
-      upShow('ok', '진행 중… ' + (k + 1) + '/' + slots.length + ' 완료  ·  누적 추가 ' + nf(totalAdded) + '건');
     }
 
-    btn.disabled = false;
-    upShow(failed ? 'err' : 'ok',
-      (failed ? '일부 실패 ' : '전체 완료 ✓ ') + '신규 추가 ' + nf(totalAdded) + '건' +
-      (failed ? ' / 실패 ' + failed + '건 (위 항목별 상태 확인)' : '') +
-      '\n(통합 탭은 다음 동기화 때 반영됩니다)');
+    if (queuedAny) {
+      await gasRun('kakaoStartWorker', []);
+      upShow('ok',
+        '백그라운드 처리 시작 ✓  (AS 즉시 추가 ' + nf(totalAdded) + '건)\n' +
+        '이제 창을 닫거나 폰을 꺼도 서버에서 끝까지 처리됩니다.\n' +
+        '다시 들어오면 진행상황이 표시됩니다.');
+      startPolling();
+    } else {
+      btn.disabled = false;
+      upShow(failed ? 'err' : 'ok',
+        (failed ? '일부 실패 ' : '완료 ✓ ') + '신규 추가 ' + nf(totalAdded) + '건' +
+        (failed ? ' / 실패 ' + failed + '건' : '') + '\n(통합 탭은 다음 동기화 때 반영됩니다)');
+    }
+  }
+
+  // 백그라운드 큐 상태 폴링 (창을 다시 열어도 동작)
+  function startPolling() {
+    if (POLLING) return;
+    POLLING = true;
+    pollQueue();
+  }
+  function pollQueue() {
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.ok) {
+          renderBgStatus(res.jobs);
+          res.jobs.forEach(function (j) {
+            var s = JOB_MAP[j.jobId];
+            if (!s) return;
+            if (j.status === 'done') setStatus(s, 'ok', '완료 +' + nf(j.added) + ' (중복 ' + nf(j.skipped) + ')');
+            else if (j.status === 'error') setStatus(s, 'err', '실패: ' + (j.lastError || '오류'));
+            else setStatus(s, 'run', (j.status === 'running' ? '처리 중 ' : '대기 ') + j.done + '/' + j.batches);
+          });
+          if (!res.active) {
+            POLLING = false;
+            document.getElementById('upBtn').disabled = false;
+            if (res.jobs.length) upShow('ok', '백그라운드 처리 완료 ✓\n(통합 탭은 다음 동기화 때 반영됩니다)');
+            return;
+          }
+        }
+        setTimeout(pollQueue, 5000);
+      })
+      .withFailureHandler(function () { setTimeout(pollQueue, 8000); })
+      .kakaoQueueStatus();
+  }
+  function renderBgStatus(jobs) {
+    var el = document.getElementById('bgStatus');
+    if (!el) return;
+    if (!jobs || !jobs.length) { el.style.display = 'none'; return; }
+    var active = jobs.filter(function (j) { return j.status !== 'done' && j.status !== 'error'; });
+    if (!active.length) { el.style.display = 'none'; return; }
+    var html = '<b>백그라운드 처리 중</b> — 창을 닫아도 계속됩니다<br>';
+    html += jobs.map(function (j) {
+      var st = j.status === 'done' ? '완료' : (j.status === 'error' ? '실패' : (j.status === 'running' ? '처리중' : '대기'));
+      return esc(j.roomType) + (j.teamLabel ? '(' + esc(j.teamLabel) + ')' : '') + ': ' + j.done + '/' + j.batches + ' ' + st + ' (+' + nf(j.added) + ')';
+    }).join('<br>');
+    el.innerHTML = html;
+    el.style.display = 'block';
   }
 
   // 카톡 내보내기 인코딩 자동 판별 (PC=UTF-16, 모바일=UTF-8). BOM 기준.
