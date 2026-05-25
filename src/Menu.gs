@@ -9,9 +9,30 @@ function onOpen() {
     .addItem('시트 → 마스터 동기화', 'syncAllToMaster')
     .addItem('인덱스 재생성', 'rebuildIndex')
     .addSeparator()
+    .addItem('매일 자동 새로고침 켜기', 'installDailyTrigger')
+    .addItem('매일 자동 새로고침 끄기', 'removeDailyTriggers')
+    .addSeparator()
     .addItem('바로가기 탭 생성/갱신', 'buildShortcutSheet')
     .addItem('접근 권한 점검', 'diagAccess')
     .addToUi();
+}
+
+// 매일 자동 새로고침 트리거 (refreshAll = 시트→마스터→인덱스). 기본 새벽 5시.
+function installDailyTrigger() {
+  removeDailyTriggers();
+  ScriptApp.newTrigger('refreshAll').timeBased().everyDays(1).atHour(5).create();
+  Logger.log('매일 새벽 5시 refreshAll 트리거 생성됨');
+  return { ok: true };
+}
+
+function removeDailyTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let n = 0;
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'refreshAll') { ScriptApp.deleteTrigger(t); n++; }
+  }
+  Logger.log('refreshAll 트리거 ' + n + '개 제거됨');
+  return { ok: true, removed: n };
 }
 
 // 영역별 원본 시트 / 통합 탭으로 바로 이동하는 링크 탭 (화이트보드의 "바로가기 버튼")

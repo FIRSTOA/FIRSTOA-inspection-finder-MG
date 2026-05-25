@@ -20,7 +20,10 @@ function syncCategoryToMaster(cat) {
   const masterSs = SpreadsheetApp.openById(MASTER_SS_ID);
   const tabName = MASTER_TABS[cat] || cat;
   const sheet = ensureMasterTab_(masterSs, cat, tabName);
-  const existing = loadDupKeys_(sheet);
+  const headerCols = masterHeaders_(cat);
+
+  // 시트 미러는 매번 전체 교체하므로, 카톡으로 적재된 행은 따로 보존한다.
+  const preserved = loadRowsBySourcePrefix_(sheet, '카톡');
 
   let src;
   try {
@@ -28,9 +31,6 @@ function syncCategoryToMaster(cat) {
   } catch (e) {
     return { ok: false, error: '원본 열기 실패: ' + e };
   }
-
-  const headerCols = masterHeaders_(cat);
-  const newRows = [];
 
   // 원본 시트 목록: sheets(이름) 우선, 없으면 gid로 해석
   const sources = [];
@@ -42,19 +42,17 @@ function syncCategoryToMaster(cat) {
     }
   }
 
+  // 시트 원본을 그대로 복제 (중복 제거 X, 업체명 빈 행도 유지). 완전 빈 행만 제외.
+  const sheetRows = [];
   for (const srcItem of sources) {
     const sheetName = srcItem.name;
     const sh = srcItem.sheet;
-    if (!sh) {
-      Logger.log('  시트 없음: ' + sheetName);
-      continue;
-    }
+    if (!sh) { Logger.log('  시트 없음: ' + sheetName); continue; }
 
     const lastRow = sh.getLastRow();
     const lastCol = sh.getLastColumn();
     if (lastRow <= cfg.headerRow) continue;
 
-    // 공백/줄바꿈 무시 매칭: 정규화 헤더 → 열 인덱스(최초 출현)
     const rawHeaders = sh.getRange(cfg.headerRow, 1, 1, lastCol).getValues()[0];
     const hmap = {};
     for (let c = 0; c < rawHeaders.length; c++) {
@@ -76,9 +74,12 @@ function syncCategoryToMaster(cat) {
     const data = sh.getRange(cfg.headerRow + 1, 1, lastRow - cfg.headerRow, lastCol).getValues();
 
     for (const row of data) {
+      let allBlank = true;
+      for (const cell of row) { if (String(cell).trim() !== '') { allBlank = false; break; } }
+      if (allBlank) continue;
+
       let vendor = vIdx !== -1 ? String(row[vIdx] || '').trim() : '';
       if (!vendor && fIdx !== -1) vendor = String(row[fIdx] || '').trim();
-      if (!vendor) continue;
 
       const obj = {};
       for (const colName of cfg.displayCols) {
@@ -88,23 +89,44 @@ function syncCategoryToMaster(cat) {
         obj[colName] = v;
       }
 
-      const key = dupKey_(cat, vendor, obj);
-      if (existing[key]) continue;
-      existing[key] = true;
-
       const outRow = cfg.displayCols.map(c => (obj[c] == null ? '' : obj[c]));
-      outRow.push(vendor, '시트:' + sheetName, '', new Date(), key);
-      newRows.push(outRow);
+      outRow.push(vendor, '시트:' + sheetName, '', new Date(), dupKey_(cat, vendor, obj));
+      sheetRows.push(outRow);
     }
   }
 
-  if (newRows.length) {
-    const start = sheet.getLastRow() + 1;
-    sheet.getRange(start, 1, newRows.length, headerCols.length).setValues(newRows);
+  // 전체 교체: 데이터 영역 비우고 [시트행 + 보존 카톡행] 기록
+  const curLast = sheet.getLastRow();
+  if (curLast > 1) sheet.getRange(2, 1, curLast - 1, headerCols.length).clearContent();
+
+  const allRows = sheetRows.concat(preserved);
+  if (allRows.length) {
+    const BATCH = 10000;
+    for (let i = 0; i < allRows.length; i += BATCH) {
+      const slice = allRows.slice(i, i + BATCH);
+      sheet.getRange(2 + i, 1, slice.length, headerCols.length).setValues(slice);
+    }
   }
 
-  Logger.log(cat + ' → ' + tabName + ': +' + newRows.length + '행');
-  return { ok: true, tab: tabName, added: newRows.length };
+  Logger.log(cat + ' → ' + tabName + ': 시트 ' + sheetRows.length + '행 + 카톡 ' + preserved.length + '행 = ' + allRows.length);
+  return { ok: true, tab: tabName, sheetRows: sheetRows.length, kakaoRows: preserved.length, total: allRows.length };
+}
+
+// 통합 탭에서 _출처가 특정 접두사로 시작하는 기존 행을 그대로 읽어온다 (전체 교체 시 보존용).
+function loadRowsBySourcePrefix_(sheet, prefix) {
+  const out = [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return out;
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  const sIdx = headers.indexOf('_출처');
+  if (sIdx === -1) return out;
+
+  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  for (const row of data) {
+    if (String(row[sIdx] || '').indexOf(prefix) === 0) out.push(row);
+  }
+  return out;
 }
 
 function ensureMasterTab_(ss, cat, tabName) {
