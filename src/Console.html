@@ -293,6 +293,7 @@
 
     var reader = new FileReader();
     reader.onload = function (ev) {
+      var text = decodeUpload(ev.target.result);
       upShow('ok', '적재 중… (대용량 AI 추출은 몇 분 걸릴 수 있습니다)');
       google.script.run
         .withSuccessHandler(function (res) {
@@ -307,10 +308,22 @@
           }
         })
         .withFailureHandler(function (err) { btn.disabled = false; upShow('err', '오류: ' + err.message); })
-        .ingestKakaoUpload(room, team, ev.target.result);
+        .ingestKakaoUpload(room, team, text);
     };
     reader.onerror = function () { btn.disabled = false; upShow('err', '파일 읽기 실패'); };
-    reader.readAsText(fileInput.files[0], 'UTF-8');
+    reader.readAsArrayBuffer(fileInput.files[0]);
+  }
+
+  // 카톡 내보내기 인코딩 자동 판별 (PC=UTF-16, 모바일=UTF-8). BOM 기준.
+  function decodeUpload(buffer) {
+    var b = new Uint8Array(buffer);
+    var enc = 'utf-8';
+    if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) enc = 'utf-16le';
+    else if (b.length >= 2 && b[0] === 0xFE && b[1] === 0xFF) enc = 'utf-16be';
+    var text;
+    try { text = new TextDecoder(enc).decode(b); }
+    catch (e) { text = new TextDecoder('utf-8').decode(b); }
+    return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
   }
 </script>
 </body>
