@@ -4,9 +4,18 @@
  */
 
 function doGet(e) {
+  const action0 = (e.parameter.action || 'search').toLowerCase();
+
+  // 카톡 TXT 업로드 화면 (HTML)
+  if (action0 === 'upload') {
+    return HtmlService.createHtmlOutputFromFile('Upload')
+      .setTitle('카톡 TXT 업로드')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   let result;
   try {
-    const action = (e.parameter.action || 'search').toLowerCase();
+    const action = action0;
     const q = (e.parameter.q || '').trim();
 
     if (action === 'search') result = searchVendorsFromIndex(q);
@@ -25,6 +34,21 @@ function doGet(e) {
   }
   return ContentService.createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 업로드 화면용: 지원 카톡방 유형 목록
+function getKakaoRoomTypes() {
+  return Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
+}
+
+// 업로드 화면에서 호출 (google.script.run). TXT 내용을 받아 적재.
+function ingestKakaoUpload(roomType, teamLabel, content) {
+  try {
+    if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
+    return ingestKakaoTxt(roomType, teamLabel || '', String(content));
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
 }
 
 function searchVendorsFromIndex(query) {
