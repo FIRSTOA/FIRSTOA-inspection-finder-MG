@@ -26,9 +26,9 @@ const KAKAO_SOURCES = {
   '경영지원': { category: '경영지원', mode: 'ai' }
 };
 
-// 비용 절감용 OpenAI 모델. 정확도가 필요하면 'gpt-4o' 등으로 교체 가능.
-const KAKAO_AI_MODEL = 'gpt-4o-mini';
-const KAKAO_AI_MAX_TOKENS = 8000;
+// 카톡 AI 추출 모델. 분류·요약 품질이 중요하면 'gpt-4o'(권장), 비용 최소화는 'gpt-4o-mini'.
+const KAKAO_AI_MODEL = 'gpt-4o';
+const KAKAO_AI_MAX_TOKENS = 12000;
 const KAKAO_AI_BATCH = 40; // 한 번에 보내는 메시지 수
 
 function ingestKakaoTxt(roomType, txtContent, teamLabel) {
@@ -360,19 +360,30 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
     const vendor = String(r['업체명'] || '').trim();
     if (!vendor) continue;
     const obj = {};
-    for (const c of cols) if (r[c] != null) obj[c] = r[c];
+    for (const c of cols) if (!isBlankVal_(r[c])) obj[c] = r[c];
     out.push({ vendor: vendor, obj: obj, raw: '' });
   }
   return out;
 }
 
+// AI가 빈 값으로 채우는 표현들("null", "없음" 등)을 빈칸으로 정규화
+function isBlankVal_(v) {
+  if (v == null) return true;
+  const s = String(v).trim().toLowerCase();
+  return s === '' || s === 'null' || s === 'n/a' || s === 'na' || s === '-' || s === '.' ||
+         s === '없음' || s === '미상' || s === '해당없음' || s === '불명' || s === '확인불가';
+}
+
 function buildExtractSystemPrompt_(cat, cols, hint) {
   const lines = [
-    '너는 카카오톡 단체방 대화에서 거래처별 "' + cat + '" 정보를 추출하는 도우미다.',
-    '하나의 방(팀별 방)에 여러 거래처 이야기가 섞여 있다. 각 거래처(업체) 건별로 레코드를 분리해라.',
-    '각 레코드는 반드시 "업체명"을 포함해야 한다. 업체명을 알 수 없는 메시지는 건너뛴다(누락 허용).',
-    '다음 항목을 대화에서 찾을 수 있으면 채우고, 없으면 null로 둬라: ' + cols.join(', ') + '.',
-    '대화에 실제로 있는 내용만 사용하고 추측해서 지어내지 마라.'
+    '너는 카카오톡 단체방 대화에서 거래처별 "' + cat + '" 정보를 추출·정리하는 전문가다.',
+    '하나의 방에 여러 거래처 이야기가 섞여 있다. 각 거래처(업체) 건별로 레코드를 분리해라.',
+    '각 레코드는 반드시 "업체명"을 포함한다. 업체명을 알 수 없는 잡담·인사·시스템 메시지는 건너뛴다.',
+    '채울 항목: ' + cols.join(', ') + '.',
+    '항목 작성 규칙:',
+    '- 사실 정보(연락처·날짜·금액·담당자·기종·코드 등): 대화에 실제로 있는 값만 쓰고 없으면 null. 지어내지 마라.',
+    '- 분류·유형·항목·감정·요약·분석 성격의 항목(예: 불만유형, 불만항목, 고객감정상태, AI_*, 사실확인, 대안제시, 재발방지 등): 대화 내용을 근거로 네가 적극적으로 판단해 채워라. 명시돼 있지 않아도 맥락으로 추론 가능하면 채운다. 근거가 전혀 없을 때만 null.',
+    '- 빈 값은 반드시 JSON null 로 두고 "null","없음" 같은 글자를 값으로 쓰지 마라.'
   ];
   if (hint) lines.push(hint);
   lines.push('결과는 records 배열로만 반환한다.');
