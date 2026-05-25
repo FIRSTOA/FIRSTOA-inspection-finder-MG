@@ -46,7 +46,7 @@ function syncCategoryToMaster(cat) {
     }
   }
 
-  // 시트 원본을 그대로 복제 (중복 제거 X, 업체명 빈 행도 유지). 완전 빈 행만 제외.
+  // 시트 원본을 복제 (중복 제거 X). 업체명 없는 행은 제외 (인덱스/검색도 어차피 제외함).
   const sheetRows = [];
   for (const srcItem of sources) {
     const sheetName = srcItem.name;
@@ -78,12 +78,9 @@ function syncCategoryToMaster(cat) {
     const data = sh.getRange(cfg.headerRow + 1, 1, lastRow - cfg.headerRow, lastCol).getValues();
 
     for (const row of data) {
-      let allBlank = true;
-      for (const cell of row) { if (String(cell).trim() !== '') { allBlank = false; break; } }
-      if (allBlank) continue;
-
       let vendor = vIdx !== -1 ? String(row[vIdx] || '').trim() : '';
       if (!vendor && fIdx !== -1) vendor = String(row[fIdx] || '').trim();
+      if (!vendor) continue;
 
       const obj = {};
       for (const colName of cfg.displayCols) {
