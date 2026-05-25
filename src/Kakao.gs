@@ -119,27 +119,41 @@ function kakaoUploadStart(roomType, teamLabel, content) {
     messages = filterKakaoMessages_(messages);
     if (!messages.length) return { ok: false, error: '유효 메시지 0건 (사진/이모티콘 등만 있음)' };
 
+    // 이미 처리한 메시지는 제외 → 전체 TXT를 다시 붙여넣어도 "새 메시지"만 AI에 보낸다
+    const seen = loadSeenHashes_(roomType);
+    const fresh = [];
+    for (const m of messages) {
+      const h = msgHash_(roomType, m);
+      if (seen[h]) continue;
+      seen[h] = true; // 같은 파일 내 중복도 방지
+      fresh.push([m.date || '', m.author || '', m.text || '', h]);
+    }
+
+    const tabName = MASTER_TABS[cat] || cat;
+    if (!fresh.length) {
+      return { ok: true, total: 0, batches: 0, mode: src.mode, tab: tabName, nothingNew: true, scanned: messages.length };
+    }
+
     const ss = SpreadsheetApp.openById(MASTER_SS_ID);
     let tmp = ss.getSheetByName(KAKAO_TMP_TAB);
     if (!tmp) { tmp = ss.insertSheet(KAKAO_TMP_TAB); tmp.hideSheet(); }
     tmp.clear();
-    tmp.getRange(1, 1, 1, 3).setValues([['date', 'author', 'text']]);
-    const rows = messages.map(m => [m.date || '', m.author || '', m.text || '']);
+    tmp.getRange(1, 1, 1, 4).setValues([['date', 'author', 'text', 'hash']]);
     const B = 5000;
-    for (let i = 0; i < rows.length; i += B) {
-      const slice = rows.slice(i, i + B);
-      tmp.getRange(2 + i, 1, slice.length, 3).setValues(slice);
+    for (let i = 0; i < fresh.length; i += B) {
+      const slice = fresh.slice(i, i + B);
+      tmp.getRange(2 + i, 1, slice.length, 4).setValues(slice);
     }
 
     const size = src.mode === 'rule' ? 1000 : KAKAO_AI_BATCH * 2;
-    const batches = Math.ceil(messages.length / size);
+    const batches = Math.ceil(fresh.length / size);
     const job = {
       roomType: roomType, teamLabel: teamLabel || '', cat: cat, mode: src.mode,
-      total: messages.length, size: size, batches: batches, ts: Date.now()
+      total: fresh.length, size: size, batches: batches, ts: Date.now()
     };
     PropertiesService.getScriptProperties().setProperty('KAKAO_JOB', JSON.stringify(job));
 
-    return { ok: true, total: messages.length, batches: batches, mode: src.mode, tab: MASTER_TABS[cat] || cat };
+    return { ok: true, total: fresh.length, batches: batches, mode: src.mode, tab: tabName, scanned: messages.length };
   } catch (err) {
     return { ok: false, error: err.toString() };
   }
@@ -160,8 +174,9 @@ function kakaoUploadBatch(batchIndex) {
     if (remaining <= 0) return { ok: true, done: true, added: 0, skipped: 0, records: 0, tab: MASTER_TABS[job.cat] || job.cat, mode: job.mode };
 
     const n = Math.min(job.size, remaining);
-    const vals = tmp.getRange(2 + batchIndex * job.size, 1, n, 3).getValues();
+    const vals = tmp.getRange(2 + batchIndex * job.size, 1, n, 4).getValues();
     const messages = vals.map(r => ({ date: r[0], author: r[1], text: r[2] }));
+    const hashes = vals.map(r => r[3]);
 
     const src = KAKAO_SOURCES[job.roomType];
     const records = job.mode === 'rule'
@@ -169,6 +184,7 @@ function kakaoUploadBatch(batchIndex) {
       : extractKakaoWithAI_(job.cat, messages, src && src.aiHint);
 
     const r = appendKakaoRecords_(job.cat, job.roomType, job.teamLabel, records);
+    appendSeenHashes_(job.roomType, hashes); // 이 배치 메시지를 "처리됨"으로 기록
 
     const done = (batchIndex + 1) >= job.batches;
     if (done) {
@@ -183,6 +199,45 @@ function kakaoUploadBatch(batchIndex) {
   } catch (err) {
     return { ok: false, error: err.toString() };
   }
+}
+
+// ── 메시지 단위 중복 추적 (전체 TXT 재업로드 시 새 메시지만 처리) ──
+const KAKAO_SEEN_TAB = '_kakao_seen';
+
+function msgHash_(room, m) {
+  const raw = room + '|' + (m.date || '') + '|' + (m.author || '') + '|' + (m.text || '');
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw, Utilities.Charset.UTF_8);
+  let hex = '';
+  for (let b = 0; b < bytes.length; b++) {
+    const v = bytes[b] < 0 ? bytes[b] + 256 : bytes[b];
+    hex += (v < 16 ? '0' : '') + v.toString(16);
+  }
+  return hex;
+}
+
+function loadSeenHashes_(room) {
+  const set = {};
+  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+  const sh = ss.getSheetByName(KAKAO_SEEN_TAB);
+  if (!sh) return set;
+  const last = sh.getLastRow();
+  if (last < 2) return set;
+  const data = sh.getRange(2, 1, last - 1, 2).getValues();
+  for (const r of data) { if (r[0] === room) set[r[1]] = true; }
+  return set;
+}
+
+function appendSeenHashes_(room, hashes) {
+  if (!hashes || !hashes.length) return;
+  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+  let sh = ss.getSheetByName(KAKAO_SEEN_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(KAKAO_SEEN_TAB);
+    sh.hideSheet();
+    sh.getRange(1, 1, 1, 2).setValues([['room', 'hash']]);
+  }
+  const rows = hashes.map(h => [room, h]);
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, 2).setValues(rows);
 }
 
 // 규칙 기반 (AS 등 양식 메시지): "라벨: 값" 줄에서 업체명 + 표시컬럼을 뽑는다.
