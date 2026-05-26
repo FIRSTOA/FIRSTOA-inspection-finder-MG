@@ -723,7 +723,8 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
     if (!vendor) continue;
     const obj = {};
     for (const c of cols) if (!isBlankVal_(r[c])) obj[c] = r[c];
-    out.push({ vendor: vendor, obj: obj, raw: obj['원문'] || '' });
+    // 원문은 displayCols의 '원문' 칸에 들어가므로 헬퍼 _원문(raw)은 비워 중복 방지
+    out.push({ vendor: vendor, obj: obj, raw: '' });
   }
   return out;
 }
