@@ -77,15 +77,16 @@ function filterKakaoMessages_(messages) {
 }
 
 // 카테고리별 사전 필터. 재계약방은 초과료/분기마감 보고서를 AI 전에 제거(재계약 신호 있으면 유지).
-const RECON_KEEP = /재계약|재약정|재\s?약정|계약\s*연장|연장\s*계약|계약\s*갱신|약정\s*연장|계약\s*갱신|갱신\s*계약|재\s*약정/;
-const RECON_OVERAGE = /분기\s*마감|초과료|초과\s*발생|발생.*초과|첫\s*청구|청구\s*안내|명세서|세금계산서|발행\s*완료/;
+const RECON_KEEP = /재계약|재약정|재\s?약정|계약\s*연장|연장\s*계약|계약\s*갱신|약정\s*연장|갱신\s*계약/;
+const RECON_OVERAGE = /분기\s*마감|매월\s*마감|마감|정산|초과|청구|명세서|세금계산서|발행\s*완료|누적/;
 function preFilterForCategory_(cat, messages) {
   if (cat !== '재계약') return messages;
   return messages.filter(function (m) {
     const t = String(m.text || '');
-    if (RECON_KEEP.test(t)) return true;     // 재계약 신호 → 유지
-    if (RECON_OVERAGE.test(t)) return false; // 초과료/분기마감 보고 → 제외
-    return true;                             // 애매하면 유지(AI 판단)
+    if (RECON_KEEP.test(t)) return true;                       // 재계약 신호 → 유지
+    if (/상담내용/.test(t) && /기본료/.test(t)) return false;  // 분기마감/정산 구조 보고서 → 제외
+    if (RECON_OVERAGE.test(t)) return false;                   // 초과료/청구/정산 류 → 제외
+    return true;                                               // 애매하면 유지(AI 판단)
   });
 }
 
