@@ -51,6 +51,7 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
     return { ok: false, error: '카톡 메시지 파싱 결과 0건 (수신 ' + String(txtContent || '').length + '자, 시작: "' + head + '")' };
   }
   messages = filterKakaoMessages_(messages);
+  messages = preFilterForCategory_(cat, messages);
 
   const records = src.mode === 'rule'
     ? extractKakaoByRule_(cat, messages)
@@ -72,6 +73,19 @@ function filterKakaoMessages_(messages) {
     if (t.length < 2) return false;
     if (KAKAO_NOISE.test(t)) return false;
     return true;
+  });
+}
+
+// 카테고리별 사전 필터. 재계약방은 초과료/분기마감 보고서를 AI 전에 제거(재계약 신호 있으면 유지).
+const RECON_KEEP = /재계약|재약정|재\s?약정|계약\s*연장|연장\s*계약|계약\s*갱신|약정\s*연장|계약\s*갱신|갱신\s*계약|재\s*약정/;
+const RECON_OVERAGE = /분기\s*마감|초과료|초과\s*발생|발생.*초과|첫\s*청구|청구\s*안내|명세서|세금계산서|발행\s*완료/;
+function preFilterForCategory_(cat, messages) {
+  if (cat !== '재계약') return messages;
+  return messages.filter(function (m) {
+    const t = String(m.text || '');
+    if (RECON_KEEP.test(t)) return true;     // 재계약 신호 → 유지
+    if (RECON_OVERAGE.test(t)) return false; // 초과료/분기마감 보고 → 제외
+    return true;                             // 애매하면 유지(AI 판단)
   });
 }
 
@@ -123,6 +137,7 @@ function kakaoUploadStart(roomType, teamLabel, content) {
       return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
     }
     messages = filterKakaoMessages_(messages);
+    messages = preFilterForCategory_(cat, messages);
     if (!messages.length) return { ok: false, error: '유효 메시지 0건 (사진/이모티콘 등만 있음)' };
 
     // 이미 처리한 메시지는 제외 → 전체 TXT를 다시 붙여넣어도 "새 메시지"만 AI에 보낸다
@@ -222,6 +237,7 @@ function kakaoEnqueue(roomType, teamLabel, content) {
     let messages = parseKakaoMessages_(String(content));
     if (!messages.length) return { ok: false, error: '파싱 0건' };
     messages = filterKakaoMessages_(messages);
+    messages = preFilterForCategory_(cat, messages);
 
     const seen = loadSeenHashes_(roomType);
     const fresh = [];
