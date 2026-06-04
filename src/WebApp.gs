@@ -46,6 +46,7 @@ function doGet(e) {
 // 업로드 화면용: 지원 카톡방 유형 목록 (AS는 전용 양식 파서로 별도 처리)
 function getKakaoRoomTypes() {
   const list = Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
+  list.unshift({ type: '점검', mode: 'inspectform' });
   list.unshift({ type: 'AS', mode: 'asform' });
   return list;
 }

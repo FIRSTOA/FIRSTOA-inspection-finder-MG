@@ -598,6 +598,94 @@ function appendASToSheet_(records) {
   return { added: newRows.length, skipped: records.length - newRows.length };
 }
 
+// ── 점검 전용: 카톡 "구분:점검" 양식을 규칙 파싱해 마스터 "점검" 탭에 직접 적재 (AI 미사용) ──
+// AS와 흐름은 같으나 원본 시트가 없고 통합(마스터) 탭이 곧 적재처다(kakaoOnly).
+function ingestInspectFormsUpload(content, regionFallback) {
+  try {
+    if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
+    const messages = parseKakaoMessages_(String(content));
+    if (!messages.length) {
+      const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
+      return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
+    }
+    const records = extractInspectForms_(messages, regionFallback || '');
+    if (!records.length) return { ok: false, error: '점검 양식(구분:점검) 메시지를 찾지 못했습니다.', parsed: messages.length };
+    const r = appendKakaoRecords_('점검', '점검', regionFallback || '', records);
+    return { ok: true, tab: r.tab, parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// "구분" 값에 "점검"이 포함되면 점검 양식으로 본다.
+// 예: 구분:점검 / 구분 : 점검 / 구분:점검,as / 구분:점검,마감 / 구분: AS/점검 … 모두 인식
+function isInspectForm_(content) {
+  const m = String(content).match(/구분\s*[:：]\s*([^\n\r]{0,60})/);
+  if (!m) return false;
+  return /점\s*검/.test(m[1]);
+}
+
+function extractInspectForms_(messages, regionFallback) {
+  const cols = CONFIG['점검'].displayCols;
+  const out = [];
+  for (const m of messages) {
+    const content = m.text || '';
+    if (!isInspectForm_(content)) continue;
+
+    const f = extractInspectFields_(content);
+    const vendor = f['업체명'];
+    if (!vendor || vendor.length < 2 || /^부서명/.test(vendor)) continue;
+
+    if (!f['작성자']) f['작성자'] = String(m.author || '').replace(/님$/, '');
+    if (!f['지역']) f['지역'] = regionFallback || '';
+
+    const obj = {};
+    for (const c of cols) { if (f[c] != null && String(f[c]).trim() !== '') obj[c] = f[c]; }
+    obj['업체명'] = vendor; // displayCols에 업체명이 있으므로 값을 채워준다
+
+    out.push({ vendor: vendor, obj: obj, raw: content });
+  }
+  return out;
+}
+
+function extractInspectFields_(content) {
+  const f = {};
+  const single = [
+    '작성자', '구분', '레벨', '부서명', '지역', '키맨/접수자',
+    '모델명', '시리얼넘버', '자산기번',
+    '매수', '토너잔량', '폐통', '여분', '한틴이카유무', '주차비지원유무', '특이사항'
+  ];
+  single.forEach(function (lab) { f[lab] = extractInspectField_(content, lab, false); });
+  f['업체명'] = extractInspectField_(content, '업체명', false);
+  f['내용'] = extractInspectField_(content, '내용', true);
+  f['처리내용'] = extractInspectField_(content, '처리내용', true);
+
+  // 등급: "(1,2,3)" 같은 안내 기본값은 제외 (AS와 동일 규칙)
+  const gm = content.match(/등급\s*[:：]?\s*\(?\s*([^),\n\r]+?)\s*[,)\r\n]/);
+  if (gm) {
+    const v = gm[1].trim();
+    if (v && v !== '1 , 2 , 3' && v !== '1,2,3' && !/^\d?\s*,\s*\d/.test(v)) f['등급'] = v;
+  }
+  return f;
+}
+
+// 라벨 기준 값 추출. AS용(extractASField_)과 달리 "---"(2자 이상)·※·* 구분선도 경계로 인식해
+// 점검 양식의 블록 구분선이 값에 섞이지 않게 한다.
+function extractInspectField_(content, label, multiline) {
+  const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    '(?:^|[\\r\\n])' + escLabel + '\\s*[:：]?\\s*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?[:：]|[-=]{2,}|※|＊|\\*)|$)',
+    ''
+  );
+  const match = content.match(pattern);
+  if (!match) return '';
+  let val = match[1].trim();
+  val = val.replace(/[\r\n]+\s*[-=*※＊].*$/, '').trim(); // 끝에 붙은 구분선 제거
+  if (!val) return '';
+  if (/^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항)\s*[:：]?\s*$/.test(val)) return '';
+  return multiline ? val : val.split(/[\r\n]/)[0].trim();
+}
+
 // 규칙 기반 (AS 등 양식 메시지): "라벨: 값" 줄에서 업체명 + 표시컬럼을 뽑는다.
 function extractKakaoByRule_(cat, messages) {
   const cfg = CONFIG[cat];

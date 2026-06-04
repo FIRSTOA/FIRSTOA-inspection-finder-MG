@@ -231,6 +231,7 @@
   // 영역별 업로드 슬롯(팀/지역). 빈 문자열 = 단일 파일.
   var AREA_SLOTS = {
     'AS':     ['A', 'B', 'C', 'D'],
+    '점검':    [''],
     '불만':    ['AB', 'CD'],
     '미수':    ['A', 'B', 'C', 'D'],
     '재계약':  ['A', 'B', 'C', 'D'],
@@ -300,6 +301,7 @@
     types.forEach(function (t) {
       var slots = AREA_SLOTS[t.type] || [''];
       var badge = t.mode === 'asform' ? '<span class="badge sheet">양식→AS시트</span>'
+                : t.mode === 'inspectform' ? '<span class="badge sheet">양식→점검탭</span>'
                 : '<span class="badge kakao">AI</span>';
       html += '<div class="area">';
       html += '<div class="area-head">' + esc(t.type) + ' ' + badge + '</div>';
@@ -401,6 +403,13 @@
           if (!r || !r.ok) throw new Error(r && r.error ? r.error : '실패');
           setStatus(slot, 'ok', '완료 +' + nf(r.added) + ' (중복 ' + nf(r.skipped) + ')');
           totalAdded += (r.added || 0);
+        } else if (mode === 'inspectform') {
+          // 점검도 양식 추출 → 마스터 점검 탭에 즉시 적재
+          setStatus(slot, 'run', '양식 추출 중…');
+          var ri = await gasRun('ingestInspectFormsUpload', [text, team]);
+          if (!ri || !ri.ok) throw new Error(ri && ri.error ? ri.error : '실패');
+          setStatus(slot, 'ok', '완료 +' + nf(ri.added) + ' (중복 ' + nf(ri.skipped) + ')');
+          totalAdded += (ri.added || 0);
         } else {
           // AI는 백그라운드 대기열에 등록
           setStatus(slot, 'run', '대기열 등록 중…');
