@@ -231,7 +231,7 @@
   // 영역별 업로드 슬롯(팀/지역). 빈 문자열 = 단일 파일.
   var AREA_SLOTS = {
     'AS':     ['A', 'B', 'C', 'D'],
-    '점검':    [''],
+    '점검':    ['A', 'B', 'C', 'D'],
     '불만':    ['AB', 'CD'],
     '미수':    ['A', 'B', 'C', 'D'],
     '재계약':  ['A', 'B', 'C', 'D'],
@@ -271,7 +271,10 @@
     var rows = '<table><tr><th>카테고리</th><th>유형</th><th>통합 탭</th><th class="num">건수</th></tr>';
     data.categories.forEach(function (c) {
       var tab = c.tabUrl ? '<a class="btn btn-soft" href="' + c.tabUrl + '" target="_blank">' + esc(c.tabName) + '</a>' : '<span class="muted">미생성</span>';
-      var badge = c.kakaoOnly ? '<span class="badge kakao">카톡</span>' : '<span class="badge sheet">시트연동</span>';
+      var hasSheet = c.hasSheet != null ? c.hasSheet : !c.kakaoOnly;
+      var badge = (c.hasKakao && hasSheet) ? '<span class="badge kakao">카톡</span> <span class="badge sheet">시트</span>'
+                : c.hasKakao ? '<span class="badge kakao">카톡</span>'
+                : '<span class="badge sheet">시트연동</span>';
       rows += '<tr><td class="catname">' + esc(c.cat) + '</td><td>' + badge + '</td><td>' + tab + '</td><td class="num">' + nf(c.count) + '</td></tr>';
     });
     rows += '</table>';

@@ -57,6 +57,12 @@ function getConsoleData() {
   const masterUrl = 'https://docs.google.com/spreadsheets/d/' + MASTER_SS_ID + '/edit';
   const meta = getIndexMeta();
 
+  // 카톡 입력을 받는 카테고리 집합 (AI 방 + 양식 방 AS·점검)
+  const kakaoCats = {};
+  for (const k in KAKAO_SOURCES) kakaoCats[KAKAO_SOURCES[k].category] = true;
+  kakaoCats['AS'] = true;
+  kakaoCats['점검'] = true;
+
   const categories = CATEGORIES.map(function (cat) {
     const cfg = CONFIG[cat] || {};
     const tabName = MASTER_TABS[cat] || cat;
@@ -75,6 +81,8 @@ function getConsoleData() {
     return {
       cat: cat,
       kakaoOnly: !!cfg.kakaoOnly,
+      hasKakao: !!kakaoCats[cat],   // 카톡으로 데이터가 들어오는가
+      hasSheet: !cfg.kakaoOnly,     // 원본 시트가 있는가
       tabName: tabName,
       tabUrl: tabUrl,
       count: Number(meta['count_' + cat] || 0),
@@ -174,6 +182,7 @@ function getVendorDetailFromIndex(vendorName) {
 
   const sortByDate = {
     'AS': 'AS날짜',
+    '점검': '작성일',
     '초과': '날짜',
     '불만': '날짜',
     '미수': '입력일',

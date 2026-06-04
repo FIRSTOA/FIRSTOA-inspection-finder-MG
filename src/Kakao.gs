@@ -638,6 +638,7 @@ function extractInspectForms_(messages, regionFallback) {
 
     if (!f['작성자']) f['작성자'] = String(m.author || '').replace(/님$/, '');
     if (!f['지역']) f['지역'] = regionFallback || '';
+    if (!f['작성일']) f['작성일'] = m.date || ''; // 카톡 메시지 날짜 = 작성일 (등록시각과 별개)
 
     const obj = {};
     for (const c of cols) { if (f[c] != null && String(f[c]).trim() !== '') obj[c] = f[c]; }
