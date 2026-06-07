@@ -40,9 +40,9 @@ function rebuildIndexFromMaster() {
   const vendorMeta = {};
   const dataRows = [];
   const catCounts = {};
-  for (const c of CATEGORIES) catCounts[c] = 0;
+  for (const c of SEARCH_CATEGORIES) catCounts[c] = 0;
 
-  for (const cat of CATEGORIES) {
+  for (const cat of SEARCH_CATEGORIES) {
     const cfg = CONFIG[cat];
     const tabName = MASTER_TABS[cat] || cat;
     const sheet = masterSs.getSheetByName(tabName);
@@ -66,7 +66,7 @@ function rebuildIndexFromMaster() {
 
       if (!vendorCounts[vendor]) {
         vendorCounts[vendor] = {};
-        for (const c of CATEGORIES) vendorCounts[vendor][c] = 0;
+        for (const c of SEARCH_CATEGORIES) vendorCounts[vendor][c] = 0;
       }
       vendorCounts[vendor][cat]++;
       catCounts[cat]++;
@@ -111,14 +111,14 @@ function writeIndexSheets_(indexSs, vendorCounts, vendorMeta, dataRows, catCount
   if (!vSheet) vSheet = indexSs.insertSheet(INDEX_VENDORS);
   vSheet.clear();
 
-  const headerRow = ['vendor'].concat(CATEGORIES).concat(['meta']);
+  const headerRow = ['vendor'].concat(SEARCH_CATEGORIES).concat(['meta']);
   vSheet.getRange(1, 1, 1, headerRow.length).setValues([headerRow]);
 
   if (vendors.length > 0) {
     const rows = vendors.map(v => {
       const counts = vendorCounts[v];
       const r = [v];
-      for (const c of CATEGORIES) r.push(counts[c] || 0);
+      for (const c of SEARCH_CATEGORIES) r.push(counts[c] || 0);
       r.push(JSON.stringify(vendorMeta[v] || {}));
       return r;
     });
@@ -151,7 +151,7 @@ function writeIndexSheets_(indexSs, vendorCounts, vendorMeta, dataRows, catCount
     ['dataRowCount', dataRows.length],
     ['elapsedSec', elapsed]
   ];
-  for (const c of CATEGORIES) metaRows.push(['count_' + c, catCounts[c] || 0]);
+  for (const c of SEARCH_CATEGORIES) metaRows.push(['count_' + c, catCounts[c] || 0]);
   mSheet.getRange(1, 1, metaRows.length, 2).setValues(metaRows);
 
   try {

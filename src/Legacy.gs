@@ -26,7 +26,7 @@ function rebuildIndexFromSources_(skipCats) {
 
     const vSh = indexSs.getSheetByName(INDEX_VENDORS);
     if (vSh && vSh.getLastRow() >= 2) {
-      const totalCols = 1 + CATEGORIES.length + 1;
+      const totalCols = 1 + SEARCH_CATEGORIES.length + 1;
       const vdata = vSh.getRange(2, 1, vSh.getLastRow() - 1, totalCols).getValues();
       for (const row of vdata) {
         const vendor = String(row[0] || '').trim();
@@ -35,8 +35,8 @@ function rebuildIndexFromSources_(skipCats) {
         let meta = {};
         try { meta = JSON.parse(String(row[totalCols - 1] || '{}')); } catch (e) {}
 
-        for (let c = 0; c < CATEGORIES.length; c++) {
-          const cat = CATEGORIES[c];
+        for (let c = 0; c < SEARCH_CATEGORIES.length; c++) {
+          const cat = SEARCH_CATEGORIES[c];
           if (!skipSet[cat]) continue;
 
           const cnt = Number(row[1 + c]) || 0;
@@ -65,13 +65,13 @@ function rebuildIndexFromSources_(skipCats) {
   const vendorCounts = {};
   const dataRows = [];
   const catCounts = {};
-  for (const c of CATEGORIES) catCounts[c] = 0;
+  for (const c of SEARCH_CATEGORIES) catCounts[c] = 0;
   const vendorMeta = {};
 
   for (const vendor in preservedCounts) {
     if (!vendorCounts[vendor]) {
       vendorCounts[vendor] = {};
-      for (const c of CATEGORIES) vendorCounts[vendor][c] = 0;
+      for (const c of SEARCH_CATEGORIES) vendorCounts[vendor][c] = 0;
     }
     for (const cat in preservedCounts[vendor]) {
       vendorCounts[vendor][cat] = preservedCounts[vendor][cat];
@@ -86,6 +86,7 @@ function rebuildIndexFromSources_(skipCats) {
 
   for (const cat in CONFIG) {
     if (skipSet[cat]) continue;
+    if (SEARCH_CATEGORIES.indexOf(cat) === -1) continue;  // 검색 제외 카테고리는 인덱스에 적재하지 않음
 
     const cfg = CONFIG[cat];
     let ss;
@@ -118,7 +119,7 @@ function rebuildIndexFromSources_(skipCats) {
 
         if (!vendorCounts[vendor]) {
           vendorCounts[vendor] = {};
-          for (const c of CATEGORIES) vendorCounts[vendor][c] = 0;
+          for (const c of SEARCH_CATEGORIES) vendorCounts[vendor][c] = 0;
         }
         vendorCounts[vendor][cat]++;
         catCounts[cat]++;

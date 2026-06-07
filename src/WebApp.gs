@@ -78,6 +78,11 @@ function getConsoleData() {
     if (cfg.sheets && cfg.sheets.length) sheets = cfg.sheets.slice();
     else if (cfg.gid != null) sheets = ['gid=' + cfg.gid];
 
+    // 건수: 검색 인덱스 카운트(count_*)가 우선. 검색 제외 카테고리(임대현황표·해지방어·경영지원)는
+    // 인덱스에 없으므로 통합 탭 행수(헤더 1행 제외)로 대체해 데이터 통합 웹앱에 그대로 보이게 한다.
+    let count = Number(meta['count_' + cat] || 0);
+    if (!count && tab && tab.getLastRow() > 1) count = tab.getLastRow() - 1;
+
     return {
       cat: cat,
       kakaoOnly: !!cfg.kakaoOnly,
@@ -85,7 +90,7 @@ function getConsoleData() {
       hasSheet: !cfg.kakaoOnly,     // 원본 시트가 있는가
       tabName: tabName,
       tabUrl: tabUrl,
-      count: Number(meta['count_' + cat] || 0),
+      count: count,
       srcUrl: srcUrl,
       sheets: sheets
     };
@@ -124,7 +129,7 @@ function searchVendorsFromIndex(query) {
   }
 
   const lastRow = sheet.getLastRow();
-  const totalCols = 1 + CATEGORIES.length + 1;
+  const totalCols = 1 + SEARCH_CATEGORIES.length + 1;
   const data = sheet.getRange(2, 1, lastRow - 1, totalCols).getValues();
   const lowerQ = query.toLowerCase();
 
@@ -136,8 +141,8 @@ function searchVendorsFromIndex(query) {
       try { meta = JSON.parse(String(data[i][totalCols - 1] || '{}')); } catch (e) { meta = {}; }
 
       const counts = {};
-      for (let c = 0; c < CATEGORIES.length; c++) {
-        counts[CATEGORIES[c]] = Number(data[i][1 + c]) || 0;
+      for (let c = 0; c < SEARCH_CATEGORIES.length; c++) {
+        counts[SEARCH_CATEGORIES[c]] = Number(data[i][1 + c]) || 0;
       }
 
       matched.push({ vendor: v, counts: counts, meta: meta });
