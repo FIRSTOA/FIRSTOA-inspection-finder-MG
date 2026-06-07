@@ -31,8 +31,8 @@ function mergeForms(forms: InspForm[]): InspForm[] {
 }
 
 const GUBUN_STYLE: Record<string, { bg: string; fg: string }> = {
-  "점검": { bg: "#18181B", fg: "#FFFFFF" },
-  "AS": { bg: "#E4E4E7", fg: "#3F3F46" },
+  "점검": { bg: "#334155", fg: "#FFFFFF" },
+  "AS": { bg: "#E2E8F0", fg: "#475569" },
 };
 
 // 후보 한 줄: [구분] 날짜·기종·N대·지역·작성자

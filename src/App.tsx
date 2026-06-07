@@ -47,9 +47,9 @@ type ModeConfig = {
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
 // 블랙&화이트 컨셉: 모든 모드 동일한 모노크롬 팔레트 (구분은 탭 라벨로만)
-const BW_ACCENT = "#0A0A0A";
-const BW_SOFT = "#F4F4F5";
-const BW_TEXT = "#18181B";
+const BW_ACCENT = "#334155";
+const BW_SOFT = "#EEF2F7";
+const BW_TEXT = "#1E293B";
 const MODE_CONFIG: Record<Mode, ModeConfig> = {
   inspection: {
     label: "점검",
@@ -3148,15 +3148,15 @@ function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+      className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-white py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
     >
       <span
         className="flex h-9 w-9 items-center justify-center rounded-xl text-lg text-white shadow-md ring-1 ring-white/10"
-        style={{ background: disabled ? "#A1A1AA" : `linear-gradient(135deg, #52525B, ${accent})` }}
+        style={{ background: disabled ? "#94A3B8" : `linear-gradient(135deg, #64748B, ${accent})` }}
       >
         {icon}
       </span>
-      <span className="text-[11px] font-bold tracking-tight text-zinc-700">{label}</span>
+      <span className="text-[11px] font-bold tracking-tight text-slate-700">{label}</span>
       {dot && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" style={{ background: accent }} />}
     </button>
   );
@@ -3459,18 +3459,18 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-zinc-50 to-zinc-100 text-zinc-900">
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-4 flex items-end justify-between">
           <div>
             <span
               className="mb-1.5 inline-block rounded-full px-3 py-1 text-[11px] font-bold tracking-wide text-white shadow-md"
-              style={{ background: "linear-gradient(135deg, #3F3F46, #0A0A0A)" }}
+              style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
             >
               퍼스트전산 CS팀
             </span>
-            <h1 className="text-2xl font-black tracking-tighter text-zinc-900 sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tighter text-slate-900 sm:text-3xl">
               점검이력 변환기
             </h1>
           </div>
@@ -3478,7 +3478,7 @@ export default function App() {
             type="button"
             onClick={() => setHelpOpen(true)}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-base font-bold text-white shadow-md transition active:scale-95"
-            style={{ background: "linear-gradient(135deg, #3F3F46, #0A0A0A)" }}
+            style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
             aria-label="사용 설명서"
           >
             ?
@@ -3487,7 +3487,7 @@ export default function App() {
 
         {/* Mode tabs - segmented control (B&W) */}
         <div
-          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200 bg-zinc-100 p-1"
+          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
           role="tablist"
         >
           {MODE_ORDER.map((m: Mode) => {
@@ -3500,10 +3500,10 @@ export default function App() {
                 aria-selected={active}
                 onClick={() => handleModeChange(m)}
                 className={`rounded-xl py-2.5 text-sm transition ${
-                  active ? "font-bold text-white" : "font-medium text-zinc-500 hover:text-zinc-800"
+                  active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"
                 }`}
                 style={{
-                  background: active ? "linear-gradient(135deg, #27272A, #0A0A0A)" : "transparent",
+                  background: active ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent",
                   boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined,
                 }}
               >
@@ -3592,7 +3592,7 @@ export default function App() {
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-3 sm:px-6">
           <button
             onClick={handleReset}
-            className="rounded-xl border border-zinc-300 bg-white px-3 py-3 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-50 active:scale-95"
+            className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
             aria-label="초기화"
           >
             초기화
@@ -3600,8 +3600,8 @@ export default function App() {
           <button
             onClick={handleCopyAll}
             disabled={!hasOutput}
-            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none"
-            style={hasOutput ? { background: "linear-gradient(135deg, #27272A, #0A0A0A)" } : undefined}
+            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            style={hasOutput ? { background: "linear-gradient(135deg, #475569, #1E293B)" } : undefined}
             aria-label="결과 전체 복사"
           >
             📋 복사
