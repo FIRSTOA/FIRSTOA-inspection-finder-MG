@@ -58,6 +58,12 @@ function rebuildIndexFromMaster() {
     const dCol = dateField ? headers.indexOf(dateField) : -1;
     const rCol = regionField ? headers.indexOf(regionField) : -1;
 
+    // 점검/AS는 검색 후보에 기종·작성자·댓수(_원문 모델명 수)도 노출하므로 meta에 추가 캡처
+    const isInsp = (cat === '점검' || cat === 'AS');
+    const mCol = isInsp ? headers.indexOf('모델명') : -1;
+    const aCol = isInsp ? headers.indexOf('작성자') : -1;
+    const wCol = isInsp ? headers.indexOf('_원문') : -1;
+
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
 
     for (const row of data) {
@@ -86,7 +92,15 @@ function rebuildIndexFromMaster() {
       if (!vendorMeta[vendor]) vendorMeta[vendor] = {};
       const cur = vendorMeta[vendor][cat];
       if (!cur || (dateStr && dateStr > cur.d)) {
-        vendorMeta[vendor][cat] = { d: dateStr, r: regionStr };
+        const meta = { d: dateStr, r: regionStr };
+        if (isInsp) {
+          meta.model = mCol !== -1 ? String(row[mCol] || '').trim() : '';
+          meta.author = aCol !== -1 ? String(row[aCol] || '').trim() : '';
+          const won = wCol !== -1 ? String(row[wCol] || '') : '';
+          const cnt = (won.match(/모델명/g) || []).length;
+          meta.count = cnt > 0 ? cnt : 1;
+        }
+        vendorMeta[vendor][cat] = meta;
       }
     }
   }

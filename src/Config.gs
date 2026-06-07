@@ -147,16 +147,18 @@ const CONFIG = {
     ]
   },
 
+  // AS — 점검과 양식이 동일하므로 점검 탭과 같은 풀 구조(+_원문)로 통일.
+  // 외부 AS시트 동기화를 끊고(kakaoOnly), AS방 카톡을 통합 "AS" 탭에 직접 적재한다.
+  // (기존 외부시트 데이터는 migrateASTabToFull_() 로 AS날짜→작성일 매핑해 1회 이관)
   AS: {
-    ssId: '1-AcARUVMzSY4ln6jRhf751AJ60pTVf-4BAOBhec4hUo',
-    sheets: ['AS'],
-    headerRow: 1,
+    kakaoOnly: true,
+    sheets: [],
     vendorCol: '업체명',
-    metaFields: { date: 'AS날짜', region: '지역' },
+    metaFields: { date: '작성일', region: '지역' },
     displayCols: [
-      'AS날짜', '작성자', '지역', '등급',
-      '모델명', '시리얼넘버', '자산기번',
-      '내용', '처리내용'
+      '작성일', '작성자', '구분', '레벨', '등급', '업체명', '부서명', '지역', '키맨/접수자',
+      '모델명', '시리얼넘버', '자산기번', '내용', '처리내용',
+      '매수', '토너잔량', '폐통', '여분', '한틴이카유무', '주차비지원유무', '특이사항'
     ]
   },
 

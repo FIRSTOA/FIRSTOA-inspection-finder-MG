@@ -474,8 +474,9 @@ function appendSeenHashes_(room, hashes) {
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, 2).setValues(rows);
 }
 
-// ── AS 전용: 카톡 "구분:AS" 양식을 규칙 파싱해 AS 원문시트에 직접 적재 (AI 미사용) ──
-// 흐름: 카톡 TXT → 양식 추출 → AS 원문시트 입력 → (동기화 시) 통합 AS 탭으로 미러
+// ── AS 전용: 카톡 "구분:AS" 양식을 규칙 파싱해 통합 "AS" 탭에 직접 적재 (AI 미사용) ──
+// 점검과 양식이 같으므로 점검과 동일한 풀 파서로 추출하고 _원문을 그대로 저장한다.
+// (AS방 → AS탭, 점검방 → 점검탭. 적재처/흐름은 점검과 동일, 카테고리만 'AS'.)
 function ingestASFormsUpload(content, regionFallback) {
   try {
     if (!content || !String(content).trim()) return { ok: false, error: '파일 내용이 비어있습니다.' };
@@ -484,13 +485,40 @@ function ingestASFormsUpload(content, regionFallback) {
       const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
       return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
     }
-    const records = extractASForms_(messages, regionFallback || '');
+    const records = extractASFormsFull_(messages, regionFallback || '');
     if (!records.length) return { ok: false, error: 'AS 양식(구분:AS) 메시지를 찾지 못했습니다.', parsed: messages.length };
-    const r = appendASToSheet_(records);
-    return { ok: true, tab: 'AS 원문시트', parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
+    const r = appendKakaoRecords_('AS', 'AS', regionFallback || '', records);
+    return { ok: true, tab: r.tab, parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
   } catch (err) {
     return { ok: false, error: err.toString() };
   }
+}
+
+// AS방 메시지(구분:AS)를 점검과 동일한 풀 필드로 추출. _원문(raw)을 저장해 양식 재사용이 가능하다.
+// (점검용 extractInspectForms_ 는 구분에 "점검"이 있어야 통과하므로, AS는 isASForm_ 필터로 별도 수집한다.)
+function extractASFormsFull_(messages, regionFallback) {
+  const cols = CONFIG['AS'].displayCols;
+  const out = [];
+  for (const m of messages) {
+    const content = m.text || '';
+    if (!isASForm_(content)) continue;
+
+    const f = extractInspectFields_(content); // 점검과 동일 풀 추출
+    const vendor = f['업체명'];
+    if (!vendor || vendor.length < 2 || /^부서명/.test(vendor)) continue;
+
+    if (!f['작성자']) f['작성자'] = String(m.author || '').replace(/님$/, '');
+    if (!f['지역']) f['지역'] = regionFallback || '';
+    if (!f['작성일']) f['작성일'] = m.date || '';
+    if (!f['구분']) f['구분'] = 'AS';
+
+    const obj = {};
+    for (const c of cols) { if (f[c] != null && String(f[c]).trim() !== '') obj[c] = f[c]; }
+    obj['업체명'] = vendor;
+
+    out.push({ vendor: vendor, obj: obj, raw: content });
+  }
+  return out;
 }
 
 // "구분" 값에 AS가 포함되면 AS 양식으로 본다.

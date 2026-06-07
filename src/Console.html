@@ -303,7 +303,7 @@
     var html = '';
     types.forEach(function (t) {
       var slots = AREA_SLOTS[t.type] || [''];
-      var badge = t.mode === 'asform' ? '<span class="badge sheet">양식→AS시트</span>'
+      var badge = t.mode === 'asform' ? '<span class="badge sheet">양식→AS탭</span>'
                 : t.mode === 'inspectform' ? '<span class="badge sheet">양식→점검탭</span>'
                 : '<span class="badge kakao">AI</span>';
       html += '<div class="area">';

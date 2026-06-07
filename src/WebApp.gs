@@ -27,6 +27,7 @@ function doGet(e) {
 
     if (action === 'search') result = searchVendorsFromIndex(q);
     else if (action === 'detail') result = getVendorDetailFromIndex(q);
+    else if (action === 'inspforms') result = getInspectionFormsByVendor(q);
     else if (action === 'ping') result = { ok: true, time: new Date().toISOString(), indexInfo: getIndexMeta() };
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
@@ -186,14 +187,15 @@ function getVendorDetailFromIndex(vendorName) {
   }
 
   const sortByDate = {
-    'AS': 'AS날짜',
+    'AS': '작성일',
     '점검': '작성일',
     '초과': '날짜',
     '불만': '날짜',
     '미수': '입력일',
     'PC확장성': '날짜',
     '복합기확장성': '등록일',
-    '업체정보': '종료일'
+    '업체정보': '종료일',
+    '재계약': '날짜'
   };
 
   for (const cat in sortByDate) {
