@@ -1,0 +1,3847 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import VendorSearch from "./VendorSearch";
+import UnifiedHistory from "./UnifiedHistory";
+import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
+import type { AuthorTeam } from "./authors";
+
+type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note";
+
+type CopyResult = {
+  ok: boolean;
+  message: string;
+};
+
+type ModelSerial = {
+  model: string;
+  serial: string;
+};
+
+type ResultItem = {
+  content: string;
+  warning?: string;
+};
+
+type TestMode = Mode | "shared";
+
+type TestCase = {
+  name: string;
+  input: string;
+  mode: TestMode;
+  expected?: string;
+  expectedFunction?: boolean;
+};
+
+type TestResult = TestCase & {
+  passed: boolean;
+  actual: string;
+};
+
+type ModeConfig = {
+  label: string;
+  accent: string;
+  bgSoft: string;
+  textDark: string;
+  placeholder: string;
+};
+
+const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
+
+// 블랙&화이트 컨셉: 모든 모드 동일한 모노크롬 팔레트 (구분은 탭 라벨로만)
+const BW_ACCENT = "#0A0A0A";
+const BW_SOFT = "#F4F4F5";
+const BW_TEXT = "#18181B";
+const MODE_CONFIG: Record<Mode, ModeConfig> = {
+  inspection: {
+    label: "점검",
+    accent: BW_ACCENT,
+    bgSoft: BW_SOFT,
+    textDark: BW_TEXT,
+    placeholder: "여기에 -시작- 부터 -끝- 까지의 원본 점검이력을 붙여넣으세요.",
+  },
+  "blank-report": {
+    label: "미양식",
+    accent: BW_ACCENT,
+    bgSoft: BW_SOFT,
+    textDark: BW_TEXT,
+    placeholder: "여기에 스케줄 원문을 문단별로 붙여넣으세요.",
+  },
+  "air-purifier": {
+    label: "청정기",
+    accent: BW_ACCENT,
+    bgSoft: BW_SOFT,
+    textDark: BW_TEXT,
+    placeholder: "여기에 공기청정기 점검이력 원본을 붙여넣으세요.",
+  },
+  "samsung-note": {
+    label: "삼성노트",
+    accent: BW_ACCENT,
+    bgSoft: BW_SOFT,
+    textDark: BW_TEXT,
+    placeholder: "여기에 번호가 붙은 스케줄 원문을 여러 개 붙여넣으세요.",
+  },
+};
+
+const ITEM_DIVIDER = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
+const SECTION_DIVIDER = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Shared text utilities
+// ────────────────────────────────────────────────────────────────────────────
+
+// Recognizes divider lines made of ASCII `-`/`_`, ㅡ (U+3161, our new default for Samsung Notes safety),
+// `═` (U+2550), and common Unicode dashes/box-drawing chars that appear when output is round-tripped
+// through apps like Samsung Notes.
+const DIVIDER_CHAR_CLASS = "[-_\\u3161\\u2550\\u2500\\u2501\\u23BC\\u2015\\u2014\\u2013]";
+const DIVIDER_LINE_REGEX = new RegExp(`^\\s*${DIVIDER_CHAR_CLASS}{3,}\\s*$`);
+
+function isDividerLine(line: string): boolean {
+  return DIVIDER_LINE_REGEX.test(line);
+}
+
+function findLine(lines: string[], regex: RegExp): string | null {
+  return lines.find((line: string) => regex.test(line)) || null;
+}
+
+function normalizeLabelSpacing(line: string): string {
+  return line.replace(/^([^:]+):\s*/, "$1: ");
+}
+
+function collectMultilineField(
+  cleaned: string[],
+  startRegex: RegExp,
+  stopRegex: RegExp,
+  defaultLines: string[],
+  normalizeFirst = true,
+  breakOnNumberedItem = true
+): string[] {
+  const startIndex = cleaned.findIndex((line: string) => startRegex.test(line));
+  if (startIndex < 0) return defaultLines;
+
+  const firstLine = normalizeFirst ? normalizeLabelSpacing(cleaned[startIndex]) : cleaned[startIndex];
+  const collected: string[] = [firstLine];
+
+  for (let i = startIndex + 1; i < cleaned.length; i += 1) {
+    const nextLine = cleaned[i];
+    if (stopRegex.test(nextLine)) break;
+    if (breakOnNumberedItem && /^\d+\./.test(nextLine)) break;
+    collected.push(nextLine);
+  }
+
+  return collected;
+}
+
+function collectHeaderMultiline(
+  lines: string[],
+  startRegex: RegExp,
+  stopRegex: RegExp,
+  defaultLines: string[]
+): string[] {
+  const startIndex = lines.findIndex((line: string) => startRegex.test(line));
+  if (startIndex < 0) return defaultLines;
+
+  const collected: string[] = [normalizeLabelSpacing(lines[startIndex])];
+
+  for (let i = startIndex + 1; i < lines.length; i += 1) {
+    const nextLine = lines[i];
+    if (stopRegex.test(nextLine)) break;
+    if (isDividerLine(nextLine)) break;
+    collected.push(nextLine);
+  }
+
+  return collected;
+}
+
+function buildItemTitleLine(cleaned: string[], blockIndex: number): string {
+  const firstLine = cleaned[0] || "";
+  const modelIndex = cleaned.findIndex((line: string) => /^모델명\s*:/.test(line));
+
+  // Location can sit on its own line(s) between the number and 모델명
+  // (e.g. "1." then "3층"). Gather those non-field lines into the title.
+  const gatherLoc = (startIdx: number): string => {
+    if (modelIndex <= startIdx) return "";
+    return cleaned
+      .slice(startIdx, modelIndex)
+      .filter((l: string) => l.trim() && !/:/.test(l))
+      .join(" ")
+      .trim();
+  };
+
+  // Preserve & normalize existing title (all legacy formats → N.)
+  const titleMatch = firstLine.match(/^(?:(\d+)\.|\((\d+)\)|【(\d+)】)\s*(.*)$/);
+  if (titleMatch) {
+    const num = titleMatch[1] || titleMatch[2] || titleMatch[3];
+    let rest = (titleMatch[4] || "").trim();
+    const loc = gatherLoc(1);
+    if (loc) rest = rest ? `${rest} ${loc}` : loc;
+    return rest ? `${num}. ${rest}` : `${num}.`;
+  }
+
+  if (modelIndex > 0 && firstLine && !/:/.test(firstLine)) {
+    return `${blockIndex + 1}. ${firstLine.trim()}`;
+  }
+
+  return `${blockIndex + 1}.`;
+}
+
+function stripConsumedTitleLine(cleaned: string[]): string[] {
+  const firstLine = cleaned[0] || "";
+  const modelIndex = cleaned.findIndex((line: string) => /^모델명\s*:/.test(line));
+
+  if (/^(?:\d+\.|\(\d+\)|【\d+】)/.test(firstLine)) return cleaned.slice(1);
+  if (modelIndex > 0 && firstLine && !/:/.test(firstLine)) return cleaned.slice(1);
+
+  return cleaned;
+}
+
+function splitItemBlocks(lines: string[]): string[][] {
+  const blocks: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (isDividerLine(line)) {
+      if (current.length > 0) {
+        blocks.push(current);
+        current = [];
+      }
+      continue;
+    }
+    // 【N】 or 【N】 텍스트 also marks the start of a new item block
+    if (/^【\d+】/.test(line.trim())) {
+      if (current.length > 0) {
+        blocks.push(current);
+        current = [];
+      }
+      current.push(line);
+      continue;
+    }
+    current.push(line);
+  }
+
+  if (current.length > 0) blocks.push(current);
+  return blocks;
+}
+
+function extractHeader(headerLines: string[]): string[] {
+  const gradeLines = collectHeaderMultiline(
+    headerLines,
+    /^등급\s*:/,
+    /^(작성자|구분|레벨|업체명|부서명|지역|키맨\/접수자)\s*:/,
+    ["등급:  "]
+  );
+  const companyLines = collectHeaderMultiline(
+    headerLines,
+    /^업체명\s*:/,
+    /^(작성자|구분|레벨|등급|부서명|지역|키맨\/접수자)\s*:/,
+    ["업체명: "]
+  );
+  const departmentLines = collectHeaderMultiline(
+    headerLines,
+    /^부서명\s*:/,
+    /^(작성자|구분|레벨|등급|업체명|지역|키맨\/접수자)\s*:/,
+    ["부서명: "]
+  );
+  const regionLines = collectHeaderMultiline(
+    headerLines,
+    /^지역\s*:/,
+    /^(작성자|구분|레벨|등급|업체명|부서명|키맨\/접수자)\s*:/,
+    ["지역: "]
+  );
+  const keymanLines = collectHeaderMultiline(
+    headerLines,
+    /^키맨\/접수자\s*:/,
+    /^(작성자|구분|레벨|등급|업체명|부서명|지역)\s*:/,
+    ["키맨/접수자:"]
+  );
+
+  return [
+    "작성자: ",
+    "구분: 점검",
+    "레벨: 1",
+    ...gradeLines,
+    ...companyLines,
+    ...departmentLines,
+    ...regionLines,
+    ...keymanLines,
+  ];
+}
+
+function findPartsSectionEnd(bodyLines: string[]): number {
+  const partsIndex = bodyLines.findIndex((line: string) => /^\s*※부품신청※\s*$/.test(line));
+  const selfIndex = bodyLines.findIndex((line: string) => /^\s*※자가신청※\s*$/.test(line));
+  const arrivalIndex = bodyLines.findIndex((line: string) => /^도착 시간\s*:/.test(line));
+  const durationIndex = bodyLines.findIndex((line: string) => /^소요 시간\s*:/.test(line));
+
+  let end = bodyLines.length;
+  if (partsIndex >= 0) end = Math.min(end, partsIndex);
+  if (selfIndex >= 0) end = Math.min(end, selfIndex);
+  if (arrivalIndex >= 0) end = Math.min(end, arrivalIndex);
+  if (durationIndex >= 0) end = Math.min(end, durationIndex);
+  return end;
+}
+
+const STANDARD_PARTS_SECTION: string[] = [
+  SECTION_DIVIDER,
+  "※부품신청※",
+  "보증기간 내 여부 : ",
+  "교체 전 카운터 누적 사용매수 : ",
+  "사용 부품 예상 사용매수 : ",
+  "▶ 신청 부품",
+  "물품명:",
+  "수량:",
+  "출고여부: ",
+  SECTION_DIVIDER,
+  "※자가신청※",
+  "물품:",
+  "수량:",
+  "출고여부:",
+  ITEM_DIVIDER,
+  "도착 시간:",
+  "소요 시간:",
+];
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mode 1: Inspection (점검이력 변환)
+// ────────────────────────────────────────────────────────────────────────────
+
+function collectExtraLines(cleaned: string[]): string[] {
+  return collectMultilineField(
+    cleaned,
+    /^여분\s*:/,
+    /^(한틴이카유무|주차비지원유무|특이사항|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통)\s*:/,
+    ["여분: K- C- M- Y- 폐- "]
+  );
+}
+
+function collectNoteLines(cleaned: string[]): string[] {
+  return collectMultilineField(
+    cleaned,
+    /^특이사항\s*:/,
+    /^(모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무)\s*:/,
+    ["특이사항:"]
+  );
+}
+
+function collectParkingLines(cleaned: string[]): string[] {
+  return collectMultilineField(
+    cleaned,
+    /^주차비지원유무\s*:/,
+    /^(특이사항|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무)\s*:/,
+    ["주차비지원유무: "]
+  );
+}
+
+function normalizeInspectionItemBlock(blockLines: string[], blockIndex: number): string[] {
+  const cleaned = blockLines
+    .map((line: string) => line.trimEnd())
+    .filter((line: string) => line !== "" && !isDividerLine(line));
+
+  if (cleaned.length === 0) return [];
+
+  const titleLine = buildItemTitleLine(cleaned, blockIndex);
+  const contentLines = stripConsumedTitleLine(cleaned);
+
+  const modelLine = findLine(contentLines, /^모델명\s*:/);
+  const serialLine = findLine(contentLines, /^시리얼넘버\s*:/);
+  const assetLine = findLine(contentLines, /^자산기번\s*:/);
+  const hantinLine = findLine(contentLines, /^한틴이카유무\s*:/) || "한틴이카유무:";
+  const extraLines = collectExtraLines(contentLines);
+  const parkingLines = collectParkingLines(contentLines);
+  const noteLines = collectNoteLines(contentLines);
+
+  return [
+    titleLine,
+    modelLine || "모델명:",
+    serialLine || "시리얼넘버:",
+    assetLine || "자산기번: ",
+    "내용: 정기점검",
+    "처리내용: 정기점검",
+    "매수: 흑-    컬-    큰컬-    합-",
+    "토너잔량:K-   C-   M-   Y-",
+    "폐통:        %",
+    ...extraLines,
+    hantinLine,
+    ...parkingLines,
+    ...noteLines,
+  ];
+}
+
+function transformInspectionText(input: string): string {
+  if (!input || !input.trim()) return "";
+
+  const lines = input.split(/\r?\n/);
+  const firstDividerIndex = lines.findIndex((line: string) => isDividerLine(line));
+  const itemStartIndex = firstDividerIndex >= 0 ? firstDividerIndex : lines.length;
+  const headerLines = lines.slice(0, itemStartIndex);
+  const bodyLines = lines.slice(itemStartIndex);
+
+  const normalizedHeader = extractHeader(headerLines);
+  const itemSectionEnd = findPartsSectionEnd(bodyLines);
+  const rawItemSection = bodyLines.slice(0, itemSectionEnd);
+  const itemBlocks = splitItemBlocks(rawItemSection);
+  const normalizedItemSection: string[] = [];
+
+  itemBlocks.forEach((block: string[], index: number) => {
+    const normalizedBlock = normalizeInspectionItemBlock(block, index);
+    if (normalizedBlock.length === 0) return;
+    normalizedItemSection.push(ITEM_DIVIDER);
+    normalizedItemSection.push(...normalizedBlock);
+  });
+
+  return [...normalizedHeader, ...normalizedItemSection, ...STANDARD_PARTS_SECTION].join("\n");
+}
+
+function collectAirPurifierNoteLines(cleaned: string[]): string[] {
+  return collectMultilineField(
+    cleaned,
+    /^특이사항\s*:/,
+    /^(모델명|시리얼넘버|자산기번|내용|처리내용|필터리셋|필터교체)\s*:/,
+    ["특이사항:"]
+  );
+}
+
+function normalizeAirPurifierItemBlock(blockLines: string[], blockIndex: number): string[] {
+  const cleaned = blockLines
+    .map((line: string) => line.trimEnd())
+    .filter((line: string) => line !== "" && !isDividerLine(line));
+
+  if (cleaned.length === 0) return [];
+
+  const titleLine = buildItemTitleLine(cleaned, blockIndex);
+  const contentLines = stripConsumedTitleLine(cleaned);
+
+  const modelLine = findLine(contentLines, /^모델명\s*:/);
+  const serialLine = findLine(contentLines, /^시리얼넘버\s*:/);
+  const assetLine = findLine(contentLines, /^자산기번\s*:/);
+  const filterResetLine = findLine(contentLines, /^필터리셋\s*:/) || "필터리셋:";
+  const filterReplaceLine = findLine(contentLines, /^필터교체\s*:/) || "필터교체:";
+  const noteLines = collectAirPurifierNoteLines(contentLines);
+
+  return [
+    titleLine,
+    modelLine || "모델명:",
+    serialLine || "시리얼넘버:",
+    assetLine || "자산기번: ",
+    "내용: 정기점검",
+    "처리내용: 정기점검",
+    filterResetLine,
+    filterReplaceLine,
+    ...noteLines,
+  ];
+}
+
+function transformAirPurifierStructured(input: string): string {
+  const lines = input.split(/\r?\n/);
+  const firstDividerIndex = lines.findIndex((line: string) => isDividerLine(line));
+  const itemStartIndex = firstDividerIndex >= 0 ? firstDividerIndex : lines.length;
+  const headerLines = lines.slice(0, itemStartIndex);
+  const bodyLines = lines.slice(itemStartIndex);
+
+  const normalizedHeader = extractHeader(headerLines);
+  const itemSectionEnd = findPartsSectionEnd(bodyLines);
+  const rawItemSection = bodyLines.slice(0, itemSectionEnd);
+  const itemBlocks = splitItemBlocks(rawItemSection);
+  const normalizedItemSection: string[] = [];
+
+  itemBlocks.forEach((block: string[], index: number) => {
+    const normalizedBlock = normalizeAirPurifierItemBlock(block, index);
+    if (normalizedBlock.length === 0) return;
+    normalizedItemSection.push(ITEM_DIVIDER);
+    normalizedItemSection.push(...normalizedBlock);
+  });
+
+  return [...normalizedHeader, ...normalizedItemSection, ...STANDARD_PARTS_SECTION].join("\n");
+}
+
+function buildAirPurifierFromFields(
+  blockIndex: number,
+  grade: string,
+  company: string,
+  department: string,
+  keyman: string,
+  model: string,
+  serial: string,
+  assetNumber: string
+): string[] {
+  const header = [
+    "작성자: ",
+    "구분: 점검",
+    "레벨: 1",
+    `등급: ${grade}`,
+    `업체명: ${company}`,
+    `부서명: ${department}`,
+    "지역: C",
+    `키맨/접수자:${keyman}`,
+  ];
+
+  const item = [
+    ITEM_DIVIDER,
+    `${blockIndex + 1}.`,
+    `모델명: ${model}`,
+    `시리얼넘버: ${serial}`,
+    `자산기번: ${assetNumber}`,
+    "내용: 정기점검",
+    "처리내용: 정기점검",
+    "필터리셋:",
+    "필터교체:",
+    "특이사항:",
+  ];
+
+  return [...header, ...item];
+}
+
+function buildAirPurifierFromCompact(input: string): string {
+  const blocks = splitCompactBlocks(input);
+  const sections: string[] = [];
+
+  blocks.forEach((block: string[], index: number) => {
+    if (block.length === 0) return;
+
+    const gradeCompanyLine = block[0] || "";
+    const modelSerialLine = block[1] || "";
+    const addressLine = block[2] || "";
+    const phoneLines = block.slice(3);
+
+    const grade = extractGrade(gradeCompanyLine);
+    const company = extractCompactCompany(gradeCompanyLine);
+    const { model, serial } = parseCompactModelSerial(modelSerialLine);
+    const department = extractDepartment(addressLine);
+    const keymanSegments = phoneLines.flatMap((l: string) => splitPhoneLine(l));
+    const keyman = keymanSegments.length > 0 ? keymanSegments.join("\n") : "";
+
+    const out = buildAirPurifierFromFields(
+      index,
+      grade,
+      company,
+      department,
+      keyman,
+      model,
+      serial,
+      ""
+    );
+
+    if (index === 0) {
+      sections.push(...out);
+    } else {
+      // subsequent blocks: repeat only item section (kept minimal — rare case)
+      sections.push(...out);
+    }
+  });
+
+  sections.push(...STANDARD_PARTS_SECTION);
+  return sections.join("\n");
+}
+
+function buildAirPurifierFromTable(input: string): string {
+  const rawText = input;
+  const flatText = input.replace(/[\t\r]+/g, " ");
+
+  const grade = extractGrade(flatText);
+  const company = extractTableCompany(rawText);
+  const department = extractDepartment(flatText);
+  const keyman = extractTableKeyman(rawText);
+  const tableMs = extractTableModelSerial(rawText);
+  const fallbackMs = extractModelAndSerial(flatText);
+  const ms: ModelSerial = {
+    model: tableMs.model || fallbackMs.model,
+    serial: tableMs.serial || fallbackMs.serial,
+  };
+  const assetNumber = extractAssetNumber(flatText);
+
+  const out = buildAirPurifierFromFields(
+    0,
+    grade,
+    company,
+    department,
+    keyman,
+    ms.model,
+    ms.serial,
+    assetNumber
+  );
+
+  return [...out, ...STANDARD_PARTS_SECTION].join("\n");
+}
+
+function transformAirPurifierText(input: string): string {
+  if (!input || !input.trim()) return "";
+
+  const format = detectInputFormat(input);
+  if (format === "compact") return buildAirPurifierFromCompact(input);
+  if (format === "table") return buildAirPurifierFromTable(input);
+  return transformAirPurifierStructured(input);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Shared multi-format extractors (used by Air Purifier and Blank Report)
+// ────────────────────────────────────────────────────────────────────────────
+
+type InputFormat = "compact" | "structured" | "table";
+
+function detectInputFormat(input: string): InputFormat {
+  if (
+    /기번\s+\S/.test(input) ||
+    /접수자성함\s+\S/.test(input) ||
+    /접수자연락처\s+\S/.test(input) ||
+    /★?키맨성함\/번호\s+\S/.test(input) ||
+    /자산번호\s+[A-Z]/.test(input)
+  ) {
+    return "table";
+  }
+
+  if (/^\s*구분\s*:/m.test(input) && /^\s*업체명\s*:/m.test(input)) {
+    return "structured";
+  }
+
+  return "compact";
+}
+
+// Company extraction — handles "17S㈜프리즘산업-매월마감" or "31SS주식회사 에이피더핀..."
+function extractCompactCompany(line: string): string {
+  const match = line.match(
+    /^\s*\d+(?:NN|SS|S|N|V)([^\n]*?)(?:분기마감|매월마감|매년마감|오픈\s*\d*시?반?|단순마감마감|단순마감|$)/
+  );
+  if (!match) return "";
+  return match[1]
+    .trim()
+    .replace(/^㈜\s*/, "")
+    .replace(/-\s*$/, "")
+    .trim();
+}
+
+// Table-format company — preserves newlines inside quoted "19V...매월마감" blocks
+function extractTableCompany(rawText: string): string {
+  const stripMarks = (s: string): string =>
+    s
+      .replace(/^㈜\s*/, "")
+      .replace(/\s*㈜\s*$/, "")
+      .replace(/^\(주\)\s*/, "")
+      .replace(/\s*\(주\)\s*$/, "")
+      .trim();
+
+  const quotedGradeMatch = rawText.match(
+    /"\s*\d+(?:NN|SS|S|N|V)?\s*([\s\S]*?)\s*(?:분기마감|매월마감|매년마감)\s*"/
+  );
+  if (quotedGradeMatch) {
+    return stripMarks(quotedGradeMatch[1].trim());
+  }
+
+  const lines = rawText.split(/\r?\n/);
+  for (const line of lines) {
+    const gradeMatch = line.match(
+      /^\s*\d+(?:NN|SS|S|N|V)([^\n]*?)(?:분기마감|매월마감|매년마감|오픈\s*\d*시?반?|단순마감마감|단순마감)/
+    );
+    if (gradeMatch) {
+      return stripMarks(gradeMatch[1].trim().replace(/-\s*$/, ""));
+    }
+  }
+
+  return stripMarks(extractCompanyForTemplate(rawText).replace(/-\s*$/, ""));
+}
+
+// Table-format model/serial — handles tab-separated "기종\tMODEL\t..." and "기번\t\"SERIAL\n..."
+function extractTableModelSerial(rawText: string): ModelSerial {
+  // Model: "기종" + tab/whitespace + value + (tab/newline/next-label)
+  const modelMatch = rawText.match(
+    /기종\s*[\t ]+\s*"?\s*([^\t\n"]+?)\s*(?:"|\t|\n|기기상태|접수분야|$)/
+  );
+  // Serial: "기번" + tab/whitespace + optional quote + alphanumeric (first line only)
+  const serialMatch = rawText.match(/기번\s*[\t ]+\s*"?\s*([A-Z0-9-]+)/i);
+
+  return {
+    model: modelMatch ? modelMatch[1].trim() : "",
+    serial: serialMatch ? serialMatch[1].trim() : "",
+  };
+}
+
+// Table-format report type — reads 접수분야 field (handles 샘플전달, 점검, A/S, 여분요청, etc.)
+function extractTableReportType(rawText: string): string {
+  // Matches at line start OR after tab/space (since "접수유형 X 접수분야 Y" has both on same line)
+  const match = rawText.match(/(?:^|[\t ])접수분야[\t ]+([^\t\n]+?)(?=[\t\n]|$)/);
+  if (match) {
+    const t = match[1].trim();
+    if (t) return t;
+  }
+  return "";
+}
+
+// Table-format 상태 field — captures multi-line values, strips outer quotes,
+// stops at next known field label at line start
+function extractStatusTextFromRaw(rawText: string): string {
+  const startMatch = rawText.match(/^\s*상태\s+/m);
+  if (!startMatch) return "";
+
+  const startIdx = (startMatch.index ?? 0) + startMatch[0].length;
+  const remaining = rawText.slice(startIdx);
+
+  const boundaryMatch = remaining.match(
+    /^\s*(?:제목|참고사항|기종|기기상태|AS접수횟수|방문담당자|주소|미수개월|한조\/틴텍코드|★?키맨성함\/번호|접수자성함|접수자연락처|일반전화|설치업체|기본임대료|방문주기|납품\/교체일|종료일|계약일|임대리스트순번|접수유형|접수분야|기번|장비소유주|확장성|교체일로부터|교체이력|사용개월|남은개월|평균임대료|유지보수업체)/m
+  );
+
+  const endIdx = boundaryMatch ? (boundaryMatch.index ?? remaining.length) : remaining.length;
+  let value = remaining.slice(0, endIdx).trim();
+
+  // Strip outer matching quotes (e.g., `" MA2101...\n...함"`)
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    value = value.slice(1, -1).trim();
+  }
+
+  return value;
+}
+
+// Table-format 지역 extraction — reads 방문담당자 value (e.g., "수도권A" → "A")
+function extractTableRegion(rawText: string): string {
+  const match = rawText.match(/방문담당자[\t ]+[^\t\n]*?([A-E])(?=[\t \n]|$)/);
+  if (match) return match[1];
+  return "";
+}
+
+// Compact model/serial: "샤오미 MI-AIR/318115/00036240" → model + (rest as serial)
+function parseCompactModelSerial(line: string): ModelSerial {
+  const trimmed = line.trim();
+  const firstSlash = trimmed.indexOf("/");
+  if (firstSlash < 0) return { model: trimmed, serial: "" };
+  return {
+    model: trimmed.slice(0, firstSlash).trim(),
+    serial: trimmed.slice(firstSlash + 1).trim(),
+  };
+}
+
+// Split phone line like "010-A 김/010-B 이 070-C 박" into one line per contact
+function splitPhoneLine(rawLine: string): string[] {
+  const segments = rawLine
+    .split("/")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+
+  const result: string[] = [];
+  for (const seg of segments) {
+    const phoneMatches = [...seg.matchAll(/\d{2,3}-?\d{3,4}-?\d{4}/g)];
+    if (phoneMatches.length <= 1) {
+      result.push(seg);
+      continue;
+    }
+    for (let i = 0; i < phoneMatches.length; i += 1) {
+      const start = phoneMatches[i].index ?? 0;
+      const end =
+        i + 1 < phoneMatches.length ? (phoneMatches[i + 1].index ?? seg.length) : seg.length;
+      const piece = seg.slice(start, end).trim();
+      if (piece) result.push(piece);
+    }
+  }
+  return result;
+}
+
+// Table-format keyman: 접수자성함+접수자연락처 / 일반전화 / ★키맨성함·번호
+function extractTableKeyman(rawText: string): string {
+  const lines: string[] = [];
+
+  // Use [\t ]+ instead of \s+ to stay within the same line (avoid swallowing newlines)
+  const nameMatch = rawText.match(/접수자성함[\t ]+([^\n\t]+?)(?=[\t\n])/);
+  const contactPhoneMatch = rawText.match(
+    /접수자연락처[\t ]+(01\d[- ]?\d{3,4}[- ]?\d{4}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/
+  );
+
+  const name = nameMatch ? nameMatch[1].trim() : "";
+  const phone = contactPhoneMatch ? contactPhoneMatch[1].trim() : "";
+
+  if (name && phone) {
+    lines.push(`${name} ${phone}`);
+  } else if (phone) {
+    lines.push(phone);
+  } else if (name) {
+    lines.push(name);
+  }
+
+  const landlineMatch = rawText.match(/일반전화\s+(0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/);
+  if (landlineMatch) {
+    lines.push(landlineMatch[1].trim());
+  }
+
+  // Quoted multi-line form: "010-... 이름\n010-..."
+  const quotedKeymanMatch = rawText.match(/★?키맨성함\/번호\s*[\t ]+\s*"([\s\S]*?)"/);
+  if (quotedKeymanMatch) {
+    const inner = quotedKeymanMatch[1]
+      .split(/\r?\n/)
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    lines.push(...inner);
+  } else {
+    const keymanMatch = rawText.match(
+      /★?키맨성함\/번호\s+([^\n\t]+?)(?=\s*(?:\n|\t|방문담당자|한조\/틴텍코드|주소|확장성|$))/
+    );
+    if (keymanMatch) {
+      lines.push(keymanMatch[1].trim());
+    }
+  }
+
+  if (lines.length === 0) {
+    const fallback = extractPhonesWithContext(rawText);
+    if (fallback) return fallback;
+  }
+
+  return lines.join("\n");
+}
+
+// One-line compact input decomposer — handles case where newlines were stripped.
+// Uses landmarks (마감 keyword, first phone, first slash) to identify the 4 sections:
+//   [grade+company+마감] [model/serial] [address] [phone(s)]
+// Returns null if the input doesn't look like compact format or can't be confidently split.
+function splitOneLineCompact(input: string): string[] | null {
+  const closingKeywordMatch = input.match(
+    /(분기마감|매월마감|매년마감|단순마감마감|단순마감|오픈\s*\d*시?반?)/
+  );
+  if (!closingKeywordMatch || closingKeywordMatch.index === undefined) return null;
+  const sec1End = closingKeywordMatch.index + closingKeywordMatch[0].length;
+  const sec1 = input.slice(0, sec1End);
+
+  const rest = input.slice(sec1End);
+
+  const phoneMatch = rest.match(/\d{2,3}-\d{3,4}-\d{4}/);
+  if (!phoneMatch || phoneMatch.index === undefined) return null;
+  const sec4Start = phoneMatch.index;
+  const middle = rest.slice(0, sec4Start);
+  const sec4 = rest.slice(sec4Start);
+
+  // middle = [model/serial][address]. Must contain at least one '/'.
+  const firstSlash = middle.indexOf("/");
+  if (firstSlash < 0) return null;
+
+  const after = middle.slice(firstSlash + 1);
+  const addressStartRel = findAddressStart(after);
+  if (addressStartRel < 0) return null;
+
+  const serial = after.slice(0, addressStartRel).replace(/\s+$/, "");
+  const address = after.slice(addressStartRel).trim();
+  const sec2 = middle.slice(0, firstSlash) + "/" + serial;
+
+  const sections = [sec1, sec2, address, sec4].map((s: string) => s.trim()).filter(Boolean);
+  return sections.length >= 2 ? sections : null;
+}
+
+// Find where the address section begins within the "model/serial + address" blob.
+// Picks the earliest plausible boundary from multiple hints:
+//   - floor hint (\d+층 followed by space + 한글/괄호) — last 1-2 digits are the floor, rest is serial
+//   - first 한글 character (serials don't contain 한글)
+//   - opening parenthesis
+//   - 지하/B+숫자+층
+// Returns -1 if no boundary found.
+function findAddressStart(after: string): number {
+  const candidates: number[] = [];
+
+  const floorMatch = after.match(/(\d+)층\s+[가-힣(]/);
+  if (floorMatch && floorMatch.index !== undefined) {
+    const digits = floorMatch[1];
+    const floorLen = digits.length <= 2 ? digits.length : 1;
+    candidates.push(floorMatch.index + (digits.length - floorLen));
+  }
+
+  const hangulMatch = after.match(/[가-힣]/);
+  if (hangulMatch && hangulMatch.index !== undefined) {
+    candidates.push(hangulMatch.index);
+  }
+
+  const parenMatch = after.match(/\(/);
+  if (parenMatch && parenMatch.index !== undefined) {
+    candidates.push(parenMatch.index);
+  }
+
+  const basementMatch = after.match(/지하\s*\d+층|B\d+층/);
+  if (basementMatch && basementMatch.index !== undefined) {
+    candidates.push(basementMatch.index);
+  }
+
+  if (candidates.length === 0) return -1;
+  return Math.min(...candidates);
+}
+
+// Split compact input block(s) — one block per 4-line group (company/model/address/phone)
+function splitCompactBlocks(input: string): string[][] {
+  const lines = input
+    .split(/\r?\n/)
+    .map((l: string) => l.trim())
+    .filter(Boolean);
+
+  // Single-line input with newlines stripped — try to decompose via landmarks
+  if (lines.length === 1) {
+    const decomposed = splitOneLineCompact(lines[0]);
+    if (decomposed && decomposed.length >= 3) {
+      return [decomposed];
+    }
+  }
+
+  const blocks: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    // Grade-company header marks start of a new block
+    const isGradeCompanyLine = /^\s*\d+(?:NN|SS|S|N|V)[^0-9]/.test(line);
+    if (isGradeCompanyLine && current.length > 0) {
+      blocks.push(current);
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) blocks.push(current);
+
+  return blocks.length > 0 ? blocks : [lines];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mode 3: Samsung Note Titles (삼성노트 제목 생성)
+// ────────────────────────────────────────────────────────────────────────────
+
+const SEOUL_DISTRICTS = [
+  "송파구", "강남구", "서초구", "용산구", "성동구", "노원구", "은평구",
+  "마포구", "종로구", "광진구", "동작구", "관악구", "구로구",
+  "영등포구", "금천구", "동대문구", "서대문구", "도봉구", "강동구",
+  "강북구", "양천구", "성북구", "중랑구",
+];
+
+const BUSINESS_SUFFIXES = [
+  "학원", "교회", "의원", "치과", "병원", "약국", "법인", "회사",
+  "디자인", "피앤씨", "기획", "팩토리", "코리아", "메디칼", "메디컬",
+  "코스메틱", "바이오", "안전", "사이언스", "엔터테인먼트", "컴퍼니",
+  "인터내셔널", "그룹", "연구소", "협회", "재단", "스튜디오",
+];
+
+const COMPANY_STOP_PATTERN = new RegExp(
+  [
+    "㈜",
+    "\\(주\\)",
+    "주식회사",
+    "\\d+층",
+    "\\d+호",
+    "\\d+동",
+    "[A-Z]{2,}",
+    "빌딩",
+    "타워",
+    "분기마감",
+    "매월마감",
+    "매년마감",
+    "단순마감마감",
+    "단순마감",
+    "전일연락필수",
+    "준전일연락필수",
+    "진성완료",
+    "현장종료",
+    "오픈\\s*\\d*시?반?",
+    ">",
+    "-",
+    "본사",
+    ...SEOUL_DISTRICTS,
+  ].join("|")
+);
+
+function splitScheduleBlocks(input: string): string[][] {
+  if (!input || !input.trim()) return [];
+
+  const lines = input.split(/\r?\n/).map((line: string) => line.trimEnd());
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  let expectedNextNumber: number | null = null;
+
+  lines.forEach((line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (/^#/.test(trimmed) && current.length === 0) return;
+
+    const numberMatch = trimmed.match(/^(\d+)\./);
+    if (numberMatch) {
+      const num = parseInt(numberMatch[1], 10);
+
+      if (expectedNextNumber === null) {
+        if (current.length > 0) blocks.push(current);
+        current = [trimmed];
+        expectedNextNumber = num + 1;
+        return;
+      }
+
+      if (num === expectedNextNumber) {
+        if (current.length > 0) blocks.push(current);
+        current = [trimmed];
+        expectedNextNumber = num + 1;
+        return;
+      }
+      // Non-sequential number = internal list item, fall through to treat as content
+    }
+
+    if (current.length === 0) return;
+    current.push(trimmed);
+  });
+
+  if (current.length > 0) blocks.push(current);
+  return blocks;
+}
+
+function extractLocationLabel(lines: string[]): string {
+  const joined = lines.join(" ");
+  const basementFloorMatch = joined.match(/(지하\s*\d+층|B\s*\d+층)/i);
+  if (basementFloorMatch) return basementFloorMatch[1].replace(/\s+/g, "");
+  const hoMatch = joined.match(/(\d+호)/);
+  if (hoMatch) return hoMatch[1];
+  const floorDotMatch = joined.match(/(\d+[·.]\d+층)/);
+  if (floorDotMatch) {
+    const parts = floorDotMatch[1].match(/\d+/g);
+    if (parts && parts.length > 0) return `${parts[parts.length - 1]}층`;
+  }
+  const floorMatch = joined.match(/(\d+층)/);
+  if (floorMatch) return floorMatch[1];
+  const dongMatch = joined.match(/(\d+동)/);
+  if (dongMatch) return dongMatch[1];
+  return "미기재";
+}
+
+function extractCompanyBySuffixWord(line: string): string {
+  const alternation = BUSINESS_SUFFIXES.join("|");
+  const pattern = new RegExp(
+    `([가-힣A-Za-z0-9]{2,}(?:${alternation}))(?=[^가-힣A-Za-z0-9]|$)`,
+    "g"
+  );
+  const matches = [...line.matchAll(pattern)];
+  for (const m of matches) {
+    const candidate = m[1].trim();
+    if (candidate.length >= 3 && candidate.length <= 30) return candidate;
+  }
+  return "";
+}
+
+function applyCompanyStop(raw: string): string {
+  let result = raw.replace(/\([^)]*\)/g, "").replace(/^\d+\.\s*/, "").trim();
+  const stopMatch = result.match(COMPANY_STOP_PATTERN);
+  if (stopMatch && typeof stopMatch.index === "number" && stopMatch.index > 0) {
+    result = result.slice(0, stopMatch.index);
+  }
+  return result.trim();
+}
+
+const KOREA_REGION_PATTERN =
+  "서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주";
+
+function extractCompanyBeforeModel(line: string): string {
+  const pattern = new RegExp(
+    `([가-힣][가-힣A-Za-z0-9]{1,})\\s+[A-Z][A-Za-z0-9,-]{2,}(?:\\([^)]*\\))?\\s*\\/\\s*(?:${KOREA_REGION_PATTERN})`
+  );
+  const m = line.match(pattern);
+  if (m) {
+    const candidate = m[1].trim();
+    if (candidate.length >= 2 && candidate.length <= 30) return candidate;
+  }
+  return "";
+}
+
+function extractTaskFromBody(lines: string[]): string {
+  const pattern = new RegExp(
+    `(?:^|\\s)([가-힣]{2,}[가-힣A-Za-z0-9]*)\\s+[가-힣][가-힣A-Za-z0-9]+\\s+[A-Z][A-Za-z0-9,-]{2,}(?:\\([^)]*\\))?\\s*\\/\\s*(?:${KOREA_REGION_PATTERN})`
+  );
+  for (let i = 1; i < lines.length; i += 1) {
+    const m = lines[i].match(pattern);
+    if (m) {
+      const task = m[1].trim();
+      if (task.length >= 2 && task.length <= 20) return task;
+    }
+  }
+  return "";
+}
+
+function extractCompanyFromBodyLine(line: string): string {
+  if (!line) return "";
+
+  let raw = line.trim();
+  raw = raw.replace(/^"/, "").replace(/"$/, "");
+
+  // Suffix form: "XXX㈜", "XXX주식회사", "XXX(주)"
+  const suffixMatch = raw.match(
+    /(?:^|\s|")\d*(?:NN|SS|S|N|V)?\s*([가-힣][가-힣0-9]{1,})(?:㈜|주식회사|\(주\))/
+  );
+  if (suffixMatch) return suffixMatch[1].trim();
+
+  // Prefix form: "주식회사 XXX" or "㈜XXX"
+  let afterAnchor: string | null = null;
+  const jushikMatch = raw.match(/주식회사\s+(.+)/);
+  if (jushikMatch) {
+    afterAnchor = jushikMatch[1];
+  } else {
+    const juMatch = raw.match(/㈜\s*([가-힣A-Za-z0-9].+)/);
+    if (juMatch) afterAnchor = juMatch[1];
+  }
+
+  // Grade-prefix anchor: "14SS광운", "30N코리움사이언스"
+  if (!afterAnchor) {
+    const gradeMatch = raw.match(
+      /(?:^|\s|")\d*(?:NN|SS|S|N|V)\s*([가-힣][^\s].*)/
+    );
+    if (gradeMatch) afterAnchor = gradeMatch[1];
+  }
+
+  if (afterAnchor) {
+    const result = applyCompanyStop(afterAnchor);
+    if (result && /[가-힣]{2,}/.test(result)) return result;
+  }
+
+  // Model-based: "[company] [MODEL] / [region]"
+  const beforeModel = extractCompanyBeforeModel(raw);
+  if (beforeModel) return beforeModel;
+
+  // Final fallback: suffix-word pattern (학원, 교회, 의원...)
+  const suffixWord = extractCompanyBySuffixWord(raw);
+  if (suffixWord) return suffixWord;
+
+  return "";
+}
+
+function extractCompanyFromBody(lines: string[]): string {
+  for (let i = 1; i < lines.length; i += 1) {
+    const company = extractCompanyFromBodyLine(lines[i]);
+    if (company && /[가-힣]{2,}/.test(company) && company.length <= 30) {
+      return company;
+    }
+  }
+  return "";
+}
+
+function companyWordOverlap(candidate: string, bodyText: string): boolean {
+  if (!candidate || !bodyText) return false;
+  const words = candidate
+    .split(/\s+/)
+    .filter((w: string) => w.length >= 2 && /[가-힣A-Za-z]/.test(w));
+  if (words.length === 0) return false;
+  return words.some((w: string) => bodyText.includes(w));
+}
+
+function extractScheduleSummary(lines: string[], scheduleIndex: number): ResultItem {
+  const firstLineRaw = (lines[0] || "").trim();
+  const firstLineContent = firstLineRaw.replace(/^\d+\.\s*/, "").trim();
+
+  const slashIdx = firstLineContent.indexOf("/");
+  let candidateCompany = "";
+  let summaryAfterSlash = "";
+  if (slashIdx > 0) {
+    candidateCompany = firstLineContent.slice(0, slashIdx).trim();
+    summaryAfterSlash = firstLineContent.slice(slashIdx + 1).trim();
+  }
+
+  const bodyText = lines.slice(1).join(" ");
+  const bodyCompany = extractCompanyFromBody(lines);
+
+  let company: string;
+  let summary: string;
+
+  if (candidateCompany && companyWordOverlap(candidateCompany, bodyText)) {
+    // First-line "X" matches body content — it's a real company identifier
+    company = candidateCompany;
+    summary = summaryAfterSlash || firstLineContent || "점검";
+  } else if (bodyCompany) {
+    company = bodyCompany;
+    const bodyTask = firstLineContent ? "" : extractTaskFromBody(lines);
+    summary = firstLineContent || bodyTask || "점검";
+  } else if (candidateCompany) {
+    // No body confirmation but first line has slash — still use it
+    company = candidateCompany;
+    summary = summaryAfterSlash || "점검";
+  } else {
+    company = "미기재";
+    summary = firstLineContent || "점검";
+  }
+
+  const location = extractLocationLabel(lines);
+  const content = `${scheduleIndex + 1}/${company} ${location}/${summary}`;
+
+  const warnings: string[] = [];
+  if (company === "미기재") warnings.push("업체명 추출 실패");
+  if (location === "미기재") warnings.push("위치 추출 실패");
+
+  return {
+    content,
+    warning: warnings.length > 0 ? warnings.join(" · ") : undefined,
+  };
+}
+
+function transformSamsungNoteTitles(input: string): ResultItem[] {
+  const blocks = splitScheduleBlocks(input);
+  return blocks.map((lines: string[], index: number) => extractScheduleSummary(lines, index));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mode 4: Blank Report (미양식 → 빈 보고서 양식 생성)
+// ────────────────────────────────────────────────────────────────────────────
+
+function splitParagraphBlocks(input: string): string[][] {
+  if (!input || !input.trim()) return [];
+
+  const normalized = input.trim();
+  const explicitMultiBlocks = normalized
+    .split(/\n\s*\n+/)
+    .map((block: string) => block.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean))
+    .filter((block: string[]) => block.length > 0);
+
+  const hasNumberedSchedules = /^\d+\./m.test(normalized);
+  const hasRepeatedTypeMarkers = (normalized.match(/(?:^|\n)(A\/S|여분요청|점검)\b/g) || []).length > 1;
+
+  if (hasNumberedSchedules || hasRepeatedTypeMarkers) {
+    return explicitMultiBlocks;
+  }
+
+  return [normalized.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean)];
+}
+
+function extractReportType(text: string): string {
+  if (/여분요청/.test(text)) return "여분요청";
+  if (/\bA\/S\b/.test(text)) return "A/S";
+  return "점검";
+}
+
+function extractReportLevel(text: string, type: string): string {
+  if (type === "점검") return "1";
+  if (type === "A/S") {
+    const match = text.match(/레벨\s*([123])/);
+    return match ? match[1] : "";
+  }
+  return "";
+}
+
+function extractGrade(text: string): string {
+  const tokenMatch = text.match(/(?:^|\s)(NN|SS|S|N|V)(?=\s|$)/);
+  if (tokenMatch) return tokenMatch[1];
+  const companyPrefixedMatch = text.match(/(?:^|\s)\d+(NN|SS|S|N|V)(?=[^A-Za-z0-9])/);
+  if (companyPrefixedMatch) return companyPrefixedMatch[1];
+  return "";
+}
+
+function extractCompanyForTemplate(text: string): string {
+  const compact = text.replace(/\s+/g, " ");
+  const quotedMatch = compact.match(
+    /"\s*\d*(주식회사[^"]*?|법무법인[^"]*?|세무법인[^"]*?|[^"]*?(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))\s*(?:분기마감|매월마감|매년마감)/
+  );
+  if (quotedMatch) return quotedMatch[1].trim().replace(/-\s*$/, "");
+
+  const companyAfterGradeMatch = compact.match(
+    /(?:^|\s)\d+(NN|SS|S|N|V)([^\n]*?)(분기마감|매월마감|매년마감|오픈\s*\d*시?반?분기마감|오픈\s*\d*시?반?|단순마감마감|단순마감)/
+  );
+  if (companyAfterGradeMatch) {
+    return companyAfterGradeMatch[2]
+      .replace(/^\s*"/, "")
+      .replace(/"\s*$/, "")
+      .trim()
+      .replace(/-\s*$/, "");
+  }
+
+  const fallback = compact.match(
+    /(법무법인\s*[가-힣A-Za-z0-9\s]+|세무법인\s*[가-힣A-Za-z0-9\s]+|주식회사\s*[가-힣A-Za-z0-9\s]+|㈜\s*[가-힣A-Za-z0-9\s]+|[가-힣A-Za-z0-9\s]+(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))/
+  );
+  return fallback ? fallback[1].trim().replace(/-\s*$/, "") : "";
+}
+
+function extractDepartment(text: string): string {
+  // Basement floors (지하1층, 지하 1층, B1층) take priority — must be checked
+  // before the general \d+층 pattern which would only grab the trailing digit
+  const basementMatch = text.match(/(지하\s*\d+층|B\s*\d+층)/i);
+  if (basementMatch) return basementMatch[1].replace(/\s+/g, "");
+
+  // Prefer whitespace-anchored 1-2 digit floor: " 7층", " 11층"
+  const spacedFloorMatch = text.match(/(?:^|\s)(\d{1,2})층/);
+  if (spacedFloorMatch) return `${spacedFloorMatch[1]}층`;
+
+  // Merged form like "107층" → typically building# + floor → take trailing digit
+  const mergedFloorMatch = text.match(/(\d+)층/);
+  if (mergedFloorMatch) {
+    const num = mergedFloorMatch[1];
+    if (num.length <= 2) return `${num}층`;
+    return `${num.slice(-1)}층`;
+  }
+
+  const hoMatch = text.match(/(\d+호)/);
+  if (hoMatch) return hoMatch[1];
+  const suiteMatch = text.match(/상가\s*(\d+호)/);
+  if (suiteMatch) return suiteMatch[1];
+  return "";
+}
+
+function extractPhonesWithContext(text: string): string {
+  const contactNameMatch = text.match(
+    /접수자성함\s*([^\n]+?)\s+접수자연락처\s*(01\d[- ]?\d{3,4}[- ]?\d{4}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/
+  );
+  if (contactNameMatch) return `${contactNameMatch[1].trim()} ${contactNameMatch[2].trim()}`;
+
+  const contactPhoneOnlyMatch = text.match(
+    /접수자연락처\s*(01\d[- ]?\d{3,4}[- ]?\d{4}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/
+  );
+  if (contactPhoneOnlyMatch) return contactPhoneOnlyMatch[1].trim();
+
+  const genericContactBlockMatch = text.match(/연락처\s+(01\d[- ]?\d{3,4}[- ]?\d{4})\s*([^\n]*)/);
+  if (genericContactBlockMatch) {
+    const phone = genericContactBlockMatch[1].trim();
+    const name = (genericContactBlockMatch[2] || "").trim();
+    return name ? `${phone} ${name}` : phone;
+  }
+
+  return "";
+}
+
+function extractModelAndSerial(text: string): ModelSerial {
+  const modelMatch = text.match(
+    /기종\s+((?:ApeosPort|Apeos|ECOSYS|SL-|DocuCentre|DocuPrint|bizhub|IR-|TASKalfa|MX-|HP-|MFC-|[A-Za-z가-힣0-9][A-Za-z가-힣0-9._-]{1,})[^\s\n]*)/i
+  );
+  const serialMatch = text.match(/(?:기번|시리얼넘버)\s+([A-Z0-9-]+)/i);
+  if (modelMatch || serialMatch) {
+    return {
+      model: modelMatch ? modelMatch[1].trim() : "",
+      serial: serialMatch ? serialMatch[1].trim() : "",
+    };
+  }
+
+  const slashMatch = text.match(
+    /((?:ApeosPort|Apeos|ECOSYS|SL-|DocuCentre|DocuPrint|bizhub|IR-|TASKalfa|MX-|HP-|MFC-)[^/\n\s]*)\s*\/\s*([A-Z0-9-]+)/i
+  );
+  if (slashMatch) return { model: slashMatch[1].trim(), serial: slashMatch[2].trim() };
+
+  const genericSlashLineMatch = text.match(
+    /(?:^|\n|\s)(?!한조\/틴텍코드)([A-Za-z가-힣][A-Za-z가-힣0-9._-]{1,})\s*\/\s*([A-Z0-9-]{6,})(?=\s|$)/
+  );
+  if (genericSlashLineMatch) {
+    return { model: genericSlashLineMatch[1].trim(), serial: genericSlashLineMatch[2].trim() };
+  }
+
+  return { model: "", serial: "" };
+}
+
+function extractAssetNumber(text: string): string {
+  const match = text.match(/자산번호\s+([A-Z]\d+)/i);
+  return match ? match[1].trim() : "";
+}
+
+function extractStatusText(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const quotedStatusMatch = normalized.match(
+    /(?:^|\s)상태\s+"\s*([\s\S]*?)\s*"(?=\s+(?:제목|참고사항|기종|기기상태|AS접수횟수|방문담당자|주소)|\s*$)/
+  );
+  if (quotedStatusMatch) return quotedStatusMatch[1].trim();
+  const plainStatusMatch = normalized.match(
+    /(?:^|\s)상태\s+(.*?)(?=\s+(?:제목|참고사항|기종|기기상태|AS접수횟수|방문담당자|주소)|\s*$)/
+  );
+  if (plainStatusMatch) return plainStatusMatch[1].trim();
+  return "";
+}
+
+function extractTitleText(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const titleMatch = normalized.match(
+    /제목\s+(.*?)(?=\s+(?:상태|참고사항|기종|기기상태|AS접수횟수|방문담당자|주소)|\s*$)/
+  );
+  return titleMatch ? titleMatch[1].trim() : "";
+}
+
+function extractTemplateContent(text: string, type: string): string {
+  if (type === "여분요청") return extractStatusText(text) || extractTitleText(text) || "";
+  if (type === "A/S") return extractStatusText(text) || extractTitleText(text) || "";
+  return "정기점검";
+}
+
+function extractTemplateProcessContent(_text: string, type: string): string {
+  if (type === "점검") return "정기점검";
+  return "";
+}
+
+type PrinterReportFields = {
+  type: string;
+  level: string;
+  grade: string;
+  company: string;
+  department: string;
+  region: string;
+  keyman: string;
+  model: string;
+  serial: string;
+  assetNumber: string;
+  content: string;
+  processContent: string;
+};
+
+function formatPrinterReport(f: PrinterReportFields): string {
+  return [
+    "작성자:",
+    `구분:${f.type}`,
+    `레벨:${f.level}`,
+    `등급:${f.grade}`,
+    `업체명:${f.company}`,
+    `부서명:${f.department}`,
+    `지역:${f.region}`,
+    `키맨/접수자:${f.keyman}`,
+    ITEM_DIVIDER,
+    "1.",
+    `모델명:${f.model}`,
+    `시리얼넘버:${f.serial}`,
+    `자산기번: ${f.assetNumber}`,
+    `내용: ${f.content}`,
+    `처리내용:${f.processContent ? ` ${f.processContent}` : ""}`,
+    "매수:흑- 컬- 큰컬- 합-",
+    "토너잔량:K- C- M- Y-",
+    "폐통:  %",
+    "여분:  K- C- M- Y- 폐-",
+    "한틴이카유무:",
+    "주차비지원유무:",
+    "특이사항:",
+    SECTION_DIVIDER,
+    "※부품신청※",
+    "보증기간 내 여부 :",
+    "교체 전 카운터 누적 사용매수 :",
+    "사용 부품 예상 사용매수 :",
+    "▶ 신청 부품",
+    "물품명:",
+    "수량:",
+    "출고여부:",
+    SECTION_DIVIDER,
+    "※자가신청※",
+    "물품:",
+    "수량:",
+    "출고여부:",
+    ITEM_DIVIDER,
+    "도착 시간:",
+    "소요 시간:",
+  ].join("\n");
+}
+
+function buildBlankReportCompact(blockLines: string[]): ResultItem {
+  const gradeCompanyLine = blockLines[0] || "";
+  const modelSerialLine = blockLines[1] || "";
+  const addressLine = blockLines[2] || "";
+  const phoneLines = blockLines.slice(3);
+
+  const grade = extractGrade(gradeCompanyLine);
+  const company = extractCompactCompany(gradeCompanyLine);
+  const { model, serial } = parseCompactModelSerial(modelSerialLine);
+  const department = extractDepartment(addressLine);
+  const keymanSegments = phoneLines.flatMap((l: string) => splitPhoneLine(l));
+  const keyman = keymanSegments.join("\n");
+
+  const body = formatPrinterReport({
+    type: "점검",
+    level: "1",
+    grade,
+    company,
+    department,
+    region: "C",
+    keyman,
+    model,
+    serial,
+    assetNumber: "",
+    content: "정기점검",
+    processContent: "정기점검",
+  });
+
+  const warnings: string[] = [];
+  if (!company) warnings.push("업체명 추출 실패");
+  if (!model && !serial) warnings.push("모델/시리얼 추출 실패");
+  if (!keyman) warnings.push("연락처 추출 실패");
+
+  return {
+    content: body,
+    warning: warnings.length > 0 ? warnings.join(" · ") : undefined,
+  };
+}
+
+function buildBlankReport(blockLines: string[]): ResultItem {
+  const rawText = blockLines.join("\n");
+  const flatText = blockLines.join(" ");
+  const format = detectInputFormat(rawText);
+
+  // Type: table format prefers 접수분야 field (handles 샘플전달, 점검, A/S, 여분요청...)
+  const tableType = format === "table" ? extractTableReportType(rawText) : "";
+  const type = tableType || extractReportType(flatText);
+
+  const level = extractReportLevel(flatText, type);
+  const grade = extractGrade(flatText);
+  const company =
+    format === "table" ? extractTableCompany(rawText) : extractCompanyForTemplate(flatText);
+  const department = extractDepartment(flatText);
+  const keyman =
+    format === "table" ? extractTableKeyman(rawText) : extractPhonesWithContext(flatText);
+  const ms: ModelSerial = (() => {
+    if (format === "table") {
+      const table = extractTableModelSerial(rawText);
+      const fallback = extractModelAndSerial(flatText);
+      return {
+        model: table.model || fallback.model,
+        serial: table.serial || fallback.serial,
+      };
+    }
+    return extractModelAndSerial(flatText);
+  })();
+  const assetNumber = extractAssetNumber(flatText);
+
+  // Region: table format reads 방문담당자 (수도권A/B/C/D/E), defaults to C
+  const region = format === "table" ? extractTableRegion(rawText) || "C" : "C";
+
+  // Content: table format prefers 상태 field (multi-line, quote-stripped).
+  // If 상태 has a value, use it and leave 처리내용 blank; otherwise fall back to defaults.
+  let content: string;
+  let processContent: string;
+  if (format === "table") {
+    const status = extractStatusTextFromRaw(rawText);
+    if (status) {
+      content = status;
+      processContent = "";
+    } else {
+      content = extractTemplateContent(flatText, type);
+      processContent = extractTemplateProcessContent(flatText, type);
+    }
+  } else {
+    content = extractTemplateContent(flatText, type);
+    processContent = extractTemplateProcessContent(flatText, type);
+  }
+
+  const body = formatPrinterReport({
+    type,
+    level,
+    grade,
+    company,
+    department,
+    region,
+    keyman,
+    model: ms.model,
+    serial: ms.serial,
+    assetNumber,
+    content,
+    processContent,
+  });
+
+  const warnings: string[] = [];
+  if (!company) warnings.push("업체명 추출 실패");
+  if (!ms.model && !ms.serial) warnings.push("모델/시리얼 추출 실패");
+  if (!keyman) warnings.push("연락처 추출 실패");
+
+  return {
+    content: body,
+    warning: warnings.length > 0 ? warnings.join(" · ") : undefined,
+  };
+}
+
+function transformBlankReports(input: string): ResultItem[] {
+  if (!input || !input.trim()) return [];
+
+  const format = detectInputFormat(input);
+  if (format === "compact") {
+    const blocks = splitCompactBlocks(input);
+    return blocks.map((block: string[]) => buildBlankReportCompact(block));
+  }
+
+  const blocks = splitParagraphBlocks(input);
+  return blocks.map((block: string[]) => buildBlankReport(block));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Clipboard utilities
+// ────────────────────────────────────────────────────────────────────────────
+
+function copyTextFallback(text: string): boolean {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+async function copyTextToClipboard(text: string): Promise<CopyResult> {
+  if (!text) return { ok: false, message: "복사할 내용이 없습니다." };
+
+  if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return { ok: true, message: "복사 완료" };
+    } catch {
+      const fallbackSucceeded = copyTextFallback(text);
+      if (fallbackSucceeded) return { ok: true, message: "복사 완료" };
+      return { ok: false, message: "복사가 차단되었습니다. 직접 선택해 복사해 주세요." };
+    }
+  }
+
+  const fallbackSucceeded = copyTextFallback(text);
+  if (fallbackSucceeded) return { ok: true, message: "복사 완료" };
+  return { ok: false, message: "복사가 차단되었습니다. 직접 선택해 복사해 주세요." };
+}
+
+async function pasteFromClipboard(): Promise<string | null> {
+  if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.readText) {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tests (DEV only)
+// ────────────────────────────────────────────────────────────────────────────
+
+const TEST_CASES: TestCase[] = [
+  {
+    name: "업체명 여러 줄 유지",
+    input: "업체명: 주식회사 필립오토서비스\n부가설명 한 줄 더\n부서명: 303호\n-------------------------------------",
+    expected: "부가설명 한 줄 더",
+    mode: "inspection",
+  },
+  {
+    name: "주차비지원유무 여러 줄 유지",
+    input: "-------------------------------------\n모델명: ECOSYS\n주차비지원유무 : 주차하려했으나 발렛 5천원\n다음 방문시 공용주차 요청\n특이사항: 테스트",
+    expected: "다음 방문시 공용주차 요청",
+    mode: "inspection",
+  },
+  {
+    name: "특이사항 여러 줄 유지",
+    input: "-------------------------------------\n모델명: ECOSYS\n특이사항: 첫줄\n둘째줄\n셋째줄",
+    expected: "셋째줄",
+    mode: "inspection",
+  },
+  {
+    name: "위치 제목 자동 번호 부여",
+    input: "-------------------------------------\n15층입구\n모델명: D470\n시리얼넘버: 809150608947",
+    expected: "1. 15층입구",
+    mode: "inspection",
+  },
+  {
+    name: "청정기 필터리셋 필드 유지",
+    input: "구분:점검\n등급:S\n업체명:업체A\n부서명:7층\n지역:C\n키맨/접수자:010-0000-0000\n_____________________________\n1.\n모델명:샤오미 MI-AIR\n시리얼넘버:318115/00036240\n자산기번: X7505\n내용: 정기점검\n처리내용: 필터 청소\n필터리셋:유\n필터교체:무\n특이사항: 없음",
+    expected: "필터리셋:유",
+    mode: "air-purifier",
+  },
+  {
+    name: "청정기 필터교체 필드 유지",
+    input: "구분:점검\n등급:S\n업체명:업체A\n부서명:7층\n지역:C\n키맨/접수자:010-0000-0000\n_____________________________\n1.\n모델명:샤오미 MI-AIR\n시리얼넘버:318115/00036240\n자산기번: X7505\n내용: 정기점검\n처리내용: 필터 청소\n필터리셋:유\n필터교체:무\n특이사항: 없음",
+    expected: "필터교체:무",
+    mode: "air-purifier",
+  },
+  {
+    name: "청정기 매수/토너 필드 제외",
+    input: "구분:점검\n등급:S\n업체명:업체A\n부서명:7층\n지역:C\n키맨/접수자:010-0000-0000\n_____________________________\n1.\n모델명:샤오미 MI-AIR\n시리얼넘버:318115/00036240\n필터리셋:유\n필터교체:무\n특이사항: 없음",
+    mode: "air-purifier",
+    expected: "※부품신청※",
+  },
+  {
+    name: "삼성노트 업체명 추출 실패 경고",
+    input: "1.점검\n알수없는텍스트\n010-1234-5678",
+    expected: "미기재",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 첫줄 X/Y + 바디 매칭 (올리브인터내셔널)",
+    input: "1.올리브인터내셔널/모니터 전달\nAS    SS   PC모니터  비용 180,000원 안내완료   주식회사 올리브인터내셔널 AK빌딩 4층\n자산번호   S0378   시리얼번호\n접수자성함연락처   김종현 담당자님 010-7456-5416\n서울 강남구 논현로79길 12 (역삼동) AK빌딩 4층 (엘베 유)",
+    expected: "1/올리브인터내셔널 4층/모니터 전달",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 내부 번호리스트 제외 (알스퀘어)",
+    input: "2.알스퀘어 신한리츠운용/랜선2개\n5.알스퀘어디자인-신한리츠운용 그레이츠강남\n6. 성함 : 천명규 책임 / 010-6210-8679\n7. 주소(엘리베이터 유무) :서울 서초구 서초동 1321-11 그레이츠강남 1층",
+    expected: "1/알스퀘어 신한리츠운용 1층/랜선2개",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 첫줄 슬래시는 태스크 (블레이드)",
+    input: "3.블레이드/k드럼 분해PM\nA/S N ECOSYS-MA2100CFX \"4N주식회사 그리드엔터테인먼트-전 주식회사 일삼일 /\n기번   WDM4302486   자산번호   B7749\n접수자성함   서유나\n접수자연락처   010-5018-0906\n주소   서울 강남구 논현로155길 31   확장성",
+    expected: "1/그리드엔터테인먼트 미기재/블레이드/k드럼 분해PM",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 구(區) 표기 정리 (광운)",
+    input: "4.1대\n14SS주식회사 광운송파구 > 강남구분기마감\nD450/800140653219\n서울 강남구 도산대로 159\n춘곡빌딩 (춘곡빌딩, 서울 강남구 신사동 561-30)",
+    expected: "1/광운 미기재/1대",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 빈 첫줄은 점검 (팬틱스)",
+    input: "5.\n4NN주식회사 팬틱스-전 주식회사 컨셉케이컴퍼니분기마감\nApeosPort-C2060/513194\n서울 강남구 도산대로12길 25-1\n2층 엘베o 엘베는 3층(특이사항: 엘리베이터는 3층으로 내려야함) (서울 강남구 논현동 11-19)\n010-9119-3335 대표님 김수민 010-4893-3286(결제 키)",
+    expected: "1/팬틱스 2층/점검",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 ㈜ 접미형 (신우개발)",
+    input: "6.9대\n25V신우개발㈜3층 매월마감\nAPEOS-C5570/175219\n서울 서초구 바우뫼로 198\n- (신우빌딩, 서울 서초구 양재동 82-7)",
+    expected: "1/신우개발 3층/9대",
+    mode: "samsung-note",
+  },
+  {
+    name: "삼성노트 6건 일괄 처리 순차 번호",
+    input: "1.올리브인터내셔널/모니터 전달\n주식회사 올리브인터내셔널 AK빌딩 4층\n2.알스퀘어 신한리츠운용/랜선2개\n5.알스퀘어디자인-신한리츠운용 그레이츠강남\n7. 주소 서울 서초구 1층\n3.블레이드/k드럼 분해PM\nN ECOSYS \"4N주식회사 그리드엔터테인먼트-전 주식회사\n4.1대\n14SS주식회사 광운송파구 > 강남구분기마감\n5.\n4NN주식회사 팬틱스-전 주식회사 분기마감\n2층\n6.9대\n25V신우개발㈜3층",
+    expected: "6/신우개발 3층/9대",
+    mode: "samsung-note",
+  },
+  {
+    name: "청정기 compact 입력 - 등급/업체명/부서명",
+    input:
+      "17S㈜프리즘산업-매월마감\n샤오미 MI-AIR/318115/00036240\n서울 강남구 테헤란로22길 107층 프리즘산업 (프리즘빌딩, 서울 강남구 역삼동 736-35)\n010-9312-7412 이영선/010-9312-7412 이영선",
+    expected: "업체명: 프리즘산업",
+    mode: "air-purifier",
+  },
+  {
+    name: "청정기 compact 입력 - 부서명 107층 → 7층",
+    input:
+      "17S㈜프리즘산업-매월마감\n샤오미 MI-AIR/318115/00036240\n서울 강남구 테헤란로22길 107층 프리즘산업\n010-9312-7412 이영선",
+    expected: "부서명: 7층",
+    mode: "air-purifier",
+  },
+  {
+    name: "청정기 compact 입력 - 모델/시리얼 슬래시 분리",
+    input:
+      "17S㈜프리즘산업-매월마감\n샤오미 MI-AIR/318115/00036240\n서울 강남구 테헤란로22길 107층\n010-9312-7412 이영선",
+    expected: "시리얼넘버: 318115/00036240",
+    mode: "air-purifier",
+  },
+  {
+    name: "미양식 compact 입력 - 주식회사 유지",
+    input:
+      "31SS주식회사 에이피더핀(AP The Fin Inc)중앙쪽매월마감\nECOSYS-M5521CDN/VUY2Z03481\n서울 강남구 테헤란로 218에이피타워 11층 (AP Tower)\n010-6822-9591/070-4850-8726 이수민선임 010-8131-1966 이세희선임(경영지원)",
+    expected: "업체명:주식회사 에이피더핀(AP The Fin Inc)중앙쪽",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 compact 입력 - 키맨 여러 전화번호 분리",
+    input:
+      "31SS주식회사 에이피더핀매월마감\nECOSYS-M5521CDN/VUY2Z03481\n서울 강남구 11층\n010-6822-9591/070-4850-8726 이수민선임 010-8131-1966 이세희선임(경영지원)",
+    expected: "010-8131-1966 이세희선임(경영지원)",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table 입력 - 업체명 여러 줄 유지",
+    input:
+      'A/S\tV\tApeosPort-VI C3371(베니)\t"19V엔티에스케이투\nK2 성수 2층 CS팀-문서용매월마감"\n기번\t"665941\nIP-211-63-14-146"\t자산번호\tC3686\n접수자성함\t양명호\n접수자연락처\t010-6314-7409\n일반전화\t02-3408-8507\n★키맨성함/번호\t양명호 차장 010-6314-7409\n기종\tApeosPort-VI C3371(베니)\t기기상태\t확인요망\n상태\t출력시 묻어나옴',
+    expected: "K2 성수 2층 CS팀-문서용",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table 입력 - 모델명 전체 추출",
+    input:
+      'A/S\tV\tApeosPort-VI C3371(베니)\t"19V엔티에스케이투\nK2 성수 2층 CS팀-문서용매월마감"\n기번\t"665941\nIP-211-63-14-146"\t자산번호\tC3686\n기종\tApeosPort-VI C3371(베니)\t기기상태\t확인요망',
+    expected: "모델명:ApeosPort-VI C3371(베니)",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table 입력 - 시리얼 인용구 내부 추출",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n기번\t"665941\nIP-211-63-14-146"\t자산번호\tC3686',
+    expected: "시리얼넘버:665941",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table 입력 - 키맨 3줄 (접수자/일반/★키맨)",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n접수자성함\t양명호\n접수자연락처\t010-6314-7409\n일반전화\t02-3408-8507\n★키맨성함/번호\t양명호 차장 010-6314-7409',
+    expected: "02-3408-8507",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 내용이 참고사항까지 넘치지 않음",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n접수자성함\t양명호\n접수자연락처\t010-6314-7409\n제목\t출력시 묻어나옴\n상태\t출력시 묻어나옴\n참고사항\t" [AS 히스토리 요약]\n📊 총 접수 건수: 3건\n✅ 특이사항 없음"',
+    expected: "내용: 출력시 묻어나옴\n처리내용:",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 접수분야가 샘플전달이면 구분도 샘플전달",
+    input:
+      '샘플전달\tN\tES5473\t"15N브루니아단순마감"\n접수유형\t전화\t접수분야\t샘플전달\n기번\tAK96006517',
+    expected: "구분:샘플전달",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 점검 타입이어도 상태값 있으면 내용에 사용",
+    input:
+      '점검\tN\t모델\t"19N회사단순마감"\n기번\tXYZ123\t자산번호\tA1\n접수유형\t카카오\t접수분야\t점검\n상태\t실제 문제 증상\n참고사항\t" 뭐라뭐라 "',
+    expected: "내용: 실제 문제 증상\n처리내용:",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 키맨 따옴표 다중라인 (분리)",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n접수자성함\t\n접수자연락처\t010-1111-2222\n★키맨성함/번호\t"010-3333-4444 대표님\n010-5555-6666"\n방문담당자\t수도권C',
+    expected: "010-5555-6666",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 업체명 끝 ㈜ 제거",
+    input:
+      "점검    N   MFC-L5700DN   19N동영공예품㈜-단순마감마감\n접수분야   점검\n기번   E7671",
+    expected: "업체명:동영공예품",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 방문담당자 수도권A → 지역:A",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n기번\tXYZ\t자산번호\tA1\n접수자연락처\t010-1111-2222\n방문담당자\t수도권A',
+    expected: "지역:A",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 방문담당자 수도권E → 지역:E",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n기번\tXYZ\t자산번호\tA1\n접수자연락처\t010-1111-2222\n방문담당자\t수도권E',
+    expected: "지역:E",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 방문담당자 없으면 기본 지역:C",
+    input:
+      'A/S\tV\t모델\t"19V회사매월마감"\n기번\tXYZ\t자산번호\tA1\n접수자연락처\t010-1111-2222',
+    expected: "지역:C",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 compact 한 줄 입력 - 시리얼 끝 자리 누락 안됨",
+    input:
+      "17S㈜프리즘산업-매월마감샤오미 MI-AIR/318115/000362407층 프리즘산업 (프리즘빌딩, 서울 강남구 역삼동 736-35)010-9312-7412 이영선/",
+    expected: "시리얼넘버:318115/00036240",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 compact 한 줄 입력 - 부서명 정상 추출",
+    input:
+      "17S㈜프리즘산업-매월마감샤오미 MI-AIR/318115/000362407층 프리즘산업010-9312-7412 이영선",
+    expected: "부서명:7층",
+    mode: "blank-report",
+  },
+  {
+    name: "청정기 compact 한 줄 입력 - 모델/시리얼 분리",
+    input:
+      "17S㈜프리즘산업-매월마감샤오미 MI-AIR/318115/000362407층 프리즘산업010-9312-7412 이영선",
+    expected: "시리얼넘버: 318115/00036240",
+    mode: "air-purifier",
+  },
+  {
+    name: "compact 한 줄 입력 - 2자리 층 (AP The Fin)",
+    input:
+      "31SS주식회사 에이피더핀매월마감ECOSYS-M5521CDN/VUY2Z03481서울 강남구 테헤란로 218에이피타워 11층 (AP Tower)010-6822-9591",
+    expected: "부서명:11층",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - 지하1층 주소 (지하1층으로 추출)",
+    input:
+      'A/S\tV\t모델\t"19V회사단순마감"\n기번\tX1\t자산번호\tA1\n접수자연락처\t010-1111-2222\n주소\t서울 성북구 종암로36길 52, 하월곡아남아파트 102동 9호10호 지하 1층 관리사무소',
+    expected: "부서명:지하1층",
+    mode: "blank-report",
+  },
+  {
+    name: "미양식 table - B1층 패턴도 지하층으로 인식",
+    input:
+      'A/S\tV\t모델\t"19V회사단순마감"\n기번\tX1\t자산번호\tA1\n접수자연락처\t010-1111-2222\n주소\t서울 강남구 테헤란로 123 B1층 기계실',
+    expected: "부서명:B1층",
+    mode: "blank-report",
+  },
+  {
+    name: "복사 함수 준비",
+    input: "noop",
+    expectedFunction: true,
+    mode: "shared",
+  },
+];
+
+function runSelfTests(): TestResult[] {
+  return TEST_CASES.map((test: TestCase) => {
+    if (test.expectedFunction) {
+      const passed = typeof copyTextToClipboard === "function" && typeof copyTextFallback === "function";
+      return { ...test, passed, actual: passed ? "function ready" : "missing function" };
+    }
+
+    let actual = "";
+    if (test.mode === "samsung-note") {
+      actual = transformSamsungNoteTitles(test.input).map((r: ResultItem) => r.content).join("\n");
+    } else if (test.mode === "blank-report") {
+      actual = transformBlankReports(test.input).map((r: ResultItem) => r.content).join("\n");
+    } else if (test.mode === "air-purifier") {
+      actual = transformAirPurifierText(test.input);
+    } else {
+      actual = transformInspectionText(test.input);
+    }
+
+    return {
+      ...test,
+      passed: typeof test.expected === "string" ? actual.includes(test.expected) : false,
+      actual,
+    };
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Processing form (미양식 mode) — manual entry for printer service details
+// ────────────────────────────────────────────────────────────────────────────
+
+type PerItemForm = {
+  processContent: string;
+  mailBlack: string;
+  mailColor: string;
+  mailLargeColor: string;
+  mailTotal: string;
+  tonerK: string;
+  tonerC: string;
+  tonerM: string;
+  tonerY: string;
+  waste: string;
+  spareRaw: string;
+  hantin: string;
+  parking: string;
+  notes: string;
+};
+
+const EMPTY_ITEM_FORM: PerItemForm = {
+  processContent: "",
+  mailBlack: "", mailColor: "", mailLargeColor: "", mailTotal: "",
+  tonerK: "", tonerC: "", tonerM: "", tonerY: "",
+  waste: "",
+  spareRaw: "",
+  hantin: "",
+  parking: "",
+  notes: "",
+};
+
+type SharedForm = {
+  level: string;
+  warranty: string;
+  cumCount: string;
+  expectedCount: string;
+  partName: string;
+  partQty: string;
+  partShipped: string;
+  selfItem: string;
+  selfQty: string;
+  selfShipped: string;
+  arrivalHour: string;
+  arrivalMinute: string;
+  duration: string;
+};
+
+const EMPTY_SHARED_FORM: SharedForm = {
+  level: "",
+  warranty: "", cumCount: "", expectedCount: "",
+  partName: "", partQty: "", partShipped: "",
+  selfItem: "", selfQty: "", selfShipped: "",
+  arrivalHour: "", arrivalMinute: "", duration: "",
+};
+
+type AirPurifierForm = {
+  filterReset: string;
+  filterChange: string;
+  notes: string;
+  arrivalHour: string;
+  arrivalMinute: string;
+  duration: string;
+};
+
+const EMPTY_AIR_FORM: AirPurifierForm = {
+  filterReset: "",
+  filterChange: "",
+  notes: "",
+  arrivalHour: "",
+  arrivalMinute: "",
+  duration: "",
+};
+
+function suffixIfValue(label: string, v: string): string {
+  return v.trim() ? `${label} ${v.trim()}` : label;
+}
+
+function normToken(s: string): string {
+  return s === "-" ? "" : s;
+}
+
+function dashIfEmpty(s: string): string {
+  return s.trim() ? s.trim() : "-";
+}
+
+// Parses an existing "매수:흑X 컬X 큰컬X 합X" line into its 4 values
+function parseMail(line: string): { black: string; color: string; largeColor: string; total: string } {
+  const m = line.match(/^매수\s*:\s*흑(\S*)\s*컬(\S*)\s*큰컬(\S*)\s*합(\S*)/);
+  if (!m) return { black: "", color: "", largeColor: "", total: "" };
+  return { black: normToken(m[1]), color: normToken(m[2]), largeColor: normToken(m[3]), total: normToken(m[4]) };
+}
+
+function parseToner(line: string): { K: string; C: string; M: string; Y: string } {
+  const m = line.match(/^토너잔량\s*:\s*K(\S*)\s+C(\S*)\s+M(\S*)\s+Y(\S*)/);
+  if (!m) return { K: "", C: "", M: "", Y: "" };
+  return { K: normToken(m[1]), C: normToken(m[2]), M: normToken(m[3]), Y: normToken(m[4]) };
+}
+
+function parseValueAfterColon(line: string, label: string): string {
+  const re = new RegExp(`^${label}\\s*:\\s*(.*)$`);
+  const m = line.match(re);
+  return m ? m[1].trim() : "";
+}
+
+function mergeMailLine(line: string, f: PerItemForm): string {
+  const formHasAny = !!(f.mailBlack.trim() || f.mailColor.trim() || f.mailLargeColor.trim() || f.mailTotal.trim());
+  if (!formHasAny) return line;
+  const p = parseMail(line);
+  const black = f.mailBlack.trim() || p.black;
+  const color = f.mailColor.trim() || p.color;
+  const large = f.mailLargeColor.trim() || p.largeColor;
+  const total = f.mailTotal.trim() || p.total;
+  return `매수:흑${dashIfEmpty(black)} 컬${dashIfEmpty(color)} 큰컬${dashIfEmpty(large)} 합${dashIfEmpty(total)}`;
+}
+
+function mergeTonerLine(line: string, f: PerItemForm): string {
+  const formHasAny = !!(f.tonerK.trim() || f.tonerC.trim() || f.tonerM.trim() || f.tonerY.trim());
+  if (!formHasAny) return line;
+  const p = parseToner(line);
+  const K = f.tonerK.trim() || p.K;
+  const C = f.tonerC.trim() || p.C;
+  const M = f.tonerM.trim() || p.M;
+  const Y = f.tonerY.trim() || p.Y;
+  return `토너잔량:K${dashIfEmpty(K)} C${dashIfEmpty(C)} M${dashIfEmpty(M)} Y${dashIfEmpty(Y)}`;
+}
+
+function mergeWasteLine(line: string, f: PerItemForm): string {
+  if (!f.waste.trim()) return line;
+  return `폐통: ${f.waste.trim()}%`;
+}
+
+// 여분 is kept as free text (the user edits the original directly), so it
+// renders straight from the stored raw string. Multi-line notes are joined
+// with newlines and emitted as-is.
+function renderSpareLine(f: PerItemForm): string {
+  const raw = f.spareRaw.replace(/\s+$/, "");
+  return raw ? `여분: ${raw.replace(/^\s+/, "")}` : "여분:";
+}
+
+// Structural lines that end a 여분/특이사항 free-text block.
+const FIELD_MARKER_REGEX = /^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항|보증기간 내 여부|교체 전 카운터 누적 사용매수|사용 부품 예상 사용매수|물품명|물품|수량|출고여부|도착 시간|소요 시간)\s*:/;
+
+function isStructuralLine(line: string, isStart: boolean): boolean {
+  return isStart || isDividerLine(line) || /^※/.test(line) || FIELD_MARKER_REGEX.test(line);
+}
+
+
+// A numbered line ("1.", "2. 7층") only starts a new item when it directly
+// follows a divider — this avoids treating numbered lines inside multi-line
+// 처리내용/특이사항 (e.g. "2.토너교체") as a new device.
+function itemStartFlags(lines: string[]): boolean[] {
+  const flags: boolean[] = new Array(lines.length).fill(false);
+  let prevDivider = false;
+  lines.forEach((line: string, i: number) => {
+    if (isDividerLine(line)) { prevDivider = true; return; }
+    if (line.trim() === "") return;
+    if (prevDivider && /^\s*\d+\./.test(line) && !/※/.test(line)) flags[i] = true;
+    prevDivider = false;
+  });
+  return flags;
+}
+
+function applyProcessingFormV2(
+  text: string,
+  itemForms: PerItemForm[],
+  shared: SharedForm,
+  author: string
+): string {
+  let itemIdx = -1;
+  let section: "" | "parts" | "self" = "";
+  let skipCont = false;
+  const out: string[] = [];
+  const lines = text.split("\n");
+  const starts = itemStartFlags(lines);
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    // Skip continuation lines of a 여분/특이사항 we've already re-rendered.
+    if (skipCont) {
+      if (isStructuralLine(line, starts[li])) {
+        skipCont = false;
+      } else {
+        continue;
+      }
+    }
+
+    if (starts[li]) {
+      itemIdx++;
+      section = "";
+      out.push(line);
+      continue;
+    }
+    if (/^※부품신청※/.test(line)) { section = "parts"; out.push(line); continue; }
+    if (/^※자가신청※/.test(line)) { section = "self"; out.push(line); continue; }
+
+    // Header (shared)
+    if (/^작성자\s*:/.test(line)) {
+      out.push(author.trim() ? line.replace(/^(작성자\s*:\s*).*/, `$1${author.trim()}`) : line);
+      continue;
+    }
+    if (/^레벨\s*:/.test(line)) {
+      out.push(shared.level.trim() ? line.replace(/^(레벨\s*:\s*).*/, `$1${shared.level.trim()}`) : line);
+      continue;
+    }
+
+    // Per-item fields
+    if (itemIdx >= 0 && itemIdx < itemForms.length) {
+      const f = itemForms[itemIdx];
+      if (/^처리내용\s*:/.test(line)) {
+        out.push(f.processContent.trim() ? `처리내용: ${f.processContent.trim()}` : line);
+        continue;
+      }
+      if (/^매수\s*:/.test(line)) { out.push(mergeMailLine(line, f)); continue; }
+      if (/^토너잔량\s*:/.test(line)) { out.push(mergeTonerLine(line, f)); continue; }
+      if (/^폐통\s*:/.test(line)) { out.push(mergeWasteLine(line, f)); continue; }
+      if (/^여분\s*:/.test(line)) { out.push(renderSpareLine(f)); skipCont = true; continue; }
+      if (/^한틴이카유무\s*:/.test(line)) {
+        const existing = parseValueAfterColon(line, "한틴이카유무");
+        const v = f.hantin.trim() || existing;
+        out.push(suffixIfValue("한틴이카유무:", v));
+        continue;
+      }
+      if (/^주차비지원유무\s*:/.test(line)) {
+        const existing = parseValueAfterColon(line, "주차비지원유무");
+        const v = f.parking.trim() || existing;
+        out.push(suffixIfValue("주차비지원유무:", v));
+        continue;
+      }
+      if (/^특이사항\s*:/.test(line)) {
+        const notes = f.notes.trim();
+        out.push(notes ? `특이사항: ${notes}` : "특이사항:");
+        skipCont = true;
+        continue;
+      }
+    }
+
+    // Parts / self / footer (shared)
+    if (/^보증기간 내 여부\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "보증기간 내 여부");
+      const v = shared.warranty.trim() || existing;
+      out.push(v ? `보증기간 내 여부 : ${v}` : "보증기간 내 여부 :");
+      continue;
+    }
+    if (/^교체 전 카운터 누적 사용매수\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "교체 전 카운터 누적 사용매수");
+      const v = shared.cumCount.trim() || existing;
+      out.push(v ? `교체 전 카운터 누적 사용매수 : ${v}` : "교체 전 카운터 누적 사용매수 :");
+      continue;
+    }
+    if (/^사용 부품 예상 사용매수\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "사용 부품 예상 사용매수");
+      const v = shared.expectedCount.trim() || existing;
+      out.push(v ? `사용 부품 예상 사용매수 : ${v}` : "사용 부품 예상 사용매수 :");
+      continue;
+    }
+    if (/^물품명\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "물품명");
+      const v = shared.partName.trim() || existing;
+      out.push(suffixIfValue("물품명:", v));
+      continue;
+    }
+    if (/^물품\s*:/.test(line) && section === "self") {
+      const existing = parseValueAfterColon(line, "물품");
+      const v = shared.selfItem.trim() || existing;
+      out.push(suffixIfValue("물품:", v));
+      continue;
+    }
+    if (/^수량\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "수량");
+      const v = (section === "self" ? shared.selfQty.trim() : shared.partQty.trim()) || existing;
+      out.push(suffixIfValue("수량:", v));
+      continue;
+    }
+    if (/^출고여부\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "출고여부");
+      const v = (section === "self" ? shared.selfShipped.trim() : shared.partShipped.trim()) || existing;
+      out.push(suffixIfValue("출고여부:", v));
+      continue;
+    }
+    if (/^도착 시간\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "도착 시간");
+      const arrival = shared.arrivalHour
+        ? `${shared.arrivalHour}:${shared.arrivalMinute || "00"}`
+        : existing;
+      out.push(suffixIfValue("도착 시간:", arrival));
+      continue;
+    }
+    if (/^소요 시간\s*:/.test(line)) {
+      const existing = parseValueAfterColon(line, "소요 시간");
+      const v = shared.duration.trim() ? `${shared.duration.trim()}분` : existing;
+      out.push(suffixIfValue("소요 시간:", v));
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+// Pre-fills per-item forms from a transformed result: captures each item's
+// 여분 (raw text, multi-line) and 특이사항 so the form boxes show the
+// existing values for the user to confirm or edit.
+function parseItemDataFromText(text: string, count: number): PerItemForm[] {
+  const forms: PerItemForm[] = Array.from({ length: count }, () => ({ ...EMPTY_ITEM_FORM }));
+  let idx = -1;
+  let collecting: "spare" | "note" | null = null;
+  const lines = text.split("\n");
+  const starts = itemStartFlags(lines);
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (starts[li]) { idx++; collecting = null; continue; }
+    if (isDividerLine(line) || /^※/.test(line)) { collecting = null; continue; }
+    if (idx < 0 || idx >= count) continue;
+
+    if (/^여분\s*:/.test(line)) {
+      forms[idx].spareRaw = parseValueAfterColon(line, "여분");
+      collecting = "spare";
+      continue;
+    }
+    if (/^한틴이카유무\s*:/.test(line)) {
+      forms[idx].hantin = parseValueAfterColon(line, "한틴이카유무");
+      collecting = null;
+      continue;
+    }
+    if (/^주차비지원유무\s*:/.test(line)) {
+      forms[idx].parking = parseValueAfterColon(line, "주차비지원유무");
+      collecting = null;
+      continue;
+    }
+    if (/^특이사항\s*:/.test(line)) {
+      forms[idx].notes = parseValueAfterColon(line, "특이사항");
+      collecting = "note";
+      continue;
+    }
+    if (collecting && !FIELD_MARKER_REGEX.test(line)) {
+      const key = collecting === "spare" ? "spareRaw" : "notes";
+      forms[idx][key] = forms[idx][key] ? `${forms[idx][key]}\n${line}` : line;
+      continue;
+    }
+    collecting = null;
+  }
+  return forms;
+}
+
+type ResultBlock = { text: string; device: number | null };
+
+// Splits a rendered inspection result into header / per-device / footer
+// blocks so the bottom result panel can jump to the device being edited.
+function splitResultBlocks(text: string): ResultBlock[] {
+  if (!text) return [];
+  const lines = text.split("\n");
+  const starts = itemStartFlags(lines);
+  const blocks: ResultBlock[] = [];
+  let cur: string[] = [];
+  let curDevice: number | null = null;
+  let deviceIdx = -1;
+  let inFooter = false;
+
+  const flush = () => {
+    const t = cur.join("\n").replace(/^\n+|\n+$/g, "");
+    if (t.trim()) blocks.push({ text: t, device: curDevice });
+    cur = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!inFooter && /^※/.test(lines[i])) { flush(); inFooter = true; curDevice = null; }
+    else if (starts[i]) { flush(); deviceIdx++; curDevice = deviceIdx; }
+    cur.push(lines[i]);
+  }
+  flush();
+  return blocks;
+}
+
+function countInspectionItems(text: string): number {
+  if (!text) return 0;
+  return itemStartFlags(text.split("\n")).filter(Boolean).length;
+}
+
+function extractInspectionItemLabels(text: string): string[] {
+  if (!text) return [];
+  const lines = text.split("\n");
+  const starts = itemStartFlags(lines);
+  const labels: string[] = [];
+  let idx = -1;
+  let location = "";
+  let model = "";
+  let serial = "";
+  let asset = "";
+
+  const flush = () => {
+    if (idx < 0) return;
+    const parts = [location, model, serial, asset].map((p: string) => p.trim()).filter((p: string) => p);
+    labels.push(`${idx + 1}. ${parts.length ? parts.join("/") : "(미상)"}`);
+  };
+
+  let collectingLoc = false;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (starts[li]) {
+      flush();
+      idx++;
+      const titleMatch = line.match(/^\s*\d+\.\s*(.*)$/);
+      location = titleMatch ? titleMatch[1].trim() : "";
+      model = serial = asset = "";
+      collectingLoc = true;
+      continue;
+    }
+    const mm = line.match(/^모델명\s*:\s*(.*)$/);
+    if (mm) { model = mm[1]; collectingLoc = false; continue; }
+    const ms = line.match(/^시리얼넘버\s*:\s*(.*)$/);
+    if (ms) { serial = ms[1]; continue; }
+    const ma = line.match(/^자산기번\s*:\s*(.*)$/);
+    if (ma) { asset = ma[1]; continue; }
+    // A standalone line between the number and 모델명 is the location
+    // (e.g. "1." on its own line followed by "3층").
+    if (collectingLoc && line.trim() && !isDividerLine(line) && !FIELD_MARKER_REGEX.test(line)) {
+      location = location ? `${location} ${line.trim()}` : line.trim();
+    }
+  }
+  flush();
+  return labels;
+}
+
+function applyAirPurifierForm(text: string, f: AirPurifierForm, author: string): string {
+  return text.split("\n").map((line: string) => {
+    if (/^작성자\s*:/.test(line)) {
+      return author.trim() ? line.replace(/^(작성자\s*:\s*).*/, `$1${author.trim()}`) : line;
+    }
+    if (/^필터리셋\s*:/.test(line)) {
+      return f.filterReset.trim() ? `필터리셋:${f.filterReset.trim()}` : "필터리셋:";
+    }
+    if (/^필터교체\s*:/.test(line)) {
+      return f.filterChange.trim() ? `필터교체:${f.filterChange.trim()}` : "필터교체:";
+    }
+    if (/^특이사항\s*:/.test(line)) {
+      return suffixIfValue("특이사항:", f.notes);
+    }
+    if (/^도착 시간\s*:/.test(line)) {
+      const arrival = f.arrivalHour
+        ? `${f.arrivalHour}:${f.arrivalMinute || "00"}`
+        : "";
+      return suffixIfValue("도착 시간:", arrival);
+    }
+    if (/^소요 시간\s*:/.test(line)) {
+      const duration = f.duration.trim() ? `${f.duration.trim()}분` : "";
+      return suffixIfValue("소요 시간:", duration);
+    }
+    return line;
+  }).join("\n");
+}
+
+const HANTIN_OPTIONS = ["한공", "한조", "한조해지업체", "보안으로 설치불가", "고객불편으로 설치불가", "무"];
+const PARKING_OPTIONS = ["유", "무"];
+const SHIP_OPTIONS = ["출고부탁드립니다", "선출고완료"];
+const HOUR_OPTIONS = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"];
+const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
+const DURATION_STEPS = [1, 5, 10, 30, 60];
+const LEVEL_OPTIONS = ["1", "2", "3", "4", "5"];
+const YESNO_OPTIONS = ["유", "무"];
+
+const TONER_COLORS: Record<string, string> = {
+  K: "#111827",
+  C: "#06B6D4",
+  M: "#EC4899",
+  Y: "#EAB308",
+};
+
+type NumSelectProps = {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  labels?: string[];
+  placeholder?: string;
+  accent: string;
+  suffix?: string;
+};
+
+function NumSelect({ value, onChange, options, labels, placeholder, accent, suffix }: NumSelectProps) {
+  const [open, setOpen] = useState(false);
+  const filled = value !== "";
+  const label = placeholder ?? "선택";
+  const labelFor = (v: string): string => {
+    if (labels) {
+      const idx = options.indexOf(v);
+      if (idx >= 0) return labels[idx];
+    }
+    return `${v}${suffix ?? ""}`;
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm outline-none transition active:scale-[0.99]"
+        style={{
+          background: filled ? "white" : "#F1F5F9",
+          borderLeft: filled ? `3px solid ${accent}` : "3px solid transparent",
+          fontWeight: filled ? 600 : 400,
+          color: filled ? "#0F172A" : "#64748B",
+        }}
+      >
+        <span className="truncate">{filled ? labelFor(value) : label}</span>
+        <span className="ml-1 text-[10px] text-slate-400">▾</span>
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setOpen(false)}
+          role="dialog"
+        >
+          <div
+            className="flex w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+            style={{ maxHeight: "75vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-700">{label}</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md px-2 py-1 text-xs text-slate-500"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+                className="block w-full px-5 py-3 text-left text-sm text-slate-500 transition active:bg-slate-100"
+              >
+                해제
+              </button>
+              {options.map((opt: string, i: number) => {
+                const active = value === opt;
+                const text = labels?.[i] ?? `${opt}${suffix ?? ""}`;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt);
+                      setOpen(false);
+                    }}
+                    className="block w-full px-5 py-3 text-left text-sm transition active:bg-slate-100"
+                    style={{
+                      background: active ? accent : "transparent",
+                      color: active ? "white" : "#0F172A",
+                      fontWeight: active ? 600 : 400,
+                    }}
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+type AuthorPickerProps = {
+  value: string;
+  onChange: (v: string) => void;
+  accent: string;
+};
+
+function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [team, setTeam] = useState<AuthorTeam>("팀장");
+  const filled = value !== "";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm outline-none transition active:scale-[0.99]"
+        style={{
+          background: filled ? "white" : "#F1F5F9",
+          borderLeft: filled ? `3px solid ${accent}` : "3px solid transparent",
+          fontWeight: filled ? 600 : 400,
+          color: filled ? "#0F172A" : "#64748B",
+        }}
+      >
+        <span className="truncate">{filled ? value : "작성자 선택"}</span>
+        <span className="ml-1 text-[10px] text-slate-400">▾</span>
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setOpen(false)}
+          role="dialog"
+        >
+          <div
+            className="flex w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+            style={{ maxHeight: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-700">작성자 선택</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md px-2 py-1 text-xs text-slate-500"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="grid grid-cols-5 gap-1 border-b border-slate-100 px-3 py-2">
+              {AUTHOR_TEAMS.map((t: AuthorTeam) => {
+                const active = team === t;
+                const label = t === "팀장" ? "팀장" : `${t}팀`;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTeam(t)}
+                    className="rounded-lg py-2 text-xs font-semibold transition active:scale-95"
+                    style={{
+                      background: active ? accent : "#F1F5F9",
+                      color: active ? "white" : "#334155",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex-1 overflow-y-auto py-1 pb-3">
+              {AUTHOR_BOOK[team].map((name: string) => {
+                const active = value === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      onChange(name);
+                      setOpen(false);
+                    }}
+                    className="block w-full border-b border-slate-50 px-5 py-3 text-left text-sm transition active:bg-slate-100"
+                    style={{
+                      background: active ? accent : "transparent",
+                      color: active ? "white" : "#0F172A",
+                      fontWeight: active ? 600 : 400,
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+type ProcessingFormPanelProps = {
+  itemForm: PerItemForm;
+  setItemF: <K extends keyof PerItemForm>(key: K, value: PerItemForm[K]) => void;
+  shared: SharedForm;
+  setSharedF: <K extends keyof SharedForm>(key: K, value: SharedForm[K]) => void;
+  itemCount: number;
+  itemLabels: string[];
+  selectedItem: number;
+  setSelectedItem: (i: number) => void;
+  accent: string;
+  bgSoft: string;
+  author: string;
+  setAuthor: (v: string) => void;
+  showLevel: boolean;
+  showHantinParking: boolean;
+};
+
+function ProcessingFormPanel({
+  itemForm, setItemF,
+  shared, setSharedF,
+  itemCount, itemLabels, selectedItem, setSelectedItem,
+  accent, bgSoft,
+  author, setAuthor, showLevel, showHantinParking,
+}: ProcessingFormPanelProps) {
+  const [partsExpanded, setPartsExpanded] = useState(false);
+  const [selfExpanded, setSelfExpanded] = useState(false);
+  const numInputClass =
+    "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
+  const textInputClass =
+    "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
+
+  return (
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs font-medium text-slate-600">처리내용 입력</label>
+        <span className="text-[10px] text-slate-400">입력 즉시 결과에 반영</span>
+      </div>
+
+      {/* 작성자 / 레벨 */}
+      <div className={`mb-2 grid gap-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`}>
+        <div>
+          <div className="mb-1 text-xs font-semibold text-slate-700">작성자</div>
+          <AuthorPicker
+            value={author}
+            onChange={setAuthor}
+            accent={accent}
+          />
+        </div>
+        {showLevel && (
+          <div className="w-24">
+            <div className="mb-1 text-xs font-semibold text-slate-700">레벨</div>
+            <NumSelect
+              value={shared.level}
+              onChange={(v) => setSharedF("level", v)}
+              options={LEVEL_OPTIONS}
+              placeholder="-"
+              accent={accent}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* 기기 선택 (2대 이상일 때만) */}
+      {itemCount > 1 && (
+        <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-700">기기 선택</span>
+            <span className="text-[10px] text-slate-500">{itemCount}대 중 {selectedItem + 1}번 편집 중</span>
+          </div>
+          <NumSelect
+            value={String(selectedItem)}
+            onChange={(v) => {
+              const n = parseInt(v, 10);
+              if (!isNaN(n)) setSelectedItem(n);
+            }}
+            options={Array.from({ length: itemCount }, (_, i: number) => String(i))}
+            labels={Array.from({ length: itemCount }, (_, i: number) => itemLabels[i] ?? `${i + 1}.`)}
+            placeholder="기기 선택"
+            accent={accent}
+          />
+        </div>
+      )}
+
+      {/* 처리내용 */}
+      <div className="mb-2">
+        <div className="mb-1 text-xs font-semibold text-slate-700">처리내용</div>
+        <textarea
+          value={itemForm.processContent}
+          onChange={(e) => setItemF("processContent", e.target.value)}
+          placeholder="예: 정기점검 / 헤드 청소 후 테스트 출력 정상"
+          rows={4}
+          className="w-full resize-y rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+        />
+      </div>
+
+      {/* 매수 */}
+      <div className="mb-2">
+        <div className="mb-1 text-xs font-semibold text-slate-700">매수</div>
+        <div className="grid grid-cols-4 gap-1.5">
+          <input
+            inputMode="numeric"
+            placeholder="흑"
+            value={itemForm.mailBlack}
+            onChange={(e) => setItemF("mailBlack", e.target.value)}
+            className={numInputClass}
+          />
+          <input
+            inputMode="numeric"
+            placeholder="컬"
+            value={itemForm.mailColor}
+            onChange={(e) => setItemF("mailColor", e.target.value)}
+            className={numInputClass}
+          />
+          <input
+            inputMode="numeric"
+            placeholder="큰컬"
+            value={itemForm.mailLargeColor}
+            onChange={(e) => setItemF("mailLargeColor", e.target.value)}
+            className={numInputClass}
+          />
+          <input
+            inputMode="numeric"
+            placeholder="합"
+            value={itemForm.mailTotal}
+            onChange={(e) => setItemF("mailTotal", e.target.value)}
+            className={numInputClass}
+          />
+        </div>
+      </div>
+
+      {/* 잔량 — K/C/M/Y + 폐통, 직접 입력 (5칸) */}
+      <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
+        <div className="mb-1 text-xs font-semibold text-slate-700">잔량 (%)</div>
+        <div className="grid grid-cols-5 gap-1">
+          {(["K", "C", "M", "Y"] as const).map((ch: "K" | "C" | "M" | "Y") => {
+            const key = (`toner${ch}`) as "tonerK" | "tonerC" | "tonerM" | "tonerY";
+            return (
+              <div key={ch}>
+                <div className="mb-0.5 flex items-center justify-center gap-0.5">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full ring-1 ring-slate-300"
+                    style={{ background: TONER_COLORS[ch] }}
+                  />
+                  <span className="text-[11px] font-semibold text-slate-600">{ch}</span>
+                </div>
+                <input
+                  inputMode="numeric"
+                  value={itemForm[key]}
+                  onChange={(e) => setItemF(key, e.target.value)}
+                  className="w-full min-w-0 rounded-lg bg-white px-1 py-1.5 text-center text-sm outline-none"
+                />
+              </div>
+            );
+          })}
+          <div>
+            <div className="mb-0.5 text-center text-[11px] font-semibold text-slate-600">폐통</div>
+            <input
+              inputMode="numeric"
+              value={itemForm.waste}
+              onChange={(e) => setItemF("waste", e.target.value)}
+              className="w-full min-w-0 rounded-lg bg-white px-1 py-1.5 text-center text-sm outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 여분 — 원본 그대로 직접 수정 */}
+      <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
+        <div className="mb-1 text-xs font-semibold text-slate-700">여분</div>
+        <textarea
+          value={itemForm.spareRaw}
+          onChange={(e) => setItemF("spareRaw", e.target.value)}
+          rows={2}
+          placeholder="예: K-2 C-1 M-1 Y-1 폐-1 / 1set, 폐1 / 공용"
+          className="w-full resize-y rounded-lg bg-white p-2 font-mono text-xs outline-none"
+        />
+      </div>
+
+      {showHantinParking && (
+        <>
+          {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
+          <div className="mb-2">
+            <div className="mb-1 text-xs font-semibold text-slate-700">한틴이카유무</div>
+            <div className="mb-1 flex flex-wrap gap-1">
+              {HANTIN_OPTIONS.map((opt: string) => {
+                const active = itemForm.hantin === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setItemF("hantin", active ? "" : opt)}
+                    className="rounded-full px-2.5 py-1 text-xs font-medium transition active:scale-95"
+                    style={{
+                      background: active ? accent : "#F1F5F9",
+                      color: active ? "white" : "#334155",
+                    }}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="text"
+              placeholder="직접 입력"
+              value={itemForm.hantin}
+              onChange={(e) => setItemF("hantin", e.target.value)}
+              className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white"
+            />
+          </div>
+
+          {/* 주차비 — 칩 빠른선택 + 직접입력 */}
+          <div className="mb-2">
+            <div className="mb-1 text-xs font-semibold text-slate-700">주차비지원유무</div>
+            <div className="mb-1 flex flex-wrap gap-1">
+              {PARKING_OPTIONS.map((opt: string) => {
+                const active = itemForm.parking === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setItemF("parking", active ? "" : opt)}
+                    className="rounded-full px-3 py-1 text-xs font-medium transition active:scale-95"
+                    style={{
+                      background: active ? accent : "#F1F5F9",
+                      color: active ? "white" : "#334155",
+                    }}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="text"
+              placeholder="직접 입력"
+              value={itemForm.parking}
+              onChange={(e) => setItemF("parking", e.target.value)}
+              className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white"
+            />
+          </div>
+        </>
+      )}
+
+      {/* 특이사항 */}
+      <div className="mb-3">
+        <div className="mb-1 text-xs font-semibold text-slate-700">특이사항</div>
+        <textarea
+          value={itemForm.notes}
+          onChange={(e) => setItemF("notes", e.target.value)}
+          rows={2}
+          className="w-full resize-none rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+        />
+      </div>
+
+      {/* 부품신청 */}
+      <div className="mb-3 rounded-xl border border-slate-200 p-2">
+        <button
+          type="button"
+          onClick={() => setPartsExpanded((v) => !v)}
+          className="flex w-full items-center justify-between text-xs font-bold text-slate-700"
+        >
+          <span>※ 부품신청 ※</span>
+          <span className="text-[10px] text-slate-400">{partsExpanded ? "접기 ▲" : "펼치기 ▼"}</span>
+        </button>
+        {partsExpanded && (
+        <div className="mt-2 space-y-1.5">
+          <div>
+            <div className="text-[11px] text-slate-500">보증기간 내 여부</div>
+            <input value={shared.warranty} onChange={(e) => setSharedF("warranty", e.target.value)} className={textInputClass} />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-500">교체 전 카운터 누적 사용매수</div>
+            <input value={shared.cumCount} onChange={(e) => setSharedF("cumCount", e.target.value)} inputMode="numeric" className={textInputClass} />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-500">사용 부품 예상 사용매수</div>
+            <input value={shared.expectedCount} onChange={(e) => setSharedF("expectedCount", e.target.value)} inputMode="numeric" className={textInputClass} />
+          </div>
+          <div className="pt-1 text-[11px] font-semibold text-slate-600">▶ 신청 부품</div>
+          <div>
+            <div className="text-[11px] text-slate-500">물품명</div>
+            <input value={shared.partName} onChange={(e) => setSharedF("partName", e.target.value)} className={textInputClass} />
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <div className="text-[11px] text-slate-500">수량</div>
+              <input value={shared.partQty} onChange={(e) => setSharedF("partQty", e.target.value)} inputMode="numeric" className={textInputClass} />
+            </div>
+            <div>
+              <div className="text-[11px] text-slate-500">출고여부</div>
+              <NumSelect
+                value={shared.partShipped}
+                onChange={(v) => setSharedF("partShipped", v)}
+                options={SHIP_OPTIONS}
+                accent={accent}
+              />
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* 자가신청 */}
+      <div className="mb-3 rounded-xl border border-slate-200 p-2">
+        <button
+          type="button"
+          onClick={() => setSelfExpanded((v) => !v)}
+          className="flex w-full items-center justify-between text-xs font-bold text-slate-700"
+        >
+          <span>※ 자가신청 ※</span>
+          <span className="text-[10px] text-slate-400">{selfExpanded ? "접기 ▲" : "펼치기 ▼"}</span>
+        </button>
+        {selfExpanded && (
+        <div className="mt-2 space-y-1.5">
+          <div>
+            <div className="text-[11px] text-slate-500">물품</div>
+            <input value={shared.selfItem} onChange={(e) => setSharedF("selfItem", e.target.value)} className={textInputClass} />
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <div className="text-[11px] text-slate-500">수량</div>
+              <input value={shared.selfQty} onChange={(e) => setSharedF("selfQty", e.target.value)} inputMode="numeric" className={textInputClass} />
+            </div>
+            <div>
+              <div className="text-[11px] text-slate-500">출고여부</div>
+              <NumSelect
+                value={shared.selfShipped}
+                onChange={(v) => setSharedF("selfShipped", v)}
+                options={SHIP_OPTIONS}
+                accent={accent}
+              />
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* 시간 */}
+      <div className="space-y-2">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-700">도착 시간</span>
+            {shared.arrivalHour && (
+              <span className="text-xs font-semibold" style={{ color: accent }}>
+                {shared.arrivalHour}:{shared.arrivalMinute || "00"}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumSelect
+              value={shared.arrivalHour}
+              onChange={(v) => setSharedF("arrivalHour", v)}
+              options={HOUR_OPTIONS}
+              placeholder="시"
+              accent={accent}
+              suffix="시"
+            />
+            <NumSelect
+              value={shared.arrivalMinute}
+              onChange={(v) => setSharedF("arrivalMinute", v)}
+              options={MINUTE_OPTIONS}
+              placeholder="분"
+              accent={accent}
+              suffix="분"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-700">소요 시간</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold" style={{ color: accent }}>
+                {shared.duration ? `${shared.duration}분` : "0분"}
+              </span>
+              {shared.duration && (
+                <button
+                  type="button"
+                  onClick={() => setSharedF("duration", "")}
+                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 active:scale-95"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {DURATION_STEPS.map((step: number) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  const current = parseInt(shared.duration || "0", 10) || 0;
+                  setSharedF("duration", String(current + step));
+                }}
+                className="rounded-lg bg-slate-100 py-2.5 text-sm font-semibold text-slate-700 transition active:scale-95"
+              >
+                +{step}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type AirPurifierFormPanelProps = {
+  form: AirPurifierForm;
+  setAirF: <K extends keyof AirPurifierForm>(key: K, value: AirPurifierForm[K]) => void;
+  accent: string;
+  author: string;
+  setAuthor: (v: string) => void;
+};
+
+function AirPurifierFormPanel({
+  form, setAirF, accent,
+  author, setAuthor,
+}: AirPurifierFormPanelProps) {
+  return (
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs font-medium text-slate-600">청정기 입력</label>
+        <span className="text-[10px] text-slate-400">입력 즉시 결과에 반영</span>
+      </div>
+
+      {/* 작성자 */}
+      <div className="mb-2">
+        <div className="mb-1 text-xs font-semibold text-slate-700">작성자</div>
+        <AuthorPicker
+          value={author}
+          onChange={setAuthor}
+          accent={accent}
+        />
+      </div>
+
+      {/* 필터리셋 / 필터교체 */}
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <div>
+          <div className="mb-1 text-xs font-semibold text-slate-700">필터리셋</div>
+          <NumSelect
+            value={form.filterReset}
+            onChange={(v) => setAirF("filterReset", v)}
+            options={YESNO_OPTIONS}
+            placeholder="-"
+            accent={accent}
+          />
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-semibold text-slate-700">필터교체</div>
+          <NumSelect
+            value={form.filterChange}
+            onChange={(v) => setAirF("filterChange", v)}
+            options={YESNO_OPTIONS}
+            placeholder="-"
+            accent={accent}
+          />
+        </div>
+      </div>
+
+      {/* 특이사항 */}
+      <div className="mb-3">
+        <div className="mb-1 text-xs font-semibold text-slate-700">특이사항</div>
+        <textarea
+          value={form.notes}
+          onChange={(e) => setAirF("notes", e.target.value)}
+          rows={3}
+          className="w-full resize-y rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+        />
+      </div>
+
+      {/* 시간 */}
+      <div className="space-y-2">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-700">도착 시간</span>
+            {form.arrivalHour && (
+              <span className="text-xs font-semibold" style={{ color: accent }}>
+                {form.arrivalHour}:{form.arrivalMinute || "00"}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumSelect
+              value={form.arrivalHour}
+              onChange={(v) => setAirF("arrivalHour", v)}
+              options={HOUR_OPTIONS}
+              placeholder="시"
+              accent={accent}
+              suffix="시"
+            />
+            <NumSelect
+              value={form.arrivalMinute}
+              onChange={(v) => setAirF("arrivalMinute", v)}
+              options={MINUTE_OPTIONS}
+              placeholder="분"
+              accent={accent}
+              suffix="분"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-700">소요 시간</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold" style={{ color: accent }}>
+                {form.duration ? `${form.duration}분` : "0분"}
+              </span>
+              {form.duration && (
+                <button
+                  type="button"
+                  onClick={() => setAirF("duration", "")}
+                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 active:scale-95"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {DURATION_STEPS.map((step: number) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  const current = parseInt(form.duration || "0", 10) || 0;
+                  setAirF("duration", String(current + step));
+                }}
+                className="rounded-lg bg-slate-100 py-2.5 text-sm font-semibold text-slate-700 transition active:scale-95"
+              >
+                +{step}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Main component
+// ────────────────────────────────────────────────────────────────────────────
+
+// Prefixes whose lines are owned by the form. When the user types directly
+// into a result block, lines NOT in this set are preserved across subsequent
+// form changes; lines IN this set are re-driven by the form (so the form
+// stays the source of truth for them).
+const FORM_DRIVEN_PREFIXES = new Set<string>([
+  // shared header
+  "작성자", "레벨",
+  // per-item (inspection)
+  "처리내용", "매수", "토너잔량", "폐통", "여분",
+  "한틴이카유무", "주차비지원유무", "특이사항",
+  // shared footer / 부품·자가
+  "보증기간 내 여부",
+  "교체 전 카운터 누적 사용매수", "사용 부품 예상 사용매수",
+  "물품명", "물품", "수량", "출고여부",
+  "도착 시간", "소요 시간",
+  // air-purifier
+  "필터리셋", "필터교체",
+]);
+
+function linePrefix(line: string): string {
+  const t = line.replace(/^\s+/, "");
+  const idx = t.indexOf(":");
+  if (idx === -1) return "";
+  return t.slice(0, idx).trim();
+}
+
+// Merge the user's manual edit of a block with the freshly form-driven base.
+// Lines whose prefix is form-driven take the form's value; every other line
+// keeps the user's text (기기위치, 모델명, 시리얼넘버, 내용, 등급 등).
+function mergeBlockEdit(formBase: string, userEdit: string): string {
+  const baseByPrefix = new Map<string, string>();
+  for (const line of formBase.split("\n")) {
+    const p = linePrefix(line);
+    if (p && FORM_DRIVEN_PREFIXES.has(p)) baseByPrefix.set(p, line);
+  }
+  return userEdit.split("\n").map((line: string) => {
+    const p = linePrefix(line);
+    if (p && baseByPrefix.has(p)) return baseByPrefix.get(p) as string;
+    return line;
+  }).join("\n");
+}
+
+// 생성된 양식/결과 텍스트에서 "업체명: X" 줄을 찾아 거래처명을 뽑는다.
+// 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
+function extractVendorFromText(text: string): string {
+  const m = text.match(/^\s*업체명\s*[:：]\s*(.+)$/m);
+  return m ? m[1].trim() : "";
+}
+
+// 상단 사각 아이콘 버튼 (거래처검색 / 원본입력 / 통합이력) — 글로시 블랙 칩
+function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
+  icon: string; label: string; accent: string; onClick: () => void; disabled?: boolean; dot?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+    >
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-xl text-lg text-white shadow-md ring-1 ring-white/10"
+        style={{ background: disabled ? "#A1A1AA" : `linear-gradient(135deg, #52525B, ${accent})` }}
+      >
+        {icon}
+      </span>
+      <span className="text-[11px] font-bold tracking-tight text-zinc-700">{label}</span>
+      {dot && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" style={{ background: accent }} />}
+    </button>
+  );
+}
+
+export default function App() {
+  // Restore the previous working session so leaving/returning (or a stray
+  // tap) doesn't wipe everything that was being entered.
+  const [savedSession] = useState<Record<string, unknown> | null>(() => {
+    try { return JSON.parse(localStorage.getItem("session_v1") || "null"); } catch { return null; }
+  });
+  const ss = savedSession ?? {};
+
+  const [mode, setMode] = useState<Mode>(() => {
+    const m = ss.mode as Mode;
+    return MODE_ORDER.includes(m) ? m : "inspection";
+  });
+  // Original input is entered via a popup and not persisted (blank next time);
+  // the converted result/forms are persisted so work isn't lost.
+  const [inputText, setInputText] = useState<string>("");
+  const [textOutput, setTextOutput] = useState<string>((ss.textOutput as string) ?? "");
+  const [listOutput, setListOutput] = useState<ResultItem[]>((ss.listOutput as ResultItem[]) ?? []);
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [itemForms, setItemForms] = useState<PerItemForm[]>(
+    Array.isArray(ss.itemForms) && ss.itemForms.length
+      ? (ss.itemForms as PerItemForm[]).map((f) => ({ ...EMPTY_ITEM_FORM, ...f }))
+      : [EMPTY_ITEM_FORM],
+  );
+  const [sharedForm, setSharedForm] = useState<SharedForm>({ ...EMPTY_SHARED_FORM, ...(ss.sharedForm as Partial<SharedForm> ?? {}) });
+  const [selectedItem, setSelectedItem] = useState<number>((ss.selectedItem as number) ?? 0);
+  const [airForm, setAirForm] = useState<AirPurifierForm>({ ...EMPTY_AIR_FORM, ...(ss.airForm as Partial<AirPurifierForm> ?? {}) });
+  // Manual result edits live per result block (keyed by block index). They're
+  // persisted so a user's direct fixes (기기위치 / 특이사항 등) survive a reload.
+  // Any form change still calls clearManualEdits() so a stale override can't
+  // block the form from driving the result.
+  const [editedBlocks, setEditedBlocks] = useState<Record<number, string>>(
+    (ss.editedBlocks as Record<number, string>) ?? {},
+  );
+  const [helpOpen, setHelpOpen] = useState<boolean>(false);
+  const [inputModalOpen, setInputModalOpen] = useState<boolean>(false);
+  const [draftInput, setDraftInput] = useState<string>("");
+
+  // 거래처 조회(통합이력 / 점검양식 검색) 관련
+  const [currentVendor, setCurrentVendor] = useState<string>("");
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const lastBlankVendor = useRef<string>("");
+
+
+  // On a restored session, skip the first auto-transform so it doesn't
+  // re-parse and overwrite the restored form edits.
+  const skipAutoRef = useRef<boolean>(
+    Boolean(savedSession && (ss.textOutput || (Array.isArray(ss.listOutput) && ss.listOutput.length))),
+  );
+
+  const [author, setAuthor] = useState<string>(() => {
+    try { return localStorage.getItem("author") || ""; } catch { return ""; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("author", author); } catch {
+      // ignore quota / private mode errors
+    }
+  }, [author]);
+
+  // 내장 자가테스트는 화면 패널 대신 개발 콘솔로만 출력한다(평소엔 숨김).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const results = runSelfTests();
+    const failed = results.filter((t) => !t.passed);
+    if (failed.length) console.warn("[selfTests] 실패:", failed.map((t) => t.name));
+    else console.info(`[selfTests] ${results.length}건 통과`);
+  }, []);
+
+  const config = MODE_CONFIG[mode];
+  const showForm = mode === "blank-report" || mode === "inspection";
+  const showAirForm = mode === "air-purifier";
+
+  const displayedList = useMemo(() => {
+    if (mode !== "blank-report") return listOutput;
+    return listOutput.map((item: ResultItem, i: number) => ({
+      ...item,
+      content: applyProcessingFormV2(
+        item.content,
+        [itemForms[i] ?? EMPTY_ITEM_FORM],
+        sharedForm,
+        author,
+      ),
+    }));
+  }, [mode, listOutput, itemForms, sharedForm, author]);
+
+  const displayedTextOutput = useMemo(() => {
+    if (mode === "air-purifier") {
+      return applyAirPurifierForm(textOutput, airForm, author);
+    }
+    if (mode === "inspection") {
+      return applyProcessingFormV2(textOutput, itemForms, sharedForm, author);
+    }
+    return textOutput;
+  }, [mode, textOutput, airForm, itemForms, sharedForm, author]);
+
+  const currentItemForm = itemForms[selectedItem] ?? EMPTY_ITEM_FORM;
+
+  const itemLabels = useMemo(() => {
+    if (mode === "inspection") return extractInspectionItemLabels(textOutput);
+    if (mode === "blank-report") {
+      return listOutput.map((item: ResultItem, i: number) => {
+        const labels = extractInspectionItemLabels(item.content);
+        return labels[0] ?? `${i + 1}.`;
+      });
+    }
+    return [];
+  }, [mode, textOutput, listOutput]);
+
+  // Form changes do NOT discard manual edits; mergeBlockEdit re-applies the
+  // form's values to form-driven lines while preserving everything else.
+  const setItemF = <K extends keyof PerItemForm>(key: K, value: PerItemForm[K]) => {
+    setItemForms((prev: PerItemForm[]) => prev.map((f: PerItemForm, i: number) =>
+      i === selectedItem ? { ...f, [key]: value } : f,
+    ));
+  };
+  const setSharedF = <K extends keyof SharedForm>(key: K, value: SharedForm[K]) => {
+    setSharedForm((prev: SharedForm) => ({ ...prev, [key]: value }));
+  };
+  const setAirF = <K extends keyof AirPurifierForm>(key: K, value: AirPurifierForm[K]) => {
+    setAirForm((prev: AirPurifierForm) => ({ ...prev, [key]: value }));
+  };
+  const handleSetAuthor = (v: string) => {
+    setAuthor(v);
+  };
+
+  // Result blocks for the bottom panel, tagged with their device index so
+  // selecting a device scrolls its block into view.
+  const resultBlocks = useMemo<ResultBlock[]>(() => {
+    if (mode === "inspection") return splitResultBlocks(displayedTextOutput);
+    if (mode === "blank-report") {
+      return displayedList.map((item: ResultItem, i: number) => ({ text: item.content, device: i }));
+    }
+    if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
+    if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
+    return [];
+  }, [mode, displayedTextOutput, displayedList]);
+
+  const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
+
+  const deviceBlockRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const resultScrollRef = useRef<HTMLDivElement | null>(null);
+  // Scroll the result panel to the selected device — only when the device
+  // selection changes, and only within the panel (never the page), so
+  // typing in form fields doesn't make the screen jump.
+  useEffect(() => {
+    const container = resultScrollRef.current;
+    const el = deviceBlockRefs.current[selectedItem];
+    if (container && el) container.scrollTop = el.offsetTop - container.offsetTop;
+  }, [selectedItem]);
+
+  const showToast = (text: string, kind: "success" | "error" = "success") => {
+    setToast({ text, kind });
+    window.setTimeout(() => setToast(null), 1600);
+  };
+
+  const resetOutputs = () => {
+    setTextOutput("");
+    setListOutput([]);
+    setEditedBlocks({});
+  };
+
+  const handleModeChange = (next: Mode) => {
+    if (next === mode) return;
+    // Each mode takes its own input, so switching starts fresh.
+    setMode(next);
+    setInputText("");
+    resetOutputs();
+    setItemForms([{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setSelectedItem(0);
+  };
+
+  const runTransform = (text: string, m: Mode) => {
+    let nextItemForms: PerItemForm[] = [{ ...EMPTY_ITEM_FORM }];
+    if (m === "inspection") {
+      const out = transformInspectionText(text);
+      setTextOutput(out);
+      setListOutput([]);
+      const count = Math.max(1, countInspectionItems(out));
+      nextItemForms = parseItemDataFromText(out, count);
+    } else if (m === "air-purifier") {
+      setTextOutput(transformAirPurifierText(text));
+      setListOutput([]);
+    } else if (m === "samsung-note") {
+      setListOutput(transformSamsungNoteTitles(text));
+      setTextOutput("");
+    } else {
+      const items = transformBlankReports(text);
+      setListOutput(items);
+      setTextOutput("");
+      // Each 미양식 card is a self-contained single-item report.
+      nextItemForms = items.map((item: ResultItem) => parseItemDataFromText(item.content, 1)[0]);
+      if (nextItemForms.length === 0) nextItemForms = [{ ...EMPTY_ITEM_FORM }];
+    }
+    setItemForms(nextItemForms);
+    setSelectedItem(0);
+    setEditedBlocks({});
+  };
+
+  // Auto-transform on input or mode change (debounced)
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (skipAutoRef.current) {
+        skipAutoRef.current = false;
+        return;
+      }
+      // Empty input doesn't wipe outputs (mode change / 초기화 handle that),
+      // so a restored result survives.
+      if (inputText.trim()) runTransform(inputText, mode);
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [inputText, mode]);
+
+  // Persist the working session (debounced) so it survives reloads.
+  // inputText is excluded (popup-only); editedBlocks ARE persisted so the
+  // user's direct result edits don't disappear after leaving and coming back.
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      try {
+        localStorage.setItem("session_v1", JSON.stringify({
+          mode, textOutput, listOutput, itemForms, sharedForm,
+          selectedItem, airForm, editedBlocks,
+        }));
+      } catch {
+        // ignore quota / private mode errors
+      }
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [mode, textOutput, listOutput, itemForms, sharedForm, selectedItem, airForm, editedBlocks]);
+
+  const openInputModal = () => {
+    setDraftInput(inputText);
+    setInputModalOpen(true);
+  };
+  const handlePasteToDraft = async () => {
+    const text = await pasteFromClipboard();
+    if (text === null) {
+      showToast("클립보드 권한이 필요해요", "error");
+      return;
+    }
+    setDraftInput(text);
+  };
+  const confirmInputModal = () => {
+    setInputText(draftInput);
+    if (!draftInput.trim()) resetOutputs();
+    setInputModalOpen(false);
+  };
+
+  // 점검탭 검색에서 고른 양식(_원문)을 변환기에 주입 — 붙여넣기 확인과 같은 경로(자동 변환).
+  const handleLoadForm = (text: string) => {
+    setInputText(text);
+    setSearchOpen(false);
+    showToast("양식을 불러왔어요");
+  };
+
+  // 미양식탭: AS 접수내용을 변환하면 출력의 업체명을 인식해 통합이력을 자동으로 띄운다.
+  useEffect(() => {
+    if (mode !== "blank-report") return;
+    const src = listOutput[0]?.content || textOutput || "";
+    const v = extractVendorFromText(src);
+    if (v && v !== lastBlankVendor.current) {
+      lastBlankVendor.current = v;
+      setCurrentVendor(v);
+      setHistoryOpen(true);
+    }
+  }, [mode, listOutput, textOutput]);
+
+  const handleCopyAll = async () => {
+    const target = resultBlocks
+      .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? mergeBlockEdit(b.text, editedBlocks[i]) : b.text))
+      .join(blockJoiner);
+
+    if (!target) {
+      showToast("복사할 내용이 없어요", "error");
+      return;
+    }
+
+    const result = await copyTextToClipboard(target);
+    showToast(result.message, result.ok ? "success" : "error");
+  };
+
+  const handleReset = () => {
+    setInputText("");
+    resetOutputs();
+    setItemForms([{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setSelectedItem(0);
+    setAirForm(EMPTY_AIR_FORM);
+    try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
+    showToast("초기화 완료");
+  };
+
+
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white via-zinc-50 to-zinc-100 text-zinc-900">
+      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput ? "pb-[42vh]" : "pb-28"}`}>
+        {/* Header — 브랜딩 */}
+        <header className="mb-4 flex items-end justify-between">
+          <div>
+            <span
+              className="mb-1.5 inline-block rounded-full px-3 py-1 text-[11px] font-bold tracking-wide text-white shadow-md"
+              style={{ background: "linear-gradient(135deg, #3F3F46, #0A0A0A)" }}
+            >
+              퍼스트전산 CS팀
+            </span>
+            <h1 className="text-2xl font-black tracking-tighter text-zinc-900 sm:text-3xl">
+              점검이력 변환기
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-base font-bold text-white shadow-md transition active:scale-95"
+            style={{ background: "linear-gradient(135deg, #3F3F46, #0A0A0A)" }}
+            aria-label="사용 설명서"
+          >
+            ?
+          </button>
+        </header>
+
+        {/* Mode tabs - segmented control (B&W) */}
+        <div
+          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200 bg-zinc-100 p-1"
+          role="tablist"
+        >
+          {MODE_ORDER.map((m: Mode) => {
+            const c = MODE_CONFIG[m];
+            const active = m === mode;
+            return (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleModeChange(m)}
+                className={`rounded-xl py-2.5 text-sm transition ${
+                  active ? "font-bold text-white" : "font-medium text-zinc-500 hover:text-zinc-800"
+                }`}
+                style={{
+                  background: active ? "linear-gradient(135deg, #27272A, #0A0A0A)" : "transparent",
+                  boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined,
+                }}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 사각 아이콘 툴바 — 거래처검색 / 원본입력 / 통합이력 (팝업으로 분리) */}
+        <div className="mb-3 flex gap-2">
+          {mode === "inspection" && (
+            <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
+          )}
+          <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
+          <ToolButton icon="🗂️" label="통합이력" accent={config.accent} onClick={() => setHistoryOpen(true)} />
+        </div>
+
+        {/* Processing form — 미양식 + 점검 */}
+        {showForm && (
+          <ProcessingFormPanel
+            itemForm={currentItemForm}
+            setItemF={setItemF}
+            shared={sharedForm}
+            setSharedF={setSharedF}
+            itemCount={itemForms.length}
+            itemLabels={itemLabels}
+            selectedItem={selectedItem}
+            setSelectedItem={setSelectedItem}
+            accent={config.accent}
+            bgSoft={config.bgSoft}
+            author={author}
+            setAuthor={handleSetAuthor}
+            showLevel={mode === "blank-report"}
+            showHantinParking={mode === "blank-report" || mode === "inspection"}
+          />
+        )}
+
+        {/* Air purifier form — only for 청정기 */}
+        {showAirForm && (
+          <AirPurifierFormPanel
+            form={airForm}
+            setAirF={setAirF}
+            accent={config.accent}
+            author={author}
+            setAuthor={handleSetAuthor}
+          />
+        )}
+
+      </div>
+
+      {/* Sticky bottom: result panel + action bar */}
+      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur">
+        {hasOutput && (
+          <div className="mx-auto max-w-3xl px-3 pt-1.5 sm:px-6">
+            <div ref={resultScrollRef} className="relative space-y-1.5 overflow-y-auto pb-2" style={{ maxHeight: "30vh" }}>
+                {resultBlocks.map((block: ResultBlock, i: number) => {
+                  const active = block.device !== null && block.device === selectedItem;
+                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
+                  return (
+                    <div
+                      key={i}
+                      ref={(el) => {
+                        if (block.device !== null) deviceBlockRefs.current[block.device] = el;
+                      }}
+                      className="rounded-lg p-1"
+                      style={{
+                        background: active ? config.bgSoft : "#F8FAFC",
+                        borderLeft: `3px solid ${active ? config.accent : "transparent"}`,
+                      }}
+                    >
+                      <textarea
+                        value={text}
+                        onChange={(e) =>
+                          setEditedBlocks((prev: Record<number, string>) => ({ ...prev, [i]: e.target.value }))
+                        }
+                        rows={Math.max(2, text.split("\n").length)}
+                        className="w-full resize-none bg-transparent p-1 font-mono text-[11px] leading-snug text-slate-800 outline-none"
+                      />
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-3 sm:px-6">
+          <button
+            onClick={handleReset}
+            className="rounded-xl border border-zinc-300 bg-white px-3 py-3 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-50 active:scale-95"
+            aria-label="초기화"
+          >
+            초기화
+          </button>
+          <button
+            onClick={handleCopyAll}
+            disabled={!hasOutput}
+            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none"
+            style={hasOutput ? { background: "linear-gradient(135deg, #27272A, #0A0A0A)" } : undefined}
+            aria-label="결과 전체 복사"
+          >
+            📋 복사
+          </button>
+        </div>
+      </div>
+
+      {/* 원본 입력 팝업 */}
+      {inputModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center"
+          onClick={() => setInputModalOpen(false)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-white sm:max-w-lg sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <span className="text-sm font-bold text-slate-800">원본 입력</span>
+              <button
+                type="button"
+                onClick={handlePasteToDraft}
+                className="rounded-lg px-2 py-1 text-xs font-medium"
+                style={{ color: config.accent, background: config.bgSoft }}
+              >
+                📋 붙여넣기
+              </button>
+            </div>
+            <textarea
+              value={draftInput}
+              onChange={(e) => setDraftInput(e.target.value)}
+              placeholder={config.placeholder}
+              autoFocus
+              className="m-3 h-[45vh] resize-none rounded-xl bg-slate-50 p-3 font-mono text-sm outline-none focus:bg-white"
+            />
+            <div className="flex gap-2 border-t border-slate-100 p-3">
+              <button
+                type="button"
+                onClick={() => setInputModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftInput("")}
+                className="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-medium text-rose-500"
+              >
+                초기화
+              </button>
+              <button
+                type="button"
+                onClick={confirmInputModal}
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
+                style={{ background: config.accent }}
+              >
+                확인 (변환)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 사용 설명서 */}
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-slate-50 sm:max-w-lg sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div
+              className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 text-white"
+              style={{ background: config.accent }}
+            >
+              <div>
+                <div className="text-base font-bold">사용 설명서</div>
+                <div className="text-xs opacity-80">처음이어도 그대로 따라 하면 돼요</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(false)}
+                className="rounded-full bg-white/20 px-3 py-1 text-sm font-semibold"
+              >
+                닫기 ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4">
+              {/* 한 줄 소개 */}
+              <div className="rounded-2xl bg-white p-4 text-center text-sm text-slate-600 shadow-sm">
+                <b style={{ color: config.accent }}>거래처를 검색</b>해 지난 점검양식을 불러오거나,<br />
+                원본을 붙여넣어 <b style={{ color: config.accent }}>깔끔한 보고 양식</b>으로 바꿔주는 앱이에요 📄
+              </div>
+
+              {/* 기본 순서 - 스텝 배지 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-3 text-sm font-bold text-slate-900">⭐ 기본 순서 (이것만 기억!)</div>
+                <div className="space-y-2.5">
+                  {[
+                    ["맨 위에서 ", "탭", " 고르기 (점검 / 미양식 / 청정기)"],
+                    ["", "🔍 거래처검색", " → 지난 양식 불러오기"],
+                    ["또는 ", "📝 원본입력", " → 카톡 원본 붙여넣기"],
+                    ["", "작성자", " 고르고 빈 칸 채우기"],
+                    ["맨 아래 ", "결과", " 확인 후 ", "📋 복사"],
+                  ].map((parts: string[], idx: number) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={{ background: config.accent }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span className="text-sm text-slate-700">
+                        {parts[0]}<b className="text-slate-900">{parts[1]}</b>{parts[2] ?? ""}<b className="text-slate-900">{parts[3] ?? ""}</b>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 상단 아이콘 3개 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-2 text-sm font-bold text-slate-900">🔲 상단 아이콘</div>
+                <div className="space-y-1.5 text-sm text-slate-700">
+                  <div><b className="text-slate-900">🔍 거래처검색</b> — 거래처명으로 지난 점검/AS 양식을 찾아 불러오기 (점검 탭)</div>
+                  <div><b className="text-slate-900">📝 원본입력</b> — 카톡 원본을 직접 붙여넣어 변환</div>
+                  <div><b className="text-slate-900">🗂️ 통합이력</b> — 그 거래처의 점검·AS·초과·미수·불만 등 전체 이력 보기</div>
+                </div>
+              </div>
+
+              {/* 탭 3가지 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-2 text-sm font-bold text-slate-900">🗂️ 탭 3가지</div>
+                <div className="space-y-1.5 text-sm text-slate-700">
+                  <div><b className="text-slate-900">점검</b> — 복합기/프린터 점검 (여러 대 가능, 거래처검색 지원)</div>
+                  <div><b className="text-slate-900">미양식</b> — 양식 없는 접수 글 정리 (붙여넣으면 업체명 자동 인식 → 통합이력)</div>
+                  <div><b className="text-slate-900">청정기</b> — 공기청정기 점검</div>
+                </div>
+              </div>
+
+              {/* 칸 채우기 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-2 text-sm font-bold text-slate-900">✏️ 칸 채우기</div>
+                <ul className="space-y-1.5 text-sm text-slate-700">
+                  <li>• <b className="text-slate-900">작성자</b> : 탭하면 팀별 이름 → 내 이름 선택 (기억됨)</li>
+                  <li>• <b className="text-slate-900">매수 / 잔량</b> : 숫자 직접 입력</li>
+                  <li>• <b className="text-slate-900">여분</b> : 원래 내용이 들어와 있어 숫자만 고치면 됨</li>
+                  <li>• <b className="text-slate-900">한틴이카 / 주차비</b> : 단추로 고르거나 직접 입력</li>
+                  <li>• <b className="text-slate-900">부품·자가신청</b> : 평소 접힘, 필요할 때 “펼치기 ▼”</li>
+                </ul>
+                <div className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
+                  💡 칸을 채우면 아래 결과가 바로바로 바뀝니다.
+                </div>
+              </div>
+
+              {/* 기기 여러 대 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-2 text-sm font-bold text-slate-900">🖨️ 기기가 여러 대일 때 (점검)</div>
+                <p className="text-sm leading-relaxed text-slate-700">
+                  폼 위쪽 <b className="text-slate-900">“기기 선택”</b>에서 기기를 고르면 아래 결과도 그 기기로 따라가요.
+                  기기를 바꿔가며 채우면 되고, 먼저 채운 건 그대로 저장돼요.
+                </p>
+              </div>
+
+              {/* 결과/복사 */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-2 text-sm font-bold text-slate-900">📋 결과 / 복사</div>
+                <p className="text-sm leading-relaxed text-slate-700">
+                  맨 아래 <b className="text-slate-900">결과 칸</b>은 위아래로 넘겨 보고, 글자를 직접 고칠 수도 있어요.
+                  다 됐으면 <b className="text-slate-900">복사</b> 누르고 메신저에 붙여넣기!
+                </p>
+              </div>
+
+              {/* 자동 저장 */}
+              <div
+                className="rounded-2xl p-4 text-sm leading-relaxed"
+                style={{ background: config.bgSoft, color: config.textDark }}
+              >
+                <b>🔒 안심하세요</b><br />
+                적던 내용은 자동 저장돼요. 앱을 닫았다 와도 그대로 있어요.
+                처음부터 다시 하려면 <b>초기화</b>를 누르세요.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 거래처 검색 팝업 */}
+      {searchOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end bg-slate-900/40 backdrop-blur-sm sm:items-center sm:justify-center"
+          onClick={() => setSearchOpen(false)}
+        >
+          <div
+            className="flex h-[90vh] w-full flex-col rounded-t-3xl bg-white sm:h-[82vh] sm:max-w-2xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between rounded-t-3xl px-5 py-4 text-white" style={{ background: config.accent }}>
+              <div className="text-base font-bold">거래처 점검양식 찾기</div>
+              <button type="button" onClick={() => setSearchOpen(false)} className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
+                닫기
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <VendorSearch
+                accent={config.accent}
+                onLoadForm={handleLoadForm}
+                onVendor={setCurrentVendor}
+                onError={(m) => showToast(m, "error")}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 통합이력 팝업 (controlled) */}
+      <UnifiedHistory
+        vendor={currentVendor}
+        accent={config.accent}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onError={(m) => showToast(m, "error")}
+      />
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-medium shadow-lg"
+          style={{
+            background: toast.kind === "success" ? "#065F46" : "#991B1B",
+            color: "white",
+          }}
+        >
+          {toast.text}
+        </div>
+      )}
+    </div>
+  );
+}

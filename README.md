@@ -1,0 +1,24 @@
+# 퍼스트전산 CS팀 · 점검이력 변환기 (inspection-finder-MG)
+
+거래처명으로 **지난 점검/AS 양식을 검색해 불러오고**, 카톡 원본을 **깔끔한 보고 양식으로 변환**하는 CS팀 내부 웹앱. 기존 점검이력 변환기(inspection-history-webapp)에 **거래처 검색 + 통합이력 조회**를 얹은 "완전체" 버전.
+
+## 주요 기능
+- **🔍 거래처검색** — 거래처명 입력 → 구분(점검/AS)·날짜·기종·댓수·지역·작성자 표시 → 지난 점검양식(_원문) 불러오기 → 리셋·편집·복사
+- **📝 원본입력** — 카톡 원본을 붙여넣어 변환 (점검/미양식/청정기)
+- **🗂️ 통합이력** — 거래처의 점검·AS·초과·미수·불만·확장성·재계약·업체정보 등 전체 이력(9개 카테고리, 최신순) 조회
+- **미양식**: AS 접수내용 붙여넣으면 업체명 자동 인식 → 통합이력 연결
+
+## 백엔드
+- Google Apps Script(First-DATA-MG)의 통합 DB 인덱스를 JSONP로 조회
+  - `action=search` / `action=inspforms` / `action=detail`
+- 연결 URL은 `src/api.ts`의 `GAS_GET_URL` 참고
+
+## 개발
+```bash
+npm install
+npm run dev      # 로컬 개발 (http://localhost:5173)
+npm run build    # 프로덕션 빌드 (dist/)
+```
+
+## 스택
+React 19 · TypeScript · Vite · Tailwind CSS v4
