@@ -3484,7 +3484,21 @@ export default function App() {
       const isAir = mode === "air-purifier";
       const resp = await visionForm(dataUrl, isAir ? "air" : "inspection");
       if (resp.ok && resp.text) {
-        setInputText(resp.text); // 현재 탭 유지 — 그 탭의 변환 파이프라인이 결과/폼 생성
+        if (mode === "air-purifier") {
+          // 청정기는 청정기 변환기를 통과시키면 정상 동작
+          setInputText(resp.text);
+        } else {
+          // 미양식 등: blank-report 변환기가 점검 양식을 재가공하며 망가뜨리므로,
+          // 변환 없이 비전 결과를 그대로 결과로 세팅하고 편집 폼만 파싱해 채운다.
+          const forms = parseItemDataFromText(resp.text, 1);
+          setListOutput([{ content: resp.text }]);
+          setItemForms(forms.length ? forms : [{ ...EMPTY_ITEM_FORM }]);
+          setTextOutput("");
+          setSelectedItem(0);
+          setEditedBlocks({});
+          skipAutoRef.current = true; // 입력 변경으로 자동 변환이 덮어쓰지 않게
+          setInputText(resp.text);
+        }
         showToast("사진에서 양식을 만들었어요");
       } else {
         showToast(resp.error || "사진 변환 실패", "error");
