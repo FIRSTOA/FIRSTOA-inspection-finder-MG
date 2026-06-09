@@ -60,29 +60,26 @@ function getInspectionFormsByVendor(vendor) {
       var scanCols = cWon > 0 ? cWon : lastCol;
       var data = insp.getRange(2, 1, n, scanCols).getValues();
 
-      var best = {}; // 구분 -> { rowNum, date, model, author, region }
+      // 점검/점검+AS 를 모두 '점검'으로 모아 최신순 정렬 → 최근 N건 (청정기 등 옛 점검도 고를 수 있게)
+      var rows = [];
       for (var i = 0; i < data.length; i++) {
         if (String(data[i][cVendor] || '').trim() !== vendor) continue;
         var cls = classifyGubun_(data[i][cGubun]);
         if (cls !== '점검' && cls !== '점검+AS') continue;
-        var d = cDate !== -1 ? safeDate(data[i][cDate]) : '';
-        if (!best[cls] || d > best[cls].date) {
-          best[cls] = {
-            rowNum: i + 2,
-            date: d,
-            model: cModel !== -1 ? String(data[i][cModel] || '').trim() : '',
-            author: cAuthor !== -1 ? String(data[i][cAuthor] || '').trim() : '',
-            region: cRegion !== -1 ? String(data[i][cRegion] || '').trim() : ''
-          };
-        }
+        rows.push({
+          rowNum: i + 2,
+          date: cDate !== -1 ? safeDate(data[i][cDate]) : '',
+          model: cModel !== -1 ? String(data[i][cModel] || '').trim() : '',
+          author: cAuthor !== -1 ? String(data[i][cAuthor] || '').trim() : '',
+          region: cRegion !== -1 ? String(data[i][cRegion] || '').trim() : ''
+        });
       }
-
-      ['점검', '점검+AS'].forEach(function (k) {
-        if (!best[k]) return;
-        var won = cWon !== -1 ? String(insp.getRange(best[k].rowNum, cWon + 1).getValue() || '') : '';
+      rows.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+      rows.slice(0, 6).forEach(function (r) {
+        var won = cWon !== -1 ? String(insp.getRange(r.rowNum, cWon + 1).getValue() || '') : '';
         forms.push({
-          gubun: k, date: best[k].date, model: best[k].model,
-          author: best[k].author, region: best[k].region, count: deviceCount_(won),
+          gubun: '점검', date: r.date, model: r.model,
+          author: r.author, region: r.region, count: deviceCount_(won),
           text: won, source: '점검'
         });
       });
@@ -100,26 +97,26 @@ function getInspectionFormsByVendor(vendor) {
     var aVendor = AH.indexOf('_업체명');
 
     if (aVendor !== -1) {
-      // 업체명 + 날짜 컬럼만 좁게 읽어 최신 행 탐색
+      // 업체명 + 날짜 컬럼만 좁게 읽어 최신순 정렬 → 최근 N건
       var aV = asSheet.getRange(2, aVendor + 1, an, 1).getValues();
       var aD = aDate !== -1 ? asSheet.getRange(2, aDate + 1, an, 1).getValues() : null;
-      var bestRow = -1, bestDate = '';
+      var arows = [];
       for (var j = 0; j < an; j++) {
         if (String(aV[j][0] || '').trim() !== vendor) continue;
-        var dd = aD ? safeDate(aD[j][0]) : '';
-        if (bestRow === -1 || dd > bestDate) { bestRow = j + 2; bestDate = dd; }
+        arows.push({ rowNum: j + 2, date: aD ? safeDate(aD[j][0]) : '' });
       }
-      if (bestRow !== -1) {
-        var rowVals = asSheet.getRange(bestRow, 1, 1, aLast).getValues()[0];
+      arows.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+      arows.slice(0, 4).forEach(function (r) {
+        var rowVals = asSheet.getRange(r.rowNum, 1, 1, aLast).getValues()[0];
         var get = function (name) { var idx = AH.indexOf(name); return idx >= 0 ? String(rowVals[idx] || '').trim() : ''; };
         var asWon = get('_원문');
         forms.push({
-          gubun: 'AS', date: bestDate, source: 'AS', text: asWon,
+          gubun: 'AS', date: r.date, source: 'AS', text: asWon,
           model: get('모델명'), serial: get('시리얼넘버'), asset: get('자산기번'),
           content: get('내용'), handled: get('처리내용'),
           author: get('작성자'), region: get('지역'), count: deviceCount_(asWon)
         });
-      }
+      });
     }
   }
 
