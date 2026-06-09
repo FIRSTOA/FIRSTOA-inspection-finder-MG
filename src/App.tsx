@@ -3517,8 +3517,7 @@ export default function App() {
     const v = extractVendorFromText(src);
     if (v && v !== lastBlankVendor.current) {
       lastBlankVendor.current = v;
-      setCurrentVendor(v);
-      setHistoryOpen(true);
+      setCurrentVendor(v); // 통합이력은 자동으로 띄우지 않음 — 사용자가 직접 열어 검색
     }
   }, [mode, listOutput, textOutput]);
 

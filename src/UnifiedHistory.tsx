@@ -68,7 +68,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   // 팝업 열릴 때: 점검탭에서 고른 거래처명을 검색창에 미리 채우고 "목록"을 보여준다(자동 선택 X).
   // 같은 회사라도 업체명 표기가 다른 경우가 있어, 사용자가 목록에서 직접 고르게 한다.
   useEffect(() => {
-    if (open) { setOverride(""); setDetail(null); setHits([]); setQ(vendor || ""); }
+    if (open) { setOverride(""); setDetail(null); setHits([]); setQ(""); }
   }, [open, vendor]);
 
   // 후보 검색 (이미 고른 거래처와 같은 검색어면 목록을 다시 띄우지 않음)
