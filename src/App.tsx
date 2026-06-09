@@ -3227,6 +3227,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
@@ -3551,7 +3552,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
-      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput ? "pb-[42vh]" : "pb-28"}`}>
+      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-4 flex items-end justify-between">
           <div>
@@ -3653,7 +3654,15 @@ export default function App() {
       {/* Sticky bottom: result panel + action bar */}
       <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur">
         {hasOutput && (
-          <div className="mx-auto max-w-3xl px-3 pt-1.5 sm:px-6">
+          <div className="mx-auto max-w-3xl px-3 pt-1 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setPreviewCollapsed((v) => !v)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+            >
+              {previewCollapsed ? "결과 미리보기 펼치기 ▲" : "결과 미리보기 접기 ▼"}
+            </button>
+            {!previewCollapsed && (
             <div ref={resultScrollRef} className="relative space-y-1.5 overflow-y-auto pb-2" style={{ maxHeight: "30vh" }}>
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
@@ -3682,6 +3691,7 @@ export default function App() {
                   );
                 })}
             </div>
+            )}
           </div>
         )}
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-3 sm:px-6">
