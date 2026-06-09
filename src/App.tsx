@@ -1,6 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import UnifiedHistory from "./UnifiedHistory";
+import { visionForm } from "./api";
+
+// 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
+function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("canvas 미지원")); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 로드 실패")); };
+    img.src = url;
+  });
+}
 import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
 import type { AuthorTeam } from "./authors";
 
@@ -3203,6 +3226,8 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [photoBusy, setPhotoBusy] = useState<boolean>(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
   const modeStateRef = useRef<Record<string, {
@@ -3445,6 +3470,39 @@ export default function App() {
     showToast("양식을 불러왔어요");
   };
 
+  // 📷 사진 → 양식: 비전 모델로 추출 후 해당 변환기에 입력.
+  //  - 청정기 탭: 청정기 양식으로 (현재 탭 유지)
+  //  - 그 외(미양식 등): 점검 양식으로 (점검 탭으로 전환해 결과 표시)
+  const handlePhotoPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPhotoBusy(true);
+    showToast("사진 읽는 중…");
+    try {
+      const dataUrl = await fileToDownscaledDataUrl(file, 1400);
+      const isAir = mode === "air-purifier";
+      const resp = await visionForm(dataUrl, isAir ? "air" : "inspection");
+      if (resp.ok && resp.text) {
+        if (!isAir && mode !== "inspection") {
+          // 미양식 등에서 올린 사진 → 점검 양식이므로 점검 탭으로 전환(현재 탭 작업은 보존)
+          modeStateRef.current[mode] = {
+            inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+          };
+          setMode("inspection");
+        }
+        setInputText(resp.text); // 자동 변환 파이프라인이 결과/폼 생성
+        showToast("사진에서 양식을 만들었어요");
+      } else {
+        showToast(resp.error || "사진 변환 실패", "error");
+      }
+    } catch {
+      showToast("사진 처리 오류", "error");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   // 미양식탭: AS 접수내용을 변환하면 출력의 업체명을 인식해 통합이력을 자동으로 띄운다.
   useEffect(() => {
     if (mode !== "blank-report") return;
@@ -3546,8 +3604,12 @@ export default function App() {
             <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
           )}
           <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
+          {(mode === "blank-report" || mode === "air-purifier") && (
+            <ToolButton icon={photoBusy ? "⏳" : "📷"} label={photoBusy ? "변환중" : "사진양식"} accent={config.accent} onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} />
+          )}
           <ToolButton icon="🗂️" label="통합이력" accent={config.accent} onClick={() => setHistoryOpen(true)} />
         </div>
+        <input ref={photoInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoPick} className="hidden" />
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (

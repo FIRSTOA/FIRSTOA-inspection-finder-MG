@@ -87,3 +87,19 @@ export function getInspForms(vendor: string): Promise<InspFormsResp> {
 export function getVendorDetail(vendor: string): Promise<DetailResp> {
   return jsonp<DetailResp>({ action: "detail", q: vendor });
 }
+
+// 사진 → 양식 변환 (POST). 단순요청(text/plain)이라 프리플라이트 없이 GAS doPost 호출.
+export type VisionResp = { ok?: boolean; text?: string; error?: string };
+export function visionForm(dataUrl: string, kind: "inspection" | "air"): Promise<VisionResp> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 70000);
+  return fetch(GAS_GET_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "vision", image: dataUrl, kind }),
+    signal: ctrl.signal,
+  })
+    .then((r) => r.json() as Promise<VisionResp>)
+    .catch((e) => ({ ok: false, error: e.name === "AbortError" ? "시간 초과" : (e.message || "네트워크 오류") }))
+    .finally(() => window.clearTimeout(timer));
+}

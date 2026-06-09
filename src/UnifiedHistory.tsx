@@ -143,6 +143,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               {!searching && hits.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">결과 없음</div>}
               {!searching && hits.map((h) => {
                 const cs = CAT_ORDER.filter((c) => (h.counts?.[c] || 0) > 0).map((c) => `${CAT_SHORT[c]} ${h.counts[c]}`);
+                // 가장 최근 날짜 + 지역(팀) — 겹치는 업체명 구분용
+                let recent: { d: string; r: string } | null = null;
+                for (const k in (h.meta || {})) {
+                  const e = h.meta[k];
+                  if (e?.d && (!recent || e.d > recent.d)) recent = { d: e.d, r: e.r };
+                }
                 return (
                   <button
                     key={h.vendor}
@@ -151,6 +157,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                     className="block w-full border-b border-slate-50 px-3 py-2 text-left last:border-0 hover:bg-slate-50"
                   >
                     <div className="truncate text-sm text-slate-800">{h.vendor}</div>
+                    {recent && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <span>📅 {recent.d}</span>
+                        {recent.r && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">{recent.r}</span>}
+                      </div>
+                    )}
                     {cs.length > 0 && <div className="mt-0.5 truncate text-[11px] text-slate-400">{cs.join(" · ")}</div>}
                   </button>
                 );
