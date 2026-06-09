@@ -3204,6 +3204,12 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const lastBlankVendor = useRef<string>("");
+  // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
+  const modeStateRef = useRef<Record<string, {
+    inputText: string; textOutput: string; listOutput: ResultItem[];
+    itemForms: PerItemForm[]; sharedForm: SharedForm; selectedItem: number;
+    editedBlocks: Record<number, string>; airForm: AirPurifierForm;
+  }>>({});
 
 
   // On a restored session, skip the first auto-transform so it doesn't
@@ -3326,13 +3332,34 @@ export default function App() {
 
   const handleModeChange = (next: Mode) => {
     if (next === mode) return;
-    // Each mode takes its own input, so switching starts fresh.
+    // 현재 탭의 작업상태를 저장해 두고, 대상 탭의 저장본을 복원한다(없으면 빈 상태).
+    modeStateRef.current[mode] = {
+      inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+    };
+    const s = modeStateRef.current[next];
     setMode(next);
-    setInputText("");
-    resetOutputs();
-    setItemForms([{ ...EMPTY_ITEM_FORM }]);
-    setSharedForm(EMPTY_SHARED_FORM);
-    setSelectedItem(0);
+    skipAutoRef.current = true; // 복원된 입력으로 자동 변환이 다시 돌지 않게(작업 보존)
+    if (s) {
+      setInputText(s.inputText);
+      setTextOutput(s.textOutput);
+      setListOutput(s.listOutput);
+      setItemForms(s.itemForms);
+      setSharedForm(s.sharedForm);
+      setSelectedItem(s.selectedItem);
+      setEditedBlocks(s.editedBlocks);
+      setAirForm(s.airForm);
+      // 미양식 복원 시 통합이력 팝업이 자동으로 다시 뜨지 않게 마지막 인식 업체명을 맞춰둔다.
+      if (next === "blank-report") {
+        lastBlankVendor.current = extractVendorFromText(s.listOutput[0]?.content || s.textOutput || "");
+      }
+    } else {
+      setInputText("");
+      resetOutputs();
+      setItemForms([{ ...EMPTY_ITEM_FORM }]);
+      setSharedForm(EMPTY_SHARED_FORM);
+      setSelectedItem(0);
+      setAirForm(EMPTY_AIR_FORM);
+    }
   };
 
   const runTransform = (text: string, m: Mode) => {

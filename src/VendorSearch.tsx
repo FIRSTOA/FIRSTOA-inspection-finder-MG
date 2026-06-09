@@ -13,23 +13,6 @@ type Props = {
   onError: (msg: string) => void;
 };
 
-// 점검+AS는 점검으로 → 점검(최신 1) + AS(최신 1)만.
-function mergeForms(forms: InspForm[]): InspForm[] {
-  let insp: InspForm | null = null;
-  let as: InspForm | null = null;
-  for (const f of forms) {
-    if (f.gubun === "AS") {
-      if (!as || f.date > as.date) as = f;
-      continue;
-    }
-    if (!insp || f.date > insp.date) insp = { ...f, gubun: "점검" };
-  }
-  const out: InspForm[] = [];
-  if (insp) out.push(insp);
-  if (as) out.push(as);
-  return out;
-}
-
 const GUBUN_STYLE: Record<string, { bg: string; fg: string }> = {
   "점검": { bg: "#334155", fg: "#FFFFFF" },
   "AS": { bg: "#E2E8F0", fg: "#475569" },
@@ -97,7 +80,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setLoadingForms(true);
     onVendor(v);
     getInspForms(v)
-      .then((resp) => setForms(mergeForms(resp.forms || [])))
+      .then((resp) => setForms(resp.forms || []))
       .catch((e) => onError(e.message || "양식 조회 실패"))
       .finally(() => setLoadingForms(false));
   };

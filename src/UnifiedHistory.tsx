@@ -29,12 +29,21 @@ const CAT_COLOR: Record<string, string> = {
 };
 const MAX_RECORDS = 8;
 
-function recordSummary(cat: string, rec: Record<string, unknown>): { date: string; lines: string[] } {
+// 언제/어디팀/누가 한눈에 보이도록 상단 칩으로 뽑을 키들
+const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자"];
+const REGION_KEYS = ["지역", "미팅지역", "시/구"];
+function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val: string } {
+  for (const k of keys) { const v = String(rec[k] ?? "").trim(); if (v) return { key: k, val: v }; }
+  return { key: "", val: "" };
+}
+
+function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[] } {
   const dateKey = DATE_FIELD[cat];
   const date = dateKey ? String(rec[dateKey] ?? "") : "";
+  const skip = new Set([dateKey, ...exclude]);
   const lines: string[] = [];
   for (const [k, v] of Object.entries(rec)) {
-    if (k === dateKey) continue;
+    if (skip.has(k)) continue;
     const s = String(v ?? "").trim();
     if (!s) continue;
     lines.push(`${k}: ${s}`);
@@ -185,14 +194,21 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           )}
           {!loading &&
             recs.slice(0, MAX_RECORDS).map((rec, i) => {
-              const { date, lines } = recordSummary(activeCat, rec);
+              const who = pick(rec, WHO_KEYS);
+              const region = pick(rec, REGION_KEYS);
+              const { date, lines } = recordSummary(activeCat, rec, [who.key, region.key]);
               return (
                 <div key={i} className="rounded-2xl bg-white p-3 shadow-sm">
-                  {date && (
-                    <div className="mb-1.5 inline-block rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: CAT_COLOR[activeCat] }}>
-                      {date}
-                    </div>
-                  )}
+                  {/* 언제 · 어디팀 · 누가 */}
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    {date && (
+                      <span className="rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: CAT_COLOR[activeCat] }}>
+                        📅 {date}
+                      </span>
+                    )}
+                    {region.val && <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{region.val}</span>}
+                    {who.val && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{who.val}</span>}
+                  </div>
                   <div className="space-y-0.5">
                     {lines.map((ln, j) => (
                       <div key={j} className="break-words text-xs leading-snug text-slate-600">{ln}</div>
