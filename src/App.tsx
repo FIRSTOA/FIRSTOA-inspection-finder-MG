@@ -3602,7 +3602,7 @@ export default function App() {
           )}
           <ToolButton icon="🗂️" label="통합이력" accent={config.accent} onClick={() => setHistoryOpen(true)} />
         </div>
-        <input ref={photoInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoPick} className="hidden" />
+        <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
