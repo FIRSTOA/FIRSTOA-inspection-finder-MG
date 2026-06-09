@@ -3484,14 +3484,7 @@ export default function App() {
       const isAir = mode === "air-purifier";
       const resp = await visionForm(dataUrl, isAir ? "air" : "inspection");
       if (resp.ok && resp.text) {
-        if (!isAir && mode !== "inspection") {
-          // 미양식 등에서 올린 사진 → 점검 양식이므로 점검 탭으로 전환(현재 탭 작업은 보존)
-          modeStateRef.current[mode] = {
-            inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
-          };
-          setMode("inspection");
-        }
-        setInputText(resp.text); // 자동 변환 파이프라인이 결과/폼 생성
+        setInputText(resp.text); // 현재 탭 유지 — 그 탭의 변환 파이프라인이 결과/폼 생성
         showToast("사진에서 양식을 만들었어요");
       } else {
         showToast(resp.error || "사진 변환 실패", "error");
