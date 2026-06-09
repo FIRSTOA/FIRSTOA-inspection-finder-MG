@@ -52,8 +52,49 @@ function inspectionFormTemplate_() {
   ].join('\n');
 }
 
+// 청정기 양식 템플릿 — 점검과 같되 기기 블록 중간(매수~주차비)이 필터리셋/필터교체로 대체
+function airFormTemplate_() {
+  return [
+    '작성자:',
+    '구분: 점검',
+    '레벨: 1',
+    '등급: ',
+    '업체명: ',
+    '부서명: ',
+    '지역: C',
+    '키맨/접수자:',
+    INSP_DIVIDER_,
+    '1.',
+    '모델명: ',
+    '시리얼넘버: ',
+    '자산기번: ',
+    '내용: 정기점검',
+    '처리내용: 정기점검',
+    '필터리셋:',
+    '필터교체:',
+    '특이사항:',
+    INSP_DIVIDER_,
+    '※부품신청※',
+    '보증기간 내 여부 : ',
+    '교체 전 카운터 누적 사용매수 : ',
+    '사용 부품 예상 사용매수 : ',
+    '▶ 신청 부품',
+    '물품명:',
+    '수량:',
+    '출고여부: ',
+    INSP_DIVIDER_,
+    '※자가신청※',
+    '물품:',
+    '수량:',
+    '출고여부:',
+    INSP_DIVIDER_,
+    '도착 시간:',
+    '소요 시간:'
+  ].join('\n');
+}
+
 function visionSystemPrompt_(kind) {
-  var template = inspectionFormTemplate_(); // 청정기 틀이 확정되면 kind === 'air' 분기 추가
+  var template = (kind === 'air') ? airFormTemplate_() : inspectionFormTemplate_();
   return [
     '당신은 거래처 상세카드(휴대폰 연락처/CRM 캡처)나 점검지 사진을 읽어 "점검 보고 양식"으로 변환하는 도우미다.',
     '아래 템플릿을 그대로 출력하되, 이미지에서 확실히 읽히는 값만 각 항목 뒤에 채운다. 안 보이거나 모르는 값은 비워 둔다(추측 금지).',
