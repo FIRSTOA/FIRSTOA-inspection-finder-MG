@@ -367,6 +367,37 @@
       google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn].apply(google.script.run, args);
     });
   }
+
+  // 큰 파일을 한 번에 보내면 게이트웨이가 HTTP 413으로 거부한다(google.script.run은
+  // 인자 전체를 단일 POST로 전송). 작은 파일은 그대로, 큰 파일은 청크로 나눠 보낸다.
+  var UPLOAD_CHUNK = 30000;       // 청크당 코드유닛 (셀 5만 한도 · 413 모두 여유)
+  var UPLOAD_DIRECT_MAX = 30000;  // 이 이하면 한 번에 직접 전송
+
+  // mode: 'asform' | 'inspectform' | 그 외(AI). 반환값은 기존 적재 함수와 동일 형식.
+  // onProgress(sent, total): 청크 업로드 진행률 콜백(선택).
+  async function sendUpload(mode, area, team, text, onProgress) {
+    if (text.length <= UPLOAD_DIRECT_MAX) {
+      if (mode === 'asform') return gasRun('ingestASFormsUpload', [text, team]);
+      if (mode === 'inspectform') return gasRun('ingestInspectFormsUpload', [text, team]);
+      return gasRun('kakaoEnqueue', [area, team, text]);
+    }
+    var begin = await gasRun('uploadStashBegin', []);
+    if (!begin || !begin.ok) throw new Error(begin && begin.error ? begin.error : '업로드 준비 실패');
+    var total = Math.ceil(text.length / UPLOAD_CHUNK);
+    var i = 0, idx = 0;
+    while (i < text.length) {
+      var end = Math.min(i + UPLOAD_CHUNK, text.length);
+      if (end < text.length) {                       // 서로게이트 쌍이 잘리지 않게 한 칸 앞으로
+        var code = text.charCodeAt(end - 1);
+        if (code >= 0xD800 && code <= 0xDBFF && end - 1 > i) end--;
+      }
+      var r = await gasRun('uploadStashChunk', [idx, text.slice(i, end)]);
+      if (!r || !r.ok) throw new Error(r && r.error ? r.error : '청크 전송 실패');
+      i = end; idx++;
+      if (onProgress) onProgress(idx, total);
+    }
+    return gasRun('ingestStashedUpload', [mode, area, team]);
+  }
   // 파일 → 디코딩된 텍스트
   function readDecoded(file) {
     return new Promise(function (resolve, reject) {
@@ -399,24 +430,25 @@
         setStatus(slot, 'run', '읽는 중…');
         var text = await readDecoded(slot._file);
 
+        var onProg = function (sent, tot) { setStatus(slot, 'run', '전송 중 ' + sent + '/' + tot); };
         if (mode === 'asform') {
           // AS는 빠르므로 즉시 처리
           setStatus(slot, 'run', '양식 추출 중…');
-          var r = await gasRun('ingestASFormsUpload', [text, team]);
+          var r = await sendUpload('asform', area, team, text, onProg);
           if (!r || !r.ok) throw new Error(r && r.error ? r.error : '실패');
           setStatus(slot, 'ok', '완료 +' + nf(r.added) + ' (중복 ' + nf(r.skipped) + ')');
           totalAdded += (r.added || 0);
         } else if (mode === 'inspectform') {
           // 점검도 양식 추출 → 마스터 점검 탭에 즉시 적재
           setStatus(slot, 'run', '양식 추출 중…');
-          var ri = await gasRun('ingestInspectFormsUpload', [text, team]);
+          var ri = await sendUpload('inspectform', area, team, text, onProg);
           if (!ri || !ri.ok) throw new Error(ri && ri.error ? ri.error : '실패');
           setStatus(slot, 'ok', '완료 +' + nf(ri.added) + ' (중복 ' + nf(ri.skipped) + ')');
           totalAdded += (ri.added || 0);
         } else {
           // AI는 백그라운드 대기열에 등록
           setStatus(slot, 'run', '대기열 등록 중…');
-          var q = await gasRun('kakaoEnqueue', [area, team, text]);
+          var q = await sendUpload(mode, area, team, text, onProg);
           if (!q || !q.ok) throw new Error(q && q.error ? q.error : '실패');
           if (!q.batches) { setStatus(slot, 'ok', '새 메시지 없음'); continue; }
           slot._jobId = q.jobId;

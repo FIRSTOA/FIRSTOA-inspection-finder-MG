@@ -44,6 +44,21 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// 사진 → 양식 변환 (inspection-finder 프론트가 base64 이미지를 POST). CORS: 단순요청(text/plain)로 호출.
+function doPost(e) {
+  var result;
+  try {
+    var data = {};
+    try { data = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { data = {}; }
+    var action = String(data.action || '').toLowerCase();
+    if (action === 'vision') result = visionExtractForm(data.image, data.kind || 'inspection');
+    else result = { error: 'Invalid POST action: ' + action };
+  } catch (err) {
+    result = { error: err.toString() };
+  }
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+}
+
 // 업로드 화면용: 지원 카톡방 유형 목록 (AS는 전용 양식 파서로 별도 처리)
 function getKakaoRoomTypes() {
   const list = Object.keys(KAKAO_SOURCES).map(k => ({ type: k, mode: KAKAO_SOURCES[k].mode }));
@@ -112,6 +127,84 @@ function ingestKakaoUpload(roomType, teamLabel, content) {
     return ingestKakaoTxt(roomType, String(content), teamLabel || '');
   } catch (err) {
     return { ok: false, error: err.toString() };
+  }
+}
+
+// ── 대용량 업로드 청크 처리 ──────────────────────────────────────────────
+// google.script.run은 인자 전체를 한 번에 POST하므로 큰 TXT는 게이트웨이가 HTTP 413으로
+// 거부한다. 클라이언트가 파일을 청크로 쪼개 _upload_tmp에 적재한 뒤, 서버에서 조립해
+// 기존 모드별 적재 함수로 넘긴다. 청크 셀 앞에 '!' 센티넬을 붙여 '='로 시작하는 청크가
+// 수식으로 해석되는 것을 막고, 읽을 때 첫 글자를 떼어낸다.
+const UPLOAD_STASH_TAB = '_upload_tmp';
+
+function uploadStashBegin() {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let sh = ss.getSheetByName(UPLOAD_STASH_TAB);
+    if (!sh) { sh = ss.insertSheet(UPLOAD_STASH_TAB); sh.hideSheet(); }
+    sh.clearContents();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function uploadStashChunk(index, chunk) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let sh = ss.getSheetByName(UPLOAD_STASH_TAB);
+    if (!sh) { sh = ss.insertSheet(UPLOAD_STASH_TAB); sh.hideSheet(); }
+    sh.appendRow([Number(index), '!' + String(chunk)]);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function readStashedUpload_() {
+  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+  const sh = ss.getSheetByName(UPLOAD_STASH_TAB);
+  if (!sh || sh.getLastRow() < 1) return '';
+  const data = sh.getRange(1, 1, sh.getLastRow(), 2).getValues();
+  return data
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(r => String(r[1]).slice(1))   // '!' 센티넬 제거
+    .join('');
+}
+
+// 레거시 업로드 화면(action=upload)용: 청크 조립 후 ingestKakaoTxt로 적재.
+function ingestKakaoUploadStashed(roomType, teamLabel) {
+  try {
+    const content = readStashedUpload_();
+    if (!content || !content.trim()) return { ok: false, error: '업로드 내용이 비어있습니다.' };
+    return ingestKakaoTxt(roomType, content, teamLabel || '');
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  } finally {
+    try {
+      const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+      const sh = ss.getSheetByName(UPLOAD_STASH_TAB);
+      if (sh) sh.clearContents();
+    } catch (e) {}
+  }
+}
+
+// 청크 조립 후 모드별 적재 함수로 디스패치. mode: 'asform' | 'inspectform' | 그 외(AI)
+function ingestStashedUpload(mode, area, team) {
+  try {
+    const content = readStashedUpload_();
+    if (!content || !content.trim()) return { ok: false, error: '업로드 내용이 비어있습니다.' };
+    if (mode === 'asform') return ingestASFormsUpload(content, team || '');
+    if (mode === 'inspectform') return ingestInspectFormsUpload(content, team || '');
+    return kakaoEnqueue(area, team || '', content);
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  } finally {
+    try {
+      const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+      const sh = ss.getSheetByName(UPLOAD_STASH_TAB);
+      if (sh) sh.clearContents();
+    } catch (e) {}
   }
 }
 
