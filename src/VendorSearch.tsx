@@ -49,7 +49,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
 
   useEffect(() => {
     const q = query.trim();
-    if (!q || q === vendor) {
+    if (q.length < 2 || q === vendor) {
       setHits([]);
       return;
     }
@@ -67,7 +67,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
         .finally(() => {
           if (myReq === reqSeq.current) setSearching(false);
         });
-    }, 250);
+    }, 300);
     return () => window.clearTimeout(handle);
   }, [query, vendor, onError]);
 

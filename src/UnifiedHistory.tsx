@@ -74,7 +74,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   // 후보 검색 (이미 고른 거래처와 같은 검색어면 목록을 다시 띄우지 않음)
   useEffect(() => {
     const query = q.trim();
-    if (!open || !query || query === override) { setHits([]); return; }
+    if (!open || query.length < 2 || query === override) { setHits([]); return; }
     setSearching(true);
     setShowHits(true);
     const my = ++reqSeq.current;
@@ -83,7 +83,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         .then((r) => { if (my === reqSeq.current) setHits(r.results || []); })
         .catch((e) => onError(e.message || "검색 실패"))
         .finally(() => { if (my === reqSeq.current) setSearching(false); });
-    }, 250);
+    }, 300);
     return () => window.clearTimeout(h);
   }, [q, open, override, onError]);
 
