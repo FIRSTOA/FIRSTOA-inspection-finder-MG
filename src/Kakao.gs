@@ -485,10 +485,28 @@ function ingestASFormsUpload(content, regionFallback) {
       const head = String(content).slice(0, 100).replace(/\n/g, '⏎');
       return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
     }
+    // 진단용 단계별 카운트: 전체 파싱 → 구분:줄 있음 → AS 매칭(isASForm_)
+    let withGubun = 0, asMatched = 0;
+    for (const m of messages) {
+      const c = String(m.text || '');
+      if (/구분\s*[:：]/.test(c)) withGubun++;
+      if (isASForm_(c)) asMatched++;
+    }
+
     const records = extractASFormsFull_(messages, regionFallback || '');
-    if (!records.length) return { ok: false, error: 'AS 양식(구분:AS) 메시지를 찾지 못했습니다.', parsed: messages.length };
+    if (!records.length) {
+      return {
+        ok: false,
+        error: 'AS 양식(구분:AS) 메시지를 찾지 못했습니다.',
+        parsed: messages.length, withGubun: withGubun, asMatched: asMatched
+      };
+    }
     const r = appendKakaoRecords_('AS', 'AS', regionFallback || '', records);
-    return { ok: true, tab: r.tab, parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
+    return {
+      ok: true, tab: r.tab,
+      parsed: messages.length, withGubun: withGubun, asMatched: asMatched,
+      records: records.length, added: r.added, skipped: r.skipped
+    };
   } catch (err) {
     return { ok: false, error: err.toString() };
   }

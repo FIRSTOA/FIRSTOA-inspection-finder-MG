@@ -12,24 +12,34 @@ function onOpen() {
     .addItem('매일 자동 새로고침 켜기', 'installDailyTrigger')
     .addItem('매일 자동 새로고침 끄기', 'removeDailyTriggers')
     .addSeparator()
+    .addItem('드라이브 자동적재 켜기 (수신함 폴더+트리거)', 'setupDriveIngest')
+    .addItem('드라이브 수신함 지금 적재', 'ingestFromDriveFolder')
+    .addItem('드라이브 자동적재 끄기', 'disableDriveIngest')
+    .addSeparator()
     .addItem('바로가기 탭 생성/갱신', 'buildShortcutSheet')
     .addItem('접근 권한 점검', 'diagAccess')
     .addToUi();
 }
 
-// 자동 새로고침 트리거:
-//  - 매일 새벽 5시: refreshDaily (대용량 임대 시트 제외)
-//  - 월요일 새벽 4시: refreshLease (임대리스트·임대현황표 재동기화)
+// 자동 새로고침 트리거 (작업을 쪼개 30분 한도 회피):
+//  - 매일 0시: syncNonLeaseOnly  (임대 제외 전체 동기화, 가벼움)
+//  - 매일 6시: refreshIndexOnly  (검색 인덱스만 단독 재생성)
+//  - 월 2시:  syncBizInfoOnly    (업체정보 21k 단독)
+//  - 월 4시:  syncLeaseStatusOnly(임대현황표 27k 단독)
+//  시간대(0/2/4/6시)는 1시간 창이 겹치지 않게 띄워 동시 실행을 막는다.
 function installDailyTrigger() {
   removeDailyTriggers();
-  ScriptApp.newTrigger('refreshDaily').timeBased().everyDays(1).atHour(5).create();
-  ScriptApp.newTrigger('refreshLease').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create();
-  Logger.log('트리거 생성: 매일 5시 refreshDaily(임대 제외) + 월요일 4시 refreshLease(임대)');
+  ScriptApp.newTrigger('syncNonLeaseOnly').timeBased().everyDays(1).atHour(0).create();
+  ScriptApp.newTrigger('refreshIndexOnly').timeBased().everyDays(1).atHour(6).create();
+  ScriptApp.newTrigger('syncBizInfoOnly').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(2).create();
+  ScriptApp.newTrigger('syncLeaseStatusOnly').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create();
+  Logger.log('트리거 생성: 매일 0시 비임대동기화 / 6시 인덱스 / 월 2시 업체정보 / 월 4시 임대현황표');
   return { ok: true };
 }
 
 function removeDailyTriggers() {
-  const handlers = ['refreshAll', 'refreshDaily', 'refreshLease'];
+  const handlers = ['refreshAll', 'refreshDaily', 'refreshLease',
+    'syncNonLeaseOnly', 'refreshIndexOnly', 'syncBizInfoOnly', 'syncLeaseStatusOnly'];
   const triggers = ScriptApp.getProjectTriggers();
   let n = 0;
   for (const t of triggers) {

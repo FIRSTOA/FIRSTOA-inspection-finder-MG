@@ -53,10 +53,14 @@ const MASTER_HELPER_COLS = ['_업체명', '_출처', '_원문', '_등록시각',
 
 const CACHE_DURATION_SEC = 300;
 const FILE_LOOKUP_CACHE_SEC = 600;
+// 거래처 검색 인덱스 캐시 TTL — CacheService 최대치(6시간).
+// 데이터 변경 시 rebuildIndex()가 vidx_* 캐시를 직접 무효화하므로 길게 잡아도 안전.
+const VINDEX_CACHE_SEC = 21600;
 
 const CONFIG = {
   불만: {
-    ssNameLatest: '확장성 정보',
+    ssId: '1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ',  // '확장성 정보' 시트 고정ID (이름검색 → 미연결 방지)
+    ssNameLatest: '확장성 정보',                            // ssId 우선, 이건 폴백용으로 남김
     sheets: ['불만-총괄담당자는 홍대경,신정훈'],
     headerRow: 2,
     vendorCol: '업체명',

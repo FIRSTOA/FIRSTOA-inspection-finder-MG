@@ -26,6 +26,13 @@ function refreshLease() {
   return { sync: sync, index: index };
 }
 
+// ── 분리 트리거용: 한 실행에 한 가지 일만 해서 30분 한도를 넘지 않게 한다 ──
+// (refreshLease/refreshDaily는 한 번에 동기화+인덱스를 다 해 대용량에서 타임아웃 → 아래로 쪼갬)
+function syncBizInfoOnly() { return { 업체정보: syncCategoryToMaster('업체정보') }; }       // 21k행
+function syncLeaseStatusOnly() { return { 임대현황표: syncCategoryToMaster('임대현황표') }; } // 27k행
+function syncNonLeaseOnly() { return syncAllToMaster(LEASE_CATEGORIES); }                  // 임대 제외 전체(가벼움)
+function refreshIndexOnly() { return rebuildIndex(); }                                      // 인덱스만 단독
+
 // 기본 인덱스 재생성은 통합 탭 기준
 function rebuildIndex() {
   return rebuildIndexFromMaster();
@@ -169,6 +176,10 @@ function writeIndexSheets_(indexSs, vendorCounts, vendorMeta, dataRows, catCount
   mSheet.getRange(1, 1, metaRows.length, 2).setValues(metaRows);
 
   try {
-    CacheService.getScriptCache().removeAll(['fast_search_v6_', 'fast_detail_v7_']);
+    const c = CacheService.getScriptCache();
+    const keys = ['vidx_n_v1'];
+    const n = Number(c.get('vidx_n_v1') || 0);
+    for (let i = 0; i < n; i++) keys.push('vidx_v1_' + i);
+    c.removeAll(keys);
   } catch (e) {}
 }

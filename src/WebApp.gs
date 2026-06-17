@@ -31,7 +31,7 @@ function doGet(e) {
     else if (action === 'ping') result = { ok: true, time: new Date().toISOString(), indexInfo: getIndexMeta() };
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
-    result = { error: err.toString(), stack: err.stack };
+    result = { error: err.toString() };
   }
 
   const json = JSON.stringify(result);
@@ -120,6 +120,118 @@ function getConsoleData() {
   };
 }
 
+// ── 원본 시트 연동 상태 점검 (원본DB/홈 화면용). 무거우니 10분 캐시. ──
+// 각 비(非)카톡전용 카테고리의 원본 스프레드시트를 실제로 열어보고, 설정된 탭이 있는지 확인한다.
+function getConnectionStatus() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('conn_status_v2');
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+
+  const cats = {};
+  CATEGORIES.forEach(function (cat) {
+    const cfg = CONFIG[cat] || {};
+    if (cfg.kakaoOnly || (!cfg.ssId && !cfg.ssNameLatest)) { cats[cat] = { status: 'kakao' }; return; }
+    try {
+      const src = openSpreadsheet(cfg);
+      let okTab = true, missing = [];
+      if (cfg.sheets && cfg.sheets.length) {
+        missing = cfg.sheets.filter(function (nm) { return !src.getSheetByName(nm); });
+        okTab = missing.length < cfg.sheets.length;   // 하나라도 있으면 연동으로 본다
+      } else if (cfg.gid != null) {
+        okTab = src.getSheets().some(function (s) { return s.getSheetId() === cfg.gid; });
+        if (!okTab) missing = ['gid=' + cfg.gid];
+      }
+      if (okTab) cats[cat] = { status: 'connected', name: src.getName(), missing: missing };
+      else cats[cat] = { status: 'broken', error: '대상 탭 없음: ' + missing.join(', ') };
+    } catch (e) {
+      cats[cat] = { status: 'broken', error: String(e).slice(0, 160) };
+    }
+  });
+
+  const res = { checkedAt: new Date().toISOString(), cats: cats };
+  try { cache.put('conn_status_v2', JSON.stringify(res), 600); } catch (e) {}
+  return res;
+}
+
+// ── 업로드 이력 로그 (누가/언제/무엇을/몇 건 올렸는지 — 중복 작업 방지) ──
+const UPLOAD_LOG_TAB = '_upload_log';
+
+function logUpload(entry) {
+  try {
+    entry = entry || {};
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let sh = ss.getSheetByName(UPLOAD_LOG_TAB);
+    if (!sh) {
+      sh = ss.insertSheet(UPLOAD_LOG_TAB); sh.hideSheet();
+      sh.getRange(1, 1, 1, 9).setValues([['시각', '카테고리', '지역', '방이름', '추출', '추가', '중복', '상태', '올린사람']]);
+    }
+    let who = '';
+    try { who = Session.getActiveUser().getEmail() || ''; } catch (e) {}
+    sh.appendRow([
+      new Date(), String(entry.category || ''), String(entry.team || ''), String(entry.roomName || ''),
+      Number(entry.parsed || 0), Number(entry.added || 0), Number(entry.skipped || 0),
+      String(entry.status || ''), who
+    ]);
+    return { ok: true };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+function getUploadLog(limit) {
+  try {
+    limit = Number(limit || 40);
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_LOG_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, rows: [] };
+    const last = sh.getLastRow();
+    const start = Math.max(2, last - limit + 1);
+    const data = sh.getRange(start, 1, last - start + 1, 9).getValues();
+    const rows = data.map(function (r) {
+      return {
+        time: r[0] instanceof Date ? r[0].toISOString() : String(r[0]),
+        category: String(r[1] || ''), team: String(r[2] || ''), roomName: String(r[3] || ''),
+        parsed: Number(r[4] || 0), added: Number(r[5] || 0), skipped: Number(r[6] || 0),
+        status: String(r[7] || ''), who: String(r[8] || '')
+      };
+    }).reverse();   // 최신순
+    return { ok: true, rows: rows };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+// ── 카톡 방 이름 → (카테고리, 지역) 매핑표. 일괄 자동 업로드의 라우팅 기준. ──
+// 방 이름이 바뀌거나 새 방이 생기면 _room_map 숨김시트에 한 줄 추가/수정하면 된다.
+const ROOM_MAP_TAB = '_room_map';
+const ROOM_MAP_SEED = [
+  ['강북A as', 'AS', 'A'], ['강서B as', 'AS', 'B'], ['강남C as', 'AS', 'C'], ['경기D as', 'AS', 'D'],
+  ['강북A 점검방', '점검', 'A'], ['강서B 점검방', '점검', 'B'], ['강남C 점검방', '점검', 'C'], ['경기D 점검방', '점검', 'D'],
+  ['신)CD불만고객방', '불만', 'CD'],
+  ['강서B 미수 보증금미입금 보고방', '미수', 'B'], ['강남C 미수 보증금 보고방', '미수', 'C'],
+  ['강북A/초과사용 계약종료체크', '재계약', 'A'], ['강서B/초과사용 계약종료체크', '재계약', 'B'],
+  ['강남C/초과사용 계약종료체크', '재계약', 'C'], ['경기D/초과사용 계약종료체크', '재계약', 'D']
+];
+
+function ensureRoomMap_() {
+  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+  let sh = ss.getSheetByName(ROOM_MAP_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(ROOM_MAP_TAB); sh.hideSheet();
+    sh.getRange(1, 1, 1, 3).setValues([['방이름', '카테고리', '지역']]);
+    sh.getRange(2, 1, ROOM_MAP_SEED.length, 3).setValues(ROOM_MAP_SEED);
+  }
+  return sh;
+}
+
+function getRoomMap() {
+  try {
+    const sh = ensureRoomMap_();
+    const last = sh.getLastRow();
+    if (last < 2) return { ok: true, rows: [] };
+    const data = sh.getRange(2, 1, last - 1, 3).getValues();
+    const rows = data.filter(function (r) { return String(r[0] || '').trim(); })
+      .map(function (r) { return { roomName: String(r[0]).trim(), category: String(r[1]).trim(), team: String(r[2]).trim() }; });
+    return { ok: true, rows: rows };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
 // 업로드 화면에서 호출 (google.script.run). TXT 내용을 받아 적재.
 function ingestKakaoUpload(roomType, teamLabel, content) {
   try {
@@ -133,8 +245,9 @@ function ingestKakaoUpload(roomType, teamLabel, content) {
 // ── 대용량 업로드 청크 처리 ──────────────────────────────────────────────
 // google.script.run은 인자 전체를 한 번에 POST하므로 큰 TXT는 게이트웨이가 HTTP 413으로
 // 거부한다. 클라이언트가 파일을 청크로 쪼개 _upload_tmp에 적재한 뒤, 서버에서 조립해
-// 기존 모드별 적재 함수로 넘긴다. 청크 셀 앞에 '!' 센티넬을 붙여 '='로 시작하는 청크가
-// 수식으로 해석되는 것을 막고, 읽을 때 첫 글자를 떼어낸다.
+// 기존 모드별 적재 함수로 넘긴다. 청크 셀 앞뒤에 '!' 센티넬을 붙인다: 앞 센티넬은 '='로
+// 시작하는 청크가 수식으로 해석되는 것을 막고, 뒤 센티넬은 시트가 셀 끝 줄바꿈·공백을
+// 잘라내 경계가 어긋나는 것을 막는다. 읽을 때 양 끝 한 글자씩 떼어내 원본을 정확히 복원한다.
 const UPLOAD_STASH_TAB = '_upload_tmp';
 
 function uploadStashBegin() {
@@ -154,7 +267,7 @@ function uploadStashChunk(index, chunk) {
     const ss = SpreadsheetApp.openById(MASTER_SS_ID);
     let sh = ss.getSheetByName(UPLOAD_STASH_TAB);
     if (!sh) { sh = ss.insertSheet(UPLOAD_STASH_TAB); sh.hideSheet(); }
-    sh.appendRow([Number(index), '!' + String(chunk)]);
+    sh.appendRow([Number(index), '!' + String(chunk) + '!']);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.toString() };
@@ -168,7 +281,7 @@ function readStashedUpload_() {
   const data = sh.getRange(1, 1, sh.getLastRow(), 2).getValues();
   return data
     .sort((a, b) => Number(a[0]) - Number(b[0]))
-    .map(r => String(r[1]).slice(1))   // '!' 센티넬 제거
+    .map(r => String(r[1]).slice(1, -1))   // 앞뒤 '!' 센티넬 제거
     .join('');
 }
 
@@ -208,23 +321,105 @@ function ingestStashedUpload(mode, area, team) {
   }
 }
 
-function searchVendorsFromIndex(query) {
-  if (!query || query.length < 1) return { results: [], total: 0 };
+// ── 증분 업로드 커서 (양식 모드 전용): 방별로 "마지막으로 처리한 끝부분"을 앵커로 기억 ──
+// key = area|team|mode. anchor = 지난번 처리한 텍스트의 마지막 N글자.
+// 카톡 내보내기는 맨 위 "저장한 날짜" 줄이 매번 바뀌므로 앞부분 비교는 못 쓴다.
+// 대신 끝부분 앵커를 새 파일에서 찾아(lastIndexOf) 그 뒤만 보내게 한다(append-only 가정).
+// 못 찾으면(다른 내보내기 등) 클라이언트가 전체 재전송. 중복은 _dupKey가 받쳐준다.
+const UPLOAD_CURSOR_TAB = '_upload_cursor';
 
+function getUploadCursor(key) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_CURSOR_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, anchor: '' };
+    const data = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    for (const r of data) {
+      if (String(r[0]) === String(key)) {
+        let a = String(r[1] || '');
+        if (a.charAt(0) === '!') a = a.slice(1);   // 저장 시 붙인 센티넬 제거 → 원본 앵커 복원
+        return { ok: true, anchor: a };
+      }
+    }
+    return { ok: true, anchor: '' };
+  } catch (err) { return { ok: false, error: err.toString(), anchor: '' }; }
+}
+
+function setUploadCursor(key, anchor) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let sh = ss.getSheetByName(UPLOAD_CURSOR_TAB);
+    if (!sh) {
+      sh = ss.insertSheet(UPLOAD_CURSOR_TAB); sh.hideSheet();
+      sh.getRange(1, 1, 1, 2).setValues([['key', 'anchor']]);
+    }
+    // 앞에 '!' 센티넬: 앵커가 '='·'+'·'@' 등으로 시작해도 수식으로 해석되지 않게. 조회 시 떼어낸다.
+    const row = [String(key), '!' + String(anchor || '')];
+    const last = sh.getLastRow();
+    if (last >= 2) {
+      const keys = sh.getRange(2, 1, last - 1, 1).getValues();
+      for (let i = 0; i < keys.length; i++) {
+        if (String(keys[i][0]) === String(key)) {
+          sh.getRange(i + 2, 1, 1, 2).setValues([row]);
+          return { ok: true, updated: true };
+        }
+      }
+    }
+    sh.appendRow(row);
+    return { ok: true, inserted: true };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+// 전체 vendor 인덱스를 한 번만 읽어 청크 캐시에 보관 → prefix 타이핑마다 시트 재읽기 방지.
+// CacheService는 키당 100KB(UTF-8 바이트) 제한이라, 한글(3바이트) 안전선으로 25000자 단위 분할.
+function loadVendorIndexRows_() {
   const cache = CacheService.getScriptCache();
-  const cacheKey = 'fast_search_v6_' + query;
-  const cached = cache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
+  const cntStr = cache.get('vidx_n_v1');
+  if (cntStr) {
+    const n = Number(cntStr);
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('vidx_v1_' + i);
+    const got = cache.getAll(keys);
+    let ok = true;
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const s = got['vidx_v1_' + i];
+      if (s == null) { ok = false; break; }
+      parts.push(s);
+    }
+    if (ok) { try { return JSON.parse(parts.join('')); } catch (e) {} }
+  }
 
   const ss = SpreadsheetApp.openById(INDEX_SS_ID);
   const sheet = ss.getSheetByName(INDEX_VENDORS);
-  if (!sheet || sheet.getLastRow() < 2) {
-    return { results: [], total: 0, error: '인덱스 미생성. rebuildIndex 실행 필요' };
-  }
+  if (!sheet || sheet.getLastRow() < 2) return null;
 
   const lastRow = sheet.getLastRow();
   const totalCols = 1 + SEARCH_CATEGORIES.length + 1;
   const data = sheet.getRange(2, 1, lastRow - 1, totalCols).getValues();
+
+  try {
+    const json = JSON.stringify(data);
+    const CHUNK = 25000;
+    const toPut = {};
+    let n = 0;
+    for (let i = 0; i < json.length; i += CHUNK) { toPut['vidx_v1_' + n] = json.slice(i, i + CHUNK); n++; }
+    cache.putAll(toPut, VINDEX_CACHE_SEC);
+    cache.put('vidx_n_v1', String(n), VINDEX_CACHE_SEC);
+  } catch (e) {}
+
+  return data;
+}
+
+function searchVendorsFromIndex(query) {
+  if (!query || query.length < 1) return { results: [], total: 0 };
+
+  const data = loadVendorIndexRows_();
+  if (data === null) {
+    return { results: [], total: 0, error: '인덱스 미생성. rebuildIndex 실행 필요' };
+  }
+
+  const totalCols = 1 + SEARCH_CATEGORIES.length + 1;
   const lowerQ = query.toLowerCase();
 
   const matched = [];
@@ -245,9 +440,7 @@ function searchVendorsFromIndex(query) {
   }
 
   matched.sort((a, b) => a.vendor.localeCompare(b.vendor));
-  const response = { results: matched, total: matched.length };
-  cache.put(cacheKey, JSON.stringify(response), CACHE_DURATION_SEC);
-  return response;
+  return { results: matched, total: matched.length };
 }
 
 function getVendorDetailFromIndex(vendorName) {
