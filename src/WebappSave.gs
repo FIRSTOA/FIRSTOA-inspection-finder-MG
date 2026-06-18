@@ -20,9 +20,32 @@ var WEBAPP_BOT_TOKEN  = 'firstoa2026';        // 메신저봇 polling 인증값(
 var WEBAPP_OUTBOX_TAB = '_webapp_outbox';     // 카톡 발신 큐 [시각, 방, 메시지, 전송여부]
 
 // 방 이름은 코드가 아니라 _room_map 숨김시트에서 읽는다(카테고리|지역 → 방이름).
-// → 방 이름이 바뀌거나 새 방이 생기면 그 시트만 고치면 됨(코드 수정/재배포 불필요).
-var TEST_ROOM = '테스트 전용방';   // E·빈값·미지원 지역 fallback, 그리고 TEST_MODE 대상
-var TEST_MODE = true;             // true: 지역 상관없이 전부 TEST_ROOM 으로. 실서비스 전환 시 false.
+// TEST_MODE / TEST_ROOM 도 코드가 아니라 _webapp_config 숨김시트에서 읽는다.
+// → 시트 셀만 고치면 전환/방이름 변경 가능(코드 수정·재배포 불필요).
+var WEBAPP_CONFIG_TAB = '_webapp_config';
+
+// 설정 시트 읽기(없으면 기본값으로 생성). { TEST_MODE, TEST_ROOM, ... }
+function webappConfig_() {
+  var ss = SpreadsheetApp.openById(MASTER_SS_ID);
+  var sh = ss.getSheetByName(WEBAPP_CONFIG_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(WEBAPP_CONFIG_TAB); sh.hideSheet();
+    sh.getRange(1, 1, 3, 2).setValues([
+      ['설정', '값'],
+      ['TEST_MODE', 'true'],            // true=전부 테스트방 / false=실서비스(지역별 방)
+      ['TEST_ROOM', '테스트 전용방']     // 테스트/미지원지역 fallback 방
+    ]);
+    sh.setColumnWidth(1, 140); sh.setColumnWidth(2, 200);
+  }
+  var cfg = {};
+  var last = sh.getLastRow();
+  if (last >= 2) {
+    sh.getRange(2, 1, last - 1, 2).getValues().forEach(function (r) {
+      if (String(r[0]).trim()) cfg[String(r[0]).trim()] = String(r[1]).trim();
+    });
+  }
+  return cfg;
+}
 // ================================================
 
 // 웹앱 보내기 1건 적재 + 라우팅
@@ -83,7 +106,7 @@ function webappSaveInspection_(data) {
       tabs: tabs.join(' + '),
       region: region,
       rooms: rooms,
-      testMode: TEST_MODE
+      testMode: String(webappConfig_()['TEST_MODE'] || 'true').toLowerCase() === 'true'
     };
   } catch (err) {
     return { ok: false, error: err.toString() };
@@ -104,13 +127,17 @@ function roomIndex_() {
   return idx;
 }
 
-// 지역 + AS여부 → 보낼 방 목록(중복 제거). 방 이름은 _room_map 시트에서 조회.
+// 지역 + AS여부 → 보낼 방 목록(중복 제거). TEST_MODE/방이름 모두 시트에서 조회.
 function resolveRooms_(region, hasAS) {
-  if (TEST_MODE) return [TEST_ROOM];
+  var cfg = webappConfig_();
+  var testRoom = cfg['TEST_ROOM'] || '테스트 전용방';
+  var testMode = String(cfg['TEST_MODE'] || 'true').toLowerCase() === 'true';
+  if (testMode) return [testRoom];
+
   var key = String(region || '').trim().toUpperCase();
   var idx = roomIndex_();
   var inspectRoom = idx['점검|' + key];
-  if (!inspectRoom) return [TEST_ROOM];          // 미지원 지역(E·빈값 등)
+  if (!inspectRoom) return [testRoom];           // 미지원 지역(E·빈값 등)
   var rooms = [inspectRoom];                      // 점검방은 항상
   if (hasAS) {
     var asRoom = idx['AS|' + key];
