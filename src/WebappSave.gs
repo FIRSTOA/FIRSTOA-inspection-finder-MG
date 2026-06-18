@@ -19,13 +19,8 @@
 var WEBAPP_BOT_TOKEN  = 'firstoa2026';        // 메신저봇 polling 인증값(봇과 동일)
 var WEBAPP_OUTBOX_TAB = '_webapp_outbox';     // 카톡 발신 큐 [시각, 방, 메시지, 전송여부]
 
-// 지역(팀) → 방 이름. 카톡방 제목과 정확히 일치해야 함.
-var REGION_ROOMS = {
-  'A': { inspect: '강북A 점검방', as: '강북A as' },
-  'B': { inspect: '강서B 점검방', as: '강서B as' },
-  'C': { inspect: '강남C 점검방', as: '강남C as' },
-  'D': { inspect: '경기D 점검방', as: '경기D as' }
-};
+// 방 이름은 코드가 아니라 _room_map 숨김시트에서 읽는다(카테고리|지역 → 방이름).
+// → 방 이름이 바뀌거나 새 방이 생기면 그 시트만 고치면 됨(코드 수정/재배포 불필요).
 var TEST_ROOM = '테스트 전용방';   // E·빈값·미지원 지역 fallback, 그리고 TEST_MODE 대상
 var TEST_MODE = true;             // true: 지역 상관없이 전부 TEST_ROOM 으로. 실서비스 전환 시 false.
 // ================================================
@@ -95,14 +90,32 @@ function webappSaveInspection_(data) {
   }
 }
 
-// 지역 + AS여부 → 보낼 방 목록(중복 제거)
+// _room_map 시트 → { '카테고리|지역': '방이름' } 인덱스. (getRoomMap/ensureRoomMap_ 는 WebApp.gs)
+function roomIndex_() {
+  var idx = {};
+  try {
+    var gm = getRoomMap();
+    if (gm && gm.rows) {
+      gm.rows.forEach(function (r) {
+        idx[r.category + '|' + String(r.team).trim().toUpperCase()] = r.roomName;
+      });
+    }
+  } catch (e) {}
+  return idx;
+}
+
+// 지역 + AS여부 → 보낼 방 목록(중복 제거). 방 이름은 _room_map 시트에서 조회.
 function resolveRooms_(region, hasAS) {
   if (TEST_MODE) return [TEST_ROOM];
   var key = String(region || '').trim().toUpperCase();
-  var r = REGION_ROOMS[key];
-  if (!r) return [TEST_ROOM];          // E·빈값·미지원 지역
-  var rooms = [r.inspect];             // 점검방은 항상
-  if (hasAS) rooms.push(r.as);         // AS방은 AS 포함 시
+  var idx = roomIndex_();
+  var inspectRoom = idx['점검|' + key];
+  if (!inspectRoom) return [TEST_ROOM];          // 미지원 지역(E·빈값 등)
+  var rooms = [inspectRoom];                      // 점검방은 항상
+  if (hasAS) {
+    var asRoom = idx['AS|' + key];
+    if (asRoom) rooms.push(asRoom);              // AS방은 AS 포함 시
+  }
   return rooms;
 }
 
