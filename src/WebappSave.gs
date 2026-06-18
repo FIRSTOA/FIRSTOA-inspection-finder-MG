@@ -17,7 +17,6 @@
 
 // ===================== 설정 =====================
 var WEBAPP_BOT_TOKEN  = 'firstoa2026';        // 메신저봇 polling 인증값(봇과 동일)
-var WEBAPP_OUTBOX_TAB = '_webapp_outbox';     // 카톡 발신 큐 [시각, 방, 메시지, 전송여부]
 
 // 방 이름은 코드가 아니라 _room_map 숨김시트에서 읽는다(카테고리|지역 → 방이름).
 // TEST_MODE / TEST_ROOM 도 코드가 아니라 _webapp_config 숨김시트에서 읽는다.
@@ -148,42 +147,73 @@ function resolveRooms_(region, hasAS) {
 
 // 카톡 발신 큐 적재
 function webappEnqueue_(room, text) {
-  var ss = SpreadsheetApp.openById(MASTER_SS_ID);
-  var sh = ss.getSheetByName(WEBAPP_OUTBOX_TAB);
-  if (!sh) {
-    sh = ss.insertSheet(WEBAPP_OUTBOX_TAB); sh.hideSheet();
-    sh.getRange(1, 1, 1, 4).setValues([['시각', '방', '메시지', '전송여부']]);
-  }
-  sh.appendRow([new Date(), String(room), String(text), 'N']);
+  outboxSheet_().appendRow([Utilities.getUuid(), new Date(), String(room), String(text)]);
 }
 
-// 메신저봇 polling: GET ?action=pull&token=...&rooms=방1\n방2  → 봇이 아는 방의 미전송분만 반환(+Y표시)
+// 발신 큐는 통합시트(큼=느림) 대신 전용 작은 스프레드시트에 둔다 → 봇 폴링이 빠름.
+// 스키마: [id, 시각, 방, 메시지]. 배달 확인(ack)된 건만 삭제(무유실).
+function outboxSheet_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('WEBAPP_OUTBOX_SS_ID');
+  var ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (!ss) {
+    ss = SpreadsheetApp.create('점검알림_발신큐');
+    props.setProperty('WEBAPP_OUTBOX_SS_ID', ss.getId());
+  }
+  var sh = ss.getSheets()[0];
+  if (sh.getName() !== 'outbox') sh.setName('outbox');
+  if (String(sh.getRange(1, 1).getValue()) !== 'id') {   // 헤더 없거나 구버전 → 초기화
+    sh.clear();
+    sh.getRange(1, 1, 1, 4).setValues([['id', '시각', '방', '메시지']]);
+  }
+  return sh;
+}
+
+// 봇이 bot.send 성공한 id들을 통보 → 그 행만 삭제 (무유실 핵심)
+function webappAck_(e) {
+  if (!e || !e.parameter || e.parameter.token !== WEBAPP_BOT_TOKEN) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var ids = {};
+  String(e.parameter.ids || '').split(',').forEach(function (x) { var k = x.trim(); if (k) ids[k] = true; });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = outboxSheet_();
+    var last = sh.getLastRow();
+    var deleted = 0;
+    if (last >= 2) {
+      var col = sh.getRange(2, 1, last - 1, 1).getValues();   // id 열
+      for (var i = col.length - 1; i >= 0; i--) {
+        if (ids[String(col[i][0])]) { sh.deleteRow(i + 2); deleted++; }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, deleted: deleted }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 메신저봇 polling: GET ?action=pull&token=...  → 대기 중 전체를 {id, room, text}로 반환(삭제 안 함).
+// 봇이 bot.send 성공한 것만 action=ack 로 통보 → 그때 삭제(무유실).
 function webappPullKakao_(e) {
   if (!e || !e.parameter || e.parameter.token !== WEBAPP_BOT_TOKEN) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }))
       .setMimeType(ContentService.MimeType.JSON);
   }
-  // 봇이 세션 가진 방 목록(없으면 전체 대상)
-  var allow = null;
-  if (e.parameter.rooms) {
-    allow = {};
-    String(e.parameter.rooms).split('\n').forEach(function (r) { var k = r.trim(); if (k) allow[k] = true; });
-  }
-
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var ss = SpreadsheetApp.openById(MASTER_SS_ID);
-    var sh = ss.getSheetByName(WEBAPP_OUTBOX_TAB);
+    var sh = outboxSheet_();
     var items = [];
-    if (sh && sh.getLastRow() >= 2) {
-      var values = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
+    var last = sh.getLastRow();
+    if (last >= 2) {
+      var values = sh.getRange(2, 1, last - 1, 4).getValues();   // id, 시각, 방, 메시지
       for (var i = 0; i < values.length; i++) {
-        if (values[i][3] !== 'N') continue;
-        var room = String(values[i][1]);
-        if (allow && !allow[room]) continue;   // 봇이 못 보내는 방은 'N'으로 남겨 재시도
-        items.push({ room: room, text: String(values[i][2]) });
-        sh.getRange(i + 2, 4).setValue('Y');
+        items.push({ id: String(values[i][0]), room: String(values[i][2]), text: String(values[i][3]) });
       }
     }
     return ContentService.createTextOutput(JSON.stringify({ ok: true, items: items }))

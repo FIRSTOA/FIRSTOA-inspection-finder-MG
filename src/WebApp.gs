@@ -8,6 +8,7 @@ function doGet(e) {
 
   // 메신저봇 polling: 웹앱 보내기로 적재된 양식을 카톡방에 게시하기 위해 가져감
   if (action0 === 'pull') return webappPullKakao_(e);
+  if (action0 === 'ack') return webappAck_(e);   // 봇이 전송 성공한 id 통보 → 큐에서 삭제
 
   // 관리 콘솔 (메인 화면)
   if (action0 === 'console') {
