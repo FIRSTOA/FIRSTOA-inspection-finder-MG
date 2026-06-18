@@ -6,6 +6,9 @@
  * 엔드포인트는 검색용과 동일 배포(URL 고정 — "기존 배포 편집→새 버전").
  */
 
+import { buildRecords } from "./inspectParser";
+import { insertRecord, getConfig, getRoomMap, enqueueOutbox } from "./supabase";
+
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
 
@@ -98,18 +101,70 @@ export type SavePayload = {
   author?: string;         // 작성자
   ts?: string;             // 클라이언트 작성 시각
 };
-export function sendForm(payload: SavePayload): Promise<SaveResp> {
-  const ctrl = new AbortController();
-  const timer = window.setTimeout(() => ctrl.abort(), 30000);
-  return fetch(GAS_GET_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action: "save", ...payload }),
-    signal: ctrl.signal,
-  })
-    .then((r) => r.json() as Promise<SaveResp>)
-    .catch((e) => ({ ok: false, error: e.name === "AbortError" ? "시간 초과" : (e.message || "네트워크 오류") }))
-    .finally(() => window.clearTimeout(timer));
+// 작성 시각(ISO) → KST yyyy-MM-dd (작성일 컬럼/ _dupKey 용)
+function toKstDate(ts?: string): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+// 지역 + AS여부 → 보낼 방 목록 (TEST_MODE/방이름 모두 Supabase 시트에서 조회)
+async function resolveRooms(region: string, hasAS: boolean): Promise<string[]> {
+  const cfg = await getConfig();
+  const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+  if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
+  const key = String(region || "").trim().toUpperCase();
+  const map = await getRoomMap();
+  const inspectRoom = map["점검|" + key];
+  if (!inspectRoom) return [testRoom];           // 미지원 지역(E·빈값 등)
+  const rooms = [inspectRoom];                    // 점검방은 항상
+  if (hasAS) {
+    const asRoom = map["AS|" + key];
+    if (asRoom) rooms.push(asRoom);               // AS방은 AS 포함 시
+  }
+  return rooms;
+}
+
+// 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).
+export async function sendForm(payload: SavePayload): Promise<SaveResp> {
+  try {
+    const text = String(payload.text || "");
+    if (!text.trim()) return { ok: false, error: "내용이 비어있습니다." };
+
+    const built = buildRecords(text, toKstDate(payload.ts), payload.author || "", "");
+    if (!built.hasInspect && !built.hasAS) {
+      return { ok: false, error: `구분에 점검/AS가 없어 저장 대상이 아닙니다. (mode=${payload.mode || "?"})` };
+    }
+    if (!built.inspect && !built.as) return { ok: false, error: "업체명을 찾지 못했습니다." };
+
+    let anyNew = false;
+    const tabs: string[] = [];
+    if (built.inspect) {
+      const r = await insertRecord("jeomgeom", built.inspect);
+      tabs.push(`점검(${r === "new" ? "신규" : "중복"})`);
+      if (r === "new") anyNew = true;
+    }
+    if (built.as) {
+      const r = await insertRecord("as_records", built.as);
+      tabs.push(`AS(${r === "new" ? "신규" : "중복"})`);
+      if (r === "new") anyNew = true;
+    }
+
+    let rooms: string[] = [];
+    if (anyNew) {
+      rooms = await resolveRooms(built.region, built.hasAS);
+      for (const room of rooms) await enqueueOutbox(room, text);
+    }
+
+    return {
+      ok: true,
+      message: anyNew ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복).",
+    };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
 }
 
 // 사진 → 양식 변환 (POST). 단순요청(text/plain)이라 프리플라이트 없이 GAS doPost 호출.

@@ -1,29 +1,28 @@
 /**
- * 메신저봇R - 웹앱 저장 양식을 지역별 방에 자동 게시. (버전 0.7.39a+, 멀티룸, 무유실)
+ * 메신저봇R - Supabase outbox 폴링 → 지역별 방에 자동 게시 (GAS 미경유, v0.7.39a+).
  *
- *  방식(ack 기반 무유실):
- *   - pull: 대기 중 전체를 {id, room, text}로 받음(서버는 삭제 안 함)
- *   - bot.send(room, text) 성공(true)한 것만 ack → 서버가 그 id 삭제
- *   - 실패(false: 봇이 그 방 멤버 아님/일시 오류)한 건 큐에 남아 다음 폴링에 재시도 → 유실 0
- *   - 방 활동(onMessage) 시 폴링 즉시 깨움 → 지연 최소
+ *  흐름:
+ *   - pull  : GET  /rest/v1/outbox?select=id,room,text&order=created_at.asc
+ *   - send  : bot.send(room, text) 성공(true)한 것만 id 수집
+ *   - ack   : DELETE /rest/v1/outbox?id=in.(id1,id2,...)  ← 전송 성공분만 삭제(무유실)
+ *   - 실패분은 큐에 남아 다음 폴링 재시도
+ *   - WakeLock 으로 화면 꺼도 CPU 유지(Doze 방지), 메시지 오면 즉시 폴링
  *
- *  ★ 봇이 알림 보낼 방들(테스트 전용방 / 운영 8개 방)의 멤버여야 함.
- *    v39 bot.send 는 방 활동 없이도 멤버 방엔 전송됨(v36의 세션 식음 문제 해결).
- *  ★ v39에서 컴파일 모드 에러 시 인터프리터 모드 사용(패치노트 권장).
+ *  ★ 봇이 알림 보낼 방(테스트 전용방 / 운영 방)의 멤버여야 함.
  */
 
 // ===================== 설정 =====================
-const WEBAPP_URL    = "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
-const BOT_TOKEN     = "firstoa2026";
-const POLL_INTERVAL = 7000;            // 7초 (백업 폴링 주기)
+const SUPABASE_URL  = "https://jwhwicplfwrorrgtqrlw.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3aHdpY3BsZndyb3JyZ3Rxcmx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODg0MTQsImV4cCI6MjA5NzM2NDQxNH0.Dx227ZN2b8w6116mrjimoRiYkElddB3pqk9ys4DL72U";
+const POLL_INTERVAL = 7000;   // 7초
 // ================================================
 
+const REST = SUPABASE_URL + "/rest/v1";
 const bot = BotManager.getCurrentBot();
 var wakePoll = false;
 var lastPull = 0;
 
-// ---- WakeLock: CPU가 얼지(Doze) 않게 붙잡아 백그라운드 폴링이 멈추지 않게 함 ----
-// 폰 컨텍스트를 버전별로 시도해서 PARTIAL_WAKE_LOCK 획득. 실패해도 봇은 정상 동작(그땐 화면 켜둠 필요).
+// ---- WakeLock: CPU가 얼지(Doze) 않게 ----
 var _wakeLock = null;
 function acquireWakeLock() {
   if (_wakeLock !== null) { try { if (_wakeLock.isHeld()) return; } catch (e) {} }
@@ -41,7 +40,6 @@ function acquireWakeLock() {
 }
 
 function onMessage(msg) {
-  // 메시지 오면 CPU가 깨어난 김에 즉시 폴링(쌓인 것 바로 배달) — 단 2초 디바운스.
   try {
     if (java.lang.System.currentTimeMillis() - lastPull > 2000) {
       wakePoll = true;
@@ -51,29 +49,43 @@ function onMessage(msg) {
 }
 bot.addListener(Event.MESSAGE, onMessage);
 
-function httpGet(qs) {
-  return org.jsoup.Jsoup.connect(WEBAPP_URL + qs)
-    .ignoreContentType(true).followRedirects(true).timeout(20000).execute().body();
+function httpGet(path) {
+  return org.jsoup.Jsoup.connect(REST + path)
+    .header("apikey", SUPABASE_ANON)
+    .header("Authorization", "Bearer " + SUPABASE_ANON)
+    .ignoreContentType(true).followRedirects(true).timeout(20000)
+    .execute().body();
+}
+
+function httpDelete(path) {
+  org.jsoup.Jsoup.connect(REST + path)
+    .header("apikey", SUPABASE_ANON)
+    .header("Authorization", "Bearer " + SUPABASE_ANON)
+    .ignoreContentType(true).followRedirects(true).timeout(20000)
+    .method(org.jsoup.Connection.Method.DELETE)
+    .execute();
 }
 
 function pollOnce() {
   lastPull = java.lang.System.currentTimeMillis();
-  var data = JSON.parse(httpGet("?action=pull&token=" + encodeURIComponent(BOT_TOKEN)));
-  if (!data || !data.ok || !data.items || !data.items.length) return;
+  var body = httpGet("/outbox?select=id,room,text&order=created_at.asc");
+  var items = JSON.parse(body);
+  if (!items || !items.length) return;
   var acked = [];
-  for (var i = 0; i < data.items.length; i++) {
-    var it = data.items[i];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
     var r = false;
     try { r = bot.send(it.room, it.text); } catch (e) {}
     if (r === true) { acked.push(it.id); Log.i("[게시] " + it.room); }
   }
   if (acked.length) {
-    try { httpGet("?action=ack&token=" + encodeURIComponent(BOT_TOKEN) + "&ids=" + encodeURIComponent(acked.join(","))); } catch (e) {}
+    // PostgREST in 필터: id=in.(uuid1,uuid2,...)
+    try { httpDelete("/outbox?id=in.(" + acked.join(",") + ")"); } catch (e) { Log.e("[ack] " + e); }
   }
 }
 
 function startPolling() {
-  acquireWakeLock();   // CPU 유지(Doze 방지) — 백그라운드 폴링이 멈추지 않게
+  acquireWakeLock();
   var threads = java.lang.Thread.getAllStackTraces().keySet().toArray();
   for (var i in threads) {
     var nm = String(threads[i].getName());
@@ -92,7 +104,7 @@ function startPolling() {
     }
   });
   t.setName("inspPoller"); t.setDaemon(true); t.start();
-  Log.i("[봇] 시작");
+  Log.i("[봇] Supabase outbox 폴링 시작");
 }
 function onStartCompile() { startPolling(); }
 startPolling();
