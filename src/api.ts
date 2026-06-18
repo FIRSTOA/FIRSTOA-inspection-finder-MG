@@ -88,6 +88,30 @@ export function getVendorDetail(vendor: string): Promise<DetailResp> {
   return jsonp<DetailResp>({ action: "detail", q: vendor });
 }
 
+// 완성 양식 → 시트 저장 + 카톡 알림 큐 적재 (POST).
+// 단순요청(text/plain)이라 프리플라이트 없이 GAS doPost(action=save) 호출.
+export type SaveResp = { ok?: boolean; message?: string; error?: string };
+export type SavePayload = {
+  text: string;            // 완성된 양식 전체 텍스트 (카톡에 게시될 내용)
+  vendor?: string;         // 거래처명
+  mode?: string;           // 점검/미양식/청정기/삼성노트
+  author?: string;         // 작성자
+  ts?: string;             // 클라이언트 작성 시각
+};
+export function sendForm(payload: SavePayload): Promise<SaveResp> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 30000);
+  return fetch(GAS_GET_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "save", ...payload }),
+    signal: ctrl.signal,
+  })
+    .then((r) => r.json() as Promise<SaveResp>)
+    .catch((e) => ({ ok: false, error: e.name === "AbortError" ? "시간 초과" : (e.message || "네트워크 오류") }))
+    .finally(() => window.clearTimeout(timer));
+}
+
 // 사진 → 양식 변환 (POST). 단순요청(text/plain)이라 프리플라이트 없이 GAS doPost 호출.
 export type VisionResp = { ok?: boolean; text?: string; error?: string };
 export function visionForm(dataUrl: string, kind: "inspection" | "air"): Promise<VisionResp> {

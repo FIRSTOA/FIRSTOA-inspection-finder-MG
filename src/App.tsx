@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import UnifiedHistory from "./UnifiedHistory";
-import { visionForm } from "./api";
+import { visionForm, sendForm } from "./api";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -3522,10 +3522,13 @@ export default function App() {
     }
   }, [mode, listOutput, textOutput]);
 
-  const handleCopyAll = async () => {
-    const target = resultBlocks
+  const buildResultText = () =>
+    resultBlocks
       .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? mergeBlockEdit(b.text, editedBlocks[i]) : b.text))
       .join(blockJoiner);
+
+  const handleCopyAll = async () => {
+    const target = buildResultText();
 
     if (!target) {
       showToast("복사할 내용이 없어요", "error");
@@ -3534,6 +3537,37 @@ export default function App() {
 
     const result = await copyTextToClipboard(target);
     showToast(result.message, result.ok ? "success" : "error");
+  };
+
+  const [sending, setSending] = useState(false);
+
+  const handleSendAll = async () => {
+    const target = buildResultText();
+    if (!target) {
+      showToast("보낼 내용이 없어요", "error");
+      return;
+    }
+    if (sending) return;
+    setSending(true);
+    showToast("보내는 중…");
+    const modeLabel =
+      mode === "inspection" ? "점검" :
+      mode === "blank-report" ? "미양식" :
+      mode === "air-purifier" ? "청정기" :
+      mode === "samsung-note" ? "삼성노트" : String(mode);
+    const res = await sendForm({
+      text: target,
+      vendor: currentVendor,
+      mode: modeLabel,
+      author,
+      ts: new Date().toISOString(),
+    });
+    setSending(false);
+    if (res.ok) {
+      showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
+    } else {
+      showToast("전송 실패: " + (res.error || "알 수 없는 오류"), "error");
+    }
   };
 
   const handleReset = () => {
@@ -3705,11 +3739,20 @@ export default function App() {
           <button
             onClick={handleCopyAll}
             disabled={!hasOutput}
-            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            className="rounded-xl px-4 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             style={hasOutput ? { background: "linear-gradient(135deg, #475569, #1E293B)" } : undefined}
             aria-label="결과 전체 복사"
           >
             📋 복사
+          </button>
+          <button
+            onClick={handleSendAll}
+            disabled={!hasOutput || sending}
+            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #2d6cdf, #1746a2)" } : undefined}
+            aria-label="시트 저장 후 카톡으로 보내기"
+          >
+            {sending ? "보내는 중…" : "📤 보내기"}
           </button>
         </div>
       </div>
