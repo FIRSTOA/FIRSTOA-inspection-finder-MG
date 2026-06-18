@@ -6,6 +6,9 @@
 function doGet(e) {
   const action0 = (e.parameter.action || 'console').toLowerCase();
 
+  // 메신저봇 polling: 웹앱 보내기로 적재된 양식을 카톡방에 게시하기 위해 가져감
+  if (action0 === 'pull') return webappPullKakao_(e);
+
   // 관리 콘솔 (메인 화면)
   if (action0 === 'console') {
     return HtmlService.createHtmlOutputFromFile('Console')
@@ -52,6 +55,7 @@ function doPost(e) {
     try { data = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { data = {}; }
     var action = String(data.action || '').toLowerCase();
     if (action === 'vision') result = visionExtractForm(data.image, data.kind || 'inspection');
+    else if (action === 'save') result = webappSaveInspection_(data);
     else result = { error: 'Invalid POST action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
