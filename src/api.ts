@@ -7,7 +7,7 @@
  */
 
 import { buildRecords } from "./inspectParser";
-import { insertRecord, getConfig, getRoomMap, enqueueOutbox } from "./supabase";
+import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows } from "./supabase";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -46,49 +46,79 @@ export type DetailResp = { vendor: string; error?: string } & Record<
   Array<Record<string, unknown>> | string | undefined
 >;
 
-let jsonpSeq = 0;
+// ── 검색: GAS _idx_* 시트 → Supabase RPC 직접 조회로 이전 (통합시트 은퇴) ──
 
-function jsonp<T>(params: Record<string, string>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const cb = `__gas_cb_${Date.now()}_${jsonpSeq++}`;
-    const script = document.createElement("script");
-
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("요청 시간 초과"));
-    }, 30000);
-
-    function cleanup() {
-      window.clearTimeout(timeout);
-      delete (window as unknown as Record<string, unknown>)[cb];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
-
-    (window as unknown as Record<string, unknown>)[cb] = (data: T) => {
-      cleanup();
-      resolve(data);
-    };
-
-    const qs = new URLSearchParams({ ...params, callback: cb }).toString();
-    script.src = `${GAS_GET_URL}?${qs}`;
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("네트워크 오류 — 인터넷/배포 상태를 확인하세요"));
-    };
-    document.body.appendChild(script);
-  });
+// 거래처 검색(접두) → Supabase search_vendors RPC → {results, total}
+type RpcHit = { vendor: string; counts: Record<string, number>; meta: VendorMeta; total: number };
+export async function searchVendors(q: string): Promise<SearchResp> {
+  const query = String(q || "").trim();
+  if (query.length < 1) return { results: [], total: 0 };
+  try {
+    const rows = await rpc<RpcHit[]>("search_vendors", { q: query });
+    const results: VendorHit[] = rows.map((r) => ({
+      vendor: r.vendor,
+      counts: r.counts || {},
+      meta: r.meta || {},
+    }));
+    return { results, total: results.length };
+  } catch (e) {
+    return { results: [], total: 0, error: (e as Error).message };
+  }
 }
 
-export function searchVendors(q: string): Promise<SearchResp> {
-  return jsonp<SearchResp>({ action: "search", q });
+// 거래처 상세(전 카테고리) → Supabase vendor_detail RPC → {vendor, [카테고리]: 레코드[]}
+type RpcDetailRow = { tab: string; rows: Array<Record<string, unknown>> };
+export async function getVendorDetail(vendor: string): Promise<DetailResp> {
+  const v = String(vendor || "").trim();
+  if (!v) return { vendor: "" };
+  try {
+    const rows = await rpc<RpcDetailRow[]>("vendor_detail", { v });
+    const out: DetailResp = { vendor: v };
+    for (const r of rows) (out as Record<string, unknown>)[r.tab] = r.rows || [];
+    return out;
+  } catch (e) {
+    return { vendor: v, error: (e as Error).message };
+  }
 }
 
-export function getInspForms(vendor: string): Promise<InspFormsResp> {
-  return jsonp<InspFormsResp>({ action: "inspforms", q: vendor });
+// 점검/AS 최근 양식(원문 재사용) → jeomgeom/as_records 직접 조회
+const VKEY = encodeURIComponent("_업체명");
+function vendorEq(v: string): string {
+  return `${VKEY}=eq.${encodeURIComponent(v)}`;
 }
-
-export function getVendorDetail(vendor: string): Promise<DetailResp> {
-  return jsonp<DetailResp>({ action: "detail", q: vendor });
+function modelLineCount(text: string): number {
+  const m = text.match(/모델명/g);
+  return m ? m.length : 1;
+}
+function toForm(r: Record<string, unknown>, gubun: Gubun): InspForm {
+  const text = String(r["_원문"] ?? "");
+  return {
+    gubun,
+    date: String(r["작성일"] ?? ""),
+    model: String(r["모델명"] ?? ""),
+    author: String(r["작성자"] ?? ""),
+    region: String(r["지역"] ?? ""),
+    count: text ? modelLineCount(text) : 1,
+    text,
+    source: gubun,
+  };
+}
+export async function getInspForms(vendor: string): Promise<InspFormsResp> {
+  const v = String(vendor || "").trim();
+  if (!v) return { vendor: "", forms: [] };
+  try {
+    const [insp, as] = await Promise.all([
+      selectRows<Record<string, unknown>>("jeomgeom", `select=*&${vendorEq(v)}&order=id.desc&limit=6`),
+      selectRows<Record<string, unknown>>("as_records", `select=*&${vendorEq(v)}&order=id.desc&limit=4`),
+    ]);
+    const forms: InspForm[] = [
+      ...insp.map((r) => toForm(r, "점검")),
+      ...as.map((r) => toForm(r, "AS")),
+    ];
+    return { vendor: v, forms };
+  } catch (e) {
+    return { vendor: v, forms: [], error: (e as Error).message };
+  }
 }
 
 // 완성 양식 → 시트 저장 + 카톡 알림 큐 적재 (POST).

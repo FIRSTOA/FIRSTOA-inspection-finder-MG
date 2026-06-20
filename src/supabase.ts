@@ -20,6 +20,30 @@ const BASE_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
 };
 
+// PostgREST RPC 호출 (POST /rpc/<fn>). Supabase 함수 search_vendors / vendor_detail 용.
+export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${REST}/rpc/${fn}`, {
+    method: "POST",
+    headers: BASE_HEADERS,
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`RPC ${fn} 실패(${res.status}): ${t.slice(0, 200)}`);
+  }
+  return (await res.json()) as T;
+}
+
+// 테이블 직접 조회 (select + 필터). 점검/AS 원문 재사용(getInspForms) 용.
+export async function selectRows<T>(table: string, query: string): Promise<T[]> {
+  const res = await fetch(`${REST}/${table}?${query}`, { headers: BASE_HEADERS });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`조회 실패 ${table}(${res.status}): ${t.slice(0, 160)}`);
+  }
+  return (await res.json()) as T[];
+}
+
 export type InsertResult = "new" | "dup";
 
 // 행 insert. 201 → 신규, 409(유니크 _dupKey 충돌) → 중복.
