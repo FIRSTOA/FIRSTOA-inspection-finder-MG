@@ -3183,14 +3183,16 @@ function extractVendorFromText(text: string): string {
 // 키맨/접수자 문자열 → [{label, name, phone}]. 여러 명(전화 2개 이상)이면 분리.
 const PHONE_RE = /(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|\d{2,4}-\d{3,4}-\d{4})/;
 export function parseKeymen_(raw: string): { label: string; name: string; phone: string }[] {
-  const s = String(raw || "").trim();
-  if (!s) return [];
-  let parts = s.split(/[,/;·\n]+/).map((x) => x.trim()).filter(Boolean);
+  const s0 = String(raw || "").trim();
+  if (!s0) return [];
+  // "이연철님 박현수님"처럼 공백+님으로 붙은 여러 명 → 님 뒤를 경계로.
+  const s = s0.replace(/님/g, "님|");
+  let parts = s.split(/[,/;·\n|]+/).map((x) => x.trim()).filter(Boolean);
   if (parts.length <= 1) {
-    const phones = s.match(new RegExp(PHONE_RE, "g"));
+    const phones = s0.match(new RegExp(PHONE_RE, "g"));
     if (phones && phones.length >= 2) {
       parts = [];
-      let rest = s;
+      let rest = s0;
       for (const ph of phones) {
         const idx = rest.indexOf(ph);
         parts.push(rest.slice(0, idx + ph.length).trim());
@@ -3199,12 +3201,14 @@ export function parseKeymen_(raw: string): { label: string; name: string; phone:
       if (rest.trim()) parts[parts.length - 1] += " " + rest.trim();
     }
   }
-  return parts.map((p) => {
-    const m = p.match(PHONE_RE);
-    const phone = m ? m[0].trim() : "";
-    const name = p.replace(phone, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
-    return { label: p, name, phone };
-  });
+  return parts
+    .map((p) => {
+      const m = p.match(PHONE_RE);
+      const phone = m ? m[0].trim() : "";
+      const name = p.replace(phone, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+      return { label: p.trim(), name, phone };
+    })
+    .filter((k) => (k.name || k.phone) && !/^(유|무|유\/무)$/.test(k.name) && !/처리내용|특이사항|필히작성/.test(k.label));
 }
 
 export default function App() {

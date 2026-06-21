@@ -97,6 +97,44 @@ function ChipMulti({ label, options, value, onChange }: { label: string; options
   );
 }
 
+// 그룹별 다중선택 칩 (인텔/라이젠/맥/세대 등) + 직접입력
+function ChipGroups({ label, groups, value, onChange }: { label: string; groups: { title: string; options: string[] }[]; value: string; onChange: (v: string) => void }) {
+  const [custom, setCustom] = useState("");
+  const sel = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const known = groups.flatMap((g) => g.options);
+  const set = (arr: string[]) => onChange(arr.join(", "));
+  const toggle = (o: string) => set(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o]);
+  const addCustom = () => { const c = custom.trim(); if (c && !sel.includes(c)) set([...sel, c]); setCustom(""); };
+  return (
+    <div className="block">
+      <span className="text-xs font-medium text-slate-500">{label} <span className="text-slate-300">(중복 가능)</span></span>
+      {groups.map((g) => (
+        <div key={g.title} className="mt-1.5">
+          <div className="text-[10px] font-bold text-slate-400">{g.title}</div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {g.options.map((o) => (
+              <button key={o} type="button" onClick={() => toggle(o)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#3182F6] text-white" : "bg-slate-100 text-slate-600"}`}>{o}</button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {sel.filter((s) => !known.includes(s)).length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {sel.filter((s) => !known.includes(s)).map((s) => (
+            <button key={s} type="button" onClick={() => toggle(s)} className="rounded-full bg-[#3182F6] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
+          ))}
+        </div>
+      )}
+      <div className="mt-1.5 flex gap-1.5">
+        <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#3182F6]" />
+        <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
+      </div>
+    </div>
+  );
+}
+
 export default function PcForm({ form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
   const set = (k: keyof PcFormState) => (v: string) => setForm({ ...form, [k]: v });
@@ -155,7 +193,12 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
 
       <div className="text-[11px] font-bold text-slate-400">＊사양</div>
       <ChipMulti label="사무/설계/디자인/개발" options={["사무", "설계", "디자인", "개발"]} value={form.purpose} onChange={set("purpose")} />
-      <ChipMulti label="세부사양" options={["i3", "i5", "i7", "i9", "AMD", "Mac"]} value={form.spec} onChange={set("spec")} />
+      <ChipGroups label="세부사양" value={form.spec} onChange={set("spec")} groups={[
+        { title: "인텔", options: ["i3", "i5", "i7", "i9"] },
+        { title: "라이젠", options: ["라이젠3", "라이젠5", "라이젠7", "라이젠9"] },
+        { title: "맥", options: ["M1", "M2", "M3", "M4"] },
+        { title: "세대", options: ["11세대", "12세대", "13세대", "14세대"] },
+      ]} />
       <div className="grid grid-cols-2 gap-2">
         <Field label="지역" value={form.region} onChange={set("region")} />
         <Field label="등급" value={form.grade} onChange={set("grade")} />
