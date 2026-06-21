@@ -75,10 +75,10 @@ type ModeConfig = {
 
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
-// 블랙&화이트 컨셉: 모든 모드 동일한 모노크롬 팔레트 (구분은 탭 라벨로만)
-const BW_ACCENT = "#334155";
-const BW_SOFT = "#EEF2F7";
-const BW_TEXT = "#1E293B";
+// 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
+const BW_ACCENT = "#3182F6";
+const BW_SOFT = "#EFF6FF";
+const BW_TEXT = "#191F28";
 const MODE_CONFIG: Record<Mode, ModeConfig> = {
   inspection: {
     label: "점검",
@@ -3685,7 +3685,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
+    <div className="min-h-screen bg-[#F9FAFB] text-slate-900">
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
@@ -3726,8 +3726,7 @@ export default function App() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => { setMoreOpen(false); if (!active) handleModeChange(target); }}
-                  className={`rounded-xl py-2.5 text-sm transition ${active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"}`}
-                  style={{ background: active ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent", boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined }}
+                  className={`rounded-xl py-2.5 text-sm transition ${active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"}`}
                 >
                   {label}
                 </button>
@@ -3739,8 +3738,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"}`}
-                  style={{ background: moreActive ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent", boxShadow: moreActive ? "0 6px 16px rgba(0,0,0,0.28)" : undefined }}
+                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-white font-bold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -3768,7 +3766,7 @@ export default function App() {
 
         {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
         {(mode === "inspection" || mode === "air-purifier") && (
-          <div className="mb-3 flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
+          <div className="mb-3 flex gap-1 rounded-xl bg-slate-100 p-1">
             {([["복합기", "inspection"], ["청정기", "air-purifier"]] as [string, Mode][]).map(([label, target]) => {
               const active = mode === target;
               return (
@@ -3776,7 +3774,7 @@ export default function App() {
                   key={label}
                   onClick={() => { if (!active) handleModeChange(target); }}
                   className={`flex-1 rounded-lg py-2 text-xs transition ${
-                    active ? "bg-slate-800 font-semibold text-white" : "font-medium text-slate-500 hover:text-slate-800"
+                    active ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {label}
@@ -3946,7 +3944,7 @@ export default function App() {
               onClick={() => handleSendAll("normal")}
               disabled={!hasOutput || sending}
               className="flex-[1.5] whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#1746a2" } : undefined}
+              style={hasOutput && !sending ? { background: "#3182F6" } : undefined}
             >
               {sending ? "보내는 중…" : "보내기"}
             </button>
