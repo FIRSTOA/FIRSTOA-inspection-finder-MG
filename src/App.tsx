@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import UnifiedHistory from "./UnifiedHistory";
 import { visionForm, sendForm } from "./api";
-import { uploadPhoto } from "./supabase";
+import { uploadPhoto, createAlbum } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -3544,13 +3544,13 @@ export default function App() {
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
-  const photoUrlsRef = useRef<string[]>([]);
+  const photoLinkRef = useRef<string>(""); // 업로드+앨범 생성 후 모아보기 링크(캐시)
 
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
       setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
-      photoUrlsRef.current = []; // 새 사진 추가 → 업로드 캐시 무효화
+      photoLinkRef.current = ""; // 새 사진 추가 → 캐시 무효화
     }
     e.target.value = "";
   };
@@ -3560,20 +3560,20 @@ export default function App() {
       if (p) URL.revokeObjectURL(p.url);
       return prev.filter((_, i) => i !== idx);
     });
-    photoUrlsRef.current = [];
+    photoLinkRef.current = "";
   };
 
-  // 첨부 사진 병렬 업로드(캐시) → 공개 URL 배열. (대량 대비 동시 4개)
-  const ensurePhotosUploaded = async (): Promise<string[]> => {
-    if (!photos.length) return [];
-    if (photoUrlsRef.current.length === photos.length) return photoUrlsRef.current;
+  // 첨부 사진 병렬 업로드(동시 4개) → 앨범 1건 생성 → 모아보기 링크 1개 반환(캐시).
+  const ensurePhotoLink = async (): Promise<string> => {
+    if (!photos.length) return "";
+    if (photoLinkRef.current) return photoLinkRef.current;
     const now = new Date();
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const urls: string[] = new Array(photos.length);
-    let next = 0, done = 0;
+    let nextIdx = 0, done = 0;
     const worker = async () => {
-      while (next < photos.length) {
-        const i = next++;
+      while (nextIdx < photos.length) {
+        const i = nextIdx++;
         const dataUrl = await fileToDownscaledDataUrl(photos[i].file, 1600);
         const blob = await (await fetch(dataUrl)).blob();
         urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
@@ -3582,8 +3582,9 @@ export default function App() {
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
-    photoUrlsRef.current = urls;
-    return urls;
+    const albumId = await createAlbum(urls, currentVendor);
+    photoLinkRef.current = `${window.location.origin}${window.location.pathname}?album=${albumId}`;
+    return photoLinkRef.current;
   };
 
   const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal") => {
@@ -3596,8 +3597,8 @@ export default function App() {
     setSending(true);
     showToast(kind === "normal" ? "보내는 중…" : `${kind} 요청 보내는 중…`);
     try {
-      const photoUrls = await ensurePhotosUploaded();
-      if (photoUrls.length) target += `\n\n📷 사진 (${photoUrls.length}장)\n` + photoUrls.join("\n");
+      const link = await ensurePhotoLink();
+      if (link) target += `\n\n📷 현장사진 ${photos.length}장 모아보기:\n${link}`;
     } catch (e) {
       setSending(false);
       showToast("사진 업로드 실패: " + ((e as Error).message || "오류"), "error");
@@ -3631,7 +3632,7 @@ export default function App() {
     setSelectedItem(0);
     setAirForm(EMPTY_AIR_FORM);
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
-    photoUrlsRef.current = [];
+    photoLinkRef.current = "";
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
   };

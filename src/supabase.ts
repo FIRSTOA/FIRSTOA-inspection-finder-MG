@@ -91,6 +91,26 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
   return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
 }
 
+// 사진 여러 장 → 앨범 1건 생성, id 반환. (링크 1개로 모아보기)
+export async function createAlbum(urls: string[], vendor: string): Promise<string> {
+  const res = await fetch(`${REST}/photo_albums`, {
+    method: "POST",
+    headers: { ...BASE_HEADERS, Prefer: "return=representation" },
+    body: JSON.stringify({ urls, vendor }),
+  });
+  if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`앨범 생성 실패(${res.status}): ${t.slice(0, 160)}`); }
+  const rows = (await res.json()) as Array<{ id: string }>;
+  return rows[0].id;
+}
+
+export async function getAlbum(id: string): Promise<{ vendor: string; urls: string[]; created_at: string }> {
+  const res = await fetch(`${REST}/photo_albums?id=eq.${encodeURIComponent(id)}&select=vendor,urls,created_at`, { headers: BASE_HEADERS });
+  if (!res.ok) throw new Error(`앨범 조회 실패(${res.status})`);
+  const rows = (await res.json()) as Array<{ vendor: string; urls: string[]; created_at: string }>;
+  if (!rows.length) throw new Error("앨범을 찾을 수 없어요");
+  return rows[0];
+}
+
 export async function enqueueOutbox(room: string, text: string): Promise<void> {
   const res = await fetch(`${REST}/outbox`, {
     method: "POST",
