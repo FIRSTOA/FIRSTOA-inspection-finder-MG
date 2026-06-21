@@ -3205,7 +3205,7 @@ export function parseKeymen_(raw: string): { label: string; name: string; phone:
     .map((p) => {
       const m = p.match(PHONE_RE);
       const phone = m ? m[0].trim() : "";
-      const name = p.replace(phone, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+      const name = p.replace(phone, "").replace(/\([^)]*\)/g, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
       return { label: p.trim(), name, phone };
     })
     .filter((k) => (k.name || k.phone) && !/^(유|무|유\/무)$/.test(k.name) && !/처리내용|특이사항|필히작성/.test(k.label));
@@ -3524,7 +3524,9 @@ export default function App() {
     const company = pick(/업체명\s*[:：]\s*(.+)/);
     const region = pick(/지역\s*[:：]\s*(.+)/);
     const grade = pick(/등급\s*[:：]\s*(.+)/);
-    const keymanRaw = pick(/키맨\/접수자\s*[:：]\s*(.+)/);
+    // 키맨/접수자는 여러 줄일 수 있음(이름1 전화1\n이름2 전화2) → 구분선/다음항목 전까지 통째로.
+    const kmM = text.match(/키맨\/접수자\s*[:：]\s*([\s\S]*?)(?=[\r\n]\s*(?:[ㅡ\-_=]{3,}|\d+\s*\.)|$)/);
+    const keymanRaw = kmM ? kmM[1].trim() : "";
     return { grade, company, region, keymen: parseKeymen_(keymanRaw), author };
   };
 
