@@ -121,7 +121,7 @@ export async function getAirForms(vendor: string): Promise<AirForm[]> {
   if (!v) return [];
   const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&${vendorEq(v)}&order=id.desc&limit=30`);
   return rows
-    .filter((r) => AIR_RX.test(String(r["모델명"] ?? "")))
+    .filter((r) => AIR_RX.test(String(r["모델명"] ?? "")) || AIR_RX.test(String(r["_원문"] ?? "")))
     .slice(0, 6)
     .map((r) => ({
       date: String(r["작성일"] ?? ""), model: String(r["모델명"] ?? ""),
