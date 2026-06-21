@@ -3,8 +3,20 @@
  *   거래처명 입력 → 후보 → 선택 → 구분별(점검/AS) 최근 1건 카드(기종·댓수·지역·작성자·날짜)
  *   → "불러오기"가 _원문을 변환기에 주입(onLoadForm)한다. 점검+AS는 점검으로 병합.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { searchVendors, getInspForms, type InspForm, type VendorHit, type VendorMetaEntry } from "./api";
+
+// 거래처명 기준이름: 괄호·공백·구분기호 제거 후 끝의 위치 수식어(본사/지점/N층/N호/공장 등) 반복 제거.
+// "질경이 본사", "질경이본사3층", "질경이(지하1층)" → "질경이" 로 묶기 위한 휴리스틱(완벽X, 정밀통합은 별칭테이블 단계).
+const QUALIFIER =
+  /(본사|본점|지사|지점|영업점|본관|별관|신관|공장|창고|물류센터|센터|지하)?\d*(층|호|동|관)$|(본사|본점|지사|지점|영업점|공장|창고)$/;
+export function vendorBaseName(name: string): string {
+  const orig = String(name || "").trim();
+  let s = orig.replace(/[(（][^)）]*[)）]/g, "").replace(/[\s\-–—·/]+/g, "");
+  let prev = "";
+  while (s.length > 2 && s !== prev) { prev = s; s = s.replace(QUALIFIER, ""); }
+  return s || orig;
+}
 
 type Props = {
   accent: string;
@@ -93,6 +105,17 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setShowHits(false);
   };
 
+  // 기준이름으로 후보 묶기 (질경이 본사/질경이본사 → "질경이" 그룹). 표시만, 선택은 변형 단위 유지.
+  const groups = useMemo(() => {
+    const m = new Map<string, VendorHit[]>();
+    for (const h of hits) {
+      const b = vendorBaseName(h.vendor);
+      const arr = m.get(b);
+      if (arr) arr.push(h); else m.set(b, [h]);
+    }
+    return Array.from(m.entries());
+  }, [hits]);
+
   return (
     <div>
       {/* 검색 입력 */}
@@ -127,25 +150,34 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             {!searching && hits.length === 0 && (
               <div className="px-3.5 py-2.5 text-sm text-slate-400">일치하는 거래처가 없어요</div>
             )}
-            {!searching && hits.map((h) => {
-              const j = h.meta?.["점검"];
-              const a = h.meta?.["AS"];
-              return (
-                <button
-                  key={h.vendor}
-                  type="button"
-                  onClick={() => pickVendor(h.vendor)}
-                  className="block w-full border-b border-slate-50 px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-50"
-                >
-                  <div className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</div>
-                  <div className="mt-1 space-y-0.5">
-                    {j && <MetaLine gubun="점검" e={j} />}
-                    {a && <MetaLine gubun="AS" e={a} />}
-                    {!j && !a && <span className="text-[11px] text-slate-400">점검/AS 기록 없음</span>}
+            {!searching && groups.map(([base, items]) => (
+              <div key={base}>
+                {items.length > 1 && (
+                  <div className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 px-3.5 py-1 text-[11px] font-semibold text-slate-500 backdrop-blur">
+                    {base} · {items.length}곳
                   </div>
-                </button>
-              );
-            })}
+                )}
+                {items.map((h) => {
+                  const j = h.meta?.["점검"];
+                  const a = h.meta?.["AS"];
+                  return (
+                    <button
+                      key={h.vendor}
+                      type="button"
+                      onClick={() => pickVendor(h.vendor)}
+                      className={`block w-full border-b border-slate-50 px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-50 ${items.length > 1 ? "pl-5" : ""}`}
+                    >
+                      <div className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</div>
+                      <div className="mt-1 space-y-0.5">
+                        {j && <MetaLine gubun="점검" e={j} />}
+                        {a && <MetaLine gubun="AS" e={a} />}
+                        {!j && !a && <span className="text-[11px] text-slate-400">점검/AS 기록 없음</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </div>
