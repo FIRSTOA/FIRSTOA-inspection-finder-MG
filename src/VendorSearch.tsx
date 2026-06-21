@@ -5,27 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { searchVendors, getInspForms, type InspForm, type VendorHit, type VendorMetaEntry } from "./api";
-
-// 지역 정규화: "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 없으면 원문(강남/지방 등).
-function normRegion(r: string): string {
-  const s = String(r || "").trim();
-  const m = s.match(/[A-Ea-e]/);
-  return m ? m[0].toUpperCase() : s;
-}
-// 거래처의 대표 지역 (점검 > AS > 그 외 순). 정렬·뱃지용.
-const REGION_PREF = ["점검", "AS", "미수", "불만", "임대현황표", "초과", "PC확장성", "복합기확장성", "재계약", "업체정보"];
-function primaryRegion(h: VendorHit): string {
-  const m = h.meta || {};
-  for (const k of REGION_PREF) { const r = m[k]?.r; if (r) return normRegion(String(r)); }
-  return "";
-}
-// 거래처가 가진 모든 지역(카테고리별 지역 합집합) — 지역 탭 필터용.
-function vendorRegions(h: VendorHit): string[] {
-  const s = new Set<string>();
-  const m = h.meta || {};
-  for (const k in m) { const r = m[k]?.r; if (r) s.add(normRegion(String(r))); }
-  return [...s];
-}
+import { REGIONS, REGION_LABEL, normRegion, primaryRegion, vendorRegion } from "./region";
 
 type Props = {
   accent: string;
@@ -115,24 +95,23 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setShowHits(false);
   };
 
-  // 결과에 등장하는 지역들 → 탭 (전체 + 정렬된 지역). A~E 먼저, 나머지 뒤.
+  // 거래처 점검검색: 점검/AS 기록 있는 거래처만 (불만/임대만 있는 곳은 제외).
+  const base = useMemo(
+    () => hits.filter((h) => (h.counts?.["점검"] || 0) > 0 || (h.counts?.["AS"] || 0) > 0),
+    [hits]
+  );
+
+  // 탭: 전체 + A~E(고정) + 기타(확인 안 된 게 있을 때만)
   const regionTabs = useMemo(() => {
-    const s = new Set<string>();
-    for (const h of hits) for (const r of vendorRegions(h)) s.add(r);
-    const arr = [...s].sort((a, b) => {
-      const ai = /^[A-E]$/.test(a), bi = /^[A-E]$/.test(b);
-      if (ai && bi) return a.localeCompare(b);
-      if (ai !== bi) return ai ? -1 : 1;
-      return a.localeCompare(b);
-    });
-    return ["전체", ...arr];
-  }, [hits]);
+    const hasEtc = base.some((h) => vendorRegion(h) === "기타");
+    return ["전체", ...REGIONS, ...(hasEtc ? ["기타"] : [])];
+  }, [base]);
 
   // 결과 바뀌면 지역 탭 초기화
   useEffect(() => { setActiveRegion("전체"); }, [hits]);
 
-  // 활성 지역으로 필터 (전체면 전부). 지역순 → 이름순 정렬.
-  const filtered = (activeRegion === "전체" ? hits : hits.filter((h) => vendorRegions(h).includes(activeRegion)))
+  // 활성 지역으로 필터(대표지역 1개 기준) → 이름순 정렬.
+  const filtered = (activeRegion === "전체" ? base : base.filter((h) => vendorRegion(h) === activeRegion))
     .slice()
     .sort((a, b) => primaryRegion(a).localeCompare(primaryRegion(b)) || a.vendor.localeCompare(b.vendor));
 
@@ -167,12 +146,12 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
         {showHits && (
           <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {searching && <div className="px-3.5 py-2.5 text-sm text-slate-400">검색 중…</div>}
-            {!searching && hits.length === 0 && (
-              <div className="px-3.5 py-2.5 text-sm text-slate-400">일치하는 거래처가 없어요</div>
+            {!searching && base.length === 0 && (
+              <div className="px-3.5 py-2.5 text-sm text-slate-400">점검/AS 기록이 있는 거래처가 없어요</div>
             )}
 
-            {/* 지역 탭 — 지역이 2개 이상일 때만. 클릭으로 지역 필터 */}
-            {!searching && regionTabs.length > 2 && (
+            {/* 지역 탭 (전체 / A 강북 / B 강서 / C 강남 / D 경기 / E 지방 / 기타) */}
+            {!searching && base.length > 0 && (
               <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
                 {regionTabs.map((rg) => (
                   <button
@@ -185,18 +164,24 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                         : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    {rg}
+                    {REGION_LABEL[rg] ? `${rg} ${REGION_LABEL[rg]}` : rg}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* 결과 목록 (지역순 정렬, 지역 뱃지) */}
-            {!searching && filtered.length > 0 && (
+            {/* 결과 목록. 특정 지역 탭이면 그 지역 줄만 표시 */}
+            {!searching && base.length > 0 && (
               <div className="max-h-64 overflow-y-auto">
+                {filtered.length === 0 && (
+                  <div className="px-3.5 py-2.5 text-sm text-slate-400">이 지역엔 없어요</div>
+                )}
                 {filtered.map((h) => {
+                  const showAll = activeRegion === "전체";
                   const j = h.meta?.["점검"];
                   const a = h.meta?.["AS"];
+                  const jShow = j && (showAll || normRegion(String(j.r || "")) === activeRegion) ? j : undefined;
+                  const aShow = a && (showAll || normRegion(String(a.r || "")) === activeRegion) ? a : undefined;
                   const reg = primaryRegion(h);
                   return (
                     <button
@@ -212,9 +197,8 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                         <span className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</span>
                       </div>
                       <div className="mt-1 space-y-0.5">
-                        {j && <MetaLine gubun="점검" e={j} />}
-                        {a && <MetaLine gubun="AS" e={a} />}
-                        {!j && !a && <span className="text-[11px] text-slate-400">점검/AS 기록 없음</span>}
+                        {jShow && <MetaLine gubun="점검" e={jShow} />}
+                        {aShow && <MetaLine gubun="AS" e={aShow} />}
                       </div>
                     </button>
                   );

@@ -2,8 +2,9 @@
  * 통합이력 팝업 (controlled). 자체 거래처 검색박을 가져 점검탭 선택과 무관하게 어떤 거래처든 조회 가능.
  * 9개 카테고리 탭(데이터 있는 것만 색), 탭 클릭 시 해당 카테고리 최근 레코드(최신순). 기존 백엔드 detail 사용.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getVendorDetail, searchVendors, type DetailResp, type VendorHit } from "./api";
+import { REGIONS, REGION_LABEL, primaryRegion, vendorRegion } from "./region";
 
 type Props = {
   vendor: string; // 점검탭에서 선택된 거래처(있으면 초기값)
@@ -62,8 +63,16 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const [hits, setHits] = useState<VendorHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showHits, setShowHits] = useState(false);
+  const [activeRegion, setActiveRegion] = useState<string>("전체");
   const reqSeq = useRef(0);
   const loadedFor = useRef<string>("");
+
+  // 지역 탭(전체 + A~E + 기타) — 통합이력은 전 카테고리라 모든 거래처 유지.
+  const regionTabs = useMemo(() => {
+    const hasEtc = hits.some((h) => vendorRegion(h) === "기타");
+    return ["전체", ...REGIONS, ...(hasEtc ? ["기타"] : [])];
+  }, [hits]);
+  const filteredHits = activeRegion === "전체" ? hits : hits.filter((h) => vendorRegion(h) === activeRegion);
 
   // 팝업 열릴 때: 점검탭에서 고른 거래처명을 검색창에 미리 채우고 "목록"을 보여준다(자동 선택 X).
   // 같은 회사라도 업체명 표기가 다른 경우가 있어, 사용자가 목록에서 직접 고르게 한다.
@@ -86,6 +95,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     }, 300);
     return () => window.clearTimeout(h);
   }, [q, open, override, onError]);
+
+  // 결과 바뀌면 지역 탭 초기화
+  useEffect(() => { setActiveRegion("전체"); }, [hits]);
 
   // 상세 로드 (목록에서 고른 거래처 기준)
   useEffect(() => {
@@ -141,7 +153,29 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             <div className="absolute left-3 right-3 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
               {searching && <div className="px-3 py-2 text-xs text-slate-400">검색 중…</div>}
               {!searching && hits.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">결과 없음</div>}
-              {!searching && hits.map((h) => {
+
+              {/* 지역 탭 (전체 / A 강북 … / 기타) */}
+              {!searching && hits.length > 0 && (
+                <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+                  {regionTabs.map((rg) => (
+                    <button
+                      key={rg}
+                      type="button"
+                      onClick={() => setActiveRegion(rg)}
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
+                        activeRegion === rg ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {REGION_LABEL[rg] ? `${rg} ${REGION_LABEL[rg]}` : rg}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!searching && hits.length > 0 && filteredHits.length === 0 && (
+                <div className="px-3 py-2 text-xs text-slate-400">이 지역엔 없어요</div>
+              )}
+              {!searching && filteredHits.map((h) => {
                 const cs = CAT_ORDER.filter((c) => (h.counts?.[c] || 0) > 0).map((c) => `${CAT_SHORT[c]} ${h.counts[c]}`);
                 // 가장 최근 날짜 + 지역(팀) — 겹치는 업체명 구분용
                 let recent: { d: string; r: string } | null = null;
@@ -149,6 +183,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                   const e = h.meta[k];
                   if (e?.d && (!recent || e.d > recent.d)) recent = { d: e.d, r: e.r };
                 }
+                const reg = primaryRegion(h);
                 return (
                   <button
                     key={h.vendor}
@@ -156,7 +191,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                     onClick={() => { setOverride(h.vendor); setQ(h.vendor); setShowHits(false); }}
                     className="block w-full border-b border-slate-50 px-3 py-2 text-left last:border-0 hover:bg-slate-50"
                   >
-                    <div className="truncate text-sm text-slate-800">{h.vendor}</div>
+                    <div className="flex items-center gap-1.5">
+                      {reg && <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>}
+                      <span className="truncate text-sm text-slate-800">{h.vendor}</span>
+                    </div>
                     {recent && (
                       <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
                         <span>📅 {recent.d}</span>
