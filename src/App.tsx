@@ -3809,48 +3809,47 @@ export default function App() {
           )}
         </div>
 
-        {/* 액션: 보조줄(초기화·복사) + 전송줄(보내기·자가·부품) */}
+        {/* 액션: 보조줄(초기화·복사 = 고스트) + 전송줄(보내기·자가·부품 = 딥톤 단색) */}
         <div className="mx-auto max-w-3xl space-y-2 px-3 py-3 sm:px-6">
           <div className="flex gap-2">
             <button
               onClick={handleReset}
-              className="flex-1 rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
+              className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 active:scale-[0.98]"
             >
               초기화
             </button>
             <button
               onClick={handleCopyAll}
               disabled={!hasOutput}
-              className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white shadow transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput ? { background: "#475569" } : undefined}
+              className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
             >
-              📋 복사
+              복사
             </button>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => handleSendAll("normal")}
               disabled={!hasOutput || sending}
-              className="flex-[1.5] whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#2563eb" } : undefined}
+              className="flex-[1.5] whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "#1746a2" } : undefined}
             >
-              {sending ? "보내는 중…" : "📤 보내기"}
+              {sending ? "보내는 중…" : "보내기"}
             </button>
             <button
               onClick={() => handleSendAll("자가")}
               disabled={!hasOutput || sending}
-              className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#16a34a" } : undefined}
+              className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "#0f766e" } : undefined}
             >
-              🧴 자가
+              자가
             </button>
             <button
               onClick={() => handleSendAll("부품")}
               disabled={!hasOutput || sending}
-              className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#d97706" } : undefined}
+              className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "#b45309" } : undefined}
             >
-              🔧 부품
+              부품
             </button>
           </div>
         </div>
