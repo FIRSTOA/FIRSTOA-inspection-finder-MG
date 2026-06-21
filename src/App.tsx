@@ -83,11 +83,11 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
     placeholder: "여기에 -시작- 부터 -끝- 까지의 원본 점검이력을 붙여넣으세요.",
   },
   "blank-report": {
-    label: "미양식",
+    label: "AS",
     accent: BW_ACCENT,
     bgSoft: BW_SOFT,
     textDark: BW_TEXT,
-    placeholder: "여기에 스케줄 원문을 문단별로 붙여넣으세요.",
+    placeholder: "여기에 AS 접수내용을 붙여넣으세요.",
   },
   "air-purifier": {
     label: "청정기",
@@ -3606,7 +3606,7 @@ export default function App() {
     }
     const modeLabel =
       mode === "inspection" ? "점검" :
-      mode === "blank-report" ? "미양식" :
+      mode === "blank-report" ? "AS" :
       mode === "air-purifier" ? "청정기" :
       mode === "samsung-note" ? "삼성노트" : String(mode);
     const res = await sendForm({
@@ -3667,20 +3667,19 @@ export default function App() {
           </button>
         </header>
 
-        {/* Mode tabs - segmented control (B&W) */}
+        {/* 상단 탭 — 점검 / AS */}
         <div
-          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
+          className="mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
           role="tablist"
         >
-          {MODE_ORDER.map((m: Mode) => {
-            const c = MODE_CONFIG[m];
-            const active = m === mode;
+          {([["점검", "inspection"], ["AS", "blank-report"]] as [string, Mode][]).map(([label, target]) => {
+            const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === "blank-report";
             return (
               <button
-                key={m}
+                key={label}
                 role="tab"
                 aria-selected={active}
-                onClick={() => handleModeChange(m)}
+                onClick={() => { if (!active) handleModeChange(target); }}
                 className={`rounded-xl py-2.5 text-sm transition ${
                   active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"
                 }`}
@@ -3689,11 +3688,31 @@ export default function App() {
                   boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined,
                 }}
               >
-                {c.label}
+                {label}
               </button>
             );
           })}
         </div>
+
+        {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
+        {(mode === "inspection" || mode === "air-purifier") && (
+          <div className="mb-3 flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
+            {([["복합기", "inspection"], ["청정기", "air-purifier"]] as [string, Mode][]).map(([label, target]) => {
+              const active = mode === target;
+              return (
+                <button
+                  key={label}
+                  onClick={() => { if (!active) handleModeChange(target); }}
+                  className={`flex-1 rounded-lg py-2 text-xs transition ${
+                    active ? "bg-slate-800 font-semibold text-white" : "font-medium text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* 사각 아이콘 툴바 — 거래처검색 / 원본입력 / 통합이력 (팝업으로 분리) */}
         <div className="mb-3 flex gap-2">
@@ -3701,7 +3720,7 @@ export default function App() {
             <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
           )}
           <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
-          {(mode === "blank-report" || mode === "air-purifier") && (
+          {(mode === "inspection" || mode === "air-purifier") && (
             <ToolButton icon={photoBusy ? "⏳" : "📷"} label={photoBusy ? "변환중" : "사진양식"} accent={config.accent} onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} />
           )}
           <ToolButton icon="🗂️" label="통합이력" accent={config.accent} onClick={() => setHistoryOpen(true)} />
@@ -3951,7 +3970,7 @@ export default function App() {
                 <div className="mb-3 text-sm font-bold text-slate-900">⭐ 기본 순서 (이것만 기억!)</div>
                 <div className="space-y-2.5">
                   {[
-                    ["맨 위에서 ", "탭", " 고르기 (점검 / 미양식 / 청정기)"],
+                    ["맨 위에서 ", "탭", " 고르기 (점검[복합기/청정기] / AS)"],
                     ["", "🔍 거래처검색", " → 지난 양식 불러오기"],
                     ["또는 ", "📝 원본입력", " → 카톡 원본 붙여넣기"],
                     ["", "작성자", " 고르고 빈 칸 채우기"],
@@ -3982,13 +4001,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 탭 3가지 */}
+              {/* 탭 안내 */}
               <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="mb-2 text-sm font-bold text-slate-900">🗂️ 탭 3가지</div>
+                <div className="mb-2 text-sm font-bold text-slate-900">🗂️ 탭 안내</div>
                 <div className="space-y-1.5 text-sm text-slate-700">
-                  <div><b className="text-slate-900">점검</b> — 복합기/프린터 점검 (여러 대 가능, 거래처검색 지원)</div>
-                  <div><b className="text-slate-900">미양식</b> — 양식 없는 접수 글 정리 (붙여넣으면 업체명 자동 인식 → 통합이력)</div>
-                  <div><b className="text-slate-900">청정기</b> — 공기청정기 점검</div>
+                  <div><b className="text-slate-900">점검</b> — 복합기/프린터 점검 (거래처검색·사진양식 지원). 안에서 <b className="text-slate-900">복합기/청정기</b> 토글로 청정기 점검도</div>
+                  <div><b className="text-slate-900">AS</b> — AS 접수내용을 붙여넣어 깔끔한 양식으로 변환</div>
                 </div>
               </div>
 
