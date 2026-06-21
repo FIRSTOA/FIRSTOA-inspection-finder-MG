@@ -140,13 +140,20 @@ function toKstDate(ts?: string): string {
   return kst.toISOString().slice(0, 10);
 }
 
-// 지역 + AS여부 → 보낼 방 목록 (TEST_MODE/방이름 모두 Supabase 시트에서 조회)
-async function resolveRooms(region: string, hasAS: boolean): Promise<string[]> {
+export type SendKind = "normal" | "자가" | "부품";
+
+// 보낼 방 목록 결정. TEST_MODE면 무조건 테스트방. kind=자가/부품이면 단일 전용방.
+async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
   if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
-  const key = String(region || "").trim().toUpperCase();
+
   const map = await getRoomMap();
+  if (kind === "자가") return [map["자가|*"] || "여분토너요청방"];
+  if (kind === "부품") return [map["부품|*"] || "부품요청"];
+
+  // normal: 지역별 점검방(+AS방)
+  const key = String(region || "").trim().toUpperCase();
   const inspectRoom = map["점검|" + key];
   if (!inspectRoom) return [testRoom];           // 미지원 지역(E·빈값 등)
   const rooms = [inspectRoom];                    // 점검방은 항상
@@ -158,7 +165,9 @@ async function resolveRooms(region: string, hasAS: boolean): Promise<string[]> {
 }
 
 // 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).
-export async function sendForm(payload: SavePayload): Promise<SaveResp> {
+//  kind: normal=지역 점검/AS방, 자가=여분토너요청방, 부품=부품요청방.
+//  자가/부품은 알림 목적이라 중복(이미 저장)이어도 해당 방으로는 항상 게시한다.
+export async function sendForm(payload: SavePayload, kind: SendKind = "normal"): Promise<SaveResp> {
   try {
     const text = String(payload.text || "");
     if (!text.trim()) return { ok: false, error: "내용이 비어있습니다." };
@@ -170,27 +179,28 @@ export async function sendForm(payload: SavePayload): Promise<SaveResp> {
     if (!built.inspect && !built.as) return { ok: false, error: "업체명을 찾지 못했습니다." };
 
     let anyNew = false;
-    const tabs: string[] = [];
     if (built.inspect) {
       const r = await insertRecord("jeomgeom", built.inspect);
-      tabs.push(`점검(${r === "new" ? "신규" : "중복"})`);
       if (r === "new") anyNew = true;
     }
     if (built.as) {
       const r = await insertRecord("as_records", built.as);
-      tabs.push(`AS(${r === "new" ? "신규" : "중복"})`);
       if (r === "new") anyNew = true;
     }
 
+    const isExtra = kind === "자가" || kind === "부품";
     let rooms: string[] = [];
-    if (anyNew) {
-      rooms = await resolveRooms(built.region, built.hasAS);
+    if (anyNew || isExtra) {   // 자가/부품은 중복이어도 알림 게시
+      rooms = await resolveRoomsFor(kind, built.region, built.hasAS);
       for (const room of rooms) await enqueueOutbox(room, text);
     }
 
+    const dest = rooms.length ? `게시 대기: ${rooms.join(", ")}` : "";
     return {
       ok: true,
-      message: anyNew ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복).",
+      message: isExtra
+        ? `${kind} 요청 ${dest}`
+        : anyNew ? `저장 완료 — ${dest}` : "이미 저장된 내용입니다(중복).",
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };

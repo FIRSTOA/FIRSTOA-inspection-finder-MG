@@ -3541,7 +3541,7 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
 
-  const handleSendAll = async () => {
+  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal") => {
     const target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
@@ -3549,7 +3549,7 @@ export default function App() {
     }
     if (sending) return;
     setSending(true);
-    showToast("보내는 중…");
+    showToast(kind === "normal" ? "보내는 중…" : `${kind} 요청 보내는 중…`);
     const modeLabel =
       mode === "inspection" ? "점검" :
       mode === "blank-report" ? "미양식" :
@@ -3561,7 +3561,7 @@ export default function App() {
       mode: modeLabel,
       author,
       ts: new Date().toISOString(),
-    });
+    }, kind);
     setSending(false);
     if (res.ok) {
       showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
@@ -3746,13 +3746,31 @@ export default function App() {
             📋 복사
           </button>
           <button
-            onClick={handleSendAll}
+            onClick={() => handleSendAll("normal")}
             disabled={!hasOutput || sending}
             className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             style={hasOutput && !sending ? { background: "linear-gradient(135deg, #2d6cdf, #1746a2)" } : undefined}
             aria-label="시트 저장 후 카톡으로 보내기"
           >
             {sending ? "보내는 중…" : "📤 보내기"}
+          </button>
+          <button
+            onClick={() => handleSendAll("자가")}
+            disabled={!hasOutput || sending}
+            className="shrink-0 rounded-xl px-3 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #0f9d58, #0b7a43)" } : undefined}
+            aria-label="여분토너요청방으로 보내기"
+          >
+            🧴 자가
+          </button>
+          <button
+            onClick={() => handleSendAll("부품")}
+            disabled={!hasOutput || sending}
+            className="shrink-0 rounded-xl px-3 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #d9822b, #b3651b)" } : undefined}
+            aria-label="부품요청방으로 보내기"
+          >
+            🔧 부품
           </button>
         </div>
       </div>
