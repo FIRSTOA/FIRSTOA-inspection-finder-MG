@@ -3822,7 +3822,7 @@ export default function App() {
               onClick={handleCopyAll}
               disabled={!hasOutput}
               className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white shadow transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput ? { background: "linear-gradient(135deg, #475569, #1E293B)" } : undefined}
+              style={hasOutput ? { background: "#475569" } : undefined}
             >
               📋 복사
             </button>
@@ -3832,7 +3832,7 @@ export default function App() {
               onClick={() => handleSendAll("normal")}
               disabled={!hasOutput || sending}
               className="flex-[1.5] whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #2d6cdf, #1746a2)" } : undefined}
+              style={hasOutput && !sending ? { background: "#2563eb" } : undefined}
             >
               {sending ? "보내는 중…" : "📤 보내기"}
             </button>
@@ -3840,7 +3840,7 @@ export default function App() {
               onClick={() => handleSendAll("자가")}
               disabled={!hasOutput || sending}
               className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #0f9d58, #0b7a43)" } : undefined}
+              style={hasOutput && !sending ? { background: "#16a34a" } : undefined}
             >
               🧴 자가
             </button>
@@ -3848,7 +3848,7 @@ export default function App() {
               onClick={() => handleSendAll("부품")}
               disabled={!hasOutput || sending}
               className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #d9822b, #b3651b)" } : undefined}
+              style={hasOutput && !sending ? { background: "#d97706" } : undefined}
             >
               🔧 부품
             </button>
