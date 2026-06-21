@@ -67,12 +67,15 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const reqSeq = useRef(0);
   const loadedFor = useRef<string>("");
 
-  // 지역 탭(전체 + A~E + 기타) — 통합이력은 전 카테고리라 모든 거래처 유지.
+  // 통합이력 9개 탭(CAT_ORDER) 중 하나라도 기록 있는 거래처만 (임대현황표 등만 있는 빈 거래처 제외).
+  const base = useMemo(() => hits.filter((h) => CAT_ORDER.some((c) => (h.counts?.[c] || 0) > 0)), [hits]);
+
+  // 지역 탭(전체 + A~E + 기타)
   const regionTabs = useMemo(() => {
-    const hasEtc = hits.some((h) => vendorRegion(h) === "기타");
+    const hasEtc = base.some((h) => vendorRegion(h) === "기타");
     return ["전체", ...REGIONS, ...(hasEtc ? ["기타"] : [])];
-  }, [hits]);
-  const filteredHits = activeRegion === "전체" ? hits : hits.filter((h) => vendorRegion(h) === activeRegion);
+  }, [base]);
+  const filteredHits = activeRegion === "전체" ? base : base.filter((h) => vendorRegion(h) === activeRegion);
 
   // 팝업 열릴 때: 점검탭에서 고른 거래처명을 검색창에 미리 채우고 "목록"을 보여준다(자동 선택 X).
   // 같은 회사라도 업체명 표기가 다른 경우가 있어, 사용자가 목록에서 직접 고르게 한다.
@@ -152,10 +155,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           {showHits && (
             <div className="absolute left-3 right-3 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
               {searching && <div className="px-3 py-2 text-xs text-slate-400">검색 중…</div>}
-              {!searching && hits.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">결과 없음</div>}
+              {!searching && base.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">결과 없음</div>}
 
               {/* 지역 탭 (전체 / A 강북 … / 기타) */}
-              {!searching && hits.length > 0 && (
+              {!searching && base.length > 0 && (
                 <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
                   {regionTabs.map((rg) => (
                     <button
@@ -172,7 +175,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 </div>
               )}
 
-              {!searching && hits.length > 0 && filteredHits.length === 0 && (
+              {!searching && base.length > 0 && filteredHits.length === 0 && (
                 <div className="px-3 py-2 text-xs text-slate-400">이 지역엔 없어요</div>
               )}
               {!searching && filteredHits.map((h) => {
