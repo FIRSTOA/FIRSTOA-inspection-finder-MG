@@ -6,24 +6,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { searchVendors, getInspForms, type InspForm, type VendorHit, type VendorMetaEntry } from "./api";
 
-// 거래처명 기준이름: 괄호·공백·구분기호 제거 후 끝의 위치 수식어(본사/지점/N층/N호/공장 등) 반복 제거.
-// "질경이 본사", "질경이본사3층", "질경이(지하1층)" → "질경이" 로 묶기 위한 휴리스틱(완벽X, 정밀통합은 별칭테이블 단계).
-const QUALIFIER =
-  /(본사|본점|지사|지점|영업점|본관|별관|신관|공장|창고|물류센터|센터|지하)?\d*(층|호|동|관)$|(본사|본점|지사|지점|영업점|공장|창고)$/;
-export function vendorBaseName(name: string): string {
-  const orig = String(name || "").trim();
-  let s = orig.replace(/[(（][^)）]*[)）]/g, "").replace(/[\s\-–—·/]+/g, "");
-  let prev = "";
-  while (s.length > 2 && s !== prev) { prev = s; s = s.replace(QUALIFIER, ""); }
-  return s || orig;
+// 지역 정규화: "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 없으면 원문(강남/지방 등).
+function normRegion(r: string): string {
+  const s = String(r || "").trim();
+  const m = s.match(/[A-Ea-e]/);
+  return m ? m[0].toUpperCase() : s;
 }
-
-// 거래처의 대표 지역 (점검 > AS > 그 외 카테고리 순으로 첫 지역). 정렬·뱃지용.
+// 거래처의 대표 지역 (점검 > AS > 그 외 순). 정렬·뱃지용.
 const REGION_PREF = ["점검", "AS", "미수", "불만", "임대현황표", "초과", "PC확장성", "복합기확장성", "재계약", "업체정보"];
 function primaryRegion(h: VendorHit): string {
   const m = h.meta || {};
-  for (const k of REGION_PREF) { const r = m[k]?.r; if (r) return String(r); }
+  for (const k of REGION_PREF) { const r = m[k]?.r; if (r) return normRegion(String(r)); }
   return "";
+}
+// 거래처가 가진 모든 지역(카테고리별 지역 합집합) — 지역 탭 필터용.
+function vendorRegions(h: VendorHit): string[] {
+  const s = new Set<string>();
+  const m = h.meta || {};
+  for (const k in m) { const r = m[k]?.r; if (r) s.add(normRegion(String(r))); }
+  return [...s];
 }
 
 type Props = {
@@ -64,7 +65,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [vendor, setVendor] = useState("");
   const [forms, setForms] = useState<InspForm[]>([]);
   const [loadingForms, setLoadingForms] = useState(false);
-  const [activeBase, setActiveBase] = useState<string | null>(null);
+  const [activeRegion, setActiveRegion] = useState<string>("전체");
 
   const reqSeq = useRef(0);
 
@@ -114,25 +115,26 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setShowHits(false);
   };
 
-  // 기준이름으로 후보 묶기 (질경이 본사/질경이본사 → "질경이" 그룹). 큰 그룹 먼저.
-  const groups = useMemo(() => {
-    const m = new Map<string, VendorHit[]>();
-    for (const h of hits) {
-      const b = vendorBaseName(h.vendor);
-      const arr = m.get(b);
-      if (arr) arr.push(h); else m.set(b, [h]);
-    }
-    return Array.from(m.entries()).sort((a, b) => b[1].length - a[1].length);
+  // 결과에 등장하는 지역들 → 탭 (전체 + 정렬된 지역). A~E 먼저, 나머지 뒤.
+  const regionTabs = useMemo(() => {
+    const s = new Set<string>();
+    for (const h of hits) for (const r of vendorRegions(h)) s.add(r);
+    const arr = [...s].sort((a, b) => {
+      const ai = /^[A-E]$/.test(a), bi = /^[A-E]$/.test(b);
+      if (ai && bi) return a.localeCompare(b);
+      if (ai !== bi) return ai ? -1 : 1;
+      return a.localeCompare(b);
+    });
+    return ["전체", ...arr];
   }, [hits]);
 
-  // 결과 바뀌면 활성 탭을 가장 큰 그룹으로
-  useEffect(() => { setActiveBase(groups[0]?.[0] ?? null); }, [groups]);
+  // 결과 바뀌면 지역 탭 초기화
+  useEffect(() => { setActiveRegion("전체"); }, [hits]);
 
-  // 활성 그룹의 변형들(지역순 → 이름순 정렬). 활성탭 없으면 첫 그룹.
-  const activeGroup = groups.find(([b]) => b === activeBase) || groups[0];
-  const activeItems = activeGroup
-    ? [...activeGroup[1]].sort((a, b) => primaryRegion(a).localeCompare(primaryRegion(b)) || a.vendor.localeCompare(b.vendor))
-    : [];
+  // 활성 지역으로 필터 (전체면 전부). 지역순 → 이름순 정렬.
+  const filtered = (activeRegion === "전체" ? hits : hits.filter((h) => vendorRegions(h).includes(activeRegion)))
+    .slice()
+    .sort((a, b) => primaryRegion(a).localeCompare(primaryRegion(b)) || a.vendor.localeCompare(b.vendor));
 
   return (
     <div>
@@ -169,30 +171,30 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
               <div className="px-3.5 py-2.5 text-sm text-slate-400">일치하는 거래처가 없어요</div>
             )}
 
-            {/* 그룹 탭 (기준이름 · 곳수) — 2개 이상일 때만. 클릭으로 그룹 전환 */}
-            {!searching && groups.length > 1 && (
+            {/* 지역 탭 — 지역이 2개 이상일 때만. 클릭으로 지역 필터 */}
+            {!searching && regionTabs.length > 2 && (
               <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
-                {groups.map(([base, items]) => (
+                {regionTabs.map((rg) => (
                   <button
-                    key={base}
+                    key={rg}
                     type="button"
-                    onClick={() => setActiveBase(base)}
+                    onClick={() => setActiveRegion(rg)}
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                      (activeGroup && activeGroup[0] === base)
+                      activeRegion === rg
                         ? "bg-slate-800 text-white"
                         : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    {base} {items.length}
+                    {rg}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* 활성 그룹 변형들 (지역순 정렬, 지역 뱃지로 구분) */}
-            {!searching && activeItems.length > 0 && (
+            {/* 결과 목록 (지역순 정렬, 지역 뱃지) */}
+            {!searching && filtered.length > 0 && (
               <div className="max-h-64 overflow-y-auto">
-                {activeItems.map((h) => {
+                {filtered.map((h) => {
                   const j = h.meta?.["점검"];
                   const a = h.meta?.["AS"];
                   const reg = primaryRegion(h);
