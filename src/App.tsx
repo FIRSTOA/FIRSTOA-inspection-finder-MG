@@ -3542,37 +3542,46 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
 
-  // 첨부 사진(전송 시 Storage 업로드 → 카톡 메시지에 링크 첨부). 같은 사진은 1회만 업로드(캐시).
-  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
   const photoUrlsRef = useRef<string[]>([]);
 
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
-      setPhotoFiles((prev) => [...prev, ...files]);
+      setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
       photoUrlsRef.current = []; // 새 사진 추가 → 업로드 캐시 무효화
     }
     e.target.value = "";
   };
   const removePhoto = (idx: number) => {
-    setPhotoFiles((prev) => prev.filter((_, i) => i !== idx));
+    setPhotos((prev) => {
+      const p = prev[idx];
+      if (p) URL.revokeObjectURL(p.url);
+      return prev.filter((_, i) => i !== idx);
+    });
     photoUrlsRef.current = [];
   };
 
-  // 첨부 사진 업로드(캐시) → 공개 URL 배열
+  // 첨부 사진 병렬 업로드(캐시) → 공개 URL 배열. (대량 대비 동시 4개)
   const ensurePhotosUploaded = async (): Promise<string[]> => {
-    if (!photoFiles.length) return [];
-    if (photoUrlsRef.current.length === photoFiles.length) return photoUrlsRef.current;
-    showToast("사진 올리는 중…");
+    if (!photos.length) return [];
+    if (photoUrlsRef.current.length === photos.length) return photoUrlsRef.current;
     const now = new Date();
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-    const urls: string[] = [];
-    for (const f of photoFiles) {
-      const dataUrl = await fileToDownscaledDataUrl(f, 1600);
-      const blob = await (await fetch(dataUrl)).blob();
-      const path = `${ymd}/${crypto.randomUUID()}.jpg`;
-      urls.push(await uploadPhoto(path, blob, "image/jpeg"));
-    }
+    const urls: string[] = new Array(photos.length);
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (next < photos.length) {
+        const i = next++;
+        const dataUrl = await fileToDownscaledDataUrl(photos[i].file, 1600);
+        const blob = await (await fetch(dataUrl)).blob();
+        urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
+        done++;
+        showToast(`사진 ${done}/${photos.length} 올리는 중…`);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
     photoUrlsRef.current = urls;
     return urls;
   };
@@ -3621,7 +3630,7 @@ export default function App() {
     setSharedForm(EMPTY_SHARED_FORM);
     setSelectedItem(0);
     setAirForm(EMPTY_AIR_FORM);
-    setPhotoFiles([]);
+    setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoUrlsRef.current = [];
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
@@ -3774,69 +3783,75 @@ export default function App() {
             )}
           </div>
         )}
-        {/* 첨부 사진 스트립 (썸네일 + 추가) — 보내기 시 Storage 업로드 후 카톡에 링크 첨부 */}
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 px-3 pt-2 sm:px-6">
-          {photoFiles.map((f, i) => (
-            <div key={i} className="relative">
-              <img src={URL.createObjectURL(f)} alt="" className="h-12 w-12 rounded-lg object-cover" />
-              <button
-                type="button"
-                onClick={() => removePhoto(i)}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white"
-                aria-label="사진 제거"
-              >✕</button>
-            </div>
-          ))}
-          <label className="flex h-12 cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 text-xs font-semibold text-slate-500 hover:bg-slate-50">
-            📷 사진 첨부
-            <input type="file" accept="image/*" multiple capture="environment" onChange={handlePhotoSelect} className="hidden" />
-          </label>
-          {photoFiles.length > 0 && <span className="text-[11px] text-slate-400">{photoFiles.length}장 — 보내기 시 카톡에 링크로 첨부</span>}
+        {/* 첨부 사진 스트립 (갤러리 다중선택, 가로 스크롤) — 보내기 시 Storage 업로드 후 카톡에 링크 첨부 */}
+        <div className="mx-auto max-w-3xl px-3 pt-2 sm:px-6">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <label className="flex h-14 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-[10px] font-semibold text-slate-500 hover:bg-slate-50">
+              <span className="text-base leading-none">📷</span>
+              사진
+              <input type="file" accept="image/*" multiple onChange={handlePhotoSelect} className="hidden" />
+            </label>
+            {photos.map((p, i) => (
+              <div key={p.url} className="relative shrink-0">
+                <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(i)}
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white"
+                  aria-label="사진 제거"
+                >✕</button>
+              </div>
+            ))}
+          </div>
+          {photos.length > 0 && (
+            <div className="mt-0.5 text-[11px] text-slate-400">사진 {photos.length}장 — 보내기 시 카톡에 링크로 첨부</div>
+          )}
         </div>
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-3 sm:px-6">
-          <button
-            onClick={handleReset}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
-            aria-label="초기화"
-          >
-            초기화
-          </button>
-          <button
-            onClick={handleCopyAll}
-            disabled={!hasOutput}
-            className="rounded-xl px-4 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            style={hasOutput ? { background: "linear-gradient(135deg, #475569, #1E293B)" } : undefined}
-            aria-label="결과 전체 복사"
-          >
-            📋 복사
-          </button>
-          <button
-            onClick={() => handleSendAll("normal")}
-            disabled={!hasOutput || sending}
-            className="flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #2d6cdf, #1746a2)" } : undefined}
-            aria-label="시트 저장 후 카톡으로 보내기"
-          >
-            {sending ? "보내는 중…" : "📤 보내기"}
-          </button>
-          <button
-            onClick={() => handleSendAll("자가")}
-            disabled={!hasOutput || sending}
-            className="shrink-0 rounded-xl px-3 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #0f9d58, #0b7a43)" } : undefined}
-            aria-label="여분토너요청방으로 보내기"
-          >
-            🧴 자가
-          </button>
-          <button
-            onClick={() => handleSendAll("부품")}
-            disabled={!hasOutput || sending}
-            className="shrink-0 rounded-xl px-3 py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            style={hasOutput && !sending ? { background: "linear-gradient(135deg, #d9822b, #b3651b)" } : undefined}
-            aria-label="부품요청방으로 보내기"
-          >
-            🔧 부품
-          </button>
+
+        {/* 액션: 보조줄(초기화·복사) + 전송줄(보내기·자가·부품) */}
+        <div className="mx-auto max-w-3xl space-y-2 px-3 py-3 sm:px-6">
+          <div className="flex gap-2">
+            <button
+              onClick={handleReset}
+              className="flex-1 rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
+            >
+              초기화
+            </button>
+            <button
+              onClick={handleCopyAll}
+              disabled={!hasOutput}
+              className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white shadow transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput ? { background: "linear-gradient(135deg, #475569, #1E293B)" } : undefined}
+            >
+              📋 복사
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleSendAll("normal")}
+              disabled={!hasOutput || sending}
+              className="flex-[1.5] whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #2d6cdf, #1746a2)" } : undefined}
+            >
+              {sending ? "보내는 중…" : "📤 보내기"}
+            </button>
+            <button
+              onClick={() => handleSendAll("자가")}
+              disabled={!hasOutput || sending}
+              className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #0f9d58, #0b7a43)" } : undefined}
+            >
+              🧴 자가
+            </button>
+            <button
+              onClick={() => handleSendAll("부품")}
+              disabled={!hasOutput || sending}
+              className="flex-1 whitespace-nowrap rounded-xl py-3 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              style={hasOutput && !sending ? { background: "linear-gradient(135deg, #d9822b, #b3651b)" } : undefined}
+            >
+              🔧 부품
+            </button>
+          </div>
         </div>
       </div>
 
