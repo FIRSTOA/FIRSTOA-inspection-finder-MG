@@ -18,6 +18,14 @@ export function vendorBaseName(name: string): string {
   return s || orig;
 }
 
+// 거래처의 대표 지역 (점검 > AS > 그 외 카테고리 순으로 첫 지역). 정렬·뱃지용.
+const REGION_PREF = ["점검", "AS", "미수", "불만", "임대현황표", "초과", "PC확장성", "복합기확장성", "재계약", "업체정보"];
+function primaryRegion(h: VendorHit): string {
+  const m = h.meta || {};
+  for (const k of REGION_PREF) { const r = m[k]?.r; if (r) return String(r); }
+  return "";
+}
+
 type Props = {
   accent: string;
   onLoadForm: (text: string) => void;
@@ -56,6 +64,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [vendor, setVendor] = useState("");
   const [forms, setForms] = useState<InspForm[]>([]);
   const [loadingForms, setLoadingForms] = useState(false);
+  const [activeBase, setActiveBase] = useState<string | null>(null);
 
   const reqSeq = useRef(0);
 
@@ -105,7 +114,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setShowHits(false);
   };
 
-  // 기준이름으로 후보 묶기 (질경이 본사/질경이본사 → "질경이" 그룹). 표시만, 선택은 변형 단위 유지.
+  // 기준이름으로 후보 묶기 (질경이 본사/질경이본사 → "질경이" 그룹). 큰 그룹 먼저.
   const groups = useMemo(() => {
     const m = new Map<string, VendorHit[]>();
     for (const h of hits) {
@@ -113,8 +122,17 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
       const arr = m.get(b);
       if (arr) arr.push(h); else m.set(b, [h]);
     }
-    return Array.from(m.entries());
+    return Array.from(m.entries()).sort((a, b) => b[1].length - a[1].length);
   }, [hits]);
+
+  // 결과 바뀌면 활성 탭을 가장 큰 그룹으로
+  useEffect(() => { setActiveBase(groups[0]?.[0] ?? null); }, [groups]);
+
+  // 활성 그룹의 변형들(지역순 → 이름순 정렬). 활성탭 없으면 첫 그룹.
+  const activeGroup = groups.find(([b]) => b === activeBase) || groups[0];
+  const activeItems = activeGroup
+    ? [...activeGroup[1]].sort((a, b) => primaryRegion(a).localeCompare(primaryRegion(b)) || a.vendor.localeCompare(b.vendor))
+    : [];
 
   return (
     <div>
@@ -145,29 +163,52 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
 
         {/* 후보 드롭다운 */}
         {showHits && (
-          <div className="absolute z-20 mt-1.5 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {searching && <div className="px-3.5 py-2.5 text-sm text-slate-400">검색 중…</div>}
             {!searching && hits.length === 0 && (
               <div className="px-3.5 py-2.5 text-sm text-slate-400">일치하는 거래처가 없어요</div>
             )}
-            {!searching && groups.map(([base, items]) => (
-              <div key={base}>
-                {items.length > 1 && (
-                  <div className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 px-3.5 py-1 text-[11px] font-semibold text-slate-500 backdrop-blur">
-                    {base} · {items.length}곳
-                  </div>
-                )}
-                {items.map((h) => {
+
+            {/* 그룹 탭 (기준이름 · 곳수) — 2개 이상일 때만. 클릭으로 그룹 전환 */}
+            {!searching && groups.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+                {groups.map(([base, items]) => (
+                  <button
+                    key={base}
+                    type="button"
+                    onClick={() => setActiveBase(base)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                      (activeGroup && activeGroup[0] === base)
+                        ? "bg-slate-800 text-white"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {base} {items.length}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 활성 그룹 변형들 (지역순 정렬, 지역 뱃지로 구분) */}
+            {!searching && activeItems.length > 0 && (
+              <div className="max-h-64 overflow-y-auto">
+                {activeItems.map((h) => {
                   const j = h.meta?.["점검"];
                   const a = h.meta?.["AS"];
+                  const reg = primaryRegion(h);
                   return (
                     <button
                       key={h.vendor}
                       type="button"
                       onClick={() => pickVendor(h.vendor)}
-                      className={`block w-full border-b border-slate-50 px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-50 ${items.length > 1 ? "pl-5" : ""}`}
+                      className="block w-full border-b border-slate-50 px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-50"
                     >
-                      <div className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</div>
+                      <div className="flex items-center gap-1.5">
+                        {reg && (
+                          <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>
+                        )}
+                        <span className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</span>
+                      </div>
                       <div className="mt-1 space-y-0.5">
                         {j && <MetaLine gubun="점검" e={j} />}
                         {a && <MetaLine gubun="AS" e={a} />}
@@ -177,7 +218,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                   );
                 })}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
