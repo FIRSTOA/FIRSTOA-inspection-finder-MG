@@ -4,6 +4,7 @@ import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
+import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
 import { visionForm, sendForm, sendPcForm, sendCategoryForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
@@ -3566,6 +3567,8 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
+  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote">("field"); // 좌측 메뉴 화면
+  const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
@@ -3686,34 +3689,74 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] text-slate-900">
-      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
+      {/* 좌측 메뉴 드로어 */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
+          <div className="h-full w-64 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-slate-100 px-5 py-4">
+              <div className="text-lg font-bold text-slate-900">퍼스트전산 CS팀</div>
+              <div className="text-[11px] text-slate-400">현장 업무 통합</div>
+            </div>
+            <nav className="p-2">
+              {([["home", "홈"], ["field", "FIELD"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
+                <button key={key} type="button"
+                  onClick={() => { setScreen(key); setMenuOpen(false); }}
+                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#EFF6FF] font-bold text-[#3182F6]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="flex-1 bg-black/30" />
+        </div>
+      )}
+
+      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">FIELD</h1>
-            <span className="text-[10px] font-medium text-slate-400">퍼스트전산 CS팀</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white transition hover:bg-slate-50 active:scale-95">
+              <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-slate-700" /><span className="h-0.5 w-4 rounded bg-slate-700" /><span className="h-0.5 w-4 rounded bg-slate-700" /></span>
+            </button>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : "IT 견적"}
+            </h1>
           </div>
-          <div className="flex items-center gap-1.5">
-            {(mode === "inspection" || mode === "air-purifier") && (
-              <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🔍</button>
-            )}
-            {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
-              <button type="button" onClick={openInputModal} aria-label="원본입력"
-                className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">
-                📝{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
-              </button>
-            )}
-            {(mode === "inspection" || mode === "air-purifier") && (
-              <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40">{photoBusy ? "⏳" : "📷"}</button>
-            )}
-            <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🗂️</button>
-            <button type="button" onClick={() => setHelpOpen(true)} aria-label="도움말"
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white transition active:scale-95">?</button>
-          </div>
+          {screen === "field" && (
+            <div className="flex items-center gap-1.5">
+              {(mode === "inspection" || mode === "air-purifier") && (
+                <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🔍</button>
+              )}
+              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
+                <button type="button" onClick={openInputModal} aria-label="원본입력"
+                  className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">
+                  📝{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                </button>
+              )}
+              {(mode === "inspection" || mode === "air-purifier") && (
+                <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40">{photoBusy ? "⏳" : "📷"}</button>
+              )}
+              <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🗂️</button>
+            </div>
+          )}
         </header>
+
+        {/* 홈 / 해피콜 / IT견적 화면 */}
+        {screen === "home" && <Home onGoField={() => setScreen("field")} />}
+        {(screen === "happycall" || screen === "itquote") && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <div className="text-3xl">🚧</div>
+            <div className="mt-2 text-base font-bold text-slate-700">{screen === "happycall" ? "해피콜" : "IT 견적"}</div>
+            <div className="mt-1 text-sm text-slate-400">구상 중 — 곧 만들어집니다</div>
+          </div>
+        )}
+
+        {screen === "field" && (<>
+        {/* ===== FIELD 화면 ===== */}
 
         {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
         <div className="relative mb-3">
@@ -3738,7 +3781,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-white font-bold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"}`}
+                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#3182F6] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -3851,10 +3894,12 @@ export default function App() {
             <div className="mt-1 text-sm text-slate-400">양식 확정 후 추가 예정</div>
           </div>
         )}
+        </>)}
 
       </div>
 
-      {/* Sticky bottom: result panel + action bar */}
+      {/* Sticky bottom: result panel + action bar (FIELD 전용) */}
+      {screen === "field" && (
       <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur">
         {hasOutput && (
           <div className="mx-auto max-w-3xl px-3 pt-1 sm:px-6">
@@ -3923,7 +3968,7 @@ export default function App() {
         </div>
 
         {/* 액션: 보조줄(초기화·복사 = 고스트) + 전송줄(보내기·자가·부품 = 딥톤 단색) */}
-        <div className="mx-auto max-w-3xl space-y-2 px-3 py-3 sm:px-6">
+        <div className="mx-auto max-w-3xl space-y-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex gap-2">
             <button
               onClick={handleReset}
@@ -3971,6 +4016,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      )}
 
       {/* 원본 입력 팝업 */}
       {inputModalOpen && (
