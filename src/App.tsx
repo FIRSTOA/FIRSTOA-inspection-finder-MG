@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
+import CategoryForm from "./CategoryForm";
+import { buildCatText, emptyCatForm } from "./categoryForms";
 import UnifiedHistory from "./UnifiedHistory";
-import { visionForm, sendForm, sendPcForm } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCategoryForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -3342,6 +3344,13 @@ export default function App() {
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
 
+  // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
+  const isCat = mode === "bulman" || mode === "recontract" || mode === "overage-adjust";
+  const [catForms, setCatForms] = useState<Record<string, Record<string, string>>>({});
+  const curCatForm = catForms[mode] || (isCat ? emptyCatForm(mode) : {});
+  const catFilled = isCat && Object.values(curCatForm).some((v) => String(v).trim() !== "");
+  const catText = useMemo(() => (isCat ? buildCatText(mode, curCatForm, author) : ""), [isCat, mode, curCatForm, author]);
+
   const resultBlocks = useMemo<ResultBlock[]>(() => {
     if (mode === "inspection") return splitResultBlocks(displayedTextOutput);
     if (mode === "blank-report") {
@@ -3350,8 +3359,9 @@ export default function App() {
     if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
     if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
     if (mode === "pc") return pcFilled ? [{ text: pcText, device: null }] : [];
+    if (isCat) return catFilled ? [{ text: catText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled]);
+  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled, isCat, catText, catFilled]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -3642,9 +3652,17 @@ export default function App() {
       return;
     }
 
-    // IT통합(PC): pc_expansion 저장 + PC방 전송 (점검/AS 경로와 별개)
+    // 확장성(PC): pc_expansion 저장 + PC방 전송 (점검/AS 경로와 별개)
     if (mode === "pc") {
       const res = await sendPcForm(pcForm, author, target, new Date().toISOString());
+      setSending(false);
+      showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      return;
+    }
+
+    // 카테고리(불만/재계약/초과조정): 테이블 저장 + 방 전송
+    if (isCat) {
+      const res = await sendCategoryForm(mode, curCatForm, author, target, new Date().toISOString());
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -3680,12 +3698,13 @@ export default function App() {
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
+    if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
@@ -3820,15 +3839,25 @@ export default function App() {
           />
         )}
 
-        {/* 준비중 탭 (불만/미수/초과조정/재계약) — 그림용 자리 */}
-        {(mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract") && (
+        {/* 카테고리 폼 (불만/재계약/초과조정) */}
+        {isCat && (
+          <CategoryForm
+            schemaKey={mode}
+            form={curCatForm}
+            setForm={(f) => setCatForms((prev) => ({ ...prev, [mode]: f }))}
+            author={author}
+            setAuthor={handleSetAuthor}
+            onLoad={loadSharedFromInspect}
+            onError={(m) => showToast(m, "error")}
+          />
+        )}
+
+        {/* 미수 — 양식 미정, 준비중 자리 */}
+        {mode === "misu" && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
             <div className="text-3xl">🛠️</div>
-            <div className="mt-2 text-base font-bold text-slate-700">{config.label} 양식</div>
-            <div className="mt-1 text-sm text-slate-400">준비중 — 곧 추가됩니다</div>
-            <div className="mt-3 text-[11px] text-slate-400">
-              여기에 {config.label} 입력폼이 들어가고, 작성 → 카톡방 전송 + Supabase 저장됩니다.
-            </div>
+            <div className="mt-2 text-base font-bold text-slate-700">미수 양식</div>
+            <div className="mt-1 text-sm text-slate-400">양식 확정 후 추가 예정</div>
           </div>
         )}
 

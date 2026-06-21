@@ -10,6 +10,7 @@ import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
 import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows, insertRow } from "./supabase";
 import type { PcFormState } from "./PcForm";
+import { CATEGORY_SCHEMAS } from "./categoryForms";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -230,6 +231,39 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal"):
         ? `${kind} 요청 ${dest}`
         : anyNew ? `저장 완료 — ${dest}` : "이미 저장된 내용입니다(중복).",
     };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
+// 카테고리 폼(불만/재계약/초과조정) → 테이블 저장 + 방 전송. (스키마 기반)
+export async function sendCategoryForm(schemaKey: string, form: Record<string, string>, author: string, text: string, ts?: string): Promise<SaveResp> {
+  try {
+    const s = CATEGORY_SCHEMAS[schemaKey];
+    if (!s) return { ok: false, error: "알 수 없는 양식: " + schemaKey };
+    const fields = s.sections.flatMap((sec) => sec.fields);
+    const companyKey = fields.find((f) => f.fill === "company")?.key;
+    const vendor = String((companyKey && form[companyKey]) || "").trim();
+    if (!vendor) return { ok: false, error: "업체명을 입력하세요." };
+
+    const row: Record<string, unknown> = {};
+    for (const f of fields) row[f.key] = f.fill === "author" ? author : (form[f.key] || "");
+    row["_업체명"] = vendor;
+    row["_출처"] = "웹앱:" + s.category;
+    row["_원문"] = text;
+    row["_dupKey"] = md5([s.category, vendor, author, toKstDate(ts), ...fields.map((f) => form[f.key] || "")].join("|"));
+
+    const r = await insertRow(s.table, row);
+
+    let rooms: string[] = [];
+    if (r === "new") {
+      const cfg = await getConfig();
+      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+      else { const map = await getRoomMap(); rooms = [map[s.roomKey] || testRoom]; }
+      for (const room of rooms) await enqueueOutbox(room, text);
+    }
+    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
