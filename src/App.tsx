@@ -30,7 +30,8 @@ function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
 import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
 import type { AuthorTeam } from "./authors";
 
-type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc";
+type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
+  | "bulman" | "misu" | "overage-adjust" | "recontract";
 
 type CopyResult = {
   ok: boolean;
@@ -106,12 +107,16 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
     placeholder: "여기에 번호가 붙은 스케줄 원문을 여러 개 붙여넣으세요.",
   },
   pc: {
-    label: "IT통합",
+    label: "확장성",
     accent: BW_ACCENT,
     bgSoft: BW_SOFT,
     textDark: BW_TEXT,
     placeholder: "",
   },
+  bulman: { label: "불만", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  misu: { label: "미수", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  "overage-adjust": { label: "초과조정", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  recontract: { label: "재계약", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
 };
 
 const ITEM_DIVIDER = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
@@ -3709,12 +3714,12 @@ export default function App() {
           </button>
         </header>
 
-        {/* 상단 탭 — 점검 / AS / IT통합 */}
+        {/* 상단 탭 — 점검 / AS / 확장성 / 불만 / 미수 / 초과조정 / 재계약 (가로 스크롤) */}
         <div
-          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
+          className="mb-3 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100 p-1"
           role="tablist"
         >
-          {([["점검", "inspection"], ["AS", "blank-report"], ["IT통합", "pc"]] as [string, Mode][]).map(([label, target]) => {
+          {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => {
             const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
             return (
               <button
@@ -3722,7 +3727,7 @@ export default function App() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => { if (!active) handleModeChange(target); }}
-                className={`rounded-xl py-2.5 text-sm transition ${
+                className={`shrink-0 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm transition ${
                   active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"
                 }`}
                 style={{
@@ -3761,7 +3766,7 @@ export default function App() {
           {(mode === "inspection" || mode === "air-purifier") && (
             <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
           )}
-          {mode !== "pc" && (
+          {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
             <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
           )}
           {(mode === "inspection" || mode === "air-purifier") && (
@@ -3802,7 +3807,7 @@ export default function App() {
           />
         )}
 
-        {/* IT통합(PC) form */}
+        {/* 확장성(PC) form */}
         {mode === "pc" && (
           <PcForm
             form={pcForm}
@@ -3813,6 +3818,18 @@ export default function App() {
             onLoad={loadSharedFromInspect}
             onError={(m) => showToast(m, "error")}
           />
+        )}
+
+        {/* 준비중 탭 (불만/미수/초과조정/재계약) — 그림용 자리 */}
+        {(mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract") && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            <div className="text-3xl">🛠️</div>
+            <div className="mt-2 text-base font-bold text-slate-700">{config.label} 양식</div>
+            <div className="mt-1 text-sm text-slate-400">준비중 — 곧 추가됩니다</div>
+            <div className="mt-3 text-[11px] text-slate-400">
+              여기에 {config.label} 입력폼이 들어가고, 작성 → 카톡방 전송 + Supabase 저장됩니다.
+            </div>
+          </div>
         )}
 
       </div>
