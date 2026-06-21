@@ -1,7 +1,6 @@
-/** IT통합(PC·복합기·IT·네트워크 확장성) 입력 폼.
- *  - [점검 불러오기][AS 불러오기]: 이번 세션 점검/AS 출력에서 작성자·업체명·지역·키맨을 가져와 채움.
- *  - 키맨 여러 명이면 드롭다운 선택, 직접 수정도 가능.
- *  - 양식은 추후 변경 예정 → 필드 추가/수정 쉽게 단순 구조로.
+/** 확장성(PC·IT·복합기·네트워크) 입력 폼.
+ *  - 불러오기: 점검/AS에서 등급·업체명·지역·키맨(이름→업체담당자/IT담당자, 연락처→연락처) 가져옴.
+ *  - 키맨 여러 명 드롭다운 + 직접입력. 사무/설계/디자인/개발·세부사양 다중선택. 렌탈/구매/유지보수 드롭다운.
  */
 import { useState } from "react";
 import { AUTHOR_TEAMS, AUTHOR_BOOK } from "./authors";
@@ -9,24 +8,10 @@ import { AUTHOR_TEAMS, AUTHOR_BOOK } from "./authors";
 const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
 export type PcFormState = {
-  purpose: string;        // 사무/설계/디자인/개발
-  spec: string;           // 세부사양
-  region: string;
-  company: string;
-  grade: string;
-  vendorContact: string;  // 업체담당자 (키맨 불러오기 대상)
-  contact: string;        // 연락처
-  itContact: string;      // IT담당자
-  rentalBuyMaint: string; // 렌탈or구매or유지보수
-  designatedVendor: string;     // 지정업체
-  designatedSat: string;        // 지정업체만족도
-  totalPeople: string;    // 총 인원
-  peopleNote: string;     // 인원 추가 설명
-  qty: string;            // 수량
-  amount: string;         // 금액
-  timing: string;         // 시기
-  timingNote: string;     // 시기 추가 설명
-  appeal: string;         // 어필 OR 추가영업
+  purpose: string; spec: string; region: string; company: string; grade: string;
+  vendorContact: string; contact: string; itContact: string; rentalBuyMaint: string;
+  designatedVendor: string; designatedSat: string; totalPeople: string; peopleNote: string;
+  qty: string; amount: string; timing: string; timingNote: string; appeal: string;
 };
 
 export const EMPTY_PC_FORM: PcFormState = {
@@ -36,43 +21,24 @@ export const EMPTY_PC_FORM: PcFormState = {
   qty: "", amount: "", timing: "", timingNote: "", appeal: "",
 };
 
-// 폼 → 카톡 전송 텍스트(/PC DB 활용 양식)
 export function buildPcText(f: PcFormState, author: string): string {
   return [
-    "/PC DB 활용",
-    "*사양",
-    `사무/설계/디자인/개발: ${f.purpose}`,
-    `세부사양: ${f.spec}`,
-    `작성자: ${author}`,
-    `지역: ${f.region}`,
-    `업체명: ${f.company}`,
-    `등급: ${f.grade}`,
-    `업체담당자: ${f.vendorContact}`,
-    `연락처: ${f.contact}`,
-    `IT담당자: ${f.itContact}`,
-    `렌탈or구매or유지보수: ${f.rentalBuyMaint}`,
-    `지정업체: ${f.designatedVendor}`,
-    `지정업체만족도: ${f.designatedSat}`,
-    "*총 인원",
-    `총 인원: ${f.totalPeople}`,
-    `인원 추가 설명: ${f.peopleNote}`,
-    "*수요",
-    `수량: ${f.qty}`,
-    `금액: ${f.amount}`,
-    `시기: ${f.timing}`,
-    `시기 추가 설명: ${f.timingNote}`,
+    "/PC DB 활용", "*사양",
+    `사무/설계/디자인/개발: ${f.purpose}`, `세부사양: ${f.spec}`,
+    `작성자: ${author}`, `지역: ${f.region}`, `업체명: ${f.company}`, `등급: ${f.grade}`,
+    `업체담당자: ${f.vendorContact}`, `연락처: ${f.contact}`, `IT담당자: ${f.itContact}`,
+    `렌탈or구매or유지보수: ${f.rentalBuyMaint}`, `지정업체: ${f.designatedVendor}`, `지정업체만족도: ${f.designatedSat}`,
+    "*총 인원", `총 인원: ${f.totalPeople}`, `인원 추가 설명: ${f.peopleNote}`,
+    "*수요", `수량: ${f.qty}`, `금액: ${f.amount}`, `시기: ${f.timing}`, `시기 추가 설명: ${f.timingNote}`,
     `어필 OR 추가영업: ${f.appeal}`,
   ].join("\n");
 }
 
-type LoadResult = { company: string; region: string; keymen: string[]; author: string };
-
+type Keyman = { label: string; name: string; phone: string };
+type LoadResult = { grade: string; company: string; region: string; keymen: Keyman[]; author: string };
 type Props = {
-  form: PcFormState;
-  setForm: (f: PcFormState) => void;
-  author: string;
-  setAuthor: (v: string) => void;
-  accent: string;
+  form: PcFormState; setForm: (f: PcFormState) => void;
+  author: string; setAuthor: (v: string) => void; accent: string;
   onLoad: (src: "inspection" | "as") => LoadResult | null;
   onError: (msg: string) => void;
 };
@@ -81,17 +47,58 @@ function Field({ label, value, onChange, star }: { label: string; value: string;
   return (
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{star && <span className="text-rose-400">* </span>}{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-      />
+      <input value={value} onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]" />
     </label>
   );
 }
 
-export default function PcForm({ form, setForm, author, setAuthor, accent, onLoad, onError }: Props) {
-  const [keymen, setKeymen] = useState<string[]>([]);
+function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]">
+        <option value="">선택</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// 다중선택 칩 + 직접입력
+function ChipMulti({ label, options, value, onChange }: { label: string; options: string[]; value: string; onChange: (v: string) => void }) {
+  const [custom, setCustom] = useState("");
+  const sel = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const set = (arr: string[]) => onChange(arr.join(", "));
+  const toggle = (o: string) => set(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o]);
+  const addCustom = () => { const c = custom.trim(); if (c && !sel.includes(c)) set([...sel, c]); setCustom(""); };
+  return (
+    <div className="block">
+      <span className="text-xs font-medium text-slate-500">{label} <span className="text-slate-300">(중복 가능)</span></span>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button key={o} type="button" onClick={() => toggle(o)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#3182F6] text-white" : "bg-slate-100 text-slate-600"}`}>
+            {o}
+          </button>
+        ))}
+        {sel.filter((s) => !options.includes(s)).map((s) => (
+          <button key={s} type="button" onClick={() => toggle(s)}
+            className="rounded-full bg-[#3182F6] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
+        ))}
+      </div>
+      <div className="mt-1.5 flex gap-1.5">
+        <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#3182F6]" />
+        <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
+      </div>
+    </div>
+  );
+}
+
+export default function PcForm({ form, setForm, author, setAuthor, onLoad, onError }: Props) {
+  const [keymen, setKeymen] = useState<Keyman[]>([]);
   const set = (k: keyof PcFormState) => (v: string) => setForm({ ...form, [k]: v });
 
   const handleLoad = (src: "inspection" | "as") => {
@@ -99,47 +106,56 @@ export default function PcForm({ form, setForm, author, setAuthor, accent, onLoa
     if (!r) { onError(`${src === "inspection" ? "점검" : "AS"} 탭에 입력된 내용이 없어요`); return; }
     if (r.author) setAuthor(r.author);
     setKeymen(r.keymen);
-    setForm({ ...form, company: r.company || form.company, region: r.region || form.region, vendorContact: r.keymen[0] || form.vendorContact });
+    const k = r.keymen[0];
+    setForm({
+      ...form,
+      grade: r.grade || form.grade, company: r.company || form.company, region: r.region || form.region,
+      vendorContact: k?.name || form.vendorContact, itContact: k?.name || form.itContact, contact: k?.phone || form.contact,
+    });
+  };
+
+  const pickKeyman = (v: string) => {
+    if (v === "manual" || v === "") return;
+    const k = keymen[Number(v)];
+    if (k) setForm({ ...form, vendorContact: k.name, itContact: k.name, contact: k.phone });
   };
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      {/* 불러오기 */}
-      <div className="flex gap-2">
-        <button type="button" onClick={() => handleLoad("inspection")}
-          className="flex-1 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
-          ↓ 점검에서 불러오기
-        </button>
-        <button type="button" onClick={() => handleLoad("as")}
-          className="flex-1 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
-          ↓ AS에서 불러오기
-        </button>
+      {/* 불러오기 — 세련되게 */}
+      <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
+        <span className="text-xs font-bold text-slate-500">불러오기</span>
+        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">점검</button>
+        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">AS</button>
+        <span className="ml-auto text-[10px] text-slate-400">업체·지역·등급·키맨 자동</span>
       </div>
 
       {/* 작성자 */}
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
         <select value={author} onChange={(e) => setAuthor(e.target.value)}
-          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
+          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]">
           <option value="">선택</option>
           {AUTHORS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
       </label>
 
-      {/* 키맨 여러 명이면 선택 (업체담당자에 채움) */}
-      {keymen.length > 1 && (
+      {/* 키맨 선택 (여러 명/직접입력) */}
+      {keymen.length > 0 && (
         <label className="block">
-          <span className="text-xs font-medium text-slate-500">키맨 선택 → 업체담당자</span>
-          <select value={form.vendorContact} onChange={(e) => set("vendorContact")(e.target.value)}
+          <span className="text-xs font-medium text-slate-500">키맨 선택 → 담당자/연락처 채움</span>
+          <select onChange={(e) => pickKeyman(e.target.value)}
             className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none">
-            {keymen.map((k, i) => <option key={i} value={k}>{k}</option>)}
+            <option value="">선택…</option>
+            {keymen.map((k, i) => <option key={i} value={i}>{k.label}</option>)}
+            <option value="manual">직접입력 (아래 칸에 직접)</option>
           </select>
         </label>
       )}
 
       <div className="text-[11px] font-bold text-slate-400">＊사양</div>
-      <Field label="사무/설계/디자인/개발" value={form.purpose} onChange={set("purpose")} />
-      <Field label="세부사양" value={form.spec} onChange={set("spec")} />
+      <ChipMulti label="사무/설계/디자인/개발" options={["사무", "설계", "디자인", "개발"]} value={form.purpose} onChange={set("purpose")} />
+      <ChipMulti label="세부사양" options={["i3", "i5", "i7", "i9", "AMD", "Mac"]} value={form.spec} onChange={set("spec")} />
       <div className="grid grid-cols-2 gap-2">
         <Field label="지역" value={form.region} onChange={set("region")} />
         <Field label="등급" value={form.grade} onChange={set("grade")} />
@@ -151,7 +167,7 @@ export default function PcForm({ form, setForm, author, setAuthor, accent, onLoa
       </div>
       <Field label="IT담당자" value={form.itContact} onChange={set("itContact")} />
       <div className="grid grid-cols-2 gap-2">
-        <Field label="렌탈/구매/유지보수" value={form.rentalBuyMaint} onChange={set("rentalBuyMaint")} />
+        <Select label="렌탈/구매/유지보수" value={form.rentalBuyMaint} onChange={set("rentalBuyMaint")} options={["렌탈", "구매", "유지보수"]} />
         <Field label="지정업체" value={form.designatedVendor} onChange={set("designatedVendor")} />
       </div>
       <Field label="지정업체만족도" value={form.designatedSat} onChange={set("designatedSat")} />
@@ -172,9 +188,6 @@ export default function PcForm({ form, setForm, author, setAuthor, accent, onLoa
         <Field label="시기 추가 설명" value={form.timingNote} onChange={set("timingNote")} />
       </div>
       <Field label="어필 OR 추가영업" value={form.appeal} onChange={set("appeal")} />
-
-      <div className="text-[11px] text-slate-400">저장: PC확장성(pc_expansion) · 전송: PC방 (양식은 추후 변경 가능)</div>
-      <input type="hidden" style={{ display: "none" }} value={accent} readOnly />
     </div>
   );
 }

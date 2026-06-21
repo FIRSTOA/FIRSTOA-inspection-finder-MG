@@ -8,7 +8,8 @@ import { CATEGORY_SCHEMAS, type FieldDef } from "./categoryForms";
 
 const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
-type LoadResult = { company: string; region: string; keymen: string[]; author: string };
+type Keyman = { label: string; name: string; phone: string };
+type LoadResult = { grade: string; company: string; region: string; keymen: Keyman[]; author: string };
 type Props = {
   schemaKey: string;
   form: Record<string, string>;
@@ -20,7 +21,7 @@ type Props = {
 };
 
 export default function CategoryForm({ schemaKey, form, setForm, author, setAuthor, onLoad, onError }: Props) {
-  const [keymen, setKeymen] = useState<string[]>([]);
+  const [keymen, setKeymen] = useState<Keyman[]>([]);
   const schema = CATEGORY_SCHEMAS[schemaKey];
   if (!schema) return null;
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
@@ -30,11 +31,13 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
     if (!r) { onError(`${src === "inspection" ? "점검" : "AS"} 탭에 입력된 내용이 없어요`); return; }
     if (r.author) setAuthor(r.author);
     setKeymen(r.keymen);
+    const k0 = r.keymen[0];
     const next = { ...form };
     for (const sec of schema.sections) for (const f of sec.fields) {
       if (f.fill === "company") next[f.key] = r.company || next[f.key];
       else if (f.fill === "region") next[f.key] = r.region || next[f.key];
-      else if (f.fill === "keyman") next[f.key] = r.keymen[0] || next[f.key];
+      else if (f.fill === "grade") next[f.key] = r.grade || next[f.key];
+      else if (f.fill === "keyman") next[f.key] = (k0 ? (k0.phone ? `${k0.name} ${k0.phone}`.trim() : k0.name || k0.label) : next[f.key]);
     }
     setForm(next);
   };
@@ -76,23 +79,21 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="flex gap-2">
-        <button type="button" onClick={() => handleLoad("inspection")}
-          className="flex-1 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
-          ↓ 점검에서 불러오기
-        </button>
-        <button type="button" onClick={() => handleLoad("as")}
-          className="flex-1 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">
-          ↓ AS에서 불러오기
-        </button>
+      <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
+        <span className="text-xs font-bold text-slate-500">불러오기</span>
+        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">점검</button>
+        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">AS</button>
+        <span className="ml-auto text-[10px] text-slate-400">업체·지역·등급·키맨 자동</span>
       </div>
 
       {keymen.length > 1 && keymanKey && (
         <label className="block">
-          <span className="text-xs font-medium text-slate-500">키맨 선택</span>
-          <select value={form[keymanKey] || ""} onChange={(e) => set(keymanKey, e.target.value)}
+          <span className="text-xs font-medium text-slate-500">키맨 선택 (여러 명)</span>
+          <select onChange={(e) => { if (e.target.value !== "manual" && e.target.value !== "") set(keymanKey, e.target.value); }}
             className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none">
-            {keymen.map((k, i) => <option key={i} value={k}>{k}</option>)}
+            <option value="">선택…</option>
+            {keymen.map((k, i) => <option key={i} value={k.phone ? `${k.name} ${k.phone}`.trim() : (k.name || k.label)}>{k.label}</option>)}
+            <option value="manual">직접입력 (담당자 칸에 직접)</option>
           </select>
         </label>
       )}

@@ -3180,6 +3180,33 @@ function extractVendorFromText(text: string): string {
   return m ? m[1].trim() : "";
 }
 
+// 키맨/접수자 문자열 → [{label, name, phone}]. 여러 명(전화 2개 이상)이면 분리.
+const PHONE_RE = /(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|\d{2,4}-\d{3,4}-\d{4})/;
+export function parseKeymen_(raw: string): { label: string; name: string; phone: string }[] {
+  const s = String(raw || "").trim();
+  if (!s) return [];
+  let parts = s.split(/[,/;·\n]+/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    const phones = s.match(new RegExp(PHONE_RE, "g"));
+    if (phones && phones.length >= 2) {
+      parts = [];
+      let rest = s;
+      for (const ph of phones) {
+        const idx = rest.indexOf(ph);
+        parts.push(rest.slice(0, idx + ph.length).trim());
+        rest = rest.slice(idx + ph.length);
+      }
+      if (rest.trim()) parts[parts.length - 1] += " " + rest.trim();
+    }
+  }
+  return parts.map((p) => {
+    const m = p.match(PHONE_RE);
+    const phone = m ? m[0].trim() : "";
+    const name = p.replace(phone, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+    return { label: p, name, phone };
+  });
+}
+
 export default function App() {
   // Restore the previous working session so leaving/returning (or a stray
   // tap) doesn't wipe everything that was being entered.
@@ -3480,7 +3507,7 @@ export default function App() {
     showToast("양식을 불러왔어요");
   };
 
-  // IT통합 [점검/AS 불러오기]: 해당 탭 세션 출력에서 업체명·지역·키맨 추출
+  // [점검/AS 불러오기]: 세션 출력에서 등급·업체명·지역·키맨(이름/연락처 분리) 추출
   const loadSharedFromInspect = (src: "inspection" | "as") => {
     const key: Mode = src === "inspection" ? "inspection" : "blank-report";
     const s = key === mode ? { textOutput, listOutput } : modeStateRef.current[key];
@@ -3492,9 +3519,9 @@ export default function App() {
     const pick = (re: RegExp) => { const m = text.match(re); return m ? m[1].trim() : ""; };
     const company = pick(/업체명\s*[:：]\s*(.+)/);
     const region = pick(/지역\s*[:：]\s*(.+)/);
+    const grade = pick(/등급\s*[:：]\s*(.+)/);
     const keymanRaw = pick(/키맨\/접수자\s*[:：]\s*(.+)/);
-    const keymen = keymanRaw.split(/[,/;·]|\n/).map((x) => x.trim()).filter(Boolean);
-    return { company, region, keymen: keymen.length ? keymen : (keymanRaw ? [keymanRaw] : []), author };
+    return { grade, company, region, keymen: parseKeymen_(keymanRaw), author };
   };
 
   // 📷 사진 → 양식: 비전 모델로 추출 후 해당 변환기에 입력.
@@ -3711,7 +3738,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
+      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : "pb-60"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">

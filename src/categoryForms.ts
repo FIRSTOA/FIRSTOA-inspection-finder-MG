@@ -3,7 +3,7 @@
  *  - buildCatText: 폼 → 카톡 전송 텍스트(■ 양식)
  */
 export type FieldType = "text" | "textarea" | "select";
-export type FieldFill = "author" | "company" | "region" | "keyman";
+export type FieldFill = "author" | "company" | "region" | "keyman" | "grade";
 export type FieldDef = { key: string; label: string; type: FieldType; options?: string[]; fill?: FieldFill };
 export type Section = { title: string; fields: FieldDef[] };
 export type FormSchema = {
@@ -23,7 +23,7 @@ export const CATEGORY_SCHEMAS: Record<string, FormSchema> = {
     title: "/불만접수", category: "불만", table: "bulman", roomKey: "불만|*",
     sections: [
       { title: "기본정보", fields: [
-        T("작성자", "작성자", "author"), T("지역", "지역", "region"), T("등급", "등급"),
+        T("작성자", "작성자", "author"), T("지역", "지역", "region"), T("등급", "등급", "grade"),
         T("업체명", "업체명", "company"), T("담당자", "담당자/연락처", "keyman"), T("기종", "기종/위치"),
       ] },
       { title: "불만 분류", fields: [
@@ -46,7 +46,7 @@ export const CATEGORY_SCHEMAS: Record<string, FormSchema> = {
     title: "/계약갱신", category: "재계약", table: "recontract", roomKey: "재계약|*",
     sections: [
       { title: "기본정보", fields: [
-        T("작성자", "작성자", "author"), T("지역", "지역", "region"), T("등급", "등급"),
+        T("작성자", "작성자", "author"), T("지역", "지역", "region"), T("등급", "등급", "grade"),
         T("업체명", "업체명", "company"), T("담당자", "담당자/연락처", "keyman"), T("기종", "기종/위치"), T("계약종료일", "계약 종료일"),
       ] },
       { title: "갱신", fields: [
