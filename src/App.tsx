@@ -3188,16 +3188,11 @@ function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-white py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+      className="relative flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-2 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
     >
-      <span
-        className="flex h-9 w-9 items-center justify-center rounded-xl text-lg text-white shadow-md ring-1 ring-white/10"
-        style={{ background: disabled ? "#94A3B8" : `linear-gradient(135deg, #64748B, ${accent})` }}
-      >
-        {icon}
-      </span>
-      <span className="text-[11px] font-bold tracking-tight text-slate-700">{label}</span>
-      {dot && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" style={{ background: accent }} />}
+      <span className="text-sm leading-none">{icon}</span>
+      <span className="text-[11px] font-medium text-slate-600">{label}</span>
+      {dot && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-white" style={{ background: accent }} />}
     </button>
   );
 }
@@ -3367,6 +3362,8 @@ export default function App() {
 
   const deviceBlockRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const resultScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { activeTabRef.current?.scrollIntoView({ inline: "center", block: "nearest" }); }, [mode]);
   // Scroll the result panel to the selected device — only when the device
   // selection changes, and only within the panel (never the page), so
   // typing in form fields doesn't make the screen jump.
@@ -3710,23 +3707,15 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
-        <header className="mb-4 flex items-end justify-between">
-          <div>
-            <span
-              className="mb-1.5 inline-block rounded-full px-3 py-1 text-[11px] font-bold tracking-wide text-white shadow-md"
-              style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
-            >
-              퍼스트전산 CS팀
-            </span>
-            <h1 className="text-2xl font-black tracking-tighter text-slate-900 sm:text-3xl">
-              점검이력 변환기
-            </h1>
+        <header className="mb-2.5 flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">퍼스트 현장리포트</h1>
+            <span className="text-[10px] font-medium text-slate-400">CS팀</span>
           </div>
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-base font-bold text-white shadow-md transition active:scale-95"
-            style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white transition active:scale-95"
             aria-label="사용 설명서"
           >
             ?
@@ -3743,6 +3732,7 @@ export default function App() {
             return (
               <button
                 key={label}
+                ref={active ? activeTabRef : undefined}
                 role="tab"
                 aria-selected={active}
                 onClick={() => { if (!active) handleModeChange(target); }}
