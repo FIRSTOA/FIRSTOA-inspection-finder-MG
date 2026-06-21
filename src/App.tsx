@@ -3179,24 +3179,6 @@ function extractVendorFromText(text: string): string {
   return m ? m[1].trim() : "";
 }
 
-// 상단 사각 아이콘 버튼 (거래처검색 / 원본입력 / 통합이력) — 글로시 블랙 칩
-function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
-  icon: string; label: string; accent: string; onClick: () => void; disabled?: boolean; dot?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="relative flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-2 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
-    >
-      <span className="text-sm leading-none">{icon}</span>
-      <span className="text-[11px] font-medium text-slate-600">{label}</span>
-      {dot && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-white" style={{ background: accent }} />}
-    </button>
-  );
-}
-
 export default function App() {
   // Restore the previous working session so leaving/returning (or a stray
   // tap) doesn't wipe everything that was being entered.
@@ -3711,14 +3693,26 @@ export default function App() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">FIELD</h1>
             <span className="text-[10px] font-medium text-slate-400">퍼스트전산 CS팀</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white transition active:scale-95"
-            aria-label="사용 설명서"
-          >
-            ?
-          </button>
+          <div className="flex items-center gap-1.5">
+            {(mode === "inspection" || mode === "air-purifier") && (
+              <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🔍</button>
+            )}
+            {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
+              <button type="button" onClick={openInputModal} aria-label="원본입력"
+                className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">
+                📝{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
+              </button>
+            )}
+            {(mode === "inspection" || mode === "air-purifier") && (
+              <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40">{photoBusy ? "⏳" : "📷"}</button>
+            )}
+            <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🗂️</button>
+            <button type="button" onClick={() => setHelpOpen(true)} aria-label="도움말"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white transition active:scale-95">?</button>
+          </div>
         </header>
 
         {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
@@ -3792,19 +3786,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 사각 아이콘 툴바 — 거래처검색 / 원본입력 / 통합이력 (팝업으로 분리) */}
-        <div className="mb-3 flex gap-2">
-          {(mode === "inspection" || mode === "air-purifier") && (
-            <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
-          )}
-          {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
-            <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
-          )}
-          {(mode === "inspection" || mode === "air-purifier") && (
-            <ToolButton icon={photoBusy ? "⏳" : "📷"} label={photoBusy ? "변환중" : "사진양식"} accent={config.accent} onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} />
-          )}
-          <ToolButton icon="🗂️" label="통합이력" accent={config.accent} onClick={() => setHistoryOpen(true)} />
-        </div>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
         {/* Processing form — 미양식 + 점검 */}
