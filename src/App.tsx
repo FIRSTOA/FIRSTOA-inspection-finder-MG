@@ -3163,7 +3163,7 @@ function extractVendorFromText(text: string): string {
   return m ? m[1].trim() : "";
 }
 
-// 상단 사각 아이콘 버튼 (거래처검색 / 원본입력 / 통합이력) — 플랫 미니멀 카드
+// 상단 사각 아이콘 버튼 (거래처검색 / 원본입력 / 통합이력) — 글로시 블랙 칩
 function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
   icon: string; label: string; accent: string; onClick: () => void; disabled?: boolean; dot?: boolean;
 }) {
@@ -3172,10 +3172,15 @@ function ToolButton({ icon, label, accent, onClick, disabled, dot }: {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-3.5 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
+      className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-white py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
     >
-      <span className="text-xl leading-none">{icon}</span>
-      <span className="text-[11px] font-medium text-slate-600">{label}</span>
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-xl text-lg text-white shadow-md ring-1 ring-white/10"
+        style={{ background: disabled ? "#94A3B8" : `linear-gradient(135deg, #64748B, ${accent})` }}
+      >
+        {icon}
+      </span>
+      <span className="text-[11px] font-bold tracking-tight text-slate-700">{label}</span>
       {dot && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full ring-2 ring-white" style={{ background: accent }} />}
     </button>
   );
@@ -3636,22 +3641,26 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${hasOutput && !previewCollapsed ? "pb-[42vh]" : "pb-28"}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-4 flex items-end justify-between">
           <div>
-            <span className="mb-1.5 inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-slate-500">
+            <span
+              className="mb-1.5 inline-block rounded-full px-3 py-1 text-[11px] font-bold tracking-wide text-white shadow-md"
+              style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
+            >
               퍼스트전산 CS팀
             </span>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tighter text-slate-900 sm:text-3xl">
               점검이력 변환기
             </h1>
           </div>
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base font-semibold text-slate-400 transition hover:bg-slate-50 active:scale-95"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-base font-bold text-white shadow-md transition active:scale-95"
+            style={{ background: "linear-gradient(135deg, #64748B, #334155)" }}
             aria-label="사용 설명서"
           >
             ?
@@ -3660,7 +3669,7 @@ export default function App() {
 
         {/* Mode tabs - segmented control (B&W) */}
         <div
-          className="mb-3 grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1"
+          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
           role="tablist"
         >
           {MODE_ORDER.map((m: Mode) => {
@@ -3672,9 +3681,13 @@ export default function App() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => handleModeChange(m)}
-                className={`rounded-lg py-2.5 text-sm transition ${
-                  active ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"
+                className={`rounded-xl py-2.5 text-sm transition ${
+                  active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"
                 }`}
+                style={{
+                  background: active ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent",
+                  boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined,
+                }}
               >
                 {c.label}
               </button>
