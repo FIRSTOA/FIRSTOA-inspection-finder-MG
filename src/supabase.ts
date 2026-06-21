@@ -77,6 +77,20 @@ export async function getRoomMap(): Promise<Record<string, string>> {
   return m;
 }
 
+// 사진 → Supabase Storage(photos 버킷) 업로드 후 공개 URL 반환. (버킷/정책은 SQL로 1회 생성)
+export async function uploadPhoto(path: string, file: Blob, contentType = "image/jpeg"): Promise<string> {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/photos/${path}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType, "x-upsert": "true" },
+    body: file,
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`사진 업로드 실패(${res.status}): ${t.slice(0, 160)}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
+}
+
 export async function enqueueOutbox(room: string, text: string): Promise<void> {
   const res = await fetch(`${REST}/outbox`, {
     method: "POST",
