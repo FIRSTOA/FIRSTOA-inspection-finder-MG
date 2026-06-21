@@ -3362,8 +3362,6 @@ export default function App() {
 
   const deviceBlockRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const resultScrollRef = useRef<HTMLDivElement | null>(null);
-  const activeTabRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => { activeTabRef.current?.scrollIntoView({ inline: "center", block: "nearest" }); }, [mode]);
   // Scroll the result panel to the selected device — only when the device
   // selection changes, and only within the panel (never the page), so
   // typing in form fields doesn't make the screen jump.
@@ -3585,6 +3583,7 @@ export default function App() {
   };
 
   const [sending, setSending] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
@@ -3709,8 +3708,8 @@ export default function App() {
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-baseline gap-2">
-            <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">퍼스트 현장리포트</h1>
-            <span className="text-[10px] font-medium text-slate-400">CS팀</span>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">FIELD</h1>
+            <span className="text-[10px] font-medium text-slate-400">퍼스트전산 CS팀</span>
           </div>
           <button
             type="button"
@@ -3722,32 +3721,55 @@ export default function App() {
           </button>
         </header>
 
-        {/* 상단 탭 — 점검 / AS / 확장성 / 불만 / 미수 / 초과조정 / 재계약 (가로 스크롤) */}
-        <div
-          className="mb-3 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100 p-1"
-          role="tablist"
-        >
-          {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => {
-            const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
-            return (
-              <button
-                key={label}
-                ref={active ? activeTabRef : undefined}
-                role="tab"
-                aria-selected={active}
-                onClick={() => { if (!active) handleModeChange(target); }}
-                className={`shrink-0 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm transition ${
-                  active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"
-                }`}
-                style={{
-                  background: active ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent",
-                  boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined,
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+        {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
+        <div className="relative mb-3">
+          <div className="grid grid-cols-4 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1" role="tablist">
+            {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
+              const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
+              return (
+                <button
+                  key={label}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => { setMoreOpen(false); if (!active) handleModeChange(target); }}
+                  className={`rounded-xl py-2.5 text-sm transition ${active ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"}`}
+                  style={{ background: active ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent", boxShadow: active ? "0 6px 16px rgba(0,0,0,0.28)" : undefined }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {(() => {
+              const moreActive = mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
+              return (
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "font-bold text-white" : "font-medium text-slate-500 hover:text-slate-800"}`}
+                  style={{ background: moreActive ? "linear-gradient(135deg, #475569, #1E293B)" : "transparent", boxShadow: moreActive ? "0 6px 16px rgba(0,0,0,0.28)" : undefined }}
+                >
+                  {moreActive ? config.label : "더보기"} ▾
+                </button>
+              );
+            })()}
+          </div>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+              <div className="absolute right-1 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                {([["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => { setMoreOpen(false); if (mode !== target) handleModeChange(target); }}
+                    className={`block w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 ${mode === target ? "font-bold text-slate-900" : "text-slate-600"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
