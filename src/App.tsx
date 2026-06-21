@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
+import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
 import UnifiedHistory from "./UnifiedHistory";
-import { visionForm, sendForm } from "./api";
+import { visionForm, sendForm, sendPcForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -29,7 +30,7 @@ function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
 import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
 import type { AuthorTeam } from "./authors";
 
-type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note";
+type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc";
 
 type CopyResult = {
   ok: boolean;
@@ -103,6 +104,13 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
     bgSoft: BW_SOFT,
     textDark: BW_TEXT,
     placeholder: "여기에 번호가 붙은 스케줄 원문을 여러 개 붙여넣으세요.",
+  },
+  pc: {
+    label: "IT통합",
+    accent: BW_ACCENT,
+    bgSoft: BW_SOFT,
+    textDark: BW_TEXT,
+    placeholder: "",
   },
 };
 
@@ -3324,6 +3332,11 @@ export default function App() {
 
   // Result blocks for the bottom panel, tagged with their device index so
   // selecting a device scrolls its block into view.
+  // IT통합(PC) 폼 상태 (탭 전환에도 유지, 초기화 시 리셋)
+  const [pcForm, setPcForm] = useState<PcFormState>({ ...EMPTY_PC_FORM });
+  const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
+  const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
+
   const resultBlocks = useMemo<ResultBlock[]>(() => {
     if (mode === "inspection") return splitResultBlocks(displayedTextOutput);
     if (mode === "blank-report") {
@@ -3331,8 +3344,9 @@ export default function App() {
     }
     if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
     if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
+    if (mode === "pc") return pcFilled ? [{ text: pcText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList]);
+  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -3473,6 +3487,23 @@ export default function App() {
     showToast("양식을 불러왔어요");
   };
 
+  // IT통합 [점검/AS 불러오기]: 해당 탭 세션 출력에서 업체명·지역·키맨 추출
+  const loadSharedFromInspect = (src: "inspection" | "as") => {
+    const key: Mode = src === "inspection" ? "inspection" : "blank-report";
+    const s = key === mode ? { textOutput, listOutput } : modeStateRef.current[key];
+    if (!s) return null;
+    const text = (s.textOutput && s.textOutput.trim())
+      ? s.textOutput
+      : (s.listOutput || []).map((i: ResultItem) => i.content).join("\n");
+    if (!text.trim()) return null;
+    const pick = (re: RegExp) => { const m = text.match(re); return m ? m[1].trim() : ""; };
+    const company = pick(/업체명\s*[:：]\s*(.+)/);
+    const region = pick(/지역\s*[:：]\s*(.+)/);
+    const keymanRaw = pick(/키맨\/접수자\s*[:：]\s*(.+)/);
+    const keymen = keymanRaw.split(/[,/;·]|\n/).map((x) => x.trim()).filter(Boolean);
+    return { company, region, keymen: keymen.length ? keymen : (keymanRaw ? [keymanRaw] : []), author };
+  };
+
   // 📷 사진 → 양식: 비전 모델로 추출 후 해당 변환기에 입력.
   //  - 청정기 탭: 청정기 양식으로 (현재 탭 유지)
   //  - 그 외(미양식 등): 점검 양식으로 (점검 탭으로 전환해 결과 표시)
@@ -3605,6 +3636,15 @@ export default function App() {
       showToast("사진 업로드 실패: " + ((e as Error).message || "오류"), "error");
       return;
     }
+
+    // IT통합(PC): pc_expansion 저장 + PC방 전송 (점검/AS 경로와 별개)
+    if (mode === "pc") {
+      const res = await sendPcForm(pcForm, author, target, new Date().toISOString());
+      setSending(false);
+      showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      return;
+    }
+
     const modeLabel =
       mode === "inspection" ? "점검" :
       mode === "blank-report" ? "AS" :
@@ -3634,12 +3674,13 @@ export default function App() {
     setAirForm(EMPTY_AIR_FORM);
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
+    setPcForm({ ...EMPTY_PC_FORM });
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0;
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900">
@@ -3668,13 +3709,13 @@ export default function App() {
           </button>
         </header>
 
-        {/* 상단 탭 — 점검 / AS */}
+        {/* 상단 탭 — 점검 / AS / IT통합 */}
         <div
-          className="mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
+          className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1"
           role="tablist"
         >
-          {([["점검", "inspection"], ["AS", "blank-report"]] as [string, Mode][]).map(([label, target]) => {
-            const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === "blank-report";
+          {([["점검", "inspection"], ["AS", "blank-report"], ["IT통합", "pc"]] as [string, Mode][]).map(([label, target]) => {
+            const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
             return (
               <button
                 key={label}
@@ -3720,7 +3761,9 @@ export default function App() {
           {(mode === "inspection" || mode === "air-purifier") && (
             <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
           )}
-          <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
+          {mode !== "pc" && (
+            <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
+          )}
           {(mode === "inspection" || mode === "air-purifier") && (
             <ToolButton icon={photoBusy ? "⏳" : "📷"} label={photoBusy ? "변환중" : "사진양식"} accent={config.accent} onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} />
           )}
@@ -3756,6 +3799,19 @@ export default function App() {
             accent={config.accent}
             author={author}
             setAuthor={handleSetAuthor}
+          />
+        )}
+
+        {/* IT통합(PC) form */}
+        {mode === "pc" && (
+          <PcForm
+            form={pcForm}
+            setForm={setPcForm}
+            author={author}
+            setAuthor={handleSetAuthor}
+            accent={config.accent}
+            onLoad={loadSharedFromInspect}
+            onError={(m) => showToast(m, "error")}
           />
         )}
 
@@ -3855,22 +3911,26 @@ export default function App() {
             >
               {sending ? "보내는 중…" : "보내기"}
             </button>
-            <button
-              onClick={() => handleSendAll("자가")}
-              disabled={!hasOutput || sending}
-              className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#0f766e" } : undefined}
-            >
-              자가
-            </button>
-            <button
-              onClick={() => handleSendAll("부품")}
-              disabled={!hasOutput || sending}
-              className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#b45309" } : undefined}
-            >
-              부품
-            </button>
+            {mode !== "pc" && (
+              <>
+                <button
+                  onClick={() => handleSendAll("자가")}
+                  disabled={!hasOutput || sending}
+                  className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                  style={hasOutput && !sending ? { background: "#0f766e" } : undefined}
+                >
+                  자가
+                </button>
+                <button
+                  onClick={() => handleSendAll("부품")}
+                  disabled={!hasOutput || sending}
+                  className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                  style={hasOutput && !sending ? { background: "#b45309" } : undefined}
+                >
+                  부품
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

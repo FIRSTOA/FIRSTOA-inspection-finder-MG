@@ -59,6 +59,19 @@ export async function insertRecord(table: "jeomgeom" | "as_records", row: Row): 
   throw new Error(`저장 실패(${res.status}): ${t.slice(0, 200)}`);
 }
 
+// 범용 단일행 insert. on_conflict=_dupKey 무시(중복이면 dup). 201/200 신규, 409 중복.
+export async function insertRow(table: string, row: Record<string, unknown>): Promise<InsertResult> {
+  const res = await fetch(`${REST}/${table}?on_conflict=_dupKey`, {
+    method: "POST",
+    headers: { ...BASE_HEADERS, Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify(row),
+  });
+  if (res.status === 201 || res.status === 200) return "new";
+  if (res.status === 409) return "dup";
+  const t = await res.text().catch(() => "");
+  throw new Error(`저장 실패 ${table}(${res.status}): ${t.slice(0, 200)}`);
+}
+
 export async function getConfig(): Promise<Record<string, string>> {
   const res = await fetch(`${REST}/app_config?select=key,value`, { headers: BASE_HEADERS });
   if (!res.ok) throw new Error(`설정 조회 실패(${res.status})`);

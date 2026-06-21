@@ -7,7 +7,9 @@
  */
 
 import { buildRecords } from "./inspectParser";
-import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows } from "./supabase";
+import { md5 } from "./md5";
+import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows, insertRow } from "./supabase";
+import type { PcFormState } from "./PcForm";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -228,6 +230,39 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal"):
         ? `${kind} 요청 ${dest}`
         : anyNew ? `저장 완료 — ${dest}` : "이미 저장된 내용입니다(중복).",
     };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
+// IT통합(PC) 폼 → pc_expansion 저장 + PC방 전송.
+export async function sendPcForm(form: PcFormState, author: string, text: string, ts?: string): Promise<SaveResp> {
+  try {
+    const vendor = String(form.company || "").trim();
+    if (!vendor) return { ok: false, error: "업체명을 입력하세요." };
+    const date = toKstDate(ts);
+    const row: Record<string, unknown> = {
+      "날짜": date, "작성자": author, "등급": form.grade,
+      "사무/설계/디자인/개발": form.purpose, "세부사양": form.spec, "지역": form.region,
+      "업체담당자": form.vendorContact, "연락처": form.contact, "IT담당자": form.itContact,
+      "렌탈or구매or유지보수": form.rentalBuyMaint, "지정업체": form.designatedVendor, "지정업체만족도": form.designatedSat,
+      "총 인원": form.totalPeople, "인원 추가 설명": form.peopleNote,
+      "수량": form.qty, "금액": form.amount, "시기": form.timing, "시기 추가 설명": form.timingNote,
+      "어필 OR 추가영업": form.appeal,
+      "_업체명": vendor, "_출처": "웹앱:IT통합", "_원문": text,
+      "_dupKey": md5([vendor, date, form.spec, form.qty, form.amount, form.timing, form.appeal].join("|")),
+    };
+    const r = await insertRow("pc_expansion", row);
+
+    let rooms: string[] = [];
+    if (r === "new") {
+      const cfg = await getConfig();
+      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+      else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || testRoom]; }
+      for (const room of rooms) await enqueueOutbox(room, text);
+    }
+    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
