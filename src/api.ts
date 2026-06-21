@@ -103,6 +103,32 @@ function toForm(r: Record<string, unknown>, gubun: Gubun): InspForm {
     source: gubun,
   };
 }
+// ── 청정기 거래처검색: 모델명이 청정기 브랜드(블루스카이/샤오미/Xiaomi/mi-air)인 점검기록만 ──
+export type AirHit = { vendor: string; model: string; date: string; region: string; author: string; n: number };
+export async function searchAircleaner(q: string): Promise<AirHit[]> {
+  const query = String(q || "").trim();
+  if (query.length < 1) return [];
+  const rows = await rpc<Array<{ vendor: string; model: string; dt: string; region: string; author: string; n: number }>>(
+    "search_aircleaner", { q: query }
+  );
+  return rows.map((r) => ({ vendor: r.vendor, model: r.model || "", date: r.dt || "", region: r.region || "", author: r.author || "", n: r.n || 0 }));
+}
+
+const AIR_RX = /블루스카이|샤오미|xiaomi|mi[\s-]?air|blue\s?sky/i;
+export type AirForm = { date: string; model: string; region: string; author: string; text: string };
+export async function getAirForms(vendor: string): Promise<AirForm[]> {
+  const v = String(vendor || "").trim();
+  if (!v) return [];
+  const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&${vendorEq(v)}&order=id.desc&limit=30`);
+  return rows
+    .filter((r) => AIR_RX.test(String(r["모델명"] ?? "")))
+    .slice(0, 6)
+    .map((r) => ({
+      date: String(r["작성일"] ?? ""), model: String(r["모델명"] ?? ""),
+      region: String(r["지역"] ?? ""), author: String(r["작성자"] ?? ""), text: String(r["_원문"] ?? ""),
+    }));
+}
+
 export async function getInspForms(vendor: string): Promise<InspFormsResp> {
   const v = String(vendor || "").trim();
   if (!v) return { vendor: "", forms: [] };

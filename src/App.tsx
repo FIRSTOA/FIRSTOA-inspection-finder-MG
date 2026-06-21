@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import VendorSearch from "./VendorSearch";
+import AirSearch from "./AirSearch";
 import UnifiedHistory from "./UnifiedHistory";
 import { visionForm, sendForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
@@ -3716,7 +3717,7 @@ export default function App() {
 
         {/* 사각 아이콘 툴바 — 거래처검색 / 원본입력 / 통합이력 (팝업으로 분리) */}
         <div className="mb-3 flex gap-2">
-          {mode === "inspection" && (
+          {(mode === "inspection" || mode === "air-purifier") && (
             <ToolButton icon="🔍" label="거래처검색" accent={config.accent} onClick={() => setSearchOpen(true)} />
           )}
           <ToolButton icon="📝" label="원본입력" accent={config.accent} onClick={openInputModal} dot={!!inputText.trim()} />
@@ -4068,18 +4069,27 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between rounded-t-3xl px-5 py-4 text-white" style={{ background: config.accent }}>
-              <div className="text-base font-bold">거래처 점검양식 찾기</div>
+              <div className="text-base font-bold">{mode === "air-purifier" ? "청정기 거래처 찾기" : "거래처 점검양식 찾기"}</div>
               <button type="button" onClick={() => setSearchOpen(false)} className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
                 닫기
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <VendorSearch
-                accent={config.accent}
-                onLoadForm={handleLoadForm}
-                onVendor={setCurrentVendor}
-                onError={(m) => showToast(m, "error")}
-              />
+              {mode === "air-purifier" ? (
+                <AirSearch
+                  accent={config.accent}
+                  onLoadForm={handleLoadForm}
+                  onVendor={setCurrentVendor}
+                  onError={(m) => showToast(m, "error")}
+                />
+              ) : (
+                <VendorSearch
+                  accent={config.accent}
+                  onLoadForm={handleLoadForm}
+                  onVendor={setCurrentVendor}
+                  onError={(m) => showToast(m, "error")}
+                />
+              )}
             </div>
           </div>
         </div>
