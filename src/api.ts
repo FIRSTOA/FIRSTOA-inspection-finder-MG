@@ -149,7 +149,7 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
 
   const map = await getRoomMap();
-  if (kind === "자가") return [map["자가|*"] || "여분토너요청방"];
+  if (kind === "자가") return [map["자가|*"] || "자가(토너 폐통) 여분토너요청방"];
   if (kind === "부품") return [map["부품|*"] || "부품요청"];
 
   // normal: 지역별 점검방(+AS방)
