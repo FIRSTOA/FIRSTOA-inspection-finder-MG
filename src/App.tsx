@@ -3979,7 +3979,11 @@ export default function App() {
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {photos.map((p, i) => (
                 <div key={p.url} className="relative shrink-0">
-                  <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  {p.file.type.startsWith("video/") ? (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-800 text-lg text-white">🎥</div>
+                  ) : (
+                    <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  )}
                   <button type="button" onClick={() => removePhoto(i)}
                     className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">✕</button>
                 </div>
