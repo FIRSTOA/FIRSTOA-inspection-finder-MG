@@ -3738,15 +3738,15 @@ export default function App() {
 
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
-        <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "mb-3 border-b-2 border-slate-300 bg-slate-100 pb-3 pt-1" : ""}`}>
+        <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white transition hover:bg-slate-50 active:scale-95">
-              <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-slate-700" /><span className="h-0.5 w-4 rounded bg-slate-700" /><span className="h-0.5 w-4 rounded bg-slate-700" /></span>
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+              <span className="flex flex-col gap-[3px]"><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /></span>
             </button>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className={`text-xl font-bold tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-900"}`}>
               {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : "IT 견적"}
             </h1>
           </div>
@@ -3787,7 +3787,7 @@ export default function App() {
 
         {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
         <div className="relative">
-          <div className="grid grid-cols-4 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1" role="tablist">
+          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/10 p-1" role="tablist">
             {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
               const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
               return (
@@ -3796,7 +3796,7 @@ export default function App() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => { setMoreOpen(false); if (!active) handleModeChange(target); }}
-                  className={`rounded-xl py-2.5 text-sm transition ${active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-slate-500 hover:text-slate-800"}`}
+                  className={`rounded-xl py-2.5 text-sm transition ${active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-white/70 hover:text-white"}`}
                 >
                   {label}
                 </button>
@@ -3808,7 +3808,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm font-bold transition ${moreActive ? "bg-[#334155] text-white shadow-sm" : "bg-slate-200/60 text-slate-600 hover:bg-slate-200"}`}
+                  className={`rounded-xl py-2.5 text-sm font-bold transition ${moreActive ? "bg-white text-slate-900 shadow-sm" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -3836,7 +3836,7 @@ export default function App() {
 
         {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
         {(mode === "inspection" || mode === "air-purifier") && (
-          <div className="mt-2 flex gap-1 rounded-xl bg-slate-100 p-1">
+          <div className="mt-2 flex gap-1 rounded-xl bg-white/10 p-1">
             {([["복합기", "inspection"], ["청정기", "air-purifier"]] as [string, Mode][]).map(([label, target]) => {
               const active = mode === target;
               return (
@@ -3844,7 +3844,7 @@ export default function App() {
                   key={label}
                   onClick={() => { if (!active) handleModeChange(target); }}
                   className={`flex-1 rounded-lg py-2 text-sm transition ${
-                    active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-slate-500 hover:text-slate-800"
+                    active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-white/70 hover:text-white"
                   }`}
                 >
                   {label}
