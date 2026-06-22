@@ -2742,7 +2742,6 @@ function ProcessingFormPanel({
           value={itemForm.spareRaw}
           onChange={(e) => setItemF("spareRaw", e.target.value)}
           rows={2}
-          placeholder="예: K-2 C-1 M-1 Y-1 폐-1 / 1set, 폐1 / 공용"
           className="w-full resize-y rounded-lg bg-white p-2 font-mono text-xs outline-none"
         />
       </div>
