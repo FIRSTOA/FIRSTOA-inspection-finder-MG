@@ -4026,16 +4026,16 @@ export default function App() {
                 <button
                   onClick={() => handleSendAll("자가")}
                   disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-                  style={hasOutput && !sending ? { background: "#0f766e" } : undefined}
+                  className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
+                  style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}
                 >
                   자가
                 </button>
                 <button
                   onClick={() => handleSendAll("부품")}
                   disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-                  style={hasOutput && !sending ? { background: "#b45309" } : undefined}
+                  className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
+                  style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}
                 >
                   부품
                 </button>
