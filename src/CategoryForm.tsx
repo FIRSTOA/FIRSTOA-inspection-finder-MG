@@ -81,8 +81,8 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
         <span className="text-xs font-bold text-slate-500">불러오기</span>
-        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-bold text-[#1E3A5F]">점검</button>
-        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-bold text-[#1E3A5F]">AS</button>
+        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#F1F5F9] px-3 py-1 text-xs font-bold text-[#334155]">점검</button>
+        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#F1F5F9] px-3 py-1 text-xs font-bold text-[#334155]">AS</button>
         <span className="ml-auto text-[10px] text-slate-400">업체·지역·등급·키맨 자동</span>
       </div>
 

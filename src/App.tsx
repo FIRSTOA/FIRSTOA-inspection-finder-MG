@@ -77,8 +77,8 @@ type ModeConfig = {
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
 // 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
-const BW_ACCENT = "#1E3A5F";
-const BW_SOFT = "#EEF3F8";
+const BW_ACCENT = "#334155";
+const BW_SOFT = "#F1F5F9";
 const BW_TEXT = "#191F28";
 const MODE_CONFIG: Record<Mode, ModeConfig> = {
   inspection: {
@@ -2618,6 +2618,8 @@ function ProcessingFormPanel({
 
   return (
     <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
+      {/* ▣ 기본 입력 */}
+      <div className="mb-3 rounded-xl border border-slate-200 p-3">
       {/* 작성자 / 레벨 */}
       <div className={`mb-2 grid gap-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`}>
         <div>
@@ -2644,7 +2646,7 @@ function ProcessingFormPanel({
 
       {/* 기기 선택 (2대 이상일 때만) */}
       {itemCount > 1 && (
-        <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+        <div className="mb-2 rounded-lg bg-slate-50 p-2">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-700">기기 선택</span>
             <span className="text-[10px] text-slate-500">{itemCount}대 중 {selectedItem + 1}번 편집 중</span>
@@ -2664,7 +2666,7 @@ function ProcessingFormPanel({
       )}
 
       {/* 처리내용 */}
-      <div className="mb-2 mt-2 border-t border-slate-100 pt-3">
+      <div className="mb-2">
         <div className="mb-1 text-xs font-semibold text-slate-700">처리내용</div>
         <textarea
           value={itemForm.processContent}
@@ -2676,7 +2678,7 @@ function ProcessingFormPanel({
       </div>
 
       {/* 매수 */}
-      <div className="mb-2 mt-2 border-t border-slate-100 pt-3">
+      <div className="mb-2">
         <div className="mb-1 text-xs font-semibold text-slate-700">매수</div>
         <div className="grid grid-cols-4 gap-1.5">
           <input
@@ -2757,7 +2759,10 @@ function ProcessingFormPanel({
           className="w-full resize-y rounded-lg bg-white p-2 font-mono text-xs outline-none"
         />
       </div>
+      </div>{/* /기본 입력 */}
 
+      {/* ▣ 추가 정보 */}
+      <div className="mb-3 rounded-xl border border-slate-200 p-3">
       {showHantinParking && (
         <>
           {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
@@ -2825,7 +2830,7 @@ function ProcessingFormPanel({
       )}
 
       {/* 특이사항 */}
-      <div className="mb-3">
+      <div>
         <div className="mb-1 text-xs font-semibold text-slate-700">특이사항</div>
         <textarea
           value={itemForm.notes}
@@ -2834,9 +2839,12 @@ function ProcessingFormPanel({
           className="w-full resize-none rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
         />
       </div>
+      </div>{/* /추가 정보 */}
 
+      {/* ▣ 부품·자가·시간 */}
+      <div className="mb-3 space-y-3 rounded-xl border border-slate-200 p-3">
       {/* 부품신청 */}
-      <div className="mb-3 rounded-xl border border-slate-200 p-2">
+      <div className="rounded-lg bg-slate-50 p-2">
         <button
           type="button"
           onClick={() => setPartsExpanded((v) => !v)}
@@ -2884,7 +2892,7 @@ function ProcessingFormPanel({
       </div>
 
       {/* 자가신청 */}
-      <div className="mb-3 rounded-xl border border-slate-200 p-2">
+      <div className="rounded-lg bg-slate-50 p-2">
         <button
           type="button"
           onClick={() => setSelfExpanded((v) => !v)}
@@ -2984,6 +2992,7 @@ function ProcessingFormPanel({
           </div>
         </div>
       </div>
+      </div>{/* /부품·자가·시간 */}
     </section>
   );
 }
@@ -3731,7 +3740,7 @@ export default function App() {
               {([["home", "홈"], ["field", "FIELD"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
-                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#EEF3F8] font-bold text-[#1E3A5F]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
                   {label}
                 </button>
               ))}
@@ -3811,7 +3820,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#1E3A5F] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
+                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#334155] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -4014,7 +4023,7 @@ export default function App() {
               onClick={() => handleSendAll("normal")}
               disabled={!hasOutput || sending}
               className="flex-[1.5] whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#1E3A5F" } : undefined}
+              style={hasOutput && !sending ? { background: "#334155" } : undefined}
             >
               {sending ? "보내는 중…" : "보내기"}
             </button>
