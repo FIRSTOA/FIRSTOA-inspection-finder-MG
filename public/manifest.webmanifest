@@ -1,16 +1,16 @@
 {
-  "name": "퍼스트전산 CS팀 점검이력 변환기",
-  "short_name": "점검",
-  "description": "거래처 점검/AS 양식 검색·변환 및 통합이력 조회",
+  "name": "퍼스트전산 CS팀 · 현장업무 통합",
+  "short_name": "FIELD",
+  "description": "현장 점검·AS·확장성·불만·재계약 통합 업무 앱 (카톡 전송 + 데이터 검색)",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#1E293B",
-  "theme_color": "#334155",
+  "background_color": "#16213B",
+  "theme_color": "#1E293B",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }
