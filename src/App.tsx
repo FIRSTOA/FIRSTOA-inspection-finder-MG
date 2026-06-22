@@ -4010,12 +4010,8 @@ export default function App() {
               복사
             </button>
             <label className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
-              📷 사진{(() => { const n = photos.filter((p) => !p.file.type.startsWith("video/")).length; return n ? ` ${n}` : ""; })()}
-              <input type="file" accept="image/*" multiple onChange={handlePhotoSelect} className="hidden" />
-            </label>
-            <label className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
-              🎥 영상{(() => { const n = photos.filter((p) => p.file.type.startsWith("video/")).length; return n ? ` ${n}` : ""; })()}
-              <input type="file" accept="video/*" multiple onChange={handlePhotoSelect} className="hidden" />
+              📷 사진/영상{photos.length > 0 ? ` ${photos.length}` : ""}
+              <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>
           </div>
           <div className="flex gap-2">
