@@ -3975,32 +3975,23 @@ export default function App() {
             )}
           </div>
         )}
-        {/* 첨부 사진 스트립 (갤러리 다중선택, 가로 스크롤) — 보내기 시 Storage 업로드 후 카톡에 링크 첨부 */}
-        <div className="mx-auto max-w-3xl px-3 pt-2 sm:px-6">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <label className="flex h-14 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-[10px] font-semibold text-slate-500 hover:bg-slate-50">
-              <span className="text-base leading-none">📷</span>
-              사진
-              <input type="file" accept="image/*" multiple onChange={handlePhotoSelect} className="hidden" />
-            </label>
-            {photos.map((p, i) => (
-              <div key={p.url} className="relative shrink-0">
-                <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removePhoto(i)}
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white"
-                  aria-label="사진 제거"
-                >✕</button>
-              </div>
-            ))}
-          </div>
-          {photos.length > 0 && (
+        {/* 첨부 사진 썸네일 — 첨부했을 때만 표시 */}
+        {photos.length > 0 && (
+          <div className="mx-auto max-w-3xl px-3 pt-2 sm:px-6">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {photos.map((p, i) => (
+                <div key={p.url} className="relative shrink-0">
+                  <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  <button type="button" onClick={() => removePhoto(i)}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">✕</button>
+                </div>
+              ))}
+            </div>
             <div className="mt-0.5 text-[11px] text-slate-400">사진 {photos.length}장 — 보내기 시 카톡에 링크로 첨부</div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* 액션: 보조줄(초기화·복사 = 고스트) + 전송줄(보내기·자가·부품 = 딥톤 단색) */}
+        {/* 액션: 보조줄(초기화·복사·사진첨부) + 전송줄(보내기·자가·부품) */}
         <div className="mx-auto max-w-3xl space-y-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex gap-2">
             <button
@@ -4016,6 +4007,10 @@ export default function App() {
             >
               복사
             </button>
+            <label className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
+              📷 사진{photos.length > 0 ? ` ${photos.length}` : ""}
+              <input type="file" accept="image/*" multiple onChange={handlePhotoSelect} className="hidden" />
+            </label>
           </div>
           <div className="flex gap-2">
             <button
