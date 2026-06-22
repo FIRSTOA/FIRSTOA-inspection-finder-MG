@@ -2414,8 +2414,9 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
         onClick={() => setOpen(true)}
         className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm outline-none transition active:scale-[0.99]"
         style={{
-          background: filled ? "white" : "#F1F5F9",
-          borderLeft: filled ? `3px solid ${accent}` : "3px solid transparent",
+          background: "white",
+          border: "1px solid #CBD5E1",
+          borderLeft: filled ? `3px solid ${accent}` : "1px solid #CBD5E1",
           fontWeight: filled ? 600 : 400,
           color: filled ? "#0F172A" : "#64748B",
         }}
@@ -2504,8 +2505,9 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
         onClick={() => setOpen(true)}
         className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm outline-none transition active:scale-[0.99]"
         style={{
-          background: filled ? "white" : "#F1F5F9",
-          borderLeft: filled ? `3px solid ${accent}` : "3px solid transparent",
+          background: "white",
+          border: "1px solid #CBD5E1",
+          borderLeft: filled ? `3px solid ${accent}` : "1px solid #CBD5E1",
           fontWeight: filled ? 600 : 400,
           color: filled ? "#0F172A" : "#64748B",
         }}
@@ -2669,9 +2671,8 @@ function ProcessingFormPanel({
         <textarea
           value={itemForm.processContent}
           onChange={(e) => setItemF("processContent", e.target.value)}
-          placeholder="예: 정기점검 / 헤드 청소 후 테스트 출력 정상"
           rows={4}
-          className="w-full resize-y rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+          className="w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-sm outline-none focus:border-slate-500"
         />
       </div>
 
@@ -2778,7 +2779,7 @@ function ProcessingFormPanel({
               placeholder="직접 입력"
               value={itemForm.hantin}
               onChange={(e) => setItemF("hantin", e.target.value)}
-              className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white"
+              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500"
             />
           </div>
 
@@ -2809,7 +2810,7 @@ function ProcessingFormPanel({
               placeholder="직접 입력"
               value={itemForm.parking}
               onChange={(e) => setItemF("parking", e.target.value)}
-              className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white"
+              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500"
             />
           </div>
         </>
@@ -2822,7 +2823,7 @@ function ProcessingFormPanel({
           value={itemForm.notes}
           onChange={(e) => setItemF("notes", e.target.value)}
           rows={2}
-          className="w-full resize-none rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+          className="w-full resize-none rounded-lg border border-slate-300 bg-white p-2 text-sm outline-none focus:border-slate-500"
         />
       </div>
       </div>{/* /추가 정보 */}
@@ -3038,7 +3039,7 @@ function AirPurifierFormPanel({
           value={form.notes}
           onChange={(e) => setAirF("notes", e.target.value)}
           rows={3}
-          className="w-full resize-y rounded-lg bg-slate-50 p-2 text-sm outline-none focus:bg-white"
+          className="w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-sm outline-none focus:border-slate-500"
         />
       </div>
 
