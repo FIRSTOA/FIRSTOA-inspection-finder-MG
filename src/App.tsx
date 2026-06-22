@@ -2612,10 +2612,10 @@ function ProcessingFormPanel({
   const [partsExpanded, setPartsExpanded] = useState(false);
   const [selfExpanded, setSelfExpanded] = useState(false);
   const textInputClass =
-    "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
+    "w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500";
 
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 sm:p-4">
+    <section className="mb-3 rounded-2xl bg-white px-1 py-2 sm:px-1.5">
       {/* ▣ 기본 입력 */}
       <div className="mb-3 rounded-xl border-2 border-slate-800 p-3">
       {/* 작성자 / 레벨 */}
@@ -2996,7 +2996,7 @@ function AirPurifierFormPanel({
   author, setAuthor,
 }: AirPurifierFormPanelProps) {
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 sm:p-4">
+    <section className="mb-3 rounded-2xl bg-white px-1 py-2 sm:px-1.5">
       {/* 작성자 */}
       <div className="mb-2">
         <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
@@ -3713,7 +3713,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] text-slate-900">
+    <div className="min-h-screen bg-white text-slate-900">
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
