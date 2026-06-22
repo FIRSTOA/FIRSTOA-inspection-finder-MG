@@ -77,8 +77,8 @@ type ModeConfig = {
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
 // 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
-const BW_ACCENT = "#3182F6";
-const BW_SOFT = "#EFF6FF";
+const BW_ACCENT = "#1E3A5F";
+const BW_SOFT = "#EEF3F8";
 const BW_TEXT = "#191F28";
 const MODE_CONFIG: Record<Mode, ModeConfig> = {
   inspection: {
@@ -3731,7 +3731,7 @@ export default function App() {
               {([["home", "홈"], ["field", "FIELD"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
-                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#EFF6FF] font-bold text-[#3182F6]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#EEF3F8] font-bold text-[#1E3A5F]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
                   {label}
                 </button>
               ))}
@@ -3811,7 +3811,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#3182F6] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
+                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#1E3A5F] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -4014,7 +4014,7 @@ export default function App() {
               onClick={() => handleSendAll("normal")}
               disabled={!hasOutput || sending}
               className="flex-[1.5] whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#3182F6" } : undefined}
+              style={hasOutput && !sending ? { background: "#1E3A5F" } : undefined}
             >
               {sending ? "보내는 중…" : "보내기"}
             </button>

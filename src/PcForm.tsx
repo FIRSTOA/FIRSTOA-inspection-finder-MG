@@ -48,7 +48,7 @@ function Field({ label, value, onChange, star }: { label: string; value: string;
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{star && <span className="text-rose-400">* </span>}{label}</span>
       <input value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]" />
+        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#1E3A5F]" />
     </label>
   );
 }
@@ -58,7 +58,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]">
+        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#1E3A5F]">
         <option value="">선택</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -79,18 +79,18 @@ function ChipMulti({ label, options, value, onChange }: { label: string; options
       <div className="mt-1 flex flex-wrap gap-1.5">
         {options.map((o) => (
           <button key={o} type="button" onClick={() => toggle(o)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#3182F6] text-white" : "bg-slate-100 text-slate-600"}`}>
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#1E3A5F] text-white" : "bg-slate-100 text-slate-600"}`}>
             {o}
           </button>
         ))}
         {sel.filter((s) => !options.includes(s)).map((s) => (
           <button key={s} type="button" onClick={() => toggle(s)}
-            className="rounded-full bg-[#3182F6] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
+            className="rounded-full bg-[#1E3A5F] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
         ))}
       </div>
       <div className="mt-1.5 flex gap-1.5">
         <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#3182F6]" />
+          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#1E3A5F]" />
         <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
       </div>
     </div>
@@ -114,7 +114,7 @@ function ChipGroups({ label, groups, value, onChange }: { label: string; groups:
           <div className="mt-1 flex flex-wrap gap-1.5">
             {g.options.map((o) => (
               <button key={o} type="button" onClick={() => toggle(o)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#3182F6] text-white" : "bg-slate-100 text-slate-600"}`}>{o}</button>
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${sel.includes(o) ? "bg-[#1E3A5F] text-white" : "bg-slate-100 text-slate-600"}`}>{o}</button>
             ))}
           </div>
         </div>
@@ -122,13 +122,13 @@ function ChipGroups({ label, groups, value, onChange }: { label: string; groups:
       {sel.filter((s) => !known.includes(s)).length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {sel.filter((s) => !known.includes(s)).map((s) => (
-            <button key={s} type="button" onClick={() => toggle(s)} className="rounded-full bg-[#3182F6] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
+            <button key={s} type="button" onClick={() => toggle(s)} className="rounded-full bg-[#1E3A5F] px-3 py-1 text-xs font-semibold text-white">{s} ✕</button>
           ))}
         </div>
       )}
       <div className="mt-1.5 flex gap-1.5">
         <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#3182F6]" />
+          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#1E3A5F]" />
         <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
       </div>
     </div>
@@ -163,8 +163,8 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
       {/* 불러오기 — 세련되게 */}
       <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
         <span className="text-xs font-bold text-slate-500">불러오기</span>
-        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">점검</button>
-        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#EFF6FF] px-3 py-1 text-xs font-bold text-[#3182F6]">AS</button>
+        <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-bold text-[#1E3A5F]">점검</button>
+        <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-bold text-[#1E3A5F]">AS</button>
         <span className="ml-auto text-[10px] text-slate-400">업체·지역·등급·키맨 자동</span>
       </div>
 
@@ -172,7 +172,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
         <select value={author} onChange={(e) => setAuthor(e.target.value)}
-          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#3182F6]">
+          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#1E3A5F]">
           <option value="">선택</option>
           {AUTHORS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
