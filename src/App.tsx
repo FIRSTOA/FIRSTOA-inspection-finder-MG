@@ -2611,19 +2611,17 @@ function ProcessingFormPanel({
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
   const [selfExpanded, setSelfExpanded] = useState(false);
-  const numInputClass =
-    "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
   const textInputClass =
     "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
 
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
       {/* ▣ 기본 입력 */}
-      <div className="mb-3 rounded-xl border-2 border-slate-300 p-3">
+      <div className="mb-3 rounded-xl border-2 border-slate-400 p-3">
       {/* 작성자 / 레벨 */}
       <div className={`mb-2 grid gap-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`}>
         <div>
-          <div className="mb-1 text-sm font-bold text-slate-800">작성자</div>
+          <div className="mb-1 text-sm font-bold text-slate-900">작성자</div>
           <AuthorPicker
             value={author}
             onChange={setAuthor}
@@ -2632,7 +2630,7 @@ function ProcessingFormPanel({
         </div>
         {showLevel && (
           <div className="w-24">
-            <div className="mb-1 text-sm font-bold text-slate-800">레벨</div>
+            <div className="mb-1 text-sm font-bold text-slate-900">레벨</div>
             <NumSelect
               value={shared.level}
               onChange={(v) => setSharedF("level", v)}
@@ -2648,7 +2646,7 @@ function ProcessingFormPanel({
       {itemCount > 1 && (
         <div className="mb-2 rounded-lg bg-slate-50 p-2">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">기기 선택</span>
+            <span className="text-sm font-bold text-slate-900">기기 선택</span>
             <span className="text-[10px] text-slate-500">{itemCount}대 중 {selectedItem + 1}번 편집 중</span>
           </div>
           <NumSelect
@@ -2667,7 +2665,7 @@ function ProcessingFormPanel({
 
       {/* 처리내용 */}
       <div className="mb-2">
-        <div className="mb-1 text-sm font-bold text-slate-800">처리내용</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">처리내용</div>
         <textarea
           value={itemForm.processContent}
           onChange={(e) => setItemF("processContent", e.target.value)}
@@ -2679,42 +2677,30 @@ function ProcessingFormPanel({
 
       {/* 매수 */}
       <div className="mb-2">
-        <div className="mb-1 text-sm font-bold text-slate-800">매수</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">매수</div>
         <div className="grid grid-cols-4 gap-1.5">
-          <input
-            inputMode="numeric"
-            placeholder="흑"
-            value={itemForm.mailBlack}
-            onChange={(e) => setItemF("mailBlack", e.target.value)}
-            className={numInputClass}
-          />
-          <input
-            inputMode="numeric"
-            placeholder="컬"
-            value={itemForm.mailColor}
-            onChange={(e) => setItemF("mailColor", e.target.value)}
-            className={numInputClass}
-          />
-          <input
-            inputMode="numeric"
-            placeholder="큰컬"
-            value={itemForm.mailLargeColor}
-            onChange={(e) => setItemF("mailLargeColor", e.target.value)}
-            className={numInputClass}
-          />
-          <input
-            inputMode="numeric"
-            placeholder="합"
-            value={itemForm.mailTotal}
-            onChange={(e) => setItemF("mailTotal", e.target.value)}
-            className={numInputClass}
-          />
+          <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
+            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">흑</span>
+            <input inputMode="numeric" value={itemForm.mailBlack} onChange={(e) => setItemF("mailBlack", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
+          </div>
+          <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
+            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">컬</span>
+            <input inputMode="numeric" value={itemForm.mailColor} onChange={(e) => setItemF("mailColor", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
+          </div>
+          <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
+            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">큰컬</span>
+            <input inputMode="numeric" value={itemForm.mailLargeColor} onChange={(e) => setItemF("mailLargeColor", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
+          </div>
+          <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
+            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">합</span>
+            <input inputMode="numeric" value={itemForm.mailTotal} onChange={(e) => setItemF("mailTotal", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
+          </div>
         </div>
       </div>
 
       {/* 잔량 — K/C/M/Y + 폐통, 직접 입력 (5칸) */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1 text-sm font-bold text-slate-800">잔량 (%)</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">잔량 (%)</div>
         <div className="grid grid-cols-5 gap-1">
           {(["K", "C", "M", "Y"] as const).map((ch: "K" | "C" | "M" | "Y") => {
             const key = (`toner${ch}`) as "tonerK" | "tonerC" | "tonerM" | "tonerY";
@@ -2750,7 +2736,7 @@ function ProcessingFormPanel({
 
       {/* 여분 — 원본 그대로 직접 수정 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1 text-sm font-bold text-slate-800">여분</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">여분</div>
         <textarea
           value={itemForm.spareRaw}
           onChange={(e) => setItemF("spareRaw", e.target.value)}
@@ -2762,12 +2748,12 @@ function ProcessingFormPanel({
       </div>{/* /기본 입력 */}
 
       {/* ▣ 추가 정보 */}
-      <div className="mb-3 rounded-xl border-2 border-slate-300 p-3">
+      <div className="mb-3 rounded-xl border-2 border-slate-400 p-3">
       {showHantinParking && (
         <>
           {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1 text-sm font-bold text-slate-800">한틴이카유무</div>
+            <div className="mb-1 text-sm font-bold text-slate-900">한틴이카유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {HANTIN_OPTIONS.map((opt: string) => {
                 const active = itemForm.hantin === opt;
@@ -2798,7 +2784,7 @@ function ProcessingFormPanel({
 
           {/* 주차비 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1 text-sm font-bold text-slate-800">주차비지원유무</div>
+            <div className="mb-1 text-sm font-bold text-slate-900">주차비지원유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {PARKING_OPTIONS.map((opt: string) => {
                 const active = itemForm.parking === opt;
@@ -2831,7 +2817,7 @@ function ProcessingFormPanel({
 
       {/* 특이사항 */}
       <div>
-        <div className="mb-1 text-sm font-bold text-slate-800">특이사항</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">특이사항</div>
         <textarea
           value={itemForm.notes}
           onChange={(e) => setItemF("notes", e.target.value)}
@@ -2842,7 +2828,7 @@ function ProcessingFormPanel({
       </div>{/* /추가 정보 */}
 
       {/* ▣ 부품·자가·시간 */}
-      <div className="mb-3 space-y-3 rounded-xl border-2 border-slate-300 p-3">
+      <div className="mb-3 space-y-3 rounded-xl border-2 border-slate-400 p-3">
       {/* 부품신청 */}
       <div className="rounded-lg bg-slate-50 p-2">
         <button
@@ -2930,7 +2916,7 @@ function ProcessingFormPanel({
       <div className="space-y-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">도착 시간</span>
+            <span className="text-sm font-bold text-slate-900">도착 시간</span>
             {shared.arrivalHour && (
               <span className="text-xs font-semibold" style={{ color: accent }}>
                 {shared.arrivalHour}:{shared.arrivalMinute || "00"}
@@ -2959,7 +2945,7 @@ function ProcessingFormPanel({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">소요 시간</span>
+            <span className="text-sm font-bold text-slate-900">소요 시간</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: accent }}>
                 {shared.duration ? `${shared.duration}분` : "0분"}
@@ -3010,10 +2996,10 @@ function AirPurifierFormPanel({
   author, setAuthor,
 }: AirPurifierFormPanelProps) {
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
       {/* 작성자 */}
       <div className="mb-2">
-        <div className="mb-1 text-sm font-bold text-slate-800">작성자</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">작성자</div>
         <AuthorPicker
           value={author}
           onChange={setAuthor}
@@ -3024,7 +3010,7 @@ function AirPurifierFormPanel({
       {/* 필터리셋 / 필터교체 */}
       <div className="mb-2 grid grid-cols-2 gap-2">
         <div>
-          <div className="mb-1 text-sm font-bold text-slate-800">필터리셋</div>
+          <div className="mb-1 text-sm font-bold text-slate-900">필터리셋</div>
           <NumSelect
             value={form.filterReset}
             onChange={(v) => setAirF("filterReset", v)}
@@ -3034,7 +3020,7 @@ function AirPurifierFormPanel({
           />
         </div>
         <div>
-          <div className="mb-1 text-sm font-bold text-slate-800">필터교체</div>
+          <div className="mb-1 text-sm font-bold text-slate-900">필터교체</div>
           <NumSelect
             value={form.filterChange}
             onChange={(v) => setAirF("filterChange", v)}
@@ -3047,7 +3033,7 @@ function AirPurifierFormPanel({
 
       {/* 특이사항 */}
       <div className="mb-3">
-        <div className="mb-1 text-sm font-bold text-slate-800">특이사항</div>
+        <div className="mb-1 text-sm font-bold text-slate-900">특이사항</div>
         <textarea
           value={form.notes}
           onChange={(e) => setAirF("notes", e.target.value)}
@@ -3060,7 +3046,7 @@ function AirPurifierFormPanel({
       <div className="space-y-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">도착 시간</span>
+            <span className="text-sm font-bold text-slate-900">도착 시간</span>
             {form.arrivalHour && (
               <span className="text-xs font-semibold" style={{ color: accent }}>
                 {form.arrivalHour}:{form.arrivalMinute || "00"}
@@ -3089,7 +3075,7 @@ function AirPurifierFormPanel({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800">소요 시간</span>
+            <span className="text-sm font-bold text-slate-900">소요 시간</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: accent }}>
                 {form.duration ? `${form.duration}분` : "0분"}
@@ -3751,6 +3737,8 @@ export default function App() {
       )}
 
       <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : "pb-60"}`}>
+        {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
+        <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "mb-3 border-b-2 border-slate-300 bg-slate-100 pb-3 pt-1" : ""}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -3798,7 +3786,7 @@ export default function App() {
         {/* ===== FIELD 화면 ===== */}
 
         {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
-        <div className="relative mb-3">
+        <div className="relative">
           <div className="grid grid-cols-4 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1" role="tablist">
             {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
               const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
@@ -3808,7 +3796,7 @@ export default function App() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => { setMoreOpen(false); if (!active) handleModeChange(target); }}
-                  className={`rounded-xl py-2.5 text-sm transition ${active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"}`}
+                  className={`rounded-xl py-2.5 text-sm transition ${active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-slate-500 hover:text-slate-800"}`}
                 >
                   {label}
                 </button>
@@ -3820,7 +3808,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm transition ${moreActive ? "bg-[#334155] font-bold text-white shadow-sm" : "bg-slate-200/60 font-semibold text-slate-600 hover:bg-slate-200"}`}
+                  className={`rounded-xl py-2.5 text-sm font-bold transition ${moreActive ? "bg-[#334155] text-white shadow-sm" : "bg-slate-200/60 text-slate-600 hover:bg-slate-200"}`}
                 >
                   {moreActive ? config.label : "더보기"} ▾
                 </button>
@@ -3848,15 +3836,15 @@ export default function App() {
 
         {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
         {(mode === "inspection" || mode === "air-purifier") && (
-          <div className="mb-3 flex gap-1 rounded-xl bg-slate-100 p-1">
+          <div className="mt-2 flex gap-1 rounded-xl bg-slate-100 p-1">
             {([["복합기", "inspection"], ["청정기", "air-purifier"]] as [string, Mode][]).map(([label, target]) => {
               const active = mode === target;
               return (
                 <button
                   key={label}
                   onClick={() => { if (!active) handleModeChange(target); }}
-                  className={`flex-1 rounded-lg py-2 text-xs transition ${
-                    active ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-500 hover:text-slate-800"
+                  className={`flex-1 rounded-lg py-2 text-sm transition ${
+                    active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {label}
@@ -3865,7 +3853,10 @@ export default function App() {
             })}
           </div>
         )}
+        </>)}{/* /필드 탭 */}
+        </div>{/* /헤더 존 */}
 
+        {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
         {/* Processing form — 미양식 + 점검 */}
@@ -4063,7 +4054,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <span className="text-sm font-bold text-slate-800">원본 입력</span>
+              <span className="text-sm font-bold text-slate-900">원본 입력</span>
               <button
                 type="button"
                 onClick={handlePasteToDraft}
