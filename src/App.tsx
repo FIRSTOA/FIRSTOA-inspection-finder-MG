@@ -2679,21 +2679,21 @@ function ProcessingFormPanel({
       {/* 매수 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
         <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">매수</div>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
-            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">흑</span>
+            <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">흑</span>
             <input inputMode="numeric" value={itemForm.mailBlack} onChange={(e) => setItemF("mailBlack", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
           </div>
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
-            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">컬</span>
+            <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">컬</span>
             <input inputMode="numeric" value={itemForm.mailColor} onChange={(e) => setItemF("mailColor", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
           </div>
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
-            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">큰컬</span>
+            <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">큰컬</span>
             <input inputMode="numeric" value={itemForm.mailLargeColor} onChange={(e) => setItemF("mailLargeColor", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
           </div>
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
-            <span className="flex items-center bg-slate-200 px-2 text-xs font-bold text-slate-600">합</span>
+            <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">합</span>
             <input inputMode="numeric" value={itemForm.mailTotal} onChange={(e) => setItemF("mailTotal", e.target.value)} className="w-full min-w-0 bg-transparent px-2 py-1.5 text-sm outline-none" />
           </div>
         </div>
