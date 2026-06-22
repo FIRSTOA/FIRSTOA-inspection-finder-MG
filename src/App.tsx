@@ -2619,11 +2619,11 @@ function ProcessingFormPanel({
   return (
     <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
       {/* ▣ 기본 입력 */}
-      <div className="mb-3 rounded-xl border border-slate-200 p-3">
+      <div className="mb-3 rounded-xl border-2 border-slate-300 p-3">
       {/* 작성자 / 레벨 */}
       <div className={`mb-2 grid gap-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`}>
         <div>
-          <div className="mb-1 text-xs font-semibold text-slate-700">작성자</div>
+          <div className="mb-1 text-sm font-bold text-slate-800">작성자</div>
           <AuthorPicker
             value={author}
             onChange={setAuthor}
@@ -2632,7 +2632,7 @@ function ProcessingFormPanel({
         </div>
         {showLevel && (
           <div className="w-24">
-            <div className="mb-1 text-xs font-semibold text-slate-700">레벨</div>
+            <div className="mb-1 text-sm font-bold text-slate-800">레벨</div>
             <NumSelect
               value={shared.level}
               onChange={(v) => setSharedF("level", v)}
@@ -2648,7 +2648,7 @@ function ProcessingFormPanel({
       {itemCount > 1 && (
         <div className="mb-2 rounded-lg bg-slate-50 p-2">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">기기 선택</span>
+            <span className="text-sm font-bold text-slate-800">기기 선택</span>
             <span className="text-[10px] text-slate-500">{itemCount}대 중 {selectedItem + 1}번 편집 중</span>
           </div>
           <NumSelect
@@ -2667,7 +2667,7 @@ function ProcessingFormPanel({
 
       {/* 처리내용 */}
       <div className="mb-2">
-        <div className="mb-1 text-xs font-semibold text-slate-700">처리내용</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">처리내용</div>
         <textarea
           value={itemForm.processContent}
           onChange={(e) => setItemF("processContent", e.target.value)}
@@ -2679,7 +2679,7 @@ function ProcessingFormPanel({
 
       {/* 매수 */}
       <div className="mb-2">
-        <div className="mb-1 text-xs font-semibold text-slate-700">매수</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">매수</div>
         <div className="grid grid-cols-4 gap-1.5">
           <input
             inputMode="numeric"
@@ -2714,7 +2714,7 @@ function ProcessingFormPanel({
 
       {/* 잔량 — K/C/M/Y + 폐통, 직접 입력 (5칸) */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1 text-xs font-semibold text-slate-700">잔량 (%)</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">잔량 (%)</div>
         <div className="grid grid-cols-5 gap-1">
           {(["K", "C", "M", "Y"] as const).map((ch: "K" | "C" | "M" | "Y") => {
             const key = (`toner${ch}`) as "tonerK" | "tonerC" | "tonerM" | "tonerY";
@@ -2750,7 +2750,7 @@ function ProcessingFormPanel({
 
       {/* 여분 — 원본 그대로 직접 수정 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1 text-xs font-semibold text-slate-700">여분</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">여분</div>
         <textarea
           value={itemForm.spareRaw}
           onChange={(e) => setItemF("spareRaw", e.target.value)}
@@ -2762,12 +2762,12 @@ function ProcessingFormPanel({
       </div>{/* /기본 입력 */}
 
       {/* ▣ 추가 정보 */}
-      <div className="mb-3 rounded-xl border border-slate-200 p-3">
+      <div className="mb-3 rounded-xl border-2 border-slate-300 p-3">
       {showHantinParking && (
         <>
           {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1 text-xs font-semibold text-slate-700">한틴이카유무</div>
+            <div className="mb-1 text-sm font-bold text-slate-800">한틴이카유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {HANTIN_OPTIONS.map((opt: string) => {
                 const active = itemForm.hantin === opt;
@@ -2798,7 +2798,7 @@ function ProcessingFormPanel({
 
           {/* 주차비 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1 text-xs font-semibold text-slate-700">주차비지원유무</div>
+            <div className="mb-1 text-sm font-bold text-slate-800">주차비지원유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {PARKING_OPTIONS.map((opt: string) => {
                 const active = itemForm.parking === opt;
@@ -2831,7 +2831,7 @@ function ProcessingFormPanel({
 
       {/* 특이사항 */}
       <div>
-        <div className="mb-1 text-xs font-semibold text-slate-700">특이사항</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">특이사항</div>
         <textarea
           value={itemForm.notes}
           onChange={(e) => setItemF("notes", e.target.value)}
@@ -2842,7 +2842,7 @@ function ProcessingFormPanel({
       </div>{/* /추가 정보 */}
 
       {/* ▣ 부품·자가·시간 */}
-      <div className="mb-3 space-y-3 rounded-xl border border-slate-200 p-3">
+      <div className="mb-3 space-y-3 rounded-xl border-2 border-slate-300 p-3">
       {/* 부품신청 */}
       <div className="rounded-lg bg-slate-50 p-2">
         <button
@@ -2930,7 +2930,7 @@ function ProcessingFormPanel({
       <div className="space-y-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">도착 시간</span>
+            <span className="text-sm font-bold text-slate-800">도착 시간</span>
             {shared.arrivalHour && (
               <span className="text-xs font-semibold" style={{ color: accent }}>
                 {shared.arrivalHour}:{shared.arrivalMinute || "00"}
@@ -2959,7 +2959,7 @@ function ProcessingFormPanel({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">소요 시간</span>
+            <span className="text-sm font-bold text-slate-800">소요 시간</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: accent }}>
                 {shared.duration ? `${shared.duration}분` : "0분"}
@@ -3013,7 +3013,7 @@ function AirPurifierFormPanel({
     <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
       {/* 작성자 */}
       <div className="mb-2">
-        <div className="mb-1 text-xs font-semibold text-slate-700">작성자</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">작성자</div>
         <AuthorPicker
           value={author}
           onChange={setAuthor}
@@ -3024,7 +3024,7 @@ function AirPurifierFormPanel({
       {/* 필터리셋 / 필터교체 */}
       <div className="mb-2 grid grid-cols-2 gap-2">
         <div>
-          <div className="mb-1 text-xs font-semibold text-slate-700">필터리셋</div>
+          <div className="mb-1 text-sm font-bold text-slate-800">필터리셋</div>
           <NumSelect
             value={form.filterReset}
             onChange={(v) => setAirF("filterReset", v)}
@@ -3034,7 +3034,7 @@ function AirPurifierFormPanel({
           />
         </div>
         <div>
-          <div className="mb-1 text-xs font-semibold text-slate-700">필터교체</div>
+          <div className="mb-1 text-sm font-bold text-slate-800">필터교체</div>
           <NumSelect
             value={form.filterChange}
             onChange={(v) => setAirF("filterChange", v)}
@@ -3047,7 +3047,7 @@ function AirPurifierFormPanel({
 
       {/* 특이사항 */}
       <div className="mb-3">
-        <div className="mb-1 text-xs font-semibold text-slate-700">특이사항</div>
+        <div className="mb-1 text-sm font-bold text-slate-800">특이사항</div>
         <textarea
           value={form.notes}
           onChange={(e) => setAirF("notes", e.target.value)}
@@ -3060,7 +3060,7 @@ function AirPurifierFormPanel({
       <div className="space-y-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">도착 시간</span>
+            <span className="text-sm font-bold text-slate-800">도착 시간</span>
             {form.arrivalHour && (
               <span className="text-xs font-semibold" style={{ color: accent }}>
                 {form.arrivalHour}:{form.arrivalMinute || "00"}
@@ -3089,7 +3089,7 @@ function AirPurifierFormPanel({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">소요 시간</span>
+            <span className="text-sm font-bold text-slate-800">소요 시간</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: accent }}>
                 {form.duration ? `${form.duration}분` : "0분"}
