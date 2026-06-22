@@ -2617,12 +2617,7 @@ function ProcessingFormPanel({
     "w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm outline-none focus:bg-white";
 
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <label className="text-xs font-medium text-slate-600">처리내용 입력</label>
-        <span className="text-[10px] text-slate-400">입력 즉시 결과에 반영</span>
-      </div>
-
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
       {/* 작성자 / 레벨 */}
       <div className={`mb-2 grid gap-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`}>
         <div>
@@ -2669,7 +2664,7 @@ function ProcessingFormPanel({
       )}
 
       {/* 처리내용 */}
-      <div className="mb-2">
+      <div className="mb-2 mt-2 border-t border-slate-100 pt-3">
         <div className="mb-1 text-xs font-semibold text-slate-700">처리내용</div>
         <textarea
           value={itemForm.processContent}
@@ -2681,7 +2676,7 @@ function ProcessingFormPanel({
       </div>
 
       {/* 매수 */}
-      <div className="mb-2">
+      <div className="mb-2 mt-2 border-t border-slate-100 pt-3">
         <div className="mb-1 text-xs font-semibold text-slate-700">매수</div>
         <div className="grid grid-cols-4 gap-1.5">
           <input
@@ -3006,12 +3001,7 @@ function AirPurifierFormPanel({
   author, setAuthor,
 }: AirPurifierFormPanelProps) {
   return (
-    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm sm:p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <label className="text-xs font-medium text-slate-600">청정기 입력</label>
-        <span className="text-[10px] text-slate-400">입력 즉시 결과에 반영</span>
-      </div>
-
+    <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 sm:p-4">
       {/* 작성자 */}
       <div className="mb-2">
         <div className="mb-1 text-xs font-semibold text-slate-700">작성자</div>
@@ -3635,11 +3625,18 @@ export default function App() {
     const worker = async () => {
       while (nextIdx < photos.length) {
         const i = nextIdx++;
-        const dataUrl = await fileToDownscaledDataUrl(photos[i].file, 1600);
-        const blob = await (await fetch(dataUrl)).blob();
-        urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
+        const f = photos[i].file;
+        if (f.type.startsWith("video/")) {
+          // 동영상은 원본 그대로 업로드 (다운스케일/변환 X)
+          const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4");
+        } else {
+          const dataUrl = await fileToDownscaledDataUrl(f, 1600);
+          const blob = await (await fetch(dataUrl)).blob();
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
+        }
         done++;
-        showToast(`사진 ${done}/${photos.length} 올리는 중…`);
+        showToast(`첨부 ${done}/${photos.length} 올리는 중…`);
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
@@ -3987,7 +3984,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div className="mt-0.5 text-[11px] text-slate-400">사진 {photos.length}장 — 보내기 시 카톡에 링크로 첨부</div>
+            <div className="mt-0.5 text-[11px] text-slate-400">첨부 {photos.length}개 — 보내기 시 카톡에 링크로 첨부 (사진·영상)</div>
           </div>
         )}
 
@@ -4008,8 +4005,8 @@ export default function App() {
               복사
             </button>
             <label className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
-              📷 사진{photos.length > 0 ? ` ${photos.length}` : ""}
-              <input type="file" accept="image/*" multiple onChange={handlePhotoSelect} className="hidden" />
+              📷 사진/영상{photos.length > 0 ? ` ${photos.length}` : ""}
+              <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>
           </div>
           <div className="flex gap-2">

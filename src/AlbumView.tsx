@@ -18,6 +18,7 @@ export default function AlbumView({ id }: { id: string }) {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const isVideo = (u: string) => /\.(mp4|mov|webm|m4v|avi|3gp|mkv)(\?|$)/i.test(u);
   const prev = () => setIdx((i) => (i == null ? i : Math.max(0, i - 1)));
   const next = () => setIdx((i) => (i == null ? i : Math.min(urls.length - 1, i + 1)));
 
@@ -47,8 +48,15 @@ export default function AlbumView({ id }: { id: string }) {
 
       <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4">
         {urls.map((u, i) => (
-          <button key={i} type="button" onClick={() => setIdx(i)} className="aspect-square overflow-hidden bg-slate-800">
-            <img src={u} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+          <button key={i} type="button" onClick={() => setIdx(i)} className="relative aspect-square overflow-hidden bg-slate-800">
+            {isVideo(u) ? (
+              <>
+                <video src={u} preload="metadata" muted className="h-full w-full object-cover" />
+                <span className="absolute inset-0 flex items-center justify-center text-3xl text-white/90 drop-shadow">▶</span>
+              </>
+            ) : (
+              <img src={u} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+            )}
           </button>
         ))}
       </div>
@@ -65,12 +73,23 @@ export default function AlbumView({ id }: { id: string }) {
             touchX.current = null;
           }}
         >
-          <img
-            src={urls[idx]}
-            alt=""
-            className="max-h-full max-w-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {isVideo(urls[idx]) ? (
+            <video
+              src={urls[idx]}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-full max-w-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={urls[idx]}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
 
           {/* 좌우 화살표 (데스크톱/탭) */}
           {idx > 0 && (

@@ -38,18 +38,21 @@ function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val:
   return { key: "", val: "" };
 }
 
-function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[] } {
+const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
+function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; album: string } {
   const dateKey = DATE_FIELD[cat];
   const date = dateKey ? String(rec[dateKey] ?? "") : "";
   const skip = new Set([dateKey, ...exclude]);
   const lines: string[] = [];
+  let album = "";
   for (const [k, v] of Object.entries(rec)) {
-    if (skip.has(k)) continue;
     const s = String(v ?? "").trim();
+    if (!album) { const m = s.match(ALBUM_RX); if (m) album = m[0]; } // 본문 어디든 첨부 링크 추출
+    if (skip.has(k) || k.startsWith("_")) continue; // 내부 컬럼(_원문/_dupKey 등) 숨김
     if (!s) continue;
     lines.push(`${k}: ${s}`);
   }
-  return { date, lines };
+  return { date, lines, album };
 }
 
 export default function UnifiedHistory({ vendor, accent, open, onClose, onError }: Props) {
@@ -249,7 +252,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             recs.slice(0, MAX_RECORDS).map((rec, i) => {
               const who = pick(rec, WHO_KEYS);
               const region = pick(rec, REGION_KEYS);
-              const { date, lines } = recordSummary(activeCat, rec, [who.key, region.key]);
+              const { date, lines, album } = recordSummary(activeCat, rec, [who.key, region.key]);
               return (
                 <div key={i} className="rounded-2xl bg-white p-3 shadow-sm">
                   {/* 언제 · 어디팀 · 누가 */}
@@ -267,6 +270,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                       <div key={j} className="break-words text-xs leading-snug text-slate-600">{ln}</div>
                     ))}
                   </div>
+                  {album && (
+                    <a href={album} target="_blank" rel="noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-[11px] font-bold text-white">
+                      📷 사진·영상 보기
+                    </a>
+                  )}
                 </div>
               );
             })}
