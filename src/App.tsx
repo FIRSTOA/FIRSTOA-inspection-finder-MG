@@ -2623,6 +2623,73 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
   );
 }
 
+type DeviceInfo = Pick<PerItemForm, "model" | "serial" | "asset" | "content">;
+const EMPTY_DEVICE_INFO: DeviceInfo = { model: "", serial: "", asset: "", content: "" };
+
+function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMove, onRemove }: {
+  forms: PerItemForm[];
+  labels: string[];
+  selected: number;
+  onSelect: (i: number) => void;
+  onAdd: (info: DeviceInfo) => void;
+  onUpdate: (i: number, info: DeviceInfo) => void;
+  onMove: (i: number, direction: -1 | 1) => void;
+  onRemove: (i: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [draft, setDraft] = useState<DeviceInfo>({ ...EMPTY_DEVICE_INFO });
+  const beginEdit = (index: number | "new") => {
+    setEditing(index);
+    setDraft(index === "new" ? { ...EMPTY_DEVICE_INFO } : {
+      model: forms[index]?.model || "", serial: forms[index]?.serial || "",
+      asset: forms[index]?.asset || "", content: forms[index]?.content || "",
+    });
+    setOpen(true);
+  };
+  const save = () => {
+    if (!draft.model.trim() && !draft.serial.trim() && !draft.asset.trim()) return;
+    if (editing === "new") onAdd(draft);
+    else if (typeof editing === "number") onUpdate(editing, draft);
+    setEditing(null);
+  };
+
+  return <div className="mb-2 rounded-lg bg-slate-50 p-2">
+    <div className="mb-1 flex items-center justify-between">
+      <span className="text-sm font-bold text-slate-900">기기 선택</span>
+      <span className="text-[10px] text-slate-500">{forms.length}대 중 {selected + 1}번 편집 중</span>
+    </div>
+    <div className="flex gap-1.5">
+      <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex min-w-0 flex-1 items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
+        <span className="truncate">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="text-[10px] text-slate-400">▾</span>
+      </button>
+      <button type="button" onClick={() => beginEdit("new")} className="shrink-0 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">＋ 추가</button>
+    </div>
+
+    {open && <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setOpen(false)} role="dialog">
+      <div className="flex max-h-[82vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div className="text-sm font-bold text-slate-800">{editing === "new" ? "새 기기 추가" : typeof editing === "number" ? `${editing + 1}번 기기 정보 수정` : "기기 선택·순서변경"}</div>
+          <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
+        </div>
+        {editing !== null ? <div className="space-y-2 overflow-y-auto p-4">
+          {([['model','모델명'],['serial','시리얼넘버'],['asset','자산기번'],['content','내용']] as [keyof DeviceInfo,string][]).map(([key, label]) =>
+            <label key={key} className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input autoFocus={key === "model"} value={draft[key]} onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" /></label>)}
+          <div className="flex gap-2 pt-2"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">뒤로</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">{editing === "new" ? "기기 추가" : "정보 저장"}</button></div>
+        </div> : <div className="flex-1 overflow-y-auto p-2">
+          {forms.map((_, i) => <div key={i} className={`mb-1 flex items-center gap-1 rounded-xl border p-1.5 ${selected === i ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-white"}`}>
+            <button type="button" onClick={() => { onSelect(i); setOpen(false); }} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="truncate text-sm font-bold text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
+            <button type="button" disabled={i === 0} onClick={() => onMove(i, -1)} className="h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25">↑</button>
+            <button type="button" disabled={i === forms.length - 1} onClick={() => onMove(i, 1)} className="h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25">↓</button>
+            <button type="button" onClick={() => beginEdit(i)} className="h-9 rounded-lg bg-slate-100 px-2 text-[11px] font-bold text-slate-600">수정</button>
+            {forms.length > 1 && <button type="button" onClick={() => onRemove(i)} className="h-9 rounded-lg bg-rose-50 px-2 text-[11px] font-bold text-rose-600">삭제</button>}
+          </div>)}
+        </div>}
+      </div>
+    </div>}
+  </div>;
+}
+
 type AuthorPickerProps = {
   value: string;
   onChange: (v: string) => void;
@@ -2741,9 +2808,11 @@ type ProcessingFormPanelProps = {
   setReportTypes: (v: string[]) => void;
   setReportTypeOther: (v: string) => void;
   canManageDevices: boolean;
-  onAddDevice: () => void;
-  onMoveDevice: (direction: -1 | 1) => void;
-  onRemoveDevice: () => void;
+  allItemForms: PerItemForm[];
+  onAddDevice: (info: DeviceInfo) => void;
+  onUpdateDevice: (i: number, info: DeviceInfo) => void;
+  onMoveDevice: (i: number, direction: -1 | 1) => void;
+  onRemoveDevice: (i: number) => void;
   showLevel: boolean;
   showHantinParking: boolean;
 };
@@ -2755,7 +2824,7 @@ function ProcessingFormPanel({
   accent, bgSoft,
   author, setAuthor,
   reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
-  canManageDevices, onAddDevice, onMoveDevice, onRemoveDevice,
+  canManageDevices, allItemForms, onAddDevice, onUpdateDevice, onMoveDevice, onRemoveDevice,
   showLevel, showHantinParking,
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
@@ -2799,56 +2868,9 @@ function ProcessingFormPanel({
         onOther={setReportTypeOther}
       />
 
-      {canManageDevices && (
-        <div className="my-2 rounded-xl border border-blue-100 bg-blue-50 p-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-bold text-slate-800">기기 관리</div>
-              <div className="text-[10px] text-slate-500">추가·순서변경 시 번호가 자동 정리됩니다.</div>
-            </div>
-            <button type="button" onClick={onAddDevice} className="shrink-0 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">＋ 기기 추가</button>
-          </div>
-          {itemCount > 1 && (
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              <button type="button" disabled={selectedItem === 0} onClick={() => onMoveDevice(-1)} className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 disabled:opacity-35">← 앞 순서</button>
-              <button type="button" disabled={selectedItem === itemCount - 1} onClick={() => onMoveDevice(1)} className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 disabled:opacity-35">뒤 순서 →</button>
-              <button type="button" onClick={onRemoveDevice} className="rounded-lg border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600">기기 삭제</button>
-            </div>
-          )}
-        </div>
+      {canManageDevices ? <DevicePicker forms={allItemForms} labels={itemLabels} selected={selectedItem} onSelect={setSelectedItem} onAdd={onAddDevice} onUpdate={onUpdateDevice} onMove={onMoveDevice} onRemove={onRemoveDevice} /> : itemCount > 1 && (
+        <NumSelect value={String(selectedItem)} onChange={(v) => setSelectedItem(Number(v))} options={Array.from({ length: itemCount }, (_, i) => String(i))} labels={itemLabels} placeholder="기기 선택" accent={accent} />
       )}
-
-      {/* 기기 선택 (2대 이상일 때만) */}
-      {itemCount > 1 && (
-        <div className="mb-2 rounded-lg bg-slate-50 p-2">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-900">기기 선택</span>
-            <span className="text-[10px] text-slate-500">{itemCount}대 중 {selectedItem + 1}번 편집 중</span>
-          </div>
-          <NumSelect
-            value={String(selectedItem)}
-            onChange={(v) => {
-              const n = parseInt(v, 10);
-              if (!isNaN(n)) setSelectedItem(n);
-            }}
-            options={Array.from({ length: itemCount }, (_, i: number) => String(i))}
-            labels={Array.from({ length: itemCount }, (_, i: number) => itemLabels[i] ?? `${i + 1}.`)}
-            placeholder="기기 선택"
-            accent={accent}
-          />
-        </div>
-      )}
-
-      {/* 기기별 기본정보 — 신규 기기를 추가했을 때 직접 입력 */}
-      <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">기기 기본정보</div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <input value={itemForm.model} onChange={(e) => setItemF("model", e.target.value)} placeholder="모델명" className={textInputClass} />
-          <input value={itemForm.serial} onChange={(e) => setItemF("serial", e.target.value)} placeholder="시리얼넘버" className={textInputClass} />
-          <input value={itemForm.asset} onChange={(e) => setItemF("asset", e.target.value)} placeholder="자산기번" className={textInputClass} />
-          <input value={itemForm.content} onChange={(e) => setItemF("content", e.target.value)} placeholder="내용" className={textInputClass} />
-        </div>
-      </div>
 
       {/* 처리내용 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
@@ -3999,7 +4021,7 @@ export default function App() {
     showToast("초기화 완료");
   };
 
-  const addInspectionDevice = () => {
+  const addInspectionDevice = (info: DeviceInfo) => {
     const parts = inspectionDeviceParts(buildResultText());
     if (!parts.devices.length) {
       showToast("먼저 기존 점검 양식을 불러오세요", "error");
@@ -4008,36 +4030,42 @@ export default function App() {
     const nextIndex = parts.devices.length;
     const nextDevices = [...parts.devices, [`${nextIndex + 1}.`, ...NEW_DEVICE_LINES]];
     setTextOutput(rebuildInspectionDevices(parts.header, nextDevices, parts.footer));
-    setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM }]);
+    setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM, ...info }]);
     setSelectedItem(nextIndex);
     setEditedBlocks({});
     showToast(`${nextIndex + 1}번 기기를 추가했어요`);
   };
 
-  const moveInspectionDevice = (direction: -1 | 1) => {
-    const target = selectedItem + direction;
-    const parts = inspectionDeviceParts(buildResultText());
-    if (target < 0 || target >= parts.devices.length) return;
-    const devices = [...parts.devices];
-    [devices[selectedItem], devices[target]] = [devices[target], devices[selectedItem]];
-    setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
-    setItemForms((prev) => {
-      const next = [...prev];
-      [next[selectedItem], next[target]] = [next[target], next[selectedItem]];
-      return next;
-    });
-    setSelectedItem(target);
+  const updateInspectionDevice = (index: number, info: DeviceInfo) => {
+    setItemForms((prev) => prev.map((form, i) => i === index ? { ...form, ...info } : form));
+    setSelectedItem(index);
     setEditedBlocks({});
   };
 
-  const removeInspectionDevice = () => {
+  const moveInspectionDevice = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    const parts = inspectionDeviceParts(buildResultText());
+    if (target < 0 || target >= parts.devices.length) return;
+    const devices = [...parts.devices];
+    [devices[index], devices[target]] = [devices[target], devices[index]];
+    setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
+    setItemForms((prev) => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setSelectedItem((current) => current === index ? target : current === target ? index : current);
+    setEditedBlocks({});
+  };
+
+  const removeInspectionDevice = (index: number) => {
     const parts = inspectionDeviceParts(buildResultText());
     if (parts.devices.length <= 1) return;
-    if (!window.confirm(`${selectedItem + 1}번 기기를 양식에서 삭제할까요?`)) return;
-    const devices = parts.devices.filter((_, i) => i !== selectedItem);
+    if (!window.confirm(`${index + 1}번 기기를 양식에서 삭제할까요?`)) return;
+    const devices = parts.devices.filter((_, i) => i !== index);
     setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
-    setItemForms((prev) => prev.filter((_, i) => i !== selectedItem));
-    setSelectedItem(Math.min(selectedItem, devices.length - 1));
+    setItemForms((prev) => prev.filter((_, i) => i !== index));
+    setSelectedItem((current) => current === index ? Math.min(index, devices.length - 1) : current > index ? current - 1 : current);
     setEditedBlocks({});
     showToast("기기를 삭제했어요");
   };
@@ -4238,7 +4266,9 @@ export default function App() {
             setReportTypes={setReportTypes}
             setReportTypeOther={setReportTypeOther}
             canManageDevices={mode === "inspection"}
+            allItemForms={itemForms}
             onAddDevice={addInspectionDevice}
+            onUpdateDevice={updateInspectionDevice}
             onMoveDevice={moveInspectionDevice}
             onRemoveDevice={removeInspectionDevice}
             showLevel
