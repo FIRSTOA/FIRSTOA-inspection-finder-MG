@@ -9,8 +9,11 @@ import UnifiedHistory from "./UnifiedHistory";
 import VisitMetaPanel from "./VisitMetaPanel";
 import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
+import LogisticsForm from "./LogisticsForm";
+import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
+import ReportTypeSelector from "./ReportTypeSelector";
 import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCategoryForm } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -38,7 +41,7 @@ import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
-  | "bulman" | "misu" | "overage-adjust" | "recontract";
+  | "logistics" | "bulman" | "misu" | "overage-adjust" | "recontract";
 
 type CopyResult = {
   ok: boolean;
@@ -120,6 +123,7 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
     textDark: BW_TEXT,
     placeholder: "",
   },
+  logistics: { label: "물류", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   bulman: { label: "불만", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   misu: { label: "미수", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   "overage-adjust": { label: "초과조정", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
@@ -2007,6 +2011,12 @@ function dashIfEmpty(s: string): string {
   return s.trim() ? s.trim() : "-";
 }
 
+function applyReportTypeSelection(text: string, selected: string[], other: string): string {
+  if (!selected.length) return text;
+  const values = selected.map((v) => v === "기타" ? other.trim() : v).filter(Boolean).join(", ");
+  return /^구분\s*[:：]/m.test(text) ? text.replace(/^구분\s*[:：]\s*.*$/gm, `구분: ${values}`) : `구분: ${values}\n${text}`;
+}
+
 // Parses an existing "매수:흑X 컬X 큰컬X 합X" line into its 4 values
 function parseMail(line: string): { black: string; color: string; largeColor: string; total: string } {
   const m = line.match(/^매수\s*:\s*흑(\S*)\s*컬(\S*)\s*큰컬(\S*)\s*합(\S*)/);
@@ -3341,6 +3351,11 @@ export default function App() {
   const [pcForm, setPcForm] = useState<PcFormState>({ ...EMPTY_PC_FORM });
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
+  const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>({ ...EMPTY_LOGISTICS_FORM });
+  const logisticsFilled = Boolean(logisticsForm.vendor.trim() || logisticsForm.item.trim() || logisticsForm.notes.trim());
+  const logisticsText = useMemo(() => buildLogisticsText(logisticsForm, author), [logisticsForm, author]);
+  const [reportTypes, setReportTypes] = useState<string[]>([]);
+  const [reportTypeOther, setReportTypeOther] = useState("");
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
   const isCat = mode === "bulman" || mode === "recontract" || mode === "overage-adjust";
@@ -3350,16 +3365,17 @@ export default function App() {
   const catText = useMemo(() => (isCat ? buildCatText(mode, curCatForm, author) : ""), [isCat, mode, curCatForm, author]);
 
   const resultBlocks = useMemo<ResultBlock[]>(() => {
-    if (mode === "inspection") return splitResultBlocks(displayedTextOutput);
+    if (mode === "inspection") return splitResultBlocks(applyReportTypeSelection(displayedTextOutput, reportTypes, reportTypeOther));
     if (mode === "blank-report") {
-      return displayedList.map((item: ResultItem, i: number) => ({ text: item.content, device: i }));
+      return displayedList.map((item: ResultItem, i: number) => ({ text: applyReportTypeSelection(item.content, reportTypes, reportTypeOther), device: i }));
     }
     if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
     if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
     if (mode === "pc") return pcFilled ? [{ text: pcText, device: null }] : [];
+    if (mode === "logistics") return logisticsFilled ? [{ text: logisticsText, device: null }] : [];
     if (isCat) return catFilled ? [{ text: catText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled, isCat, catText, catFilled]);
+  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled, logisticsText, logisticsFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -3570,10 +3586,15 @@ export default function App() {
     }
   }, [mode, listOutput, textOutput]);
 
-  const buildResultText = () =>
-    resultBlocks
+  const buildResultText = () => {
+    let text = resultBlocks
       .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? mergeBlockEdit(b.text, editedBlocks[i]) : b.text))
       .join(blockJoiner);
+    if ((mode === "inspection" || mode === "blank-report") && reportTypes.length) {
+      text = applyReportTypeSelection(text, reportTypes, reportTypeOther);
+    }
+    return text;
+  };
 
   const handleCopyAll = async () => {
     const target = buildResultText();
@@ -3650,14 +3671,14 @@ export default function App() {
 
   const visitKindForMode = (): WorkKind =>
     mode === "inspection" || mode === "air-purifier" ? "inspection" : mode === "blank-report" ? "as" :
-    mode === "pc" ? "pc" : mode === "bulman" ? "bulman" : mode === "misu" ? "misu" :
+    mode === "logistics" ? "delivery" : mode === "pc" ? "pc" : mode === "bulman" ? "bulman" : mode === "misu" ? "misu" :
     mode === "recontract" ? "recontract" : "overage";
 
-  const recordVisit = async (target: string) => {
+  const recordVisit = async (target: string, destination?: SendDestination) => {
     const parsedVendor = extractVendorFromText(target);
     const parsedGrade = target.match(/등급\s*[:：]?\s*\(?\s*([^,\n\r)]+)/)?.[1]?.trim() || "";
-    const vendor = parsedVendor || pcForm.company || String(curCatForm["업체명"] || currentVendor || "");
-    const kind = visitKindForMode();
+    const vendor = parsedVendor || logisticsForm.vendor || pcForm.company || String(curCatForm["업체명"] || currentVendor || "");
+    const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" : visitKindForMode();
     const existingMinutes = Number(visitMeta.minutes[kind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
     const arrivalTime = visitMeta.arrivalTime || (mode === "air-purifier"
@@ -3666,12 +3687,12 @@ export default function App() {
     await saveVisit({
       ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime, grade: visitMeta.grade || parsedGrade,
       machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : 0),
-      workKinds: Array.from(new Set([...visitMeta.workKinds, kind])),
+      workKinds: Array.from(new Set([...visitMeta.workKinds, kind, ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []), ...(reportTypes.includes("AS") ? ["as" as WorkKind] : [])])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
     }, target);
   };
 
-  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal") => {
+  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination) => {
     let target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
@@ -3698,6 +3719,14 @@ export default function App() {
       return;
     }
 
+    if (mode === "logistics") {
+      const res = await sendLogisticsForm(logisticsForm, author, target, new Date().toISOString());
+      if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      setSending(false);
+      showToast(res.ok ? (res.message || "물류방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      return;
+    }
+
     // 카테고리(불만/재계약/초과조정): 테이블 저장 + 방 전송
     if (isCat) {
       const res = await sendCategoryForm(mode, curCatForm, author, target, new Date().toISOString());
@@ -3718,8 +3747,8 @@ export default function App() {
       mode: modeLabel,
       author,
       ts: new Date().toISOString(),
-    }, kind);
-    if (res.ok && kind === "normal") try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+    }, kind, destination);
+    if (res.ok && kind === "normal") try { await recordVisit(target, destination); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
     setSending(false);
     if (res.ok) {
       showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
@@ -3738,6 +3767,9 @@ export default function App() {
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
+    setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
+    setReportTypes([]);
+    setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
@@ -3745,7 +3777,7 @@ export default function App() {
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
 
   return (
     <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-slate-50" : "bg-white"}`}>
@@ -3825,8 +3857,8 @@ export default function App() {
 
         {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
         <div className="relative">
-          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/10 p-1" role="tablist">
-            {([["점검", "inspection"], ["AS", "blank-report"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
+          <div className="grid grid-cols-5 gap-1 rounded-2xl bg-white/10 p-1" role="tablist">
+            {([["점검", "inspection"], ["AS", "blank-report"], ["물류", "logistics"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
               const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
               return (
                 <button
@@ -3897,6 +3929,10 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
+        {(mode === "inspection" || mode === "blank-report") && hasOutput && (
+          <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} />
+        )}
+
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
           <ProcessingFormPanel
@@ -3940,6 +3976,8 @@ export default function App() {
             onError={(m) => showToast(m, "error")}
           />
         )}
+
+        {mode === "logistics" && <LogisticsForm form={logisticsForm} setForm={setLogisticsForm} author={author} setAuthor={handleSetAuthor} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
@@ -4034,7 +4072,7 @@ export default function App() {
 
         {/* 액션: 보조줄(초기화·복사·사진첨부) + 전송줄(보내기·자가·부품) */}
         <div className="mx-auto max-w-3xl space-y-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleReset}
               className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 active:scale-[0.98]"
@@ -4053,16 +4091,12 @@ export default function App() {
               <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSendAll("normal")}
-              disabled={!hasOutput || sending}
-              className="flex-[1.5] whitespace-nowrap rounded-lg py-3 text-sm font-semibold tracking-tight text-white shadow-sm transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-              style={hasOutput && !sending ? { background: "#334155" } : undefined}
-            >
-              {sending ? "보내는 중…" : "보내기"}
-            </button>
-            {mode !== "pc" && (
+          <div className="flex flex-wrap gap-2">
+            {(mode === "inspection" || mode === "blank-report") ? <>
+              <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
+              <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
+            </> : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
+            {(mode === "inspection" || mode === "blank-report") && (
               <>
                 <button
                   onClick={() => handleSendAll("자가")}

@@ -170,6 +170,7 @@ function toKstDate(ts?: string): string {
 }
 
 export type SendKind = "normal" | "자가" | "부품";
+export type SendDestination = "inspection" | "as";
 
 // 보낼 방 목록 결정. TEST_MODE면 무조건 테스트방. kind=자가/부품이면 단일 전용방.
 async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
@@ -193,15 +194,32 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   return rooms;
 }
 
+async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
+  const cfg = await getConfig();
+  const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+  if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
+  const map = await getRoomMap();
+  const key = String(region || "").trim().toUpperCase();
+  const room = map[`${destination === "inspection" ? "점검" : "AS"}|${key}`];
+  return [room || testRoom];
+}
+
 // 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).
 //  kind: normal=지역 점검/AS방, 자가=여분토너요청방, 부품=부품요청방.
 //  자가/부품은 알림 목적이라 중복(이미 저장)이어도 해당 방으로는 항상 게시한다.
-export async function sendForm(payload: SavePayload, kind: SendKind = "normal"): Promise<SaveResp> {
+export async function sendForm(payload: SavePayload, kind: SendKind = "normal", destination?: SendDestination): Promise<SaveResp> {
   try {
     const text = String(payload.text || "");
     if (!text.trim()) return { ok: false, error: "내용이 비어있습니다." };
 
-    const built = buildRecords(text, toKstDate(payload.ts), payload.author || "", "");
+    let built = buildRecords(text, toKstDate(payload.ts), payload.author || "", "");
+    // 여분/마감/세팅처럼 구분에 점검·AS 문자가 없어도 사용자가 누른 방 기준으로 저장한다.
+    if (!built.hasInspect && !built.hasAS && destination) {
+      const forced = text.match(/^구분\s*[:：]/m)
+        ? text.replace(/^구분\s*[:：]\s*(.*)$/m, `구분: ${destination === "inspection" ? "점검" : "AS"}, $1`)
+        : `구분: ${destination === "inspection" ? "점검" : "AS"}\n${text}`;
+      built = buildRecords(forced, toKstDate(payload.ts), payload.author || "", "");
+    }
     if (!built.hasInspect && !built.hasAS) {
       return { ok: false, error: `구분에 점검/AS가 없어 저장 대상이 아닙니다. (mode=${payload.mode || "?"})` };
     }
@@ -219,8 +237,8 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal"):
 
     const isExtra = kind === "자가" || kind === "부품";
     let rooms: string[] = [];
-    if (anyNew || isExtra) {   // 자가/부품은 중복이어도 알림 게시
-      rooms = await resolveRoomsFor(kind, built.region, built.hasAS);
+    if (anyNew || isExtra || destination) {   // 강제 목적지/자가/부품은 중복이어도 알림 게시
+      rooms = destination ? await resolveForcedRoom(destination, built.region) : await resolveRoomsFor(kind, built.region, built.hasAS);
       for (const room of rooms) await enqueueOutbox(room, text);
     }
 
@@ -234,6 +252,39 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal"):
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
+}
+
+export type LogisticsFormState = {
+  category: string; categoryOther: string; vendor: string; item: string; quantity: string;
+  consumableBilling: string; setup: string; emailCounter: string; hanjo: string;
+  condition: string; spareToner: string; notes: string;
+};
+
+export async function sendLogisticsForm(form: LogisticsFormState, author: string, text: string, ts?: string): Promise<SaveResp> {
+  try {
+    const vendor = form.vendor.trim();
+    if (!vendor) return { ok: false, error: "거래처명을 입력하세요." };
+    const date = toKstDate(ts);
+    const category = form.category === "기타" ? form.categoryOther.trim() : form.category;
+    const row: Record<string, unknown> = {
+      "작성일": date, "작성자": author, "구분": category, "거래처명": vendor, "품목": form.item,
+      "수량": form.quantity, "소모품(납품/청구여부)": form.consumableBilling, "셋팅여부": form.setup,
+      "이메일카운터셋팅완료": form.emailCounter, "한조셋팅완료": form.hanjo,
+      "상태체크(내부/외부)": form.condition, "여분토너체크(철수 시)": form.spareToner,
+      "특이사항": form.notes, "_업체명": vendor, "_원문": text, "_출처": "웹앱:물류",
+      "_dupKey": md5([date, author, category, vendor, form.item, form.quantity, form.notes].join("|")),
+    };
+    const result = await insertRow("logistics_records", row);
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    let room = testRoom;
+    if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
+      const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || testRoom;
+    }
+    // 사용자가 명시적으로 전송했으므로 중복 저장이어도 알림은 보낸다.
+    await enqueueOutbox(room, text);
+    return { ok: true, message: `${result === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${room}` };
+  } catch (e) { return { ok: false, error: (e as Error).message || "네트워크 오류" }; }
 }
 
 // 카테고리 폼(불만/재계약/초과조정) → 테이블 저장 + 방 전송. (스키마 기반)
