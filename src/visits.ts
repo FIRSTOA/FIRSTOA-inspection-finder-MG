@@ -94,16 +94,46 @@ export async function saveOfficeLog(log: OfficeLog): Promise<void> {
   await upsertRow("office_logs", { work_date: log.workDate, author: log.author, return_time: log.returnTime || null, values: log.values, updated_at: new Date().toISOString() }, "author,work_date");
 }
 
-export type WeeklyNote = { goals: Record<string, number>; review: string; growth: string; challenge: string; special: string; learning: string; request: string; praise: string };
-export const EMPTY_WEEKLY_NOTE: WeeklyNote = { goals: {}, review: "", growth: "", challenge: "", special: "", learning: "", request: "", praise: "" };
+export type GoalStatus = "todo" | "doing" | "done" | "failed" | "carried";
+export type GoalItem = { id: string; title: string; target: string; result: string; status: GoalStatus; reason: string; nextAction: string };
+export type WeeklyNote = { goals: Record<string, number>; goalItems: GoalItem[]; review: string; growth: string; challenge: string; special: string; learning: string; request: string; praise: string };
+export const EMPTY_WEEKLY_NOTE: WeeklyNote = { goals: {}, goalItems: [], review: "", growth: "", challenge: "", special: "", learning: "", request: "", praise: "" };
 
 export async function getWeeklyNote(author: string, weekStart: string): Promise<WeeklyNote> {
   const rows = await selectRows<Record<string, unknown>>("weekly_notes", `select=*&author=eq.${encodeURIComponent(author)}&week_start=eq.${weekStart}&limit=1`);
   if (!rows.length) return { ...EMPTY_WEEKLY_NOTE };
   const r = rows[0];
-  return { goals: (r.goals as Record<string, number>) || {}, review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") };
+  return { goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") };
 }
 
 export async function saveWeeklyNote(author: string, weekStart: string, note: WeeklyNote): Promise<void> {
-  await upsertRow("weekly_notes", { author, week_start: weekStart, ...note, updated_at: new Date().toISOString() }, "author,week_start");
+  const { goalItems, ...rest } = note;
+  await upsertRow("weekly_notes", { author, week_start: weekStart, ...rest, goal_items: goalItems, updated_at: new Date().toISOString() }, "author,week_start");
+}
+
+export type WeeklyNoteRow = WeeklyNote & { author: string; weekStart: string };
+export async function getWeeklyNotes(start: string, end: string): Promise<WeeklyNoteRow[]> {
+  const rows = await selectRows<Record<string, unknown>>("weekly_notes", `select=*&week_start=gte.${start}&week_start=lte.${end}&order=week_start.desc,author.asc`);
+  return rows.map((r) => ({ author: String(r.author), weekStart: String(r.week_start), goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") }));
+}
+
+export type LevelGoal = { id: string; category: string; title: string; currentLevel: string; targetLevel: string; budget: string; month1: string; month2: string; month3: string; progress: number };
+export type QuarterlyPlan = { author: string; year: number; quarter: number; goals: LevelGoal[] };
+export async function getQuarterlyPlan(author: string, year: number, quarter: number): Promise<QuarterlyPlan> {
+  const rows = await selectRows<Record<string, unknown>>("quarterly_plans", `select=*&author=eq.${encodeURIComponent(author)}&year=eq.${year}&quarter=eq.${quarter}&limit=1`);
+  return rows.length ? { author, year, quarter, goals: (rows[0].goals as LevelGoal[]) || [] } : { author, year, quarter, goals: [] };
+}
+export async function saveQuarterlyPlan(plan: QuarterlyPlan): Promise<void> {
+  await upsertRow("quarterly_plans", { author: plan.author, year: plan.year, quarter: plan.quarter, goals: plan.goals, updated_at: new Date().toISOString() }, "author,year,quarter");
+}
+
+export const GOLDEN_CATEGORIES = ["매출증대/안정", "효율성", "비용절감", "자기개발", "소통", "AI"] as const;
+export const GOLDEN_QUESTIONS = ["지난 기간 나의 성과", "타인의 성과에 내가 기여한 것", "성장을 위한 학습·발견한 지식", "다음 도전을 위한 지원 요청"] as const;
+export type GoldenCard = { author: string; year: number; quarter: number; answers: Record<string, Record<string, string>> };
+export async function getGoldenCard(author: string, year: number, quarter: number): Promise<GoldenCard> {
+  const rows = await selectRows<Record<string, unknown>>("golden_cards", `select=*&author=eq.${encodeURIComponent(author)}&year=eq.${year}&quarter=eq.${quarter}&limit=1`);
+  return rows.length ? { author, year, quarter, answers: (rows[0].answers as GoldenCard["answers"]) || {} } : { author, year, quarter, answers: {} };
+}
+export async function saveGoldenCard(card: GoldenCard): Promise<void> {
+  await upsertRow("golden_cards", { author: card.author, year: card.year, quarter: card.quarter, answers: card.answers, updated_at: new Date().toISOString() }, "author,year,quarter");
 }

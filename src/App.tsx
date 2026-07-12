@@ -8,6 +8,7 @@ import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
 import VisitMetaPanel from "./VisitMetaPanel";
 import WorkDashboard from "./WorkDashboard";
+import GrowthHub from "./GrowthHub";
 import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCategoryForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
@@ -3588,7 +3589,7 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [visitMeta, setVisitMeta] = useState<VisitDraft>({
     visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
@@ -3747,7 +3748,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
 
   return (
-    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" ? "bg-slate-50" : "bg-white"}`}>
+    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-slate-50" : "bg-white"}`}>
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
@@ -3757,7 +3758,7 @@ export default function App() {
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
             <nav className="p-2">
-              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
+              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
                   className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
@@ -3770,7 +3771,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" ? "max-w-[1500px] pb-16" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "max-w-[1500px] pb-16" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" || screen === "growth" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
         {/* Header — 브랜딩 */}
@@ -3781,7 +3782,7 @@ export default function App() {
               <span className="flex flex-col gap-[3px]"><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /></span>
             </button>
             <h1 className={`text-xl font-bold tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-900"}`}>
-              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일업무" : "주간현황판"}
+              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일업무" : screen === "weekly" ? "주간현황판" : "성장기록"}
             </h1>
           </div>
           {screen === "field" && (
@@ -3810,6 +3811,7 @@ export default function App() {
         {screen === "home" && <Home onGoField={() => setScreen("field")} />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
+        {screen === "growth" && <GrowthHub author={author} />}
         {(screen === "happycall" || screen === "itquote") && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
             <div className="text-3xl">🚧</div>

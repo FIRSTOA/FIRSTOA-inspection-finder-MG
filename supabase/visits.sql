@@ -30,11 +30,13 @@ create table if not exists public.weekly_notes (
   author text not null,
   week_start date not null,
   goals jsonb not null default '{}'::jsonb,
+  goal_items jsonb not null default '[]'::jsonb,
   review text not null default '', growth text not null default '', challenge text not null default '',
   special text not null default '', learning text not null default '', request text not null default '', praise text not null default '',
   updated_at timestamptz not null default now(),
   unique(author, week_start)
 );
+alter table public.weekly_notes add column if not exists goal_items jsonb not null default '[]'::jsonb;
 
 create table if not exists public.office_logs (
   id uuid primary key default gen_random_uuid(),
@@ -46,18 +48,35 @@ create table if not exists public.office_logs (
   unique(author, work_date)
 );
 
+create table if not exists public.quarterly_plans (
+  id uuid primary key default gen_random_uuid(), author text not null, year integer not null, quarter integer not null check (quarter between 1 and 4),
+  goals jsonb not null default '[]'::jsonb, updated_at timestamptz not null default now(), unique(author, year, quarter)
+);
+create table if not exists public.golden_cards (
+  id uuid primary key default gen_random_uuid(), author text not null, year integer not null, quarter integer not null check (quarter between 1 and 4),
+  answers jsonb not null default '{}'::jsonb, updated_at timestamptz not null default now(), unique(author, year, quarter)
+);
+
 alter table public.visit_logs enable row level security;
 alter table public.weekly_notes enable row level security;
 alter table public.office_logs enable row level security;
+alter table public.quarterly_plans enable row level security;
+alter table public.golden_cards enable row level security;
 -- 현재 앱이 anon 기반이므로 기존 운영 방식과 맞춘 정책. 직원 로그인 도입 시 auth.uid() 기반으로 교체한다.
 drop policy if exists "visit_logs anon read" on public.visit_logs;
 drop policy if exists "visit_logs anon insert" on public.visit_logs;
 drop policy if exists "weekly_notes anon all" on public.weekly_notes;
 drop policy if exists "office_logs anon all" on public.office_logs;
+drop policy if exists "quarterly_plans anon all" on public.quarterly_plans;
+drop policy if exists "golden_cards anon all" on public.golden_cards;
 create policy "visit_logs anon read" on public.visit_logs for select to anon using (true);
 create policy "visit_logs anon insert" on public.visit_logs for insert to anon with check (true);
 create policy "weekly_notes anon all" on public.weekly_notes for all to anon using (true) with check (true);
 create policy "office_logs anon all" on public.office_logs for all to anon using (true) with check (true);
+create policy "quarterly_plans anon all" on public.quarterly_plans for all to anon using (true) with check (true);
+create policy "golden_cards anon all" on public.golden_cards for all to anon using (true) with check (true);
 grant select, insert on public.visit_logs to anon;
 grant select, insert, update on public.weekly_notes to anon;
 grant select, insert, update on public.office_logs to anon;
+grant select, insert, update on public.quarterly_plans to anon;
+grant select, insert, update on public.golden_cards to anon;
