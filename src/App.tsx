@@ -2017,6 +2017,28 @@ function applyReportTypeSelection(text: string, selected: string[], other: strin
   return /^구분\s*[:：]/m.test(text) ? text.replace(/^구분\s*[:：]\s*.*$/gm, `구분: ${values}`) : `구분: ${values}\n${text}`;
 }
 
+function detectUnifiedInputMode(text: string): "inspection" | "blank-report" {
+  const raw = String(text || "");
+  const intakeMarkers = ["접수분야", "접수유형", "임대리스트순번", "방문담당자", "AS접수횟수", "자가사용내역"];
+  const markerCount = intakeMarkers.filter((marker) => raw.includes(marker)).length;
+  if (markerCount >= 2) return "blank-report";
+  const first = raw.trim().split(/\r?\n/)[0] || "";
+  if (/^(?:A\s*\/?\s*S|여분요청|샘플전달|자가요청)\b/i.test(first)) return "blank-report";
+  return "inspection";
+}
+
+function detectReportTypesFromInput(text: string): string[] {
+  const raw = String(text || "");
+  const field = raw.match(/(?:접수분야|구분)\s*[:：\t ]+\s*([^\t\r\n]+)/i)?.[1] || raw.trim().split(/\s+/)[0] || "";
+  const found: string[] = [];
+  if (/점검/.test(field)) found.push("점검");
+  if (/A\s*\/?\s*S|에이에스/i.test(field)) found.push("AS");
+  if (/마감/.test(field)) found.push("마감");
+  if (/여분/.test(field)) found.push("여분");
+  if (/세팅|셋팅/.test(field)) found.push("세팅");
+  return found;
+}
+
 // Parses an existing "매수:흑X 컬X 큰컬X 합X" line into its 4 values
 function parseMail(line: string): { black: string; color: string; largeColor: string; total: string } {
   const m = line.match(/^매수\s*:\s*흑(\S*)\s*컬(\S*)\s*큰컬(\S*)\s*합(\S*)/);
@@ -3561,6 +3583,14 @@ export default function App() {
     setDraftInput(text);
   };
   const confirmInputModal = () => {
+    if (draftInput.trim() && (mode === "inspection" || mode === "blank-report")) {
+      const detected = detectUnifiedInputMode(draftInput);
+      if (detected !== mode) {
+        handleModeChange(detected);
+        skipAutoRef.current = false;
+      }
+      setReportTypes(detectReportTypesFromInput(draftInput));
+    }
     setInputText(draftInput);
     if (!draftInput.trim()) resetOutputs();
     setInputModalOpen(false);
@@ -3568,6 +3598,14 @@ export default function App() {
 
   // 점검탭 검색에서 고른 양식(_원문)을 변환기에 주입 — 붙여넣기 확인과 같은 경로(자동 변환).
   const handleLoadForm = (text: string) => {
+    if (mode !== "air-purifier") {
+      const detected = detectUnifiedInputMode(text);
+      if (detected !== mode) {
+        handleModeChange(detected);
+        skipAutoRef.current = false;
+      }
+      setReportTypes(detectReportTypesFromInput(text));
+    }
     setInputText(text);
     setSearchOpen(false);
     showToast("양식을 불러왔어요");
@@ -3886,7 +3924,7 @@ export default function App() {
                   📝{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
                 </button>
               )}
-              {(mode === "inspection" || mode === "air-purifier") && (
+              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40">{photoBusy ? "⏳" : "📷"}</button>
               )}
@@ -3961,21 +3999,11 @@ export default function App() {
           )}
         </div>
 
+        {/* 점검·AS 내부에서는 기기 종류만 선택. 원본 형식은 자동 감지. */}
         {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
-          <div className="mt-2 rounded-xl bg-white/10 p-1">
-            <div className="mb-1 px-2 pt-1 text-[10px] font-bold text-white/50">원본 입력 형식</div>
-            <div className="grid grid-cols-2 gap-1">
-              <button type="button" onClick={() => mode !== "inspection" && handleModeChange("inspection")} className={`rounded-lg py-2 text-xs font-bold ${mode === "inspection" || mode === "air-purifier" ? "bg-white text-slate-900" : "text-white/70"}`}>점검 원본</button>
-              <button type="button" onClick={() => mode !== "blank-report" && handleModeChange("blank-report")} className={`rounded-lg py-2 text-xs font-bold ${mode === "blank-report" ? "bg-white text-slate-900" : "text-white/70"}`}>AS 접수 원본</button>
-            </div>
-          </div>
-        )}
-
-        {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
-        {(mode === "inspection" || mode === "air-purifier") && (
           <div className="mt-2 flex gap-1 rounded-xl bg-white/10 p-1">
             {([["복합기", "inspection"], ["청정기", "air-purifier"]] as [string, Mode][]).map(([label, target]) => {
-              const active = mode === target;
+              const active = target === "inspection" ? mode === "inspection" || mode === "blank-report" : mode === target;
               return (
                 <button
                   key={label}
