@@ -2142,6 +2142,7 @@ function applyProcessingFormV2(
       const f = itemForms[itemIdx];
       if (/^처리내용\s*:/.test(line)) {
         out.push(f.processContent.trim() ? `처리내용: ${f.processContent.trim()}` : line);
+        if (f.processContent.trim()) skipCont = true;
         continue;
       }
       if (/^매수\s*:/.test(line)) { out.push(mergeMailLine(line, f)); continue; }
@@ -2236,7 +2237,7 @@ function applyProcessingFormV2(
 function parseItemDataFromText(text: string, count: number): PerItemForm[] {
   const forms: PerItemForm[] = Array.from({ length: count }, () => ({ ...EMPTY_ITEM_FORM }));
   let idx = -1;
-  let collecting: "spare" | "note" | null = null;
+  let collecting: "process" | "spare" | "note" | null = null;
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
 
@@ -2246,6 +2247,11 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
     if (isDividerLine(line) || /^※/.test(line)) { collecting = null; continue; }
     if (idx < 0 || idx >= count) continue;
 
+    if (/^처리내용\s*:/.test(line)) {
+      forms[idx].processContent = parseValueAfterColon(line, "처리내용");
+      collecting = "process";
+      continue;
+    }
     if (/^여분\s*:/.test(line)) {
       forms[idx].spareRaw = parseValueAfterColon(line, "여분");
       collecting = "spare";
@@ -2267,7 +2273,7 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
       continue;
     }
     if (collecting && !FIELD_MARKER_REGEX.test(line)) {
-      const key = collecting === "spare" ? "spareRaw" : "notes";
+      const key = collecting === "process" ? "processContent" : collecting === "spare" ? "spareRaw" : "notes";
       forms[idx][key] = forms[idx][key] ? `${forms[idx][key]}\n${line}` : line;
       continue;
     }
@@ -3160,12 +3166,31 @@ function linePrefix(line: string): string {
 // Lines whose prefix is form-driven take the form's value; every other line
 // keeps the user's text (기기위치, 모델명, 시리얼넘버, 내용, 등급 등).
 function mergeBlockEdit(formBase: string, userEdit: string): string {
+  // 처리내용 등 여러 줄 필드는 첫 라벨 줄뿐 아니라 다음 필드 전까지를 통째로 교체한다.
+  // 기존 Map 방식만 사용하면 라벨 없는 2번째 줄부터가 사라질 수 있다.
+  const replaceMultiline = (target: string, source: string, label: string): string => {
+    const sourceLines = source.split("\n");
+    const targetLines = target.split("\n");
+    const startOf = (lines: string[]) => lines.findIndex((line) => new RegExp(`^${label}\\s*:`).test(line));
+    const endOf = (lines: string[], start: number) => {
+      let end = start + 1;
+      while (end < lines.length && !FIELD_MARKER_REGEX.test(lines[end]) && !isDividerLine(lines[end]) && !/^※/.test(lines[end])) end++;
+      return end;
+    };
+    const sourceStart = startOf(sourceLines); const targetStart = startOf(targetLines);
+    if (sourceStart < 0 || targetStart < 0) return target;
+    targetLines.splice(targetStart, endOf(targetLines, targetStart) - targetStart, ...sourceLines.slice(sourceStart, endOf(sourceLines, sourceStart)));
+    return targetLines.join("\n");
+  };
+  let mergedEdit = replaceMultiline(userEdit, formBase, "처리내용");
+  mergedEdit = replaceMultiline(mergedEdit, formBase, "여분");
+  mergedEdit = replaceMultiline(mergedEdit, formBase, "특이사항");
   const baseByPrefix = new Map<string, string>();
   for (const line of formBase.split("\n")) {
     const p = linePrefix(line);
     if (p && FORM_DRIVEN_PREFIXES.has(p)) baseByPrefix.set(p, line);
   }
-  return userEdit.split("\n").map((line: string) => {
+  return mergedEdit.split("\n").map((line: string) => {
     const p = linePrefix(line);
     if (p && baseByPrefix.has(p)) return baseByPrefix.get(p) as string;
     return line;

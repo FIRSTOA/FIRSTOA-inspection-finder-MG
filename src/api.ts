@@ -11,6 +11,7 @@ import { md5 } from "./md5";
 import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows, insertRow } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
+import { normRegion } from "./region";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -183,7 +184,7 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   if (kind === "부품") return [map["부품|*"] || "부품요청"];
 
   // normal: 지역별 점검방(+AS방)
-  const key = String(region || "").trim().toUpperCase();
+  const key = normRegion(region);
   const inspectRoom = map["점검|" + key];
   if (!inspectRoom) return [testRoom];           // 미지원 지역(E·빈값 등)
   const rooms = [inspectRoom];                    // 점검방은 항상
@@ -199,7 +200,7 @@ async function resolveForcedRoom(destination: SendDestination, region: string): 
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
   if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
   const map = await getRoomMap();
-  const key = String(region || "").trim().toUpperCase();
+  const key = normRegion(region);
   const room = map[`${destination === "inspection" ? "점검" : "AS"}|${key}`];
   return [room || testRoom];
 }

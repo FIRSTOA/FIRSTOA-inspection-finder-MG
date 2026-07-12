@@ -9,8 +9,11 @@ export const REGION_LABEL: Record<string, string> = { A: "강북", B: "강서", 
 // "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 없으면 원문.
 export function normRegion(r: string): string {
   const s = String(r || "").trim();
-  const m = s.match(/[A-Ea-e]/);
-  return m ? m[0].toUpperCase() : s;
+  const upper = s.toUpperCase();
+  const suffix = upper.match(/([A-E])\s*$/);
+  if (suffix) return suffix[1];
+  const prefix = upper.match(/^([A-E])(?:\s|$)/);
+  return prefix ? prefix[1] : s;
 }
 
 // 대표 지역 (점검 > AS > 그 외 순) — 뱃지·정렬용.

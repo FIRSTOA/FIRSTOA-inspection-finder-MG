@@ -24,6 +24,7 @@ const SINGLE_FIELDS = [
 ];
 
 const EMPTY_LABEL_RE = /^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항)\s*[:：]?\s*$/;
+const FIELD_LABEL_PATTERN = "작성자|구분|레벨|등급|업체명|부서명|지역|키맨\\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항";
 
 export type Row = Record<string, string>;
 export type BuiltRecords = {
@@ -49,7 +50,7 @@ export function isASForm(content: string): boolean {
 function extractField(content: string, label: string, multiline: boolean): string {
   const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    "(?:^|[\\r\\n])" + esc + "\\s*[:：]?\\s*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?[:：]|[-=]{2,}|※|＊|\\*)|$)"
+    "(?:^|[\\r\\n])" + esc + "\\s*[:：]?\\s*([\\s\\S]*?)(?=[\\r\\n](?:(?:" + FIELD_LABEL_PATTERN + ")\\s*[:：]|[-=]{2,}|※|＊|\\*)|$)"
   );
   const match = content.match(pattern);
   if (!match) return "";
