@@ -2118,16 +2118,10 @@ function changeSpareToken(raw: string, token: SpareToken, delta: number): string
   if (!raw.trim()) return value;
   return newline < 0 ? `${raw.trimEnd()} ${value}` : `${raw.slice(0, newline).trimEnd()} ${value}${raw.slice(newline)}`;
 }
-function ensureSpareTemplate(raw: string, tokens: SpareToken[]): string {
-  return tokens.reduce((text, token) => spareTokenCount(text, token) === null ? changeSpareToken(text, token, 1) : text, raw);
-}
-
 function SpareQuickEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const addLocation = (location: string) => { if (!value.includes(location)) onChange(`${value.trimEnd()}${value.trim() ? "\n" : ""}${location}`); };
   return <div>
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">{SPARE_TOKENS.map((token) => { const count = spareTokenCount(value, token); return <div key={token} className="rounded-lg border border-slate-200 bg-white p-1.5"><div className="text-center text-[10px] font-bold text-slate-500">{token}</div><div className="mt-1 grid grid-cols-3 items-center"><button type="button" onClick={()=>onChange(changeSpareToken(value,token,-1))} className="rounded bg-slate-100 py-1 text-xs text-slate-500">−</button><span className="text-center text-sm font-bold text-slate-700">{count ?? "-"}</span><button type="button" onClick={()=>onChange(changeSpareToken(value,token,1))} className="rounded bg-slate-700 py-1 text-xs text-white">＋</button></div></div>; })}</div>
-    <div className="mt-2 flex flex-wrap gap-1.5"><button type="button" onClick={()=>onChange(ensureSpareTemplate(value,["K","C","M","Y","폐"]))} className="rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">컬러 기본 추가</button><button type="button" onClick={()=>onChange(ensureSpareTemplate(value,["K","폐"]))} className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-600">흑백 기본 추가</button><button type="button" onClick={()=>addLocation("(복합기 뒤 보관)")} className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700">복합기 뒤</button><button type="button" onClick={()=>addLocation("수납장에 보관중")} className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700">수납장</button></div>
-    <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1\n복합기 뒤 수납장에 보관중" className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
+    <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1\n보관 위치나 특이사항 직접 입력" className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
     <div className="mt-1 text-[10px] text-slate-400">컬드럼·보관위치·줄바꿈 등 직접 작성한 내용은 그대로 유지됩니다.</div>
   </div>;
 }
@@ -2681,6 +2675,10 @@ type ProcessingFormPanelProps = {
   bgSoft: string;
   author: string;
   setAuthor: (v: string) => void;
+  reportTypes: string[];
+  reportTypeOther: string;
+  setReportTypes: (v: string[]) => void;
+  setReportTypeOther: (v: string) => void;
   showLevel: boolean;
   showHantinParking: boolean;
 };
@@ -2690,7 +2688,9 @@ function ProcessingFormPanel({
   shared, setSharedF,
   itemCount, itemLabels, selectedItem, setSelectedItem,
   accent, bgSoft,
-  author, setAuthor, showLevel, showHantinParking,
+  author, setAuthor,
+  reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
+  showLevel, showHantinParking,
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
   const [selfExpanded, setSelfExpanded] = useState(false);
@@ -2724,6 +2724,14 @@ function ProcessingFormPanel({
           </div>
         )}
       </div>
+
+      {/* 작성자 다음에 방문 업무 구분을 선택 */}
+      <ReportTypeSelector
+        selected={reportTypes}
+        other={reportTypeOther}
+        onSelected={setReportTypes}
+        onOther={setReportTypeOther}
+      />
 
       {/* 기기 선택 (2대 이상일 때만) */}
       {itemCount > 1 && (
@@ -3937,23 +3945,23 @@ export default function App() {
             </h1>
           </div>
           {screen === "field" && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🔍</button>
+                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🔍</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">검색</span></button>
               )}
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={openInputModal} aria-label="원본입력"
-                  className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">
-                  📝{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                  className="relative flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95">
+                  <span className="text-sm">📝</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">원본</span>{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
                 </button>
               )}
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40">{photoBusy ? "⏳" : "📷"}</button>
+                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"><span className="text-sm">{photoBusy ? "⏳" : "📷"}</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">사진</span></button>
               )}
               <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🗂️</button>
+                className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
             </div>
           )}
         </header>
@@ -4048,10 +4056,6 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
-        {(mode === "inspection" || mode === "blank-report") && (
-          <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} />
-        )}
-
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
           <ProcessingFormPanel
@@ -4067,6 +4071,10 @@ export default function App() {
             bgSoft={config.bgSoft}
             author={author}
             setAuthor={handleSetAuthor}
+            reportTypes={reportTypes}
+            reportTypeOther={reportTypeOther}
+            setReportTypes={setReportTypes}
+            setReportTypeOther={setReportTypeOther}
             showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
           />
