@@ -2097,7 +2097,9 @@ type SpareToken = "K" | "C" | "M" | "Y" | "폐" | "드럼";
 const SPARE_TOKENS: SpareToken[] = ["K", "C", "M", "Y", "폐", "드럼"];
 function spareTokenRegex(token: SpareToken): RegExp {
   const name = token === "폐" ? "폐(?:통)?" : token;
-  return new RegExp(`(^|[\\s\\n])(${name})\\s*[:=]?\\s*(-|\\d+)`, token.length === 1 && token !== "폐" ? "i" : "");
+  // K2C2M2Y2처럼 붙여 쓰는 경우 다음 토큰 앞의 이전 숫자도 경계로 인정한다.
+  const prefix = token.length === 1 ? "(^|[\\s\\n]|\\d)" : "(^|[\\s\\n])";
+  return new RegExp(`${prefix}(${name})\\s*[:=]?\\s*(-|\\d+)`, token.length === 1 ? "i" : "");
 }
 function spareTokenCount(raw: string, token: SpareToken): number | null {
   const m = raw.match(spareTokenRegex(token));
@@ -3365,6 +3367,10 @@ export default function App() {
     const failed = results.filter((t) => !t.passed);
     if (failed.length) console.warn("[selfTests] 실패:", failed.map((t) => t.name));
     else console.info(`[selfTests] ${results.length}건 통과`);
+    const compactSpare = "K2C2M2Y2 폐2\n(복합기 뒤 보관)";
+    const spareCountsOk = (["K", "C", "M", "Y", "폐"] as SpareToken[]).every((token) => spareTokenCount(compactSpare, token) === 2);
+    const spareEditOk = changeSpareToken(compactSpare, "M", 1).startsWith("K2C2M3Y2 폐2");
+    if (!spareCountsOk || !spareEditOk) console.warn("[selfTests] 공백 없는 여분 토큰 파싱 실패");
   }, []);
 
   const config = MODE_CONFIG[mode];
@@ -3574,6 +3580,13 @@ export default function App() {
     setDraftInput(inputText);
     setInputModalOpen(true);
   };
+  // 거래처 전환 시 함께 비워야 하는 현장 사진 상태.
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const photoLinkRef = useRef<string>("");
+  const [visitMeta, setVisitMeta] = useState<VisitDraft>({
+    visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
+    workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
+  });
   const handlePasteToDraft = async () => {
     const text = await pasteFromClipboard();
     if (text === null) {
@@ -3582,10 +3595,26 @@ export default function App() {
     }
     setDraftInput(text);
   };
+  const clearPreviousVendorWork = (clearVendor = true) => {
+    setItemForms([{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setAirForm(EMPTY_AIR_FORM);
+    setSelectedItem(0);
+    setEditedBlocks({});
+    if (clearVendor) setCurrentVendor("");
+    setReportTypes([]);
+    setReportTypeOther("");
+    setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
+    setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
+    photoLinkRef.current = "";
+  };
   const confirmInputModal = () => {
+    const isNewSource = draftInput.trim() !== inputText.trim();
+    if (draftInput.trim() && isNewSource) clearPreviousVendorWork();
     if (draftInput.trim() && (mode === "inspection" || mode === "blank-report")) {
       const detected = detectUnifiedInputMode(draftInput);
       if (detected !== mode) {
+        delete modeStateRef.current[detected];
         handleModeChange(detected);
         skipAutoRef.current = false;
       }
@@ -3598,9 +3627,11 @@ export default function App() {
 
   // 점검탭 검색에서 고른 양식(_원문)을 변환기에 주입 — 붙여넣기 확인과 같은 경로(자동 변환).
   const handleLoadForm = (text: string) => {
+    clearPreviousVendorWork(false);
     if (mode !== "air-purifier") {
       const detected = detectUnifiedInputMode(text);
       if (detected !== mode) {
+        delete modeStateRef.current[detected];
         handleModeChange(detected);
         skipAutoRef.current = false;
       }
@@ -3707,15 +3738,8 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
-  const [visitMeta, setVisitMeta] = useState<VisitDraft>({
-    visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
-    workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
-  });
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
-  const photoLinkRef = useRef<string>(""); // 업로드+앨범 생성 후 모아보기 링크(캐시)
-
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
@@ -3781,7 +3805,7 @@ export default function App() {
       : (sharedForm.arrivalHour ? `${sharedForm.arrivalHour}:${sharedForm.arrivalMinute || "00"}` : ""));
     await saveVisit({
       ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime, grade: visitMeta.grade || parsedGrade,
-      machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : 0),
+      machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : mode === "air-purifier" ? 1 : 0),
       workKinds: Array.from(new Set([...visitMeta.workKinds, kind, ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []), ...(reportTypes.includes("AS") ? ["as" as WorkKind] : [])])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
     }, target);
@@ -4043,7 +4067,7 @@ export default function App() {
             bgSoft={config.bgSoft}
             author={author}
             setAuthor={handleSetAuthor}
-            showLevel={mode === "blank-report"}
+            showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
           />
         )}
@@ -4096,7 +4120,7 @@ export default function App() {
           </div>
         )}
 
-        {hasOutput && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
+        {hasOutput && mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
         </>)}
 
       </div>
