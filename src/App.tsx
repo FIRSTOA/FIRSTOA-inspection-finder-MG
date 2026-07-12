@@ -6,6 +6,9 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
+import VisitMetaPanel from "./VisitMetaPanel";
+import WorkDashboard from "./WorkDashboard";
+import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCategoryForm } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
 
@@ -3585,8 +3588,12 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
+  const [visitMeta, setVisitMeta] = useState<VisitDraft>({
+    visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0,
+    workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
+  });
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
@@ -3640,6 +3647,28 @@ export default function App() {
     return photoLinkRef.current;
   };
 
+  const visitKindForMode = (): WorkKind =>
+    mode === "inspection" || mode === "air-purifier" ? "inspection" : mode === "blank-report" ? "as" :
+    mode === "pc" ? "pc" : mode === "bulman" ? "bulman" : mode === "misu" ? "misu" :
+    mode === "recontract" ? "recontract" : "overage";
+
+  const recordVisit = async (target: string) => {
+    const parsedVendor = extractVendorFromText(target);
+    const vendor = parsedVendor || pcForm.company || String(curCatForm["업체명"] || currentVendor || "");
+    const kind = visitKindForMode();
+    const existingMinutes = Number(visitMeta.minutes[kind] || 0);
+    const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
+    const arrivalTime = visitMeta.arrivalTime || (mode === "air-purifier"
+      ? (airForm.arrivalHour ? `${airForm.arrivalHour}:${airForm.arrivalMinute || "00"}` : "")
+      : (sharedForm.arrivalHour ? `${sharedForm.arrivalHour}:${sharedForm.arrivalMinute || "00"}` : ""));
+    await saveVisit({
+      ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime,
+      machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : 0),
+      workKinds: Array.from(new Set([...visitMeta.workKinds, kind])),
+      minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
+    }, target);
+  };
+
   const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal") => {
     let target = buildResultText();
     if (!target) {
@@ -3661,6 +3690,7 @@ export default function App() {
     // 확장성(PC): pc_expansion 저장 + PC방 전송 (점검/AS 경로와 별개)
     if (mode === "pc") {
       const res = await sendPcForm(pcForm, author, target, new Date().toISOString());
+      if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -3669,6 +3699,7 @@ export default function App() {
     // 카테고리(불만/재계약/초과조정): 테이블 저장 + 방 전송
     if (isCat) {
       const res = await sendCategoryForm(mode, curCatForm, author, target, new Date().toISOString());
+      if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -3686,6 +3717,7 @@ export default function App() {
       author,
       ts: new Date().toISOString(),
     }, kind);
+    if (res.ok && kind === "normal") try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
     setSending(false);
     if (res.ok) {
       showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
@@ -3704,6 +3736,7 @@ export default function App() {
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
+    setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
@@ -3723,7 +3756,7 @@ export default function App() {
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
             <nav className="p-2">
-              {([["home", "홈"], ["field", "FIELD"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
+              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
                   className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
@@ -3747,7 +3780,7 @@ export default function App() {
               <span className="flex flex-col gap-[3px]"><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /></span>
             </button>
             <h1 className={`text-xl font-bold tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-900"}`}>
-              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : "IT 견적"}
+              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일업무" : "주간현황판"}
             </h1>
           </div>
           {screen === "field" && (
@@ -3774,6 +3807,8 @@ export default function App() {
 
         {/* 홈 / 해피콜 / IT견적 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} />}
+        {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
+        {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {(screen === "happycall" || screen === "itquote") && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
             <div className="text-3xl">🚧</div>
@@ -3924,6 +3959,8 @@ export default function App() {
             <div className="mt-1 text-sm text-slate-400">양식 확정 후 추가 예정</div>
           </div>
         )}
+
+        {hasOutput && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
         </>)}
 
       </div>

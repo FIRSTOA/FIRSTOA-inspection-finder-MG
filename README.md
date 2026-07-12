@@ -7,6 +7,7 @@
 - **📝 원본입력** — 카톡 원본을 붙여넣어 변환 (점검/미양식/청정기)
 - **🗂️ 통합이력** — 거래처의 점검·AS·초과·미수·불만·확장성·재계약·업체정보 등 전체 이력(9개 카테고리, 최신순) 조회
 - **미양식**: AS 접수내용 붙여넣으면 업체명 자동 인식 → 통합이력 연결
+- **📊 일일업무·주간현황판** — FIELD 전송 기록에서 방문 수·기기 수·업무별 건수와 시간을 자동 집계하고, 주간 목표·성장노트·칭찬 등만 직접 작성
 
 ## 백엔드
 - Google Apps Script(First-DATA-MG)의 통합 DB 인덱스를 JSONP로 조회
@@ -19,6 +20,10 @@ npm install
 npm run dev      # 로컬 개발 (http://localhost:5173)
 npm run build    # 프로덕션 빌드 (dist/)
 ```
+
+## 방문 집계 초기 설정
+
+Supabase SQL Editor에서 `supabase/visits.sql`을 한 번 실행해야 일일업무·주간현황판이 동작한다. 이후 FIELD의 **방문 집계**를 확인하고 보내면 카톡/업무기록 저장과 동시에 집계된다.
 
 ## 스택
 React 19 · TypeScript · Vite · Tailwind CSS v4

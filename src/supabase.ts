@@ -72,6 +72,19 @@ export async function insertRow(table: string, row: Record<string, unknown>): Pr
   throw new Error(`저장 실패 ${table}(${res.status}): ${t.slice(0, 200)}`);
 }
 
+// 범용 upsert. 주간 목표/회고처럼 동일 키의 내용을 다시 저장할 때 사용한다.
+export async function upsertRow(table: string, row: Record<string, unknown>, onConflict: string): Promise<void> {
+  const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
+    method: "POST",
+    headers: { ...BASE_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`저장 실패 ${table}(${res.status}): ${t.slice(0, 200)}`);
+  }
+}
+
 export async function getConfig(): Promise<Record<string, string>> {
   const res = await fetch(`${REST}/app_config?select=key,value`, { headers: BASE_HEADERS });
   if (!res.ok) throw new Error(`설정 조회 실패(${res.status})`);
