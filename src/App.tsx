@@ -2383,7 +2383,7 @@ function applyAirPurifierForm(text: string, f: AirPurifierForm, author: string):
   }).join("\n");
 }
 
-const HANTIN_OPTIONS = ["한공", "한조", "한조해지업체", "보안으로 설치불가", "고객불편으로 설치불가", "무"];
+const HANTIN_OPTIONS = ["한공", "한조", "모바일한조", "한조해지업체", "보안으로 설치불가", "고객불편으로 설치불가", "무"];
 const PARKING_OPTIONS = ["유", "무"];
 const SHIP_OPTIONS = ["출고부탁드립니다", "선출고완료"];
 const HOUR_OPTIONS = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"];
@@ -3929,7 +3929,7 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
-        {(mode === "inspection" || mode === "blank-report") && hasOutput && (
+        {(mode === "inspection" || mode === "blank-report") && (
           <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} />
         )}
 
@@ -4104,7 +4104,7 @@ export default function App() {
                   className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
                   style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}
                 >
-                  자가
+                  자가신청
                 </button>
                 <button
                   onClick={() => handleSendAll("부품")}
@@ -4112,7 +4112,7 @@ export default function App() {
                   className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
                   style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}
                 >
-                  부품
+                  부품신청
                 </button>
               </>
             )}

@@ -26,7 +26,7 @@ export type VisitRow = VisitDraft & {
 };
 
 export const WORK_LABELS: Record<WorkKind, string> = {
-  inspection: "점검", as: "AS", delivery: "납품/반출/교체/셋팅", etc: "기타",
+  inspection: "점검", as: "AS", delivery: "납품/반출/교체/셋팅", etc: "기타(배송,마감등)",
   pc: "PC·IT 홍보", misu: "미수", bulman: "불만", recontract: "재계약", overage: "초과조정",
 };
 
