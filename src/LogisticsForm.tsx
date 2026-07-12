@@ -21,7 +21,6 @@ export default function LogisticsForm({ form, setForm, author, setAuthor }: { fo
   const [hanjoDirect, setHanjoDirect] = useState(false);
   const set = (key: keyof LogisticsFormState, value: string) => setForm({ ...form, [key]: value });
   return <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-    <div><div className="text-base font-bold text-slate-800">📦 물류 업무</div><div className="text-xs text-slate-400">납품·교체·철수·이전·세팅을 기록하고 물류방에 전송합니다.</div></div>
     <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-500">작성자</span><LogisticsAuthorPicker value={author} onChange={setAuthor}/></label>
     <div><div className="text-xs font-semibold text-slate-500">구분</div><div className="mt-1 grid grid-cols-4 gap-1.5">{categories.map((c)=><button type="button" key={c} onClick={()=>set("category",c)} className={`rounded-xl px-2 py-2.5 text-xs font-bold ${form.category===c?"bg-slate-700 text-white":"border border-slate-200 bg-white text-slate-500"}`}>{c}</button>)}</div>{form.category==="기타"&&<input value={form.categoryOther} onChange={(e)=>set("categoryOther",e.target.value)} placeholder="구분 직접입력" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"/>}</div>
     <TextField label="거래처명 (지점/현장명 필수)" value={form.vendor} onChange={(v)=>set("vendor",v)} placeholder="업체명과 지점/현장명"/>

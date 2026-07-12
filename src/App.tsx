@@ -2836,8 +2836,8 @@ function ProcessingFormPanel({
     <section className="mb-3 rounded-2xl bg-white px-1 py-2 sm:px-1.5">
       {/* ▣ 기본 입력 */}
       <div className="mb-3 rounded-xl border-2 border-slate-800 p-3">
-      {/* 작성자 / 레벨 */}
-      <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[1fr_auto]" : ""}`} style={{ background: bgSoft }}>
+      {/* 작성자 / 구분 / 레벨 */}
+      <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]" : "grid-cols-2"}`} style={{ background: bgSoft }}>
         <div>
           <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
           <AuthorPicker
@@ -2846,8 +2846,12 @@ function ProcessingFormPanel({
             accent={accent}
           />
         </div>
+        <div className="min-w-0">
+          <div className="mb-1.5 flex items-center gap-1"><span className="rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">구분</span><span className="text-[9px] text-slate-400">중복</span></div>
+          <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} accent={accent} />
+        </div>
         {showLevel && (
-          <div className="w-24">
+          <div className="min-w-0">
             <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">레벨</div>
             <NumSelect
               value={shared.level}
@@ -2859,14 +2863,6 @@ function ProcessingFormPanel({
           </div>
         )}
       </div>
-
-      {/* 작성자 다음에 방문 업무 구분을 선택 */}
-      <ReportTypeSelector
-        selected={reportTypes}
-        other={reportTypeOther}
-        onSelected={setReportTypes}
-        onOther={setReportTypeOther}
-      />
 
       {canManageDevices ? <DevicePicker forms={allItemForms} labels={itemLabels} selected={selectedItem} onSelect={setSelectedItem} onAdd={onAddDevice} onUpdate={onUpdateDevice} onMove={onMoveDevice} onRemove={onRemoveDevice} /> : itemCount > 1 && (
         <NumSelect value={String(selectedItem)} onChange={(v) => setSelectedItem(Number(v))} options={Array.from({ length: itemCount }, (_, i) => String(i))} labels={itemLabels} placeholder="기기 선택" accent={accent} />
