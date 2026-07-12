@@ -81,6 +81,19 @@ type ModeConfig = {
   placeholder: string;
 };
 
+const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: string }> = {
+  inspection: { icon: "🖨️", title: "점검·AS 업무", description: "기존 양식이나 AS 원본을 불러와 현장 처리내용을 작성하고 점검방·AS방으로 전송합니다." },
+  "blank-report": { icon: "🖨️", title: "점검·AS 업무", description: "AS 접수 원본을 자동 변환해 현장 처리내용을 작성하고 점검방·AS방으로 전송합니다." },
+  "air-purifier": { icon: "🌿", title: "청정기 점검", description: "청정기 양식을 불러오거나 사진으로 생성해 필터 점검내용을 기록합니다." },
+  "samsung-note": { icon: "📝", title: "일정 원본 변환", description: "번호가 붙은 현장 일정을 여러 건의 업무 양식으로 변환합니다." },
+  pc: { icon: "💻", title: "확장성 업무", description: "거래처의 PC·소프트웨어 현황과 홍보·견적 내용을 기록합니다." },
+  logistics: { icon: "📦", title: "물류 업무", description: "납품·교체·철수·이전·셋팅 업무와 물품 상태를 기록합니다." },
+  bulman: { icon: "📣", title: "불만 방문", description: "거래처 불만 내용과 방문 처리결과를 정해진 양식으로 기록합니다." },
+  misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록합니다. 전용 양식은 준비 중입니다." },
+  "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
+  recontract: { icon: "🤝", title: "재계약", description: "계약 종료 예정 거래처의 상담과 재계약 진행내용을 기록합니다." },
+};
+
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
 // 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
@@ -3924,6 +3937,14 @@ export default function App() {
                   {label}
                 </button>
               ))}
+              <a
+                href="/manual/field-manual.svg"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                사용 매뉴얼 이미지 ↗
+              </a>
             </nav>
           </div>
           <div className="flex-1 bg-black/30" />
@@ -4055,6 +4076,21 @@ export default function App() {
 
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
+
+        <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-start gap-2.5">
+            <span className="text-xl" aria-hidden="true">{FIELD_GUIDES[mode].icon}</span>
+            <div className="min-w-0">
+              <div className="font-bold text-slate-900">{FIELD_GUIDES[mode].title}</div>
+              <div className="mt-0.5 text-xs leading-5 text-slate-500">{FIELD_GUIDES[mode].description}</div>
+            </div>
+          </div>
+          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-800">
+              카톡방 자동전송은 아직 준비 중입니다. 내용을 작성한 뒤 하단의 <b>복사</b> 버튼을 눌러 카톡방에 붙여넣어 주세요.
+            </div>
+          )}
+        </div>
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (

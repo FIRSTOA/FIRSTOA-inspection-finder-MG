@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800">
+  <rect width="1200" height="1800" fill="#F1F5F9"/>
+  <style>
+    text { font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; fill:#0F172A; }
+    .title { font-size:46px; font-weight:800; }
+    .sub { font-size:20px; fill:#64748B; }
+    .h2 { font-size:27px; font-weight:800; }
+    .h3 { font-size:20px; font-weight:800; }
+    .body { font-size:17px; fill:#475569; }
+    .small { font-size:15px; fill:#64748B; }
+    .white { fill:#FFFFFF; }
+    .blue { fill:#1D4ED8; }
+    .amber { fill:#92400E; }
+  </style>
+
+  <rect x="50" y="45" width="1100" height="1710" rx="34" fill="#FFFFFF"/>
+  <rect x="50" y="45" width="1100" height="190" rx="34" fill="#27375C"/>
+  <text x="95" y="118" class="title white">FIRSTOA 현장업무 앱 사용 매뉴얼</text>
+  <text x="95" y="160" class="sub white">처음 사용하는 직원도 이 순서대로 진행하면 됩니다.</text>
+  <rect x="95" y="185" width="260" height="34" rx="17" fill="#FFFFFF" fill-opacity=".16"/>
+  <text x="225" y="208" text-anchor="middle" font-size="15" font-weight="700" class="white">모바일 FIELD 빠른 시작</text>
+
+  <text x="95" y="295" class="h2">1. 공통 사용 순서</text>
+  <g transform="translate(95 325)">
+    <g><rect width="190" height="130" rx="18" fill="#EFF6FF" stroke="#BFDBFE"/><circle cx="32" cy="32" r="18" fill="#2563EB"/><text x="32" y="39" text-anchor="middle" font-size="18" font-weight="800" class="white">1</text><text x="22" y="76" class="h3">업무 탭 선택</text><text x="22" y="105" class="small">점검·AS / 물류 등</text></g>
+    <g transform="translate(215)"><rect width="190" height="130" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><circle cx="32" cy="32" r="18" fill="#475569"/><text x="32" y="39" text-anchor="middle" font-size="18" font-weight="800" class="white">2</text><text x="22" y="76" class="h3">양식 불러오기</text><text x="22" y="105" class="small">검색·원본·사진</text></g>
+    <g transform="translate(430)"><rect width="190" height="130" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><circle cx="32" cy="32" r="18" fill="#475569"/><text x="32" y="39" text-anchor="middle" font-size="18" font-weight="800" class="white">3</text><text x="22" y="76" class="h3">내용 작성</text><text x="22" y="105" class="small">작성자·구분·시간</text></g>
+    <g transform="translate(645)"><rect width="190" height="130" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><circle cx="32" cy="32" r="18" fill="#475569"/><text x="32" y="39" text-anchor="middle" font-size="18" font-weight="800" class="white">4</text><text x="22" y="76" class="h3">결과 확인</text><text x="22" y="105" class="small">미리보기 펼치기</text></g>
+    <g transform="translate(860)"><rect width="190" height="130" rx="18" fill="#ECFDF5" stroke="#A7F3D0"/><circle cx="32" cy="32" r="18" fill="#059669"/><text x="32" y="39" text-anchor="middle" font-size="18" font-weight="800" class="white">5</text><text x="22" y="76" class="h3">전송 또는 복사</text><text x="22" y="105" class="small">업무 기록 자동 저장</text></g>
+  </g>
+
+  <text x="95" y="525" class="h2">2. 점검·AS 작성 방법</text>
+  <rect x="95" y="550" width="1010" height="400" rx="22" fill="#F8FAFC" stroke="#CBD5E1"/>
+  <text x="130" y="595" class="h3">① 복합기 또는 청정기를 선택합니다.</text>
+  <text x="130" y="628" class="body">복합기 점검과 AS는 같은 화면을 사용하며, ‘구분’에서 점검·AS·마감·여분·세팅을 중복 선택할 수 있습니다.</text>
+  <text x="130" y="680" class="h3">② 상단 아이콘으로 양식을 준비합니다.</text>
+  <g transform="translate(130 702)">
+    <rect width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="22" y="34" class="h3">검색</text><text x="22" y="61" class="small">지난 거래처 양식 불러오기</text>
+    <rect x="235" width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="257" y="34" class="h3">원본</text><text x="257" y="61" class="small">AS 원문·기존 양식 붙여넣기</text>
+    <rect x="470" width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="492" y="34" class="h3">사진</text><text x="492" y="61" class="small">워킹맵 사진으로 양식 생성</text>
+    <rect x="705" width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="727" y="34" class="h3">이력</text><text x="727" y="61" class="small">저장된 전체 업무 조회</text>
+  </g>
+  <text x="130" y="830" class="h3">③ 작성자 → 구분 → 처리내용 순서로 입력합니다.</text>
+  <text x="130" y="863" class="body">여분은 K/C/M/Y/폐/드럼의 +·− 버튼으로 수량을 조절하고, 보관 위치나 추가 내용은 아래 칸에 직접 적습니다.</text>
+  <text x="130" y="905" class="h3">④ 점검방 보내기 또는 AS방 보내기를 누릅니다.</text>
+  <text x="130" y="935" class="small">같은 양식이어도 원하는 카톡방을 직접 선택할 수 있으며 방문집계도 함께 저장됩니다.</text>
+
+  <text x="95" y="1020" class="h2">3. 나머지 업무 탭</text>
+  <g transform="translate(95 1045)">
+    <rect width="320" height="110" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><text x="24" y="38" class="h3">물류</text><text x="24" y="68" class="body">납품·교체·철수·이전·셋팅</text><text x="24" y="94" class="small">품목·수량·상태를 기록</text>
+    <rect x="345" width="320" height="110" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><text x="369" y="38" class="h3">확장성</text><text x="369" y="68" class="body">PC·소프트웨어 현황 및 홍보</text><text x="369" y="94" class="small">견적·상담 내용을 기록</text>
+    <rect x="690" width="320" height="110" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/><text x="714" y="38" class="h3">더보기</text><text x="714" y="68" class="body">불만·미수·초과조정·재계약</text><text x="714" y="94" class="small">해당 방문 내용을 기록</text>
+  </g>
+  <rect x="95" y="1175" width="1010" height="76" rx="16" fill="#FFFBEB" stroke="#FCD34D"/>
+  <text x="125" y="1208" class="h3 amber">중요: 점검·AS 외 카톡 자동전송은 준비 중입니다.</text>
+  <text x="125" y="1236" class="body">양식을 작성한 뒤 하단 ‘복사’를 눌러 카톡방에 붙여넣어 주세요.</text>
+
+  <text x="95" y="1325" class="h2">4. 자동으로 쌓이는 기록</text>
+  <rect x="95" y="1350" width="1010" height="188" rx="22" fill="#EFF6FF" stroke="#BFDBFE"/>
+  <text x="130" y="1395" class="h3 blue">일일업무</text><text x="300" y="1395" class="body">방문 거래처 수, 기기 대수, AS·점검·기타 시간과 영업·계약·미수 수치를 조회합니다.</text>
+  <text x="130" y="1442" class="h3 blue">주간현황판</text><text x="300" y="1442" class="body">점검·AS·납품 등의 주간 실적을 자동 집계하고 목표·결과·다음 주 목표만 작성합니다.</text>
+  <text x="130" y="1489" class="h3 blue">성장기록</text><text x="300" y="1489" class="body">성장노트·배운 점·아이디어를 모아 분기 레벨업 계획과 골든미팅카드에 활용합니다.</text>
+
+  <text x="95" y="1605" class="h2">5. 꼭 기억하세요</text>
+  <circle cx="112" cy="1645" r="6" fill="#2563EB"/><text x="132" y="1652" class="body">새 거래처 양식을 불러오면 이전 거래처의 자가·부품·사진 입력값은 초기화됩니다.</text>
+  <circle cx="112" cy="1685" r="6" fill="#2563EB"/><text x="132" y="1692" class="body">사진 링크에서는 개별 JPEG 저장 또는 사진 전체 저장을 사용할 수 있습니다.</text>
+  <circle cx="112" cy="1725" r="6" fill="#2563EB"/><text x="132" y="1732" class="body">입력이 이상하면 보내기 전에 ‘결과 미리보기’를 펼쳐 내용을 확인하세요.</text>
+</svg>
