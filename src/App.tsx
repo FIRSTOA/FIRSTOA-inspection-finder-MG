@@ -2111,14 +2111,35 @@ const SPARE_TOKENS: SpareToken[] = ["K", "C", "M", "Y", "폐", "드럼"];
 function spareTokenRegex(token: SpareToken): RegExp {
   const name = token === "폐" ? "폐(?:통)?" : token;
   // K2C2M2Y2처럼 붙여 쓰는 경우 다음 토큰 앞의 이전 숫자도 경계로 인정한다.
-  const prefix = token.length === 1 ? "(^|[\\s\\n]|\\d)" : "(^|[\\s\\n])";
-  return new RegExp(`${prefix}(${name})\\s*[:=]?\\s*(-|\\d+)`, token.length === 1 ? "i" : "");
+  const prefix = token.length === 1 ? "(^|[\\s\\n,;/]|\\d)" : "(^|[\\s\\n,;/])";
+  // K-2는 수량 2, K-처럼 숫자가 없는 하이픈은 미입력으로 구분한다.
+  return new RegExp(`${prefix}(${name})\\s*[:=]?\\s*(-\\s*\\d+|\\d+|-)`, token.length === 1 ? "i" : "");
+}
+function groupedSpareTokenCount(raw: string, token: SpareToken): number | null {
+  if (!(["K", "C", "M", "Y"] as SpareToken[]).includes(token)) return null;
+  const tonerSet = raw.match(/(?:컬러\s*)?토너\s*[-:=]?\s*(\d+)\s*(?:세트|set)/i);
+  if (tonerSet) return Number(tonerSet[1]);
+  const allColor = raw.match(/(?:KCMY|CMYK)\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/i);
+  if (allColor) return Number(allColor[1]);
+  const cmy = raw.match(/CMY\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/i);
+  return token !== "K" && cmy ? Number(cmy[1]) : null;
+}
+function expandSpareGroups(raw: string): string {
+  return raw
+    .replace(/(?:컬러\s*)?토너\s*[-:=]?\s*(\d+)\s*(?:세트|set)/gi, (_all, n: string) => `K${n} C${n} M${n} Y${n}`)
+    .replace(/(?:KCMY|CMYK)\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/gi, (_all, n: string) => `K${n} C${n} M${n} Y${n}`)
+    .replace(/CMY\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/gi, (_all, n: string) => `C${n} M${n} Y${n}`);
 }
 function spareTokenCount(raw: string, token: SpareToken): number | null {
   const m = raw.match(spareTokenRegex(token));
-  return m && m[3] !== "-" ? Number(m[3]) : null;
+  if (m) {
+    const value = m[3].replace(/\s/g, "");
+    return value === "-" ? null : Number(value.replace(/^-/, ""));
+  }
+  return groupedSpareTokenCount(raw, token);
 }
 function changeSpareToken(raw: string, token: SpareToken, delta: number): string {
+  raw = expandSpareGroups(raw);
   const rx = spareTokenRegex(token);
   const current = spareTokenCount(raw, token);
   if (current !== null || rx.test(raw)) {
@@ -2135,7 +2156,7 @@ function SpareQuickEditor({ value, onChange }: { value: string; onChange: (v: st
   return <div>
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">{SPARE_TOKENS.map((token) => { const count = spareTokenCount(value, token); return <div key={token} className="rounded-lg border border-slate-200 bg-white p-1.5"><div className="text-center text-[10px] font-bold text-slate-500">{token}</div><div className="mt-1 grid grid-cols-3 items-center"><button type="button" onClick={()=>onChange(changeSpareToken(value,token,-1))} className="rounded bg-slate-100 py-1 text-xs text-slate-500">−</button><span className="text-center text-sm font-bold text-slate-700">{count ?? "-"}</span><button type="button" onClick={()=>onChange(changeSpareToken(value,token,1))} className="rounded bg-slate-700 py-1 text-xs text-white">＋</button></div></div>; })}</div>
     <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1\n보관 위치나 특이사항 직접 입력" className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
-    <div className="mt-1 text-[10px] text-slate-400">컬드럼·보관위치·줄바꿈 등 직접 작성한 내용은 그대로 유지됩니다.</div>
+    <div className="mt-1 text-[10px] text-slate-400">K-2·토너1세트·CMY1개씩도 인식하며, 보관위치와 줄바꿈은 그대로 유지됩니다.</div>
   </div>;
 }
 
@@ -3392,6 +3413,14 @@ export default function App() {
     const spareCountsOk = (["K", "C", "M", "Y", "폐"] as SpareToken[]).every((token) => spareTokenCount(compactSpare, token) === 2);
     const spareEditOk = changeSpareToken(compactSpare, "M", 1).startsWith("K2C2M3Y2 폐2");
     if (!spareCountsOk || !spareEditOk) console.warn("[selfTests] 공백 없는 여분 토큰 파싱 실패");
+    const spareVariants: Array<[string, Record<string, number>]> = [
+      ["K-2 C-2 M-2 Y-2 폐-2 (폐2는 복합기 왼쪽 서랍장)", { K: 2, C: 2, M: 2, Y: 2, 폐: 2 }],
+      ["토너1세트 폐통1", { K: 1, C: 1, M: 1, Y: 1, 폐: 1 }],
+      ["토너 k1,CMY1개씩 폐-1", { K: 1, C: 1, M: 1, Y: 1, 폐: 1 }],
+    ];
+    const variantsOk = spareVariants.every(([raw, expected]) => Object.entries(expected).every(([token, count]) => spareTokenCount(raw, token as SpareToken) === count));
+    const groupedEditOk = changeSpareToken("토너 k1,CMY1개씩 폐-1", "C", 1).includes("C2 M1 Y1");
+    if (!variantsOk || !groupedEditOk) console.warn("[selfTests] 여분 변형 표현 파싱 실패");
   }, []);
 
   const config = MODE_CONFIG[mode];
