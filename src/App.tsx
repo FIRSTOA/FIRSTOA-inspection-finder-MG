@@ -3333,7 +3333,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
-  const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)

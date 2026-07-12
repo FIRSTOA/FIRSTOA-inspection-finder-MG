@@ -9,6 +9,8 @@ export default function AlbumView({ id }: { id: string }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [idx, setIdx] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadErr, setDownloadErr] = useState("");
   const touchX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -21,6 +23,47 @@ export default function AlbumView({ id }: { id: string }) {
   const isVideo = (u: string) => /\.(mp4|mov|webm|m4v|avi|3gp|mkv)(\?|$)/i.test(u);
   const prev = () => setIdx((i) => (i == null ? i : Math.max(0, i - 1)));
   const next = () => setIdx((i) => (i == null ? i : Math.min(urls.length - 1, i + 1)));
+
+  const safeVendor = (vendor || "현장사진").replace(/[\\/:*?"<>|]/g, "_");
+  const downloadPhoto = async (url: string, photoIndex: number) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("사진을 불러오지 못했습니다.");
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `${safeVendor}_${String(photoIndex + 1).padStart(2, "0")}.jpg`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  };
+
+  const handleDownload = async (url: string, photoIndex: number) => {
+    setDownloading(true);
+    setDownloadErr("");
+    try {
+      await downloadPhoto(url, photoIndex);
+    } catch (error) {
+      setDownloadErr((error as Error).message || "사진 다운로드에 실패했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    setDownloading(true);
+    setDownloadErr("");
+    try {
+      for (const [photoIndex, url] of urls.entries()) {
+        if (!isVideo(url)) await downloadPhoto(url, photoIndex);
+      }
+    } catch (error) {
+      setDownloadErr((error as Error).message || "사진 다운로드에 실패했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // 키보드 ←/→/Esc (데스크톱)
   useEffect(() => {
@@ -36,28 +79,52 @@ export default function AlbumView({ id }: { id: string }) {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      <div className="sticky top-0 z-10 flex items-center justify-between bg-slate-800 px-4 py-3">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-slate-800 px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-bold">{vendor || "현장 사진"}</div>
           {urls.length > 0 && <div className="text-[11px] text-slate-400">{urls.length}장 · 사진 탭 → 좌우로 넘기기</div>}
         </div>
+        {urls.some((url) => !isVideo(url)) && (
+          <button
+            type="button"
+            disabled={downloading}
+            onClick={handleDownloadAll}
+            className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-900 disabled:opacity-50"
+          >
+            {downloading ? "다운로드 중…" : "사진 전체 저장"}
+          </button>
+        )}
       </div>
 
       {loading && <div className="p-8 text-center text-slate-400">불러오는 중…</div>}
       {err && <div className="p-8 text-center text-rose-300">{err}</div>}
+      {downloadErr && <div className="px-4 py-2 text-center text-sm text-rose-300">{downloadErr}</div>}
 
       <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4">
         {urls.map((u, i) => (
-          <button key={i} type="button" onClick={() => setIdx(i)} className="relative aspect-square overflow-hidden bg-slate-800">
-            {isVideo(u) ? (
-              <>
-                <video src={u} preload="metadata" muted className="h-full w-full object-cover" />
-                <span className="absolute inset-0 flex items-center justify-center text-3xl text-white/90 drop-shadow">▶</span>
-              </>
-            ) : (
-              <img src={u} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+          <div key={i} className="relative aspect-square overflow-hidden bg-slate-800">
+            <button type="button" onClick={() => setIdx(i)} className="h-full w-full">
+              {isVideo(u) ? (
+                <>
+                  <video src={u} preload="metadata" muted className="h-full w-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center text-3xl text-white/90 drop-shadow">▶</span>
+                </>
+              ) : (
+                <img src={u} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+              )}
+            </button>
+            {!isVideo(u) && (
+              <button
+                type="button"
+                aria-label={`사진 ${i + 1} 다운로드`}
+                disabled={downloading}
+                onClick={() => void handleDownload(u, i)}
+                className="absolute bottom-1 right-1 rounded-md bg-black/70 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
+              >
+                저장
+              </button>
             )}
-          </button>
+          </div>
         ))}
       </div>
 
@@ -107,6 +174,16 @@ export default function AlbumView({ id }: { id: string }) {
           </div>
           <button type="button" className="absolute right-3 top-3 rounded-full bg-white/20 px-3 py-1.5 text-sm font-bold"
             onClick={(e) => { e.stopPropagation(); setIdx(null); }}>닫기</button>
+          {!isVideo(urls[idx]) && (
+            <button
+              type="button"
+              disabled={downloading}
+              className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50"
+              onClick={(e) => { e.stopPropagation(); void handleDownload(urls[idx], idx); }}
+            >
+              JPEG 다운로드
+            </button>
+          )}
         </div>
       )}
     </div>
