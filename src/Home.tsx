@@ -96,9 +96,8 @@ export default function Home({ onGoField }: { onGoField: () => void }) {
       </Section>
 
       {/* 탭 안내 */}
-      <Section title="탭 안내" sub="점검 / AS / 확장성 / 더보기">
-        <Row icon="🔧" tone="#F1F5F9" name="점검">복합기/프린터 점검. 위 토글로 <b>복합기 ↔ 청정기</b> 전환. 거래처검색·사진양식 지원.</Row>
-        <Row icon="🛠" tone="#F1F5F9" name="AS">AS 접수내용을 붙여넣으면 깔끔한 양식으로 변환돼요. 점검·AS·마감·여분·세팅을 중복 선택하고 원하는 방으로 직접 전송해요.</Row>
+      <Section title="탭 안내" sub="점검·AS / 물류 / 확장성 / 더보기">
+        <Row icon="🔧" tone="#F1F5F9" name="점검·AS">한 화면에서 <b>점검 원본 ↔ AS 접수 원본</b>을 선택해 변환해요. 점검·AS·마감·여분·세팅을 중복 선택하고 원하는 방으로 직접 전송해요.</Row>
         <Row icon="📦" tone="#F5F3FF" name="물류">납품·교체·철수·이전·세팅 내용을 작성해 물류방 전송과 기록을 한 번에 처리해요.</Row>
         <Row icon="💻" tone="#ECFEFF" name="확장성">PC·IT·복합기·네트워크 확장성(영업). 점검/AS 갔다가 바로 작성 — <b>불러오기</b>로 업체명·지역·키맨 자동 채움.</Row>
         <Row icon="📋" tone="#F1F5F9" name="더보기 (불만·미수·초과조정·재계약)">상단 <b>더보기 ▾</b> 안에 있어요. 폼 작성 → 카톡방 전송 + 저장. 불만/초과조정/재계약은 점검/AS 불러오기 지원. (미수는 준비중)</Row>

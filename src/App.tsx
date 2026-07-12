@@ -2071,6 +2071,43 @@ function renderSpareLine(f: PerItemForm): string {
   return raw ? `여분: ${raw.replace(/^\s+/, "")}` : "여분:";
 }
 
+type SpareToken = "K" | "C" | "M" | "Y" | "폐" | "드럼";
+const SPARE_TOKENS: SpareToken[] = ["K", "C", "M", "Y", "폐", "드럼"];
+function spareTokenRegex(token: SpareToken): RegExp {
+  const name = token === "폐" ? "폐(?:통)?" : token;
+  return new RegExp(`(^|[\\s\\n])(${name})\\s*[:=]?\\s*(-|\\d+)`, token.length === 1 && token !== "폐" ? "i" : "");
+}
+function spareTokenCount(raw: string, token: SpareToken): number | null {
+  const m = raw.match(spareTokenRegex(token));
+  return m && m[3] !== "-" ? Number(m[3]) : null;
+}
+function changeSpareToken(raw: string, token: SpareToken, delta: number): string {
+  const rx = spareTokenRegex(token);
+  const current = spareTokenCount(raw, token);
+  if (current !== null || rx.test(raw)) {
+    const next = Math.max(0, (current || 0) + delta);
+    return raw.replace(rx, (_all, prefix: string, name: string) => `${prefix}${name}${next}`);
+  }
+  if (delta < 0) return raw;
+  const value = `${token}1`;
+  const newline = raw.indexOf("\n");
+  if (!raw.trim()) return value;
+  return newline < 0 ? `${raw.trimEnd()} ${value}` : `${raw.slice(0, newline).trimEnd()} ${value}${raw.slice(newline)}`;
+}
+function ensureSpareTemplate(raw: string, tokens: SpareToken[]): string {
+  return tokens.reduce((text, token) => spareTokenCount(text, token) === null ? changeSpareToken(text, token, 1) : text, raw);
+}
+
+function SpareQuickEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const addLocation = (location: string) => { if (!value.includes(location)) onChange(`${value.trimEnd()}${value.trim() ? "\n" : ""}${location}`); };
+  return <div>
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">{SPARE_TOKENS.map((token) => { const count = spareTokenCount(value, token); return <div key={token} className="rounded-lg border border-slate-200 bg-white p-1.5"><div className="text-center text-[10px] font-bold text-slate-500">{token}</div><div className="mt-1 grid grid-cols-3 items-center"><button type="button" onClick={()=>onChange(changeSpareToken(value,token,-1))} className="rounded bg-slate-100 py-1 text-xs text-slate-500">−</button><span className="text-center text-sm font-bold text-slate-700">{count ?? "-"}</span><button type="button" onClick={()=>onChange(changeSpareToken(value,token,1))} className="rounded bg-slate-700 py-1 text-xs text-white">＋</button></div></div>; })}</div>
+    <div className="mt-2 flex flex-wrap gap-1.5"><button type="button" onClick={()=>onChange(ensureSpareTemplate(value,["K","C","M","Y","폐"]))} className="rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">컬러 기본 추가</button><button type="button" onClick={()=>onChange(ensureSpareTemplate(value,["K","폐"]))} className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-600">흑백 기본 추가</button><button type="button" onClick={()=>addLocation("(복합기 뒤 보관)")} className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700">복합기 뒤</button><button type="button" onClick={()=>addLocation("수납장에 보관중")} className="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700">수납장</button></div>
+    <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1\n복합기 뒤 수납장에 보관중" className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
+    <div className="mt-1 text-[10px] text-slate-400">컬드럼·보관위치·줄바꿈 등 직접 작성한 내용은 그대로 유지됩니다.</div>
+  </div>;
+}
+
 // Structural lines that end a 여분/특이사항 free-text block.
 const FIELD_MARKER_REGEX = /^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항|보증기간 내 여부|교체 전 카운터 누적 사용매수|사용 부품 예상 사용매수|물품명|물품|수량|출고여부|도착 시간|소요 시간)\s*:/;
 
@@ -2755,15 +2792,10 @@ function ProcessingFormPanel({
         </div>
       </div>
 
-      {/* 여분 — 원본 그대로 직접 수정 */}
+      {/* 여분 — 원문은 보존하고 알려진 수량만 빠르게 조정 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
         <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">여분</div>
-        <textarea
-          value={itemForm.spareRaw}
-          onChange={(e) => setItemF("spareRaw", e.target.value)}
-          rows={2}
-          className="w-full resize-y rounded-lg bg-white p-2 font-mono text-xs outline-none"
-        />
+        <SpareQuickEditor value={itemForm.spareRaw} onChange={(v)=>setItemF("spareRaw",v)} />
       </div>
       </div>{/* /기본 입력 */}
 
@@ -3844,7 +3876,7 @@ export default function App() {
           </div>
           {screen === "field" && (
             <div className="flex items-center gap-1.5">
-              {(mode === "inspection" || mode === "air-purifier") && (
+              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm transition hover:bg-slate-50 active:scale-95">🔍</button>
               )}
@@ -3880,11 +3912,11 @@ export default function App() {
         {screen === "field" && (<>
         {/* ===== FIELD 화면 ===== */}
 
-        {/* 상단 탭 (하이브리드) — 주요: 점검/AS/확장성 + 더보기(불만/미수/초과조정/재계약) */}
+        {/* 상단 탭 — 점검·AS는 하나로 합치고 내부에서 원본 형식만 전환 */}
         <div className="relative">
-          <div className="grid grid-cols-5 gap-1 rounded-2xl bg-white/10 p-1" role="tablist">
-            {([["점검", "inspection"], ["AS", "blank-report"], ["물류", "logistics"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
-              const active = label === "점검" ? (mode === "inspection" || mode === "air-purifier") : mode === target;
+          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/10 p-1" role="tablist">
+            {([["점검·AS", "inspection"], ["물류", "logistics"], ["확장성", "pc"]] as [string, Mode][]).map(([label, target]) => {
+              const active = target === "inspection" ? (mode === "inspection" || mode === "air-purifier" || mode === "blank-report") : mode === target;
               return (
                 <button
                   key={label}
@@ -3928,6 +3960,16 @@ export default function App() {
             </>
           )}
         </div>
+
+        {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
+          <div className="mt-2 rounded-xl bg-white/10 p-1">
+            <div className="mb-1 px-2 pt-1 text-[10px] font-bold text-white/50">원본 입력 형식</div>
+            <div className="grid grid-cols-2 gap-1">
+              <button type="button" onClick={() => mode !== "inspection" && handleModeChange("inspection")} className={`rounded-lg py-2 text-xs font-bold ${mode === "inspection" || mode === "air-purifier" ? "bg-white text-slate-900" : "text-white/70"}`}>점검 원본</button>
+              <button type="button" onClick={() => mode !== "blank-report" && handleModeChange("blank-report")} className={`rounded-lg py-2 text-xs font-bold ${mode === "blank-report" ? "bg-white text-slate-900" : "text-white/70"}`}>AS 접수 원본</button>
+            </div>
+          </div>
+        )}
 
         {/* 점검 탭 내부 토글 — 복합기 / 청정기 */}
         {(mode === "inspection" || mode === "air-purifier") && (
