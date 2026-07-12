@@ -40,10 +40,11 @@
     <rect x="470" width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="492" y="34" class="h3">사진</text><text x="492" y="61" class="small">워킹맵 사진으로 양식 생성</text>
     <rect x="705" width="215" height="82" rx="15" fill="#FFFFFF" stroke="#CBD5E1"/><text x="727" y="34" class="h3">이력</text><text x="727" y="61" class="small">저장된 전체 업무 조회</text>
   </g>
-  <text x="130" y="830" class="h3">③ 작성자 → 구분 → 처리내용 순서로 입력합니다.</text>
-  <text x="130" y="863" class="body">여분은 K/C/M/Y/폐/드럼의 +·− 버튼으로 수량을 조절하고, 보관 위치나 추가 내용은 아래 칸에 직접 적습니다.</text>
-  <text x="130" y="905" class="h3">④ 점검방 보내기 또는 AS방 보내기를 누릅니다.</text>
-  <text x="130" y="935" class="small">같은 양식이어도 원하는 카톡방을 직접 선택할 수 있으며 방문집계도 함께 저장됩니다.</text>
+  <text x="130" y="825" class="h3">③ 작성자 → 구분 → 처리내용 순서로 입력합니다.</text>
+  <text x="130" y="855" class="body">기기가 늘면 ‘기기 관리 → 기기 추가’를 누르고, 앞·뒤 순서 버튼으로 번호를 바꿀 수 있습니다.</text>
+  <text x="130" y="885" class="body">여분은 K/C/M/Y/폐/드럼의 +·− 버튼으로 조절하고, 보관 위치는 아래 칸에 직접 적습니다.</text>
+  <text x="130" y="918" class="h3">④ 점검방 보내기 또는 AS방 보내기를 누릅니다.</text>
+  <text x="130" y="943" class="small">같은 양식이어도 원하는 카톡방을 직접 선택할 수 있으며 방문집계도 함께 저장됩니다.</text>
 
   <text x="95" y="1020" class="h2">3. 나머지 업무 탭</text>
   <g transform="translate(95 1045)">

@@ -1637,17 +1637,6 @@ async function copyTextToClipboard(text: string): Promise<CopyResult> {
   return { ok: false, message: "복사가 차단되었습니다. 직접 선택해 복사해 주세요." };
 }
 
-async function pasteFromClipboard(): Promise<string | null> {
-  if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.readText) {
-    try {
-      return await navigator.clipboard.readText();
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Tests (DEV only)
 // ────────────────────────────────────────────────────────────────────────────
@@ -1943,6 +1932,10 @@ function runSelfTests(): TestResult[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 type PerItemForm = {
+  model: string;
+  serial: string;
+  asset: string;
+  content: string;
   processContent: string;
   mailBlack: string;
   mailColor: string;
@@ -1960,6 +1953,7 @@ type PerItemForm = {
 };
 
 const EMPTY_ITEM_FORM: PerItemForm = {
+  model: "", serial: "", asset: "", content: "",
   processContent: "",
   mailBlack: "", mailColor: "", mailLargeColor: "", mailTotal: "",
   tonerK: "", tonerC: "", tonerM: "", tonerY: "",
@@ -2229,6 +2223,10 @@ function applyProcessingFormV2(
     // Per-item fields
     if (itemIdx >= 0 && itemIdx < itemForms.length) {
       const f = itemForms[itemIdx];
+      if (/^모델명\s*:/.test(line)) { out.push(suffixIfValue("모델명:", f.model.trim() || parseValueAfterColon(line, "모델명"))); continue; }
+      if (/^시리얼넘버\s*:/.test(line)) { out.push(suffixIfValue("시리얼넘버:", f.serial.trim() || parseValueAfterColon(line, "시리얼넘버"))); continue; }
+      if (/^자산기번\s*:/.test(line)) { out.push(suffixIfValue("자산기번:", f.asset.trim() || parseValueAfterColon(line, "자산기번"))); continue; }
+      if (/^내용\s*:/.test(line)) { out.push(suffixIfValue("내용:", f.content.trim() || parseValueAfterColon(line, "내용"))); continue; }
       if (/^처리내용\s*:/.test(line)) {
         out.push(f.processContent.trim() ? `처리내용: ${f.processContent.trim()}` : line);
         if (f.processContent.trim()) skipCont = true;
@@ -2336,6 +2334,10 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
     if (isDividerLine(line) || /^※/.test(line)) { collecting = null; continue; }
     if (idx < 0 || idx >= count) continue;
 
+    if (/^모델명\s*:/.test(line)) { forms[idx].model = parseValueAfterColon(line, "모델명"); collecting = null; continue; }
+    if (/^시리얼넘버\s*:/.test(line)) { forms[idx].serial = parseValueAfterColon(line, "시리얼넘버"); collecting = null; continue; }
+    if (/^자산기번\s*:/.test(line)) { forms[idx].asset = parseValueAfterColon(line, "자산기번"); collecting = null; continue; }
+    if (/^내용\s*:/.test(line)) { forms[idx].content = parseValueAfterColon(line, "내용"); collecting = null; continue; }
     if (/^처리내용\s*:/.test(line)) {
       forms[idx].processContent = parseValueAfterColon(line, "처리내용");
       collecting = "process";
@@ -2403,6 +2405,31 @@ function splitResultBlocks(text: string): ResultBlock[] {
 function countInspectionItems(text: string): number {
   if (!text) return 0;
   return itemStartFlags(text.split("\n")).filter(Boolean).length;
+}
+
+const NEW_DEVICE_LINES = [
+  "모델명:", "시리얼넘버:", "자산기번:", "내용:", "처리내용:",
+  "매수: 흑-    컬-    큰컬-    합-", "토너잔량:K-   C-   M-   Y-", "폐통:        %",
+  "여분:", "한틴이카유무:", "주차비지원유무:", "특이사항:", ITEM_DIVIDER,
+];
+
+function inspectionDeviceParts(text: string): { header: string[]; devices: string[][]; footer: string[] } {
+  const lines = text.split("\n");
+  const starts = itemStartFlags(lines).map((flag, i) => flag ? i : -1).filter((i) => i >= 0);
+  if (!starts.length) return { header: lines, devices: [], footer: [] };
+  const footerAt = lines.findIndex((line, i) => i > starts[0] && /^※/.test(line));
+  const deviceEnd = footerAt >= 0 ? footerAt : lines.length;
+  const devices = starts.map((start, i) => lines.slice(start, starts[i + 1] ?? deviceEnd));
+  return { header: lines.slice(0, starts[0]), devices, footer: footerAt >= 0 ? lines.slice(footerAt) : [] };
+}
+
+function rebuildInspectionDevices(header: string[], devices: string[][], footer: string[]): string {
+  const numbered = devices.map((block, i) => {
+    const next = block.map((line, li) => li === 0 ? line.replace(/^\s*\d+\./, `${i + 1}.`) : line);
+    if (!isDividerLine(next[next.length - 1] || "")) next.push(ITEM_DIVIDER);
+    return next;
+  });
+  return [...header, ...numbered.flat(), ...footer].join("\n");
 }
 
 function extractInspectionItemLabels(text: string): string[] {
@@ -2713,6 +2740,10 @@ type ProcessingFormPanelProps = {
   reportTypeOther: string;
   setReportTypes: (v: string[]) => void;
   setReportTypeOther: (v: string) => void;
+  canManageDevices: boolean;
+  onAddDevice: () => void;
+  onMoveDevice: (direction: -1 | 1) => void;
+  onRemoveDevice: () => void;
   showLevel: boolean;
   showHantinParking: boolean;
 };
@@ -2724,6 +2755,7 @@ function ProcessingFormPanel({
   accent, bgSoft,
   author, setAuthor,
   reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
+  canManageDevices, onAddDevice, onMoveDevice, onRemoveDevice,
   showLevel, showHantinParking,
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
@@ -2767,6 +2799,25 @@ function ProcessingFormPanel({
         onOther={setReportTypeOther}
       />
 
+      {canManageDevices && (
+        <div className="my-2 rounded-xl border border-blue-100 bg-blue-50 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-slate-800">기기 관리</div>
+              <div className="text-[10px] text-slate-500">추가·순서변경 시 번호가 자동 정리됩니다.</div>
+            </div>
+            <button type="button" onClick={onAddDevice} className="shrink-0 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">＋ 기기 추가</button>
+          </div>
+          {itemCount > 1 && (
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              <button type="button" disabled={selectedItem === 0} onClick={() => onMoveDevice(-1)} className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 disabled:opacity-35">← 앞 순서</button>
+              <button type="button" disabled={selectedItem === itemCount - 1} onClick={() => onMoveDevice(1)} className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 disabled:opacity-35">뒤 순서 →</button>
+              <button type="button" onClick={onRemoveDevice} className="rounded-lg border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600">기기 삭제</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 기기 선택 (2대 이상일 때만) */}
       {itemCount > 1 && (
         <div className="mb-2 rounded-lg bg-slate-50 p-2">
@@ -2787,6 +2838,17 @@ function ProcessingFormPanel({
           />
         </div>
       )}
+
+      {/* 기기별 기본정보 — 신규 기기를 추가했을 때 직접 입력 */}
+      <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
+        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">기기 기본정보</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <input value={itemForm.model} onChange={(e) => setItemF("model", e.target.value)} placeholder="모델명" className={textInputClass} />
+          <input value={itemForm.serial} onChange={(e) => setItemF("serial", e.target.value)} placeholder="시리얼넘버" className={textInputClass} />
+          <input value={itemForm.asset} onChange={(e) => setItemF("asset", e.target.value)} placeholder="자산기번" className={textInputClass} />
+          <input value={itemForm.content} onChange={(e) => setItemF("content", e.target.value)} placeholder="내용" className={textInputClass} />
+        </div>
+      </div>
 
       {/* 처리내용 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
@@ -3453,7 +3515,7 @@ export default function App() {
   const currentItemForm = itemForms[selectedItem] ?? EMPTY_ITEM_FORM;
 
   const itemLabels = useMemo(() => {
-    if (mode === "inspection") return extractInspectionItemLabels(textOutput);
+    if (mode === "inspection") return extractInspectionItemLabels(displayedTextOutput);
     if (mode === "blank-report") {
       return listOutput.map((item: ResultItem, i: number) => {
         const labels = extractInspectionItemLabels(item.content);
@@ -3461,7 +3523,7 @@ export default function App() {
       });
     }
     return [];
-  }, [mode, textOutput, listOutput]);
+  }, [mode, displayedTextOutput, listOutput]);
 
   // Form changes do NOT discard manual edits; mergeBlockEdit re-applies the
   // form's values to form-driven lines while preserving everything else.
@@ -3637,14 +3699,6 @@ export default function App() {
     visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
     workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
   });
-  const handlePasteToDraft = async () => {
-    const text = await pasteFromClipboard();
-    if (text === null) {
-      showToast("클립보드 권한이 필요해요", "error");
-      return;
-    }
-    setDraftInput(text);
-  };
   const clearPreviousVendorWork = (clearVendor = true) => {
     setItemForms([{ ...EMPTY_ITEM_FORM }]);
     setSharedForm(EMPTY_SHARED_FORM);
@@ -3945,6 +3999,49 @@ export default function App() {
     showToast("초기화 완료");
   };
 
+  const addInspectionDevice = () => {
+    const parts = inspectionDeviceParts(buildResultText());
+    if (!parts.devices.length) {
+      showToast("먼저 기존 점검 양식을 불러오세요", "error");
+      return;
+    }
+    const nextIndex = parts.devices.length;
+    const nextDevices = [...parts.devices, [`${nextIndex + 1}.`, ...NEW_DEVICE_LINES]];
+    setTextOutput(rebuildInspectionDevices(parts.header, nextDevices, parts.footer));
+    setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM }]);
+    setSelectedItem(nextIndex);
+    setEditedBlocks({});
+    showToast(`${nextIndex + 1}번 기기를 추가했어요`);
+  };
+
+  const moveInspectionDevice = (direction: -1 | 1) => {
+    const target = selectedItem + direction;
+    const parts = inspectionDeviceParts(buildResultText());
+    if (target < 0 || target >= parts.devices.length) return;
+    const devices = [...parts.devices];
+    [devices[selectedItem], devices[target]] = [devices[target], devices[selectedItem]];
+    setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
+    setItemForms((prev) => {
+      const next = [...prev];
+      [next[selectedItem], next[target]] = [next[target], next[selectedItem]];
+      return next;
+    });
+    setSelectedItem(target);
+    setEditedBlocks({});
+  };
+
+  const removeInspectionDevice = () => {
+    const parts = inspectionDeviceParts(buildResultText());
+    if (parts.devices.length <= 1) return;
+    if (!window.confirm(`${selectedItem + 1}번 기기를 양식에서 삭제할까요?`)) return;
+    const devices = parts.devices.filter((_, i) => i !== selectedItem);
+    setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
+    setItemForms((prev) => prev.filter((_, i) => i !== selectedItem));
+    setSelectedItem(Math.min(selectedItem, devices.length - 1));
+    setEditedBlocks({});
+    showToast("기기를 삭제했어요");
+  };
+
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
 
@@ -4140,6 +4237,10 @@ export default function App() {
             reportTypeOther={reportTypeOther}
             setReportTypes={setReportTypes}
             setReportTypeOther={setReportTypeOther}
+            canManageDevices={mode === "inspection"}
+            onAddDevice={addInspectionDevice}
+            onMoveDevice={moveInspectionDevice}
+            onRemoveDevice={removeInspectionDevice}
             showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
           />
@@ -4325,14 +4426,7 @@ export default function App() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
               <span className="text-sm font-bold text-slate-900">원본 입력</span>
-              <button
-                type="button"
-                onClick={handlePasteToDraft}
-                className="rounded-lg px-2 py-1 text-xs font-medium"
-                style={{ color: config.accent, background: config.bgSoft }}
-              >
-                📋 붙여넣기
-              </button>
+              <span className="text-[11px] text-slate-400">입력칸을 길게 눌러 붙여넣기</span>
             </div>
             <textarea
               value={draftInput}
