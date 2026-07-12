@@ -10,6 +10,8 @@ export type VisitDraft = {
   workDate: string;
   arrivalTime: string;
   machineCount: number;
+  grade: string;
+  contractEnded: boolean;
   workKinds: WorkKind[];
   minutes: Partial<Record<WorkKind, number>>;
   salesIt: "" | "1차" | "2차";
@@ -48,12 +50,13 @@ export async function saveVisit(draft: VisitDraft, sourceText: string): Promise<
   return insertRow("visit_logs", {
     work_date: draft.workDate, author: draft.author, vendor: draft.vendor.trim(), visited: draft.visited,
     arrival_time: draft.arrivalTime || null, machine_count: Math.max(0, Number(draft.machineCount) || 0),
+    grade: draft.grade || null, contract_ended: draft.contractEnded,
     work_kinds: draft.workKinds, minutes, sales_it: draft.salesIt || null, sales_copier: draft.salesCopier || null,
     commute: draft.commute || null, note: draft.note || null, _dupKey: dup,
   });
 }
 
-type DbVisit = { id: string; created_at: string; work_date: string; author: string; vendor: string; visited: boolean; arrival_time?: string; machine_count?: number; work_kinds?: WorkKind[]; minutes?: Partial<Record<WorkKind, number>>; sales_it?: VisitDraft["salesIt"]; sales_copier?: VisitDraft["salesCopier"]; commute?: VisitDraft["commute"]; note?: string };
+type DbVisit = { id: string; created_at: string; work_date: string; author: string; vendor: string; visited: boolean; arrival_time?: string; machine_count?: number; grade?: string; contract_ended?: boolean; work_kinds?: WorkKind[]; minutes?: Partial<Record<WorkKind, number>>; sales_it?: VisitDraft["salesIt"]; sales_copier?: VisitDraft["salesCopier"]; commute?: VisitDraft["commute"]; note?: string };
 
 export async function getVisits(author: string, start: string, end: string): Promise<VisitRow[]> {
   if (!author) return [];
@@ -61,10 +64,34 @@ export async function getVisits(author: string, start: string, end: string): Pro
   const rows = await selectRows<DbVisit>("visit_logs", q);
   return rows.map((r) => ({
     id: r.id, created_at: r.created_at, workDate: r.work_date, author: r.author, vendor: r.vendor,
-    visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0, workKinds: r.work_kinds || [],
+    visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0,
+    grade: r.grade || "", contractEnded: Boolean(r.contract_ended), workKinds: r.work_kinds || [],
     minutes: r.minutes || {}, salesIt: r.sales_it || "", salesCopier: r.sales_copier || "",
     commute: r.commute || "", note: r.note || "",
   }));
+}
+
+export const OFFICE_LABELS = {
+  repairItem: "수리품", machineRepair: "기계수리", overhaul: "기계오버홀", shippingPrep: "출고준비",
+  training: "교육참여", wasteCard: "폐카불량", schedule: "스케줄", phoneClose: "전화마감",
+  cleanup: "정리정돈", vehicleCleanup: "차량정리",
+} as const;
+export type OfficeKind = keyof typeof OFFICE_LABELS;
+export type OfficeValues = Record<OfficeKind, { count: number; minutes: number }>;
+export type OfficeLog = { workDate: string; author: string; returnTime: string; values: OfficeValues };
+
+export function emptyOfficeValues(): OfficeValues {
+  return Object.fromEntries(Object.keys(OFFICE_LABELS).map((k) => [k, { count: 0, minutes: 0 }])) as OfficeValues;
+}
+
+export async function getOfficeLogs(author: string, start: string, end: string): Promise<OfficeLog[]> {
+  if (!author) return [];
+  const rows = await selectRows<Record<string, unknown>>("office_logs", `select=*&author=eq.${encodeURIComponent(author)}&work_date=gte.${start}&work_date=lte.${end}&order=work_date.asc`);
+  return rows.map((r) => ({ workDate: String(r.work_date), author: String(r.author), returnTime: String(r.return_time || ""), values: { ...emptyOfficeValues(), ...((r.values as OfficeValues) || {}) } }));
+}
+
+export async function saveOfficeLog(log: OfficeLog): Promise<void> {
+  await upsertRow("office_logs", { work_date: log.workDate, author: log.author, return_time: log.returnTime || null, values: log.values, updated_at: new Date().toISOString() }, "author,work_date");
 }
 
 export type WeeklyNote = { goals: Record<string, number>; review: string; growth: string; challenge: string; special: string; learning: string; request: string; praise: string };

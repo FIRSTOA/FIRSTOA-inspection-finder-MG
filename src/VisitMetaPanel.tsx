@@ -21,6 +21,10 @@ export default function VisitMetaPanel({ value, onChange, primaryKind }: { value
           <label className="text-xs text-slate-500">기기 대수<input type="number" min="0" value={value.machineCount || ""} onChange={(e) => set("machineCount", Number(e.target.value) || 0)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
           <label className="text-xs text-slate-500">도착 시간<input type="time" value={value.arrivalTime} onChange={(e) => set("arrivalTime", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-slate-500">거래처 등급<input value={value.grade} onChange={(e) => set("grade", e.target.value.toUpperCase())} placeholder="N, S, SS, V" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
+          <label className="flex items-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={value.contractEnded} onChange={(e) => set("contractEnded", e.target.checked)} /> 계약종료 확인</label>
+        </div>
         <div><div className="mb-1 text-xs font-semibold text-slate-500">업무별 소요시간(분)</div><div className="grid grid-cols-3 gap-2">
           {CORE.map((k) => <label key={k} className="text-[10px] text-slate-500"><span className="flex items-center gap-1"><input type="checkbox" checked={k === primaryKind || value.workKinds.includes(k)} disabled={k === primaryKind} onChange={() => toggle(k)} />{WORK_LABELS[k]}</span><input type="number" min="0" value={value.minutes[k] || ""} onChange={(e) => setMin(k, e.target.value)} className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" /></label>)}
         </div></div>

@@ -3591,7 +3591,7 @@ export default function App() {
   const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [visitMeta, setVisitMeta] = useState<VisitDraft>({
-    visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0,
+    visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
     workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
   });
 
@@ -3654,6 +3654,7 @@ export default function App() {
 
   const recordVisit = async (target: string) => {
     const parsedVendor = extractVendorFromText(target);
+    const parsedGrade = target.match(/등급\s*[:：]?\s*\(?\s*([^,\n\r)]+)/)?.[1]?.trim() || "";
     const vendor = parsedVendor || pcForm.company || String(curCatForm["업체명"] || currentVendor || "");
     const kind = visitKindForMode();
     const existingMinutes = Number(visitMeta.minutes[kind] || 0);
@@ -3662,7 +3663,7 @@ export default function App() {
       ? (airForm.arrivalHour ? `${airForm.arrivalHour}:${airForm.arrivalMinute || "00"}` : "")
       : (sharedForm.arrivalHour ? `${sharedForm.arrivalHour}:${sharedForm.arrivalMinute || "00"}` : ""));
     await saveVisit({
-      ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime,
+      ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime, grade: visitMeta.grade || parsedGrade,
       machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : 0),
       workKinds: Array.from(new Set([...visitMeta.workKinds, kind])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
@@ -3736,7 +3737,7 @@ export default function App() {
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
-    setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
+    setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
     showToast("초기화 완료");
@@ -3746,7 +3747,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (isCat && catFilled);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" ? "bg-slate-50" : "bg-white"}`}>
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
@@ -3769,7 +3770,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`mx-auto flex max-w-3xl flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" ? "max-w-[1500px] pb-16" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
         {/* Header — 브랜딩 */}
