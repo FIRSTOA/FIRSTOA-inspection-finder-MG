@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import {
   GOLDEN_CATEGORIES,
@@ -17,6 +17,7 @@ import {
 type Tab = "records" | "plan" | "golden";
 type RecordType = "all" | "growth" | "learning" | "challenge" | "special";
 type RecordPeriod = "month" | "quarter";
+type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
 const recordTypes = [
   ["growth", "성장노트"],
@@ -41,6 +42,12 @@ const fieldLabels: Record<Exclude<RecordType, "all">, string[]> = {
 };
 const hasRecordContent = (note: WeeklyNoteRow) => recordTypes.some(([key]) => String(note[key] || "").trim());
 type LearningParsed = { 날짜: string; 브랜드: string; 기종: string; "배운 점": string; 교육자: string; 소요시간: string };
+const statusText: Record<AutoSaveStatus, string> = {
+  idle: "자동저장 대기",
+  saving: "자동저장 중...",
+  saved: "자동저장됨",
+  error: "자동저장 실패",
+};
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const quarterRange = (year: number, quarter: number) => {
@@ -207,6 +214,10 @@ export default function GrowthHub({ author }: { author: string }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [gatherResult, setGatherResult] = useState<{ title: string; text: string } | null>(null);
+  const [planAutoSaveStatus, setPlanAutoSaveStatus] = useState<AutoSaveStatus>("idle");
+  const [cardAutoSaveStatus, setCardAutoSaveStatus] = useState<AutoSaveStatus>("idle");
+  const planLastSavedRef = useRef("");
+  const cardLastSavedRef = useRef("");
 
   const monthEnd = new Date(year, recordMonth, 0).getDate();
   const qRange = quarterRange(year, quarter);
@@ -227,11 +238,55 @@ export default function GrowthHub({ author }: { author: string }) {
         setNotes(n);
         setPlan(p);
         setCard(c);
+        planLastSavedRef.current = JSON.stringify({ ...p, author: person, year, quarter });
+        cardLastSavedRef.current = JSON.stringify({ ...c, author: person, year, quarter });
+        setPlanAutoSaveStatus("idle");
+        setCardAutoSaveStatus("idle");
       })
       .catch((e) => alive && setMessage((e as Error).message))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [person, year, quarter, range.start, range.end]);
+
+  useEffect(() => {
+    if (loading || !person) return;
+    const payload = { ...plan, author: person, year, quarter };
+    const signature = JSON.stringify(payload);
+    if (signature === planLastSavedRef.current) return;
+    setPlanAutoSaveStatus("saving");
+    const timer = window.setTimeout(() => {
+      saveQuarterlyPlan(payload)
+        .then(() => {
+          planLastSavedRef.current = signature;
+          setPlanAutoSaveStatus("saved");
+        })
+        .catch((e) => {
+          setPlanAutoSaveStatus("error");
+          setMessage((e as Error).message);
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [plan, person, year, quarter, loading]);
+
+  useEffect(() => {
+    if (loading || !person) return;
+    const payload = { ...card, author: person, year, quarter };
+    const signature = JSON.stringify(payload);
+    if (signature === cardLastSavedRef.current) return;
+    setCardAutoSaveStatus("saving");
+    const timer = window.setTimeout(() => {
+      saveGoldenCard(payload)
+        .then(() => {
+          cardLastSavedRef.current = signature;
+          setCardAutoSaveStatus("saved");
+        })
+        .catch((e) => {
+          setCardAutoSaveStatus("error");
+          setMessage((e as Error).message);
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [card, person, year, quarter, loading]);
 
   const rows = useMemo(() => notes.filter((note) => {
     if (!hasRecordContent(note)) return false;
@@ -276,9 +331,14 @@ export default function GrowthHub({ author }: { author: string }) {
   const setGoal = (id: string, patch: Partial<LevelGoal>) => setPlan({ ...plan, goals: plan.goals.map((g) => g.id === id ? { ...g, ...patch } : g) });
   const savePlan = async () => {
     try {
-      await saveQuarterlyPlan({ ...plan, author: person, year, quarter });
+      const payload = { ...plan, author: person, year, quarter };
+      setPlanAutoSaveStatus("saving");
+      await saveQuarterlyPlan(payload);
+      planLastSavedRef.current = JSON.stringify(payload);
+      setPlanAutoSaveStatus("saved");
       setMessage("레벨업계획을 저장했습니다.");
     } catch (e) {
+      setPlanAutoSaveStatus("error");
       setMessage((e as Error).message);
     }
   };
@@ -286,9 +346,14 @@ export default function GrowthHub({ author }: { author: string }) {
   const setAnswer = (q: string, cat: string, value: string) => setCard({ ...card, answers: { ...card.answers, [q]: { ...(card.answers[q] || {}), [cat]: value } } });
   const saveCard = async () => {
     try {
-      await saveGoldenCard({ ...card, author: person, year, quarter });
+      const payload = { ...card, author: person, year, quarter };
+      setCardAutoSaveStatus("saving");
+      await saveGoldenCard(payload);
+      cardLastSavedRef.current = JSON.stringify(payload);
+      setCardAutoSaveStatus("saved");
       setMessage("골든미팅카드를 저장했습니다.");
     } catch (e) {
+      setCardAutoSaveStatus("error");
       setMessage((e as Error).message);
     }
   };
@@ -451,7 +516,11 @@ export default function GrowthHub({ author }: { author: string }) {
               </div>
             ))}
           </div>
-          {person && <button onClick={savePlan} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">레벨업계획 저장</button>}
+          {person && (
+            <button onClick={savePlan} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+              {statusText[planAutoSaveStatus]} · 지금 저장
+            </button>
+          )}
         </section>
       )}
 
@@ -470,7 +539,11 @@ export default function GrowthHub({ author }: { author: string }) {
               {GOLDEN_CATEGORIES.map((cat) => <label key={cat} className="text-xs font-bold text-slate-500">{cat}<textarea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(e) => setAnswer(GOLDEN_QUESTIONS[question], cat, e.target.value)} rows={8} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
             </div>
           </div>
-          {person && <button onClick={saveCard} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">골든미팅카드 저장</button>}
+          {person && (
+            <button onClick={saveCard} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+              {statusText[cardAutoSaveStatus]} · 지금 저장
+            </button>
+          )}
         </section>
       )}
 
