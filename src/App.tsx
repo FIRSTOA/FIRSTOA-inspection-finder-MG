@@ -4280,7 +4280,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
   const navGroups = [
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
-    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송"]] },
+    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
@@ -4421,7 +4421,7 @@ export default function App() {
               {screen === "calendar" ? "방문 일정과 업무 일정을 한 화면에서 확인하는 캘린더 기능을 준비 중입니다."
                 : screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
                 : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
-                : screen === "promoSend" ? "팜플렛과 홍보자료 발송 기능을 준비 중입니다."
+                : screen === "promoSend" ? "팜플렛과 홍보자료 발송·인쇄 기능을 준비 중입니다."
                 : screen === "walkingMap" ? "외근 동선과 방문처를 지도에서 확인하는 워킨맵 기능을 준비 중입니다."
                 : "구상 중 — 곧 만들어집니다"}
             </div>
