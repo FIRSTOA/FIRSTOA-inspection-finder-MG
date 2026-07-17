@@ -4440,7 +4440,7 @@ export default function App() {
             <div ref={resultScrollRef} className="relative space-y-1.5 overflow-y-auto pb-2" style={{ maxHeight: "30vh" }}>
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
-                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
+                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
                   return (
                     <div
                       key={i}
