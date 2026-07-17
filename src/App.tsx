@@ -4277,7 +4277,7 @@ export default function App() {
   const appScreens = [["home", "홈"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"], ["field", "FIELD"]] as [typeof screen, string][];
 
   return (
-    <div className={`min-h-screen text-slate-900 ${screen === "field" ? "bg-white" : "bg-[#F4F7FB]"}`}>
+    <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
@@ -4308,8 +4308,7 @@ export default function App() {
         </div>
       )}
 
-      {screen !== "field" && (
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white lg:flex">
           <div className="border-b border-white/10 px-5 py-5">
             <div className="text-base font-black">FIRSTOA ERP</div>
             <div className="mt-1 text-xs font-semibold text-slate-400">현장 업무 운영</div>
@@ -4324,17 +4323,16 @@ export default function App() {
             ))}
           </nav>
           <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
-        </aside>
-      )}
+      </aside>
 
-      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen !== "field" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : "max-w-3xl lg:max-w-[1280px]"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen !== "field" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : "max-w-3xl lg:ml-64 lg:max-w-none lg:px-8"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
-        <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
+        <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-5 bg-[#0F172A] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
         <header className={`mb-2.5 flex items-center justify-between ${screen !== "field" ? "-mx-3 -mt-4 mb-5 bg-[#0F172A] px-3 py-5 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : ""}`}>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className={`flex h-8 w-8 items-center justify-center rounded-md border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-white/15 bg-white/10 hover:bg-white/20 lg:hidden"}`}>
+              className={`flex h-8 w-8 items-center justify-center rounded-md border transition active:scale-95 lg:hidden ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-white/15 bg-white/10 hover:bg-white/20"}`}>
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
             </button>
             <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
