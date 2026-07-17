@@ -4433,6 +4433,25 @@ export default function App() {
             })}
           </div>
         )}
+        {mode === "pc" && (
+          <div className="mt-2 flex gap-1 rounded-xl bg-white/10 p-1">
+            {([["it", "IT"], ["copier", "복합기(기타)"]] as [typeof pcSubTab, string][]).map(([key, label]) => {
+              const active = pcSubTab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPcSubTab(key)}
+                  className={`flex-1 rounded-lg py-2 text-sm transition ${
+                    active ? "bg-white font-bold text-slate-900 shadow-sm" : "font-bold text-white/70 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
         </>)}{/* /필드 탭 */}
         </div>{/* /헤더 존 */}
 
@@ -4447,7 +4466,7 @@ export default function App() {
               <div className="mt-0.5 text-xs leading-5 text-slate-500">{FIELD_GUIDES[mode].description}</div>
             </div>
           </div>
-          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && (
+          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-800">
               카톡방 자동전송은 아직 준비 중입니다. 내용을 작성한 뒤 하단의 <b>복사</b> 버튼을 눌러 카톡방에 붙여넣어 주세요.
             </div>
@@ -4499,18 +4518,6 @@ export default function App() {
         {/* 확장성 form */}
         {mode === "pc" && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
-              {([["it", "IT"], ["copier", "복합기(기타)"]] as [typeof pcSubTab, string][]).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setPcSubTab(key)}
-                  className={`rounded-lg py-2 text-sm font-bold transition ${pcSubTab === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
             {pcSubTab === "it" ? (
               <PcForm
                 form={pcForm}
