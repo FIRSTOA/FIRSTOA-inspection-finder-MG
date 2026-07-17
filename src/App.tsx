@@ -4291,19 +4291,18 @@ export default function App() {
     showToast("기기를 삭제했어요");
   };
 
-  const openAsTicketInField = (rawText: string) => {
+  const openAsTicketInField = (fieldText: string) => {
     modeStateRef.current[mode] = {
       inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
       reportTypes, reportTypeOther,
     };
     setMode("blank-report");
     setScreen("field");
-    setInputText(rawText);
+    setInputText("");
     skipAutoRef.current = true;
-    const items = transformBlankReports(rawText);
-    setListOutput(items);
+    setListOutput([{ content: fieldText }]);
     setTextOutput("");
-    const nextForms = items.map((item: ResultItem) => parseItemDataFromText(item.content, 1)[0]);
+    const nextForms = [parseItemDataFromText(fieldText, 1)[0]];
     setItemForms(nextForms.length ? nextForms : [{ ...EMPTY_ITEM_FORM }]);
     setSharedForm(EMPTY_SHARED_FORM);
     setSelectedItem(0);
@@ -4452,7 +4451,7 @@ export default function App() {
         {screen === "growth" && <GrowthHub author={author} />}
         {screen === "walkingMap" && <WalkingMap />}
         {screen === "calendar" && <CsCalendar />}
-        {screen === "asReception" && <AsReception onUseField={openAsTicketInField} />}
+        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>

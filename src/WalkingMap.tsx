@@ -33,7 +33,7 @@ const statusMeta: Record<MapStatus, { label: string; color: string; bg: string }
   contract: { label: "계약종료", color: "#9333EA", bg: "bg-purple-50 text-purple-700" },
 };
 
-const places: MapPlace[] = [
+const initialPlaces: MapPlace[] = [
   { id: 1, team: "A", quarter: 3, kind: "quarter", status: "due", name: "11SO클릭스벤처파트너스", device: "APEOSPORT-C2060 / 227683", address: "강북 권역", x: 23, y: 28 },
   { id: 2, team: "A", quarter: 3, kind: "contract", status: "contract", name: "25법률사무소 남산", device: "D420 / 792090564870", address: "강북 권역", x: 36, y: 44 },
   { id: 3, team: "B", quarter: 3, kind: "quarter", status: "done", name: "3NN아스크스토리디에스", device: "DocuCentre-V C3375", address: "강서 권역", x: 48, y: 32 },
@@ -55,16 +55,19 @@ function ProgressBar({ value, color = "bg-blue-600" }: { value: number; color?: 
 }
 
 export default function WalkingMap() {
+  const [mapPlaces, setMapPlaces] = useState<MapPlace[]>(initialPlaces);
   const [team, setTeam] = useState<Team | "ALL">("ALL");
   const [quarter, setQuarter] = useState<Quarter>(3);
   const [kind, setKind] = useState<MapKind | "ALL">("ALL");
-  const [selected, setSelected] = useState<MapPlace | null>(places[0]);
+  const [selectedId, setSelectedId] = useState<number>(initialPlaces[0].id);
+  const selected = mapPlaces.find((place) => place.id === selectedId) || mapPlaces[0];
+  const setPlaceStatus = (id: number, status: MapStatus) => setMapPlaces((prev) => prev.map((place) => place.id === id ? { ...place, status } : place));
 
-  const visible = useMemo(() => places.filter((place) =>
+  const visible = useMemo(() => mapPlaces.filter((place) =>
     (team === "ALL" || place.team === team) &&
     place.quarter === quarter &&
     (kind === "ALL" || place.kind === kind)
-  ), [team, quarter, kind]);
+  ), [mapPlaces, team, quarter, kind]);
 
   const total = visible.length;
   const checked = visible.filter((place) => place.kind !== "contract" && place.status === "done").length;
@@ -74,7 +77,7 @@ export default function WalkingMap() {
   const monthly = visible.filter((place) => place.kind === "monthly").length;
 
   const teamSummaries = teams.map((item) => {
-    const list = places.filter((place) => place.team === item && place.quarter === quarter);
+    const list = mapPlaces.filter((place) => place.team === item && place.quarter === quarter);
     const inspectionTotal = list.filter((place) => place.kind !== "contract").length;
     const inspectionDone = list.filter((place) => place.kind !== "contract" && place.status === "done").length;
     const contractTotal = list.filter((place) => place.kind === "contract").length;
@@ -140,7 +143,7 @@ export default function WalkingMap() {
           </div>
           <div className="divide-y divide-slate-100">
             {visible.map((place) => (
-              <button key={place.id} type="button" onClick={() => setSelected(place)} className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${selected?.id === place.id ? "bg-blue-50" : "bg-white"}`}>
+              <button key={place.id} type="button" onClick={() => setSelectedId(place.id)} className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${selected?.id === place.id ? "bg-blue-50" : "bg-white"}`}>
                 <div className="flex items-start gap-3">
                   <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ background: statusMeta[place.status].color }} />
                   <span className="min-w-0">
@@ -182,7 +185,7 @@ export default function WalkingMap() {
               <button
                 key={place.id}
                 type="button"
-                onClick={() => setSelected(place)}
+                onClick={() => setSelectedId(place.id)}
                 className="absolute -translate-x-1/2 -translate-y-full text-left"
                 style={{ left: `${place.x}%`, top: `${place.y}%` }}
               >
@@ -204,6 +207,13 @@ export default function WalkingMap() {
                   <div><b className="text-slate-400">기기</b> <span className="font-semibold text-slate-700">{selected.device}</span></div>
                   <div><b className="text-slate-400">주소</b> <span className="font-semibold text-slate-700">{selected.address}</span></div>
                   <div><b className="text-slate-400">분기</b> <span className="font-semibold text-slate-700">{selected.quarter}분기</span></div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {(Object.keys(statusMeta) as MapStatus[]).map((status) => (
+                    <button key={status} type="button" onClick={() => setPlaceStatus(selected.id, status)} className={`rounded border px-2.5 py-1.5 text-xs font-black ${selected.status === status ? statusMeta[status].bg : "border-slate-200 bg-white text-slate-500"}`}>
+                      {statusMeta[status].label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
