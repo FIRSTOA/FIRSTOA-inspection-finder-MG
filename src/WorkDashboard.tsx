@@ -143,7 +143,18 @@ function parseLearningRows(text: string): LearningRow[] {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [emptyLearningRow()];
   return lines.map((line) => {
-    const parts = line.split(/\s+/);
+    const parts = line.split(/\s+/).filter(Boolean);
+    const durationIndex = parts.findIndex((part, index) => index >= 3 && /^\d+\s*(?:분|시간)?$/.test(part));
+    if (durationIndex >= 0) {
+      return {
+        date: parts[0] || "",
+        brand: parts[1] || "",
+        model: parts[2] || "",
+        lesson: parts.slice(3, durationIndex).join(" "),
+        duration: parts[durationIndex] || "",
+        educator: parts.slice(durationIndex + 1).join(" "),
+      };
+    }
     if (parts.length < 6) {
       return {
         date: parts[0] || "",

@@ -107,15 +107,17 @@ Deno.serve(async (req) => {
 
   try {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
-    const { text = "" } = await req.json().catch(() => ({}));
+    const { text = "", instruction = "", outputMode = "" } = await req.json().catch(() => ({}));
     const input = String(text).trim();
+    const customInstruction = String(instruction || "").trim();
+    const rawOutput = String(outputMode || "").trim() === "raw";
     if (!input) {
       return new Response(JSON.stringify({ result: fields.map((field) => `${field}:`).join("\n") }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (!apiKey) {
-      return new Response(JSON.stringify({ result: fallbackTransform(input), fallback: true, reason: "OPENAI_API_KEY missing" }), {
+      return new Response(JSON.stringify({ result: rawOutput ? input : fallbackTransform(input), fallback: true, reason: "OPENAI_API_KEY missing" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -131,7 +133,7 @@ Deno.serve(async (req) => {
         input: [
           {
             role: "system",
-            content: growthCoachPrompt,
+            content: customInstruction || growthCoachPrompt,
           },
           {
             role: "user",
@@ -144,7 +146,7 @@ Deno.serve(async (req) => {
 
     if (!openaiRes.ok) {
       const detail = await openaiRes.text().catch(() => "");
-      return new Response(JSON.stringify({ result: fallbackTransform(input), fallback: true, reason: detail.slice(0, 300) }), {
+      return new Response(JSON.stringify({ result: rawOutput ? input : fallbackTransform(input), fallback: true, reason: detail.slice(0, 300) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -155,7 +157,8 @@ Deno.serve(async (req) => {
       data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") ||
       "";
 
-    return new Response(JSON.stringify({ result: normalize(outputText || fallbackTransform(input)) }), {
+    const result = rawOutput ? (outputText.trim() || input) : normalize(outputText || fallbackTransform(input));
+    return new Response(JSON.stringify({ result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

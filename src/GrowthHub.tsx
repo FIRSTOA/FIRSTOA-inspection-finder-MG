@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import {
   GOLDEN_CATEGORIES,
   GOLDEN_QUESTIONS,
@@ -35,11 +36,12 @@ const typeLabels: Record<RecordType, string> = {
 
 const fieldLabels: Record<Exclude<RecordType, "all">, string[]> = {
   growth: ["상황", "문제점", "개선해야 할 점", "실행"],
-  learning: ["날짜", "소요시간", "브랜드", "기종", "교육자", "배운 점"],
+  learning: ["날짜", "브랜드", "기종", "배운 점", "소요시간", "교육자"],
   challenge: ["내용"],
   special: ["내용"],
 };
 const hasRecordContent = (note: WeeklyNoteRow) => recordTypes.some(([key]) => String(note[key] || "").trim());
+type LearningParsed = { 날짜: string; 브랜드: string; 기종: string; "배운 점": string; 소요시간: string; 교육자: string };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const quarterRange = (year: number, quarter: number) => {
@@ -93,18 +95,78 @@ function parseStructured(text: string, labels: string[]) {
   return result;
 }
 
-function buildPrompt(title: string, rows: WeeklyNoteRow[], key: Exclude<RecordType, "all">) {
-  const body = rows
-    .filter((row) => row[key].trim())
-    .map((row) => `- ${row.weekStart} / ${row.author}\n${row[key].trim()}`)
-    .join("\n\n");
-  return `${title}
-
-아래 주간 기록을 표로 정리해줘.
-중복 내용은 합치고, 날짜별 맥락은 유지해줘.
-
-${body || "정리할 기록이 없습니다."}`;
+function parseLearningLine(line: string): LearningParsed {
+  const parts = line.trim().split(/\s+/).filter(Boolean);
+  const durationIndex = parts.findIndex((part, index) => index >= 3 && /^\d+\s*(?:분|시간)?$/.test(part));
+  if (durationIndex >= 0) {
+    return {
+      날짜: parts[0] || "",
+      브랜드: parts[1] || "",
+      기종: parts[2] || "",
+      "배운 점": parts.slice(3, durationIndex).join(" "),
+      소요시간: parts[durationIndex] || "",
+      교육자: parts.slice(durationIndex + 1).join(" "),
+    };
+  }
+  return {
+    날짜: parts[0] || "",
+    브랜드: parts[1] || "",
+    기종: parts[2] || "",
+    "배운 점": parts.slice(3, -2).join(" ") || parts.slice(3).join(" "),
+    소요시간: parts.length >= 5 ? parts.at(-2) || "" : "",
+    교육자: parts.length >= 6 ? parts.at(-1) || "" : "",
+  };
 }
+
+function parseLearningText(text: string): LearningParsed {
+  const first = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+  return parseLearningLine(first);
+}
+
+function weekLabelOnly(weekStart: string) {
+  return `${weekNumberInMonth(weekStart)}주차`;
+}
+
+function buildGrowthGatherText(rows: WeeklyNoteRow[]) {
+  const body = rows
+    .filter((row) => row.growth.trim())
+    .map((row) => `[${weekLabelOnly(row.weekStart)}]\n${row.growth.trim()}`)
+    .join("\n\n");
+  return body || "정리할 성장노트가 없습니다.";
+}
+
+function buildLearningGatherText(rows: WeeklyNoteRow[]) {
+  const lines = rows.flatMap((row) =>
+    row.learning
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `${weekLabelOnly(row.weekStart)} ${line}`),
+  );
+  return lines.join("\n") || "정리할 배운 점이 없습니다.";
+}
+
+const growthGatherInstruction = `아래 성장노트를 주차별로 정리해줘.
+응답은 코드 복사하기 좋은 일반 텍스트로만 작성해.
+각 주차는 반드시 [1주차], [2주차] 형식으로 시작해.
+각 주차 안에는 상황, 문제점, 개선해야할 점, 실행을 이 순서로 정리해.
+이미 적힌 내용을 과장하지 말고, 문장은 짧고 명확하게 다듬어줘.
+
+출력 예시:
+[1주차]
+상황:
+문제점:
+개선해야할 점:
+실행:`;
+
+const learningGatherInstruction = `아래 배운 점 기록을 날짜별, 브랜드/기종별로 정리해줘.
+응답은 코드 복사하기 좋은 일반 텍스트로만 작성해.
+맨 위에는 총 투자 시간, 월/주/일 평균 시간을 계산해 적어줘.
+그 아래는 [삼성] 85분, [제록스] 90분처럼 브랜드 또는 분류별로 묶어줘.
+각 줄은 "M/D 브랜드 기종 배운내용 -교육자 [소요시간]" 형식으로 정리해.
+브랜드가 애매하면 소형기, 기타처럼 알맞게 묶어줘.
+날짜 순서를 유지하고, 교육자가 있으면 줄 끝의 소요시간 앞에 붙여줘.
+없는 정보는 억지로 만들지 마.`;
 
 export default function GrowthHub({ author }: { author: string }) {
   const { book } = useAuthorBook();
@@ -124,6 +186,8 @@ export default function GrowthHub({ author }: { author: string }) {
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [aiBusy, setAiBusy] = useState<"growth" | "learning" | "">("");
+  const [aiResult, setAiResult] = useState<{ title: string; text: string } | null>(null);
 
   const monthEnd = new Date(year, recordMonth, 0).getDate();
   const qRange = quarterRange(year, quarter);
@@ -160,13 +224,51 @@ export default function GrowthHub({ author }: { author: string }) {
     return `${note.author} ${note.weekStart} ${allText}`.toLowerCase().includes(search);
   }), [notes, person, query, type]);
 
-  const copySummaryPrompt = async (key: "growth" | "learning") => {
-    const title = key === "growth"
-      ? "성장노트를 상황/문제점/개선해야 할 점/실행으로 분기 정리"
-      : "배운 점을 날짜/소요시간/브랜드/기종/교육자/핵심 배운 점으로 정리";
-    const prompt = buildPrompt(title, rows, key);
-    await navigator.clipboard.writeText(prompt);
-    setMessage(`${typeLabels[key]} 정리용 프롬프트를 복사했습니다.`);
+  const runGatherAi = async (key: "growth" | "learning") => {
+    const input = key === "growth" ? buildGrowthGatherText(rows) : buildLearningGatherText(rows);
+    if (input.includes("정리할") && input.includes("없습니다")) {
+      setMessage(input);
+      return;
+    }
+    setAiBusy(key);
+    setMessage("");
+    try {
+      const endpoint = String(import.meta.env.VITE_AI_TRANSFORM_URL || `${SUPABASE_URL}/functions/v1/growth-note-transform`);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+        body: JSON.stringify({
+          text: input,
+          instruction: key === "growth" ? growthGatherInstruction : learningGatherInstruction,
+          outputMode: "raw",
+        }),
+      });
+      if (!res.ok) throw new Error(`AI 변환 실패(${res.status})`);
+      const data = await res.json();
+      const text = String(data.result || data.text || data.output || "").trim();
+      setAiResult({ title: key === "growth" ? "성장노트 모으기 AI변환" : "배운 점 모으기 AI변환", text: text || input });
+    } catch (e) {
+      setMessage((e as Error).message || "AI 변환에 실패했습니다.");
+    } finally {
+      setAiBusy("");
+    }
+  };
+
+  const copyAiResult = async () => {
+    if (!aiResult) return;
+    await navigator.clipboard.writeText(aiResult.text);
+    setMessage("AI변환 결과를 복사했습니다.");
+  };
+
+  const downloadAiResult = () => {
+    if (!aiResult) return;
+    const blob = new Blob([aiResult.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${aiResult.title}_${year}-${recordPeriod === "month" ? `${pad(recordMonth)}월` : `${quarter}Q`}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const addGoal = () => {
@@ -255,8 +357,8 @@ export default function GrowthHub({ author }: { author: string }) {
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => copySummaryPrompt("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 정리 프롬프트</button>
-              <button onClick={() => copySummaryPrompt("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운 점 정리 프롬프트</button>
+              <button disabled={!!aiBusy} onClick={() => runGatherAi("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-50">{aiBusy === "growth" ? "변환 중..." : "성장노트 모으기 AI변환"}</button>
+              <button disabled={!!aiBusy} onClick={() => runGatherAi("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-50">{aiBusy === "learning" ? "변환 중..." : "배운 점 모으기 AI변환"}</button>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용 또는 직원 검색" className="min-w-64 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" />
             </div>
           </section>
@@ -304,7 +406,7 @@ export default function GrowthHub({ author }: { author: string }) {
                   </thead>
                   <tbody>
                     {rows.map((row) => {
-                      const parsed = parseStructured(row[type], fieldLabels[type]);
+                      const parsed: Record<string, string> = type === "learning" ? parseLearningText(row[type]) : parseStructured(row[type], fieldLabels[type]);
                       return (
                         <tr key={`${row.author}-${row.weekStart}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                           <td className="px-4 py-4 align-top text-xs font-bold text-slate-500">{weekDisplay(row.weekStart)}</td>
@@ -372,6 +474,29 @@ export default function GrowthHub({ author }: { author: string }) {
           </div>
           {person && <button onClick={saveCard} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">골든미팅카드 저장</button>}
         </section>
+      )}
+
+      {aiResult && (
+        <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-6" onClick={() => setAiResult(null)}>
+          <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:max-w-4xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <div className="text-base font-black text-slate-950">{aiResult.title}</div>
+                <div className="mt-0.5 text-xs font-semibold text-slate-400">확인 후 복사하거나 txt로 받을 수 있습니다.</div>
+              </div>
+              <button type="button" onClick={() => setAiResult(null)} className="rounded-md px-3 py-2 text-sm font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700">닫기</button>
+            </div>
+            <textarea
+              value={aiResult.text}
+              onChange={(e) => setAiResult({ ...aiResult, text: e.target.value })}
+              className="min-h-[55vh] flex-1 resize-none bg-slate-50 p-5 font-mono text-sm leading-6 text-slate-800 outline-none"
+            />
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4">
+              <button type="button" onClick={downloadAiResult} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50">txt 다운로드</button>
+              <button type="button" onClick={copyAiResult} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">복사</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
