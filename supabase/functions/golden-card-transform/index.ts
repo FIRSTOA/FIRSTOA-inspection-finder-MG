@@ -5,7 +5,38 @@ const corsHeaders = {
 };
 
 const defaultCategories = ["매출증대/안정", "효율성", "비용절감", "자기개발", "소통", "AI"];
-const defaultQuestions = ["지난 기간 나의 성과", "타인의 성과에 내가 기여한 것", "성장을 위한 학습·발견한 지식", "다음 도전을 위한 지원 요청"];
+const defaultQuestions = [
+  "지난 기간 나의 성과",
+  "타인의 성과에 내가 기여한 것",
+  "성장을 위한 학습·발견한 지식",
+  "다음 도전을 위한 지원 요청",
+];
+
+function buildInstruction(quarterLabel: string, categories: string[], questions: string[]) {
+  return [
+    "너는 퍼스트전산 분기 골든미팅카드 작성 담당자야.",
+    `아래 현재 분기 결과표/미션표/성장기록을 분석해서 ${quarterLabel} 골든미팅카드를 작성해줘.`,
+    "이전 분기 골든미팅카드 예시가 있으면 같은 형식과 문체를 참고하되, 내용과 수치는 반드시 현재 분기 자료만 기준으로 작성한다.",
+    "",
+    "[출력 구조 - 매우 중요]",
+    "질문 4개 × 카테고리 6개 = 총 24칸을 JSON으로만 출력한다. 설명, 코드블록, 추가 문장은 금지한다.",
+    `질문 키는 반드시 이 문자열만 사용한다: ${JSON.stringify(questions)}`,
+    `카테고리 키는 반드시 이 문자열만 사용한다: ${JSON.stringify(categories)}`,
+    '형식: {"answers":{"지난 기간 나의 성과":{"매출증대/안정":"...","효율성":"..."}}}',
+    '해당 카테고리에 근거 자료가 없으면 빈 문자열("")로 둔다. 억지로 만들지 않는다.',
+    "",
+    "[작성 원칙]",
+    "1. 결과표의 수치, 건수, 달성률, 완료 여부를 반드시 반영한다. 수치를 임의로 바꾸지 않는다.",
+    '2. 미달성도 숨기지 말고 "10/12회, 83%"처럼 정확히 쓰고 개선 방향을 함께 적는다.',
+    '3. 초과달성은 "52/12건, 433%"처럼 분모와 분자를 같이 보여준다.',
+    '4. 문체는 "~했습니다/완료했습니다/기여했습니다/깨달았습니다/향상시켰습니다"처럼 성실하고 진정성 있게 쓴다.',
+    '5. q1 성과는 항목 번호를 사용한다. q2 기여는 "[○○을 하며 기여한 점]" 대괄호 제목 뒤에 겸손하게 쓴다.',
+    '6. q3 학습은 "✅[○○을 통해 배운점]" 형식과 성찰형 문장을 사용한다.',
+    "7. q4 지원 요청은 짧고 부담 없이, 개인 성장과 회사 기여 관점으로 작성한다.",
+    "8. AI/자동화는 반복업무 감소, 병목 제거, 표준화, 전사 확산 관점으로 작성한다.",
+    "9. 소통은 분위기, 동기부여, 학습 분위기, 협업 관점으로 작성한다.",
+  ].join("\n");
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -29,19 +60,8 @@ Deno.serve(async (req) => {
     const categories = Array.isArray(payload.categories) && payload.categories.length ? payload.categories : defaultCategories;
     const questions = Array.isArray(payload.questions) && payload.questions.length ? payload.questions : defaultQuestions;
     const model = Deno.env.get("OPENAI_GOLDEN_MODEL") || "gpt-5.1";
-
-    const instruction = `너는 FIRSTOA CS 직원의 골든미팅카드를 작성하는 업무 코치다.
-선택된 최신 분기 자료만 기준으로 작성한다.
-반드시 아래 질문과 카테고리 구조를 그대로 지키고 JSON만 반환한다.
-수치화와 진행률 %를 반드시 포함한다.
-근거가 부족한 항목은 지어내지 말고 "기록 보완 필요"라고 적는다.
-문장은 짧고 명확하게 쓰고, 평가자가 근거를 바로 확인할 수 있게 작성한다.
-
-반환 JSON 형식:
-{"answers":{"질문":{"카테고리":"내용"}}}
-
-질문 목록: ${JSON.stringify(questions)}
-카테고리 목록: ${JSON.stringify(categories)}`;
+    const quarterLabel = `${payload.year || ""}년 ${payload.quarter || ""}분기`;
+    const instruction = buildInstruction(quarterLabel, categories, questions);
 
     const source = {
       year: payload.year,
@@ -51,6 +71,11 @@ Deno.serve(async (req) => {
       missionText: payload.missionText || "",
       recordText: payload.recordText || "",
       currentAnswers: payload.currentAnswers || {},
+      previousGoldenCard: {
+        quarter: payload.exampleQuarter || "",
+        text: payload.exampleText || "",
+        answers: payload.exampleAnswers || {},
+      },
     };
 
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
