@@ -4,7 +4,7 @@ type Screen = "field" | "daily" | "weekly" | "growth";
 
 const quickLinks: Array<{ key: Screen; title: string; desc: string; badge: string }> = [
   { key: "field", title: "FIELD 작성", desc: "현장 보고와 카톡방 전송", badge: "현장" },
-  { key: "daily", title: "일일업무", desc: "외근/내근 자동 집계", badge: "집계" },
+  { key: "daily", title: "일일방문일지", desc: "외근/내근 자동 집계", badge: "집계" },
   { key: "weekly", title: "주간현황판", desc: "목표와 실적 비교", badge: "회고" },
   { key: "growth", title: "성장기록", desc: "분기 회고 자료 정리", badge: "성장" },
 ];
@@ -80,8 +80,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
               <div className="mt-5 rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
                 <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
                   <div>
-                    <div className="text-xs font-bold text-slate-400">처음 쓰는 사람도</div>
-                    <div className="mt-1 text-lg font-extrabold">왼쪽에서 작성하고, 오른쪽에서 결과를 확인</div>
+                    <div className="text-xs font-bold text-slate-400">업무 흐름 안내</div>
+                    <div className="mt-1 text-lg font-extrabold">작성한 내용이 전송, 집계, 회고 자료로 이어집니다</div>
                   </div>
                   <div className="hidden h-10 w-px bg-white/15 md:block" />
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold">

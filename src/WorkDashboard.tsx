@@ -158,13 +158,13 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="text-lg font-bold text-slate-900">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
           ].map(([l, v]) => <div key={String(l)} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
-          <VisitList grouped={grouped} />
+          <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
         </div>
         <section className="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-slate-900">내근 업무 입력</h3><p className="text-xs text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs text-slate-500">복귀시간<input type="time" value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-md border border-slate-300 px-2 py-1.5" /></label></div>
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label><label className="text-[10px] text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label></div>)}</div>
           <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
-      </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><VisitList grouped={grouped} /></div> : <div className="flex flex-col gap-6">
+      </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
         <section className="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div><h3 className="text-lg font-bold text-slate-900">주간 목표·회고 문서</h3><p className="mt-0.5 text-xs text-slate-400">한 화면에서 읽고, 편집기에서 집중해서 작성합니다.</p></div><button onClick={()=>setEditField("thisWeekGoal")} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white">전체 편집</button></div>
           <div className="grid divide-y divide-slate-200 lg:grid-cols-3 lg:divide-x lg:divide-y-0">{([['thisWeekGoal','이번 주 목표','🎯'],['thisWeekResult','이번 주 결과·미진행 사유','✅'],['nextWeekGoal','다음 주 목표','➡️']] as [WeeklyTextKey,string,string][]).map(([key,label,icon])=><button key={key} onClick={()=>setEditField(key)} className="min-h-52 p-5 text-left transition hover:bg-blue-50/40"><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-800">{icon} {label}</span><span className="text-xs font-bold text-blue-600">편집</span></div><div className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{note[key] || <span className="text-slate-300">작성된 내용이 없습니다.</span>}</div></button>)}</div>
@@ -233,6 +233,54 @@ function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, qu
   const title = period === "week" ? "일별 실적 비교" : period === "month" ? "주별 실적 비교" : period === "quarter" ? "월별 실적 비교" : "분기별 실적 비교";
   const desc = period === "week" ? "선택한 주의 일별 흐름을 확인하세요." : period === "month" ? "선택한 월의 주차별 흐름을 확인하세요." : period === "quarter" ? "선택한 분기의 월별 흐름을 확인하세요." : "선택한 연도의 분기별 흐름을 확인하세요.";
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="text-xs text-slate-400">{desc}</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead><tr className="border-b border-slate-200 text-xs text-slate-400"><th className="px-3 py-3">구분</th><th className="px-3 py-3 text-right">방문</th><th className="px-3 py-3 text-right">기기</th><th className="px-3 py-3 text-right">점검</th><th className="px-3 py-3 text-right">AS</th><th className="px-3 py-3 text-right">납품</th><th className="px-3 py-3 text-right">PC·IT</th><th className="px-3 py-3 text-right">미수</th><th className="px-3 py-3 text-right">불만</th><th className="px-3 py-3 text-right">외근시간</th><th className="px-3 py-3 text-right">내근시간</th></tr></thead><tbody>{buckets.map((b) => { const s = summarize(rows.filter((r) => inRange(r.workDate, b.start, b.end))); const offices = officeLogs.filter((o) => inRange(o.workDate, b.start, b.end)); return <tr key={`${b.start}-${b.end}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50"><td className="px-3 py-4 font-bold text-slate-800">{b.label} {b.sub && <span className="ml-1 text-[10px] font-normal text-slate-400">{b.sub}</span>}</td><td className="px-3 py-4 text-right font-semibold">{s.visits}</td><td className="px-3 py-4 text-right">{s.machines}</td><td className="px-3 py-4 text-right">{s.count.inspection}</td><td className="px-3 py-4 text-right">{s.count.as}</td><td className="px-3 py-4 text-right">{s.count.delivery}</td><td className="px-3 py-4 text-right">{s.count.pc}</td><td className="px-3 py-4 text-right">{s.count.misu}</td><td className="px-3 py-4 text-right">{s.count.bulman}</td><td className="px-3 py-4 text-right font-semibold text-blue-700">{hm(s.fieldMinutes)}</td><td className="px-3 py-4 text-right font-semibold text-emerald-700">{hm(officeMinutes(offices))}</td></tr>; })}</tbody></table></div></section>;
+}
+
+function HierarchicalVisitList({ period, rows, year, month, quarter, start, end }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string }) {
+  const [open, setOpen] = useState(false);
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+  const toggle = (key: string) => setOpenKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  const inRange = (d: string, s: string, e: string) => d >= s && d <= e;
+  const rowsBetween = (s: string, e: string) => rows.filter((r) => inRange(r.workDate, s, e));
+  const grouped = rows.reduce<Record<string, VisitRow[]>>((acc, row) => ((acc[row.workDate] ||= []).push(row), acc), {});
+  const monthBucket = (m: number) => {
+    const lastDay = new Date(year, m, 0).getDate();
+    return { label: `${m}월`, start: `${year}-${pad(m)}-01`, end: `${year}-${pad(m)}-${pad(lastDay)}` };
+  };
+  const dayBuckets = (s: string, e: string) => {
+    const out: Array<{ start: string }> = [];
+    const cursor = new Date(`${s}T00:00:00`);
+    const last = new Date(`${e}T00:00:00`);
+    while (cursor <= last) {
+      out.push({ start: `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}` });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return out;
+  };
+  const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="text-right text-xs text-slate-500">{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div></div>)}</div>;
+  const leafDay = (date: string, depth = 0) => {
+    const list = grouped[date] || [];
+    const key = `day:${date}`;
+    const isOpen = !!openKeys[key];
+    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className={`flex w-full items-center justify-between px-5 py-2.5 text-left text-xs font-bold ${depth ? "bg-white" : "bg-slate-50"} text-slate-500`}><span>{shortDate(date)} · {list.length}건</span><span>{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && (list.length ? visitRows(list) : <div className="px-5 py-4 text-sm text-slate-400">방문 기록이 없습니다.</div>)}</div>;
+  };
+  const weekNode = (w: { label: string; start: string; end: string }, prefix = "") => {
+    const s = w.start < start ? start : w.start;
+    const e = w.end > end ? end : w.end;
+    if (e < start || s > end) return null;
+    const list = rowsBetween(s, e);
+    const key = `${prefix}week:${s}`;
+    const isOpen = !!openKeys[key];
+    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{w.label} {shortDate(s)}~{shortDate(e)} · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{dayBuckets(s, e).map((d) => leafDay(d.start, 1))}</div>}</div>;
+  };
+  const monthNode = (m: number) => {
+    const mb = monthBucket(m);
+    const list = rowsBetween(mb.start, mb.end);
+    const key = `month:${m}`;
+    const isOpen = !!openKeys[key];
+    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{mb.label} · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
+  };
+  const title = period === "day" ? "금일 방문 상세" : period === "week" ? "주간 방문 상세" : period === "month" ? "월간 방문 상세" : period === "quarter" ? "분기 방문 상세" : "연간 방문 상세";
+  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{q}분기 · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
 }
 
 function VisitList({ grouped }: { grouped: Record<string, VisitRow[]> }) {

@@ -13,7 +13,7 @@ export default function VisitMetaPanel({ value, onChange, primaryKind }: { value
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center justify-between">
-        <div><div className="text-sm font-bold text-slate-800">📊 방문 집계</div><div className="text-[11px] text-slate-400">일일업무·주간현황에 자동 반영</div></div>
+        <div><div className="text-sm font-bold text-slate-800">📊 방문 집계</div><div className="text-[11px] text-slate-400">일일방문일지·주간현황에 자동 반영</div></div>
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={value.visited} onChange={(e) => set("visited", e.target.checked)} /> 실제 방문</label>
       </div>
       {value.visited && <div className="mt-3 space-y-3">

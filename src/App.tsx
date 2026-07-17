@@ -4274,7 +4274,7 @@ export default function App() {
 
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
-  const appScreens = [["home", "홈"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"], ["field", "FIELD"]] as [typeof screen, string][];
+  const appScreens = [["home", "홈"], ["daily", "일일방문일지"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"], ["field", "FIELD"]] as [typeof screen, string][];
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -4287,7 +4287,7 @@ export default function App() {
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
             <nav className="p-2">
-              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
+              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일방문일지"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
                   className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
@@ -4336,7 +4336,7 @@ export default function App() {
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
             </button>
             <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일업무" : screen === "weekly" ? "주간현황판" : "성장기록"}
+              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일방문일지" : screen === "weekly" ? "주간현황판" : "성장기록"}
             </h1>
           </div>
           {screen === "field" && (
