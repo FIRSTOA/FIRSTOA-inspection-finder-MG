@@ -42,10 +42,6 @@ const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone
   { key: "learning", label: "배운 점", icon: "📚", tone: "bg-emerald-50" }, { key: "request", label: "지원·요청·건의사항", icon: "🤝", tone: "bg-violet-50" },
   { key: "special", label: "특이사항", icon: "🧡", tone: "bg-orange-50" }, { key: "praise", label: "칭찬", icon: "👏", tone: "bg-pink-50" },
 ];
-const structuredLabels: Partial<Record<WeeklyTextKey, string[]>> = {
-  growth: ["상황", "문제점", "개선해야 할 점", "실행"],
-  learning: ["주차", "작성자", "날짜", "소요시간", "브랜드", "기종", "교육자", "배운 점"],
-};
 const pad = (n: number) => String(n).padStart(2, "0");
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
@@ -73,28 +69,6 @@ function weeksInMonth(year: number, month: number) {
     out.push({ ...wr, label: `${out.length + 1}주` });
   }
   return out;
-}
-
-function parseStructuredText(text: string, labels: string[]) {
-  const result: Record<string, string> = Object.fromEntries(labels.map((label) => [label, ""]));
-  const lines = text.split(/\r?\n/);
-  let current = "";
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    const matched = labels.find((label) => new RegExp(`^${label}\\s*[:：]`).test(line.trim()));
-    if (matched) {
-      current = matched;
-      result[current] = line.replace(new RegExp(`^${matched}\\s*[:：]\\s*`), "");
-    } else if (current) {
-      result[current] = `${result[current]}${result[current] ? "\n" : ""}${line}`.trim();
-    }
-  }
-  if (!Object.values(result).some((value) => value.trim())) result[labels[0]] = text.trim();
-  return result;
-}
-
-function buildStructuredText(labels: string[], values: Record<string, string>) {
-  return labels.map((label) => `${label}: ${values[label] || ""}`).join("\n");
 }
 
 function AutoGrowTextarea({ value, onChange, className = "", rows = 1 }: { value: string; onChange: (value: string) => void; className?: string; rows?: number }) {
@@ -271,23 +245,10 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, onSave, sav
       </div>
       <div className="grid gap-3 border-t border-slate-200 p-4 lg:grid-cols-2">
         {weeklyCards.map((item) => {
-          const labels = structuredLabels[item.key];
-          const parsed = labels ? parseStructuredText(String(note[item.key]), labels) : null;
           return (
             <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
               <div className={`inline-flex rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
-              {parsed ? (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {labels!.map((label) => (
-                    <div key={label} className={label === "배운 점" || label === "실행" ? "sm:col-span-2" : ""}>
-                      <div className="text-[11px] font-black text-slate-400">{label}</div>
-                      <AutoGrowTextarea value={parsed[label]} onChange={(value) => onNoteChange(item.key, buildStructuredText(labels!, { ...parsed, [label]: value }))} rows={1} className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
-              )}
+              <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
             </div>
           );
         })}
