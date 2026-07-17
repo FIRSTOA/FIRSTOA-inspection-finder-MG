@@ -10,6 +10,7 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
+import { AsReception, CsCalendar } from "./CsAsWorkspace";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
@@ -4052,7 +4053,7 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
 
@@ -4290,6 +4291,28 @@ export default function App() {
     showToast("기기를 삭제했어요");
   };
 
+  const openAsTicketInField = (rawText: string) => {
+    modeStateRef.current[mode] = {
+      inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+      reportTypes, reportTypeOther,
+    };
+    setMode("blank-report");
+    setScreen("field");
+    setInputText(rawText);
+    skipAutoRef.current = true;
+    const items = transformBlankReports(rawText);
+    setListOutput(items);
+    setTextOutput("");
+    const nextForms = items.map((item: ResultItem) => parseItemDataFromText(item.content, 1)[0]);
+    setItemForms(nextForms.length ? nextForms : [{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setSelectedItem(0);
+    setEditedBlocks({});
+    setReportTypes(["AS"]);
+    setReportTypeOther("");
+    showToast("AS접수 내용을 FIELD AS양식으로 불러왔어요", "success");
+  };
+
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (isCat && catFilled);
   const navGroups = [
@@ -4297,7 +4320,7 @@ export default function App() {
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["asReception", "AS접수"] as [typeof screen, string]];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items)];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
@@ -4428,13 +4451,14 @@ export default function App() {
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
         {screen === "walkingMap" && <WalkingMap />}
-        {(screen === "calendar" || screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (
+        {screen === "calendar" && <CsCalendar />}
+        {screen === "asReception" && <AsReception onUseField={openAsTicketInField} />}
+        {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
             <div className="mt-1 text-sm text-slate-400">
-              {screen === "calendar" ? "방문 일정과 업무 일정을 한 화면에서 확인하는 캘린더 기능을 준비 중입니다."
-                : screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
+              {screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
                 : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
                 : screen === "promoSend" ? "팜플렛과 홍보자료 발송·인쇄 기능을 준비 중입니다."
                 : "구상 중 — 곧 만들어집니다"}
