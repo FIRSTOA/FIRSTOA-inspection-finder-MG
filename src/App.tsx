@@ -4043,7 +4043,7 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
 
@@ -4283,7 +4283,7 @@ export default function App() {
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["walkingMap", "워킨맵"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items)];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
@@ -4300,11 +4300,13 @@ export default function App() {
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
             <nav className="space-y-3 p-2">
-              <button type="button"
-                onClick={() => { setScreen("home"); setMenuOpen(false); }}
-                className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === "home" ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                홈
-              </button>
+              {standaloneItems.map(([key, label]) => (
+                <button key={key} type="button"
+                  onClick={() => { setScreen(key); setMenuOpen(false); }}
+                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                  {label}
+                </button>
+              ))}
               {navGroups.map((group) => (
                 <div key={group.title}>
                   <button type="button" onClick={() => toggleNavGroup(group.title)} className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
@@ -4322,11 +4324,6 @@ export default function App() {
                   </div>}
                 </div>
               ))}
-              <button type="button"
-                onClick={() => { setScreen("walkingMap"); setMenuOpen(false); }}
-                className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === "walkingMap" ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                워킨맵
-              </button>
               <a
                 href="/manual/field-manual.svg"
                 target="_blank"
@@ -4347,11 +4344,13 @@ export default function App() {
             <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>
           </div>
           <nav className="flex-1 space-y-5 px-3 py-4">
-            <button type="button" onClick={() => setScreen("home")}
-              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === "home" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-              <span>홈</span>
-              {screen === "home" && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-            </button>
+            {standaloneItems.map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setScreen(key)}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                <span>{label}</span>
+                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+              </button>
+            ))}
             {navGroups.map((group) => (
               <div key={group.title}>
                 <button type="button" onClick={() => toggleNavGroup(group.title)} className="mb-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white">
@@ -4369,11 +4368,6 @@ export default function App() {
                 </div>}
               </div>
             ))}
-            <button type="button" onClick={() => setScreen("walkingMap")}
-              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === "walkingMap" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-              <span>워킨맵</span>
-              {screen === "walkingMap" && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-            </button>
           </nav>
           <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
       </aside>
@@ -4419,12 +4413,13 @@ export default function App() {
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
-        {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend" || screen === "walkingMap") && (
+        {(screen === "calendar" || screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend" || screen === "walkingMap") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
             <div className="mt-1 text-sm text-slate-400">
-              {screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
+              {screen === "calendar" ? "방문 일정과 업무 일정을 한 화면에서 확인하는 캘린더 기능을 준비 중입니다."
+                : screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
                 : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
                 : screen === "promoSend" ? "팜플렛과 홍보자료 발송 기능을 준비 중입니다."
                 : screen === "walkingMap" ? "외근 동선과 방문처를 지도에서 확인하는 워킨맵 기능을 준비 중입니다."
