@@ -1987,6 +1987,8 @@ const EMPTY_SHARED_FORM: SharedForm = {
   selfItem: "", selfQty: "", selfShipped: "",
   arrivalHour: "", arrivalMinute: "", duration: "",
 };
+const FIXED_INSPECTION_LEVEL = "1";
+const FIXED_INSPECTION_REPORT_TYPES = ["점검"];
 
 type AirPurifierForm = {
   filterReset: string;
@@ -3484,8 +3486,6 @@ export default function App() {
   const [airForm, setAirForm] = useState<AirPurifierForm>({ ...EMPTY_AIR_FORM, ...(ss.airForm as Partial<AirPurifierForm> ?? {}) });
   // Manual result edits live per result block (keyed by block index). They're
   // persisted so a user's direct fixes (기기위치 / 특이사항 등) survive a reload.
-  // Any form change still calls clearManualEdits() so a stale override can't
-  // block the form from driving the result.
   const [editedBlocks, setEditedBlocks] = useState<Record<number, string>>(
     (ss.editedBlocks as Record<number, string>) ?? {},
   );
@@ -3506,6 +3506,7 @@ export default function App() {
     inputText: string; textOutput: string; listOutput: ResultItem[];
     itemForms: PerItemForm[]; sharedForm: SharedForm; selectedItem: number;
     editedBlocks: Record<number, string>; airForm: AirPurifierForm;
+    reportTypes: string[]; reportTypeOther: string;
   }>>({});
 
 
@@ -3612,8 +3613,21 @@ export default function App() {
   const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>({ ...EMPTY_LOGISTICS_FORM });
   const logisticsFilled = Boolean(logisticsForm.vendor.trim() || logisticsForm.item.trim() || logisticsForm.notes.trim());
   const logisticsText = useMemo(() => buildLogisticsText(logisticsForm, author), [logisticsForm, author]);
-  const [reportTypes, setReportTypes] = useState<string[]>([]);
-  const [reportTypeOther, setReportTypeOther] = useState("");
+  const [reportTypes, setReportTypes] = useState<string[]>(
+    Array.isArray(ss.reportTypes) ? (ss.reportTypes as string[]) : [],
+  );
+  const [reportTypeOther, setReportTypeOther] = useState<string>((ss.reportTypeOther as string) ?? "");
+
+  useEffect(() => {
+    if (mode !== "inspection") return;
+    if (sharedForm.level !== FIXED_INSPECTION_LEVEL) {
+      setSharedForm((prev: SharedForm) => ({ ...prev, level: FIXED_INSPECTION_LEVEL }));
+    }
+    if (reportTypes.length !== 1 || reportTypes[0] !== FIXED_INSPECTION_REPORT_TYPES[0]) {
+      setReportTypes(FIXED_INSPECTION_REPORT_TYPES);
+    }
+    if (reportTypeOther) setReportTypeOther("");
+  }, [mode, sharedForm.level, reportTypes, reportTypeOther]);
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
   const isCat = mode === "bulman" || mode === "recontract" || mode === "overage-adjust";
@@ -3664,6 +3678,7 @@ export default function App() {
     // 현재 탭의 작업상태를 저장해 두고, 대상 탭의 저장본을 복원한다(없으면 빈 상태).
     modeStateRef.current[mode] = {
       inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+      reportTypes, reportTypeOther,
     };
     const s = modeStateRef.current[next];
     setMode(next);
@@ -3677,6 +3692,8 @@ export default function App() {
       setSelectedItem(s.selectedItem);
       setEditedBlocks(s.editedBlocks);
       setAirForm(s.airForm);
+      setReportTypes(next === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : s.reportTypes);
+      setReportTypeOther(next === "inspection" ? "" : s.reportTypeOther);
       // 미양식 복원 시 통합이력 팝업이 자동으로 다시 뜨지 않게 마지막 인식 업체명을 맞춰둔다.
       if (next === "blank-report") {
         lastBlankVendor.current = extractVendorFromText(s.listOutput[0]?.content || s.textOutput || "");
@@ -3688,6 +3705,8 @@ export default function App() {
       setSharedForm(EMPTY_SHARED_FORM);
       setSelectedItem(0);
       setAirForm(EMPTY_AIR_FORM);
+      setReportTypes(next === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
+      setReportTypeOther("");
     }
   };
 
@@ -3740,14 +3759,14 @@ export default function App() {
       try {
         localStorage.setItem("session_v1", JSON.stringify({
           mode, textOutput, listOutput, itemForms, sharedForm,
-          selectedItem, airForm, editedBlocks,
+          selectedItem, airForm, editedBlocks, reportTypes, reportTypeOther,
         }));
       } catch {
         // ignore quota / private mode errors
       }
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [mode, textOutput, listOutput, itemForms, sharedForm, selectedItem, airForm, editedBlocks]);
+  }, [mode, textOutput, listOutput, itemForms, sharedForm, selectedItem, airForm, editedBlocks, reportTypes, reportTypeOther]);
 
   const openInputModal = () => {
     setDraftInput(inputText);
@@ -3762,12 +3781,12 @@ export default function App() {
   });
   const clearPreviousVendorWork = (clearVendor = true) => {
     setItemForms([{ ...EMPTY_ITEM_FORM }]);
-    setSharedForm(EMPTY_SHARED_FORM);
+    setSharedForm(mode === "inspection" ? { ...EMPTY_SHARED_FORM, level: FIXED_INSPECTION_LEVEL } : EMPTY_SHARED_FORM);
     setAirForm(EMPTY_AIR_FORM);
     setSelectedItem(0);
     setEditedBlocks({});
     if (clearVendor) setCurrentVendor("");
-    setReportTypes([]);
+    setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
@@ -3783,7 +3802,9 @@ export default function App() {
         handleModeChange(detected);
         skipAutoRef.current = false;
       }
-      setReportTypes(detectReportTypesFromInput(draftInput));
+      setSharedForm((prev: SharedForm) => detected === "inspection" ? { ...prev, level: FIXED_INSPECTION_LEVEL } : { ...prev, level: "" });
+      setReportTypes(detected === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : detectReportTypesFromInput(draftInput));
+      if (detected === "inspection") setReportTypeOther("");
     }
     setInputText(draftInput);
     if (!draftInput.trim()) resetOutputs();
@@ -3800,7 +3821,9 @@ export default function App() {
         handleModeChange(detected);
         skipAutoRef.current = false;
       }
-      setReportTypes(detectReportTypesFromInput(text));
+      setSharedForm((prev: SharedForm) => detected === "inspection" ? { ...prev, level: FIXED_INSPECTION_LEVEL } : { ...prev, level: "" });
+      setReportTypes(detected === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : detectReportTypesFromInput(text));
+      if (detected === "inspection") setReportTypeOther("");
     }
     setInputText(text);
     setSearchOpen(false);
@@ -3885,6 +3908,15 @@ export default function App() {
       text = applyReportTypeSelection(text, reportTypes, reportTypeOther);
     }
     return text;
+  };
+  const handlePreviewBlockChange = (block: ResultBlock, index: number, value: string) => {
+    setEditedBlocks((prev: Record<number, string>) => ({ ...prev, [index]: value }));
+    if (block.device === null || (mode !== "inspection" && mode !== "blank-report")) return;
+    const parsed = parseItemDataFromText(value, 1)[0];
+    if (!parsed) return;
+    setItemForms((prev: PerItemForm[]) => prev.map((form: PerItemForm, i: number) =>
+      i === block.device ? { ...form, ...parsed } : form,
+    ));
   };
 
   const handleCopyAll = async () => {
@@ -4045,14 +4077,14 @@ export default function App() {
     setInputText("");
     resetOutputs();
     setItemForms([{ ...EMPTY_ITEM_FORM }]);
-    setSharedForm(EMPTY_SHARED_FORM);
+    setSharedForm(mode === "inspection" ? { ...EMPTY_SHARED_FORM, level: FIXED_INSPECTION_LEVEL } : EMPTY_SHARED_FORM);
     setSelectedItem(0);
     setAirForm(EMPTY_AIR_FORM);
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
     setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
-    setReportTypes([]);
+    setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
@@ -4071,14 +4103,12 @@ export default function App() {
     setTextOutput(rebuildInspectionDevices(parts.header, nextDevices, parts.footer));
     setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM, ...info }]);
     setSelectedItem(nextIndex);
-    setEditedBlocks({});
     showToast(`${nextIndex + 1}번 기기를 추가했어요`);
   };
 
   const updateInspectionDevice = (index: number, info: DeviceInfo) => {
     setItemForms((prev) => prev.map((form, i) => i === index ? { ...form, ...info } : form));
     setSelectedItem(index);
-    setEditedBlocks({});
   };
 
   const moveInspectionDevice = (index: number, direction: -1 | 1) => {
@@ -4420,9 +4450,7 @@ export default function App() {
                     >
                       <textarea
                         value={text}
-                        onChange={(e) =>
-                          setEditedBlocks((prev: Record<number, string>) => ({ ...prev, [i]: e.target.value }))
-                        }
+                        onChange={(e) => handlePreviewBlockChange(block, i, e.target.value)}
                         rows={Math.max(2, text.split("\n").length)}
                         className="w-full resize-none bg-transparent p-1 font-mono text-[11px] leading-snug text-slate-800 outline-none"
                       />
