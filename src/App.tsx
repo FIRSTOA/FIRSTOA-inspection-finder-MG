@@ -2375,6 +2375,37 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
   return forms;
 }
 
+const PREVIEW_FIELD_LABEL_BY_ITEM_KEY: Partial<Record<keyof PerItemForm, string>> = {
+  model: "모델명",
+  serial: "시리얼넘버",
+  asset: "자산기번",
+  content: "내용",
+  processContent: "처리내용",
+  spareRaw: "여분",
+  hantin: "한틴이카유무",
+  parking: "주차비지원유무",
+  notes: "특이사항",
+};
+
+function patchPreviewField(text: string, label: string, value: string): string {
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => new RegExp(`^${label}\\s*:`).test(line));
+  const valueLines = String(value || "").split("\n");
+  const replacement = [
+    valueLines[0]?.trim() ? `${label}: ${valueLines[0]}` : `${label}:`,
+    ...valueLines.slice(1),
+  ];
+  if (start >= 0) {
+    let end = start + 1;
+    while (end < lines.length && !FIELD_MARKER_REGEX.test(lines[end]) && !isDividerLine(lines[end]) && !/^※/.test(lines[end])) end++;
+    lines.splice(start, end - start, ...replacement);
+    return lines.join("\n");
+  }
+  const insertAt = lines.findIndex((line) => isDividerLine(line) || /^※/.test(line));
+  lines.splice(insertAt >= 0 ? insertAt : lines.length, 0, ...replacement);
+  return lines.join("\n");
+}
+
 type ResultBlock = { text: string; device: number | null };
 
 // Splits a rendered inspection result into header / per-device / footer
@@ -3594,6 +3625,17 @@ export default function App() {
     setItemForms((prev: PerItemForm[]) => prev.map((f: PerItemForm, i: number) =>
       i === selectedItem ? { ...f, [key]: value } : f,
     ));
+    const label = PREVIEW_FIELD_LABEL_BY_ITEM_KEY[key];
+    if (label) {
+      const blockIndex = resultBlocks.findIndex((block: ResultBlock) => block.device === selectedItem);
+      if (blockIndex >= 0) {
+        setEditedBlocks((prev: Record<number, string>) => (
+          prev[blockIndex] === undefined
+            ? prev
+            : { ...prev, [blockIndex]: patchPreviewField(prev[blockIndex], label, String(value ?? "")) }
+        ));
+      }
+    }
   };
   const setSharedF = <K extends keyof SharedForm>(key: K, value: SharedForm[K]) => {
     setSharedForm((prev: SharedForm) => ({ ...prev, [key]: value }));
