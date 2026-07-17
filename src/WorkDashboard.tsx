@@ -256,12 +256,27 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     }
     return out;
   };
+  const summaryChips = (list: VisitRow[]) => {
+    const s = summarize(list);
+    const items = [
+      ["방문", s.visits],
+      ["기기", s.machines],
+      ["점검", s.count.inspection],
+      ["AS", s.count.as],
+      ["납품", s.count.delivery],
+      ["PC·IT", s.count.pc],
+      ["미수", s.count.misu],
+      ["불만", s.count.bulman],
+      ["외근시간", hm(s.fieldMinutes)],
+    ];
+    return <div className="flex flex-wrap gap-1.5">{items.map(([label, value]) => <span key={label} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600"><b className="mr-1 text-slate-400">{label}</b>{value}</span>)}</div>;
+  };
   const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="text-right text-xs text-slate-500">{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div></div>)}</div>;
   const leafDay = (date: string, depth = 0) => {
     const list = grouped[date] || [];
     const key = `day:${date}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className={`flex w-full items-center justify-between px-5 py-2.5 text-left text-xs font-bold ${depth ? "bg-white" : "bg-slate-50"} text-slate-500`}><span>{shortDate(date)} · {list.length}건</span><span>{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && (list.length ? visitRows(list) : <div className="px-5 py-4 text-sm text-slate-400">방문 기록이 없습니다.</div>)}</div>;
+    return <div key={key} className={`border-b border-slate-100 last:border-0 ${depth ? "border-l-4 border-l-blue-200 bg-white" : "border-l-4 border-l-slate-300"}`}><button type="button" onClick={() => toggle(key)} className={`grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[210px_1fr_60px] md:items-center ${depth ? "bg-white" : "bg-slate-50"}`}><span className="text-xs font-black text-slate-700">{shortDate(date)} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && (list.length ? visitRows(list) : <div className="px-5 py-4 text-sm text-slate-400">방문 기록이 없습니다.</div>)}</div>;
   };
   const weekNode = (w: { label: string; start: string; end: string }, prefix = "") => {
     const s = w.start < start ? start : w.start;
@@ -270,17 +285,17 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     const list = rowsBetween(s, e);
     const key = `${prefix}week:${s}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{w.label} {shortDate(s)}~{shortDate(e)} · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{dayBuckets(s, e).map((d) => leafDay(d.start, 1))}</div>}</div>;
+    return <div key={key} className="border-b border-l-4 border-l-emerald-300 border-b-slate-100 bg-emerald-50/30 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[250px_1fr_60px] md:items-center"><span className="text-sm font-black text-slate-800">{w.label} {shortDate(s)}~{shortDate(e)} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/70">{dayBuckets(s, e).map((d) => leafDay(d.start, 1))}</div>}</div>;
   };
   const monthNode = (m: number) => {
     const mb = monthBucket(m);
     const list = rowsBetween(mb.start, mb.end);
     const key = `month:${m}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{mb.label} · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
+    return <div key={key} className="border-b border-l-4 border-l-blue-500 border-b-slate-100 bg-blue-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{mb.label} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
   };
   const title = period === "day" ? "금일 방문 상세" : period === "week" ? "주간 방문 상세" : period === "month" ? "월간 방문 상세" : period === "quarter" ? "분기 방문 상세" : "연간 방문 상세";
-  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between bg-slate-50 px-5 py-3 text-left text-sm font-black text-slate-700"><span>{q}분기 · {list.length}건</span><span className="text-xs text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div>{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
+  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
 }
 
 function VisitList({ grouped }: { grouped: Record<string, VisitRow[]> }) {
