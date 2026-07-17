@@ -4104,15 +4104,18 @@ export default function App() {
     const parsedVendor = extractVendorFromText(target);
     const parsedGrade = target.match(/등급\s*[:：]?\s*\(?\s*([^,\n\r)]+)/)?.[1]?.trim() || "";
     const vendor = parsedVendor || logisticsForm.vendor || (pcSubTab === "copier" ? copierExpansionForm.company : pcForm.company) || String(curCatForm["업체명"] || currentVendor || "");
-    const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" : visitKindForMode();
+    const logisticsCategory = mode === "logistics" ? (logisticsForm.category === "기타" ? logisticsForm.categoryOther : logisticsForm.category) : "";
+    const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" :
+      mode === "logistics" && /여분|마감/.test(logisticsCategory) ? "etc" : visitKindForMode();
     const existingMinutes = Number(visitMeta.minutes[kind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
+    const logisticsQuantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
     const arrivalTime = visitMeta.arrivalTime || (mode === "air-purifier"
       ? (airForm.arrivalHour ? `${airForm.arrivalHour}:${airForm.arrivalMinute || "00"}` : "")
       : (sharedForm.arrivalHour ? `${sharedForm.arrivalHour}:${sharedForm.arrivalMinute || "00"}` : ""));
     await saveVisit({
       ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime, grade: visitMeta.grade || parsedGrade,
-      machineCount: visitMeta.machineCount || (mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : mode === "air-purifier" ? 1 : 0),
+      machineCount: visitMeta.machineCount || (mode === "logistics" && kind === "delivery" ? logisticsQuantity : mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : mode === "air-purifier" ? 1 : 0),
       workKinds: Array.from(new Set([...visitMeta.workKinds, kind, ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []), ...(reportTypes.includes("AS") ? ["as" as WorkKind] : [])])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
     }, target);

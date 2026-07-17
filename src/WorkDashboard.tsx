@@ -17,7 +17,13 @@ function summarize(rows: VisitRow[]) {
   const sales = { nsIt: 0, nsCopier: 0, ssvIt: 0, ssvCopier: 0, nsEnd: 0, ssvEnd: 0 };
   for (const r of rows) {
     if (r.visited) { const key = `${r.workDate}|${r.vendor}`; visitMachines.set(key, Math.max(visitMachines.get(key) || 0, r.machineCount)); }
-    for (const k of KINDS) { if (r.workKinds.includes(k)) count[k]++; minutes[k] += Number(r.minutes[k] || 0); }
+    for (const k of KINDS) {
+      if (!r.workKinds.includes(k)) continue;
+      const visitCount = r.visited ? 1 : 0;
+      const quantity = Math.max(1, Number(r.machineCount) || 0);
+      count[k] += k === "inspection" || k === "delivery" ? quantity : visitCount;
+      minutes[k] += Number(r.minutes[k] || 0);
+    }
     const high = /^(SS|V)/i.test(r.grade.trim());
     if (r.salesIt) { if (high) sales.ssvIt++; else sales.nsIt++; }
     if (r.salesCopier) { if (high) sales.ssvCopier++; else sales.nsCopier++; }
@@ -68,12 +74,9 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
-  useEffect(() => {
-    if (kind === "weekly" && period !== "day" && period !== "month") setPeriod("day");
-  }, [kind, period]);
   const editWeek = useMemo(() => weekRange(selectedDay), [selectedDay]);
   const range = useMemo(() => {
-    if (kind === "weekly") return period === "day" ? { start: today, end: today } : editWeek;
+    if (kind === "weekly") return editWeek;
     return periodRange(period, year, month, quarter, selectedDay);
   }, [kind, period, year, month, quarter, selectedDay, editWeek, today]);
   const monthWeeks = useMemo(() => weeksInMonth(year, month), [year, month]);
@@ -104,25 +107,23 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const sum = useMemo(() => summarize(rows), [rows]);
   const insideMinutes = officeMinutes(officeLogs);
   const commute = [...rows].reverse().find((r) => r.commute)?.commute;
-  const grouped = useMemo(() => rows.reduce<Record<string, VisitRow[]>>((a, r) => ((a[r.workDate] ||= []).push(r), a), {}), [rows]);
   const setNoteField = <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => setNote({ ...note, [k]: v });
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const saveWeekly = async () => { setSaving("weekly"); setSaved(""); try { await saveWeeklyNote(author, editWeek.start, note); setSaved("주간 기록 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${selectedWeekLabel} 주간 업무 현황` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
-  const periodTabs = kind === "weekly" ? ([["day", "일간"], ["month", "월간"]] as [Period, string][]) : ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
+  const periodTabs = ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-4 pb-16">
     <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className={`grid gap-1 rounded-md bg-slate-100 p-1 ${kind === "weekly" ? "grid-cols-2" : "grid-cols-5"}`}>{periodTabs.map(([p, label]) => <button key={p} onClick={() => { setPeriod(p); if (kind === "weekly" && p === "day") setSelectedDay(today); }} className={`rounded px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>)}</div>
+      {kind === "daily" && <div className="grid grid-cols-5 gap-1 rounded-md bg-slate-100 p-1">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>)}</div>}
       <div className="flex flex-wrap items-center gap-2">
         {kind === "daily" && period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold" />}
-        {period === "day" && kind === "weekly" && <div className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">금일</div>}
-        {(period === "week" || period === "month" || period === "quarter" || period === "year") && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (period === "week" || (kind === "weekly" && period === "month")) setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
-        {(period === "week" || period === "month") && <>
-          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); if (period === "week" || kind === "weekly") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
-          {(period === "week" || kind === "weekly") && <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>}
+        {(kind === "weekly" || period === "week" || period === "month" || period === "quarter" || period === "year") && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (kind === "weekly" || period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
+        {(kind === "weekly" || period === "week" || period === "month") && <>
+          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); if (kind === "weekly" || period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
+          {(kind === "weekly" || period === "week") && <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>}
         </>}
         {kind === "daily" && period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded px-4 py-2 text-sm font-bold ${quarter === q ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>{q}분기</button>)}</div>}
         <div className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{range.start} ~ {range.end}</div>
@@ -144,6 +145,7 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
 
     {!loading && <>
       <section><div className="mb-3 flex items-end justify-between"><div><h3 className="text-lg font-bold text-slate-900">외근</h3><p className="text-xs text-slate-400">방문·현장 업무 건수와 소요시간</p></div></div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><div className="inline-flex rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white">🏢 방문 거래처</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{sum.visits}<span className="ml-1 text-xs font-semibold text-slate-400">곳</span></div><div className="text-xs font-bold text-slate-500">기기 {sum.machines}대</div></div></div>
         {KINDS.map((k) => {
           const target = Number(note.goals[k] || 0);
           const actual = sum.count[k];
@@ -171,7 +173,7 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <div className="border-t border-slate-200"><div className="grid grid-cols-[170px_1fr_70px] border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-500"><span>회고 항목</span><span>작성 내용</span><span className="text-center">관리</span></div>{weeklyCards.map((item)=><button type="button" key={item.key} onClick={()=>setEditField(item.key)} className="grid min-h-20 w-full grid-cols-[170px_1fr_70px] items-center border-b border-slate-100 px-4 py-3 text-left last:border-0 hover:bg-slate-50"><div className="text-sm font-bold text-slate-700">{item.icon} {item.label}</div><div className="line-clamp-2 whitespace-pre-wrap pr-4 text-sm leading-6 text-slate-600">{note[item.key] || <span className="text-slate-300">미작성</span>}</div><span className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-bold text-slate-600">편집</span></button>)}</div>
           <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-5 py-3"><button onClick={saveWeekly} disabled={saving === "weekly"} className="rounded-md bg-blue-600 px-8 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "weekly" ? "저장 중…" : "주간 기록 저장"}</button></div>
         </section>
-        <div className="order-2"><VisitList grouped={grouped} /></div>
+        <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
       </div>}
     </>}
     {editField && <WeeklyEditModal field={editField} setField={setEditField} note={note} onChange={setNoteField} onSave={saveWeekly} saving={saving === "weekly"} onClose={()=>setEditField("")} />}
@@ -296,14 +298,4 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
   };
   const title = period === "day" ? "금일 방문 상세" : period === "week" ? "주간 방문 상세" : period === "month" ? "월간 방문 상세" : period === "quarter" ? "분기 방문 상세" : "연간 방문 상세";
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
-}
-
-function VisitList({ grouped }: { grouped: Record<string, VisitRow[]> }) {
-  const [open, setOpen] = useState(false);
-  const [closedDates, setClosedDates] = useState<Record<string, boolean>>({});
-  const entries = Object.entries(grouped);
-  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><h3 className="text-lg font-bold text-slate-900">날짜별 방문 상세</h3><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!entries.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{entries.map(([date, list]) => {
-    const closed = closedDates[date];
-    return <div key={date} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => setClosedDates({ ...closedDates, [date]: !closed })} className="flex w-full items-center justify-between bg-slate-50 px-5 py-2 text-left text-xs font-bold text-slate-500"><span>{shortDate(date)} · {list.length}건</span><span>{closed ? "펼치기" : "접기"}</span></button>{!closed && <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">비방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="text-right text-xs text-slate-500">{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div></div>)}</div>}</div>;
-  })}</>}</section>;
 }
