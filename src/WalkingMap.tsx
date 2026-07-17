@@ -88,8 +88,8 @@ export default function WalkingMap() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-black text-blue-600">WORKIN MAP</div>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">ABCD팀 워킨맵 관리</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">분기점검, 매월점검, 계약종료 대상을 팀별로 지도에서 확인하는 초안 화면입니다.</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">CS 워킨맵</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">CS팀 분기점검, 매월점검, 계약종료 대상을 지도 중심으로 관리하는 초안 화면입니다.</p>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:flex">
             <select value={team} onChange={(e) => setTeam(e.target.value as Team | "ALL")} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold">
@@ -132,10 +132,10 @@ export default function WalkingMap() {
         })}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[320px_1fr]">
+      <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-4">
-            <div className="text-sm font-black text-slate-900">{team === "ALL" ? "ABCD팀" : `${team}팀`} {quarter}분기 대상</div>
+            <div className="text-sm font-black text-slate-900">{team === "ALL" ? "CS 전체" : `${team}팀`} {quarter}분기 대상</div>
             <div className="mt-1 text-xs font-semibold text-slate-400">총 {total}건 · 점검 {checked}/{checkTarget} · 계약 {contractDone}/{contracts} · 매월 {monthly}</div>
           </div>
           <div className="divide-y divide-slate-100">
@@ -166,7 +166,7 @@ export default function WalkingMap() {
             </div>
           </div>
 
-          <div className="relative min-h-[560px] bg-[#EAF2F8]">
+          <div className="relative min-h-[680px] bg-[#EAF2F8] lg:min-h-[calc(100vh-280px)]">
             <div className="absolute inset-0 opacity-80" style={{
               backgroundImage: "linear-gradient(90deg, rgba(71,85,105,.16) 1px, transparent 1px), linear-gradient(rgba(71,85,105,.16) 1px, transparent 1px)",
               backgroundSize: "64px 64px",
