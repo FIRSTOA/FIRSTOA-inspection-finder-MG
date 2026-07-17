@@ -68,7 +68,11 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
   const editWeek = useMemo(() => weekRange(selectedDay), [selectedDay]);
-  const range = useMemo(() => kind === "weekly" ? editWeek : periodRange(period, year, month, quarter, selectedDay), [kind, period, year, month, quarter, selectedDay, editWeek]);
+  const range = useMemo(() => {
+    if (kind === "weekly") return period === "day" ? { start: today, end: today } : editWeek;
+    if (period === "month") return editWeek;
+    return periodRange(period, year, month, quarter, selectedDay);
+  }, [kind, period, year, month, quarter, selectedDay, editWeek, today]);
   const monthWeeks = useMemo(() => weeksInMonth(year, month), [year, month]);
   const [rows, setRows] = useState<VisitRow[]>([]);
   const [officeLogs, setOfficeLogs] = useState<OfficeLog[]>([]);
@@ -101,21 +105,23 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const saveWeekly = async () => { setSaving("weekly"); setSaved(""); try { await saveWeeklyNote(author, editWeek.start, note); setSaved("주간 기록 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
-  const periodTitle = period === "day" ? "일일 업무 현황" : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
+  const periodTitle = period === "day" ? "일일 업무 현황" : period === "month" ? `${year}년 ${month}월 ${monthWeeks.find((w) => w.start === editWeek.start)?.label || ""} 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
+  const periodTabs = kind === "weekly" ? ([["day", "일간"], ["month", "월간"]] as [Period, string][]) : ([["day", "일간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-6 pb-16">
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">{([['day','일간'],['month','월간'],['quarter','분기'],['year','연간']] as [Period,string][]).map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>)}</div>
+      <div className={`grid gap-1 rounded-xl bg-slate-100 p-1 ${kind === "weekly" ? "grid-cols-2" : "grid-cols-4"}`}>{periodTabs.map(([p, label]) => <button key={p} onClick={() => { setPeriod(p); if (kind === "weekly" && p === "day") setSelectedDay(today); }} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>)}</div>
       <div className="flex flex-wrap items-center gap-2">
-        {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" />}
-        {period !== "day" && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (kind === "weekly" && period === "month") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
+        {period === "day" && kind === "daily" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" />}
+        {period === "day" && kind === "weekly" && <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">금일</div>}
+        {period !== "day" && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (period === "month") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
         {period === "month" && <>
-          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); if (kind === "weekly") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
-          {kind === "weekly" && <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>}
+          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
+          <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>
         </>}
-        {period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-xl px-4 py-2 text-sm font-bold ${quarter === q ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>{q}분기</button>)}</div>}
-        <div className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700">{kind === "weekly" ? `${editWeek.start} ~ ${editWeek.end}` : `${range.start} ~ ${range.end}`}</div>
+        {kind === "daily" && period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-xl px-4 py-2 text-sm font-bold ${quarter === q ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>{q}분기</button>)}</div>}
+        <div className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700">{range.start} ~ {range.end}</div>
       </div>
     </section>
     <section className="overflow-hidden rounded-3xl bg-[#172033] text-white shadow-xl shadow-slate-200">
@@ -142,12 +148,13 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="text-lg font-bold text-slate-900">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
           ].map(([l, v]) => <div key={String(l)} className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
+          <VisitList grouped={grouped} />
         </div>
         <section className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-slate-900">내근 업무 입력</h3><p className="text-xs text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs text-slate-500">복귀시간<input type="time" value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-lg border border-slate-200 px-2 py-1.5" /></label></div>
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label><label className="text-[10px] text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label></div>)}</div>
           <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-xl bg-[#172033] py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
-      </div><VisitList grouped={grouped} /></div> : kind === "daily" ? <div className="space-y-6"><MonthBreakdown rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} /><VisitList grouped={grouped} /></div> : <div className="flex flex-col gap-6">
+      </div></div> : kind === "daily" ? <div className="space-y-6"><MonthBreakdown rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} /><VisitList grouped={grouped} /></div> : <div className="flex flex-col gap-6">
         <section className="order-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div><h3 className="text-lg font-bold text-slate-900">주간 목표·회고 문서</h3><p className="mt-0.5 text-xs text-slate-400">한 화면에서 읽고, 편집기에서 집중해서 작성합니다.</p></div><button onClick={()=>setEditField("thisWeekGoal")} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white">전체 편집</button></div>
           <div className="grid divide-y divide-slate-200 lg:grid-cols-3 lg:divide-x lg:divide-y-0">{([['thisWeekGoal','이번 주 목표','🎯'],['thisWeekResult','이번 주 결과·미진행 사유','✅'],['nextWeekGoal','다음 주 목표','➡️']] as [WeeklyTextKey,string,string][]).map(([key,label,icon])=><button key={key} onClick={()=>setEditField(key)} className="min-h-52 p-5 text-left transition hover:bg-blue-50/40"><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-800">{icon} {label}</span><span className="text-xs font-bold text-blue-600">편집</span></div><div className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{note[key] || <span className="text-slate-300">작성된 내용이 없습니다.</span>}</div></button>)}</div>
@@ -181,7 +188,7 @@ function MonthBreakdown({ rows, officeLogs, start, end }: { rows: VisitRow[]; of
 }
 
 function VisitList({ grouped }: { grouped: Record<string, VisitRow[]> }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [closedDates, setClosedDates] = useState<Record<string, boolean>>({});
   const entries = Object.entries(grouped);
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><h3 className="text-lg font-bold text-slate-900">날짜별 방문 상세</h3><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!entries.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{entries.map(([date, list]) => {
