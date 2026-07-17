@@ -44,6 +44,7 @@ const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone
 ];
 type LearningRow = { date: string; brand: string; model: string; lesson: string; duration: string; educator: string };
 const emptyLearningRow = (): LearningRow => ({ date: "", brand: "", model: "", lesson: "", duration: "", educator: "" });
+const GROWTH_NOTE_TEMPLATE = "상황:\n문제점:\n개선해야 할 점:\n실행:";
 const pad = (n: number) => String(n).padStart(2, "0");
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
@@ -95,7 +96,7 @@ function AutoGrowTextarea({ value, onChange, className = "", rows = 1 }: { value
 function transformGrowthNote(text: string) {
   const current = text.trim();
   const labels = ["상황", "문제점", "개선해야 할 점", "실행"];
-  if (!current) return labels.map((label) => `${label}:`).join("\n");
+  if (!current) return GROWTH_NOTE_TEMPLATE;
   const hasStructure = labels.some((label) => new RegExp(`${label}\\s*[:：]`).test(current));
   if (hasStructure) return labels.map((label) => {
     const match = current.match(new RegExp(`${label}\\s*[:：]\\s*([^\\n]*)`));
@@ -112,6 +113,39 @@ function transformGrowthNote(text: string) {
   const improvement = pick([/해야|필요|개선|빠르게|먼저|보고|공유|확인|다음|일정|대응/]) || clauses[2] || "";
   const action = pick([/실행|진행|조치|처리|보고|공유|확인|완료|예정|하겠|하기/]) || clauses.at(-1) || "";
   return `상황: ${situation}\n문제점: ${problem}\n개선해야 할 점: ${improvement}\n실행: ${action}`;
+}
+
+function normalizeGrowthNote(text: string) {
+  const labels = ["상황", "문제점", "개선해야 할 점", "실행"];
+  const current = text.trim();
+  if (!current) return GROWTH_NOTE_TEMPLATE;
+  return labels.map((label) => {
+    const match = current.match(new RegExp(`${label}\\s*[:：]\\s*([\\s\\S]*?)(?=\\n(?:${labels.filter((item) => item !== label).join("|")})\\s*[:：]|$)`));
+    return `${label}: ${(match?.[1] || "").trim()}`;
+  }).join("\n");
+}
+
+async function transformGrowthNoteWithApi(text: string) {
+  const current = text.trim();
+  if (!current) return GROWTH_NOTE_TEMPLATE;
+  const endpoint = String(import.meta.env.VITE_AI_TRANSFORM_URL || "/api/growth-note-transform");
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: current,
+        instruction: "한국어 성장노트를 상황, 문제점, 개선해야 할 점, 실행 네 항목으로 짧고 명확하게 구조화해 주세요.",
+        fields: ["상황", "문제점", "개선해야 할 점", "실행"],
+      }),
+    });
+    if (!res.ok) throw new Error(`AI transform failed: ${res.status}`);
+    const data = await res.json();
+    const result = String(data.result || data.text || data.output || "");
+    return normalizeGrowthNote(result || transformGrowthNote(current));
+  } catch {
+    return transformGrowthNote(current);
+  }
 }
 
 function parseLearningRows(text: string): LearningRow[] {
@@ -334,6 +368,15 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
 
 function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved" }) {
   const goalCards = ([["thisWeekGoal", "이번 주 목표", "이번 주 집중할 결과"], ["thisWeekResult", "결과·미진행 사유", "실행 결과와 밀린 이유"], ["nextWeekGoal", "다음 주 목표", "다음 실행으로 넘길 항목"]] as [WeeklyTextKey, string, string][]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const runGrowthAiTransform = async () => {
+    setAiBusy(true);
+    try {
+      onNoteChange("growth", await transformGrowthNoteWithApi(String(note.growth)));
+    } finally {
+      setAiBusy(false);
+    }
+  };
   return (
     <section className="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
@@ -382,9 +425,14 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
               <div className="flex items-center justify-between gap-2">
                 <div className={`inline-flex rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
                 {item.key === "growth" && (
-                  <button type="button" onClick={() => onNoteChange("growth", transformGrowthNote(String(note.growth)))} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-100" title="상황, 문제점, 개선해야 할 점, 실행 틀로 변환">
-                    ✨ AI변환
-                  </button>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => onNoteChange("growth", GROWTH_NOTE_TEMPLATE)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-50">
+                      틀 추가
+                    </button>
+                    <button type="button" onClick={runGrowthAiTransform} disabled={aiBusy} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-50" title="API를 호출해 상황, 문제점, 개선해야 할 점, 실행으로 변환">
+                      {aiBusy ? "변환중" : "✨ AI변환"}
+                    </button>
+                  </div>
                 )}
               </div>
               {item.key === "learning" ? (
