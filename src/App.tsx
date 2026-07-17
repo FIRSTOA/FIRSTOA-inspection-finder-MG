@@ -9,6 +9,7 @@ import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
+import WalkingMap from "./WalkingMap";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
@@ -4426,7 +4427,8 @@ export default function App() {
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
-        {(screen === "calendar" || screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend" || screen === "walkingMap") && (
+        {screen === "walkingMap" && <WalkingMap />}
+        {(screen === "calendar" || screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
@@ -4435,7 +4437,6 @@ export default function App() {
                 : screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
                 : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
                 : screen === "promoSend" ? "팜플렛과 홍보자료 발송·인쇄 기능을 준비 중입니다."
-                : screen === "walkingMap" ? "외근 동선과 방문처를 지도에서 확인하는 워킨맵 기능을 준비 중입니다."
                 : "구상 중 — 곧 만들어집니다"}
             </div>
           </div>
