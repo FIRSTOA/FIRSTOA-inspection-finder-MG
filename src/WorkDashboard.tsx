@@ -29,7 +29,7 @@ function summarize(rows: VisitRow[]) {
 const officeMinutes = (logs: OfficeLog[]) => logs.reduce((total, log) => total + OFFICE_KINDS.reduce((n, k) => n + Number(log.values[k]?.minutes || 0), 0), 0);
 const hm = (m: number) => m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`;
 const shortDate = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
-type Period = "day" | "month" | "quarter" | "year";
+type Period = "day" | "week" | "month" | "quarter" | "year";
 type WeeklyTextKey = "thisWeekGoal" | "thisWeekResult" | "nextWeekGoal" | "review" | "growth" | "challenge" | "special" | "learning" | "request" | "praise";
 const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone: string }> = [
   { key: "growth", label: "성장노트", icon: "💡", tone: "bg-amber-50" }, { key: "challenge", label: "새로운 도전·아이디어", icon: "🎯", tone: "bg-blue-50" },
@@ -39,6 +39,7 @@ const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone
 const pad = (n: number) => String(n).padStart(2, "0");
 function periodRange(period: Period, year: number, month: number, quarter: number, today: string) {
   if (period === "day") return { start: today, end: today };
+  if (period === "week") return weekRange(today);
   const firstMonth = period === "quarter" ? (quarter - 1) * 3 + 1 : period === "year" ? 1 : month;
   const lastMonth = period === "quarter" ? firstMonth + 2 : period === "year" ? 12 : month;
   const lastDay = new Date(year, lastMonth, 0).getDate();
@@ -67,10 +68,12 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
+  useEffect(() => {
+    if (kind === "weekly" && period !== "day" && period !== "month") setPeriod("day");
+  }, [kind, period]);
   const editWeek = useMemo(() => weekRange(selectedDay), [selectedDay]);
   const range = useMemo(() => {
     if (kind === "weekly") return period === "day" ? { start: today, end: today } : editWeek;
-    if (period === "month") return editWeek;
     return periodRange(period, year, month, quarter, selectedDay);
   }, [kind, period, year, month, quarter, selectedDay, editWeek, today]);
   const monthWeeks = useMemo(() => weeksInMonth(year, month), [year, month]);
@@ -105,20 +108,20 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const saveWeekly = async () => { setSaving("weekly"); setSaved(""); try { await saveWeeklyNote(author, editWeek.start, note); setSaved("주간 기록 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
-  const periodTitle = period === "day" ? "일일 업무 현황" : period === "month" ? `${year}년 ${month}월 ${monthWeeks.find((w) => w.start === editWeek.start)?.label || ""} 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
-  const periodTabs = kind === "weekly" ? ([["day", "일간"], ["month", "월간"]] as [Period, string][]) : ([["day", "일간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
+  const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${range.start} ~ ${range.end} 주간 업무 현황` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
+  const periodTabs = kind === "weekly" ? ([["day", "일간"], ["month", "월간"]] as [Period, string][]) : ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-6 pb-16">
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className={`grid gap-1 rounded-xl bg-slate-100 p-1 ${kind === "weekly" ? "grid-cols-2" : "grid-cols-4"}`}>{periodTabs.map(([p, label]) => <button key={p} onClick={() => { setPeriod(p); if (kind === "weekly" && p === "day") setSelectedDay(today); }} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>)}</div>
+      <div className={`grid gap-1 rounded-xl bg-slate-100 p-1 ${kind === "weekly" ? "grid-cols-2" : "grid-cols-5"}`}>{periodTabs.map(([p, label]) => <button key={p} onClick={() => { setPeriod(p); if (kind === "weekly" && p === "day") setSelectedDay(today); }} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${period === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>)}</div>
       <div className="flex flex-wrap items-center gap-2">
-        {period === "day" && kind === "daily" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" />}
+        {kind === "daily" && (period === "day" || period === "week") && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" />}
         {period === "day" && kind === "weekly" && <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">금일</div>}
-        {period !== "day" && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (period === "month") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
+        {(period === "month" || period === "quarter" || period === "year") && <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); if (kind === "weekly" && period === "month") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => <option key={y} value={y}>{y}년</option>)}</select>}
         {period === "month" && <>
-          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
-          <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>
+          <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); if (kind === "weekly") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}</select>
+          {kind === "weekly" && <select value={editWeek.start} onChange={(e) => setSelectedDay(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold">{monthWeeks.map((w) => <option key={w.start} value={w.start}>{w.label} {shortDate(w.start)}~{shortDate(w.end)}</option>)}</select>}
         </>}
         {kind === "daily" && period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-xl px-4 py-2 text-sm font-bold ${quarter === q ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>{q}분기</button>)}</div>}
         <div className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700">{range.start} ~ {range.end}</div>
