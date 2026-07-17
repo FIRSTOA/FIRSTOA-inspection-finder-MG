@@ -4181,6 +4181,12 @@ export default function App() {
           {screen === "field" && (
             <div className="flex items-center gap-1">
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
+                <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
+                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"><span className="text-sm">{photoBusy ? "⏳" : "📷"}</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">사진</span></button>
+              )}
+              <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
+                className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
+              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
                   className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🔍</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">검색</span></button>
               )}
@@ -4190,12 +4196,6 @@ export default function App() {
                   <span className="text-sm">📝</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">원본</span>{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
                 </button>
               )}
-              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
-                <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
-                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"><span className="text-sm">{photoBusy ? "⏳" : "📷"}</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">사진</span></button>
-              )}
-              <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
-                className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
             </div>
           )}
         </header>
