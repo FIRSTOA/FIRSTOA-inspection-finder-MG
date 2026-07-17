@@ -4276,7 +4276,7 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
 
   return (
-    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-slate-50" : "bg-white"}`}>
+    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-[#F6F8FB]" : "bg-white"}`}>
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
@@ -4314,10 +4314,10 @@ export default function App() {
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-slate-100 bg-white shadow-sm shadow-slate-200/60 hover:bg-slate-50"}`}>
               <span className="flex flex-col gap-[3px]"><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /></span>
             </button>
-            <h1 className={`text-xl font-bold tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-900"}`}>
+            <h1 className={`text-xl font-black tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-950"}`}>
               {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일업무" : screen === "weekly" ? "주간현황판" : "성장기록"}
             </h1>
           </div>
@@ -4349,7 +4349,7 @@ export default function App() {
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
         {(screen === "happycall" || screen === "itquote") && (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+          <div className="rounded-[28px] border border-slate-100 bg-white p-10 text-center shadow-sm shadow-slate-200/60">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screen === "happycall" ? "해피콜" : "IT 견적"}</div>
             <div className="mt-1 text-sm text-slate-400">구상 중 — 곧 만들어집니다</div>
