@@ -127,7 +127,7 @@ function parseLearningText(text: string): LearningParsed {
 }
 
 function weekLabelOnly(weekStart: string) {
-  return `${weekNumberInMonth(weekStart)}주차`;
+  return `${Number(weekStart.slice(5, 7))}월 ${weekNumberInMonth(weekStart)}주차`;
 }
 
 function buildGrowthGatherText(rows: WeeklyNoteRow[]) {
@@ -475,7 +475,7 @@ export default function GrowthHub({ author }: { author: string }) {
       )}
 
       {gatherResult && (
-        <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-6" onClick={() => setGatherResult(null)}>
+        <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-6">
           <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:max-w-4xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div>
