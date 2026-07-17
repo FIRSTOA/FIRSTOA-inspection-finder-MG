@@ -7,7 +7,6 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
-import VisitMetaPanel from "./VisitMetaPanel";
 import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
 import LogisticsForm from "./LogisticsForm";
@@ -38,7 +37,7 @@ function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
     img.src = url;
   });
 }
-import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
+import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
@@ -2807,7 +2806,13 @@ type AuthorPickerProps = {
 function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
   const [open, setOpen] = useState(false);
   const [team, setTeam] = useState<AuthorTeam>("팀장");
+  const [newName, setNewName] = useState("");
+  const { book, addAuthor, removeAuthor } = useAuthorBook();
   const filled = value !== "";
+  const add = () => {
+    addAuthor(team, newName);
+    setNewName("");
+  };
 
   return (
     <>
@@ -2869,25 +2874,37 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
               })}
             </div>
             <div className="flex-1 overflow-y-auto py-1 pb-3">
-              {AUTHOR_BOOK[team].map((name: string) => {
+              <div className="flex gap-1.5 border-b border-slate-100 px-3 py-2">
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+                  placeholder="작성자 추가"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                />
+                <button type="button" onClick={add} className="rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
+              </div>
+              {book[team].map((name: string) => {
                 const active = value === name;
                 return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => {
-                      onChange(name);
-                      setOpen(false);
-                    }}
-                    className="block w-full border-b border-slate-50 px-5 py-3 text-left text-sm transition active:bg-slate-100"
-                    style={{
-                      background: active ? accent : "transparent",
-                      color: active ? "white" : "#0F172A",
-                      fontWeight: active ? 600 : 400,
-                    }}
-                  >
-                    {name}
-                  </button>
+                  <div key={name} className="flex border-b border-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange(name);
+                        setOpen(false);
+                      }}
+                      className="min-w-0 flex-1 px-5 py-3 text-left text-sm transition active:bg-slate-100"
+                      style={{
+                        background: active ? accent : "transparent",
+                        color: active ? "white" : "#0F172A",
+                        fontWeight: active ? 600 : 400,
+                      }}
+                    >
+                      {name}
+                    </button>
+                    <button type="button" onClick={() => removeAuthor(team, name)} className="px-4 text-xs font-bold text-rose-500">삭제</button>
+                  </div>
                 );
               })}
             </div>
@@ -4533,7 +4550,6 @@ export default function App() {
           />
         )}
 
-        {hasOutput && mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
         </>)}
 
       </div>

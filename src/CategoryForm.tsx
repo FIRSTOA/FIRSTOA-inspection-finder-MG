@@ -3,10 +3,8 @@
  *  - 작성자는 author 상태 사용. 나머지는 form 상태.
  */
 import { useState } from "react";
-import { AUTHOR_TEAMS, AUTHOR_BOOK } from "./authors";
+import { useAuthorBook } from "./authors";
 import { CATEGORY_SCHEMAS, type FieldDef } from "./categoryForms";
-
-const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
 type Keyman = { label: string; name: string; phone: string };
 type LoadResult = { grade: string; company: string; region: string; keymen: Keyman[]; author: string };
@@ -22,6 +20,7 @@ type Props = {
 
 export default function CategoryForm({ schemaKey, form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
+  const { authors } = useAuthorBook();
   const schema = CATEGORY_SCHEMAS[schemaKey];
   if (!schema) return null;
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
@@ -52,7 +51,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
           <select value={author} onChange={(e) => setAuthor(e.target.value)}
             className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
             <option value="">선택</option>
-            {AUTHORS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {authors.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
       );
@@ -61,11 +60,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
       <label key={f.key} className="block">
         <span className="text-xs font-medium text-slate-500">{f.label}</span>
         {f.type === "select" ? (
-          <select value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
-            <option value="">선택</option>
-            {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
+          <ChoiceInput value={form[f.key] || ""} onChange={(v) => set(f.key, v)} options={f.options || []} />
         ) : f.type === "textarea" ? (
           <textarea value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)} rows={2}
             className="mt-0.5 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
@@ -74,8 +69,36 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
             className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         )}
       </label>
-    );
+  );
+};
+
+function ChoiceInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  const [direct, setDirect] = useState(Boolean(value && !options.includes(value)));
+  const choose = (v: string) => {
+    setDirect(false);
+    onChange(value === v ? "" : v);
   };
+  return (
+    <div className="mt-1">
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button key={o} type="button" onClick={() => choose(o)}
+            className={`rounded-lg px-3 py-2 text-xs font-bold ${value === o && !direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+            {o}
+          </button>
+        ))}
+        <button type="button" onClick={() => { setDirect(true); if (options.includes(value)) onChange(""); }}
+          className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+          직접입력
+        </button>
+      </div>
+      {direct && (
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
+          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+      )}
+    </div>
+  );
+}
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">

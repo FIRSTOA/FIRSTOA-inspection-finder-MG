@@ -3,10 +3,8 @@
  *  - 키맨 여러 명 드롭다운 + 직접입력. 사무/설계/디자인/개발·세부사양 다중선택. 렌탈/구매/유지보수 드롭다운.
  */
 import { useState } from "react";
-import { AUTHOR_TEAMS, AUTHOR_BOOK } from "./authors";
+import { useAuthorBook } from "./authors";
 import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
-
-const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
 export type PcFormState = {
   purpose: string; spec: string; region: string; company: string; grade: string;
@@ -55,15 +53,23 @@ function Field({ label, value, onChange, star }: { label: string; value: string;
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  const [direct, setDirect] = useState(Boolean(value && !options.includes(value)));
+  const choose = (v: string) => {
+    setDirect(false);
+    onChange(value === v ? "" : v);
+  };
   return (
-    <label className="block">
+    <div className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
-        <option value="">선택</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </label>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {options.map((o) => <button key={o} type="button" onClick={() => choose(o)}
+          className={`rounded-lg px-3 py-2 text-xs font-bold ${value === o && !direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>{o}</button>)}
+        <button type="button" onClick={() => { setDirect(true); if (options.includes(value)) onChange(""); }}
+          className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>직접입력</button>
+      </div>
+      {direct && <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
+        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />}
+    </div>
   );
 }
 
@@ -138,6 +144,7 @@ function ChipGroups({ label, groups, value, onChange }: { label: string; groups:
 
 export default function PcForm({ form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
+  const { authors } = useAuthorBook();
   const set = (k: keyof PcFormState) => (v: string) => setForm({ ...form, [k]: v });
 
   const handleLoad = (src: "inspection" | "as") => {
@@ -175,7 +182,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
         <select value={author} onChange={(e) => setAuthor(e.target.value)}
           className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
           <option value="">선택</option>
-          {AUTHORS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {authors.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
       </label>
 
