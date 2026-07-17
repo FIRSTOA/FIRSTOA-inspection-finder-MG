@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { AUTHOR_TEAMS, AUTHOR_BOOK } from "./authors";
+import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
 
 const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
@@ -200,8 +201,8 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
         { title: "세대", options: ["11세대", "12세대", "13세대", "14세대"] },
       ]} />
       <div className="grid grid-cols-2 gap-2">
-        <Field label="지역" value={form.region} onChange={set("region")} />
-        <Field label="등급" value={form.grade} onChange={set("grade")} />
+        <Select label="지역" value={form.region} onChange={set("region")} options={REGION_OPTIONS} />
+        <Select label="등급" value={form.grade} onChange={set("grade")} options={GRADE_OPTIONS} />
       </div>
       <Field label="업체명" value={form.company} onChange={set("company")} />
       <div className="grid grid-cols-2 gap-2">
@@ -210,10 +211,10 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
       </div>
       <Field label="IT담당자" value={form.itContact} onChange={set("itContact")} />
       <div className="grid grid-cols-2 gap-2">
-        <Select label="렌탈/구매/유지보수" value={form.rentalBuyMaint} onChange={set("rentalBuyMaint")} options={["렌탈", "구매", "유지보수"]} />
-        <Field label="지정업체" value={form.designatedVendor} onChange={set("designatedVendor")} />
+        <Select label="렌탈/구매/유지보수" value={form.rentalBuyMaint} onChange={set("rentalBuyMaint")} options={["렌탈", "구매", "유지보수", "미정"]} />
+        <Select label="지정업체" value={form.designatedVendor} onChange={set("designatedVendor")} options={["있음", "없음", "확인필요"]} />
       </div>
-      <Field label="지정업체만족도" value={form.designatedSat} onChange={set("designatedSat")} />
+      <Select label="지정업체만족도" value={form.designatedSat} onChange={set("designatedSat")} options={["만족", "보통", "불만", "확인필요"]} />
 
       <div className="text-[11px] font-bold text-slate-400">＊총 인원</div>
       <div className="grid grid-cols-2 gap-2">
@@ -227,7 +228,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
         <Field label="금액" value={form.amount} onChange={set("amount")} />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="시기" value={form.timing} onChange={set("timing")} />
+        <Select label="시기" value={form.timing} onChange={set("timing")} options={["즉시", "이번달", "다음달", "분기내", "미정"]} />
         <Field label="시기 추가 설명" value={form.timingNote} onChange={set("timingNote")} />
       </div>
       <Field label="어필 OR 추가영업" value={form.appeal} onChange={set("appeal")} />

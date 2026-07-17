@@ -2689,35 +2689,6 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
   );
 }
 
-function MinuteGridSelect({ value, onChange, accent }: {
-  value: string;
-  onChange: (v: string) => void;
-  accent: string;
-}) {
-  return (
-    <div className="grid grid-cols-6 gap-1.5">
-      {MINUTE_OPTIONS.map((minute: string) => {
-        const active = value === minute;
-        return (
-          <button
-            key={minute}
-            type="button"
-            onClick={() => onChange(active ? "" : minute)}
-            className="rounded-lg border py-2 text-xs font-bold transition active:scale-95"
-            style={{
-              background: active ? accent : "white",
-              borderColor: active ? accent : "#CBD5E1",
-              color: active ? "white" : "#334155",
-            }}
-          >
-            {minute}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 type DeviceInfo = Pick<PerItemForm, "model" | "serial" | "asset" | "content">;
 const EMPTY_DEVICE_INFO: DeviceInfo = { model: "", serial: "", asset: "", content: "" };
 
@@ -3268,10 +3239,13 @@ function ProcessingFormPanel({
               accent={accent}
               suffix="시"
             />
-            <MinuteGridSelect
+            <NumSelect
               value={shared.arrivalMinute}
               onChange={(v) => setSharedF("arrivalMinute", v)}
+              options={MINUTE_OPTIONS}
+              placeholder="분"
               accent={accent}
+              suffix="분"
             />
           </div>
         </div>
@@ -3395,10 +3369,13 @@ function AirPurifierFormPanel({
               accent={accent}
               suffix="시"
             />
-            <MinuteGridSelect
+            <NumSelect
               value={form.arrivalMinute}
               onChange={(v) => setAirF("arrivalMinute", v)}
+              options={MINUTE_OPTIONS}
+              placeholder="분"
               accent={accent}
+              suffix="분"
             />
           </div>
         </div>

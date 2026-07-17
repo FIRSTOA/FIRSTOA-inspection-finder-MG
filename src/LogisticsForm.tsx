@@ -28,7 +28,10 @@ export default function LogisticsForm({ form, setForm, author, setAuthor }: { fo
     <Choice label="소모품 (납품/청구여부)" value={form.consumableBilling} onChange={(v)=>set("consumableBilling",v)} values={["납품", "청구", "해당없음"]}/>
     <Choice label="셋팅 여부" value={form.setup} onChange={(v)=>set("setup",v)} values={["완료", "미완료", "해당없음"]}/>
     <div className="grid gap-3 sm:grid-cols-2"><Choice label="이메일카운터 셋팅" value={form.emailCounter} onChange={(v)=>set("emailCounter",v)} values={["완료", "미완료", "해당없음"]}/><div><div className="text-xs font-semibold text-slate-500">한조 셋팅</div><div className="mt-1 flex flex-wrap gap-1.5">{["한조","모바일한조","한조공유기","설치불가","직접입력"].map((v)=><button type="button" key={v} onClick={()=>{if(v==="직접입력"){setHanjoDirect(true);set("hanjo","");}else{setHanjoDirect(false);set("hanjo",v);}}} className={`rounded-lg px-3 py-2 text-xs font-bold ${(v==="직접입력"?hanjoDirect:form.hanjo===v)?"bg-slate-700 text-white":"border border-slate-200 bg-white text-slate-500"}`}>{v}</button>)}</div>{hanjoDirect&&<input value={form.hanjo} onChange={(e)=>set("hanjo",e.target.value)} placeholder="한조 셋팅 직접입력" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"/>}</div></div>
-    <div className="grid gap-3 sm:grid-cols-2"><Choice label="상태체크" value={form.condition} onChange={(v)=>set("condition",v)} values={["내부", "외부", "내부+외부"]}/><TextField label="여분토너체크 (철수 시)" value={form.spareToner} onChange={(v)=>set("spareToner",v)} placeholder="여분토너 상태 직접입력"/></div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Choice label="상태체크" value={form.condition} onChange={(v)=>set("condition",v)} values={["내부", "외부", "내부+외부", "이상없음"]}/>
+      <Choice label="여분토너체크 (철수 시)" value={form.spareToner} onChange={(v)=>set("spareToner",v)} values={["회수완료", "현장보관", "없음", "확인필요", "해당없음"]}/>
+    </div>
     <label className="block"><span className="text-xs font-semibold text-slate-500">특이사항</span><textarea value={form.notes} onChange={(e)=>set("notes",e.target.value)} rows={4} className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm"/></label>
   </div>;
 }

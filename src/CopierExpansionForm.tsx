@@ -1,4 +1,5 @@
 import { AUTHOR_BOOK, AUTHOR_TEAMS } from "./authors";
+import { GRADE_OPTIONS } from "./formOptions";
 
 const AUTHORS: string[] = AUTHOR_TEAMS.flatMap((t) => AUTHOR_BOOK[t]);
 
@@ -91,6 +92,19 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
   );
 }
 
+function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
+        <option value="">선택</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function TextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <label className="block">
@@ -146,14 +160,14 @@ export default function CopierExpansionForm({ form, setForm, author, setAuthor, 
       <Field label="상호명" value={form.company} onChange={set("company")} />
       <Field label="업종 및 인원(매출)" value={form.industryPeopleRevenue} onChange={set("industryPeopleRevenue")} placeholder="모를 경우 미기재" />
       <Field label="실제 미팅 주소" value={form.meetingAddress} onChange={set("meetingAddress")} />
-      <Field label="프로젝트/진행상황" value={form.projectStatus} onChange={set("projectStatus")} placeholder="예: 간단견적제출 / 대기" />
+      <Select label="프로젝트/진행상황" value={form.projectStatus} onChange={set("projectStatus")} options={["정보확인", "간단견적제출", "견적대기", "미팅예정", "진행중", "보류", "종료"]} />
 
       <div className="text-[11px] font-bold text-slate-400">■ 키맨 정보</div>
       <div className="grid grid-cols-2 gap-2">
         <Field label="성함 및 직함" value={form.keymanNameTitle} onChange={set("keymanNameTitle")} />
         <Field label="연락처" value={form.contact} onChange={set("contact")} />
       </div>
-      <Field label="의사결정 파급력" value={form.decisionPower} onChange={set("decisionPower")} placeholder="최종결정 / 실무자 / 창업멤버 등" />
+      <Select label="의사결정 파급력" value={form.decisionPower} onChange={set("decisionPower")} options={["최종결정", "실무책임자", "실무자", "창업멤버", "영향력 낮음", "확인필요"]} />
       <Field label="개인 히스토리" value={form.personalHistory} onChange={set("personalHistory")} placeholder="전직장, 관심사 등 친밀도 형성용" />
 
       <div className="text-[11px] font-bold text-slate-400">■ 영업 파이프라인</div>
@@ -166,7 +180,7 @@ export default function CopierExpansionForm({ form, setForm, author, setAuthor, 
 
       <div className="text-[11px] font-bold text-slate-400">■ 활동 내용</div>
       <TextArea label="특이사항(미팅내용)" value={form.notes} onChange={set("notes")} placeholder="경쟁사이름, 불만사항, 고객성향, 요청자료 등을 자유롭게 적어주세요." />
-      <Field label="관리등급 (V/SS/S/NN/N)" value={form.grade} onChange={set("grade")} />
+      <Select label="관리등급 (N/NN/S/SS/V)" value={form.grade} onChange={set("grade")} options={GRADE_OPTIONS} />
     </div>
   );
 }
