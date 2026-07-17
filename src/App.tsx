@@ -4558,7 +4558,7 @@ export default function App() {
           </div>
         )}
 
-        {hasOutput && mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
+        {hasOutput && mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}
         </>)}
 
       </div>
