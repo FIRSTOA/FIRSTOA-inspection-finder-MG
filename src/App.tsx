@@ -1317,6 +1317,38 @@ function extractDepartment(text: string): string {
   return "";
 }
 
+const ADDRESS_START_PATTERN = new RegExp(
+  `(?:^|\\s)(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|${SEOUL_DISTRICTS.join("|")})\\s+`
+);
+
+function splitCompanyAddress(value: string): { company: string; address: string } {
+  const raw = value.replace(/\s+/g, " ").trim();
+  const match = raw.match(ADDRESS_START_PATTERN);
+  if (!match || match.index === undefined || match.index <= 0) return { company: raw, address: "" };
+  const company = raw.slice(0, match.index).replace(/\s*(?:주소|위치)\s*[:：]?\s*$/i, "").trim();
+  const address = raw.slice(match.index).trim();
+  return company ? { company, address } : { company: raw, address: "" };
+}
+
+function normalizeVisionInspectionText(text: string): string {
+  const lines = text.split("\n");
+  const companyIndex = lines.findIndex((line) => /^업체명\s*[:：]/.test(line));
+  const departmentIndex = lines.findIndex((line) => /^부서명\s*[:：]/.test(line));
+  if (companyIndex < 0) return text;
+
+  const companyValue = parseValueAfterColon(lines[companyIndex], "업체명");
+  const split = splitCompanyAddress(companyValue);
+  if (split.company !== companyValue) lines[companyIndex] = `업체명: ${split.company}`;
+
+  if (departmentIndex >= 0) {
+    const currentDepartment = parseValueAfterColon(lines[departmentIndex], "부서명");
+    const inferredDepartment = currentDepartment || extractDepartment(`${split.address} ${companyValue}`);
+    if (inferredDepartment) lines[departmentIndex] = `부서명: ${inferredDepartment}`;
+  }
+
+  return lines.join("\n");
+}
+
 function extractPhonesWithContext(text: string): string {
   const contactNameMatch = text.match(
     /접수자성함\s*([^\n]+?)\s+접수자연락처\s*(01\d[- ]?\d{3,4}[- ]?\d{4}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/
@@ -3939,9 +3971,10 @@ export default function App() {
         } else {
           // 미양식 등: blank-report 변환기가 점검 양식을 재가공하며 망가뜨리므로,
           // 변환 없이 비전 결과를 그대로 결과로 세팅하고 편집 폼만 파싱해 채운다.
-          const count = Math.max(1, countInspectionItems(resp.text));
-          const forms = parseItemDataFromText(resp.text, count);
-          setTextOutput(resp.text);
+          const normalizedText = normalizeVisionInspectionText(resp.text);
+          const count = Math.max(1, countInspectionItems(normalizedText));
+          const forms = parseItemDataFromText(normalizedText, count);
+          setTextOutput(normalizedText);
           setListOutput([]);
           setItemForms(forms.length ? forms : [{ ...EMPTY_ITEM_FORM }]);
           setSelectedItem(0);
@@ -3951,7 +3984,7 @@ export default function App() {
           setReportTypes(FIXED_INSPECTION_REPORT_TYPES);
           setReportTypeOther("");
           skipAutoRef.current = true; // 입력 변경으로 자동 변환이 덮어쓰지 않게
-          setInputText(resp.text);
+          setInputText(normalizedText);
         }
         showToast("사진에서 양식을 만들었어요");
       } else {
