@@ -4045,6 +4045,7 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "field" | "itHistory" | "counterSms" | "happycall" | "itquote" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
+  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
@@ -4278,12 +4279,14 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
   const navGroups = [
-    { title: "홈", items: [["home", "홈"]] },
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["itquote", "견적서 발송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
+  const homeItem = ["home", "홈"] as [typeof screen, string];
   const navItems = navGroups.flatMap((group) => group.items);
-  const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
+  const screenTitle = (screen === "home" ? homeItem : navItems.find(([key]) => key === screen))?.[1] || "홈";
+  const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => openNavGroups[group.title] || group.items.some(([key]) => key === screen);
+  const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -4296,16 +4299,26 @@ export default function App() {
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
             <nav className="space-y-3 p-2">
+              <button type="button"
+                onClick={() => { setScreen("home"); setMenuOpen(false); }}
+                className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === "home" ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                홈
+              </button>
               {navGroups.map((group) => (
                 <div key={group.title}>
-                  <div className="px-3 py-1 text-[11px] font-black text-slate-400">{group.title}</div>
-                  {group.items.map(([key, label]) => (
-                    <button key={key} type="button"
-                      onClick={() => { setScreen(key); setMenuOpen(false); }}
-                      className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                      {label}
-                    </button>
-                  ))}
+                  <button type="button" onClick={() => toggleNavGroup(group.title)} className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
+                    <span>{group.title}</span>
+                    <span className="text-xs text-slate-400">{isGroupOpen(group) ? "접기" : "펼치기"}</span>
+                  </button>
+                  {isGroupOpen(group) && <div className="ml-3 border-l border-slate-200 pl-2">
+                    {group.items.map(([key, label]) => (
+                      <button key={key} type="button"
+                        onClick={() => { setScreen(key); setMenuOpen(false); }}
+                        className={`block w-full rounded-xl px-4 py-2.5 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>}
                 </div>
               ))}
               <a
@@ -4328,10 +4341,18 @@ export default function App() {
             <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>
           </div>
           <nav className="flex-1 space-y-5 px-3 py-4">
+            <button type="button" onClick={() => setScreen("home")}
+              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === "home" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <span>홈</span>
+              {screen === "home" && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+            </button>
             {navGroups.map((group) => (
               <div key={group.title}>
-                <div className="mb-1 px-3 text-[11px] font-black uppercase tracking-wide text-slate-500">{group.title}</div>
-                <div className="space-y-1">
+                <button type="button" onClick={() => toggleNavGroup(group.title)} className="mb-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white">
+                  <span>{group.title}</span>
+                  <span className="text-[11px]">{isGroupOpen(group) ? "접기" : "펼치기"}</span>
+                </button>
+                {isGroupOpen(group) && <div className="ml-3 space-y-1 border-l border-white/10 pl-2">
                   {group.items.map(([key, label]) => (
                     <button key={key} type="button" onClick={() => setScreen(key)}
                       className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
@@ -4339,7 +4360,7 @@ export default function App() {
                       {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
                     </button>
                   ))}
-                </div>
+                </div>}
               </div>
             ))}
           </nav>
