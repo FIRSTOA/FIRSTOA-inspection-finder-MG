@@ -138,6 +138,7 @@ export type LevelGoal = {
   month2: string;
   month3: string;
   progress: number;
+  resultMerged?: boolean;
 };
 export type QuarterlyPlan = { author: string; year: number; quarter: number; goals: LevelGoal[] };
 export async function getQuarterlyPlan(author: string, year: number, quarter: number): Promise<QuarterlyPlan> {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import {
   GOLDEN_CATEGORIES,
   GOLDEN_QUESTIONS,
@@ -218,6 +219,7 @@ export default function GrowthHub({ author }: { author: string }) {
   const [gatherResult, setGatherResult] = useState<{ title: string; text: string } | null>(null);
   const [planAutoSaveStatus, setPlanAutoSaveStatus] = useState<AutoSaveStatus>("idle");
   const [cardAutoSaveStatus, setCardAutoSaveStatus] = useState<AutoSaveStatus>("idle");
+  const [goldenBusy, setGoldenBusy] = useState(false);
   const planLastSavedRef = useRef("");
   const cardLastSavedRef = useRef("");
 
@@ -328,7 +330,7 @@ export default function GrowthHub({ author }: { author: string }) {
     URL.revokeObjectURL(url);
   };
 
-  const copyGoldenAiPrompt = async () => {
+  const buildGoldenPayload = () => {
     const planText = regularGoals.map((goal, i) => [
       `${i + 1}. [${goal.category}] ${goal.title || "(목표 미입력)"}`,
       `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress || 0}%`,
@@ -350,29 +352,43 @@ export default function GrowthHub({ author }: { author: string }) {
       row.challenge ? `아이디어:\n${row.challenge}` : "",
       row.special ? `특이사항:\n${row.special}` : "",
     ].filter(Boolean).join("\n")).join("\n\n");
-    const prompt = `[골든미팅카드 작성 요청]
-${year}년 ${quarter}분기 최신 양식 기준으로 작성해줘.
-반드시 수치화와 진행률 %를 포함해줘.
-근거가 부족한 항목은 임의로 만들지 말고 "기록 보완 필요"라고 표시해줘.
-질문은 아래 4개 기준으로 정리해줘.
-- 지난기간 나의성과는?
-- 타인의 성과에 내가 기여한 것은?
-- 성장을 위한 학습 & 발견한 지식
-- 다음 도전을 위한 지원 요청
+    return {
+      year,
+      quarter,
+      author: person,
+      categories: GOLDEN_CATEGORIES,
+      questions: GOLDEN_QUESTIONS,
+      currentAnswers: card.answers,
+      planText: planText || "없음",
+      missionText: missionText || "없음",
+      recordText: recordText || "없음",
+    };
+  };
 
-[계획표/분기결과표]
-${planText || "없음"}
-
-[미션결과표]
-${missionText || "없음"}
-
-[성장기록 근거]
-${recordText || "없음"}
-
-[작성 중인 골든미팅카드]
-${JSON.stringify(card.answers, null, 2)}`;
-    await navigator.clipboard.writeText(prompt);
-    setMessage("최신 분기 기준 골든미팅카드 AI 작성 프롬프트를 복사했습니다.");
+  const runGoldenAi = async () => {
+    if (!person) {
+      setMessage("작성자를 먼저 선택하세요.");
+      return;
+    }
+    setGoldenBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/golden-card-transform`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+        body: JSON.stringify(buildGoldenPayload()),
+      });
+      if (!res.ok) throw new Error(`골든미팅카드 AI 변환 실패(${res.status})`);
+      const data = await res.json();
+      const answers = data.answers as GoldenCard["answers"] | undefined;
+      if (!answers) throw new Error("AI 응답에 answers가 없습니다.");
+      setCard({ ...card, author: person, year, quarter, answers });
+      setMessage(`골든미팅카드를 AI로 변환했습니다. 사용 모델: ${data.model || "기본 모델"}`);
+    } catch (e) {
+      setMessage((e as Error).message || "골든미팅카드 AI 변환에 실패했습니다.");
+    } finally {
+      setGoldenBusy(false);
+    }
   };
 
   const addGoal = (kind: "regular" | "mission" = "regular") => {
@@ -389,6 +405,7 @@ ${JSON.stringify(card.answers, null, 2)}`;
       month2: "",
       month3: "",
       progress: 0,
+      resultMerged: false,
     };
     setPlan({ ...plan, author: person, year, quarter, goals: [...plan.goals, g] });
   };
@@ -556,41 +573,57 @@ ${JSON.stringify(card.answers, null, 2)}`;
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 계획표</h3>
-              <p className="text-xs font-semibold text-slate-500">공식 양식 기준으로 목표, 등급, 레벨, 예산, 진도율을 관리합니다.</p>
+              <p className="text-xs font-semibold text-slate-500">시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다.</p>
             </div>
-            <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">목표 추가</button>
+            <div className="flex gap-2">
+              <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">기본업무 추가</button>
+              <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">미션업무 추가</button>
+            </div>
           </div>
           {!person && <div className="mt-8 text-center text-sm text-amber-600">작성자 직원을 선택하세요.</div>}
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-left">
-              <thead className="bg-slate-50">
+            <table className="w-full min-w-[1680px] border-collapse text-left">
+              <thead>
                 <tr>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">구분</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">업무 등급</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">현재 레벨</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표 레벨</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">요청예산</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">예산반영</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">진도율</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500"></th>
+                  <th colSpan={8} className="border border-slate-300 bg-blue-50 px-3 py-2 text-center text-xs font-black text-slate-700">기본업무 (우선순위순)</th>
+                  <th colSpan={6} className="border border-slate-300 bg-amber-50 px-3 py-2 text-center text-xs font-black text-orange-700">미션업무</th>
+                </tr>
+                <tr>
+                  {["구분", "업무등급", "목표", "현재레벨", "목표레벨", "요청예산(분기)", "예산반영", "진도율"].map((label) => <th key={label} className="border border-slate-300 bg-slate-50 px-2 py-2 text-xs font-black text-slate-500">{label}</th>)}
+                  {["목표", "업무등급", "요청예산(분기)", "예산반영", "진도율", ""].map((label) => <th key={`m-${label}`} className="border border-slate-300 bg-amber-50 px-2 py-2 text-xs font-black text-orange-700">{label}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {regularGoals.map((g) => (
-                  <tr key={g.id} className="border-b border-slate-100 align-top">
-                    <td className="px-3 py-3"><select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="w-28 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">{PLAN_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
-                    <td className="px-3 py-3"><select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
-                    <td className="px-3 py-3"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} className="w-full min-w-[360px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6" /></td>
-                    <td className="px-3 py-3"><input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
-                    <td className="px-3 py-3"><input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
-                    <td className="px-3 py-3"><input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} className="w-28 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
-                    <td className="px-3 py-3"><input value={g.reflectedBudget || ""} onChange={(e) => setGoal(g.id, { reflectedBudget: e.target.value })} className="w-28 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
-                    <td className="px-3 py-3"><div className="flex items-center gap-1"><input type="number" min="0" max="999" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /><span className="text-xs font-bold text-slate-400">%</span></div></td>
-                    <td className="px-3 py-3"><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((x) => x.id !== g.id) })} className="rounded-md px-2 py-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button></td>
+                {Array.from({ length: Math.max(regularGoals.length, missionGoals.length, 1) }, (_, i) => {
+                  const g = regularGoals[i];
+                  const m = missionGoals[i];
+                  return (
+                  <tr key={`${g?.id || "empty"}-${m?.id || "empty"}-${i}`} className="align-top">
+                    {g ? (
+                      <>
+                        <td className="border border-slate-300 p-2"><select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="w-24 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold">{PLAN_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
+                        <td className="border border-slate-300 p-2"><select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="w-16 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
+                        <td className="border border-slate-300 p-2"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} className="w-full min-w-[430px] resize-y rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900" /></td>
+                        <td className="border border-slate-300 p-2"><input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} className="w-16 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} className="w-16 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} className="w-24 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input value={g.reflectedBudget || ""} onChange={(e) => setGoal(g.id, { reflectedBudget: e.target.value })} className="w-24 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input type="number" min="0" max="999" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} className="w-16 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
+                      </>
+                    ) : <td colSpan={8} className="border border-slate-300 bg-slate-50 p-2 text-center text-xs text-slate-300">기본업무 없음</td>}
+                    {m ? (
+                      <>
+                        <td className="border border-slate-300 p-2"><textarea value={m.title} onChange={(e) => setGoal(m.id, { title: e.target.value })} rows={4} className="w-full min-w-[300px] resize-y rounded border border-orange-200 bg-white p-2 text-sm font-bold leading-5 text-orange-700" /></td>
+                        <td className="border border-slate-300 p-2"><select value={m.grade || ""} onChange={(e) => setGoal(m.id, { grade: e.target.value })} className="w-16 rounded border border-orange-200 bg-white px-2 py-1.5 text-sm"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
+                        <td className="border border-slate-300 p-2"><input value={m.budget} onChange={(e) => setGoal(m.id, { budget: e.target.value })} className="w-24 rounded border border-orange-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input value={m.reflectedBudget || ""} onChange={(e) => setGoal(m.id, { reflectedBudget: e.target.value })} className="w-24 rounded border border-orange-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><input type="number" min="0" max="999" value={m.progress || ""} onChange={(e) => setGoal(m.id, { progress: Number(e.target.value) || 0 })} className="w-16 rounded border border-orange-200 px-2 py-1.5 text-sm" /></td>
+                        <td className="border border-slate-300 p-2"><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((x) => x.id !== m.id) })} className="rounded px-2 py-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button></td>
+                      </>
+                    ) : <td colSpan={6} className="border border-slate-300 bg-amber-50/40 p-2 text-center text-xs text-orange-200">미션업무 없음</td>}
                   </tr>
-                ))}
-                {!regularGoals.length && <tr><td colSpan={9} className="p-12 text-center text-sm text-slate-400">계획표 목표를 추가하세요.</td></tr>}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -621,6 +654,7 @@ ${JSON.stringify(card.answers, null, 2)}`;
                   <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">현재</th>
                   <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표</th>
                   <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">진도율</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">셀</th>
                   {[1, 2, 3].map((m) => <th key={m} className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">{(quarter - 1) * 3 + m}월</th>)}
                 </tr>
               </thead>
@@ -633,10 +667,17 @@ ${JSON.stringify(card.answers, null, 2)}`;
                     <td className="px-3 py-3 text-sm text-slate-600">{g.currentLevel || "-"}</td>
                     <td className="px-3 py-3 text-sm text-slate-600">{g.targetLevel || "-"}</td>
                     <td className="px-3 py-3 text-sm font-black text-blue-700">{g.progress || 0}%</td>
-                    {[1, 2, 3].map((m) => <td key={m} className="px-3 py-3"><textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="w-full min-w-[260px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" /></td>)}
+                    <td className="px-3 py-3"><button type="button" onClick={() => setGoal(g.id, { resultMerged: !g.resultMerged })} className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-500 hover:bg-slate-50">{g.resultMerged ? "나누기" : "합치기"}</button></td>
+                    {g.resultMerged ? (
+                      <td colSpan={3} className="px-3 py-3">
+                        <textarea value={g.month1} onChange={(e) => setGoal(g.id, { month1: e.target.value })} rows={8} className="w-full min-w-[820px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" />
+                      </td>
+                    ) : (
+                      [1, 2, 3].map((m) => <td key={m} className="px-3 py-3"><textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="w-full min-w-[260px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" /></td>)
+                    )}
                   </tr>
                 ))}
-                {!regularGoals.length && <tr><td colSpan={9} className="p-12 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</td></tr>}
+                {!regularGoals.length && <tr><td colSpan={10} className="p-12 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -686,8 +727,8 @@ ${JSON.stringify(card.answers, null, 2)}`;
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
               <p className="text-xs font-semibold text-slate-500">최신 선택 분기의 계획표·결과표·미션결과표·성장기록을 근거로 작성하세요.</p>
             </div>
-            <button type="button" onClick={copyGoldenAiPrompt} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100">
-              최신분기 AI작성 프롬프트 복사
+            <button type="button" onClick={runGoldenAi} disabled={goldenBusy} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+              {goldenBusy ? "AI 변환 중..." : "최신분기 AI변환"}
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
