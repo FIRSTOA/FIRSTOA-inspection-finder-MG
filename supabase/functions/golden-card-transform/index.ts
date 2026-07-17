@@ -24,7 +24,7 @@ const questionMap: Record<string, string> = {
 function buildInstruction(quarterLabel: string) {
   return [
     "너는 퍼스트전산 분기 골든미팅카드 작성 담당자야.",
-    `아래 현재 분기 결과표/미션표/성장기록을 분석해서, 참고용 기존 골든미팅카드와 같은 형식·문체로 ${quarterLabel} 골든미팅카드를 작성해줘.`,
+    `아래 현재 분기 결과표/미션표를 분석해서, 참고용 기존 골든미팅카드와 같은 형식·문체로 ${quarterLabel} 골든미팅카드를 작성해줘.`,
     "참고용 기존 골든미팅카드는 문체와 구성만 참고한다. 성과, 수치, 달성률, 완료여부는 반드시 현재 분기 입력 자료만 근거로 사용한다.",
     "",
     "[출력 구조 - 절대 규칙]",
@@ -68,8 +68,8 @@ function buildInstruction(quarterLabel: string) {
     "[입력 자료 우선순위]",
     "1순위: 현재 분기 기본업무/목표/결과표",
     "2순위: 현재 분기 미션/상세 실행 결과표",
-    "3순위: 현재 분기 성장기록",
-    "4순위: 참고용 기존 골든미팅카드 결과 예시",
+    "3순위: 참고용 기존 골든미팅카드 결과 예시",
+    "성장기록 모아보기 자료는 사용하지 않는다. 계획표·분기결과표·미션결과표에 없는 내용은 골든미팅카드에 작성하지 않는다.",
     "참고용 기존 골든미팅카드는 문체 참고용일 뿐 현재 분기 성과의 근거가 될 수 없다.",
     "",
     `"[분기] ${quarterLabel}"`,
@@ -132,7 +132,6 @@ Deno.serve(async (req) => {
       },
       resultText: payload.planText || "",
       missionText: payload.missionText || "",
-      growthRecordText: payload.recordText || "",
       currentAnswers: payload.currentAnswers || {},
       exampleGoldenCard: {
         quarter: payload.exampleQuarter || "",

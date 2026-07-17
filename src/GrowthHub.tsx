@@ -354,13 +354,6 @@ export default function GrowthHub({ author }: { author: string }) {
       `${(quarter - 1) * 3 + 2}월: ${goal.month2 || "-"}`,
       `${(quarter - 1) * 3 + 3}월: ${goal.month3 || "-"}`,
     ].join("\n")).join("\n\n");
-    const recordText = rows.map((row) => [
-      `[${weekLabelOnly(row.weekStart)}]`,
-      row.growth ? `성장노트:\n${row.growth}` : "",
-      row.learning ? `배운점:\n${row.learning}` : "",
-      row.challenge ? `아이디어:\n${row.challenge}` : "",
-      row.special ? `특이사항:\n${row.special}` : "",
-    ].filter(Boolean).join("\n")).join("\n\n");
     return {
       year,
       quarter,
@@ -373,7 +366,6 @@ export default function GrowthHub({ author }: { author: string }) {
       exampleAnswers: exampleCard?.answers || {},
       planText: planText || "없음",
       missionText: missionText || "없음",
-      recordText: recordText || "없음",
     };
   };
 
@@ -752,7 +744,7 @@ export default function GrowthHub({ author }: { author: string }) {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
-              <p className="text-xs font-semibold text-slate-500">최신 선택 분기의 계획표·결과표·미션결과표·성장기록을 근거로 작성하세요.</p>
+              <p className="text-xs font-semibold text-slate-500">최신 선택 분기의 계획표·분기결과표·미션결과표를 근거로 작성하세요.</p>
             </div>
             <button type="button" onClick={runGoldenAi} disabled={goldenBusy} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50">
               {goldenBusy ? "AI 변환 중..." : "최신분기 AI변환"}
