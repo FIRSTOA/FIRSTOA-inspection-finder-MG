@@ -4327,7 +4327,7 @@ export default function App() {
         </aside>
       )}
 
-      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" || screen === "growth" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : screen === "field" ? "max-w-3xl lg:max-w-[1280px]" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen === "daily" || screen === "weekly" || screen === "growth" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
         {/* Header — 브랜딩 */}
@@ -4364,7 +4364,7 @@ export default function App() {
         </header>
 
         {/* 홈 / 해피콜 / IT견적 화면 */}
-        {screen === "home" && <Home onGoField={() => setScreen("field")} />}
+        {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
@@ -4472,7 +4472,9 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
-        <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+        <div className="min-w-0 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-start gap-2.5">
             <span className="text-xl" aria-hidden="true">{FIELD_GUIDES[mode].icon}</span>
             <div className="min-w-0">
@@ -4570,13 +4572,77 @@ export default function App() {
           />
         )}
 
+        </div>
+        <aside className="sticky top-5 hidden max-h-[calc(100vh-2.5rem)] min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:flex-col">
+          <div className="border-b border-slate-200 px-4 py-3">
+            <div className="text-sm font-black text-slate-950">결과 미리보기</div>
+            <div className="mt-0.5 text-xs font-semibold text-slate-400">PC에서는 입력과 결과를 동시에 확인합니다.</div>
+          </div>
+          <div className="min-h-[240px] flex-1 overflow-y-auto p-3">
+            {hasOutput ? (
+              <div className="space-y-2">
+                {resultBlocks.map((block: ResultBlock, i: number) => {
+                  const active = block.device !== null && block.device === selectedItem;
+                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
+                  return (
+                    <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2" style={{ borderLeft: `4px solid ${active ? config.accent : "transparent"}` }}>
+                      <textarea
+                        value={text}
+                        onChange={(e) => handlePreviewBlockChange(block, i, e.target.value)}
+                        rows={Math.max(3, Math.min(10, text.split("\n").length))}
+                        className="w-full resize-none bg-transparent font-mono text-xs leading-5 text-slate-800 outline-none"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center text-sm font-semibold text-slate-400">
+                입력하면 결과가 여기에 표시됩니다.
+              </div>
+            )}
+          </div>
+          {photos.length > 0 && (
+            <div className="border-t border-slate-200 px-3 py-2">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                {photos.map((p, i) => (
+                  <div key={p.url} className="relative shrink-0">
+                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-md object-cover" />}
+                    <button type="button" onClick={() => removePhoto(i)} className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="space-y-2 border-t border-slate-200 bg-slate-50 p-3">
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={handleReset} className="rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500">초기화</button>
+              <button onClick={handleCopyAll} disabled={!hasOutput} className="rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40">복사</button>
+              <label className="cursor-pointer rounded-lg border border-slate-200 bg-white py-2.5 text-center text-sm font-bold text-slate-600">
+                사진{photos.length > 0 ? ` ${photos.length}` : ""}
+                <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(mode === "inspection" || mode === "blank-report") ? (
+                <>
+                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
+                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
+                </>
+              ) : (
+                <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
+              )}
+            </div>
+          </div>
+        </aside>
+        </div>
         </>)}
 
       </div>
 
       {/* Sticky bottom: result panel + action bar (FIELD 전용) */}
       {screen === "field" && (
-      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
         {hasOutput && (
           <div className="mx-auto max-w-3xl px-3 pt-1 sm:px-6">
             <button

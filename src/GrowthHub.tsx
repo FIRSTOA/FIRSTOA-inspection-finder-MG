@@ -1,14 +1,85 @@
 import { useEffect, useMemo, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import {
-  GOLDEN_CATEGORIES, GOLDEN_QUESTIONS, getGoldenCard, getQuarterlyPlan, getWeeklyNotes, saveGoldenCard,
-  saveQuarterlyPlan, type GoldenCard, type LevelGoal, type QuarterlyPlan, type WeeklyNoteRow,
+  GOLDEN_CATEGORIES,
+  GOLDEN_QUESTIONS,
+  getGoldenCard,
+  getQuarterlyPlan,
+  getWeeklyNotes,
+  saveGoldenCard,
+  saveQuarterlyPlan,
+  type GoldenCard,
+  type LevelGoal,
+  type QuarterlyPlan,
+  type WeeklyNoteRow,
 } from "./visits";
 
 type Tab = "records" | "plan" | "golden";
-const types = [["growth", "성장노트", "💡"], ["learning", "배운 점", "🧡"], ["challenge", "아이디어", "🎯"], ["special", "특이사항", "📌"]] as const;
+type RecordType = "all" | "growth" | "learning" | "challenge" | "special";
+type RecordPeriod = "month" | "quarter";
+
+const recordTypes = [
+  ["growth", "성장노트"],
+  ["learning", "배운 점"],
+  ["challenge", "아이디어"],
+  ["special", "특이사항"],
+] as const;
+
+const typeLabels: Record<RecordType, string> = {
+  all: "전체",
+  growth: "성장노트",
+  learning: "배운 점",
+  challenge: "아이디어",
+  special: "특이사항",
+};
+
+const fieldLabels: Record<Exclude<RecordType, "all">, string[]> = {
+  growth: ["상황", "문제점", "개선해야 할 점", "실행"],
+  learning: ["날짜", "소요시간", "브랜드", "기종", "교육자", "배운 점"],
+  challenge: ["내용"],
+  special: ["내용"],
+};
+
 const pad = (n: number) => String(n).padStart(2, "0");
-function quarterRange(year: number, quarter: number) { const m = (quarter - 1) * 3 + 1; const end = new Date(year, m + 2, 0).getDate(); return { start: `${year}-${pad(m)}-01`, end: `${year}-${pad(m + 2)}-${pad(end)}` }; }
+const quarterRange = (year: number, quarter: number) => {
+  const startMonth = (quarter - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  const endDay = new Date(year, endMonth, 0).getDate();
+  return { start: `${year}-${pad(startMonth)}-01`, end: `${year}-${pad(endMonth)}-${pad(endDay)}` };
+};
+
+function parseStructured(text: string, labels: string[]) {
+  const result: Record<string, string> = Object.fromEntries(labels.map((label) => [label, ""]));
+  const lines = text.split(/\r?\n/);
+  let current = "";
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const matched = labels.find((label) => new RegExp(`^${label}\\s*[:：]`).test(line.trim()));
+    if (matched) {
+      current = matched;
+      result[current] = line.replace(new RegExp(`^${matched}\\s*[:：]\\s*`), "");
+    } else if (current) {
+      result[current] = `${result[current]}${result[current] ? "\n" : ""}${line}`.trim();
+    }
+  }
+  if (!Object.values(result).some((value) => value.trim())) {
+    result[labels[0]] = text.trim();
+  }
+  return result;
+}
+
+function buildPrompt(title: string, rows: WeeklyNoteRow[], key: Exclude<RecordType, "all">) {
+  const body = rows
+    .filter((row) => row[key].trim())
+    .map((row) => `- ${row.weekStart} / ${row.author}\n${row[key].trim()}`)
+    .join("\n\n");
+  return `${title}
+
+아래 주간 기록을 표로 정리해줘.
+중복 내용은 합치고, 날짜별 맥락은 유지해줘.
+
+${body || "정리할 기록이 없습니다."}`;
+}
 
 export default function GrowthHub({ author }: { author: string }) {
   const { book } = useAuthorBook();
@@ -16,57 +87,266 @@ export default function GrowthHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>("records");
   const [year, setYear] = useState(now.getFullYear());
   const [quarter, setQuarter] = useState(Math.floor(now.getMonth() / 3) + 1);
-  const [recordPeriod, setRecordPeriod] = useState<"month" | "quarter" | "year">("quarter");
+  const [recordPeriod, setRecordPeriod] = useState<RecordPeriod>("quarter");
   const [recordMonth, setRecordMonth] = useState(now.getMonth() + 1);
   const [person, setPerson] = useState(author);
-  const [type, setType] = useState("all");
+  const [type, setType] = useState<RecordType>("all");
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<WeeklyNoteRow[]>([]);
   const [plan, setPlan] = useState<QuarterlyPlan>({ author, year, quarter, goals: [] });
   const [card, setCard] = useState<GoldenCard>({ author, year, quarter, answers: {} });
   const [question, setQuestion] = useState(0);
-  const [expanded, setExpanded] = useState("");
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const qRange = quarterRange(year, quarter);
+
   const monthEnd = new Date(year, recordMonth, 0).getDate();
-  const range = tab === "records" && recordPeriod === "year" ? { start: `${year}-01-01`, end: `${year}-12-31` }
-    : tab === "records" && recordPeriod === "month" ? { start: `${year}-${pad(recordMonth)}-01`, end: `${year}-${pad(recordMonth)}-${pad(monthEnd)}` } : qRange;
+  const qRange = quarterRange(year, quarter);
+  const range = recordPeriod === "month"
+    ? { start: `${year}-${pad(recordMonth)}-01`, end: `${year}-${pad(recordMonth)}-${pad(monthEnd)}` }
+    : qRange;
+
   useEffect(() => {
     let alive = true;
-    Promise.all([getWeeklyNotes(range.start, range.end), person ? getQuarterlyPlan(person, year, quarter) : Promise.resolve({ author: "", year, quarter, goals: [] }), person ? getGoldenCard(person, year, quarter) : Promise.resolve({ author: "", year, quarter, answers: {} })])
-      .then(([n, p, c]) => { if (alive) { setNotes(n); setPlan(p); setCard(c); } })
-      .catch((e) => { if (alive) setMessage((e as Error).message); })
-      .finally(() => { if (alive) setLoading(false); });
+    setLoading(true);
+    Promise.all([
+      getWeeklyNotes(range.start, range.end),
+      person ? getQuarterlyPlan(person, year, quarter) : Promise.resolve({ author: "", year, quarter, goals: [] }),
+      person ? getGoldenCard(person, year, quarter) : Promise.resolve({ author: "", year, quarter, answers: {} }),
+    ])
+      .then(([n, p, c]) => {
+        if (!alive) return;
+        setNotes(n);
+        setPlan(p);
+        setCard(c);
+      })
+      .catch((e) => alive && setMessage((e as Error).message))
+      .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [person, year, quarter, range.start, range.end]);
 
-  const entries = useMemo(() => notes.flatMap((n) => types.map(([key, label, icon]) => ({ id: `${n.author}-${n.weekStart}-${key}`, author: n.author, week: n.weekStart, key, label, icon, text: n[key] })).filter((e) => e.text.trim())).filter((e) => (person ? e.author === person : true) && (type === "all" || e.key === type) && (!query.trim() || `${e.author} ${e.text}`.toLowerCase().includes(query.trim().toLowerCase()))), [notes, person, type, query]);
-  const recordRows = useMemo(() => notes.filter((note) => {
+  const rows = useMemo(() => notes.filter((note) => {
     if (person && note.author !== person) return false;
-    if (type !== "all" && !String(note[type as keyof WeeklyNoteRow] || "").trim()) return false;
+    if (type !== "all" && !note[type].trim()) return false;
     const search = query.trim().toLowerCase();
-    return !search || `${note.author} ${note.weekStart} ${types.map(([key]) => note[key]).join(" ")}`.toLowerCase().includes(search);
-  }), [notes, person, type, query]);
-  const expandedEntry = notes.flatMap((note) => types.map(([key, label, icon]) => ({ id: `${note.author}-${note.weekStart}-${key}`, author: note.author, week: note.weekStart, key, label, icon, text: note[key] }))).find((entry) => entry.id === expanded);
+    if (!search) return true;
+    const allText = recordTypes.map(([key]) => note[key]).join(" ");
+    return `${note.author} ${note.weekStart} ${allText}`.toLowerCase().includes(search);
+  }), [notes, person, query, type]);
 
-  const addGoal = () => { const g: LevelGoal = { id: crypto.randomUUID(), category: "자기개발", title: "", currentLevel: "", targetLevel: "", budget: "", month1: "", month2: "", month3: "", progress: 0 }; setPlan({ ...plan, author: person, year, quarter, goals: [...plan.goals, g] }); };
+  const copySummaryPrompt = async (key: "growth" | "learning") => {
+    const title = key === "growth"
+      ? "성장노트를 상황/문제점/개선해야 할 점/실행으로 분기 정리"
+      : "배운 점을 날짜/소요시간/브랜드/기종/교육자/핵심 배운 점으로 정리";
+    const prompt = buildPrompt(title, rows, key);
+    await navigator.clipboard.writeText(prompt);
+    setMessage(`${typeLabels[key]} 정리용 프롬프트를 복사했습니다.`);
+  };
+
+  const addGoal = () => {
+    const g: LevelGoal = { id: crypto.randomUUID(), category: "자기개발", title: "", currentLevel: "", targetLevel: "", budget: "", month1: "", month2: "", month3: "", progress: 0 };
+    setPlan({ ...plan, author: person, year, quarter, goals: [...plan.goals, g] });
+  };
   const setGoal = (id: string, patch: Partial<LevelGoal>) => setPlan({ ...plan, goals: plan.goals.map((g) => g.id === id ? { ...g, ...patch } : g) });
-  const savePlan = async () => { try { await saveQuarterlyPlan({ ...plan, author: person, year, quarter }); setMessage("레벨업계획을 저장했습니다."); } catch (e) { setMessage((e as Error).message); } };
+  const savePlan = async () => {
+    try {
+      await saveQuarterlyPlan({ ...plan, author: person, year, quarter });
+      setMessage("레벨업계획을 저장했습니다.");
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  };
   const answer = (q: string, cat: string) => card.answers[q]?.[cat] || "";
   const setAnswer = (q: string, cat: string, value: string) => setCard({ ...card, answers: { ...card.answers, [q]: { ...(card.answers[q] || {}), [cat]: value } } });
-  const saveCard = async () => { try { await saveGoldenCard({ ...card, author: person, year, quarter }); setMessage("골든미팅카드를 저장했습니다."); } catch (e) { setMessage((e as Error).message); } };
+  const saveCard = async () => {
+    try {
+      await saveGoldenCard({ ...card, author: person, year, quarter });
+      setMessage("골든미팅카드를 저장했습니다.");
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  };
 
-  return <div className="space-y-5 pb-16">
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-wide text-blue-600">성장의 기록이 분기의 성과가 되도록</div><h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 lg:text-3xl">성장기록 허브</h2><p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">주간 성장노트·배운 점·아이디어를 모아보고, 그 근거로 레벨업계획과 골든미팅카드를 작성합니다.</p></section>
-    <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between"><div className="grid grid-cols-3 gap-1 rounded-md bg-slate-100 p-1">{([['records','성장기록 모아보기'],['plan','레벨업계획'],['golden','골든미팅카드']] as [Tab,string][]).map(([k,l]) => <button key={k} onClick={() => setTab(k)} className={`rounded px-5 py-2 text-sm font-bold transition ${tab === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{l}</button>)}</div><div className="flex flex-wrap gap-2"><select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">{Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => <option key={y}>{y}</option>)}</select><div className="flex gap-1 rounded-md bg-slate-100 p-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded px-3 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{q}Q</button>)}</div><select value={person} onChange={(e) => setPerson(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700"><option value="">전 직원</option>{AUTHOR_TEAMS.map((t) => <optgroup key={t} label={`${t}팀`}>{book[t].map((a) => <option key={a}>{a}</option>)}</optgroup>)}</select></div></section>
-    {tab === "records" && <section className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"><span className="mr-2 text-xs font-bold text-slate-500">조회 범위</span>{([['month','월별'],['quarter','분기'],['year','연간']] as const).map(([k,l])=><button key={k} onClick={()=>setRecordPeriod(k)} className={`rounded px-3 py-2 text-xs font-bold transition ${recordPeriod===k?"bg-blue-600 text-white":"bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{l}</button>)}{recordPeriod==='month'&&<select value={recordMonth} onChange={(e)=>setRecordMonth(Number(e.target.value))} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">{Array.from({length:12},(_,i)=>i+1).map((m)=><option key={m} value={m}>{m}월</option>)}</select>}<span className="ml-auto text-xs font-bold text-blue-600">{range.start} ~ {range.end}</span></section>}
-    {message && <div className="rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</div>}{loading && <div className="p-10 text-center text-sm text-slate-400">불러오는 중…</div>}
+  return (
+    <div className="space-y-5 pb-16">
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-bold uppercase tracking-wide text-blue-600">분기 회고를 빠르게 준비하는 기록함</div>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 lg:text-3xl">성장기록 허브</h2>
+        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+          주간현황판에 적은 성장노트, 배운 점, 아이디어, 특이사항을 모아봅니다. 분기 회고 때는 정리 프롬프트를 복사해서 GPT에 붙여넣으면 됩니다.
+        </p>
+      </section>
 
-    {!loading && tab === "records" && <><section className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:flex-row"><div className="flex flex-wrap gap-1">{[["all","전체"],...types.map(([k,l]) => [k,l])] .map(([k,l]) => <button key={k} onClick={() => setType(k)} className={`rounded px-3 py-1.5 text-xs font-bold transition ${type === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{l}</button>)}</div><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용·직원 검색" className="ml-auto min-w-64 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" /></section><section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="overflow-auto"><table className="w-full min-w-[1250px] table-fixed border-collapse text-left"><colgroup><col className="w-[120px]"/><col className="w-[110px]"/>{types.map(([key])=><col key={key} className="w-[255px]"/>)}</colgroup><thead className="sticky top-0 z-10 bg-slate-50"><tr><th className="border-b border-slate-200 px-3 py-3 text-xs font-extrabold text-slate-600">주차</th><th className="border-b border-slate-200 px-3 py-3 text-xs font-extrabold text-slate-600">작성자</th>{types.map(([key,label,icon])=><th key={key} className={`border-b border-slate-200 px-3 py-3 text-xs font-extrabold ${type===key?"bg-blue-50 text-blue-700":"text-slate-600"}`}>{icon} {label}</th>)}</tr></thead><tbody>{recordRows.map((row)=><tr key={`${row.author}-${row.weekStart}`} className="bg-white hover:bg-slate-50"><td className="border-b border-slate-100 px-3 py-4 align-top text-xs font-bold text-slate-500">{row.weekStart}</td><td className="border-b border-slate-100 px-3 py-4 align-top text-sm font-bold text-slate-800">{row.author}</td>{types.map(([key])=>{const text=row[key];const id=`${row.author}-${row.weekStart}-${key}`;return <td key={key} className={`border-b border-slate-100 align-top ${type===key?"bg-blue-50/40":""}`}><button type="button" disabled={!text.trim()} onClick={()=>setExpanded(id)} title={text} className="h-28 w-full rounded-md p-3 text-left disabled:cursor-default"><span className={`block whitespace-pre-wrap text-xs leading-5 ${text.trim()?"line-clamp-4 text-slate-600":"text-slate-300"}`}>{text.trim()||"-"}</span>{text.trim()&&<span className="mt-1 block text-[10px] font-bold text-blue-600">전체보기</span>}</button></td>})}</tr>)}{!recordRows.length&&<tr><td colSpan={6} className="p-16 text-center text-sm text-slate-400">선택한 기간의 성장기록이 없습니다.</td></tr>}</tbody></table></div><div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500"><span>행 {recordRows.length}개 · 셀을 누르면 전체 내용을 볼 수 있습니다.</span><span>가로 스크롤 가능</span></div></section>{expandedEntry&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-5 backdrop-blur-sm"><div className="flex max-h-[82vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><div className="text-xs font-bold text-blue-600">{expandedEntry.week} · {expandedEntry.author}</div><h3 className="mt-1 text-xl font-black text-slate-950">{expandedEntry.icon} {expandedEntry.label}</h3></div><button onClick={()=>setExpanded("")} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">닫기 ✕</button></div><div className="overflow-y-auto whitespace-pre-wrap p-7 text-base leading-8 text-slate-700">{expandedEntry.text}</div></div></div>}</>}
+      <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid grid-cols-3 gap-1 rounded-md bg-slate-100 p-1">
+          {([["records", "성장기록 모아보기"], ["plan", "레벨업계획"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} className={`rounded px-5 py-2 text-sm font-bold transition ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">
+            {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => <option key={y}>{y}</option>)}
+          </select>
+          {tab !== "records" && (
+            <div className="flex gap-1 rounded-md bg-slate-100 p-1">
+              {[1, 2, 3, 4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded px-3 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{q}Q</button>)}
+            </div>
+          )}
+          <select value={person} onChange={(e) => setPerson(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">
+            <option value="">전체 직원</option>
+            {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
+          </select>
+        </div>
+      </section>
 
-    {!loading && tab === "plan" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 레벨업계획</h3><p className="text-xs font-semibold text-slate-500">목표와 월별 실행 결과를 한곳에서 관리합니다.</p></div><button disabled={!person} onClick={addGoal} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">+ 목표 추가</button></div>{!person && <div className="mt-8 text-center text-sm text-amber-600">작성할 직원을 선택하세요.</div>}<div className="mt-5 space-y-4">{plan.goals.map((g, i) => <div key={g.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="grid gap-2 lg:grid-cols-[40px_120px_1fr_90px_90px_120px_80px_36px]"><span className="py-2 text-center text-sm font-bold text-slate-300">{i+1}</span><select value={g.category} onChange={(e) => setGoal(g.id,{category:e.target.value})} className="rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold">{[...GOLDEN_CATEGORIES,"기타"].map((c)=><option key={c}>{c}</option>)}</select><input value={g.title} onChange={(e)=>setGoal(g.id,{title:e.target.value})} placeholder="목표와 실행기준" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"/><input value={g.currentLevel} onChange={(e)=>setGoal(g.id,{currentLevel:e.target.value})} placeholder="현재레벨" className="rounded-md border border-slate-300 bg-white px-2 text-sm"/><input value={g.targetLevel} onChange={(e)=>setGoal(g.id,{targetLevel:e.target.value})} placeholder="목표레벨" className="rounded-md border border-slate-300 bg-white px-2 text-sm"/><input value={g.budget} onChange={(e)=>setGoal(g.id,{budget:e.target.value})} placeholder="요청예산" className="rounded-md border border-slate-300 bg-white px-2 text-sm"/><input type="number" min="0" max="100" value={g.progress||""} onChange={(e)=>setGoal(g.id,{progress:Number(e.target.value)||0})} placeholder="진도%" className="rounded-md border border-slate-300 bg-white px-2 text-sm"/><button onClick={()=>setPlan({...plan,goals:plan.goals.filter((x)=>x.id!==g.id)})} className="text-slate-300 hover:text-rose-500">✕</button></div><div className="mt-3 grid gap-3 md:grid-cols-3">{[1,2,3].map((m)=><label key={m} className="text-xs font-bold text-slate-500">{(quarter-1)*3+m}월 결과<textarea value={g[`month${m}` as "month1"]} onChange={(e)=>setGoal(g.id,{[`month${m}`]:e.target.value})} rows={5} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300"/></label>)}</div></div>)}</div>{person&&<button onClick={savePlan} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">레벨업계획 저장</button>}</section>}
+      {tab === "records" && (
+        <section className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <span className="mr-2 text-xs font-bold text-slate-500">조회 범위</span>
+          {([["month", "월별"], ["quarter", "분기"]] as [RecordPeriod, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setRecordPeriod(key)} className={`rounded px-3 py-2 text-xs font-bold transition ${recordPeriod === key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{label}</button>
+          ))}
+          {recordPeriod === "month" ? (
+            <select value={recordMonth} onChange={(e) => setRecordMonth(Number(e.target.value))} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}
+            </select>
+          ) : (
+            <div className="flex gap-1 rounded-md bg-slate-100 p-1">
+              {[1, 2, 3, 4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded px-3 py-1.5 text-xs font-bold transition ${quarter === q ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{q}Q</button>)}
+            </div>
+          )}
+        </section>
+      )}
 
-    {!loading && tab === "golden" && <div className="grid gap-6 xl:grid-cols-[360px_1fr]"><aside className="h-fit rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-5"><h3 className="font-black text-slate-950">분기 근거자료</h3><p className="mt-1 text-xs font-semibold text-slate-500">주간 기록 {entries.filter((e)=>!person||e.author===person).length}건</p><div className="mt-3 max-h-[65vh] space-y-2 overflow-y-auto">{entries.filter((e)=>!person||e.author===person).map((e)=><div key={e.id} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">{e.week} · {e.label}</div><div className="mt-1 line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-slate-600">{e.text}</div></div>)}</div></aside><section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div><h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3><p className="text-xs font-semibold text-slate-500">왼쪽의 주간 근거자료를 보며 작성하세요.</p></div><div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">{GOLDEN_QUESTIONS.map((q,i)=><button key={q} onClick={()=>setQuestion(i)} className={`rounded-md px-3 py-3 text-xs font-bold transition ${question===i?"bg-slate-900 text-white":"bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{q}</button>)}</div><div className="mt-5"><h4 className="text-lg font-black text-slate-900">{GOLDEN_QUESTIONS[question]}</h4><div className="mt-3 grid gap-4 md:grid-cols-2">{GOLDEN_CATEGORIES.map((cat)=><label key={cat} className="text-xs font-bold text-slate-500">{cat}<textarea value={answer(GOLDEN_QUESTIONS[question],cat)} onChange={(e)=>setAnswer(GOLDEN_QUESTIONS[question],cat,e.target.value)} rows={8} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300"/></label>)}</div></div>{person&&<button onClick={saveCard} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">골든미팅카드 저장</button>}</section></div>}
-  </div>;
+      {message && <div className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</div>}
+      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-400">불러오는 중입니다.</div>}
+
+      {!loading && tab === "records" && (
+        <>
+          <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap gap-1">
+              {(["all", "growth", "learning", "challenge", "special"] as RecordType[]).map((key) => (
+                <button key={key} onClick={() => setType(key)} className={`rounded px-3 py-1.5 text-xs font-bold transition ${type === key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{typeLabels[key]}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => copySummaryPrompt("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 정리 프롬프트</button>
+              <button onClick={() => copySummaryPrompt("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운 점 정리 프롬프트</button>
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용 또는 직원 검색" className="min-w-64 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" />
+            </div>
+          </section>
+
+          {type === "all" ? (
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              {rows.map((row) => {
+                const id = `${row.author}-${row.weekStart}`;
+                const count = recordTypes.filter(([key]) => row[key].trim()).length;
+                const open = !!openRows[id];
+                return (
+                  <div key={id} className="border-b border-slate-100 last:border-0">
+                    <button type="button" onClick={() => setOpenRows({ ...openRows, [id]: !open })} className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
+                      <div>
+                        <div className="text-sm font-black text-slate-900">{row.weekStart} · {row.author}</div>
+                        <div className="mt-1 text-xs font-semibold text-slate-400">기록 {count}개</div>
+                      </div>
+                      <span className="text-xs font-black text-blue-600">{open ? "접기" : "펼치기"}</span>
+                    </button>
+                    {open && (
+                      <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-2">
+                        {recordTypes.map(([key, label]) => row[key].trim() && (
+                          <div key={key} className="rounded-md border border-slate-200 bg-white p-4">
+                            <div className="text-xs font-black text-slate-500">{label}</div>
+                            <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{row[key]}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!rows.length && <div className="p-16 text-center text-sm text-slate-400">선택한 기간의 성장기록이 없습니다.</div>}
+            </section>
+          ) : (
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border-b border-slate-200 px-4 py-3 text-xs font-black text-slate-500">주차</th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-xs font-black text-slate-500">작성자</th>
+                      {fieldLabels[type].map((label) => <th key={label} className="border-b border-slate-200 px-4 py-3 text-xs font-black text-slate-500">{label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const parsed = parseStructured(row[type], fieldLabels[type]);
+                      return (
+                        <tr key={`${row.author}-${row.weekStart}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                          <td className="px-4 py-4 align-top text-xs font-bold text-slate-500">{row.weekStart}</td>
+                          <td className="px-4 py-4 align-top text-sm font-bold text-slate-800">{row.author}</td>
+                          {fieldLabels[type].map((label) => <td key={label} className="whitespace-pre-wrap px-4 py-4 align-top text-sm leading-6 text-slate-600">{parsed[label] || "-"}</td>)}
+                        </tr>
+                      );
+                    })}
+                    {!rows.length && <tr><td colSpan={fieldLabels[type].length + 2} className="p-16 text-center text-sm text-slate-400">선택한 기록이 없습니다.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {!loading && tab === "plan" && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 레벨업계획</h3>
+              <p className="text-xs font-semibold text-slate-500">목표와 월별 실행 결과를 한 표에서 관리합니다.</p>
+            </div>
+            <button disabled={!person} onClick={addGoal} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">목표 추가</button>
+          </div>
+          {!person && <div className="mt-8 text-center text-sm text-amber-600">작성자 직원을 선택하세요.</div>}
+          <div className="mt-5 space-y-4">
+            {plan.goals.map((g, i) => (
+              <div key={g.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="grid gap-2 lg:grid-cols-[40px_120px_1fr_90px_90px_120px_80px_36px]">
+                  <span className="py-2 text-center text-sm font-bold text-slate-300">{i + 1}</span>
+                  <select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold">{[...GOLDEN_CATEGORIES, "기타"].map((c) => <option key={c}>{c}</option>)}</select>
+                  <input value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} placeholder="목표와 실행기준" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  <input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} placeholder="현재" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
+                  <input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} placeholder="목표" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
+                  <input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} placeholder="예산" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
+                  <input type="number" min="0" max="100" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} placeholder="진도%" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
+                  <button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((x) => x.id !== g.id) })} className="text-slate-300 hover:text-rose-500">×</button>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {[1, 2, 3].map((m) => <label key={m} className="text-xs font-bold text-slate-500">{(quarter - 1) * 3 + m}월 결과<textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={5} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {person && <button onClick={savePlan} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">레벨업계획 저장</button>}
+        </section>
+      )}
+
+      {!loading && tab === "golden" && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
+            <p className="text-xs font-semibold text-slate-500">성장기록 모아보기에서 정리한 내용을 참고해 작성하세요.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {GOLDEN_QUESTIONS.map((q, i) => <button key={q} onClick={() => setQuestion(i)} className={`rounded-md px-3 py-3 text-xs font-bold transition ${question === i ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{q}</button>)}
+          </div>
+          <div className="mt-5">
+            <h4 className="text-lg font-black text-slate-900">{GOLDEN_QUESTIONS[question]}</h4>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              {GOLDEN_CATEGORIES.map((cat) => <label key={cat} className="text-xs font-bold text-slate-500">{cat}<textarea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(e) => setAnswer(GOLDEN_QUESTIONS[question], cat, e.target.value)} rows={8} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
+            </div>
+          </div>
+          {person && <button onClick={saveCard} className="mt-5 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white">골든미팅카드 저장</button>}
+        </section>
+      )}
+    </div>
+  );
 }

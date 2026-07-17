@@ -1,134 +1,96 @@
-/** 홈 — 퍼스트전산 메인 + 상세 사용설명서. 컬러 아이콘 타일 + 실제 버튼 미리보기로 가독성 강화. */
-import { useState } from "react";
+import { useMemo } from "react";
 
-function Section({ title, sub, children, defaultOpen }: { title: string; sub?: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(!!defaultOpen);
+type Screen = "field" | "daily" | "weekly" | "growth";
+
+const quickLinks: Array<{ key: Screen; title: string; desc: string; badge: string }> = [
+  { key: "field", title: "FIELD 작성", desc: "점검, AS, 물류, 확장성, 미수, 불만을 카톡방 전송까지 처리", badge: "현장" },
+  { key: "daily", title: "일일업무", desc: "외근/내근 수치와 방문 상세를 날짜별로 확인", badge: "집계" },
+  { key: "weekly", title: "주간현황판", desc: "주간 실적, 목표, 성장노트, 배운 점을 한 화면에서 정리", badge: "회고" },
+  { key: "growth", title: "성장기록", desc: "주간 기록을 월별/분기별로 모아 골든미팅카드 준비", badge: "성장" },
+];
+
+const flow = [
+  ["1", "현장에서 FIELD 작성", "거래처 검색 또는 원본 변환으로 내용을 최대한 적게 입력합니다."],
+  ["2", "카톡방 전송", "점검, AS, 물류, 확장성 등 선택한 업무 방으로 바로 보냅니다."],
+  ["3", "일일/주간 확인", "저장된 방문 기록이 업무 현황과 실적 비교로 자동 집계됩니다."],
+  ["4", "성장기록 정리", "성장노트와 배운 점을 모아 분기 회고 자료로 전환합니다."],
+] as const;
+
+export default function Home({ onGoField, onNavigate }: { onGoField: () => void; onNavigate?: (screen: Screen) => void }) {
+  const today = useMemo(() => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short" }).format(new Date()), []);
+  const go = (screen: Screen) => {
+    if (screen === "field") onGoField();
+    else onNavigate?.(screen);
+  };
+
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between px-5 py-4 text-left">
-        <div>
-          <div className="text-[15px] font-bold text-slate-900">{title}</div>
-          {sub && <div className="mt-0.5 text-[11px] text-slate-400">{sub}</div>}
+    <div className="space-y-5 pb-14">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="p-6 lg:p-8">
+            <div className="text-xs font-black uppercase tracking-wide text-blue-600">FIRSTOA ERP</div>
+            <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950 lg:text-4xl">오늘 업무를 한 곳에서 시작하세요</h2>
+            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
+              현장 작성, 카톡방 전송, 업무 집계, 성장기록까지 이어지는 외근직용 업무 허브입니다.
+              자주 쓰는 FIELD는 바로 열고, 나머지는 좌측 메뉴나 아래 바로가기에서 이동하면 됩니다.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <button onClick={() => go("field")} className="rounded-md bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">
+                FIELD 바로 작성
+              </button>
+              <button onClick={() => go("weekly")} className="rounded-md border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                주간현황판 보기
+              </button>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0">
+            <div className="rounded-md border border-slate-200 bg-white p-4">
+              <div className="text-xs font-bold text-slate-400">오늘</div>
+              <div className="mt-1 text-2xl font-black text-slate-950">{today}</div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {["FIELD 작성", "전송 확인", "일일업무", "성장 메모"].map((item) => (
+                  <div key={item} className="rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-        <span className={`text-slate-300 transition ${open ? "rotate-180" : ""}`}>▾</span>
-      </button>
-      {open && <div className="space-y-1 border-t border-slate-100 px-4 py-3">{children}</div>}
-    </div>
-  );
-}
+      </section>
 
-// 컬러 아이콘 타일 행
-function Row({ icon, tone, name, children }: { icon: string; tone: string; name: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3 rounded-xl px-1.5 py-2.5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg" style={{ background: tone }}>{icon}</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-bold text-slate-900">{name}</div>
-        <div className="mt-0.5 text-[13px] leading-relaxed text-slate-500">{children}</div>
-      </div>
-    </div>
-  );
-}
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {quickLinks.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => go(item.key)}
+            className="rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          >
+            <span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">{item.badge}</span>
+            <div className="mt-4 text-lg font-black text-slate-950">{item.title}</div>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{item.desc}</p>
+          </button>
+        ))}
+      </section>
 
-// 실제 버튼 모양 미리보기 행
-function BtnRow({ chip, children }: { chip: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-1.5 py-2.5">
-      <div className="flex w-[68px] shrink-0 justify-center">{chip}</div>
-      <div className="min-w-0 flex-1 text-[13px] leading-relaxed text-slate-500">{children}</div>
-    </div>
-  );
-}
-
-const chipBase = "rounded-lg px-3 py-1.5 text-xs font-bold shadow-sm whitespace-nowrap";
-
-export default function Home({ onGoField }: { onGoField: () => void }) {
-  const cats: { icon: string; name: string; tone: string }[] = [
-    { icon: "🔧", name: "점검", tone: "#F1F5F9" },
-    { icon: "🛠", name: "AS", tone: "#F1F5F9" },
-    { icon: "📦", name: "물류", tone: "#F5F3FF" },
-    { icon: "💻", name: "확장성", tone: "#ECFEFF" },
-    { icon: "💢", name: "불만", tone: "#FEF2F2" },
-    { icon: "💰", name: "미수", tone: "#FFF7ED" },
-    { icon: "📈", name: "초과조정", tone: "#FEFCE8" },
-    { icon: "📝", name: "재계약", tone: "#F0FDF4" },
-  ];
-  return (
-    <div className="space-y-4 pb-10">
-      {/* 메인 박스 */}
-      <div className="rounded-3xl bg-gradient-to-br from-[#334155] to-[#1E293B] p-6 text-white shadow-lg shadow-slate-900/20">
-        <div className="inline-block rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold">퍼스트전산 CS팀</div>
-        <h2 className="mt-3 text-[26px] font-bold leading-tight tracking-tight">현장의 모든 보고를<br />한 곳에서, 한 번에</h2>
-        <p className="mt-2.5 text-[13px] leading-relaxed text-white/85">
-          점검·AS·확장성·불만·재계약까지 현장에서 작성하면 <b>카톡방 전송</b> + <b>데이터 저장·검색</b>까지 되는 통합 업무 앱이에요.
-        </p>
-        <button onClick={onGoField} className="mt-5 w-full rounded-2xl bg-white py-3.5 text-sm font-bold text-[#334155] transition active:scale-[0.98]">
-          FIELD 시작하기 →
-        </button>
-      </div>
-
-      {/* 기능 한눈에 — 카테고리 타일 */}
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-        <div className="mb-3 px-1 text-[13px] font-bold text-slate-900">무엇을 작성하나요?</div>
-        <div className="grid grid-cols-4 gap-2">
-          {cats.map((c) => (
-            <div key={c.name} className="flex flex-col items-center gap-1.5 rounded-xl py-2.5">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-xl" style={{ background: c.tone }}>{c.icon}</span>
-              <span className="text-[11px] font-semibold text-slate-600">{c.name}</span>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black text-slate-950">추천 업무 흐름</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-500">입력은 줄이고, 기록은 자동으로 남기는 흐름입니다.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-4">
+          {flow.map(([no, title, desc]) => (
+            <div key={no} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-950 text-xs font-black text-white">{no}</div>
+              <div className="mt-3 text-sm font-black text-slate-900">{title}</div>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{desc}</p>
             </div>
           ))}
-          <button onClick={onGoField} className="flex flex-col items-center justify-center gap-1.5 rounded-xl py-2.5 text-[#334155]">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#334155] text-xl text-white">→</span>
-            <span className="text-[11px] font-bold">바로가기</span>
-          </button>
         </div>
-      </div>
-
-      <div className="px-1 pt-1 text-[12px] font-bold text-slate-400">📖 사용 설명서</div>
-
-      {/* 상단 아이콘 */}
-      <Section title="상단 아이콘" sub="화면 맨 위 버튼들" defaultOpen>
-        <Row icon="≡" tone="#F1F5F9" name="메뉴 (좌측)">홈 · FIELD · 해피콜 · IT 견적 화면을 전환해요.</Row>
-        <Row icon="🔍" tone="#F1F5F9" name="거래처검색">거래처명으로 지난 점검/AS 양식을 찾아 불러와요. 결과는 <b>지역(A~E)·계열</b>로 묶여 보이고, 확장성 탭에선 청정기/PC 기록을 검색해요.</Row>
-        <Row icon="📝" tone="#F1F5F9" name="원본입력">카톡 원본 글을 붙여넣으면 자동으로 양식으로 변환돼요. (점검/AS)</Row>
-        <Row icon="📷" tone="#F1F5F9" name="사진양식">모바일 <b>워킹맵 캡처 사진</b>을 올리면 AI가 점검/청정기 양식을 자동으로 만들어줘요.</Row>
-        <Row icon="🗂️" tone="#F1F5F9" name="통합이력">그 거래처의 점검·AS·초과·미수·불만·재계약 등 <b>전체 이력</b>을 한눈에 봐요.</Row>
-      </Section>
-
-      {/* 탭 안내 */}
-      <Section title="탭 안내" sub="점검·AS / 물류 / 확장성 / 더보기">
-        <Row icon="🔧" tone="#F1F5F9" name="점검·AS">점검 양식이나 워킹맵 AS 원문을 붙여넣으면 형식을 <b>자동 판별</b>해 변환해요. 점검·AS·마감·여분·세팅을 중복 선택하고 원하는 방으로 직접 전송해요.</Row>
-        <Row icon="📦" tone="#F5F3FF" name="물류">납품·교체·철수·이전·세팅 내용을 작성해 물류방 전송과 기록을 한 번에 처리해요.</Row>
-        <Row icon="💻" tone="#ECFEFF" name="확장성">PC·IT·복합기·네트워크 확장성(영업). 점검/AS 갔다가 바로 작성 — <b>불러오기</b>로 업체명·지역·키맨 자동 채움.</Row>
-        <Row icon="📋" tone="#F1F5F9" name="더보기 (불만·미수·초과조정·재계약)">상단 <b>더보기 ▾</b> 안에 있어요. 폼 작성 → 카톡방 전송 + 저장. 점검/AS 불러오기를 지원해요.</Row>
-      </Section>
-
-      {/* 버튼 — 실제 모양 미리보기 */}
-      <Section title="보내기 · 자가 · 부품" sub="맨 아래 버튼 (실제 모양)">
-        <BtnRow chip={<span className={chipBase} style={{ background: "#334155", color: "#fff" }}>보내기</span>}>
-          작성 양식을 <b>담당 카톡방 게시 + Supabase 저장</b>. 지역에 맞는 방으로 자동 전송.
-        </BtnRow>
-        <BtnRow chip={<span className={chipBase} style={{ background: "#0f766e", color: "#fff" }}>자가</span>}>
-          같은 양식을 <b>여분토너요청방</b>으로. (자가/토너/폐통 여분 요청 시)
-        </BtnRow>
-        <BtnRow chip={<span className={chipBase} style={{ background: "#b45309", color: "#fff" }}>부품</span>}>
-          같은 양식을 <b>부품요청방</b>으로. (부품 신청 시)
-        </BtnRow>
-        <BtnRow chip={<span className={`${chipBase} border border-slate-200`} style={{ background: "#fff", color: "#475569" }}>복사</span>}>
-          결과 전체를 복사해요.
-        </BtnRow>
-        <BtnRow chip={<span className={`${chipBase} border border-slate-200`} style={{ background: "#fff", color: "#475569" }}>초기화</span>}>
-          입력한 내용을 모두 비워요.
-        </BtnRow>
-      </Section>
-
-      {/* 사진·연동 */}
-      <Section title="사진 첨부 · 불러오기" sub="현장에서 유용한 기능">
-        <Row icon="📷" tone="#F1F5F9" name="사진 첨부 (폼 하단)">현장 사진을 여러 장(수십 장도) 선택 → 보내기 하면 <b>링크 1개</b>로 모아져 카톡에 전송돼요. 링크 누르면 사진 갤러리.</Row>
-        <Row icon="🔗" tone="#F0FDF4" name="불러오기 연동">점검/AS를 먼저 작성하면, 확장성·불만 등에서 <b>[점검에서 불러오기]</b>로 업체명·지역·키맨을 그대로 가져와요. 키맨이 여러 명이면 골라서.</Row>
-      </Section>
-
-      <div className="px-2 pt-2 text-center text-[11px] text-slate-400">© 퍼스트전산 CS팀 · FIELD</div>
+      </section>
     </div>
   );
 }
