@@ -90,7 +90,7 @@ const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: str
   pc: { icon: "💻", title: "확장성 업무", description: "거래처의 PC·소프트웨어 현황과 홍보·견적 내용을 기록합니다." },
   logistics: { icon: "📦", title: "물류 업무", description: "납품·교체·철수·이전·셋팅 업무와 물품 상태를 기록합니다." },
   bulman: { icon: "📣", title: "불만 방문", description: "거래처 불만 내용과 방문 처리결과를 정해진 양식으로 기록합니다." },
-  misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록합니다. 전용 양식은 준비 중입니다." },
+  misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록하고 지역별 미수방으로 전송합니다." },
   "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
   recontract: { icon: "🤝", title: "재계약", description: "계약 종료 예정 거래처의 상담과 재계약 진행내용을 기록합니다." },
 };
@@ -3733,7 +3733,7 @@ export default function App() {
   }, [mode, sharedForm.level, reportTypes, reportTypeOther]);
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
-  const isCat = mode === "bulman" || mode === "recontract" || mode === "overage-adjust";
+  const isCat = mode === "bulman" || mode === "misu" || mode === "recontract" || mode === "overage-adjust";
   const [catForms, setCatForms] = useState<Record<string, Record<string, string>>>({});
   const curCatForm = catForms[mode] || (isCat ? emptyCatForm(mode) : {});
   const catFilled = isCat && Object.values(curCatForm).some((v) => String(v).trim() !== "");
@@ -4554,15 +4554,6 @@ export default function App() {
             onLoad={loadSharedFromInspect}
             onError={(m) => showToast(m, "error")}
           />
-        )}
-
-        {/* 미수 — 양식 미정, 준비중 자리 */}
-        {mode === "misu" && (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-            <div className="text-3xl">🛠️</div>
-            <div className="mt-2 text-base font-bold text-slate-700">미수 양식</div>
-            <div className="mt-1 text-sm text-slate-400">양식 확정 후 추가 예정</div>
-          </div>
         )}
 
         {hasOutput && mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && <VisitMetaPanel value={visitMeta} onChange={setVisitMeta} primaryKind={visitKindForMode()} />}

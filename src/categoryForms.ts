@@ -19,6 +19,22 @@ const TA = (key: string, label: string): FieldDef => ({ key, label, type: "texta
 const SEL = (key: string, label: string, options: string[]): FieldDef => ({ key, label, type: "select", options });
 
 export const CATEGORY_SCHEMAS: Record<string, FormSchema> = {
+  misu: {
+    title: "/미수 방문", category: "미수", table: "misu", roomKey: "미수|*",
+    sections: [
+      { title: "기본정보", fields: [
+        T("입력일", "입력일"), T("작성자", "작성자", "author"), T("지역", "지역", "region"),
+        T("업체명", "업체명", "company"), T("담당자", "담당자/연락처", "keyman"), T("등급", "등급", "grade"),
+      ] },
+      { title: "미수 내용", fields: [
+        T("미수금액", "미수 금액"), T("보증금미입금", "보증금 미입금"), T("미수개월", "미수개월"),
+        TA("방문내용", "방문/통화 내용"), TA("고객반응", "고객 반응"),
+      ] },
+      { title: "처리 계획", fields: [
+        T("약속일", "입금/처리 약속일"), T("후속담당자", "후속 담당자"), TA("특이사항", "특이사항"),
+      ] },
+    ],
+  },
   bulman: {
     title: "/불만접수", category: "불만", table: "bulman", roomKey: "불만|*",
     sections: [

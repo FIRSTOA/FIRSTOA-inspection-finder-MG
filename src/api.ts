@@ -174,6 +174,44 @@ function toKstDate(ts?: string): string {
 export type SendKind = "normal" | "자가" | "부품";
 export type SendDestination = "inspection" | "as";
 
+const FIXED_ROOM = {
+  logistics: "완료방(납품,철수,교체)",
+  pcIt: "PC/IT/피씨/확장성고객등록및영업",
+  copierExpansion: "영업확장성미션 : 퍼스트조국진대리, 퍼스트신정훈프로, 퍼스트홍대경프로",
+} as const;
+
+const REGION_ROOMS: Record<string, Record<string, string>> = {
+  bulman: {
+    A: "신)AB불만고객",
+    B: "신)AB불만고객",
+    C: "신)CD불만고객방",
+    D: "신)CD불만고객방",
+  },
+  misu: {
+    A: "강북A 미수 보증금미입금 보고방",
+    B: "강서B 미수 보증금미입금 보고방",
+    C: "강남C 미수 보증금 보고방",
+    D: "경기D 미수 보증금 미입금보고방",
+  },
+  "overage-adjust": {
+    A: "강북A/초과사용 계약종료체크",
+    B: "강서B/초과사용 계약종료체크",
+    C: "강남C/초과사용 계약종료체크",
+    D: "경기D/초과사용 계약종료체크",
+  },
+  recontract: {
+    A: "강북A/초과사용 계약종료체크",
+    B: "강서B/초과사용 계약종료체크",
+    C: "강남C/초과사용 계약종료체크",
+    D: "경기D/초과사용 계약종료체크",
+  },
+};
+
+function regionRoom(schemaKey: string, region: string, fallback: string): string {
+  const key = normRegion(region);
+  return REGION_ROOMS[schemaKey]?.[key] || fallback;
+}
+
 // 보낼 방 목록 결정. TEST_MODE면 무조건 테스트방. 자가/부품/AS/점검 모두 단일 방으로 보낸다.
 async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
   const cfg = await getConfig();
@@ -275,7 +313,7 @@ export async function sendLogisticsForm(form: LogisticsFormState, author: string
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     let room = testRoom;
     if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
-      const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || testRoom;
+      const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
     }
     // 사용자가 명시적으로 전송했으므로 중복 저장이어도 알림은 보낸다.
     await enqueueOutbox(room, text);
@@ -290,6 +328,7 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     if (!s) return { ok: false, error: "알 수 없는 양식: " + schemaKey };
     const fields = s.sections.flatMap((sec) => sec.fields);
     const companyKey = fields.find((f) => f.fill === "company")?.key;
+    const regionKey = fields.find((f) => f.fill === "region")?.key;
     const vendor = String((companyKey && form[companyKey]) || "").trim();
     if (!vendor) return { ok: false, error: "업체명을 입력하세요." };
 
@@ -303,14 +342,16 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     const r = await insertRow(s.table, row);
 
     let rooms: string[] = [];
-    if (r === "new") {
-      const cfg = await getConfig();
-      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
-      else { const map = await getRoomMap(); rooms = [map[s.roomKey] || testRoom]; }
-      for (const room of rooms) await enqueueOutbox(room, text);
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    else {
+      const map = await getRoomMap();
+      const fallback = map[s.roomKey] || testRoom;
+      rooms = [regionRoom(schemaKey, String((regionKey && form[regionKey]) || ""), fallback)];
     }
-    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
+    for (const room of rooms) await enqueueOutbox(room, text);
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
@@ -336,14 +377,12 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
     const r = await insertRow("pc_expansion", row);
 
     let rooms: string[] = [];
-    if (r === "new") {
-      const cfg = await getConfig();
-      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
-      else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || testRoom]; }
-      for (const room of rooms) await enqueueOutbox(room, text);
-    }
-    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt]; }
+    for (const room of rooms) await enqueueOutbox(room, text);
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
@@ -381,17 +420,15 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
     const r = await insertRow("copier_expansion", row);
 
     let rooms: string[] = [];
-    if (r === "new") {
-      const cfg = await getConfig();
-      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
-      else {
-        const map = await getRoomMap();
-        rooms = [map["복합기확장성|*"] || map["PC확장성|*"] || map["IT통합|*"] || testRoom];
-      }
-      for (const room of rooms) await enqueueOutbox(room, text);
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    else {
+      const map = await getRoomMap();
+      rooms = [map["복합기확장성|*"] || FIXED_ROOM.copierExpansion];
     }
-    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
+    for (const room of rooms) await enqueueOutbox(room, text);
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
