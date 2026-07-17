@@ -97,11 +97,21 @@ function transformGrowthNote(text: string) {
   const labels = ["상황", "문제점", "개선해야 할 점", "실행"];
   if (!current) return labels.map((label) => `${label}:`).join("\n");
   const hasStructure = labels.some((label) => new RegExp(`${label}\\s*[:：]`).test(current));
-  if (!hasStructure) return `상황: ${current}\n문제점:\n개선해야 할 점:\n실행:`;
-  return labels.map((label) => {
+  if (hasStructure) return labels.map((label) => {
     const match = current.match(new RegExp(`${label}\\s*[:：]\\s*([^\\n]*)`));
     return `${label}: ${match?.[1] || ""}`.trimEnd();
   }).join("\n");
+  const clauses = current
+    .replace(/([.!?。]|(?:했어야했다|해야했다|였다|이었다|했다|었다|됐다|되었다|늦었다|안됐다|못했다|다))\s+/g, "$1\n")
+    .split(/\n|[.!?。]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const pick = (patterns: RegExp[]) => clauses.filter((line) => patterns.some((pattern) => pattern.test(line))).join(" ");
+  const situation = clauses[0] || current;
+  const problem = pick([/문제|민폐|늦|실수|불편|안되|안 됨|못|지연|누락|부족/]) || clauses[1] || "";
+  const improvement = pick([/해야|필요|개선|빠르게|먼저|보고|공유|확인|다음|일정|대응/]) || clauses[2] || "";
+  const action = pick([/실행|진행|조치|처리|보고|공유|확인|완료|예정|하겠|하기/]) || clauses.at(-1) || "";
+  return `상황: ${situation}\n문제점: ${problem}\n개선해야 할 점: ${improvement}\n실행: ${action}`;
 }
 
 function parseLearningRows(text: string): LearningRow[] {
@@ -109,7 +119,16 @@ function parseLearningRows(text: string): LearningRow[] {
   if (!lines.length) return [emptyLearningRow()];
   return lines.map((line) => {
     const parts = line.split(/\s+/);
-    if (parts.length < 6) return { ...emptyLearningRow(), lesson: line };
+    if (parts.length < 6) {
+      return {
+        date: parts[0] || "",
+        brand: parts[1] || "",
+        model: parts[2] || "",
+        lesson: parts.length >= 5 ? parts.slice(3, -1).join(" ") : parts.slice(3).join(" "),
+        duration: parts.length >= 5 ? parts.at(-1) || "" : "",
+        educator: "",
+      };
+    }
     return {
       date: parts[0] || "",
       brand: parts[1] || "",
@@ -126,6 +145,51 @@ function buildLearningText(rows: LearningRow[]) {
     .map((row) => [row.date, row.brand, row.model, row.lesson, row.duration, row.educator].map((v) => v.trim()).filter(Boolean).join(" "))
     .filter(Boolean)
     .join("\n");
+}
+
+function LearningRowsEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [rows, setRows] = useState<LearningRow[]>(() => parseLearningRows(value));
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value === lastValue.current) return;
+    lastValue.current = value;
+    setRows(parseLearningRows(value));
+  }, [value]);
+  const commitRows = (next: LearningRow[]) => {
+    setRows(next);
+    const nextValue = buildLearningText(next);
+    lastValue.current = nextValue;
+    onChange(nextValue);
+  };
+  return (
+    <div className="mt-4 space-y-2">
+      <div className="hidden grid-cols-[70px_80px_90px_1fr_70px_80px_32px] gap-2 px-1 text-[11px] font-black text-slate-400 lg:grid">
+        <span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>소요시간</span><span>교육자</span><span />
+      </div>
+      {rows.map((row, index) => {
+        const update = (field: keyof LearningRow, fieldValue: string) => commitRows(rows.map((itemRow, i) => i === index ? { ...itemRow, [field]: fieldValue } : itemRow));
+        const remove = () => {
+          const next = rows.filter((_, i) => i !== index);
+          commitRows(next.length ? next : [emptyLearningRow()]);
+        };
+        const inputClass = "rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:bg-white";
+        return (
+          <div key={index} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50/60 p-2 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px] lg:border-0 lg:bg-transparent lg:p-0">
+            <input value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
+            <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
+            <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
+            <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
+            <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
+            <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
+            <button type="button" onClick={remove} className="rounded-md text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
+          </div>
+        );
+      })}
+      <button type="button" onClick={() => commitRows([...rows, emptyLearningRow()])} className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">
+        행 추가
+      </button>
+    </div>
+  );
 }
 
 export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekly"; author: string }) {
@@ -313,8 +377,6 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
       </div>
       <div className="grid gap-3 border-t border-slate-200 p-4 lg:grid-cols-2">
         {weeklyCards.map((item) => {
-          const learningRows = item.key === "learning" ? parseLearningRows(String(note.learning)) : [];
-          const setLearningRows = (rows: LearningRow[]) => onNoteChange("learning", buildLearningText(rows));
           return (
             <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
               <div className="flex items-center justify-between gap-2">
@@ -324,40 +386,9 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
                     ✨ AI변환
                   </button>
                 )}
-                {item.key === "learning" && (
-                  <button type="button" onClick={() => setLearningRows([...learningRows, emptyLearningRow()])} className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">
-                    행 추가
-                  </button>
-                )}
               </div>
               {item.key === "learning" ? (
-                <div className="mt-4 space-y-2">
-                  <div className="hidden grid-cols-[70px_80px_90px_1fr_70px_80px_32px] gap-2 px-1 text-[11px] font-black text-slate-400 lg:grid">
-                    <span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>소요시간</span><span>교육자</span><span />
-                  </div>
-                  {learningRows.map((row, index) => {
-                    const update = (field: keyof LearningRow, value: string) => {
-                      const next = learningRows.map((itemRow, i) => i === index ? { ...itemRow, [field]: value } : itemRow);
-                      setLearningRows(next);
-                    };
-                    const remove = () => {
-                      const next = learningRows.filter((_, i) => i !== index);
-                      setLearningRows(next.length ? next : [emptyLearningRow()]);
-                    };
-                    const inputClass = "rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:bg-white";
-                    return (
-                      <div key={index} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50/60 p-2 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px] lg:border-0 lg:bg-transparent lg:p-0">
-                        <input value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
-                        <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
-                        <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
-                        <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
-                        <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
-                        <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
-                        <button type="button" onClick={remove} className="rounded-md text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
-                      </div>
-                    );
-                  })}
-                </div>
+                <LearningRowsEditor value={String(note.learning)} onChange={(value) => onNoteChange("learning", value)} />
               ) : (
                 <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
               )}
