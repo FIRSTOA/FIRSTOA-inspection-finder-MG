@@ -2542,7 +2542,7 @@ const HANTIN_OPTIONS = ["한공", "한조", "모바일한조", "한조해지업�
 const PARKING_OPTIONS = ["유", "무"];
 const SHIP_OPTIONS = ["출고부탁드립니다", "선출고완료"];
 const HOUR_OPTIONS = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"];
-const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
+const MINUTE_OPTIONS = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 const DURATION_STEPS = [1, 5, 10, 30, 60];
 const LEVEL_OPTIONS = ["1", "2", "3", "4", "5"];
 const YESNO_OPTIONS = ["유", "무"];
@@ -2653,6 +2653,35 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
         </div>
       )}
     </>
+  );
+}
+
+function MinuteGridSelect({ value, onChange, accent }: {
+  value: string;
+  onChange: (v: string) => void;
+  accent: string;
+}) {
+  return (
+    <div className="grid grid-cols-6 gap-1.5">
+      {MINUTE_OPTIONS.map((minute: string) => {
+        const active = value === minute;
+        return (
+          <button
+            key={minute}
+            type="button"
+            onClick={() => onChange(active ? "" : minute)}
+            className="rounded-lg border py-2 text-xs font-bold transition active:scale-95"
+            style={{
+              background: active ? accent : "white",
+              borderColor: active ? accent : "#CBD5E1",
+              color: active ? "white" : "#334155",
+            }}
+          >
+            {minute}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -3197,7 +3226,7 @@ function ProcessingFormPanel({
               </span>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] gap-1.5">
             <NumSelect
               value={shared.arrivalHour}
               onChange={(v) => setSharedF("arrivalHour", v)}
@@ -3206,13 +3235,10 @@ function ProcessingFormPanel({
               accent={accent}
               suffix="시"
             />
-            <NumSelect
+            <MinuteGridSelect
               value={shared.arrivalMinute}
               onChange={(v) => setSharedF("arrivalMinute", v)}
-              options={MINUTE_OPTIONS}
-              placeholder="분"
               accent={accent}
-              suffix="분"
             />
           </div>
         </div>
@@ -3327,7 +3353,7 @@ function AirPurifierFormPanel({
               </span>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] gap-1.5">
             <NumSelect
               value={form.arrivalHour}
               onChange={(v) => setAirF("arrivalHour", v)}
@@ -3336,13 +3362,10 @@ function AirPurifierFormPanel({
               accent={accent}
               suffix="시"
             />
-            <NumSelect
+            <MinuteGridSelect
               value={form.arrivalMinute}
               onChange={(v) => setAirF("arrivalMinute", v)}
-              options={MINUTE_OPTIONS}
-              placeholder="분"
               accent={accent}
-              suffix="분"
             />
           </div>
         </div>
@@ -3916,12 +3939,17 @@ export default function App() {
         } else {
           // 미양식 등: blank-report 변환기가 점검 양식을 재가공하며 망가뜨리므로,
           // 변환 없이 비전 결과를 그대로 결과로 세팅하고 편집 폼만 파싱해 채운다.
-          const forms = parseItemDataFromText(resp.text, 1);
-          setListOutput([{ content: resp.text }]);
+          const count = Math.max(1, countInspectionItems(resp.text));
+          const forms = parseItemDataFromText(resp.text, count);
+          setTextOutput(resp.text);
+          setListOutput([]);
           setItemForms(forms.length ? forms : [{ ...EMPTY_ITEM_FORM }]);
-          setTextOutput("");
           setSelectedItem(0);
           setEditedBlocks({});
+          setMode("inspection");
+          setSharedForm((prev: SharedForm) => ({ ...prev, level: FIXED_INSPECTION_LEVEL }));
+          setReportTypes(FIXED_INSPECTION_REPORT_TYPES);
+          setReportTypeOther("");
           skipAutoRef.current = true; // 입력 변경으로 자동 변환이 덮어쓰지 않게
           setInputText(resp.text);
         }
