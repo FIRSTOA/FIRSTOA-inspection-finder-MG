@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
@@ -2626,7 +2626,7 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
 type DeviceInfo = Pick<PerItemForm, "model" | "serial" | "asset" | "content">;
 const EMPTY_DEVICE_INFO: DeviceInfo = { model: "", serial: "", asset: "", content: "" };
 
-function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMove, onRemove }: {
+function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMove, onReorder, onRemove }: {
   forms: PerItemForm[];
   labels: string[];
   selected: number;
@@ -2634,11 +2634,14 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
   onAdd: (info: DeviceInfo) => void;
   onUpdate: (i: number, info: DeviceInfo) => void;
   onMove: (i: number, direction: -1 | 1) => void;
+  onReorder: (from: number, to: number) => void;
   onRemove: (i: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<DeviceInfo>({ ...EMPTY_DEVICE_INFO });
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const beginEdit = (index: number | "new") => {
     setEditing(index);
     setDraft(index === "new" ? { ...EMPTY_DEVICE_INFO } : {
@@ -2652,6 +2655,29 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
     if (editing === "new") onAdd(draft);
     else if (typeof editing === "number") onUpdate(editing, draft);
     setEditing(null);
+  };
+  const beginDrag = (e: PointerEvent<HTMLButtonElement>, index: number) => {
+    if (forms.length <= 1) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragFrom(index);
+    setDragOver(index);
+  };
+  const trackDrag = (e: PointerEvent<HTMLButtonElement>) => {
+    if (dragFrom === null) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-device-index]") as HTMLElement | null;
+    const index = target ? Number(target.dataset.deviceIndex) : NaN;
+    if (Number.isInteger(index) && index >= 0 && index < forms.length) setDragOver(index);
+  };
+  const finishDrag = (e: PointerEvent<HTMLButtonElement>) => {
+    if (dragFrom !== null && dragOver !== null && dragFrom !== dragOver) onReorder(dragFrom, dragOver);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    setDragFrom(null);
+    setDragOver(null);
+  };
+  const cancelDrag = () => {
+    setDragFrom(null);
+    setDragOver(null);
   };
 
   return <div className="mb-2 rounded-lg bg-slate-50 p-2">
@@ -2670,18 +2696,21 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
       <div className="flex max-h-[82vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div className="text-sm font-bold text-slate-800">{editing === "new" ? "새 기기 추가" : typeof editing === "number" ? `${editing + 1}번 기기 정보 수정` : "기기 선택·순서변경"}</div>
-          <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
+          <div className="flex items-center gap-1.5">
+            {editing === null && <button type="button" onClick={() => beginEdit(selected)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">수정</button>}
+            <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
+          </div>
         </div>
         {editing !== null ? <div className="space-y-2 overflow-y-auto p-4">
           {([['model','모델명'],['serial','시리얼넘버'],['asset','자산기번'],['content','내용']] as [keyof DeviceInfo,string][]).map(([key, label]) =>
             <label key={key} className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input autoFocus={key === "model"} value={draft[key]} onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" /></label>)}
           <div className="flex gap-2 pt-2"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">뒤로</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">{editing === "new" ? "기기 추가" : "정보 저장"}</button></div>
         </div> : <div className="flex-1 overflow-y-auto p-2">
-          {forms.map((_, i) => <div key={i} className={`mb-1 flex items-center gap-1 rounded-xl border p-1.5 ${selected === i ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-white"}`}>
-            <button type="button" onClick={() => { onSelect(i); setOpen(false); }} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="truncate text-sm font-bold text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
-            <button type="button" disabled={i === 0} onClick={() => onMove(i, -1)} className="h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25">↑</button>
-            <button type="button" disabled={i === forms.length - 1} onClick={() => onMove(i, 1)} className="h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25">↓</button>
-            <button type="button" onClick={() => beginEdit(i)} className="h-9 rounded-lg bg-slate-100 px-2 text-[11px] font-bold text-slate-600">수정</button>
+          {forms.map((_, i) => <div key={i} data-device-index={i} className={`mb-1 flex items-stretch gap-1 rounded-xl border p-1.5 transition ${dragOver === i && dragFrom !== null ? "border-blue-400 bg-blue-100" : selected === i ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-white"}`}>
+            <button type="button" onPointerDown={(e) => beginDrag(e, i)} onPointerMove={trackDrag} onPointerUp={finishDrag} onPointerCancel={cancelDrag} className="w-9 shrink-0 touch-none rounded-lg bg-slate-100 text-lg font-bold leading-none text-slate-500 active:bg-slate-200">≡</button>
+            <button type="button" onClick={() => onSelect(i)} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="whitespace-normal break-words text-sm font-bold leading-5 text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
+            <button type="button" disabled={i === 0} onClick={() => onMove(i, -1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↑</button>
+            <button type="button" disabled={i === forms.length - 1} onClick={() => onMove(i, 1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↓</button>
             {forms.length > 1 && <button type="button" onClick={() => onRemove(i)} className="h-9 rounded-lg bg-rose-50 px-2 text-[11px] font-bold text-rose-600">삭제</button>}
           </div>)}
         </div>}
@@ -2812,6 +2841,7 @@ type ProcessingFormPanelProps = {
   onAddDevice: (info: DeviceInfo) => void;
   onUpdateDevice: (i: number, info: DeviceInfo) => void;
   onMoveDevice: (i: number, direction: -1 | 1) => void;
+  onReorderDevice: (from: number, to: number) => void;
   onRemoveDevice: (i: number) => void;
   showLevel: boolean;
   showHantinParking: boolean;
@@ -2824,7 +2854,7 @@ function ProcessingFormPanel({
   accent, bgSoft,
   author, setAuthor,
   reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
-  canManageDevices, allItemForms, onAddDevice, onUpdateDevice, onMoveDevice, onRemoveDevice,
+  canManageDevices, allItemForms, onAddDevice, onUpdateDevice, onMoveDevice, onReorderDevice, onRemoveDevice,
   showLevel, showHantinParking,
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
@@ -2864,7 +2894,7 @@ function ProcessingFormPanel({
         )}
       </div>
 
-      {canManageDevices ? <DevicePicker forms={allItemForms} labels={itemLabels} selected={selectedItem} onSelect={setSelectedItem} onAdd={onAddDevice} onUpdate={onUpdateDevice} onMove={onMoveDevice} onRemove={onRemoveDevice} /> : itemCount > 1 && (
+      {canManageDevices ? <DevicePicker forms={allItemForms} labels={itemLabels} selected={selectedItem} onSelect={setSelectedItem} onAdd={onAddDevice} onUpdate={onUpdateDevice} onMove={onMoveDevice} onReorder={onReorderDevice} onRemove={onRemoveDevice} /> : itemCount > 1 && (
         <NumSelect value={String(selectedItem)} onChange={(v) => setSelectedItem(Number(v))} options={Array.from({ length: itemCount }, (_, i) => String(i))} labels={itemLabels} placeholder="기기 선택" accent={accent} />
       )}
 
@@ -4054,6 +4084,26 @@ export default function App() {
     setEditedBlocks({});
   };
 
+  const reorderInspectionDevice = (from: number, to: number) => {
+    const parts = inspectionDeviceParts(buildResultText());
+    if (from === to || from < 0 || to < 0 || from >= parts.devices.length || to >= parts.devices.length) return;
+    const reorder = <T,>(items: T[]) => {
+      const next = [...items];
+      const [picked] = next.splice(from, 1);
+      next.splice(to, 0, picked);
+      return next;
+    };
+    setTextOutput(rebuildInspectionDevices(parts.header, reorder(parts.devices), parts.footer));
+    setItemForms((prev) => reorder(prev));
+    setSelectedItem((current) => {
+      if (current === from) return to;
+      if (from < to && current > from && current <= to) return current - 1;
+      if (from > to && current >= to && current < from) return current + 1;
+      return current;
+    });
+    setEditedBlocks({});
+  };
+
   const removeInspectionDevice = (index: number) => {
     const parts = inspectionDeviceParts(buildResultText());
     if (parts.devices.length <= 1) return;
@@ -4266,6 +4316,7 @@ export default function App() {
             onAddDevice={addInspectionDevice}
             onUpdateDevice={updateInspectionDevice}
             onMoveDevice={moveInspectionDevice}
+            onReorderDevice={reorderInspectionDevice}
             onRemoveDevice={removeInspectionDevice}
             showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
