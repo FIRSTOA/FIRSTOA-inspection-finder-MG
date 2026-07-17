@@ -43,9 +43,15 @@ const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone
   { key: "request", label: "지원·요청·건의사항", icon: "🤝", tone: "bg-violet-50" }, { key: "praise", label: "칭찬", icon: "👏", tone: "bg-pink-50" },
 ];
 const pad = (n: number) => String(n).padStart(2, "0");
+function workWeekRange(date = kstDate()): { start: string; end: string } {
+  const r = weekRange(date);
+  const endDate = new Date(`${r.start}T12:00:00+09:00`);
+  endDate.setDate(endDate.getDate() + 4);
+  return { start: r.start, end: kstDate(endDate) };
+}
 function periodRange(period: Period, year: number, month: number, quarter: number, today: string) {
   if (period === "day") return { start: today, end: today };
-  if (period === "week") return weekRange(today);
+  if (period === "week") return workWeekRange(today);
   const firstMonth = period === "quarter" ? (quarter - 1) * 3 + 1 : period === "year" ? 1 : month;
   const lastMonth = period === "quarter" ? firstMonth + 2 : period === "year" ? 12 : month;
   const lastDay = new Date(year, lastMonth, 0).getDate();
@@ -57,7 +63,7 @@ function weeksInMonth(year: number, month: number) {
   const seen = new Set<string>();
   const out: Array<{ start: string; end: string; label: string }> = [];
   for (let day = 1; day <= lastDay; day++) {
-    const wr = weekRange(`${year}-${pad(month)}-${pad(day)}`);
+    const wr = workWeekRange(`${year}-${pad(month)}-${pad(day)}`);
     if (seen.has(wr.start)) continue;
     seen.add(wr.start);
     out.push({ ...wr, label: `${out.length + 1}주` });
@@ -74,7 +80,7 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
-  const editWeek = useMemo(() => weekRange(selectedDay), [selectedDay]);
+  const editWeek = useMemo(() => workWeekRange(selectedDay), [selectedDay]);
   const range = useMemo(() => {
     if (kind === "weekly") return editWeek;
     return periodRange(period, year, month, quarter, selectedDay);
@@ -253,7 +259,8 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     const cursor = new Date(`${s}T00:00:00`);
     const last = new Date(`${e}T00:00:00`);
     while (cursor <= last) {
-      out.push({ start: `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}` });
+      const day = cursor.getDay();
+      if (day >= 1 && day <= 5) out.push({ start: `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}` });
       cursor.setDate(cursor.getDate() + 1);
     }
     return out;

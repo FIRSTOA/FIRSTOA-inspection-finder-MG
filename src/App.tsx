@@ -4043,7 +4043,7 @@ export default function App() {
 
   const [sending, setSending] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "field" | "happycall" | "itquote" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "field" | "itHistory" | "counterSms" | "happycall" | "itquote" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
@@ -4277,7 +4277,13 @@ export default function App() {
 
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
-  const appScreens = [["home", "홈"], ["daily", "일일방문일지"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"], ["field", "FIELD"]] as [typeof screen, string][];
+  const navGroups = [
+    { title: "홈", items: [["home", "홈"]] },
+    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
+    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["itquote", "견적서 발송"]] },
+  ] as { title: string; items: [typeof screen, string][] }[];
+  const navItems = navGroups.flatMap((group) => group.items);
+  const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -4289,13 +4295,18 @@ export default function App() {
               <div className="text-lg font-bold text-slate-900">퍼스트전산 CS팀</div>
               <div className="text-[11px] text-slate-400">현장 업무 통합</div>
             </div>
-            <nav className="p-2">
-              {([["home", "홈"], ["field", "FIELD"], ["daily", "일일방문일지"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"]] as [typeof screen, string][]).map(([key, label]) => (
-                <button key={key} type="button"
-                  onClick={() => { setScreen(key); setMenuOpen(false); }}
-                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                  {label}
-                </button>
+            <nav className="space-y-3 p-2">
+              {navGroups.map((group) => (
+                <div key={group.title}>
+                  <div className="px-3 py-1 text-[11px] font-black text-slate-400">{group.title}</div>
+                  {group.items.map(([key, label]) => (
+                    <button key={key} type="button"
+                      onClick={() => { setScreen(key); setMenuOpen(false); }}
+                      className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               ))}
               <a
                 href="/manual/field-manual.svg"
@@ -4316,13 +4327,20 @@ export default function App() {
             <div className="text-base font-black">FIRSTOA CS ERP</div>
             <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>
           </div>
-          <nav className="flex-1 space-y-1 px-3 py-4">
-            {appScreens.map(([key, label]) => (
-              <button key={key} type="button" onClick={() => setScreen(key)}
-                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{label}</span>
-                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-              </button>
+          <nav className="flex-1 space-y-5 px-3 py-4">
+            {navGroups.map((group) => (
+              <div key={group.title}>
+                <div className="mb-1 px-3 text-[11px] font-black uppercase tracking-wide text-slate-500">{group.title}</div>
+                <div className="space-y-1">
+                  {group.items.map(([key, label]) => (
+                    <button key={key} type="button" onClick={() => setScreen(key)}
+                      className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                      <span>{label}</span>
+                      {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
           <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
@@ -4339,7 +4357,7 @@ export default function App() {
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
             </button>
             <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-              {screen === "field" ? "FIELD" : screen === "home" ? "홈" : screen === "happycall" ? "해피콜" : screen === "itquote" ? "IT 견적" : screen === "daily" ? "일일방문일지" : screen === "weekly" ? "주간현황판" : "성장기록"}
+              {screenTitle}
             </h1>
           </div>
           {screen === "field" && (
@@ -4364,16 +4382,20 @@ export default function App() {
           )}
         </header>
 
-        {/* 홈 / 해피콜 / IT견적 화면 */}
+        {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
-        {(screen === "happycall" || screen === "itquote") && (
+        {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "itquote") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
-            <div className="mt-2 text-base font-bold text-slate-700">{screen === "happycall" ? "해피콜" : "IT 견적"}</div>
-            <div className="mt-1 text-sm text-slate-400">구상 중 — 곧 만들어집니다</div>
+            <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
+            <div className="mt-1 text-sm text-slate-400">
+              {screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
+                : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
+                : "구상 중 — 곧 만들어집니다"}
+            </div>
           </div>
         )}
 
