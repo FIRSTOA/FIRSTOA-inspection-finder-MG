@@ -116,16 +116,6 @@ function transformGrowthNote(text: string) {
   return `상황: ${situation}\n문제점: ${problem}\n개선해야 할 점: ${improvement}\n실행: ${action}`;
 }
 
-function normalizeGrowthNote(text: string) {
-  const labels = ["상황", "문제점", "개선해야 할 점", "실행"];
-  const current = text.trim();
-  if (!current) return GROWTH_NOTE_TEMPLATE;
-  return labels.map((label) => {
-    const match = current.match(new RegExp(`${label}\\s*[:：]\\s*([\\s\\S]*?)(?=\\n(?:${labels.filter((item) => item !== label).join("|")})\\s*[:：]|$)`));
-    return `${label}: ${(match?.[1] || "").trim()}`;
-  }).join("\n");
-}
-
 async function transformGrowthNoteWithApi(text: string) {
   const current = text.trim();
   if (!current) return GROWTH_NOTE_TEMPLATE;
@@ -136,14 +126,14 @@ async function transformGrowthNoteWithApi(text: string) {
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
       body: JSON.stringify({
         text: current,
-        instruction: "한국어 성장노트를 상황, 문제점, 개선해야 할 점, 실행 네 항목으로 짧고 명확하게 구조화해 주세요.",
+        instruction: "사용자 기록을 성장노트 정리 페르소나로 읽고 [성장노트 정리] 형식, 상황/문제점/개선해야 할 점/실행, 마지막 질문 1개로 간결하게 정리해 주세요.",
         fields: ["상황", "문제점", "개선해야 할 점", "실행"],
       }),
     });
     if (!res.ok) throw new Error(`AI transform failed: ${res.status}`);
     const data = await res.json();
     const result = String(data.result || data.text || data.output || "");
-    return normalizeGrowthNote(result || transformGrowthNote(current));
+    return result.trim() || transformGrowthNote(current);
   } catch {
     return transformGrowthNote(current);
   }
