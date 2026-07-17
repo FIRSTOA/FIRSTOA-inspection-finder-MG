@@ -10,6 +10,7 @@ import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
 import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows, insertRow } from "./supabase";
 import type { PcFormState } from "./PcForm";
+import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
 
@@ -340,6 +341,54 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
       const testRoom = cfg.TEST_ROOM || "테스트 전용방";
       if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
       else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || testRoom]; }
+      for (const room of rooms) await enqueueOutbox(room, text);
+    }
+    return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
+// 복합기(기타) 확장성 폼 → 복합기 확장성 저장 + 확장성 방 전송.
+export async function sendCopierExpansionForm(form: CopierExpansionFormState, author: string, text: string, ts?: string): Promise<SaveResp> {
+  try {
+    const vendor = String(form.company || "").trim();
+    if (!vendor) return { ok: false, error: "상호명을 입력하세요." };
+    const date = toKstDate(ts);
+    const row: Record<string, unknown> = {
+      "등록일": date,
+      "등록자": form.registrant || author,
+      "전략영업담당자": form.salesOwner,
+      "상호명": form.company,
+      "업종및인원매출": form.industryPeopleRevenue,
+      "실제미팅주소": form.meetingAddress,
+      "프로젝트진행상황": form.projectStatus,
+      "성함및직함": form.keymanNameTitle,
+      "연락처": form.contact,
+      "의사결정파급력": form.decisionPower,
+      "개인히스토리": form.personalHistory,
+      "품목원문": form.itemRaw,
+      "예상발주금액만원": form.expectedAmount,
+      "예상발주시기": form.expectedOrderMonth,
+      "계약종료예정일": form.contractEndDate,
+      "특이사항미팅내용": form.notes,
+      "관리등급": form.grade,
+      "_업체명": vendor,
+      "_출처": "웹앱:복합기확장성",
+      "_원문": text,
+      "_dupKey": md5([vendor, date, form.itemRaw, form.expectedAmount, form.expectedOrderMonth, form.notes].join("|")),
+    };
+    const r = await insertRow("copier_expansion", row);
+
+    let rooms: string[] = [];
+    if (r === "new") {
+      const cfg = await getConfig();
+      const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+      if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+      else {
+        const map = await getRoomMap();
+        rooms = [map["복합기확장성|*"] || map["PC확장성|*"] || map["IT통합|*"] || testRoom];
+      }
       for (const room of rooms) await enqueueOutbox(room, text);
     }
     return { ok: true, message: r === "new" ? `저장 완료 — 게시 대기: ${rooms.join(", ")}` : "이미 저장된 내용입니다(중복)." };

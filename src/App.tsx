@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEve
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
+import CopierExpansionForm, { EMPTY_COPIER_EXPANSION_FORM, buildCopierExpansionText, type CopierExpansionFormState } from "./CopierExpansionForm";
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
@@ -13,7 +14,7 @@ import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
 import { uploadPhoto, createAlbum } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -3705,9 +3706,13 @@ export default function App() {
   // Result blocks for the bottom panel, tagged with their device index so
   // selecting a device scrolls its block into view.
   // IT통합(PC) 폼 상태 (탭 전환에도 유지, 초기화 시 리셋)
+  const [pcSubTab, setPcSubTab] = useState<"it" | "copier">("it");
   const [pcForm, setPcForm] = useState<PcFormState>({ ...EMPTY_PC_FORM });
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
+  const [copierExpansionForm, setCopierExpansionForm] = useState<CopierExpansionFormState>({ ...EMPTY_COPIER_EXPANSION_FORM });
+  const copierExpansionFilled = useMemo(() => Object.values(copierExpansionForm).some((v) => String(v).trim() !== ""), [copierExpansionForm]);
+  const copierExpansionText = useMemo(() => buildCopierExpansionText(copierExpansionForm, author), [copierExpansionForm, author]);
   const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>({ ...EMPTY_LOGISTICS_FORM });
   const logisticsFilled = Boolean(logisticsForm.vendor.trim() || logisticsForm.item.trim() || logisticsForm.notes.trim());
   const logisticsText = useMemo(() => buildLogisticsText(logisticsForm, author), [logisticsForm, author]);
@@ -3741,11 +3746,14 @@ export default function App() {
     }
     if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
     if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
-    if (mode === "pc") return pcFilled ? [{ text: pcText, device: null }] : [];
+    if (mode === "pc") {
+      if (pcSubTab === "copier") return copierExpansionFilled ? [{ text: copierExpansionText, device: null }] : [];
+      return pcFilled ? [{ text: pcText, device: null }] : [];
+    }
     if (mode === "logistics") return logisticsFilled ? [{ text: logisticsText, device: null }] : [];
     if (isCat) return catFilled ? [{ text: catText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList, pcText, pcFilled, logisticsText, logisticsFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
+  }, [mode, displayedTextOutput, displayedList, pcSubTab, pcText, pcFilled, copierExpansionText, copierExpansionFilled, logisticsText, logisticsFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -4101,7 +4109,7 @@ export default function App() {
   const recordVisit = async (target: string, destination?: SendDestination) => {
     const parsedVendor = extractVendorFromText(target);
     const parsedGrade = target.match(/등급\s*[:：]?\s*\(?\s*([^,\n\r)]+)/)?.[1]?.trim() || "";
-    const vendor = parsedVendor || logisticsForm.vendor || pcForm.company || String(curCatForm["업체명"] || currentVendor || "");
+    const vendor = parsedVendor || logisticsForm.vendor || (pcSubTab === "copier" ? copierExpansionForm.company : pcForm.company) || String(curCatForm["업체명"] || currentVendor || "");
     const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" : visitKindForMode();
     const existingMinutes = Number(visitMeta.minutes[kind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
@@ -4134,9 +4142,11 @@ export default function App() {
       return;
     }
 
-    // 확장성(PC): pc_expansion 저장 + PC방 전송 (점검/AS 경로와 별개)
+    // 확장성: IT는 PC확장성, 복합기(기타)는 복합기확장성으로 저장/전송.
     if (mode === "pc") {
-      const res = await sendPcForm(pcForm, author, target, new Date().toISOString());
+      const res = pcSubTab === "copier"
+        ? await sendCopierExpansionForm(copierExpansionForm, author, target, new Date().toISOString())
+        : await sendPcForm(pcForm, author, target, new Date().toISOString());
       if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
@@ -4191,6 +4201,7 @@ export default function App() {
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
     photoLinkRef.current = "";
     setPcForm({ ...EMPTY_PC_FORM });
+    setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM });
     setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
     setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
@@ -4268,7 +4279,7 @@ export default function App() {
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcFilled) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
 
   return (
     <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-slate-50" : "bg-white"}`}>
@@ -4485,17 +4496,42 @@ export default function App() {
           />
         )}
 
-        {/* 확장성(PC) form */}
+        {/* 확장성 form */}
         {mode === "pc" && (
-          <PcForm
-            form={pcForm}
-            setForm={setPcForm}
-            author={author}
-            setAuthor={handleSetAuthor}
-            accent={config.accent}
-            onLoad={loadSharedFromInspect}
-            onError={(m) => showToast(m, "error")}
-          />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
+              {([["it", "IT"], ["copier", "복합기(기타)"]] as [typeof pcSubTab, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPcSubTab(key)}
+                  className={`rounded-lg py-2 text-sm font-bold transition ${pcSubTab === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {pcSubTab === "it" ? (
+              <PcForm
+                form={pcForm}
+                setForm={setPcForm}
+                author={author}
+                setAuthor={handleSetAuthor}
+                accent={config.accent}
+                onLoad={loadSharedFromInspect}
+                onError={(m) => showToast(m, "error")}
+              />
+            ) : (
+              <CopierExpansionForm
+                form={copierExpansionForm}
+                setForm={setCopierExpansionForm}
+                author={author}
+                setAuthor={handleSetAuthor}
+                onLoad={loadSharedFromInspect}
+                onError={(m) => showToast(m, "error")}
+              />
+            )}
+          </div>
         )}
 
         {mode === "logistics" && <LogisticsForm form={logisticsForm} setForm={setLogisticsForm} author={author} setAuthor={handleSetAuthor} />}
