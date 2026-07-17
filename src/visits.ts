@@ -125,7 +125,20 @@ export async function getWeeklyNotes(start: string, end: string): Promise<Weekly
   return rows.map((r) => ({ author: String(r.author), weekStart: String(r.week_start), goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], bottlenecks: normalizeBottlenecks(r.bottlenecks), thisWeekGoal: String(r.this_week_goal || ""), thisWeekResult: String(r.this_week_result || ""), nextWeekGoal: String(r.next_week_goal || ""), review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") }));
 }
 
-export type LevelGoal = { id: string; category: string; title: string; currentLevel: string; targetLevel: string; budget: string; month1: string; month2: string; month3: string; progress: number };
+export type LevelGoal = {
+  id: string;
+  category: string;
+  grade?: string;
+  title: string;
+  currentLevel: string;
+  targetLevel: string;
+  budget: string;
+  reflectedBudget?: string;
+  month1: string;
+  month2: string;
+  month3: string;
+  progress: number;
+};
 export type QuarterlyPlan = { author: string; year: number; quarter: number; goals: LevelGoal[] };
 export async function getQuarterlyPlan(author: string, year: number, quarter: number): Promise<QuarterlyPlan> {
   const rows = await selectRows<Record<string, unknown>>("quarterly_plans", `select=*&author=eq.${encodeURIComponent(author)}&year=eq.${year}&quarter=eq.${quarter}&limit=1`);

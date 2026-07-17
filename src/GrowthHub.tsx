@@ -14,7 +14,7 @@ import {
   type WeeklyNoteRow,
 } from "./visits";
 
-type Tab = "records" | "plan" | "golden";
+type Tab = "records" | "plan" | "result" | "mission" | "golden";
 type RecordType = "all" | "growth" | "learning" | "challenge" | "special";
 type RecordPeriod = "month" | "quarter";
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -48,6 +48,8 @@ const statusText: Record<AutoSaveStatus, string> = {
   saved: "자동저장됨",
   error: "자동저장 실패",
 };
+const PLAN_CATEGORIES = ["AI", "자기개발", "매출증대", "매출안정", "효율성", "비용절감", "소통", "기타"] as const;
+const GRADE_OPTIONS = ["A", "B", "C", "D"] as const;
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const quarterRange = (year: number, quarter: number) => {
@@ -297,6 +299,8 @@ export default function GrowthHub({ author }: { author: string }) {
     const allText = recordTypes.map(([key]) => note[key]).join(" ");
     return `${note.author} ${note.weekStart} ${allText}`.toLowerCase().includes(search);
   }), [notes, person, query, type]);
+  const regularGoals = useMemo(() => plan.goals.filter((goal) => goal.category !== "미션"), [plan.goals]);
+  const missionGoals = useMemo(() => plan.goals.filter((goal) => goal.category === "미션"), [plan.goals]);
 
   const openGatherResult = (key: "growth" | "learning") => {
     const text = key === "growth" ? buildGrowthGatherText(rows) : buildLearningGatherText(rows);
@@ -324,8 +328,68 @@ export default function GrowthHub({ author }: { author: string }) {
     URL.revokeObjectURL(url);
   };
 
-  const addGoal = () => {
-    const g: LevelGoal = { id: crypto.randomUUID(), category: "자기개발", title: "", currentLevel: "", targetLevel: "", budget: "", month1: "", month2: "", month3: "", progress: 0 };
+  const copyGoldenAiPrompt = async () => {
+    const planText = regularGoals.map((goal, i) => [
+      `${i + 1}. [${goal.category}] ${goal.title || "(목표 미입력)"}`,
+      `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress || 0}%`,
+      `${(quarter - 1) * 3 + 1}월: ${goal.month1 || "-"}`,
+      `${(quarter - 1) * 3 + 2}월: ${goal.month2 || "-"}`,
+      `${(quarter - 1) * 3 + 3}월: ${goal.month3 || "-"}`,
+    ].join("\n")).join("\n\n");
+    const missionText = missionGoals.map((goal, i) => [
+      `${i + 1}. ${goal.title || "(미션 미입력)"}`,
+      `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress || 0}%`,
+      `${(quarter - 1) * 3 + 1}월: ${goal.month1 || "-"}`,
+      `${(quarter - 1) * 3 + 2}월: ${goal.month2 || "-"}`,
+      `${(quarter - 1) * 3 + 3}월: ${goal.month3 || "-"}`,
+    ].join("\n")).join("\n\n");
+    const recordText = rows.map((row) => [
+      `[${weekLabelOnly(row.weekStart)}]`,
+      row.growth ? `성장노트:\n${row.growth}` : "",
+      row.learning ? `배운점:\n${row.learning}` : "",
+      row.challenge ? `아이디어:\n${row.challenge}` : "",
+      row.special ? `특이사항:\n${row.special}` : "",
+    ].filter(Boolean).join("\n")).join("\n\n");
+    const prompt = `[골든미팅카드 작성 요청]
+${year}년 ${quarter}분기 최신 양식 기준으로 작성해줘.
+반드시 수치화와 진행률 %를 포함해줘.
+근거가 부족한 항목은 임의로 만들지 말고 "기록 보완 필요"라고 표시해줘.
+질문은 아래 4개 기준으로 정리해줘.
+- 지난기간 나의성과는?
+- 타인의 성과에 내가 기여한 것은?
+- 성장을 위한 학습 & 발견한 지식
+- 다음 도전을 위한 지원 요청
+
+[계획표/분기결과표]
+${planText || "없음"}
+
+[미션결과표]
+${missionText || "없음"}
+
+[성장기록 근거]
+${recordText || "없음"}
+
+[작성 중인 골든미팅카드]
+${JSON.stringify(card.answers, null, 2)}`;
+    await navigator.clipboard.writeText(prompt);
+    setMessage("최신 분기 기준 골든미팅카드 AI 작성 프롬프트를 복사했습니다.");
+  };
+
+  const addGoal = (kind: "regular" | "mission" = "regular") => {
+    const g: LevelGoal = {
+      id: crypto.randomUUID(),
+      category: kind === "mission" ? "미션" : "자기개발",
+      grade: "C",
+      title: "",
+      currentLevel: "",
+      targetLevel: "",
+      budget: "",
+      reflectedBudget: "",
+      month1: "",
+      month2: "",
+      month3: "",
+      progress: 0,
+    };
     setPlan({ ...plan, author: person, year, quarter, goals: [...plan.goals, g] });
   };
   const setGoal = (id: string, patch: Partial<LevelGoal>) => setPlan({ ...plan, goals: plan.goals.map((g) => g.id === id ? { ...g, ...patch } : g) });
@@ -364,13 +428,13 @@ export default function GrowthHub({ author }: { author: string }) {
         <div className="text-xs font-bold uppercase tracking-wide text-blue-600">분기 회고를 빠르게 준비하는 기록함</div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 lg:text-3xl">성장기록 허브</h2>
         <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
-          주간현황판에 적은 성장노트, 배운 점, 아이디어, 특이사항을 모아봅니다. 분기 회고 때는 정리 프롬프트를 복사해서 GPT에 붙여넣으면 됩니다.
+          주간현황판 기록을 모아보고, 공식 분기목표 양식의 계획표·결과표·미션결과표·골든미팅카드를 관리합니다.
         </p>
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid grid-cols-3 gap-1 rounded-md bg-slate-100 p-1">
-          {([["records", "성장기록 모아보기"], ["plan", "레벨업계획"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
+        <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1 md:grid-cols-5">
+          {([["records", "성장기록 모아보기"], ["plan", "계획표"], ["result", "분기결과표"], ["mission", "미션결과표"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)} className={`rounded px-5 py-2 text-sm font-bold transition ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>
           ))}
         </div>
@@ -491,30 +555,121 @@ export default function GrowthHub({ author }: { author: string }) {
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 레벨업계획</h3>
-              <p className="text-xs font-semibold text-slate-500">목표와 월별 실행 결과를 한 표에서 관리합니다.</p>
+              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 계획표</h3>
+              <p className="text-xs font-semibold text-slate-500">공식 양식 기준으로 목표, 등급, 레벨, 예산, 진도율을 관리합니다.</p>
             </div>
-            <button disabled={!person} onClick={addGoal} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">목표 추가</button>
+            <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">목표 추가</button>
           </div>
           {!person && <div className="mt-8 text-center text-sm text-amber-600">작성자 직원을 선택하세요.</div>}
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[1180px] text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">구분</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">업무 등급</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">현재 레벨</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표 레벨</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">요청예산</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">예산반영</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">진도율</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {regularGoals.map((g) => (
+                  <tr key={g.id} className="border-b border-slate-100 align-top">
+                    <td className="px-3 py-3"><select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="w-28 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">{PLAN_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
+                    <td className="px-3 py-3"><select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
+                    <td className="px-3 py-3"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} className="w-full min-w-[360px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6" /></td>
+                    <td className="px-3 py-3"><input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
+                    <td className="px-3 py-3"><input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
+                    <td className="px-3 py-3"><input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} className="w-28 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
+                    <td className="px-3 py-3"><input value={g.reflectedBudget || ""} onChange={(e) => setGoal(g.id, { reflectedBudget: e.target.value })} className="w-28 rounded-md border border-slate-300 px-2 py-2 text-sm" /></td>
+                    <td className="px-3 py-3"><div className="flex items-center gap-1"><input type="number" min="0" max="999" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} className="w-20 rounded-md border border-slate-300 px-2 py-2 text-sm" /><span className="text-xs font-bold text-slate-400">%</span></div></td>
+                    <td className="px-3 py-3"><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((x) => x.id !== g.id) })} className="rounded-md px-2 py-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button></td>
+                  </tr>
+                ))}
+                {!regularGoals.length && <tr><td colSpan={9} className="p-12 text-center text-sm text-slate-400">계획표 목표를 추가하세요.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {person && (
+            <button onClick={savePlan} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+              {statusText[planAutoSaveStatus]} · 지금 저장
+            </button>
+          )}
+        </section>
+      )}
+
+      {!loading && tab === "result" && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 결과표</h3>
+              <p className="text-xs font-semibold text-slate-500">목표별 월간 결과를 기록합니다. 수치와 진행률 %는 반드시 남기는 기준으로 사용하세요.</p>
+            </div>
+            <div className="text-xs font-black text-blue-700">{statusText[planAutoSaveStatus]}</div>
+          </div>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[1280px] text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">구분</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">등급</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">현재</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">목표</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">진도율</th>
+                  {[1, 2, 3].map((m) => <th key={m} className="border-b border-slate-200 px-3 py-3 text-xs font-black text-slate-500">{(quarter - 1) * 3 + m}월</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {regularGoals.map((g) => (
+                  <tr key={g.id} className="border-b border-slate-100 align-top">
+                    <td className="px-3 py-3 text-sm font-bold text-slate-700">{g.category}</td>
+                    <td className="whitespace-pre-wrap px-3 py-3 text-sm leading-6 text-slate-700">{g.title || "-"}</td>
+                    <td className="px-3 py-3 text-sm text-slate-600">{g.grade || "-"}</td>
+                    <td className="px-3 py-3 text-sm text-slate-600">{g.currentLevel || "-"}</td>
+                    <td className="px-3 py-3 text-sm text-slate-600">{g.targetLevel || "-"}</td>
+                    <td className="px-3 py-3 text-sm font-black text-blue-700">{g.progress || 0}%</td>
+                    {[1, 2, 3].map((m) => <td key={m} className="px-3 py-3"><textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="w-full min-w-[260px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" /></td>)}
+                  </tr>
+                ))}
+                {!regularGoals.length && <tr><td colSpan={9} className="p-12 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {!loading && tab === "mission" && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 미션결과표</h3>
+              <p className="text-xs font-semibold text-slate-500">미션 목표별 기존 방식, 현재 개선 방식, 소요시간, 진행률을 기록합니다.</p>
+            </div>
+            <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">미션 추가</button>
+          </div>
           <div className="mt-5 space-y-4">
-            {plan.goals.map((g, i) => (
+            {missionGoals.map((g, i) => (
               <div key={g.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="grid gap-2 lg:grid-cols-[40px_120px_1fr_90px_90px_120px_80px_36px]">
-                  <span className="py-2 text-center text-sm font-bold text-slate-300">{i + 1}</span>
-                  <select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold">{[...GOLDEN_CATEGORIES, "기타"].map((c) => <option key={c}>{c}</option>)}</select>
-                  <input value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} placeholder="목표와 실행기준" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                <div className="grid gap-2 lg:grid-cols-[48px_1fr_80px_80px_80px_100px_36px]">
+                  <span className="py-2 text-center text-sm font-black text-slate-300">{i + 1}</span>
+                  <input value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} placeholder="미션 목표" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  <select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select>
                   <input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} placeholder="현재" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
                   <input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} placeholder="목표" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
-                  <input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} placeholder="예산" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
-                  <input type="number" min="0" max="100" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} placeholder="진도%" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
+                  <input type="number" min="0" max="999" value={g.progress || ""} onChange={(e) => setGoal(g.id, { progress: Number(e.target.value) || 0 })} placeholder="진도%" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
                   <button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((x) => x.id !== g.id) })} className="text-slate-300 hover:text-rose-500">×</button>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  {[1, 2, 3].map((m) => <label key={m} className="text-xs font-bold text-slate-500">{(quarter - 1) * 3 + m}월 결과<textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={5} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
+                  {[1, 2, 3].map((m) => <label key={m} className="text-xs font-bold text-slate-500">{(quarter - 1) * 3 + m}월 미션 결과<textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-6 outline-none focus:border-blue-300" /></label>)}
                 </div>
               </div>
             ))}
+            {!missionGoals.length && <div className="rounded-lg border border-dashed border-slate-200 p-12 text-center text-sm text-slate-400">미션을 추가하세요.</div>}
           </div>
           {person && (
             <button onClick={savePlan} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
@@ -526,9 +681,14 @@ export default function GrowthHub({ author }: { author: string }) {
 
       {!loading && tab === "golden" && (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
-            <p className="text-xs font-semibold text-slate-500">성장기록 모아보기에서 정리한 내용을 참고해 작성하세요.</p>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
+              <p className="text-xs font-semibold text-slate-500">최신 선택 분기의 계획표·결과표·미션결과표·성장기록을 근거로 작성하세요.</p>
+            </div>
+            <button type="button" onClick={copyGoldenAiPrompt} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100">
+              최신분기 AI작성 프롬프트 복사
+            </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
             {GOLDEN_QUESTIONS.map((q, i) => <button key={q} onClick={() => setQuestion(i)} className={`rounded-md px-3 py-3 text-xs font-bold transition ${question === i ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{q}</button>)}
