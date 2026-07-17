@@ -39,6 +39,7 @@ const fieldLabels: Record<Exclude<RecordType, "all">, string[]> = {
   challenge: ["내용"],
   special: ["내용"],
 };
+const hasRecordContent = (note: WeeklyNoteRow) => recordTypes.some(([key]) => String(note[key] || "").trim());
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const quarterRange = (year: number, quarter: number) => {
@@ -150,6 +151,7 @@ export default function GrowthHub({ author }: { author: string }) {
   }, [person, year, quarter, range.start, range.end]);
 
   const rows = useMemo(() => notes.filter((note) => {
+    if (!hasRecordContent(note)) return false;
     if (person && note.author !== person) return false;
     if (type !== "all" && !note[type].trim()) return false;
     const search = query.trim().toLowerCase();

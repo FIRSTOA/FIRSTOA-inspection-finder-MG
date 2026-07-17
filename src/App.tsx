@@ -11,6 +11,8 @@ import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
+import ReplacementForm from "./ReplacementForm";
+import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
@@ -41,7 +43,7 @@ import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
-  | "logistics" | "bulman" | "misu" | "overage-adjust" | "recontract";
+  | "logistics" | "replacement" | "bulman" | "misu" | "overage-adjust" | "recontract";
 
 type CopyResult = {
   ok: boolean;
@@ -88,6 +90,7 @@ const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: str
   "samsung-note": { icon: "📝", title: "일정 원본 변환", description: "번호가 붙은 현장 일정을 여러 건의 업무 양식으로 변환합니다." },
   pc: { icon: "💻", title: "확장성 업무", description: "거래처의 PC·소프트웨어 현황과 홍보·견적 내용을 기록합니다." },
   logistics: { icon: "📦", title: "물류 업무", description: "납품·교체·철수·이전·셋팅 업무와 물품 상태를 기록합니다." },
+  replacement: { icon: "🔁", title: "교체양식", description: "퍼스트전산 채널에 복사해서 붙여넣는 교체 전용 양식을 작성합니다." },
   bulman: { icon: "📣", title: "불만 방문", description: "거래처 불만 내용과 방문 처리결과를 정해진 양식으로 기록합니다." },
   misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록하고 지역별 미수방으로 전송합니다." },
   "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
@@ -137,6 +140,7 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
     placeholder: "",
   },
   logistics: { label: "물류", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  replacement: { label: "교체양식", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   bulman: { label: "불만", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   misu: { label: "미수", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   "overage-adjust": { label: "초과조정", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
@@ -3710,6 +3714,9 @@ export default function App() {
   const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>({ ...EMPTY_LOGISTICS_FORM });
   const logisticsFilled = Boolean(logisticsForm.vendor.trim() || logisticsForm.item.trim() || logisticsForm.notes.trim());
   const logisticsText = useMemo(() => buildLogisticsText(logisticsForm, author), [logisticsForm, author]);
+  const [replacementForm, setReplacementForm] = useState<ReplacementFormState>({ ...EMPTY_REPLACEMENT_FORM });
+  const replacementFilled = Object.entries(replacementForm).some(([key, value]) => key !== "owner" && String(value).trim() !== "");
+  const replacementText = useMemo(() => buildReplacementText(replacementForm), [replacementForm]);
   const [reportTypes, setReportTypes] = useState<string[]>(
     Array.isArray(ss.reportTypes) ? (ss.reportTypes as string[]) : [],
   );
@@ -3745,9 +3752,10 @@ export default function App() {
       return pcFilled ? [{ text: pcText, device: null }] : [];
     }
     if (mode === "logistics") return logisticsFilled ? [{ text: logisticsText, device: null }] : [];
+    if (mode === "replacement") return replacementFilled ? [{ text: replacementText, device: null }] : [];
     if (isCat) return catFilled ? [{ text: catText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList, pcSubTab, pcText, pcFilled, copierExpansionText, copierExpansionFilled, logisticsText, logisticsFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
+  }, [mode, displayedTextOutput, displayedList, pcSubTab, pcText, pcFilled, copierExpansionText, copierExpansionFilled, logisticsText, logisticsFilled, replacementText, replacementFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -4128,6 +4136,10 @@ export default function App() {
       showToast("보낼 내용이 없어요", "error");
       return;
     }
+    if (mode === "replacement") {
+      showToast("교체양식은 복사 전용입니다. 퍼스트전산 채널에 붙여넣어 주세요.", "error");
+      return;
+    }
     if (sending) return;
     setSending(true);
     showToast(kind === "normal" ? "보내는 중…" : `${kind} 요청 보내는 중…`);
@@ -4201,6 +4213,7 @@ export default function App() {
     setPcForm({ ...EMPTY_PC_FORM });
     setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM });
     setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
+    setReplacementForm({ ...EMPTY_REPLACEMENT_FORM });
     setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
@@ -4277,7 +4290,7 @@ export default function App() {
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (isCat && catFilled);
   const navGroups = [
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
@@ -4449,7 +4462,7 @@ export default function App() {
               );
             })}
             {(() => {
-              const moreActive = mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
+              const moreActive = mode === "replacement" || mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
               return (
                 <button
                   type="button"
@@ -4465,7 +4478,7 @@ export default function App() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
               <div className="absolute right-1 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                {([["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => (
+                {([["교체양식", "replacement"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => (
                   <button
                     key={label}
                     type="button"
@@ -4611,6 +4624,8 @@ export default function App() {
 
         {mode === "logistics" && <LogisticsForm form={logisticsForm} setForm={setLogisticsForm} author={author} setAuthor={handleSetAuthor} />}
 
+        {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
+
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
           <CategoryForm
@@ -4681,6 +4696,8 @@ export default function App() {
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
                 </>
+              ) : mode === "replacement" ? (
+                <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
               )}
@@ -4779,7 +4796,9 @@ export default function App() {
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
-            </> : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
+            </> : mode === "replacement" ? (
+              <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
+            ) : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
             {(mode === "inspection" || mode === "blank-report") && (
               <>
                 <button
