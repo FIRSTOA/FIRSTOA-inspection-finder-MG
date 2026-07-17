@@ -143,6 +143,10 @@ function parseLearningRows(text: string): LearningRow[] {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [emptyLearningRow()];
   return lines.map((line) => {
+    if (line.includes("\t")) {
+      const [date = "", brand = "", model = "", lesson = "", educator = "", duration = ""] = line.split("\t");
+      return { date, brand, model, lesson, duration, educator };
+    }
     const parts = line.split(/\s+/).filter(Boolean);
     const durationIndex = parts.findIndex((part, index) => index >= 3 && /^\d+\s*(?:분|시간)?$/.test(part));
     if (durationIndex >= 0) {
@@ -178,7 +182,7 @@ function parseLearningRows(text: string): LearningRow[] {
 
 function buildLearningText(rows: LearningRow[]) {
   return rows
-    .map((row) => [row.date, row.brand, row.model, row.lesson, row.duration, row.educator].map((v) => v.trim()).filter(Boolean).join(" "))
+    .map((row) => [row.date, row.brand, row.model, row.lesson, row.educator, row.duration].map((v) => v.trim()).join("\t").replace(/\t+$/g, ""))
     .filter(Boolean)
     .join("\n");
 }
@@ -200,7 +204,7 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
   return (
     <div className="mt-4 space-y-2">
       <div className="hidden grid-cols-[70px_80px_90px_1fr_70px_80px_32px] gap-2 px-1 text-[11px] font-black text-slate-400 lg:grid">
-        <span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>소요시간</span><span>교육자</span><span />
+        <span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>교육자</span><span>소요시간</span><span />
       </div>
       {rows.map((row, index) => {
         const update = (field: keyof LearningRow, fieldValue: string) => commitRows(rows.map((itemRow, i) => i === index ? { ...itemRow, [field]: fieldValue } : itemRow));
@@ -215,8 +219,8 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
             <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
             <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
             <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
-            <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
             <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
+            <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
             <button type="button" onClick={remove} className="rounded-md text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
           </div>
         );
