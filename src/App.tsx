@@ -4310,8 +4310,8 @@ export default function App() {
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white lg:flex">
           <div className="border-b border-white/10 px-5 py-5">
-            <div className="text-base font-black">FIRSTOA ERP</div>
-            <div className="mt-1 text-xs font-semibold text-slate-400">현장 업무 운영</div>
+            <div className="text-base font-black">FIRSTOA CS ERP</div>
+            <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>
           </div>
           <nav className="flex-1 space-y-1 px-3 py-4">
             {appScreens.map(([key, label]) => (
