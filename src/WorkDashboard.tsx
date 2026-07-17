@@ -4,6 +4,7 @@ import {
   getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
   type BottleneckItem, type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WorkKind,
 } from "./visits";
+import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 
 const KINDS = Object.keys(WORK_LABELS) as WorkKind[];
 const OFFICE_KINDS = Object.keys(OFFICE_LABELS) as OfficeKind[];
@@ -128,11 +129,11 @@ function normalizeGrowthNote(text: string) {
 async function transformGrowthNoteWithApi(text: string) {
   const current = text.trim();
   if (!current) return GROWTH_NOTE_TEMPLATE;
-  const endpoint = String(import.meta.env.VITE_AI_TRANSFORM_URL || "/api/growth-note-transform");
+  const endpoint = String(import.meta.env.VITE_AI_TRANSFORM_URL || `${SUPABASE_URL}/functions/v1/growth-note-transform`);
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
       body: JSON.stringify({
         text: current,
         instruction: "한국어 성장노트를 상황, 문제점, 개선해야 할 점, 실행 네 항목으로 짧고 명확하게 구조화해 주세요.",
