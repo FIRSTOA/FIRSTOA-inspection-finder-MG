@@ -4478,7 +4478,7 @@ export default function App() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
               <div className="absolute right-1 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                {([["교체양식", "replacement"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"]] as [string, Mode][]).map(([label, target]) => (
+                {([["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"]] as [string, Mode][]).map(([label, target]) => (
                   <button
                     key={label}
                     type="button"
@@ -4547,7 +4547,7 @@ export default function App() {
               <div className="mt-0.5 text-xs leading-5 text-slate-500">{FIELD_GUIDES[mode].description}</div>
             </div>
           </div>
-          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && (
+          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && mode !== "replacement" && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-800">
               카톡방 자동전송은 아직 준비 중입니다. 내용을 작성한 뒤 하단의 <b>복사</b> 버튼을 눌러 카톡방에 붙여넣어 주세요.
             </div>
