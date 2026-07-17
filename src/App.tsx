@@ -2721,7 +2721,7 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
         </div> : <div className="flex-1 overflow-y-auto p-2">
           {forms.map((_, i) => <div key={i} data-device-index={i} className={`mb-1 flex items-stretch gap-1 rounded-xl border p-1.5 transition ${rowClass(i)}`}>
             <button type="button" onPointerDown={(e) => beginDrag(e, i)} onPointerMove={trackDrag} onPointerUp={finishDrag} onPointerCancel={cancelDrag} className={`w-9 shrink-0 touch-none rounded-lg text-lg font-bold leading-none active:bg-blue-200 ${dragFrom === i ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>≡</button>
-            <button type="button" onClick={() => onSelect(i)} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="whitespace-normal break-words text-sm font-bold leading-5 text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
+            <button type="button" onClick={() => { onSelect(i); setOpen(false); }} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="whitespace-normal break-words text-sm font-bold leading-5 text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
             <button type="button" disabled={i === 0} onClick={() => onMove(i, -1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↑</button>
             <button type="button" disabled={i === forms.length - 1} onClick={() => onMove(i, 1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↓</button>
             {forms.length > 1 && <button type="button" onClick={() => onRemove(i)} className="h-9 rounded-lg bg-rose-50 px-2 text-[11px] font-bold text-rose-600">삭제</button>}
