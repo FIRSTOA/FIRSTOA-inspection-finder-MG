@@ -31,6 +31,7 @@ create table if not exists public.weekly_notes (
   week_start date not null,
   goals jsonb not null default '{}'::jsonb,
   goal_items jsonb not null default '[]'::jsonb,
+  bottlenecks jsonb not null default '[]'::jsonb,
   this_week_goal text not null default '', this_week_result text not null default '', next_week_goal text not null default '',
   review text not null default '', growth text not null default '', challenge text not null default '',
   special text not null default '', learning text not null default '', request text not null default '', praise text not null default '',
@@ -38,6 +39,7 @@ create table if not exists public.weekly_notes (
   unique(author, week_start)
 );
 alter table public.weekly_notes add column if not exists goal_items jsonb not null default '[]'::jsonb;
+alter table public.weekly_notes add column if not exists bottlenecks jsonb not null default '[]'::jsonb;
 alter table public.weekly_notes add column if not exists this_week_goal text not null default '';
 alter table public.weekly_notes add column if not exists this_week_result text not null default '';
 alter table public.weekly_notes add column if not exists next_week_goal text not null default '';

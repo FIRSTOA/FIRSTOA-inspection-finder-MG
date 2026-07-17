@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   EMPTY_WEEKLY_NOTE, OFFICE_LABELS, WORK_LABELS, emptyOfficeValues, getOfficeLogs, getVisits,
   getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
-  type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WorkKind,
+  type BottleneckItem, type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WorkKind,
 } from "./visits";
 
 const KINDS = Object.keys(WORK_LABELS) as WorkKind[];
@@ -42,6 +42,10 @@ const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone
   { key: "special", label: "특이사항", icon: "🧡", tone: "bg-orange-50" }, { key: "learning", label: "배운 점", icon: "📚", tone: "bg-emerald-50" },
   { key: "request", label: "지원·요청·건의사항", icon: "🤝", tone: "bg-violet-50" }, { key: "praise", label: "칭찬", icon: "👏", tone: "bg-pink-50" },
 ];
+const structuredLabels: Partial<Record<WeeklyTextKey, string[]>> = {
+  growth: ["상황", "문제점", "개선해야 할 점", "실행"],
+  learning: ["주차", "작성자", "날짜", "소요시간", "브랜드", "기종", "교육자", "배운 점"],
+};
 const pad = (n: number) => String(n).padStart(2, "0");
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
@@ -69,6 +73,29 @@ function weeksInMonth(year: number, month: number) {
     out.push({ ...wr, label: `${out.length + 1}주` });
   }
   return out;
+}
+
+function parseStructuredText(text: string, labels: string[]) {
+  const result: Record<string, string> = Object.fromEntries(labels.map((label) => [label, ""]));
+  const lines = text.split(/\r?\n/);
+  let current = "";
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const matched = labels.find((label) => new RegExp(`^${label}\\s*[:：]`).test(line.trim()));
+    if (matched) {
+      current = matched;
+      result[current] = line.replace(new RegExp(`^${matched}\\s*[:：]\\s*`), "");
+    } else if (current) {
+      result[current] = `${result[current]}${result[current] ? "\n" : ""}${line}`.trim();
+    }
+  }
+  if (!Object.values(result).some((value) => value.trim())) result[labels[0]] = text.trim();
+  return result;
+}
+
+function previewText(text: string, fallback = "미작성") {
+  const value = text.trim();
+  return value ? value : fallback;
 }
 
 export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekly"; author: string }) {
@@ -114,6 +141,10 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const insideMinutes = officeMinutes(officeLogs);
   const commute = [...rows].reverse().find((r) => r.commute)?.commute;
   const setNoteField = <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => setNote({ ...note, [k]: v });
+  const setBottleneck = (index: number, field: keyof BottleneckItem, value: string) => setNote({
+    ...note,
+    bottlenecks: note.bottlenecks.map((item, i) => i === index ? { ...item, [field]: value } : item),
+  });
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const saveWeekly = async () => { setSaving("weekly"); setSaved(""); try { await saveWeeklyNote(author, editWeek.start, note); setSaved("주간 기록 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
@@ -173,12 +204,8 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
       </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
-        <section className="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div><h3 className="text-lg font-bold text-slate-900">주간 목표·회고 문서</h3><p className="mt-0.5 text-xs text-slate-400">한 화면에서 읽고, 편집기에서 집중해서 작성합니다.</p></div><button onClick={()=>setEditField("thisWeekGoal")} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white">전체 편집</button></div>
-          <div className="grid divide-y divide-slate-200 lg:grid-cols-3 lg:divide-x lg:divide-y-0">{([['thisWeekGoal','이번 주 목표','🎯'],['thisWeekResult','이번 주 결과·미진행 사유','✅'],['nextWeekGoal','다음 주 목표','➡️']] as [WeeklyTextKey,string,string][]).map(([key,label,icon])=><button key={key} onClick={()=>setEditField(key)} className="min-h-52 p-5 text-left transition hover:bg-blue-50/40"><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-800">{icon} {label}</span><span className="text-xs font-bold text-blue-600">편집</span></div><div className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{note[key] || <span className="text-slate-300">작성된 내용이 없습니다.</span>}</div></button>)}</div>
-          <div className="border-t border-slate-200"><div className="grid grid-cols-[170px_1fr_70px] border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-500"><span>회고 항목</span><span>작성 내용</span><span className="text-center">관리</span></div>{weeklyCards.map((item)=><button type="button" key={item.key} onClick={()=>setEditField(item.key)} className="grid min-h-20 w-full grid-cols-[170px_1fr_70px] items-center border-b border-slate-100 px-4 py-3 text-left last:border-0 hover:bg-slate-50"><div className="text-sm font-bold text-slate-700">{item.icon} {item.label}</div><div className="line-clamp-2 whitespace-pre-wrap pr-4 text-sm leading-6 text-slate-600">{note[item.key] || <span className="text-slate-300">미작성</span>}</div><span className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-bold text-slate-600">편집</span></button>)}</div>
-          <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-5 py-3"><button onClick={saveWeekly} disabled={saving === "weekly"} className="rounded-md bg-blue-600 px-8 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "weekly" ? "저장 중…" : "주간 기록 저장"}</button></div>
-        </section>
+        <BottleneckSection note={note} onChange={setBottleneck} onSave={saveWeekly} saving={saving === "weekly"} />
+        <WeeklyNoteSection note={note} onEdit={setEditField} onSave={saveWeekly} saving={saving === "weekly"} />
         <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
       </div>}
     </>}
@@ -186,12 +213,89 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   </div>;
 }
 
+function BottleneckSection({ note, onChange, onSave, saving }: { note: WeeklyNote; onChange: (index: number, field: keyof BottleneckItem, value: string) => void; onSave: () => Promise<void>; saving: boolean }) {
+  return (
+    <section className="order-1 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-rose-600">Bottleneck</div>
+          <h3 className="mt-1 text-lg font-black text-slate-950">이번 주 병목현상 3가지</h3>
+          <p className="mt-1 text-xs font-semibold text-slate-400">막힌 지점, 원인, 해결방안을 짧게 남기면 회고와 다음 주 실행이 선명해집니다.</p>
+        </div>
+        <button onClick={onSave} disabled={saving} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? "저장 중..." : "병목 저장"}</button>
+      </div>
+      <div className="mt-5 grid gap-3 xl:grid-cols-3">
+        {note.bottlenecks.map((item, i) => (
+          <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="rounded bg-white px-2 py-1 text-xs font-black text-slate-700 shadow-sm">병목 {i + 1}</span>
+              <span className={`h-2 w-2 rounded-full ${item.title.trim() || item.cause.trim() || item.solution.trim() ? "bg-rose-500" : "bg-slate-300"}`} />
+            </div>
+            <label className="block text-xs font-black text-slate-500">병목현상<input value={item.title} onChange={(e) => onChange(i, "title", e.target.value)} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-300" /></label>
+            <label className="mt-3 block text-xs font-black text-slate-500">원인<textarea value={item.cause} onChange={(e) => onChange(i, "cause", e.target.value)} rows={3} className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
+            <label className="mt-3 block text-xs font-black text-slate-500">해결방안<textarea value={item.solution} onChange={(e) => onChange(i, "solution", e.target.value)} rows={3} className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WeeklyNoteSection({ note, onEdit, onSave, saving }: { note: WeeklyNote; onEdit: (field: WeeklyTextKey) => void; onSave: () => Promise<void>; saving: boolean }) {
+  const goalCards = ([["thisWeekGoal", "이번 주 목표", "이번 주 집중할 결과"], ["thisWeekResult", "결과·미진행 사유", "실행 결과와 밀린 이유"], ["nextWeekGoal", "다음 주 목표", "다음 실행으로 넘길 항목"]] as [WeeklyTextKey, string, string][]);
+  return (
+    <section className="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+        <div>
+          <h3 className="text-lg font-black text-slate-950">주간 목표·성장 기록</h3>
+          <p className="mt-0.5 text-xs font-semibold text-slate-400">목표는 요약 카드로, 성장기록은 항목별로 나누어 확인합니다.</p>
+        </div>
+        <button onClick={onSave} disabled={saving} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "저장 중..." : "주간 기록 저장"}</button>
+      </div>
+      <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-3">
+        {goalCards.map(([key, label, desc]) => (
+          <button key={key} type="button" onClick={() => onEdit(key)} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30">
+            <div className="flex items-center justify-between"><div><div className="text-sm font-black text-slate-900">{label}</div><div className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</div></div><span className="text-xs font-black text-blue-600">편집</span></div>
+            <div className="mt-4 line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-slate-600">{note[key] || <span className="text-slate-300">작성된 내용이 없습니다.</span>}</div>
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-3 border-t border-slate-200 p-4 lg:grid-cols-2">
+        {weeklyCards.map((item) => {
+          const labels = structuredLabels[item.key];
+          const parsed = labels ? parseStructuredText(String(note[item.key]), labels) : null;
+          return (
+            <button type="button" key={item.key} onClick={() => onEdit(item.key)} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className={`rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
+                <span className="text-xs font-black text-blue-600">편집</span>
+              </div>
+              {parsed ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {labels!.map((label) => (
+                    <div key={label} className={label === "배운 점" || label === "실행" ? "sm:col-span-2" : ""}>
+                      <div className="text-[11px] font-black text-slate-400">{label}</div>
+                      <div className="mt-1 min-h-8 whitespace-pre-wrap rounded-md bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">{previewText(parsed[label], "-")}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 line-clamp-4 whitespace-pre-wrap rounded-md bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-600">{note[item.key] || <span className="text-slate-300">미작성</span>}</div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WeeklyEditModal({ field, setField, note, onChange, onSave, saving, onClose }: { field: WeeklyTextKey; setField: (field: WeeklyTextKey) => void; note: WeeklyNote; onChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onSave: () => Promise<void>; saving: boolean; onClose: () => void }) {
   const meta: Record<WeeklyTextKey, [string,string]> = { thisWeekGoal:["이번 주 목표",""], thisWeekResult:["이번 주 결과",""], nextWeekGoal:["다음 주 목표",""], review:["",""], growth:["성장노트",""], challenge:["새로운 도전·아이디어",""], special:["특이사항",""], learning:["배운 점",""], request:["지원·요청·건의사항",""], praise:["칭찬",""] };
   const nav = (["thisWeekGoal","thisWeekResult","nextWeekGoal","growth","challenge","special","learning","request","praise"] as WeeklyTextKey[]);
   const templates: Partial<Record<WeeklyTextKey, string>> = {
     growth: "상황:\n문제점:\n개선해야 할 점:\n실행:\n",
-    learning: "날짜:\n소요시간:\n브랜드:\n기종:\n교육자:\n배운 점:\n",
+    learning: "주차:\n작성자:\n날짜:\n소요시간:\n브랜드:\n기종:\n교육자:\n배운 점:\n",
   };
   const applyTemplate = () => {
     const template = templates[field];

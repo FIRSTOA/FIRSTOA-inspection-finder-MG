@@ -96,14 +96,21 @@ export async function saveOfficeLog(log: OfficeLog): Promise<void> {
 
 export type GoalStatus = "todo" | "doing" | "done" | "failed" | "carried";
 export type GoalItem = { id: string; title: string; target: string; result: string; status: GoalStatus; reason: string; nextAction: string };
-export type WeeklyNote = { goals: Record<string, number>; goalItems: GoalItem[]; thisWeekGoal: string; thisWeekResult: string; nextWeekGoal: string; review: string; growth: string; challenge: string; special: string; learning: string; request: string; praise: string };
-export const EMPTY_WEEKLY_NOTE: WeeklyNote = { goals: {}, goalItems: [], thisWeekGoal: "", thisWeekResult: "", nextWeekGoal: "", review: "", growth: "", challenge: "", special: "", learning: "", request: "", praise: "" };
+export type BottleneckItem = { title: string; cause: string; solution: string };
+export type WeeklyNote = { goals: Record<string, number>; goalItems: GoalItem[]; bottlenecks: BottleneckItem[]; thisWeekGoal: string; thisWeekResult: string; nextWeekGoal: string; review: string; growth: string; challenge: string; special: string; learning: string; request: string; praise: string };
+export const emptyBottlenecks = (): BottleneckItem[] => Array.from({ length: 3 }, () => ({ title: "", cause: "", solution: "" }));
+export const EMPTY_WEEKLY_NOTE: WeeklyNote = { goals: {}, goalItems: [], bottlenecks: emptyBottlenecks(), thisWeekGoal: "", thisWeekResult: "", nextWeekGoal: "", review: "", growth: "", challenge: "", special: "", learning: "", request: "", praise: "" };
+
+function normalizeBottlenecks(value: unknown): BottleneckItem[] {
+  const rows = Array.isArray(value) ? value : [];
+  return emptyBottlenecks().map((empty, i) => ({ ...empty, ...(rows[i] as Partial<BottleneckItem> || {}) }));
+}
 
 export async function getWeeklyNote(author: string, weekStart: string): Promise<WeeklyNote> {
   const rows = await selectRows<Record<string, unknown>>("weekly_notes", `select=*&author=eq.${encodeURIComponent(author)}&week_start=eq.${weekStart}&limit=1`);
   if (!rows.length) return { ...EMPTY_WEEKLY_NOTE };
   const r = rows[0];
-  return { goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], thisWeekGoal: String(r.this_week_goal || ""), thisWeekResult: String(r.this_week_result || ""), nextWeekGoal: String(r.next_week_goal || ""), review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") };
+  return { goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], bottlenecks: normalizeBottlenecks(r.bottlenecks), thisWeekGoal: String(r.this_week_goal || ""), thisWeekResult: String(r.this_week_result || ""), nextWeekGoal: String(r.next_week_goal || ""), review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") };
 }
 
 export async function saveWeeklyNote(author: string, weekStart: string, note: WeeklyNote): Promise<void> {
@@ -115,7 +122,7 @@ export async function saveWeeklyNote(author: string, weekStart: string, note: We
 export type WeeklyNoteRow = WeeklyNote & { author: string; weekStart: string };
 export async function getWeeklyNotes(start: string, end: string): Promise<WeeklyNoteRow[]> {
   const rows = await selectRows<Record<string, unknown>>("weekly_notes", `select=*&week_start=gte.${start}&week_start=lte.${end}&order=week_start.desc,author.asc`);
-  return rows.map((r) => ({ author: String(r.author), weekStart: String(r.week_start), goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], thisWeekGoal: String(r.this_week_goal || ""), thisWeekResult: String(r.this_week_result || ""), nextWeekGoal: String(r.next_week_goal || ""), review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") }));
+  return rows.map((r) => ({ author: String(r.author), weekStart: String(r.week_start), goals: (r.goals as Record<string, number>) || {}, goalItems: (r.goal_items as GoalItem[]) || [], bottlenecks: normalizeBottlenecks(r.bottlenecks), thisWeekGoal: String(r.this_week_goal || ""), thisWeekResult: String(r.this_week_result || ""), nextWeekGoal: String(r.next_week_goal || ""), review: String(r.review || ""), growth: String(r.growth || ""), challenge: String(r.challenge || ""), special: String(r.special || ""), learning: String(r.learning || ""), request: String(r.request || ""), praise: String(r.praise || "") }));
 }
 
 export type LevelGoal = { id: string; category: string; title: string; currentLevel: string; targetLevel: string; budget: string; month1: string; month2: string; month3: string; progress: number };

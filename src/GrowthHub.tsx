@@ -48,6 +48,30 @@ const quarterRange = (year: number, quarter: number) => {
   return { start: `${year}-${pad(startMonth)}-01`, end: `${year}-${pad(endMonth)}-${pad(endDay)}` };
 };
 
+const shortDate = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+function weekEndFromStart(weekStart: string) {
+  const d = new Date(`${weekStart}T12:00:00+09:00`);
+  d.setDate(d.getDate() + 4);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function weekNumberInMonth(weekStart: string) {
+  const year = Number(weekStart.slice(0, 4));
+  const month = Number(weekStart.slice(5, 7));
+  const day = Number(weekStart.slice(8, 10));
+  const seen = new Set<string>();
+  for (let d = 1; d <= day; d++) {
+    const cursor = new Date(`${year}-${pad(month)}-${pad(d)}T12:00:00+09:00`);
+    const dayOfWeek = cursor.getDay() || 7;
+    cursor.setDate(cursor.getDate() - dayOfWeek + 1);
+    seen.add(`${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}`);
+  }
+  return seen.size;
+}
+function weekDisplay(weekStart: string) {
+  const end = weekEndFromStart(weekStart);
+  return `${shortDate(weekStart)}~${shortDate(end)} · ${weekNumberInMonth(weekStart)}주차`;
+}
+
 function parseStructured(text: string, labels: string[]) {
   const result: Record<string, string> = Object.fromEntries(labels.map((label) => [label, ""]));
   const lines = text.split(/\r?\n/);
@@ -245,7 +269,7 @@ export default function GrowthHub({ author }: { author: string }) {
                   <div key={id} className="border-b border-slate-100 last:border-0">
                     <button type="button" onClick={() => setOpenRows({ ...openRows, [id]: !open })} className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
                       <div>
-                        <div className="text-sm font-black text-slate-900">{row.weekStart} · {row.author}</div>
+                        <div className="text-sm font-black text-slate-900">{weekDisplay(row.weekStart)} · {row.author}</div>
                         <div className="mt-1 text-xs font-semibold text-slate-400">기록 {count}개</div>
                       </div>
                       <span className="text-xs font-black text-blue-600">{open ? "접기" : "펼치기"}</span>
@@ -281,7 +305,7 @@ export default function GrowthHub({ author }: { author: string }) {
                       const parsed = parseStructured(row[type], fieldLabels[type]);
                       return (
                         <tr key={`${row.author}-${row.weekStart}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                          <td className="px-4 py-4 align-top text-xs font-bold text-slate-500">{row.weekStart}</td>
+                          <td className="px-4 py-4 align-top text-xs font-bold text-slate-500">{weekDisplay(row.weekStart)}</td>
                           <td className="px-4 py-4 align-top text-sm font-bold text-slate-800">{row.author}</td>
                           {fieldLabels[type].map((label) => <td key={label} className="whitespace-pre-wrap px-4 py-4 align-top text-sm leading-6 text-slate-600">{parsed[label] || "-"}</td>)}
                         </tr>
