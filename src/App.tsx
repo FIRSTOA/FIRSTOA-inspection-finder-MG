@@ -4274,9 +4274,10 @@ export default function App() {
 
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
+  const appScreens = [["home", "홈"], ["daily", "일일업무"], ["weekly", "주간현황판"], ["growth", "성장기록"], ["happycall", "해피콜"], ["itquote", "IT 견적"], ["field", "FIELD"]] as [typeof screen, string][];
 
   return (
-    <div className={`min-h-screen text-slate-900 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "bg-[#F6F8FB]" : "bg-white"}`}>
+    <div className={`min-h-screen text-slate-900 ${screen === "field" ? "bg-white" : "bg-[#F4F6FA]"}`}>
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
@@ -4307,14 +4308,33 @@ export default function App() {
         </div>
       )}
 
-      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "max-w-[1500px] pb-16" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" || screen === "growth" ? "" : "pb-60"}`}>
+      {screen !== "field" && (
+        <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-200 bg-[#111827] text-white lg:flex">
+          <div className="border-b border-white/10 px-5 py-5">
+            <div className="text-base font-black">FIRSTOA ERP</div>
+            <div className="mt-1 text-xs font-semibold text-slate-400">현장 업무 운영</div>
+          </div>
+          <nav className="flex-1 space-y-1 px-3 py-4">
+            {appScreens.map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setScreen(key)}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                <span>{label}</span>
+                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+              </button>
+            ))}
+          </nav>
+          <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
+        </aside>
+      )}
+
+      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen === "daily" || screen === "weekly" || screen === "growth" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : "max-w-3xl"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh]" : screen === "daily" || screen === "weekly" || screen === "growth" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-3 bg-gradient-to-br from-[#27375C] to-[#1A2440] pb-3 pt-5 shadow-md sm:-mt-6 sm:pt-7" : ""}`}>
         {/* Header — 브랜딩 */}
         <header className="mb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-slate-100 bg-white shadow-sm shadow-slate-200/60 hover:bg-slate-50"}`}>
+              className={`flex h-8 w-8 items-center justify-center rounded-md border transition active:scale-95 ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-slate-200 bg-white hover:bg-slate-50 lg:hidden"}`}>
               <span className="flex flex-col gap-[3px]"><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /><span className={`h-0.5 w-4 rounded ${screen === "field" ? "bg-white" : "bg-slate-700"}`} /></span>
             </button>
             <h1 className={`text-xl font-black tracking-tight sm:text-2xl ${screen === "field" ? "text-white" : "text-slate-950"}`}>
@@ -4349,7 +4369,7 @@ export default function App() {
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
         {(screen === "happycall" || screen === "itquote") && (
-          <div className="rounded-[28px] border border-slate-100 bg-white p-10 text-center shadow-sm shadow-slate-200/60">
+          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screen === "happycall" ? "해피콜" : "IT 견적"}</div>
             <div className="mt-1 text-sm text-slate-400">구상 중 — 곧 만들어집니다</div>
