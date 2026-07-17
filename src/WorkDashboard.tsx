@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   EMPTY_WEEKLY_NOTE, OFFICE_LABELS, WORK_LABELS, emptyOfficeValues, getOfficeLogs, getVisits,
   getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
@@ -39,8 +39,8 @@ type Period = "day" | "week" | "month" | "quarter" | "year";
 type WeeklyTextKey = "thisWeekGoal" | "thisWeekResult" | "nextWeekGoal" | "review" | "growth" | "challenge" | "special" | "learning" | "request" | "praise";
 const weeklyCards: Array<{ key: WeeklyTextKey; label: string; icon: string; tone: string }> = [
   { key: "growth", label: "성장노트", icon: "💡", tone: "bg-amber-50" }, { key: "challenge", label: "새로운 도전·아이디어", icon: "🎯", tone: "bg-blue-50" },
-  { key: "special", label: "특이사항", icon: "🧡", tone: "bg-orange-50" }, { key: "learning", label: "배운 점", icon: "📚", tone: "bg-emerald-50" },
-  { key: "request", label: "지원·요청·건의사항", icon: "🤝", tone: "bg-violet-50" }, { key: "praise", label: "칭찬", icon: "👏", tone: "bg-pink-50" },
+  { key: "learning", label: "배운 점", icon: "📚", tone: "bg-emerald-50" }, { key: "request", label: "지원·요청·건의사항", icon: "🤝", tone: "bg-violet-50" },
+  { key: "special", label: "특이사항", icon: "🧡", tone: "bg-orange-50" }, { key: "praise", label: "칭찬", icon: "👏", tone: "bg-pink-50" },
 ];
 const structuredLabels: Partial<Record<WeeklyTextKey, string[]>> = {
   growth: ["상황", "문제점", "개선해야 할 점", "실행"],
@@ -93,9 +93,27 @@ function parseStructuredText(text: string, labels: string[]) {
   return result;
 }
 
-function previewText(text: string, fallback = "미작성") {
-  const value = text.trim();
-  return value ? value : fallback;
+function buildStructuredText(labels: string[], values: Record<string, string>) {
+  return labels.map((label) => `${label}: ${values[label] || ""}`).join("\n");
+}
+
+function AutoGrowTextarea({ value, onChange, className = "", rows = 1 }: { value: string; onChange: (value: string) => void; className?: string; rows?: number }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={rows}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`resize-none overflow-hidden ${className}`}
+    />
+  );
 }
 
 export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekly"; author: string }) {
@@ -122,7 +140,6 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<"" | "office" | "weekly">("");
   const [saved, setSaved] = useState("");
-  const [editField, setEditField] = useState<WeeklyTextKey | "">("");
 
   useEffect(() => {
     let alive = true; setLoading(true); setError("");
@@ -204,44 +221,14 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
       </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
-        <BottleneckSection note={note} onChange={setBottleneck} onSave={saveWeekly} saving={saving === "weekly"} />
-        <WeeklyNoteSection note={note} onEdit={setEditField} onSave={saveWeekly} saving={saving === "weekly"} />
+        <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} onSave={saveWeekly} saving={saving === "weekly"} />
         <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
       </div>}
     </>}
-    {editField && <WeeklyEditModal field={editField} setField={setEditField} note={note} onChange={setNoteField} onSave={saveWeekly} saving={saving === "weekly"} onClose={()=>setEditField("")} />}
   </div>;
 }
 
-function BottleneckSection({ note, onChange, onSave, saving }: { note: WeeklyNote; onChange: (index: number, field: keyof BottleneckItem, value: string) => void; onSave: () => Promise<void>; saving: boolean }) {
-  return (
-    <section className="order-1 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs font-black uppercase tracking-wide text-rose-600">Bottleneck</div>
-          <h3 className="mt-1 text-lg font-black text-slate-950">이번 주 병목현상 3가지</h3>
-          <p className="mt-1 text-xs font-semibold text-slate-400">막힌 지점, 원인, 해결방안을 짧게 남기면 회고와 다음 주 실행이 선명해집니다.</p>
-        </div>
-        <button onClick={onSave} disabled={saving} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? "저장 중..." : "병목 저장"}</button>
-      </div>
-      <div className="mt-5 grid gap-3 xl:grid-cols-3">
-        {note.bottlenecks.map((item, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="rounded bg-white px-2 py-1 text-xs font-black text-slate-700 shadow-sm">병목 {i + 1}</span>
-              <span className={`h-2 w-2 rounded-full ${item.title.trim() || item.cause.trim() || item.solution.trim() ? "bg-rose-500" : "bg-slate-300"}`} />
-            </div>
-            <label className="block text-xs font-black text-slate-500">병목현상<input value={item.title} onChange={(e) => onChange(i, "title", e.target.value)} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-300" /></label>
-            <label className="mt-3 block text-xs font-black text-slate-500">원인<textarea value={item.cause} onChange={(e) => onChange(i, "cause", e.target.value)} rows={3} className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
-            <label className="mt-3 block text-xs font-black text-slate-500">해결방안<textarea value={item.solution} onChange={(e) => onChange(i, "solution", e.target.value)} rows={3} className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function WeeklyNoteSection({ note, onEdit, onSave, saving }: { note: WeeklyNote; onEdit: (field: WeeklyTextKey) => void; onSave: () => Promise<void>; saving: boolean }) {
+function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, onSave, saving }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; onSave: () => Promise<void>; saving: boolean }) {
   const goalCards = ([["thisWeekGoal", "이번 주 목표", "이번 주 집중할 결과"], ["thisWeekResult", "결과·미진행 사유", "실행 결과와 밀린 이유"], ["nextWeekGoal", "다음 주 목표", "다음 실행으로 넘길 항목"]] as [WeeklyTextKey, string, string][]);
   return (
     <section className="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -252,12 +239,34 @@ function WeeklyNoteSection({ note, onEdit, onSave, saving }: { note: WeeklyNote;
         </div>
         <button onClick={onSave} disabled={saving} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "저장 중..." : "주간 기록 저장"}</button>
       </div>
+      <div className="border-b border-slate-200 bg-rose-50/40 p-4">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wide text-rose-600">Bottleneck</div>
+            <h4 className="mt-1 text-base font-black text-slate-950">이번 주 병목현상 3가지</h4>
+          </div>
+          <div className="text-xs font-semibold text-slate-400">병목현상 / 원인 / 해결방안</div>
+        </div>
+        <div className="grid gap-3 xl:grid-cols-3">
+          {note.bottlenecks.map((item, i) => (
+            <div key={i} className="rounded-lg border border-rose-100 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">병목 {i + 1}</span>
+                <span className={`h-2 w-2 rounded-full ${item.title.trim() || item.cause.trim() || item.solution.trim() ? "bg-rose-500" : "bg-slate-300"}`} />
+              </div>
+              <label className="block text-xs font-black text-slate-500">병목현상<input value={item.title} onChange={(e) => onBottleneckChange(i, "title", e.target.value)} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-300" /></label>
+              <label className="mt-3 block text-xs font-black text-slate-500">원인<AutoGrowTextarea value={item.cause} onChange={(value) => onBottleneckChange(i, "cause", value)} rows={1} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
+              <label className="mt-3 block text-xs font-black text-slate-500">해결방안<AutoGrowTextarea value={item.solution} onChange={(value) => onBottleneckChange(i, "solution", value)} rows={1} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-3">
         {goalCards.map(([key, label, desc]) => (
-          <button key={key} type="button" onClick={() => onEdit(key)} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30">
-            <div className="flex items-center justify-between"><div><div className="text-sm font-black text-slate-900">{label}</div><div className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</div></div><span className="text-xs font-black text-blue-600">편집</span></div>
-            <div className="mt-4 line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-slate-600">{note[key] || <span className="text-slate-300">작성된 내용이 없습니다.</span>}</div>
-          </button>
+          <div key={key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
+            <div><div className="text-sm font-black text-slate-900">{label}</div><div className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</div></div>
+            <AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
+          </div>
         ))}
       </div>
       <div className="grid gap-3 border-t border-slate-200 p-4 lg:grid-cols-2">
@@ -265,55 +274,26 @@ function WeeklyNoteSection({ note, onEdit, onSave, saving }: { note: WeeklyNote;
           const labels = structuredLabels[item.key];
           const parsed = labels ? parseStructuredText(String(note[item.key]), labels) : null;
           return (
-            <button type="button" key={item.key} onClick={() => onEdit(item.key)} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className={`rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
-                <span className="text-xs font-black text-blue-600">편집</span>
-              </div>
+            <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
+              <div className={`inline-flex rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
               {parsed ? (
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {labels!.map((label) => (
                     <div key={label} className={label === "배운 점" || label === "실행" ? "sm:col-span-2" : ""}>
                       <div className="text-[11px] font-black text-slate-400">{label}</div>
-                      <div className="mt-1 min-h-8 whitespace-pre-wrap rounded-md bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">{previewText(parsed[label], "-")}</div>
+                      <AutoGrowTextarea value={parsed[label]} onChange={(value) => onNoteChange(item.key, buildStructuredText(labels!, { ...parsed, [label]: value }))} rows={1} className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="mt-4 line-clamp-4 whitespace-pre-wrap rounded-md bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-600">{note[item.key] || <span className="text-slate-300">미작성</span>}</div>
+                <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
               )}
-            </button>
+            </div>
           );
         })}
       </div>
     </section>
   );
-}
-
-function WeeklyEditModal({ field, setField, note, onChange, onSave, saving, onClose }: { field: WeeklyTextKey; setField: (field: WeeklyTextKey) => void; note: WeeklyNote; onChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onSave: () => Promise<void>; saving: boolean; onClose: () => void }) {
-  const meta: Record<WeeklyTextKey, [string,string]> = { thisWeekGoal:["이번 주 목표",""], thisWeekResult:["이번 주 결과",""], nextWeekGoal:["다음 주 목표",""], review:["",""], growth:["성장노트",""], challenge:["새로운 도전·아이디어",""], special:["특이사항",""], learning:["배운 점",""], request:["지원·요청·건의사항",""], praise:["칭찬",""] };
-  const nav = (["thisWeekGoal","thisWeekResult","nextWeekGoal","growth","challenge","special","learning","request","praise"] as WeeklyTextKey[]);
-  const templates: Partial<Record<WeeklyTextKey, string>> = {
-    growth: "상황:\n문제점:\n개선해야 할 점:\n실행:\n",
-    learning: "주차:\n작성자:\n날짜:\n소요시간:\n브랜드:\n기종:\n교육자:\n배운 점:\n",
-  };
-  const applyTemplate = () => {
-    const template = templates[field];
-    if (!template) return;
-    const current = String(note[field]).trim();
-    onChange(field, current ? `${current}\n\n${template}` : template);
-  };
-  const structureGrowth = () => {
-    const current = String(note.growth).trim();
-    const alreadyStructured = ["상황:", "문제점:", "개선해야 할 점:", "실행:"].some((label) => current.includes(label));
-    onChange("growth", alreadyStructured ? current : `상황: ${current}\n문제점:\n개선해야 할 점:\n실행:\n`);
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-5 backdrop-blur-sm"><div className="grid h-[86vh] w-full max-w-6xl grid-cols-[240px_1fr] overflow-hidden rounded-lg border border-white/10 bg-white shadow-2xl"><aside className="flex flex-col bg-slate-950 p-3 text-white"><div className="px-3 py-3"><div className="text-lg font-extrabold">주간 기록 편집기</div></div><nav className="mt-2 flex-1 space-y-1 overflow-y-auto">{nav.map((key)=><button key={key} onClick={()=>setField(key)} className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm ${field===key?"bg-white font-bold text-slate-900":"text-slate-300 hover:bg-white/10"}`}><span>{meta[key][0]}</span><span className={`h-2 w-2 rounded-full ${String(note[key]).trim()?"bg-emerald-400":"bg-slate-600"}`}/></button>)}</nav><button onClick={onClose} className="rounded-md border border-white/15 py-2.5 text-sm font-bold text-slate-300">편집기 닫기</button></aside><main className="flex min-w-0 flex-col"><header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-7 py-5"><div className="text-xl font-black text-slate-950">{meta[field][0]}</div><div className="flex gap-2">{templates[field] && <button type="button" onClick={applyTemplate} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">틀 넣기</button>}{field==="growth" && <button type="button" onClick={structureGrowth} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">정리틀 적용</button>}</div></header><textarea autoFocus value={String(note[field])} onChange={(e)=>onChange(field,e.target.value)} className="min-h-0 flex-1 resize-none p-8 text-base leading-8 text-slate-700 outline-none"/><footer className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-7 py-4"><span className="text-xs text-slate-400">{String(note[field]).length.toLocaleString()}자</span><div className="flex gap-2"><button onClick={onClose} className="rounded-md border border-slate-100 bg-white px-5 py-3 text-sm font-bold text-slate-600">닫기</button><button disabled={saving} onClick={async()=>{await onSave();onClose();}} className="rounded-md bg-blue-600 px-7 py-3 text-sm font-bold text-white disabled:opacity-50">{saving?"저장 중…":"저장하고 닫기"}</button></div></footer></main></div></div>;
 }
 
 function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, quarter }: { period: Period; rows: VisitRow[]; officeLogs: OfficeLog[]; start: string; end: string; year: number; month: number; quarter: number }) {
