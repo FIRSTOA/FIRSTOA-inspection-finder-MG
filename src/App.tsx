@@ -4280,11 +4280,12 @@ export default function App() {
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (isCat && catFilled);
   const navGroups = [
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
-    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송"], ["walkingMap", "워킨맵"]] },
+    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const navItems = navGroups.flatMap((group) => group.items);
-  const screenTitle = (screen === "home" ? homeItem : navItems.find(([key]) => key === screen))?.[1] || "홈";
+  const standaloneItems = [homeItem, ["walkingMap", "워킨맵"] as [typeof screen, string]];
+  const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items)];
+  const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
 
@@ -4321,6 +4322,11 @@ export default function App() {
                   </div>}
                 </div>
               ))}
+              <button type="button"
+                onClick={() => { setScreen("walkingMap"); setMenuOpen(false); }}
+                className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === "walkingMap" ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                워킨맵
+              </button>
               <a
                 href="/manual/field-manual.svg"
                 target="_blank"
@@ -4363,6 +4369,11 @@ export default function App() {
                 </div>}
               </div>
             ))}
+            <button type="button" onClick={() => setScreen("walkingMap")}
+              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === "walkingMap" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <span>워킨맵</span>
+              {screen === "walkingMap" && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+            </button>
           </nav>
           <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
       </aside>
