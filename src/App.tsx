@@ -3499,6 +3499,7 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
   const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
+  const toastTimerRef = useRef<number | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
@@ -3663,8 +3664,12 @@ export default function App() {
   }, [selectedItem]);
 
   const showToast = (text: string, kind: "success" | "error" = "success") => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
     setToast({ text, kind });
-    window.setTimeout(() => setToast(null), 1600);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3000);
   };
 
   const resetOutputs = () => {
@@ -4757,7 +4762,7 @@ export default function App() {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-medium shadow-lg"
+          className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl px-5 py-3 text-center text-base font-bold leading-6 shadow-2xl"
           style={{
             background: toast.kind === "success" ? "#065F46" : "#991B1B",
             color: "white",

@@ -173,7 +173,7 @@ function toKstDate(ts?: string): string {
 export type SendKind = "normal" | "자가" | "부품";
 export type SendDestination = "inspection" | "as";
 
-// 보낼 방 목록 결정. TEST_MODE면 무조건 테스트방. kind=자가/부품이면 단일 전용방.
+// 보낼 방 목록 결정. TEST_MODE면 무조건 테스트방. 자가/부품/AS/점검 모두 단일 방으로 보낸다.
 async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
@@ -183,16 +183,10 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   if (kind === "자가") return [map["자가|*"] || "자가(토너 폐통) 여분토너요청방"];
   if (kind === "부품") return [map["부품|*"] || "부품요청"];
 
-  // normal: 지역별 점검방(+AS방)
+  // normal: AS는 AS방만, 그 외는 점검방만.
   const key = normRegion(region);
-  const inspectRoom = map["점검|" + key];
-  if (!inspectRoom) return [testRoom];           // 미지원 지역(E·빈값 등)
-  const rooms = [inspectRoom];                    // 점검방은 항상
-  if (hasAS) {
-    const asRoom = map["AS|" + key];
-    if (asRoom) rooms.push(asRoom);               // AS방은 AS 포함 시
-  }
-  return rooms;
+  const room = map[`${hasAS ? "AS" : "점검"}|${key}`];
+  return [room || testRoom];                      // 미지원 지역(E·빈값 등)
 }
 
 async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
@@ -206,7 +200,7 @@ async function resolveForcedRoom(destination: SendDestination, region: string): 
 }
 
 // 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).
-//  kind: normal=지역 점검/AS방, 자가=여분토너요청방, 부품=부품요청방.
+//  kind: normal=지역 점검방 또는 AS방 단일 전송, 자가=여분토너요청방, 부품=부품요청방.
 //  자가/부품은 알림 목적이라 중복(이미 저장)이어도 해당 방으로는 항상 게시한다.
 export async function sendForm(payload: SavePayload, kind: SendKind = "normal", destination?: SendDestination): Promise<SaveResp> {
   try {
