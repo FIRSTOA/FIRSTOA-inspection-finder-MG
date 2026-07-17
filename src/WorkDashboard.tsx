@@ -104,6 +104,24 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const sum = useMemo(() => summarize(rows), [rows]);
   const insideMinutes = officeMinutes(officeLogs);
   const commute = [...rows].reverse().find((r) => r.commute)?.commute;
+  const closeChecks = useMemo(() => {
+    if (kind !== "daily" || period !== "day") return [];
+    const officeTotal = OFFICE_KINDS.reduce((n, k) => n + Number(office.values[k]?.minutes || 0), 0);
+    const missingArrival = rows.filter((r) => r.visited && !r.arrivalTime).length;
+    const missingKind = rows.filter((r) => !r.workKinds.length).length;
+    const missingMinutes = rows.filter((r) => r.workKinds.length && r.workKinds.every((k) => Number(r.minutes[k] || 0) <= 0)).length;
+    const missingMachines = rows.filter((r) => r.visited && Number(r.machineCount || 0) <= 0).length;
+    return [
+      { label: "방문 기록", ok: rows.length > 0, detail: rows.length ? `${rows.length}건 저장됨` : "오늘 저장된 방문 기록이 없습니다." },
+      { label: "도착시간", ok: missingArrival === 0, detail: missingArrival ? `${missingArrival}건 미입력` : "입력 완료" },
+      { label: "업무구분", ok: missingKind === 0, detail: missingKind ? `${missingKind}건 미선택` : "선택 완료" },
+      { label: "소요시간", ok: missingMinutes === 0, detail: missingMinutes ? `${missingMinutes}건 미입력` : "입력 완료" },
+      { label: "기기대수", ok: missingMachines === 0, detail: missingMachines ? `${missingMachines}건 확인 필요` : "입력 완료" },
+      { label: "마감", ok: Boolean(commute), detail: commute || "미선택" },
+      { label: "복귀시간", ok: Boolean(office.returnTime), detail: office.returnTime || "미입력" },
+      { label: "내근업무", ok: officeTotal > 0, detail: officeTotal ? hm(officeTotal) : "미입력" },
+    ];
+  }, [kind, period, rows, office, commute]);
   const grouped = useMemo(() => rows.reduce<Record<string, VisitRow[]>>((a, r) => ((a[r.workDate] ||= []).push(r), a), {}), [rows]);
   const setNoteField = <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => setNote({ ...note, [k]: v });
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
@@ -143,8 +161,15 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
     {!loading && <>
+      {kind === "daily" && period === "day" && <CloseCheck checks={closeChecks} />}
       <section><div className="mb-3 flex items-end justify-between"><div><h3 className="text-lg font-bold text-slate-900">외근</h3><p className="text-xs text-slate-400">방문·현장 업무 건수와 소요시간</p></div></div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        {KINDS.map((k) => <div key={k} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-extrabold text-slate-900">{sum.count[k]}<span className="ml-1 text-xs font-medium text-slate-400">건</span></div><div className="text-xs font-semibold text-slate-500">{hm(sum.minutes[k])}</div></div>{kind === "weekly" && <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3"><span className="text-[11px] text-slate-400">목표</span><input type="number" min="0" value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-right text-xs outline-none" /></div>}</div>)}
+        {KINDS.map((k) => {
+          const target = Number(note.goals[k] || 0);
+          const actual = sum.count[k];
+          const percent = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
+          const gap = actual - target;
+          return <div key={k} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-extrabold text-slate-900">{actual}<span className="ml-1 text-xs font-medium text-slate-400">건</span></div><div className="text-xs font-semibold text-slate-500">{hm(sum.minutes[k])}</div></div>{kind === "weekly" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] text-slate-400">목표</span><input type="number" min="0" value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-right text-xs outline-none" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
+        })}
       </div></section>
 
       {kind === "daily" && period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
@@ -170,6 +195,11 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
     </>}
     {editField && <WeeklyEditModal field={editField} setField={setEditField} note={note} onChange={setNoteField} onSave={saveWeekly} saving={saving === "weekly"} onClose={()=>setEditField("")} />}
   </div>;
+}
+
+function CloseCheck({ checks }: { checks: Array<{ label: string; ok: boolean; detail: string }> }) {
+  const missing = checks.filter((c) => !c.ok).length;
+  return <section className={`rounded-2xl border p-5 shadow-sm ${missing ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><h3 className={`text-lg font-bold ${missing ? "text-amber-900" : "text-emerald-900"}`}>마감 체크</h3><p className={`text-xs ${missing ? "text-amber-700" : "text-emerald-700"}`}>{missing ? `${missing}개 항목 확인 필요` : "오늘 기록이 깔끔하게 채워졌습니다."}</p></div><div className={`rounded-full px-3 py-1 text-xs font-bold ${missing ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{missing ? "확인 필요" : "완료"}</div></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{checks.map((c) => <div key={c.label} className="rounded-xl bg-white/80 p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-500">{c.label}</span><span className={`text-xs font-extrabold ${c.ok ? "text-emerald-600" : "text-amber-700"}`}>{c.ok ? "OK" : "확인"}</span></div><div className="mt-1 text-sm font-semibold text-slate-800">{c.detail}</div></div>)}</div></section>;
 }
 
 function WeeklyEditModal({ field, setField, note, onChange, onSave, saving, onClose }: { field: WeeklyTextKey; setField: (field: WeeklyTextKey) => void; note: WeeklyNote; onChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onSave: () => Promise<void>; saving: boolean; onClose: () => void }) {
