@@ -2679,17 +2679,30 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
     setDragFrom(null);
     setDragOver(null);
   };
+  const closeModal = () => {
+    if (editing !== null) {
+      setEditing(null);
+      return;
+    }
+    setOpen(false);
+  };
+  const rowClass = (index: number) => {
+    if (dragFrom === index) return "border-blue-700 bg-blue-100 shadow-lg shadow-blue-200/70 ring-2 ring-blue-500 scale-[0.99]";
+    if (dragOver === index && dragFrom !== null) return "border-amber-500 bg-amber-100 ring-2 ring-amber-400";
+    if (selected === index) return "border-blue-300 bg-blue-50";
+    return "border-slate-100 bg-white";
+  };
 
-  return <div className="mb-2 rounded-lg bg-slate-50 p-2">
-    <div className="mb-1 flex items-center justify-between">
+  return <div className="relative mb-2 rounded-lg bg-slate-50 p-2">
+    <button type="button" onClick={() => beginEdit("new")} className="absolute right-2 top-2 rounded-md bg-blue-700 px-2 py-1 text-[10px] font-bold leading-none text-white shadow-sm">＋ 추가</button>
+    <div className="mb-1 flex items-center justify-between pr-14">
       <span className="text-sm font-bold text-slate-900">기기 선택</span>
       <span className="text-[10px] text-slate-500">{forms.length}대 중 {selected + 1}번 편집 중</span>
     </div>
-    <div className="flex gap-1.5">
-      <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex min-w-0 flex-1 items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
-        <span className="truncate">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="text-[10px] text-slate-400">▾</span>
+    <div>
+      <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
+        <span className="min-w-0 whitespace-normal break-words leading-5">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="shrink-0 text-[10px] text-slate-400">▾</span>
       </button>
-      <button type="button" onClick={() => beginEdit("new")} className="shrink-0 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">＋ 추가</button>
     </div>
 
     {open && <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setOpen(false)} role="dialog">
@@ -2698,7 +2711,7 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
           <div className="text-sm font-bold text-slate-800">{editing === "new" ? "새 기기 추가" : typeof editing === "number" ? `${editing + 1}번 기기 정보 수정` : "기기 선택·순서변경"}</div>
           <div className="flex items-center gap-1.5">
             {editing === null && <button type="button" onClick={() => beginEdit(selected)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">수정</button>}
-            <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
+            <button type="button" onClick={closeModal} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
           </div>
         </div>
         {editing !== null ? <div className="space-y-2 overflow-y-auto p-4">
@@ -2706,8 +2719,8 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
             <label key={key} className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input autoFocus={key === "model"} value={draft[key]} onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" /></label>)}
           <div className="flex gap-2 pt-2"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">뒤로</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">{editing === "new" ? "기기 추가" : "정보 저장"}</button></div>
         </div> : <div className="flex-1 overflow-y-auto p-2">
-          {forms.map((_, i) => <div key={i} data-device-index={i} className={`mb-1 flex items-stretch gap-1 rounded-xl border p-1.5 transition ${dragOver === i && dragFrom !== null ? "border-blue-400 bg-blue-100" : selected === i ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-white"}`}>
-            <button type="button" onPointerDown={(e) => beginDrag(e, i)} onPointerMove={trackDrag} onPointerUp={finishDrag} onPointerCancel={cancelDrag} className="w-9 shrink-0 touch-none rounded-lg bg-slate-100 text-lg font-bold leading-none text-slate-500 active:bg-slate-200">≡</button>
+          {forms.map((_, i) => <div key={i} data-device-index={i} className={`mb-1 flex items-stretch gap-1 rounded-xl border p-1.5 transition ${rowClass(i)}`}>
+            <button type="button" onPointerDown={(e) => beginDrag(e, i)} onPointerMove={trackDrag} onPointerUp={finishDrag} onPointerCancel={cancelDrag} className={`w-9 shrink-0 touch-none rounded-lg text-lg font-bold leading-none active:bg-blue-200 ${dragFrom === i ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>≡</button>
             <button type="button" onClick={() => onSelect(i)} className="min-w-0 flex-1 px-2 py-2 text-left"><div className="whitespace-normal break-words text-sm font-bold leading-5 text-slate-800">{labels[i] || `${i + 1}. (미상)`}</div></button>
             <button type="button" disabled={i === 0} onClick={() => onMove(i, -1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↑</button>
             <button type="button" disabled={i === forms.length - 1} onClick={() => onMove(i, 1)} className="hidden h-9 w-9 rounded-lg bg-slate-100 text-sm font-bold text-slate-600 disabled:opacity-25 sm:block">↓</button>
