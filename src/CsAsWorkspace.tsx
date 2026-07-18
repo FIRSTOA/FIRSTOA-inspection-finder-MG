@@ -307,6 +307,17 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     setVisibleCalendars((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   };
 
+  const teamCalendarKeys = (calendarTeam: Team) => scheduleTypes.map((type) => `${calendarTeam} ${type}` as CalendarKey);
+  const toggleTeamCalendars = (calendarTeam: Team) => {
+    const keys = teamCalendarKeys(calendarTeam);
+    setVisibleCalendars((current) => {
+      const allSelected = keys.every((key) => current.includes(key));
+      return allSelected
+        ? current.filter((key) => !keys.includes(key))
+        : Array.from(new Set([...current, ...keys]));
+    });
+  };
+
   const renderTicketCard = (ticket: AsTicket) => (
     <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className="block w-full rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
       <div className="flex items-start justify-between gap-2">
@@ -367,9 +378,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
                   {teams.map((calendarTeam) => (
                     <div key={calendarTeam} className="rounded-md border border-slate-200 bg-white">
-                      <button type="button" onClick={() => setOpenCalendarTeams((current) => ({ ...current, [calendarTeam]: !current[calendarTeam] }))} className="flex w-full items-center justify-between px-3 py-2 text-xs font-black text-slate-800">
-                        <span>{calendarTeam}팀</span><span className="text-slate-400">{openCalendarTeams[calendarTeam] ? "−" : "+"}</span>
-                      </button>
+                      <div className="flex items-center justify-between px-2 py-2">
+                        <button type="button" onClick={() => setOpenCalendarTeams((current) => ({ ...current, [calendarTeam]: !current[calendarTeam] }))} className="flex min-w-0 flex-1 items-center justify-between pr-2 text-left text-xs font-black text-slate-800">
+                          <span>{calendarTeam}팀</span><span className="text-slate-400">{openCalendarTeams[calendarTeam] ? "−" : "+"}</span>
+                        </button>
+                        <label className="flex cursor-pointer items-center gap-1 border-l border-slate-100 pl-2 text-[10px] font-black text-slate-500" title={`${calendarTeam}팀 캘린더 전체 선택`}>
+                          <input type="checkbox" checked={teamCalendarKeys(calendarTeam).every((key) => visibleCalendars.includes(key))} onChange={() => toggleTeamCalendars(calendarTeam)} className="h-3.5 w-3.5 accent-blue-600" />
+                          전체
+                        </label>
+                      </div>
                       {openCalendarTeams[calendarTeam] && <div className="border-t border-slate-100 px-1 py-1">
                         {scheduleTypes.map((type) => {
                           const key = `${calendarTeam} ${type}` as CalendarKey;
