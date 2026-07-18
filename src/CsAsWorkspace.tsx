@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 
 type Team = "A" | "B" | "C" | "D";
-type AsStatus = "접수" | "배정" | "완료" | "미루기";
-type CalendarKey = `${Team} AS` | `${Team} 익일AS` | "물류";
+type AsStatus = "접수" | "배정" | "완료" | "익일";
+type ScheduleType = "AS" | "익일AS" | "물류" | "휴가";
+type CalendarKey = `${Team} ${ScheduleType}`;
 type ViewMode = "list" | "calendar";
 type DayFilter = "today" | "tomorrow";
 
@@ -20,10 +21,12 @@ export type AsTicket = {
   issue: string;
   assignee: string;
   status: AsStatus;
+  scheduleType: ScheduleType;
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
-const calendarKeys: CalendarKey[] = ["A AS", "B AS", "C AS", "D AS", "A 익일AS", "B 익일AS", "C 익일AS", "D 익일AS", "물류"];
+const scheduleTypes: ScheduleType[] = ["AS", "익일AS", "물류", "휴가"];
+const calendarKeys: CalendarKey[] = teams.flatMap((team) => scheduleTypes.map((type) => `${team} ${type}` as CalendarKey));
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -50,6 +53,7 @@ const defaultTickets: AsTicket[] = [
     issue: "출력물 줄감 및 소음",
     assignee: "",
     status: "접수",
+    scheduleType: "AS",
   },
   {
     id: "as-2",
@@ -65,6 +69,7 @@ const defaultTickets: AsTicket[] = [
     issue: "용지 걸림 반복",
     assignee: "권태혁",
     status: "배정",
+    scheduleType: "AS",
   },
   {
     id: "as-3",
@@ -79,7 +84,8 @@ const defaultTickets: AsTicket[] = [
     serial: "0A6XBJWC000ANJ",
     issue: "스캔 전송 불가",
     assignee: "이민구",
-    status: "미루기",
+    status: "익일",
+    scheduleType: "익일AS",
   },
   {
     id: "as-4",
@@ -95,6 +101,7 @@ const defaultTickets: AsTicket[] = [
     issue: "토너 인식 오류",
     assignee: "양승원",
     status: "완료",
+    scheduleType: "AS",
   },
 ];
 
@@ -139,13 +146,18 @@ function blankTicket(date: string): AsTicket {
     issue: "",
     assignee: "",
     status: "접수",
+    scheduleType: "AS",
   };
 }
 
 function loadTickets() {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
-    return Array.isArray(parsed) && parsed.length ? (parsed as AsTicket[]) : defaultTickets;
+    return Array.isArray(parsed) && parsed.length ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => ({
+      ...ticket,
+      status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
+      scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
+    })) as AsTicket[] : defaultTickets;
   } catch {
     return defaultTickets;
   }
@@ -153,9 +165,17 @@ function loadTickets() {
 
 function statusClass(status: AsStatus) {
   if (status === "완료") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (status === "미루기") return "border-purple-200 bg-purple-50 text-purple-700";
+  if (status === "익일") return "border-purple-200 bg-purple-50 text-purple-700";
   if (status === "배정") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function scheduleColor(type: ScheduleType, completed = false) {
+  if (completed) return "bg-slate-100 text-slate-400 line-through";
+  if (type === "익일AS") return "bg-purple-100 text-purple-700";
+  if (type === "물류") return "bg-amber-100 text-amber-700";
+  if (type === "휴가") return "bg-emerald-100 text-emerald-700";
+  return "bg-blue-100 text-blue-700";
 }
 
 function buildFieldAsText(ticket: AsTicket, author: string) {
@@ -213,7 +233,8 @@ export function AsReception({ author, onUseField }: { author: string; onUseField
 function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string) => void }) {
   const [tickets, setTicketsState] = useState<AsTicket[]>(loadTickets);
   const [team, setTeam] = useState<Team | "ALL">("ALL");
-  const [visibleCalendars, setVisibleCalendars] = useState<CalendarKey[]>(calendarKeys.filter((key) => key !== "물류"));
+  const [visibleCalendars, setVisibleCalendars] = useState<CalendarKey[]>(calendarKeys);
+  const [openCalendarTeams, setOpenCalendarTeams] = useState<Record<Team, boolean>>({ A: false, B: false, C: false, D: false });
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
@@ -238,6 +259,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     setTickets(tickets.map((ticket) => (ticket.id === id ? { ...ticket, ...patch } : ticket)));
   };
 
+  const removeTicket = (ticket: AsTicket) => {
+    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?`)) return;
+    setTickets(tickets.filter((item) => item.id !== ticket.id));
+    setEditId("");
+  };
+
   const toggleDone = (ticket: AsTicket) => {
     update(ticket.id, { status: ticket.status === "완료" ? (ticket.assignee ? "배정" : "접수") : "완료" });
   };
@@ -249,7 +276,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   const applyDefer = (date: string) => {
     if (!deferTicket || !date) return;
-    update(deferTicket.id, { date, status: "미루기" });
+    const isAsSchedule = deferTicket.scheduleType === "AS" || deferTicket.scheduleType === "익일AS";
+    update(deferTicket.id, { date, status: isAsSchedule ? "익일" : deferTicket.status, scheduleType: isAsSchedule ? "익일AS" : deferTicket.scheduleType });
     setDeferId("");
   };
 
@@ -260,10 +288,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   });
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
-  const asRows = tickets.filter((ticket) => (team === "ALL" || ticket.team === team) && ticket.date === targetDate);
+  const asRows = tickets.filter((ticket) => {
+    if (team !== "ALL" && ticket.team !== team) return false;
+    return dayFilter === "today"
+      ? ticket.date === todayYmd && ticket.scheduleType === "AS"
+      : ticket.date > todayYmd && ticket.scheduleType === "익일AS";
+  });
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
-  const ticketCalendarKey = (ticket: AsTicket): CalendarKey => `${ticket.team} ${ticket.date === tomorrowYmd ? "익일AS" : "AS"}`;
+  const ticketCalendarKey = (ticket: AsTicket): CalendarKey => `${ticket.team} ${ticket.scheduleType}`;
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => visibleCalendars.includes(ticketCalendarKey(ticket))),
     [tickets, visibleCalendars],
@@ -283,7 +316,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         </div>
         <span className={`rounded border px-2 py-0.5 text-[11px] font-black ${statusClass(ticket.status)}`}>{ticket.status}</span>
       </div>
-      <div className="mt-2 text-xs font-semibold text-slate-400">담당 {ticket.assignee || "미배정"} · {ticket.model}</div>
+      <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.team}팀 {ticket.scheduleType} · 담당 {ticket.assignee || "미배정"} · {ticket.model}</div>
     </button>
   );
 
@@ -294,7 +327,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           <div>
             <div className="text-xs font-black text-blue-600">CS AS</div>
             <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">AS접수</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS 접수, 일정 수정, 완료/미루기, FIELD AS 양식 연동을 한 화면에서 처리합니다.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS 접수, 일정 수정, 완료/익일, FIELD AS 양식 연동을 한 화면에서 처리합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setTeam("ALL")} className={`rounded-md px-3 py-2 text-sm font-black ${team === "ALL" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체</button>
@@ -329,15 +362,27 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
                 <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
               </button>
-              <div className="mt-5 hidden lg:block">
+              <div className="mt-4 lg:mt-5">
                 <div className="mb-3 text-sm font-black text-slate-900">내 캘린더</div>
-                <div className="space-y-1.5">
-                  {calendarKeys.map((key) => (
-                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-white">
-                      <input type="checkbox" checked={visibleCalendars.includes(key)} onChange={() => toggleCalendar(key)} className="h-4 w-4 accent-blue-600" />
-                      <span className={`h-2.5 w-2.5 rounded-full ${key === "물류" ? "bg-amber-500" : key.includes("익일") ? "bg-purple-500" : "bg-blue-600"}`} />
-                      {key}
-                    </label>
+                <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
+                  {teams.map((calendarTeam) => (
+                    <div key={calendarTeam} className="rounded-md border border-slate-200 bg-white">
+                      <button type="button" onClick={() => setOpenCalendarTeams((current) => ({ ...current, [calendarTeam]: !current[calendarTeam] }))} className="flex w-full items-center justify-between px-3 py-2 text-xs font-black text-slate-800">
+                        <span>{calendarTeam}팀</span><span className="text-slate-400">{openCalendarTeams[calendarTeam] ? "−" : "+"}</span>
+                      </button>
+                      {openCalendarTeams[calendarTeam] && <div className="border-t border-slate-100 px-1 py-1">
+                        {scheduleTypes.map((type) => {
+                          const key = `${calendarTeam} ${type}` as CalendarKey;
+                          return (
+                            <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                              <input type="checkbox" checked={visibleCalendars.includes(key)} onChange={() => toggleCalendar(key)} className="h-4 w-4 accent-blue-600" />
+                              <span className={`h-2.5 w-2.5 rounded-full ${type === "익일AS" ? "bg-purple-500" : type === "물류" ? "bg-amber-500" : type === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />
+                              {type}
+                            </label>
+                          );
+                        })}
+                      </div>}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -361,10 +406,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               {viewMode === "list" ? (
                 <div className="space-y-2 p-4">
                   {monthTickets.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((ticket) => (
-                    <div key={ticket.id} className="flex items-center gap-3">
+                    <div key={ticket.id} className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
                       <div className="w-14 flex-none text-xs font-black text-slate-500">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</div>
                       <div className="min-w-0 flex-1">{renderTicketCard(ticket)}</div>
                       <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                      <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
+                      <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
                     </div>
                   ))}
                   {!monthTickets.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
@@ -381,11 +428,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onDoubleClick={() => setNewTicket(blankTicket(date))} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                          <div key={date} onDoubleClick={() => setNewTicket(blankTicket(date))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
                             <button type="button" onClick={() => setNewTicket(blankTicket(date))} className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 4).map((ticket) => (
-                                <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className={`block w-full truncate rounded px-1.5 py-1 text-left text-[11px] font-bold ${ticket.status === "완료" ? "bg-slate-100 text-slate-400 line-through" : ticket.date === tomorrowYmd ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => setEditId(ticket.id)} className={`block w-full cursor-grab truncate rounded px-1.5 py-1 text-left text-[11px] font-bold active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
                                   {ticket.time} {ticket.vendor || "새 일정"}
                                 </button>
                               ))}
@@ -409,7 +456,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded px-4 py-2 text-sm font-black ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
-            <div className="text-xs font-bold text-slate-400">{targetDate} · {asRows.length}건</div>
+            <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : `${tomorrowYmd} 이후`} · {asRows.length}건</div>
           </div>
 
           <div className="overflow-x-auto">
@@ -446,7 +493,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       <div className="flex justify-end gap-1.5">
                         <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author))} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">FIELD AS</button>
                         <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
-                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">미루기</button>
+                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
                       </div>
                     </td>
                   </tr>
@@ -460,14 +507,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         </section>
       )}
 
-      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} />}
+      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
       {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { setTickets([...tickets, { ...newTicket, ...patch }]); setNewTicket(null); }} />}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
     </div>
   );
 }
 
-function TicketEditModal({ ticket, title = "AS 일정 수정", onClose, onSave }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void }) {
+function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void }) {
   const [draft, setDraft] = useState(ticket);
   const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -486,15 +533,17 @@ function TicketEditModal({ ticket, title = "AS 일정 수정", onClose, onSave }
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
+            캘린더
+            <select value={draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+              {scheduleTypes.map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-500">
             담당자
             <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
               <option value="">미배정</option>
               {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
             </select>
-          </label>
-          <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 md:col-span-2">
-            <input type="checkbox" checked={draft.status === "완료"} onChange={(event) => set("status", event.target.checked ? "완료" : (draft.assignee ? "배정" : "접수"))} className="h-4 w-4 accent-blue-600" />
-            일정 완료 처리
           </label>
           <Field label="업체명" value={draft.vendor} onChange={(value) => set("vendor", value)} />
           <Field label="부서명" value={draft.department} onChange={(value) => set("department", value)} />
@@ -509,9 +558,14 @@ function TicketEditModal({ ticket, title = "AS 일정 수정", onClose, onSave }
             <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={5} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
           </label>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-          <button type="button" onClick={() => onSave(draft)} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white">저장</button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+          <div>{onDelete && <button type="button" onClick={onDelete} className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}</div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+            {onDefer && <button type="button" onClick={onDefer} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}
+            {onComplete && <button type="button" onClick={onComplete} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">{ticket.status === "완료" ? "완료 취소" : "완료"}</button>}
+            <button type="button" onClick={() => onSave(draft)} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white">저장</button>
+          </div>
         </div>
       </div>
     </div>
@@ -529,7 +583,7 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
       <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="text-lg font-black text-slate-950">미루기</div>
+        <div className="text-lg font-black text-slate-950">익일 일정 변경</div>
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         <div className="mt-5 grid grid-cols-2 gap-2">
           {options.map(([label, date]) => (

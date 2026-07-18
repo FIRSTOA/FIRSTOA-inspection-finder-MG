@@ -4055,6 +4055,7 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
@@ -4332,8 +4333,8 @@ export default function App() {
         <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
           <div className="h-full w-64 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-slate-100 px-5 py-4">
-              <div className="text-lg font-bold text-slate-900">퍼스트전산 CS팀</div>
-              <div className="text-[11px] text-slate-400">현장 업무 통합</div>
+              <div className="text-lg font-bold text-slate-900">FIRSTOA CS SYSTEM</div>
+              <div className="text-[11px] text-slate-400">CS 업무 통합</div>
             </div>
             <nav className="space-y-3 p-2">
               {standaloneItems.map(([key, label]) => (
@@ -4374,26 +4375,31 @@ export default function App() {
         </div>
       )}
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white lg:flex">
-          <div className="border-b border-white/10 px-5 py-5">
-            <div className="text-base font-black">FIRSTOA CS ERP</div>
-            <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/10 bg-[#0F172A] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
+          <div className={`flex items-start border-b border-white/10 py-5 ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-5"}`}>
+            <div className={sidebarCollapsed ? "text-center" : ""}>
+              <div className="text-base font-black">{sidebarCollapsed ? "CS" : "FIRSTOA CS SYSTEM"}</div>
+              {!sidebarCollapsed && <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>}
+            </div>
+            <button type="button" onClick={() => setSidebarCollapsed((current) => !current)} title={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} aria-label={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} className={`flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "absolute left-[66px] top-5 bg-[#0F172A]" : ""}`}>
+              {sidebarCollapsed ? "›" : "‹"}
+            </button>
           </div>
-          <nav className="flex-1 space-y-5 px-3 py-4">
+          <nav className={`flex-1 space-y-5 py-4 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
             {standaloneItems.map(([key, label]) => (
-              <button key={key} type="button" onClick={() => setScreen(key)}
-                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{label}</span>
+              <button key={key} type="button" title={label} onClick={() => setScreen(key)}
+                className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "AS접수" ? "AS" : label) : label}</span>
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
             {navGroups.map((group) => (
               <div key={group.title}>
-                <button type="button" onClick={() => toggleNavGroup(group.title)} className="mb-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white">
-                  <span>{group.title}</span>
-                  <span className="text-[11px]">{isGroupOpen(group) ? "접기" : "펼치기"}</span>
+                <button type="button" title={group.title} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : toggleNavGroup(group.title)} className={`mb-1 flex w-full items-center rounded-md py-2 text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "justify-center px-1" : "justify-between px-3 text-left"}`}>
+                  <span>{sidebarCollapsed ? group.title.slice(0, 2) : group.title}</span>
+                  {!sidebarCollapsed && <span className="text-[11px]">{isGroupOpen(group) ? "접기" : "펼치기"}</span>}
                 </button>
-                {isGroupOpen(group) && <div className="ml-3 space-y-1 border-l border-white/10 pl-2">
+                {!sidebarCollapsed && isGroupOpen(group) && <div className="ml-3 space-y-1 border-l border-white/10 pl-2">
                   {group.items.map(([key, label]) => (
                     <button key={key} type="button" onClick={() => setScreen(key)}
                       className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
@@ -4405,10 +4411,10 @@ export default function App() {
               </div>
             ))}
           </nav>
-          <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">{author || "작성자 미선택"}</div>
+          <div className={`border-t border-white/10 py-4 text-xs text-slate-400 ${sidebarCollapsed ? "px-2 text-center" : "px-5"}`}>{sidebarCollapsed ? (author?.slice(0, 1) || "-") : (author || "작성자 미선택")}</div>
       </aside>
 
-      <div className={`mx-auto flex flex-col px-3 pt-4 sm:px-6 sm:pt-6 ${screen !== "field" ? "max-w-[1500px] pb-16 lg:ml-64 lg:max-w-none lg:px-8" : "max-w-3xl lg:ml-64 lg:max-w-none lg:px-8"} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col px-3 pt-4 transition-[margin] duration-200 sm:px-6 sm:pt-6 ${screen !== "field" ? `max-w-[1500px] pb-16 lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`-mx-3 px-3 sm:-mx-6 sm:px-6 ${screen === "field" ? "-mt-4 mb-5 bg-[#0F172A] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
