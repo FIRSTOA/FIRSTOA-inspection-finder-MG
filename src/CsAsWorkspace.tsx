@@ -114,6 +114,34 @@ function addMonths(date: string, months: number) {
   return formatDate(d);
 }
 
+function monthStart(date: string) {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function monthGrid(date: string) {
+  const first = new Date(`${monthStart(date)}T12:00:00+09:00`);
+  const gridStart = addDays(formatDate(first), -first.getDay());
+  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+}
+
+function blankTicket(date: string): AsTicket {
+  return {
+    id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    team: "A",
+    date,
+    time: "09:00",
+    vendor: "",
+    contact: "",
+    address: "",
+    department: "",
+    model: "",
+    serial: "",
+    issue: "",
+    assignee: "",
+    status: "접수",
+  };
+}
+
 function loadTickets() {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -185,10 +213,12 @@ export function AsReception({ author, onUseField }: { author: string; onUseField
 function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string) => void }) {
   const [tickets, setTicketsState] = useState<AsTicket[]>(loadTickets);
   const [team, setTeam] = useState<Team | "ALL">("ALL");
-  const [calendarKey, setCalendarKey] = useState<CalendarKey>("A AS");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [visibleCalendars, setVisibleCalendars] = useState<CalendarKey[]>(calendarKeys.filter((key) => key !== "물류"));
+  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
   const [editId, setEditId] = useState("");
+  const [newTicket, setNewTicket] = useState<AsTicket | null>(null);
   const [deferId, setDeferId] = useState("");
   const [customDate, setCustomDate] = useState(tomorrowYmd);
 
@@ -232,14 +262,17 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   const asRows = tickets.filter((ticket) => (team === "ALL" || ticket.team === team) && ticket.date === targetDate);
 
-  const calendarRows = useMemo(() => {
-    if (calendarKey === "물류") return [];
-    const [teamKey, kind] = calendarKey.split(" ") as [Team, "AS" | "익일AS"];
-    const date = kind === "익일AS" ? tomorrowYmd : todayYmd;
-    return tickets.filter((ticket) => ticket.team === teamKey && ticket.date === date);
-  }, [calendarKey, tickets]);
+  const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
+  const ticketCalendarKey = (ticket: AsTicket): CalendarKey => `${ticket.team} ${ticket.date === tomorrowYmd ? "익일AS" : "AS"}`;
+  const visibleTickets = useMemo(
+    () => tickets.filter((ticket) => visibleCalendars.includes(ticketCalendarKey(ticket))),
+    [tickets, visibleCalendars],
+  );
+  const monthTickets = visibleTickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7));
 
-  const calendarDays = Array.from({ length: 7 }, (_, index) => addDays(todayYmd, index));
+  const toggleCalendar = (key: CalendarKey) => {
+    setVisibleCalendars((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  };
 
   const renderTicketCard = (ticket: AsTicket) => (
     <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className="block w-full rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
@@ -256,11 +289,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   return (
     <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      {view === "as" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-black text-blue-600">CS AS</div>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{view === "calendar" ? "CS 캘린더" : "AS접수"}</h2>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">AS접수</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS 접수, 일정 수정, 완료/미루기, FIELD AS 양식 연동을 한 화면에서 처리합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -270,9 +303,9 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="grid gap-3 lg:grid-cols-4">
+      {view === "as" && <section className="grid gap-3 lg:grid-cols-4">
         {teamSummary.map((item) => {
           const rate = item.total ? Math.round((item.done / item.total) * 100) : 0;
           return (
@@ -287,43 +320,86 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             </button>
           );
         })}
-      </section>
+      </section>}
 
       {view === "calendar" ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-1.5">
-              {calendarKeys.map((key) => (
-                <button key={key} type="button" onClick={() => setCalendarKey(key)} className={`rounded-md px-3 py-2 text-xs font-black ${calendarKey === key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{key}</button>
-              ))}
-            </div>
-            <div className="rounded-md bg-slate-100 p-1">
-              {(["list", "calendar"] as ViewMode[]).map((mode) => (
-                <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "list" ? "목록" : "달력"}</button>
-              ))}
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-[720px] flex-col lg:flex-row">
+            <aside className="border-b border-slate-200 bg-slate-50/70 p-4 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r">
+              <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
+                <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
+              </button>
+              <div className="mt-5 hidden lg:block">
+                <div className="mb-3 text-sm font-black text-slate-900">내 캘린더</div>
+                <div className="space-y-1.5">
+                  {calendarKeys.map((key) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-white">
+                      <input type="checkbox" checked={visibleCalendars.includes(key)} onChange={() => toggleCalendar(key)} className="h-4 w-4 accent-blue-600" />
+                      <span className={`h-2.5 w-2.5 rounded-full ${key === "물류" ? "bg-amber-500" : key.includes("익일") ? "bg-purple-500" : "bg-blue-600"}`} />
+                      {key}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </aside>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setCurrentMonth(monthStart(todayYmd))} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">오늘</button>
+                  <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="h-9 w-9 rounded-md text-xl font-bold text-slate-500 hover:bg-slate-100">‹</button>
+                  <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="h-9 w-9 rounded-md text-xl font-bold text-slate-500 hover:bg-slate-100">›</button>
+                  <h2 className="ml-1 text-lg font-black text-slate-950 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
+                </div>
+                <div className="rounded-md bg-slate-100 p-1">
+                  {(["calendar", "list"] as ViewMode[]).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : "목록"}</button>
+                  ))}
+                </div>
+              </div>
+
+              {viewMode === "list" ? (
+                <div className="space-y-2 p-4">
+                  {monthTickets.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((ticket) => (
+                    <div key={ticket.id} className="flex items-center gap-3">
+                      <div className="w-14 flex-none text-xs font-black text-slate-500">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</div>
+                      <div className="min-w-0 flex-1">{renderTicketCard(ticket)}</div>
+                      <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                    </div>
+                  ))}
+                  {!monthTickets.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[760px]">
+                    <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                      {["일", "월", "화", "수", "목", "금", "토"].map((day, index) => <div key={day} className={`px-2 py-2 text-center text-[11px] font-black ${index === 0 ? "text-rose-500" : index === 6 ? "text-blue-500" : "text-slate-500"}`}>{day}</div>)}
+                    </div>
+                    <div className="grid grid-cols-7">
+                      {calendarDays.map((date) => {
+                        const rows = visibleTickets.filter((ticket) => ticket.date === date);
+                        const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
+                        const isToday = date === todayYmd;
+                        return (
+                          <div key={date} onDoubleClick={() => setNewTicket(blankTicket(date))} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                            <button type="button" onClick={() => setNewTicket(blankTicket(date))} className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</button>
+                            <div className="space-y-1">
+                              {rows.slice(0, 4).map((ticket) => (
+                                <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className={`block w-full truncate rounded px-1.5 py-1 text-left text-[11px] font-bold ${ticket.status === "완료" ? "bg-slate-100 text-slate-400 line-through" : ticket.date === tomorrowYmd ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                                  {ticket.time} {ticket.vendor || "새 일정"}
+                                </button>
+                              ))}
+                              {rows.length > 4 && <div className="px-1 text-[10px] font-bold text-slate-400">+{rows.length - 4}개 더보기</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {calendarKey === "물류" ? (
-            <div className="mt-6 rounded-md border border-dashed border-slate-200 p-10 text-center text-sm font-semibold text-slate-400">물류 캘린더는 다음 단계에서 납품/철수/교체 데이터와 연결합니다.</div>
-          ) : viewMode === "list" ? (
-            <div className="mt-5 grid gap-3">
-              {calendarRows.map(renderTicketCard)}
-              {!calendarRows.length && <div className="p-8 text-center text-sm font-semibold text-slate-400">일정이 없습니다.</div>}
-            </div>
-          ) : (
-            <div className="mt-5 grid gap-2 md:grid-cols-7">
-              {calendarDays.map((date) => {
-                const rows = tickets.filter((ticket) => ticket.date === date && calendarKey.startsWith(ticket.team));
-                return (
-                  <div key={date} className="min-h-40 rounded-md border border-slate-200 bg-slate-50 p-2">
-                    <div className="mb-2 text-xs font-black text-slate-500">{date.slice(5)}</div>
-                    <div className="space-y-2">{rows.map(renderTicketCard)}</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </section>
       ) : (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -385,12 +461,13 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       )}
 
       {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} />}
+      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { setTickets([...tickets, { ...newTicket, ...patch }]); setNewTicket(null); }} />}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
     </div>
   );
 }
 
-function TicketEditModal({ ticket, onClose, onSave }: { ticket: AsTicket; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void }) {
+function TicketEditModal({ ticket, title = "AS 일정 수정", onClose, onSave }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void }) {
   const [draft, setDraft] = useState(ticket);
   const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -398,10 +475,27 @@ function TicketEditModal({ ticket, onClose, onSave }: { ticket: AsTicket; onClos
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
       <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <b>AS 일정 수정</b>
+          <b>{title}</b>
           <button type="button" onClick={onClose} className="text-xs font-bold text-slate-400">닫기</button>
         </div>
         <div className="grid gap-3 p-5 md:grid-cols-2">
+          <label className="text-xs font-bold text-slate-500">
+            팀
+            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+              {teams.map((item) => <option key={item} value={item}>{item}팀</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-500">
+            담당자
+            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+              <option value="">미배정</option>
+              {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 md:col-span-2">
+            <input type="checkbox" checked={draft.status === "완료"} onChange={(event) => set("status", event.target.checked ? "완료" : (draft.assignee ? "배정" : "접수"))} className="h-4 w-4 accent-blue-600" />
+            일정 완료 처리
+          </label>
           <Field label="업체명" value={draft.vendor} onChange={(value) => set("vendor", value)} />
           <Field label="부서명" value={draft.department} onChange={(value) => set("department", value)} />
           <Field label="날짜" value={draft.date} type="date" onChange={(value) => set("date", value)} />
