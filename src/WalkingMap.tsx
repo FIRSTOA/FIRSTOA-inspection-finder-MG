@@ -127,7 +127,7 @@ export default function WalkingMap() {
   );
 
   const mapCanvas = (large = false) => (
-    <div className={`relative overflow-hidden rounded-lg border border-slate-200 bg-[#EAF2F8] shadow-sm ${large ? "h-[78vh]" : "min-h-[680px] lg:min-h-[calc(100vh-280px)]"}`}>
+    <div className={`relative overflow-hidden border border-slate-200 bg-[#EAF2F8] shadow-sm ${large ? "h-full min-h-0 rounded-none" : "min-h-[680px] rounded-lg lg:min-h-[calc(100vh-280px)]"}`}>
       <div className="absolute inset-0 opacity-80" style={{
         backgroundImage: "linear-gradient(90deg, rgba(71,85,105,.16) 1px, transparent 1px), linear-gradient(rgba(71,85,105,.16) 1px, transparent 1px)",
         backgroundSize: "64px 64px",
@@ -250,8 +250,8 @@ export default function WalkingMap() {
       </section>
 
       {mapOpen && (
-        <div className="fixed inset-0 z-[120] bg-black/50 p-4" onMouseDown={() => setMapOpen(false)}>
-          <div className="mx-auto flex h-full max-w-[1500px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[120] bg-white" onMouseDown={() => setMapOpen(false)}>
+          <div className="flex h-screen w-screen flex-col overflow-hidden bg-white" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
                 <div className="text-lg font-black text-slate-950">CS 워킨맵 크게 보기</div>
@@ -259,8 +259,8 @@ export default function WalkingMap() {
               </div>
               <button type="button" onClick={() => setMapOpen(false)} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">닫기</button>
             </div>
-            <div className="grid min-h-0 flex-1 gap-4 bg-slate-50 p-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-              {placeList}
+            <div className="grid min-h-0 flex-1 bg-slate-50 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="hidden min-h-0 lg:block">{placeList}</div>
               {mapCanvas(true)}
             </div>
           </div>

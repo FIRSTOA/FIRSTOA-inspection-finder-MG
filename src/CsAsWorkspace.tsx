@@ -5,7 +5,7 @@ type AsStatus = "접수" | "배정" | "완료" | "익일";
 type ScheduleType = "AS" | "익일AS" | "물류" | "휴가";
 type CalendarKey = `${Team} ${ScheduleType}`;
 type ViewMode = "list" | "calendar";
-type DayFilter = "today" | "tomorrow";
+type DayFilter = "today" | "tomorrow" | "scheduled";
 
 export type AsTicket = {
   id: string;
@@ -36,7 +36,7 @@ const teamAssignees: Record<Team, string[]> = {
 
 const storageKey = "cs_as_tickets_v4";
 const todayYmd = formatDate(new Date());
-const tomorrowYmd = addDays(todayYmd, 1);
+const tomorrowYmd = nextBusinessDay(todayYmd);
 
 const defaultTickets: AsTicket[] = [
   {
@@ -113,6 +113,12 @@ function addDays(date: string, days: number) {
   const d = new Date(`${date}T12:00:00+09:00`);
   d.setDate(d.getDate() + days);
   return formatDate(d);
+}
+
+function nextBusinessDay(date: string) {
+  let next = addDays(date, 1);
+  while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDays(next, 1);
+  return next;
 }
 
 function addMonths(date: string, months: number) {
@@ -303,9 +309,9 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   const asRows = tickets.filter((ticket) => {
     if (team !== "ALL" && ticket.team !== team) return false;
-    return dayFilter === "today"
-      ? ticket.date === todayYmd && ticket.scheduleType === "AS"
-      : ticket.date > todayYmd && ticket.scheduleType === "익일AS";
+    if (dayFilter === "today") return ticket.date === todayYmd && ticket.scheduleType === "AS";
+    if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd && ticket.scheduleType === "익일AS";
+    return ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.scheduleType === "익일AS";
   });
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
@@ -480,15 +486,44 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       ) : (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="rounded-md bg-slate-100 p-1">
-              {([["today", "금일 AS"], ["tomorrow", "익일 AS"]] as [DayFilter, string][]).map(([key, label]) => (
+            <div className="grid w-full grid-cols-3 rounded-md bg-slate-100 p-1 sm:w-auto">
+              {([["today", "금일 AS"], ["tomorrow", "익일 AS"], ["scheduled", "예정 AS"]] as [DayFilter, string][]).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded px-4 py-2 text-sm font-black ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
-            <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : `${tomorrowYmd} 이후`} · {asRows.length}건</div>
+            <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {asRows.length}건</div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {asRows.map((ticket) => (
+              <article key={ticket.id} className={`rounded-lg border p-4 shadow-sm ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <button type="button" onClick={() => setEditId(ticket.id)} className="min-w-0 flex-1 text-left">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-slate-900 px-2 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
+                      <span className="text-xs font-black text-slate-500">{ticket.date} {ticket.time}</span>
+                    </div>
+                    <div className={`mt-2 text-base font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{ticket.vendor}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-600">{ticket.issue}</div>
+                    <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.model} · {ticket.serial || "시리얼 미입력"}</div>
+                  </button>
+                  {ticket.status === "완료" && <span className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
+                </div>
+                <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold">
+                  <option value="">미배정</option>
+                  {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
+                </select>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author))} className="rounded-md bg-slate-900 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>
+                  <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                  <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
+                </div>
+              </article>
+            ))}
+            {!asRows.length && <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">접수된 AS가 없습니다.</div>}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[1100px] text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">
@@ -502,12 +537,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               </thead>
               <tbody>
                 {asRows.map((ticket) => (
-                  <tr key={ticket.id} className="border-b border-slate-100 last:border-0">
+                  <tr key={ticket.id} className={`border-b last:border-0 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
                     <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
                       <button type="button" onClick={() => setEditId(ticket.id)} className="text-left">
-                        <div className="text-sm font-black text-slate-900">{ticket.vendor}</div>
+                        <div className="flex items-center gap-2 text-sm font-black text-slate-900">{ticket.vendor}{ticket.status === "완료" && <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                         <div className="mt-1 text-xs font-semibold text-slate-500">{ticket.issue}</div>
                       </button>
                     </td>
