@@ -131,6 +131,19 @@ function monthGrid(date: string) {
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
 }
 
+function normalizeTicketSchedule(ticket: AsTicket): AsTicket {
+  if (ticket.scheduleType === "물류" || ticket.scheduleType === "휴가") return ticket;
+  const isFuture = ticket.date > todayYmd;
+  const nextStatus = ticket.status === "완료"
+    ? "완료"
+    : isFuture
+      ? "익일"
+      : ticket.status === "익일"
+        ? (ticket.assignee ? "배정" : "접수")
+        : ticket.status;
+  return { ...ticket, scheduleType: isFuture ? "익일AS" : "AS", status: nextStatus };
+}
+
 function blankTicket(date: string): AsTicket {
   return {
     id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -153,11 +166,11 @@ function blankTicket(date: string): AsTicket {
 function loadTickets() {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
-    return Array.isArray(parsed) && parsed.length ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => ({
+    return Array.isArray(parsed) && parsed.length ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => normalizeTicketSchedule({
       ...ticket,
       status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
       scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
-    })) as AsTicket[] : defaultTickets;
+    } as AsTicket)) : defaultTickets.map(normalizeTicketSchedule);
   } catch {
     return defaultTickets;
   }
@@ -256,7 +269,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const update = (id: string, patch: Partial<AsTicket>) => {
-    setTickets(tickets.map((ticket) => (ticket.id === id ? { ...ticket, ...patch } : ticket)));
+    setTickets(tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket)));
   };
 
   const removeTicket = (ticket: AsTicket) => {
@@ -382,9 +395,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <button type="button" onClick={() => setOpenCalendarTeams((current) => ({ ...current, [calendarTeam]: !current[calendarTeam] }))} className="flex min-w-0 flex-1 items-center justify-between pr-2 text-left text-xs font-black text-slate-800">
                           <span>{calendarTeam}팀</span><span className="text-slate-400">{openCalendarTeams[calendarTeam] ? "−" : "+"}</span>
                         </button>
-                        <label className="flex cursor-pointer items-center gap-1 border-l border-slate-100 pl-2 text-[10px] font-black text-slate-500" title={`${calendarTeam}팀 캘린더 전체 선택`}>
+                        <label className="flex cursor-pointer items-center border-l border-slate-100 pl-2" title={`${calendarTeam}팀 캘린더 전체 선택`}>
                           <input type="checkbox" checked={teamCalendarKeys(calendarTeam).every((key) => visibleCalendars.includes(key))} onChange={() => toggleTeamCalendars(calendarTeam)} className="h-3.5 w-3.5 accent-blue-600" />
-                          전체
                         </label>
                       </div>
                       {openCalendarTeams[calendarTeam] && <div className="border-t border-slate-100 px-1 py-1">
@@ -525,7 +537,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       )}
 
       {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
-      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { setTickets([...tickets, { ...newTicket, ...patch }]); setNewTicket(null); }} />}
+      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { setTickets([...tickets, normalizeTicketSchedule({ ...newTicket, ...patch })]); setNewTicket(null); }} />}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
     </div>
   );
@@ -551,8 +563,8 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
           <label className="text-xs font-bold text-slate-500">
             캘린더
-            <select value={draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
-              {scheduleTypes.map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
+            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+              {(["AS", "물류", "휴가"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
