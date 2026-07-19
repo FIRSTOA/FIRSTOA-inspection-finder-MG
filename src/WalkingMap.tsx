@@ -179,8 +179,8 @@ export default function WalkingMap() {
   const [places, setPlaces] = useState<MapPlace[]>(loadPlaces);
   const [query, setQuery] = useState("");
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
-  const [teamFilter, setTeamFilter] = useState<Team | "ALL">("ALL");
-  const [quarterFilter, setQuarterFilter] = useState<Quarter | "ALL">("ALL");
+  const [teamFilter, setTeamFilter] = useState<Team>("C");
+  const [quarterFilter, setQuarterFilter] = useState<Quarter>(() => (Math.floor(new Date().getMonth() / 3) + 1) as Quarter);
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">("ALL");
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -205,8 +205,8 @@ export default function WalkingMap() {
     const keyword = query.trim().toLowerCase();
     return places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
-      if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
-      if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
+      if (place.team !== teamFilter) return false;
+      if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (!keyword) return true;
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
@@ -215,9 +215,8 @@ export default function WalkingMap() {
   }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
-  const currentQuarter = (Math.floor(new Date().getMonth() / 3) + 1) as Quarter;
-  const progressQuarter = quarterFilter === "ALL" ? currentQuarter : quarterFilter;
-  const conditionTitle = `${teamFilter === "ALL" ? "전체 팀" : `${teamFilter}팀`} · ${quarterFilter === "ALL" ? "전체 분기" : `${quarterFilter}분기`} · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
+  const progressQuarter = quarterFilter;
+  const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
   const teamProgress = useMemo(() => teams.map((team) => {
     const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
     const inspections = rows.filter((place) => place.kind === "quarter" || place.kind === "monthly");
@@ -264,7 +263,7 @@ export default function WalkingMap() {
         window.alert(".xlsx 형식만 불러올 수 있습니다.");
         return;
       }
-      const ExcelJS = (await import("exceljs")).default;
+      const ExcelJS = (await import("exceljs/dist/exceljs.min.js")).default;
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
       const worksheet = workbook.worksheets[0];
@@ -315,7 +314,8 @@ export default function WalkingMap() {
       })).filter((place) => place.name));
     } catch (error) {
       console.error(error);
-      window.alert("엑셀 파일을 읽지 못했습니다. 파일이 손상되지 않은 .xlsx 파일인지 확인해 주세요.");
+      const detail = error instanceof Error ? error.message : String(error);
+      window.alert(`엑셀 파일을 읽지 못했습니다.\n${detail}`);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -326,16 +326,19 @@ export default function WalkingMap() {
     setPlaces((current) => importMode === "replace"
       ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
       : [...current, ...imported]);
+    setTeamFilter(importTeam);
+    setQuarterFilter(importQuarter);
+    setKindFilter(importKind);
     setPendingImport([]);
   };
 
   const exportExcel = async () => {
-    const ExcelJS = (await import("exceljs")).default;
+    const ExcelJS = (await import("exceljs/dist/exceljs.min.js")).default;
     const keyword = query.trim().toLowerCase();
     const exportPlaces = places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
-      if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
-      if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
+      if (place.team !== teamFilter) return false;
+      if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (!keyword) return true;
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos].some((value) => value.toLowerCase().includes(keyword));
@@ -371,7 +374,7 @@ export default function WalkingMap() {
     });
     sheet.autoFilter = { from: "A1", to: "Y1" };
     const kindName = kindFilter === "ALL" ? "전체" : workKinds.find((item) => item.value === kindFilter)?.label;
-    const filename = `CS워킨맵_${teamFilter === "ALL" ? "전체" : `${teamFilter}팀`}_${quarterFilter === "ALL" ? "전체분기" : `${quarterFilter}분기`}_${kindName}.xlsx`;
+    const filename = `CS워킨맵_${teamFilter}팀_${quarterFilter}분기_${kindName}.xlsx`;
     const buffer = await workbook.xlsx.writeBuffer();
     const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const anchor = document.createElement("a");
@@ -458,19 +461,18 @@ export default function WalkingMap() {
       </div>
       <div className="absolute right-3 top-3 z-[900]">
         <div className="relative flex gap-1">
-          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
-              <div className="mt-1.5 grid grid-cols-5 gap-1">
-                {(["ALL", ...teams] as const).map((item) => <button key={item} type="button" onClick={() => setTeamFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item === "ALL" ? "전체" : item}</button>)}
+              <div className="mt-1.5 grid grid-cols-4 gap-1">
+                {teams.map((item) => <button key={item} type="button" onClick={() => setTeamFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">분기</div>
-              <div className="mt-1.5 grid grid-cols-5 gap-1">
-                <button type="button" onClick={() => setQuarterFilter("ALL")} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
+              <div className="mt-1.5 grid grid-cols-4 gap-1">
                 {quarters.map((item) => <button key={item} type="button" onClick={() => setQuarterFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">업무</div>
