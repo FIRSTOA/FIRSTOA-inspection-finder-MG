@@ -285,6 +285,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [editMode, setEditMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
@@ -298,6 +299,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const selectMapPlace = useCallback((id: number) => {
     setSelectedId(id);
+    setExpandedId(null);
     if (window.matchMedia("(max-width: 1023px)").matches) setMobileView("list");
   }, []);
 
@@ -356,6 +358,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       ? current.map((place) => place.id === draft.id ? draft : place)
       : [...current, draft]);
     setSelectedId(draft.id);
+    setExpandedId(draft.id);
     setDraft(null);
   };
 
@@ -364,6 +367,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     if (!window.confirm("이 거래처를 워킨맵에서 삭제할까요?")) return;
     setPlaces((current) => current.filter((place) => place.id !== draft.id));
     setSelectedId(null);
+    setExpandedId(null);
     setDraft(null);
   };
 
@@ -552,7 +556,11 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
-              <button type="button" onClick={() => editMode ? toggleChecked(place.id) : setSelectedId((current) => current === place.id ? null : place.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+              <button type="button" onClick={() => {
+                if (editMode) return toggleChecked(place.id);
+                setSelectedId(place.id);
+                setExpandedId((current) => current === place.id ? null : place.id);
+              }} className="flex min-w-0 flex-1 items-start gap-3 text-left">
                 {editMode ? (
                   <span className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 text-slate-300"}`}>✓</span>
                 ) : (
@@ -566,7 +574,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
               </div>
-              {selectedId === place.id && !editMode && (
+              {expandedId === place.id && !editMode && (
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
                   <div className="space-y-3">
                     <div>
@@ -623,16 +631,16 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
             <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
+                {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">분기</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {quarters.map((item) => <button key={item} type="button" onClick={() => { setQuarterFilter(item); setSelectedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
+                {quarters.map((item) => <button key={item} type="button" onClick={() => { setQuarterFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">업무</div>
               <div className="mt-1.5 grid grid-cols-2 gap-1">
-                <button type="button" onClick={() => setKindFilter("ALL")} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
-                {workKinds.map((item) => <button key={item.value} type="button" onClick={() => setKindFilter(item.value)} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
+                <button type="button" onClick={() => { setKindFilter("ALL"); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
+                {workKinds.map((item) => <button key={item.value} type="button" onClick={() => { setKindFilter(item.value); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
               </div>
             </div>
           )}
