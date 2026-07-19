@@ -146,6 +146,67 @@ function monthlyInspectionUnits(place: MapPlace) {
   return 0;
 }
 
+const koreanHolidays: Record<number, string[]> = {
+  2026: ["01-01", "02-16", "02-17", "02-18", "03-02", "05-01", "05-05", "05-25", "06-03", "08-17", "09-24", "09-25", "10-05", "10-09", "12-25"],
+};
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function businessDaysBetween(start: Date, end: Date) {
+  if (start > end) return 0;
+  const holidays = new Set((koreanHolidays[start.getFullYear()] || []).map((day) => `${start.getFullYear()}-${day}`));
+  let count = 0;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  while (cursor <= last) {
+    const weekday = cursor.getDay();
+    if (weekday !== 0 && weekday !== 6 && !holidays.has(localDateKey(cursor))) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+function quarterDates(year: number, quarter: Quarter) {
+  const startMonth = (quarter - 1) * 3;
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, startMonth + 3, 0);
+  const earlyEnd = new Date(end);
+  earlyEnd.setDate(earlyEnd.getDate() - 10);
+  return { start, end, earlyEnd };
+}
+
+function dailyTarget(remaining: number, businessDays: number, members: number) {
+  if (remaining <= 0) return "완료";
+  if (businessDays <= 0) return "기한 경과";
+  return `${(remaining / businessDays / members).toFixed(1)}건/일`;
+}
+
+function contractEnd(place: MapPlace, baseYear: number) {
+  const source = [place.name, ...place.memos].join(" ");
+  const marked = source.match(/계약종료(?:년월)?\s*[-/:.]?\s*(\d{2,4})\s*[-년/.]?\s*(\d{1,2})?/);
+  const leading = place.name.match(/^(\d{2})(\d{2})\//);
+  let year = 0;
+  let month = 0;
+  if (marked) {
+    const digits = marked[1];
+    if (digits.length === 4 && !marked[2]) {
+      year = 2000 + Number(digits.slice(0, 2));
+      month = Number(digits.slice(2));
+    } else {
+      year = digits.length === 2 ? 2000 + Number(digits) : Number(digits);
+      month = Number(marked[2] || 0);
+    }
+  } else if (leading) {
+    year = 2000 + Number(leading[1]);
+    month = Number(leading[2]);
+  }
+  if (!year || month < 1 || month > 12) return null;
+  if (year < baseYear - 10 || year > baseYear + 20) return null;
+  return { year, month, key: year * 100 + month, label: `${String(year).slice(2)}년 ${month}월`, date: `${year}.${String(month).padStart(2, "0")}.${new Date(year, month, 0).getDate()}` };
+}
+
 function loadPlaces() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -314,7 +375,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   useEffect(() => {
     if (selectedId === null) return;
     window.requestAnimationFrame(() => {
-      document.querySelector(`[data-place-id="${selectedId}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.querySelector(`[data-place-id="${selectedId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [selectedId, mobileView]);
 
@@ -333,22 +394,27 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
   const progressQuarter = quarterFilter;
+  const progressYear = new Date().getFullYear();
+  const progressDates = quarterDates(progressYear, progressQuarter);
+  const progressStart = new Date() > progressDates.start ? new Date() : progressDates.start;
+  const daysToQuarterEnd = businessDaysBetween(progressStart, progressDates.end);
+  const daysToEarlyEnd = businessDaysBetween(progressStart, progressDates.earlyEnd);
   const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
   const teamProgress = useMemo(() => teams.map((team) => {
     const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
     const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
     const monthlyInspections = rows.filter((place) => place.kind === "monthly");
     const renewals = rows.filter((place) => place.kind === "renewal");
+    const renewalDates = renewals.map((place) => ({ place, end: contractEnd(place, progressYear) })).filter((item): item is { place: MapPlace; end: NonNullable<ReturnType<typeof contractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
+    const renewalMonths = Array.from(renewalDates.reduce((groups, item) => groups.set(item.end.label, (groups.get(item.end.label) || 0) + 1), new Map<string, number>()).entries());
     return {
       team,
-      quarterlyTotal: quarterlyInspections.length,
-      monthlyTotal: monthlyInspections.length,
       inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
       inspectionTotal: quarterlyInspections.length + monthlyInspections.length * 3,
-      renewalDone: renewals.filter(isCompleted).length,
-      renewalTotal: renewals.length,
+      urgentRenewal: renewalDates[0] || null,
+      renewalMonths,
     };
-  }), [places, progressQuarter]);
+  }), [places, progressQuarter, progressYear]);
 
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
 
@@ -659,31 +725,34 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           )}
 
           {progressMenuOpen && (
-            <div className="absolute right-0 top-12 w-[310px] max-w-[calc(100vw-24px)] rounded-md border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="absolute right-0 top-12 max-h-[calc(100dvh-100px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-slate-200 bg-white p-4 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
-                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">매월 G2=1회 · G3=2회 · G5/G12=3회</div>
+                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">{progressYear}년 · 남은 영업일 {daysToQuarterEnd}일</div>
                 </div>
                 <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
               </div>
               <div className="mt-3 space-y-3">
                 {teamProgress.map((item) => {
                   const inspectionRate = item.inspectionTotal ? Math.round((item.inspectionDone / item.inspectionTotal) * 100) : 0;
-                  const renewalRate = item.renewalTotal ? Math.round((item.renewalDone / item.renewalTotal) * 100) : 0;
+                  const remaining = Math.max(0, item.inspectionTotal - item.inspectionDone);
                   return (
                     <div key={item.team} className="rounded-md border border-slate-200 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="text-xs font-black text-slate-900">{item.team}팀</div>
-                        <div className="text-[10px] font-bold text-slate-400">분기 {item.quarterlyTotal} + 매월 {item.monthlyTotal}×3</div>
+                        <div className="text-[10px] font-black text-blue-700">점검 {item.inspectionDone}/{item.inspectionTotal} · {inspectionRate}%</div>
                       </div>
-                      <div className="grid grid-cols-[54px_1fr_72px] items-center gap-2 text-[11px]">
-                        <span className="font-black text-slate-600">점검</span>
-                        <span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspectionRate}%` }} /></span>
-                        <span className="text-right font-black text-slate-700">{item.inspectionDone}/{item.inspectionTotal} · {inspectionRate}%</span>
-                        <span className="font-black text-slate-600">재계약</span>
-                        <span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewalRate}%` }} /></span>
-                        <span className="text-right font-black text-slate-700">{item.renewalDone}/{item.renewalTotal} · {renewalRate}%</span>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspectionRate}%` }} /></div>
+                      <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1 text-[10px]">
+                        <span className="font-black text-slate-500">완료 목표</span><span className="font-black text-slate-500">3인</span><span className="font-black text-slate-500">4인</span>
+                        <span className="font-bold text-slate-600">분기 말일 · {daysToQuarterEnd}일</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToQuarterEnd, 3)}</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToQuarterEnd, 4)}</span>
+                        <span className="font-bold text-slate-600">말일 10일 전 · {daysToEarlyEnd}일</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToEarlyEnd, 3)}</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToEarlyEnd, 4)}</span>
+                      </div>
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <div className="text-[10px] font-black text-emerald-700">재계약 현황</div>
+                        {item.urgentRenewal ? <div className="mt-1 text-[11px] font-black leading-4 text-slate-800">가장 급함: {item.urgentRenewal.place.name}<span className="ml-1 text-rose-600">{item.urgentRenewal.end.date}</span></div> : <div className="mt-1 text-[10px] font-bold text-slate-400">계약종료년월이 입력된 재계약 건이 없습니다.</div>}
+                        {item.renewalMonths.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{item.renewalMonths.map(([month, count]) => <span key={month} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{month} {count}건</span>)}</div>}
                       </div>
                     </div>
                   );
