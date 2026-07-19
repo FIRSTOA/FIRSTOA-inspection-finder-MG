@@ -272,7 +272,11 @@ export default function WalkingMap() {
         return;
       }
       const headers = worksheet.getRow(1).values as Array<unknown>;
-      const headerIndexes = new Map(headers.map((header, index) => [String(header || "").trim(), index]));
+      const headerIndexes = new Map<string, number>();
+      headers.forEach((header, index) => {
+        const name = String(header || "").trim();
+        if (name) headerIndexes.set(name, index);
+      });
       const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
       if (required.some((header) => !headerIndexes.has(header))) {
         window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
