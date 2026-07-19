@@ -8,9 +8,16 @@ type MapLabel = {
   color: string;
 };
 
+type Team = "A" | "B" | "C" | "D";
+type Quarter = 1 | 2 | 3 | 4;
+type WorkKind = "quarter" | "monthly" | "renewal";
+
 type MapPlace = {
   id: number;
   number: number;
+  team?: Team;
+  quarter?: Quarter;
+  kind?: WorkKind;
   label: string;
   visible: boolean;
   name: string;
@@ -24,6 +31,13 @@ type MapPlace = {
 };
 
 const storageKey = "cs_workin_map_places_v2";
+const teams: Team[] = ["A", "B", "C", "D"];
+const quarters: Quarter[] = [1, 2, 3, 4];
+const workKinds: { value: WorkKind; label: string }[] = [
+  { value: "quarter", label: "분기점검" },
+  { value: "monthly", label: "매월점검" },
+  { value: "renewal", label: "재계약" },
+];
 
 const mapLabels: MapLabel[] = [
   { code: "G1", name: "신규·초기 방문", color: "#ff8458" },
@@ -72,7 +86,13 @@ function labelMeta(code: string) {
 function loadPlaces() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
-    return Array.isArray(stored) && stored.length ? stored as MapPlace[] : initialPlaces;
+    const source = Array.isArray(stored) && stored.length ? stored as MapPlace[] : initialPlaces;
+    return source.map((place, index) => ({
+      ...place,
+      team: place.team || teams[index % teams.length],
+      quarter: place.quarter || ((index % 4) + 1) as Quarter,
+      kind: place.kind || workKinds[index % workKinds.length].value,
+    }));
   } catch {
     return initialPlaces;
   }
@@ -80,7 +100,7 @@ function loadPlaces() {
 
 function blankPlace(number: number): MapPlace {
   return {
-    id: Date.now(), number, label: "G1", visible: true, name: "", comment: "", phone: "",
+    id: Date.now(), number, team: "C", quarter: 3, kind: "quarter", label: "G1", visible: true, name: "", comment: "", phone: "",
     address: "", addressDetail: "", latitude: 37.5665, longitude: 126.978, memos: [],
   };
 }
@@ -89,18 +109,30 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const [tilesReady, setTilesReady] = useState(false);
 
   useEffect(() => {
     if (!elementRef.current || mapRef.current) return;
-    const map = L.map(elementRef.current, { zoomControl: true, minZoom: 6 }).setView([36.2, 127.8], 7);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const map = L.map(elementRef.current, {
+      zoomControl: true,
+      minZoom: 6,
+      maxBounds: [[32.5, 123.5], [39.5, 132]],
+      maxBoundsViscosity: 0.8,
+    }).setView([36.15, 127.85], 7);
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
+    });
+    tiles.on("loading", () => setTilesReady(false));
+    tiles.on("load", () => setTilesReady(true));
+    tiles.addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    window.setTimeout(() => map.invalidateSize(), 50);
+    const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    observer.observe(elementRef.current);
+    window.setTimeout(() => map.invalidateSize({ pan: false }), 50);
     return () => {
+      observer.disconnect();
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
@@ -112,7 +144,6 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
     layer.clearLayers();
-    const bounds: L.LatLngExpression[] = [];
     places.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const meta = labelMeta(place.label);
@@ -128,20 +159,26 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       tooltip.textContent = place.name;
       marker.bindTooltip(tooltip, { direction: "top", offset: [0, -22] });
       marker.on("click", () => onSelect(place.id));
-      bounds.push([place.latitude, place.longitude]);
     });
-    if (!bounds.length) map.setView([36.2, 127.8], 7);
-    else if (bounds.length === 1) map.setView(bounds[0], 13);
-    else map.fitBounds(L.latLngBounds(bounds), { padding: [42, 42], maxZoom: 13 });
   }, [places, selectedId, onSelect]);
 
-  return <div ref={elementRef} className="h-full min-h-[520px] w-full bg-slate-100" aria-label="전국 거래처 지도" />;
+  return (
+    <div className="relative h-full min-h-[500px] w-full bg-[#dce8ef]">
+      <div ref={elementRef} className="h-full w-full" aria-label="전국 거래처 지도" />
+      {!tilesReady && <div className="pointer-events-none absolute inset-0 z-[800] flex items-center justify-center bg-slate-100/75 text-sm font-black text-slate-500">지도 불러오는 중</div>}
+    </div>
+  );
 }
 
 export default function WalkingMap() {
   const [places, setPlaces] = useState<MapPlace[]>(loadPlaces);
   const [query, setQuery] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [teamFilter, setTeamFilter] = useState<Team | "ALL">("ALL");
+  const [quarterFilter, setQuarterFilter] = useState<Quarter | "ALL">("ALL");
+  const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">("ALL");
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(places[0]?.id || null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [editMode, setEditMode] = useState(false);
@@ -158,11 +195,14 @@ export default function WalkingMap() {
     return places.filter((place) => {
       if (!place.visible && !showHidden) return false;
       if (labelFilter && place.label !== labelFilter) return false;
+      if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
+      if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
+      if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (!keyword) return true;
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [places, query, labelFilter, showHidden]);
+  }, [places, query, labelFilter, teamFilter, quarterFilter, kindFilter, showHidden]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
 
@@ -198,16 +238,17 @@ export default function WalkingMap() {
     <div className="flex min-h-0 flex-col bg-white">
       <div className="border-b border-slate-200 p-3">
         <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
-            <div className="text-xs font-semibold text-slate-400">이름·기기·주소·전화번호 검색</div>
-          </div>
+          <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
           <div className="flex gap-1.5">
             <button type="button" onClick={() => setShowHidden((current) => !current)} className={`rounded-md px-2.5 py-2 text-xs font-black ${showHidden ? "bg-slate-200 text-slate-800" : "border border-slate-200 bg-white text-slate-500"}`}>숨김 포함</button>
             <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`rounded-md px-3 py-2 text-xs font-black ${editMode ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
               {editMode ? "편집 종료" : "목록 편집"}
             </button>
           </div>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+          <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
       </div>
 
@@ -242,7 +283,7 @@ export default function WalkingMap() {
                 <span className="min-w-0">
                   <span className="block text-sm font-black leading-5 text-slate-900">{place.name}</span>
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
-                  <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {meta.name}{!place.visible ? " · 지도 숨김" : ""}</span>
+                  <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {place.team}팀 · {place.quarter}Q · {workKinds.find((item) => item.value === place.kind)?.label}{!place.visible ? " · 지도 숨김" : ""}</span>
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
@@ -255,13 +296,55 @@ export default function WalkingMap() {
   );
 
   const mapPanel = (
-    <div className="relative h-full min-h-[620px] overflow-hidden bg-slate-100">
+    <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
       <MapCanvas places={mapPlaces} selectedId={selectedId} onSelect={setSelectedId} />
+      <div className="absolute left-3 right-3 top-3 z-[900] flex items-start justify-between gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-[360px]">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
+          {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
+        </div>
+        <div className="relative flex shrink-0 gap-1.5">
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
+          <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${colorMenuOpen || labelFilter ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상</button>
+
+          {conditionMenuOpen && (
+            <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+              <div className="text-[11px] font-black text-slate-400">담당 팀</div>
+              <div className="mt-1.5 grid grid-cols-5 gap-1">
+                {(["ALL", ...teams] as const).map((item) => <button key={item} type="button" onClick={() => setTeamFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item === "ALL" ? "전체" : item}</button>)}
+              </div>
+              <div className="mt-3 text-[11px] font-black text-slate-400">분기</div>
+              <div className="mt-1.5 grid grid-cols-5 gap-1">
+                <button type="button" onClick={() => setQuarterFilter("ALL")} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
+                {quarters.map((item) => <button key={item} type="button" onClick={() => setQuarterFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
+              </div>
+              <div className="mt-3 text-[11px] font-black text-slate-400">업무</div>
+              <div className="mt-1.5 grid grid-cols-2 gap-1">
+                <button type="button" onClick={() => setKindFilter("ALL")} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
+                {workKinds.map((item) => <button key={item.value} type="button" onClick={() => setKindFilter(item.value)} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
+              </div>
+            </div>
+          )}
+
+          {colorMenuOpen && (
+            <div className="absolute right-0 top-12 w-[250px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+              <button type="button" onClick={() => setLabelFilter(null)} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilter === null ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
+              <div className="grid grid-cols-3 gap-2">
+                {mapLabels.map((item) => (
+                  <button key={item.code} type="button" onClick={() => setLabelFilter(labelFilter === item.code ? null : item.code)} title={item.name} className={`flex items-center gap-2 rounded border px-2 py-2 text-xs font-black ${labelFilter === item.code ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>
+                    <span className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />{item.code}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {selected && mapPlaces.some((place) => place.id === selected.id) && (
-        <div className="absolute bottom-3 left-3 right-3 z-[500] rounded-lg border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:left-auto sm:w-[360px]">
+        <div className="absolute bottom-3 left-3 right-3 z-[700] rounded-lg border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:left-auto sm:w-[360px]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[11px] font-black" style={{ color: labelMeta(selected.label).color }}>{selected.label} · {labelMeta(selected.label).name}</div>
+              <div className="text-[11px] font-black" style={{ color: labelMeta(selected.label).color }}>{selected.label} · {selected.team}팀 · {selected.quarter}Q · {workKinds.find((item) => item.value === selected.kind)?.label}</div>
               <div className="mt-1 truncate text-sm font-black text-slate-950">{selected.name}</div>
               <div className="mt-1 text-xs font-semibold text-slate-500">{selected.address} {selected.addressDetail}</div>
             </div>
@@ -276,43 +359,15 @@ export default function WalkingMap() {
   );
 
   return (
-    <div className="space-y-3">
+    <div>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 p-3 lg:p-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="text-xs font-black text-blue-600">WORKIN MAP</div>
-              <h2 className="mt-0.5 text-xl font-black text-slate-950 lg:text-2xl">CS 워킨맵</h2>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative min-w-0 flex-1 xl:w-[360px]">
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처, 기기, 주소, 전화번호 검색" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 pr-9 text-sm font-semibold outline-none focus:border-blue-500" />
-                {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
-              </div>
-              <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white">+ 추가</button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
-            <button type="button" onClick={() => setLabelFilter(null)} className={`shrink-0 rounded-md px-3 py-2 text-xs font-black ${labelFilter === null ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체 {places.filter((place) => place.visible).length}</button>
-            {mapLabels.map((item) => {
-              const count = places.filter((place) => place.visible && place.label === item.code).length;
-              return (
-                <button key={item.code} type="button" onClick={() => setLabelFilter(labelFilter === item.code ? null : item.code)} title={item.name} className={`flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-2 text-xs font-black ${labelFilter === item.code ? "border-slate-900 bg-slate-50 text-slate-950" : "border-slate-200 bg-white text-slate-600"}`}>
-                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />{item.code} <span className="text-slate-400">{count}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="hidden h-[calc(100vh-230px)] min-h-[680px] grid-cols-[340px_minmax(0,1fr)] lg:grid">
+        <div className="hidden h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)] lg:grid">
           {placeList}
           {mapPanel}
         </div>
 
         <div className="lg:hidden">
-          <div className="h-[calc(100dvh-250px)] min-h-[560px]">{mobileView === "map" ? mapPanel : placeList}</div>
+          <div className="h-[calc(100dvh-150px)] min-h-[520px]">{mobileView === "map" ? mapPanel : placeList}</div>
           <div className="grid grid-cols-2 border-t border-slate-200 bg-white">
             <button type="button" onClick={() => setMobileView("map")} className={`py-3 text-sm font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
             <button type="button" onClick={() => setMobileView("list")} className={`py-3 text-sm font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
@@ -321,7 +376,7 @@ export default function WalkingMap() {
       </section>
 
       {draft && (
-        <div className="fixed inset-0 z-[130] flex items-end bg-slate-950/45 p-0 lg:items-center lg:justify-center lg:p-5" onMouseDown={() => setDraft(null)}>
+        <div className="fixed inset-0 z-[2000] flex items-end bg-slate-950/45 p-0 lg:items-center lg:justify-center lg:p-5" onMouseDown={() => setDraft(null)}>
           <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-xl bg-white shadow-2xl lg:max-w-3xl lg:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
               <div>
@@ -334,6 +389,9 @@ export default function WalkingMap() {
             <div className="grid gap-4 p-4 lg:grid-cols-2">
               <label className="text-xs font-black text-slate-500">번호<input type="number" value={draft.number} onChange={(event) => setDraft({ ...draft, number: Number(event.target.value) })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm text-slate-900" /></label>
               <label className="text-xs font-black text-slate-500">라벨<select value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{mapLabels.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">담당 팀<select value={draft.team || "C"} onChange={(event) => setDraft({ ...draft, team: event.target.value as Team })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">분기<select value={draft.quarter || 3} onChange={(event) => setDraft({ ...draft, quarter: Number(event.target.value) as Quarter })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500 lg:col-span-2">업무<select value={draft.kind || "quarter"} onChange={(event) => setDraft({ ...draft, kind: event.target.value as WorkKind })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label className="flex items-center gap-2 text-sm font-black text-slate-600 lg:col-span-2"><input type="checkbox" checked={draft.visible} onChange={(event) => setDraft({ ...draft, visible: event.target.checked })} className="h-4 w-4 accent-blue-600" />지도에서 표시</label>
               <label className="text-xs font-black text-slate-500 lg:col-span-2">이름<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm text-slate-900" /></label>
               <label className="text-xs font-black text-slate-500 lg:col-span-2">코멘트<input value={draft.comment} onChange={(event) => setDraft({ ...draft, comment: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm text-slate-900" /></label>
