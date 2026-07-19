@@ -117,6 +117,30 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
   return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
 }
 
+export async function uploadPublicFile(bucket: string, path: string, file: Blob, contentType: string): Promise<string> {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType, "x-upsert": "true" },
+    body: file,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`파일 업로드 실패(${res.status}): ${detail.slice(0, 160)}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+export async function invokeEdgeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: "POST",
+    headers: BASE_HEADERS,
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({})) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error || `서버 함수 호출 실패(${res.status})`);
+  return data;
+}
+
 // 사진 여러 장 → 앨범 1건 생성, id 반환. (링크 1개로 모아보기)
 export async function createAlbum(urls: string[], vendor: string): Promise<string> {
   const res = await fetch(`${REST}/photo_albums`, {

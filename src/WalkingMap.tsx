@@ -179,16 +179,20 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const map = L.map(elementRef.current, {
       zoomControl: true,
       minZoom: 6,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
       maxBounds: [[32.5, 123.5], [39.5, 132]],
       maxBoundsViscosity: 0.8,
     });
     map.setView(teamMapViews.C.center, teamMapViews.C.zoom);
     const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      updateWhenIdle: true,
+      updateWhenZooming: false,
+      keepBuffer: 5,
       attribution: "&copy; OpenStreetMap contributors",
     });
-    tiles.on("loading", () => setTilesReady(false));
-    tiles.on("load", () => setTilesReady(true));
+    tiles.once("load", () => setTilesReady(true));
     tiles.addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;

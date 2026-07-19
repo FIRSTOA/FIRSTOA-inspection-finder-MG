@@ -23,6 +23,7 @@ export type VisitDraft = {
 export type VisitRow = VisitDraft & {
   id: string;
   created_at: string;
+  sourceText: string;
 };
 
 export const WORK_LABELS: Record<WorkKind, string> = {
@@ -47,16 +48,23 @@ export async function saveVisit(draft: VisitDraft, sourceText: string): Promise<
   if (!draft.vendor.trim() || !draft.author.trim()) return "dup";
   const minutes = Object.fromEntries(Object.entries(draft.minutes).map(([k, v]) => [k, Math.max(0, Number(v) || 0)]));
   const dup = md5([draft.workDate, draft.author, draft.vendor, sourceText].join("|"));
-  return insertRow("visit_logs", {
+  const row: Record<string, unknown> = {
     work_date: draft.workDate, author: draft.author, vendor: draft.vendor.trim(), visited: draft.visited,
     arrival_time: draft.arrivalTime || null, machine_count: Math.max(0, Number(draft.machineCount) || 0),
     grade: draft.grade || null, contract_ended: draft.contractEnded,
     work_kinds: draft.workKinds, minutes, sales_it: draft.salesIt || null, sales_copier: draft.salesCopier || null,
-    commute: draft.commute || null, note: draft.note || null, _dupKey: dup,
-  });
+    commute: draft.commute || null, note: draft.note || null, source_text: sourceText || null, _dupKey: dup,
+  };
+  try {
+    return await insertRow("visit_logs", row);
+  } catch (error) {
+    if (!(error as Error).message.includes("source_text")) throw error;
+    delete row.source_text;
+    return insertRow("visit_logs", row);
+  }
 }
 
-type DbVisit = { id: string; created_at: string; work_date: string; author: string; vendor: string; visited: boolean; arrival_time?: string; machine_count?: number; grade?: string; contract_ended?: boolean; work_kinds?: WorkKind[]; minutes?: Partial<Record<WorkKind, number>>; sales_it?: VisitDraft["salesIt"]; sales_copier?: VisitDraft["salesCopier"]; commute?: VisitDraft["commute"]; note?: string };
+type DbVisit = { id: string; created_at: string; work_date: string; author: string; vendor: string; visited: boolean; arrival_time?: string; machine_count?: number; grade?: string; contract_ended?: boolean; work_kinds?: WorkKind[]; minutes?: Partial<Record<WorkKind, number>>; sales_it?: VisitDraft["salesIt"]; sales_copier?: VisitDraft["salesCopier"]; commute?: VisitDraft["commute"]; note?: string; source_text?: string };
 
 export async function getVisits(author: string, start: string, end: string): Promise<VisitRow[]> {
   if (!author) return [];
@@ -67,7 +75,7 @@ export async function getVisits(author: string, start: string, end: string): Pro
     visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0,
     grade: r.grade || "", contractEnded: Boolean(r.contract_ended), workKinds: r.work_kinds || [],
     minutes: r.minutes || {}, salesIt: r.sales_it || "", salesCopier: r.sales_copier || "",
-    commute: r.commute || "", note: r.note || "",
+    commute: r.commute || "", note: r.note || "", sourceText: r.source_text || "",
   }));
 }
 

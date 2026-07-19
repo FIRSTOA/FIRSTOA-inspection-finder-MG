@@ -10,6 +10,7 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
+import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
 import { AsReception, CsCalendar } from "./CsAsWorkspace";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
@@ -4458,14 +4459,15 @@ export default function App() {
         {screen === "walkingMap" && <WalkingMap userKey={author} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
-        {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (
+        {screen === "happycall" && <HappyCallWorkspace author={author} />}
+        {screen === "promoSend" && <PromoWorkspace author={author} />}
+        {(screen === "itHistory" || screen === "counterSms") && (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
             <div className="mt-1 text-sm text-slate-400">
               {screen === "itHistory" ? "IT 처리이력 검색, 퀴즈, 기술 레벨 기능을 준비 중입니다."
                 : screen === "counterSms" ? "복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다."
-                : screen === "promoSend" ? "팜플렛과 홍보자료 발송·인쇄 기능을 준비 중입니다."
                 : "구상 중 — 곧 만들어집니다"}
             </div>
           </div>
