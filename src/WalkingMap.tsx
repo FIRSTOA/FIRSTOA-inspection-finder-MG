@@ -744,7 +744,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           )}
 
           {progressMenuOpen && (
-            <div className="absolute right-0 top-12 max-h-[calc(100dvh-100px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="absolute right-0 top-12 max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
