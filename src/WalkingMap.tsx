@@ -203,8 +203,27 @@ function contractEnd(place: MapPlace, baseYear: number) {
     month = Number(leading[2]);
   }
   if (!year || month < 1 || month > 12) return null;
-  if (year < baseYear - 10 || year > baseYear + 20) return null;
+  if (year < 1900 || year > baseYear + 20) return null;
   return { year, month, key: year * 100 + month, label: `${String(year).slice(2)}년 ${month}월`, date: `${year}.${String(month).padStart(2, "0")}.${new Date(year, month, 0).getDate()}` };
+}
+
+function renewalQuarterMonths(quarter: Quarter) {
+  return quarter === 1 ? [2, 3, 4] : quarter === 2 ? [5, 6, 7] : quarter === 3 ? [8, 9, 10] : [11, 12, 1];
+}
+
+// 진행률 요약에서만 자동연장된 계약의 종료월을 현재 주기로 투영한다.
+function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarter) {
+  const original = contractEnd(place, baseYear);
+  const months = renewalQuarterMonths(quarter);
+  if (!original || !months.includes(original.month)) return null;
+  const year = quarter === 4 && original.month === 1 ? baseYear + 1 : baseYear;
+  return {
+    year,
+    month: original.month,
+    key: months.indexOf(original.month),
+    label: `${original.month}월`,
+    date: `${year}.${String(original.month).padStart(2, "0")}.${new Date(year, original.month, 0).getDate()}`,
+  };
 }
 
 function loadPlaces() {
@@ -405,8 +424,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
     const monthlyInspections = rows.filter((place) => place.kind === "monthly");
     const renewals = rows.filter((place) => place.kind === "renewal");
-    const renewalDates = renewals.map((place) => ({ place, end: contractEnd(place, progressYear) })).filter((item): item is { place: MapPlace; end: NonNullable<ReturnType<typeof contractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
-    const renewalMonths = Array.from(renewalDates.reduce((groups, item) => groups.set(item.end.label, (groups.get(item.end.label) || 0) + 1), new Map<string, number>()).entries());
+    const renewalDates = renewals.map((place) => ({ place, end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
+    const renewalMonths = renewalQuarterMonths(progressQuarter).map((month) => [`${month}월`, renewalDates.filter((item) => item.end.month === month).length] as const);
     return {
       team,
       inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
