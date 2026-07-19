@@ -265,6 +265,14 @@ function loadStoredPlaces(): MapPlace[] | null {
 
 function loadPlaces() { return loadStoredPlaces() || normalizePlaces(initialPlaces); }
 
+function loadMigratablePlaces() {
+  const stored = loadStoredPlaces();
+  if (!stored) return null;
+  const isDefaultSample = stored.length === initialPlaces.length
+    && stored.every((place, index) => place.id === initialPlaces[index].id && place.name === initialPlaces[index].name);
+  return isDefaultSample ? null : stored;
+}
+
 function fromDbPlace(place: DbMapPlace): MapPlace {
   return { ...place, addressDetail: place.address_detail || "", memos: Array.isArray(place.memos) ? place.memos : [] };
 }
@@ -391,7 +399,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
 }
 
 export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) {
-  const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadStoredPlaces());
+  const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
   const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
   const [sharedReady, setSharedReady] = useState(false);
   const [syncState, setSyncState] = useState<"loading" | "saved" | "error">("loading");
