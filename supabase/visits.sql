@@ -86,6 +86,10 @@ create table if not exists public.happycall_messages (
   updated_at timestamptz not null default now()
 );
 alter table public.happycall_messages add column if not exists recipients jsonb not null default '[]'::jsonb;
+alter table public.happycall_messages add column if not exists scheduled_at timestamptz;
+alter table public.happycall_messages add column if not exists job_ids jsonb not null default '[]'::jsonb;
+alter table public.happycall_messages drop constraint if exists happycall_messages_status_check;
+alter table public.happycall_messages add constraint happycall_messages_status_check check (status in ('pending', 'scheduled', 'sent', 'failed', 'skip', 'cancelled'));
 
 create table if not exists public.message_templates (
   id uuid primary key default gen_random_uuid(),
@@ -96,6 +100,32 @@ create table if not exists public.message_templates (
   created_by text not null,
   created_at timestamptz not null default now()
 );
+
+insert into public.message_templates (id, context, title, body, active, created_by) values
+  ('00000000-0000-0000-0000-000000000101', 'happycall', '점검 기본 확인형', '[퍼스트전산] {고객명}님, {방문일} 점검을 담당한 {담당자}입니다. 점검 후 기기는 잘 사용하고 계신가요? 불편한 점이 있다면 대표번호로 말씀해 주세요.', true, 'SYSTEM'),
+  ('00000000-0000-0000-0000-000000000102', 'happycall', 'AS 기본 확인형', '[퍼스트전산] {고객명}님, {방문일} AS를 담당한 {담당자}입니다. 처리한 증상은 다시 발생하지 않고 잘 사용 중이신가요? 같은 증상이 반복되면 대표번호로 말씀해 주세요.', true, 'SYSTEM'),
+  ('00000000-0000-0000-0000-000000000103', 'happycall', '짧은 만족 확인형', '[퍼스트전산] {고객명}님, 오늘 {업무} 후 불편 없이 사용 중이신지 확인드립니다. 추가 도움이 필요하시면 대표번호로 연락 부탁드립니다. 담당 {담당자}', true, 'SYSTEM'),
+  ('00000000-0000-0000-0000-000000000201', 'promotion', '자료 안내형', '[퍼스트전산] {고객명}님께 업무에 도움이 될 {자료명} 자료를 보내드립니다.\n{자료설명}\n{자료링크}', true, 'SYSTEM'),
+  ('00000000-0000-0000-0000-000000000202', 'promotion', '상담 연결형', '[퍼스트전산] {고객명}님, 방문 중 말씀드린 {자료명} 안내자료입니다. 검토 후 궁금한 점이나 상담이 필요하시면 대표번호로 연락해 주세요.\n{자료링크}', true, 'SYSTEM')
+on conflict (id) do nothing;
+
+create table if not exists public.message_jobs (
+  id uuid primary key default gen_random_uuid(),
+  source_type text not null,
+  source_id text not null,
+  channel text not null check (channel in ('sms', 'email')),
+  recipient text not null,
+  message text not null,
+  payload jsonb not null default '{}'::jsonb,
+  scheduled_at timestamptz not null,
+  status text not null default 'scheduled' check (status in ('scheduled', 'processing', 'sent', 'failed', 'cancelled')),
+  created_by text not null,
+  sent_at timestamptz,
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists message_jobs_due_idx on public.message_jobs(status, scheduled_at);
 
 create table if not exists public.promo_materials (
   id uuid primary key default gen_random_uuid(),
@@ -328,6 +358,7 @@ alter table public.quarterly_plans enable row level security;
 alter table public.golden_cards enable row level security;
 alter table public.happycall_messages enable row level security;
 alter table public.message_templates enable row level security;
+alter table public.message_jobs enable row level security;
 alter table public.promo_materials enable row level security;
 alter table public.logistics_records enable row level security;
 alter table public.misu enable row level security;
@@ -345,6 +376,7 @@ drop policy if exists "quarterly_plans anon all" on public.quarterly_plans;
 drop policy if exists "golden_cards anon all" on public.golden_cards;
 drop policy if exists "happycall_messages anon all" on public.happycall_messages;
 drop policy if exists "message_templates anon all" on public.message_templates;
+drop policy if exists "message_jobs anon all" on public.message_jobs;
 drop policy if exists "promo_materials anon all" on public.promo_materials;
 drop policy if exists "promo materials anon read" on storage.objects;
 drop policy if exists "promo materials anon insert" on storage.objects;
@@ -371,6 +403,7 @@ create policy "quarterly_plans anon all" on public.quarterly_plans for all to an
 create policy "golden_cards anon all" on public.golden_cards for all to anon using (true) with check (true);
 create policy "happycall_messages anon all" on public.happycall_messages for all to anon using (true) with check (true);
 create policy "message_templates anon all" on public.message_templates for all to anon using (true) with check (true);
+create policy "message_jobs anon all" on public.message_jobs for all to anon using (true) with check (true);
 create policy "promo_materials anon all" on public.promo_materials for all to anon using (true) with check (true);
 create policy "promo materials anon read" on storage.objects for select to anon using (bucket_id = 'promo-materials');
 create policy "promo materials anon insert" on storage.objects for insert to anon with check (bucket_id = 'promo-materials');
@@ -395,6 +428,7 @@ grant select, insert, update on public.quarterly_plans to anon;
 grant select, insert, update on public.golden_cards to anon;
 grant select, insert, update on public.happycall_messages to anon;
 grant select, insert, update on public.message_templates to anon;
+grant select, insert, update on public.message_jobs to anon;
 grant select, insert, update on public.promo_materials to anon;
 grant select, insert on public.logistics_records to anon;
 grant select, insert on public.misu to anon;
