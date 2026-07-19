@@ -140,6 +140,27 @@ create table if not exists public.promo_materials (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.workin_map_places (
+  id bigint primary key,
+  number integer not null default 0,
+  team text not null check (team in ('A', 'B', 'C', 'D')),
+  quarter smallint not null check (quarter between 1 and 4),
+  kind text not null check (kind in ('quarter', 'monthly', 'renewal')),
+  label text not null default 'G12',
+  visible boolean not null default true,
+  name text not null default '',
+  comment text not null default '',
+  phone text not null default '',
+  address text not null default '',
+  address_detail text not null default '',
+  latitude double precision not null default 0,
+  longitude double precision not null default 0,
+  memos jsonb not null default '[]'::jsonb,
+  updated_by text not null default '',
+  updated_at timestamptz not null default now()
+);
+create index if not exists workin_map_scope_idx on public.workin_map_places(team, quarter, kind);
+
 insert into storage.buckets (id, name, public)
 values ('promo-materials', 'promo-materials', true)
 on conflict (id) do update set public = true;
@@ -360,6 +381,7 @@ alter table public.happycall_messages enable row level security;
 alter table public.message_templates enable row level security;
 alter table public.message_jobs enable row level security;
 alter table public.promo_materials enable row level security;
+alter table public.workin_map_places enable row level security;
 alter table public.logistics_records enable row level security;
 alter table public.misu enable row level security;
 alter table public.bulman enable row level security;
@@ -378,6 +400,7 @@ drop policy if exists "happycall_messages anon all" on public.happycall_messages
 drop policy if exists "message_templates anon all" on public.message_templates;
 drop policy if exists "message_jobs anon all" on public.message_jobs;
 drop policy if exists "promo_materials anon all" on public.promo_materials;
+drop policy if exists "workin_map_places anon all" on public.workin_map_places;
 drop policy if exists "promo materials anon read" on storage.objects;
 drop policy if exists "promo materials anon insert" on storage.objects;
 drop policy if exists "logistics_records anon all" on public.logistics_records;
@@ -405,6 +428,7 @@ create policy "happycall_messages anon all" on public.happycall_messages for all
 create policy "message_templates anon all" on public.message_templates for all to anon using (true) with check (true);
 create policy "message_jobs anon all" on public.message_jobs for all to anon using (true) with check (true);
 create policy "promo_materials anon all" on public.promo_materials for all to anon using (true) with check (true);
+create policy "workin_map_places anon all" on public.workin_map_places for all to anon using (true) with check (true);
 create policy "promo materials anon read" on storage.objects for select to anon using (bucket_id = 'promo-materials');
 create policy "promo materials anon insert" on storage.objects for insert to anon with check (bucket_id = 'promo-materials');
 create policy "logistics_records anon read" on public.logistics_records for select to anon using (true);
@@ -430,6 +454,7 @@ grant select, insert, update on public.happycall_messages to anon;
 grant select, insert, update on public.message_templates to anon;
 grant select, insert, update on public.message_jobs to anon;
 grant select, insert, update on public.promo_materials to anon;
+grant select, insert, update, delete on public.workin_map_places to anon;
 grant select, insert on public.logistics_records to anon;
 grant select, insert on public.misu to anon;
 grant select, insert on public.bulman to anon;

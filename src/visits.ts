@@ -79,6 +79,18 @@ export async function getVisits(author: string, start: string, end: string): Pro
   }));
 }
 
+export async function getTeamVisits(start: string, end: string): Promise<VisitRow[]> {
+  const q = `select=*&work_date=gte.${start}&work_date=lte.${end}&order=work_date.asc,arrival_time.asc,created_at.asc`;
+  const rows = await selectRows<DbVisit>("visit_logs", q);
+  return rows.map((r) => ({
+    id: r.id, created_at: r.created_at, workDate: r.work_date, author: r.author, vendor: r.vendor,
+    visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0,
+    grade: r.grade || "", contractEnded: Boolean(r.contract_ended), workKinds: r.work_kinds || [],
+    minutes: r.minutes || {}, salesIt: r.sales_it || "", salesCopier: r.sales_copier || "",
+    commute: r.commute || "", note: r.note || "", sourceText: r.source_text || "",
+  }));
+}
+
 export const OFFICE_LABELS = {
   repairItem: "수리품", machineRepair: "기계수리", overhaul: "기계오버홀", shippingPrep: "출고준비",
   training: "교육참여", wasteCard: "폐카불량", schedule: "스케줄", phoneClose: "전화마감",

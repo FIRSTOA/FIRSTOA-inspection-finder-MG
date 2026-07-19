@@ -117,6 +117,30 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
   return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
 }
 
+export async function upsertRows(table: string, rows: Record<string, unknown>[], onConflict: string): Promise<void> {
+  if (!rows.length) return;
+  const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
+    method: "POST",
+    headers: { ...BASE_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`공용 저장 실패 ${table}(${res.status}): ${detail.slice(0, 200)}`);
+  }
+}
+
+export async function deleteRows(table: string, query: string): Promise<void> {
+  const res = await fetch(`${REST}/${table}?${query}`, {
+    method: "DELETE",
+    headers: { ...BASE_HEADERS, Prefer: "return=minimal" },
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`공용 삭제 실패 ${table}(${res.status}): ${detail.slice(0, 200)}`);
+  }
+}
+
 export async function updateRows(table: string, query: string, patch: Record<string, unknown>): Promise<void> {
   const res = await fetch(`${REST}/${table}?${query}`, {
     method: "PATCH",

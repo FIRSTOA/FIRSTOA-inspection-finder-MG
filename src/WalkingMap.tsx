@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { deleteRows, selectRows, upsertRows } from "./supabase";
 
 type MapLabel = {
   code: string;
@@ -25,6 +26,24 @@ type MapPlace = {
   phone: string;
   address: string;
   addressDetail: string;
+  latitude: number;
+  longitude: number;
+  memos: string[];
+};
+
+type DbMapPlace = {
+  id: number;
+  number: number;
+  team: Team;
+  quarter: Quarter;
+  kind: WorkKind;
+  label: string;
+  visible: boolean;
+  name: string;
+  comment: string;
+  phone: string;
+  address: string;
+  address_detail: string;
   latitude: number;
   longitude: number;
   memos: string[];
@@ -226,19 +245,38 @@ function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarte
   };
 }
 
-function loadPlaces() {
+function normalizePlaces(source: MapPlace[]) {
+  return source.map((place, index) => ({
+    ...place,
+    team: place.team || teams[index % teams.length],
+    quarter: place.quarter || ((index % 4) + 1) as Quarter,
+    kind: place.kind || workKinds[index % workKinds.length].value,
+  }));
+}
+
+function loadStoredPlaces(): MapPlace[] | null {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
-    const source = Array.isArray(stored) && stored.length ? stored as MapPlace[] : initialPlaces;
-    return source.map((place, index) => ({
-      ...place,
-      team: place.team || teams[index % teams.length],
-      quarter: place.quarter || ((index % 4) + 1) as Quarter,
-      kind: place.kind || workKinds[index % workKinds.length].value,
-    }));
+    return Array.isArray(stored) && stored.length ? normalizePlaces(stored as MapPlace[]) : null;
   } catch {
-    return initialPlaces;
+    return null;
   }
+}
+
+function loadPlaces() { return loadStoredPlaces() || normalizePlaces(initialPlaces); }
+
+function fromDbPlace(place: DbMapPlace): MapPlace {
+  return { ...place, addressDetail: place.address_detail || "", memos: Array.isArray(place.memos) ? place.memos : [] };
+}
+
+function toDbPlace(place: MapPlace, userKey: string): Record<string, unknown> {
+  return {
+    id: place.id, number: place.number, team: place.team || "C", quarter: place.quarter || 3,
+    kind: place.kind || "quarter", label: place.label, visible: place.visible, name: place.name,
+    comment: place.comment, phone: place.phone, address: place.address, address_detail: place.addressDetail,
+    latitude: place.latitude, longitude: place.longitude, memos: place.memos, updated_by: userKey,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 function blankPlace(number: number): MapPlace {
@@ -353,7 +391,10 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
 }
 
 export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) {
-  const [places, setPlaces] = useState<MapPlace[]>(loadPlaces);
+  const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadStoredPlaces());
+  const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
+  const [sharedReady, setSharedReady] = useState(false);
+  const [syncState, setSyncState] = useState<"loading" | "saved" | "error">("loading");
   const [query, setQuery] = useState("");
   const preferenceStorageKey = useMemo(() => `cs_workin_map_preferences_v1_${userKey.trim() || "guest"}`, [userKey]);
   const initialPreferences = useMemo(() => loadMapPreferences(preferenceStorageKey), [preferenceStorageKey]);
@@ -386,6 +427,37 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
   }, [places]);
+
+  useEffect(() => {
+    let active = true;
+    const initializeSharedPlaces = async () => {
+      try {
+        const remote = await selectRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
+        if (!active) return;
+        if (remote.length) {
+          setPlaces(remote.map(fromDbPlace));
+        } else {
+          const local = initialLocalPlacesRef.current;
+          if (local?.length) {
+            for (let index = 0; index < local.length; index += 250) {
+              await upsertRows("workin_map_places", local.slice(index, index + 250).map((place) => toDbPlace(place, userKey)), "id");
+            }
+          } else {
+            setPlaces([]);
+          }
+        }
+        if (active) {
+          setSharedReady(true);
+          setSyncState("saved");
+        }
+      } catch (error) {
+        console.error("Workin map shared load failed", error);
+        if (active) setSyncState("error");
+      }
+    };
+    void initializeSharedPlaces();
+    return () => { active = false; };
+  }, [userKey]);
 
   useEffect(() => {
     localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
@@ -439,6 +511,12 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const saveDraft = () => {
     if (!draft || !draft.name.trim()) return;
+    if (sharedReady) {
+      setSyncState("loading");
+      void upsertRows("workin_map_places", [toDbPlace(draft, userKey)], "id")
+        .then(() => setSyncState("saved"))
+        .catch((error) => { console.error(error); setSyncState("error"); });
+    }
     setPlaces((current) => current.some((place) => place.id === draft.id)
       ? current.map((place) => place.id === draft.id ? draft : place)
       : [...current, draft]);
@@ -450,6 +528,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const deleteDraft = () => {
     if (!draft || !places.some((place) => place.id === draft.id)) return setDraft(null);
     if (!window.confirm("이 거래처를 워킨맵에서 삭제할까요?")) return;
+    if (sharedReady) void deleteRows("workin_map_places", `id=eq.${draft.id}`).catch((error) => {
+      console.error(error);
+      setSyncState("error");
+    });
     setPlaces((current) => current.filter((place) => place.id !== draft.id));
     setSelectedId(null);
     setExpandedId(null);
@@ -457,6 +539,13 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   };
 
   const bulkSetLabel = (label: string) => {
+    const changed = places.filter((place) => checkedIds.includes(place.id)).map((place) => ({ ...place, label }));
+    if (sharedReady && changed.length) {
+      setSyncState("loading");
+      void upsertRows("workin_map_places", changed.map((place) => toDbPlace(place, userKey)), "id")
+        .then(() => setSyncState("saved"))
+        .catch((error) => { console.error(error); setSyncState("error"); });
+    }
     setPlaces((current) => current.map((place) => checkedIds.includes(place.id) ? { ...place, label } : place));
   };
 
@@ -532,8 +621,29 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     }
   };
 
-  const applyExcelImport = () => {
+  const applyExcelImport = async () => {
     const imported = pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind }));
+    if (sharedReady && importMode === "replace") {
+      try {
+        await deleteRows("workin_map_places", `team=eq.${importTeam}&quarter=eq.${importQuarter}&kind=eq.${importKind}`);
+      } catch (error) {
+        console.error(error);
+        setSyncState("error");
+        return;
+      }
+    }
+    if (sharedReady && imported.length) {
+      try {
+        for (let index = 0; index < imported.length; index += 250) {
+          await upsertRows("workin_map_places", imported.slice(index, index + 250).map((place) => toDbPlace(place, userKey)), "id");
+        }
+        setSyncState("saved");
+      } catch (error) {
+        console.error(error);
+        setSyncState("error");
+        return;
+      }
+    }
     setPlaces((current) => importMode === "replace"
       ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
       : [...current, ...imported]);
@@ -600,7 +710,12 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       <div className="border-b border-slate-200 p-3">
         <div className="mb-2 truncate text-xs font-black text-blue-700">{conditionTitle}</div>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
+            <div className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-600" : "text-slate-400"}`}>
+              {syncState === "loading" ? "공용 저장 중" : syncState === "error" ? "공용 DB 연결 필요" : "공용 저장됨"}
+            </div>
+          </div>
           <div className="flex gap-1.5">
             <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`rounded-md px-3 py-2 text-xs font-black ${editMode ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
               {editMode ? "편집 종료" : "목록 편집"}
@@ -820,7 +935,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <button type="button" onClick={() => setImportMode("replace")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "replace" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>같은 목록 교체</button>
               <button type="button" onClick={() => setImportMode("append")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "append" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>기존 목록에 추가</button>
             </div>
-            <button type="button" onClick={applyExcelImport} className="mt-5 w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-black text-white">불러오기 적용</button>
+            <button type="button" onClick={() => void applyExcelImport()} className="mt-5 w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-black text-white">불러오기 적용</button>
           </div>
         </div>
       )}
