@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 type ScheduleType = "AS" | "익일AS" | "물류" | "휴가";
-type ScheduleFilter = "AS" | "물류" | "휴가";
+type ScheduleFilter = ScheduleType;
 type ViewMode = "list" | "calendar";
 type DayFilter = "today" | "tomorrow" | "scheduled";
 
@@ -25,7 +25,7 @@ export type AsTicket = {
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
-const scheduleFilters: ScheduleFilter[] = ["AS", "물류", "휴가"];
+const scheduleFilters: ScheduleFilter[] = ["AS", "익일AS", "물류", "휴가"];
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -316,8 +316,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => {
-      const filterType: ScheduleFilter = ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "AS" : ticket.scheduleType;
-      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(filterType);
+      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(ticket.scheduleType);
     }),
     [tickets, visibleScheduleTypes, visibleTeams],
   );
@@ -394,7 +393,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       {scheduleFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "물류" ? "bg-amber-500" : filter === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-amber-500" : filter === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />
                           {filter}
                         </label>
                       ))}
