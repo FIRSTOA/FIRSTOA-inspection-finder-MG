@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
@@ -42,6 +42,12 @@ const workKinds: { value: WorkKind; label: string }[] = [
   { value: "monthly", label: "매월점검" },
   { value: "renewal", label: "재계약" },
 ];
+const teamMapCenters: Record<Team, L.LatLngExpression> = {
+  A: [37.64, 127.02],
+  B: [37.53, 126.88],
+  C: [37.52, 127.09],
+  D: [37.65, 127.2],
+};
 
 const mapLabels: MapLabel[] = [
   { code: "G1", name: "신규·초기 방문", color: "#ff8458" },
@@ -113,53 +119,7 @@ function blankPlace(number: number): MapPlace {
   };
 }
 
-function placePopup(place: MapPlace) {
-  const root = document.createElement("div");
-  root.className = "min-w-[240px] text-slate-700";
-
-  const title = document.createElement("div");
-  title.className = "text-sm font-black leading-5 text-slate-950";
-  title.textContent = place.name;
-  root.appendChild(title);
-
-  const meta = document.createElement("div");
-  meta.className = "mt-1 text-[11px] font-black text-blue-600";
-  meta.textContent = `${place.label} · ${place.team}팀 · ${place.quarter}분기 · ${workKinds.find((item) => item.value === place.kind)?.label}`;
-  root.appendChild(meta);
-
-  const details = [
-    place.comment && ["기기", place.comment],
-    place.phone && ["연락처", place.phone],
-    (place.address || place.addressDetail) && ["주소", [place.address, place.addressDetail].filter(Boolean).join(" ")],
-  ].filter(Boolean) as string[][];
-  details.forEach(([label, value]) => {
-    const row = document.createElement("div");
-    row.className = "mt-2 border-t border-slate-100 pt-2 text-xs leading-5";
-    const labelElement = document.createElement("b");
-    labelElement.className = "mr-2 text-slate-500";
-    labelElement.textContent = label;
-    row.append(labelElement, document.createTextNode(value));
-    root.appendChild(row);
-  });
-
-  if (place.memos.length) {
-    const memoTitle = document.createElement("div");
-    memoTitle.className = "mt-2 border-t border-slate-100 pt-2 text-xs font-black text-slate-500";
-    memoTitle.textContent = "메모";
-    root.appendChild(memoTitle);
-    const memoList = document.createElement("ul");
-    memoList.className = "mt-1 max-h-36 space-y-1 overflow-y-auto text-xs leading-5";
-    place.memos.forEach((memo) => {
-      const item = document.createElement("li");
-      item.textContent = `· ${memo}`;
-      memoList.appendChild(item);
-    });
-    root.appendChild(memoList);
-  }
-  return root;
-}
-
-function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selectedId: number | null; onSelect: (id: number) => void }) {
+function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; onSelect: (id: number) => void }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -172,7 +132,7 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       minZoom: 6,
       maxBounds: [[32.5, 123.5], [39.5, 132]],
       maxBoundsViscosity: 0.8,
-    }).setView([36.15, 127.85], 7);
+    }).setView(teamMapCenters.C, 10);
     const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors",
@@ -183,9 +143,15 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
     markerLayerRef.current = L.markerClusterGroup({
       showCoverageOnHover: false,
       spiderfyOnMaxZoom: true,
-      zoomToBoundsOnClick: true,
+      zoomToBoundsOnClick: false,
       maxClusterRadius: 42,
-    }).addTo(map);
+    });
+    markerLayerRef.current.on("clusterclick", (event) => {
+      const cluster = event.layer as L.MarkerCluster;
+      map.panTo(cluster.getLatLng(), { animate: true, duration: 0.35 });
+      cluster.spiderfy();
+    });
+    markerLayerRef.current.addTo(map);
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
     observer.observe(elementRef.current);
@@ -197,6 +163,10 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       markerLayerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    mapRef.current?.setView(teamMapCenters[team], 10, { animate: true });
+  }, [team]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -218,17 +188,13 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       tooltip.className = "text-xs font-bold";
       tooltip.textContent = place.name;
       marker.bindTooltip(tooltip, { direction: "top", offset: [0, -22] });
-      marker.bindPopup(placePopup(place), { minWidth: 260, maxWidth: 340, maxHeight: 360 });
       marker.on("click", () => onSelect(place.id));
       layer.addLayer(marker);
       if (selectedId === place.id) selectedMarker = marker;
     });
     if (selectedMarker) {
       const marker = selectedMarker as L.Marker;
-      layer.zoomToShowLayer(marker, () => {
-        map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
-        marker.openPopup();
-      });
+      map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
     }
   }, [places, selectedId, onSelect]);
 
@@ -262,9 +228,21 @@ export default function WalkingMap() {
   const [importMode, setImportMode] = useState<"append" | "replace">("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const selectMapPlace = useCallback((id: number) => {
+    setSelectedId(id);
+    if (window.matchMedia("(max-width: 1023px)").matches) setMobileView("list");
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
   }, [places]);
+
+  useEffect(() => {
+    if (selectedId === null) return;
+    window.requestAnimationFrame(() => {
+      document.querySelector(`[data-place-id="${selectedId}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [selectedId, mobileView]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -497,8 +475,9 @@ export default function WalkingMap() {
           const meta = labelMeta(place.label);
           const checked = checkedIds.includes(place.id);
           return (
-            <div key={place.id} className={`group flex items-start gap-3 px-3 py-3 ${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
-              <button type="button" onClick={() => editMode ? toggleChecked(place.id) : setSelectedId(place.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+            <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
+              <div className="group flex items-start gap-3 px-3 py-3">
+              <button type="button" onClick={() => editMode ? toggleChecked(place.id) : setSelectedId((current) => current === place.id ? null : place.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
                 {editMode ? (
                   <span className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 text-slate-300"}`}>✓</span>
                 ) : (
@@ -511,6 +490,37 @@ export default function WalkingMap() {
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
+              </div>
+              {selectedId === place.id && !editMode && (
+                <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
+                  <div className="space-y-3">
+                    <div>
+                      <div className="font-black text-slate-400">주소</div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{[place.address, place.addressDetail].filter(Boolean).join(" ") || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-400">연락처</div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.phone || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-400">기기·코멘트</div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.comment || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-400">업무 정보</div>
+                      <div className="mt-1 font-semibold leading-5">{place.label} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-400">메모</div>
+                      {place.memos.length ? (
+                        <div className="mt-1 divide-y divide-slate-100 border-y border-slate-100">
+                          {place.memos.map((memo, index) => <div key={`${place.id}-${index}`} className="whitespace-pre-wrap py-2 font-semibold leading-5">{memo}</div>)}
+                        </div>
+                      ) : <div className="mt-1 font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -521,7 +531,7 @@ export default function WalkingMap() {
 
   const mapPanel = (
     <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
-      <MapCanvas places={mapPlaces} selectedId={selectedId} onSelect={setSelectedId} />
+      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} onSelect={selectMapPlace} />
       <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
@@ -538,11 +548,11 @@ export default function WalkingMap() {
             <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {teams.map((item) => <button key={item} type="button" onClick={() => setTeamFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
+                {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">분기</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {quarters.map((item) => <button key={item} type="button" onClick={() => setQuarterFilter(item)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
+                {quarters.map((item) => <button key={item} type="button" onClick={() => { setQuarterFilter(item); setSelectedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${quarterFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}Q</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">업무</div>
               <div className="mt-1.5 grid grid-cols-2 gap-1">
