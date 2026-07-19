@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
+import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 type MapLabel = {
   code: string;
@@ -110,10 +113,56 @@ function blankPlace(number: number): MapPlace {
   };
 }
 
+function placePopup(place: MapPlace) {
+  const root = document.createElement("div");
+  root.className = "min-w-[240px] text-slate-700";
+
+  const title = document.createElement("div");
+  title.className = "text-sm font-black leading-5 text-slate-950";
+  title.textContent = place.name;
+  root.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "mt-1 text-[11px] font-black text-blue-600";
+  meta.textContent = `${place.label} · ${place.team}팀 · ${place.quarter}분기 · ${workKinds.find((item) => item.value === place.kind)?.label}`;
+  root.appendChild(meta);
+
+  const details = [
+    place.comment && ["기기", place.comment],
+    place.phone && ["연락처", place.phone],
+    (place.address || place.addressDetail) && ["주소", [place.address, place.addressDetail].filter(Boolean).join(" ")],
+  ].filter(Boolean) as string[][];
+  details.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "mt-2 border-t border-slate-100 pt-2 text-xs leading-5";
+    const labelElement = document.createElement("b");
+    labelElement.className = "mr-2 text-slate-500";
+    labelElement.textContent = label;
+    row.append(labelElement, document.createTextNode(value));
+    root.appendChild(row);
+  });
+
+  if (place.memos.length) {
+    const memoTitle = document.createElement("div");
+    memoTitle.className = "mt-2 border-t border-slate-100 pt-2 text-xs font-black text-slate-500";
+    memoTitle.textContent = "메모";
+    root.appendChild(memoTitle);
+    const memoList = document.createElement("ul");
+    memoList.className = "mt-1 max-h-36 space-y-1 overflow-y-auto text-xs leading-5";
+    place.memos.forEach((memo) => {
+      const item = document.createElement("li");
+      item.textContent = `· ${memo}`;
+      memoList.appendChild(item);
+    });
+    root.appendChild(memoList);
+  }
+  return root;
+}
+
 function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selectedId: number | null; onSelect: (id: number) => void }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const markerLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const [tilesReady, setTilesReady] = useState(false);
 
   useEffect(() => {
@@ -131,7 +180,12 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
     tiles.on("loading", () => setTilesReady(false));
     tiles.on("load", () => setTilesReady(true));
     tiles.addTo(map);
-    markerLayerRef.current = L.layerGroup().addTo(map);
+    markerLayerRef.current = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      zoomToBoundsOnClick: true,
+      maxClusterRadius: 42,
+    }).addTo(map);
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
     observer.observe(elementRef.current);
@@ -149,6 +203,7 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
     layer.clearLayers();
+    let selectedMarker: L.Marker | null = null;
     places.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const meta = labelMeta(place.label);
@@ -158,13 +213,23 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
         iconSize: [28, 28],
         iconAnchor: [14, 27],
       });
-      const marker = L.marker([place.latitude, place.longitude], { icon }).addTo(layer);
+      const marker = L.marker([place.latitude, place.longitude], { icon });
       const tooltip = document.createElement("div");
       tooltip.className = "text-xs font-bold";
       tooltip.textContent = place.name;
       marker.bindTooltip(tooltip, { direction: "top", offset: [0, -22] });
+      marker.bindPopup(placePopup(place), { minWidth: 260, maxWidth: 340, maxHeight: 360 });
       marker.on("click", () => onSelect(place.id));
+      layer.addLayer(marker);
+      if (selectedId === place.id) selectedMarker = marker;
     });
+    if (selectedMarker) {
+      const marker = selectedMarker as L.Marker;
+      layer.zoomToShowLayer(marker, () => {
+        map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
+        marker.openPopup();
+      });
+    }
   }, [places, selectedId, onSelect]);
 
   return (
@@ -185,7 +250,7 @@ export default function WalkingMap() {
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(places[0]?.id || null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [editMode, setEditMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);

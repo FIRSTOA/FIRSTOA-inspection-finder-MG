@@ -345,7 +345,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-black text-blue-600">CS AS</div>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">AS접수</h2>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">AS리스트</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS 접수, 일정 수정, 완료/익일, FIELD AS 양식 연동을 한 화면에서 처리합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
