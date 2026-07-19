@@ -139,6 +139,13 @@ function isCompleted(place: MapPlace) {
   return place.label === "G5" || place.label === "G12";
 }
 
+function monthlyInspectionUnits(place: MapPlace) {
+  if (place.label === "G2") return 1;
+  if (place.label === "G3") return 2;
+  if (place.label === "G5" || place.label === "G12") return 3;
+  return 0;
+}
+
 function loadPlaces() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -323,12 +330,15 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
   const teamProgress = useMemo(() => teams.map((team) => {
     const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
-    const inspections = rows.filter((place) => place.kind === "quarter" || place.kind === "monthly");
+    const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
+    const monthlyInspections = rows.filter((place) => place.kind === "monthly");
     const renewals = rows.filter((place) => place.kind === "renewal");
     return {
       team,
-      inspectionDone: inspections.filter(isCompleted).length,
-      inspectionTotal: inspections.length,
+      quarterlyTotal: quarterlyInspections.length,
+      monthlyTotal: monthlyInspections.length,
+      inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
+      inspectionTotal: quarterlyInspections.length + monthlyInspections.length * 3,
       renewalDone: renewals.filter(isCompleted).length,
       renewalTotal: renewals.length,
     };
@@ -641,7 +651,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
-                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">G5 완료 + G12 다음 분기 이관 기준</div>
+                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">매월 G2=1회 · G3=2회 · G5/G12=3회</div>
                 </div>
                 <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
               </div>
@@ -651,7 +661,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   const renewalRate = item.renewalTotal ? Math.round((item.renewalDone / item.renewalTotal) * 100) : 0;
                   return (
                     <div key={item.team} className="rounded-md border border-slate-200 p-3">
-                      <div className="mb-2 text-xs font-black text-slate-900">{item.team}팀</div>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="text-xs font-black text-slate-900">{item.team}팀</div>
+                        <div className="text-[10px] font-bold text-slate-400">분기 {item.quarterlyTotal} + 매월 {item.monthlyTotal}×3</div>
+                      </div>
                       <div className="grid grid-cols-[54px_1fr_72px] items-center gap-2 text-[11px]">
                         <span className="font-black text-slate-600">점검</span>
                         <span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspectionRate}%` }} /></span>

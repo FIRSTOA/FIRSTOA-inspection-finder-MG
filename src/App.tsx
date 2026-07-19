@@ -4320,7 +4320,7 @@ export default function App() {
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["asReception", "AS리스트"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string]];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items)];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
@@ -4389,7 +4389,7 @@ export default function App() {
             {standaloneItems.map(([key, label]) => (
               <button key={key} type="button" title={label} onClick={() => setScreen(key)}
                 className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "AS리스트" ? "AS" : label) : label}</span>
+                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label) : label}</span>
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
