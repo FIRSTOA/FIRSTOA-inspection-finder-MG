@@ -81,8 +81,20 @@ create table if not exists public.happycall_messages (
   status text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'skip')),
   sent_at timestamptz,
   error text not null default '',
+  recipients jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+alter table public.happycall_messages add column if not exists recipients jsonb not null default '[]'::jsonb;
+
+create table if not exists public.message_templates (
+  id uuid primary key default gen_random_uuid(),
+  context text not null check (context in ('happycall', 'promotion')),
+  title text not null,
+  body text not null,
+  active boolean not null default true,
+  created_by text not null,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists public.promo_materials (
@@ -315,6 +327,7 @@ alter table public.office_logs enable row level security;
 alter table public.quarterly_plans enable row level security;
 alter table public.golden_cards enable row level security;
 alter table public.happycall_messages enable row level security;
+alter table public.message_templates enable row level security;
 alter table public.promo_materials enable row level security;
 alter table public.logistics_records enable row level security;
 alter table public.misu enable row level security;
@@ -331,6 +344,7 @@ drop policy if exists "office_logs anon all" on public.office_logs;
 drop policy if exists "quarterly_plans anon all" on public.quarterly_plans;
 drop policy if exists "golden_cards anon all" on public.golden_cards;
 drop policy if exists "happycall_messages anon all" on public.happycall_messages;
+drop policy if exists "message_templates anon all" on public.message_templates;
 drop policy if exists "promo_materials anon all" on public.promo_materials;
 drop policy if exists "promo materials anon read" on storage.objects;
 drop policy if exists "promo materials anon insert" on storage.objects;
@@ -356,6 +370,7 @@ create policy "office_logs anon all" on public.office_logs for all to anon using
 create policy "quarterly_plans anon all" on public.quarterly_plans for all to anon using (true) with check (true);
 create policy "golden_cards anon all" on public.golden_cards for all to anon using (true) with check (true);
 create policy "happycall_messages anon all" on public.happycall_messages for all to anon using (true) with check (true);
+create policy "message_templates anon all" on public.message_templates for all to anon using (true) with check (true);
 create policy "promo_materials anon all" on public.promo_materials for all to anon using (true) with check (true);
 create policy "promo materials anon read" on storage.objects for select to anon using (bucket_id = 'promo-materials');
 create policy "promo materials anon insert" on storage.objects for insert to anon with check (bucket_id = 'promo-materials');
@@ -379,6 +394,7 @@ grant select, insert, update on public.office_logs to anon;
 grant select, insert, update on public.quarterly_plans to anon;
 grant select, insert, update on public.golden_cards to anon;
 grant select, insert, update on public.happycall_messages to anon;
+grant select, insert, update on public.message_templates to anon;
 grant select, insert, update on public.promo_materials to anon;
 grant select, insert on public.logistics_records to anon;
 grant select, insert on public.misu to anon;

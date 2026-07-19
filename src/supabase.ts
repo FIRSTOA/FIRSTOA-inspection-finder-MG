@@ -117,6 +117,18 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
   return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
 }
 
+export async function updateRows(table: string, query: string, patch: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${REST}/${table}?${query}`, {
+    method: "PATCH",
+    headers: { ...BASE_HEADERS, Prefer: "return=minimal" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`수정 실패 ${table}(${res.status}): ${detail.slice(0, 160)}`);
+  }
+}
+
 export async function uploadPublicFile(bucket: string, path: string, file: Blob, contentType: string): Promise<string> {
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
