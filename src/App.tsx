@@ -4455,7 +4455,7 @@ export default function App() {
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
-        {screen === "walkingMap" && <WalkingMap />}
+        {screen === "walkingMap" && <WalkingMap userKey={author} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {(screen === "itHistory" || screen === "counterSms" || screen === "happycall" || screen === "promoSend") && (

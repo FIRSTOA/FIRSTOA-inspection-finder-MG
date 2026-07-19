@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 type MapLabel = {
   code: string;
@@ -42,11 +39,11 @@ const workKinds: { value: WorkKind; label: string }[] = [
   { value: "monthly", label: "매월점검" },
   { value: "renewal", label: "재계약" },
 ];
-const teamMapCenters: Record<Team, L.LatLngExpression> = {
-  A: [37.64, 127.02],
-  B: [37.53, 126.88],
-  C: [37.52, 127.09],
-  D: [37.65, 127.2],
+const teamMapViews: Record<Team, { center: [number, number]; zoom: number }> = {
+  A: { center: [37.64, 127.02], zoom: 10 },
+  B: { center: [37.53, 126.88], zoom: 10 },
+  C: { center: [37.52, 127.09], zoom: 10 },
+  D: { center: [37.65, 127.2], zoom: 9 },
 };
 
 const mapLabels: MapLabel[] = [
@@ -63,6 +60,51 @@ const mapLabels: MapLabel[] = [
   { code: "G11", name: "휴면·보류", color: "#1f744a" },
   { code: "G12", name: "기타", color: "#343434" },
 ];
+
+type MapPreferences = {
+  team: Team;
+  quarter: Quarter;
+  kind: WorkKind | "ALL";
+  labels: string[];
+};
+
+function loadMapPreferences(key: string): MapPreferences {
+  const currentQuarter = (Math.floor(new Date().getMonth() / 3) + 1) as Quarter;
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) || "null") as Partial<MapPreferences> | null;
+    const storedKind = stored?.kind;
+    return {
+      team: stored?.team && teams.includes(stored.team) ? stored.team : "C",
+      quarter: stored?.quarter && quarters.includes(stored.quarter) ? stored.quarter : currentQuarter,
+      kind: storedKind === "ALL" || workKinds.some((item) => item.value === storedKind) ? storedKind as WorkKind | "ALL" : "ALL",
+      labels: Array.isArray(stored?.labels) ? stored.labels.filter((code) => mapLabels.some((item) => item.code === code)) : [],
+    };
+  } catch {
+    return { team: "C", quarter: currentQuarter, kind: "ALL", labels: [] };
+  }
+}
+
+function loadTeamMapView(key: string, team: Team) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) || "null") as Partial<Record<Team, { center: [number, number]; zoom: number }>> | null;
+    const view = stored?.[team];
+    if (view && Array.isArray(view.center) && view.center.length === 2 && view.center.every(Number.isFinite) && Number.isFinite(view.zoom)) return view;
+  } catch {
+    // Use the team default below.
+  }
+  return teamMapViews[team];
+}
+
+function saveTeamMapView(key: string, team: Team, map: L.Map) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) || "{}") as Partial<Record<Team, { center: [number, number]; zoom: number }>>;
+    const center = map.getCenter();
+    stored[team] = { center: [center.lat, center.lng], zoom: map.getZoom() };
+    localStorage.setItem(key, JSON.stringify(stored));
+  } catch {
+    // A blocked localStorage should not prevent map use.
+  }
+}
 
 const initialPlaces: MapPlace[] = [
   {
@@ -119,10 +161,10 @@ function blankPlace(number: number): MapPlace {
   };
 }
 
-function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; onSelect: (id: number) => void }) {
+function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markerLayerRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const [tilesReady, setTilesReady] = useState(false);
 
   useEffect(() => {
@@ -132,26 +174,22 @@ function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[];
       minZoom: 6,
       maxBounds: [[32.5, 123.5], [39.5, 132]],
       maxBoundsViscosity: 0.8,
-    }).setView(teamMapCenters.C, 10);
-    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    });
+    map.setView(teamMapViews.C.center, teamMapViews.C.zoom);
+    const tiles = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
+      maxNativeZoom: 16,
+      attribution: "Tiles &copy; Esri",
     });
     tiles.on("loading", () => setTilesReady(false));
     tiles.on("load", () => setTilesReady(true));
     tiles.addTo(map);
-    markerLayerRef.current = L.markerClusterGroup({
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      zoomToBoundsOnClick: false,
-      maxClusterRadius: 42,
-    });
-    markerLayerRef.current.on("clusterclick", (event) => {
-      const cluster = event.layer as L.MarkerCluster;
-      map.panTo(cluster.getLatLng(), { animate: true, duration: 0.35 });
-      cluster.spiderfy();
-    });
-    markerLayerRef.current.addTo(map);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 19,
+      maxNativeZoom: 16,
+      pane: "overlayPane",
+    }).addTo(map);
+    markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
     observer.observe(elementRef.current);
@@ -165,8 +203,16 @@ function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[];
   }, []);
 
   useEffect(() => {
-    mapRef.current?.setView(teamMapCenters[team], 10, { animate: true });
-  }, [team]);
+    const map = mapRef.current;
+    if (!map) return;
+    const view = loadTeamMapView(viewStorageKey, team);
+    map.setView(view.center, view.zoom, { animate: true });
+    const persistView = () => saveTeamMapView(viewStorageKey, team, map);
+    map.on("moveend zoomend", persistView);
+    return () => {
+      map.off("moveend zoomend", persistView);
+    };
+  }, [team, viewStorageKey]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -174,8 +220,24 @@ function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[];
     if (!map || !layer) return;
     layer.clearLayers();
     let selectedMarker: L.Marker | null = null;
+    const coordinateCounts = new Map<string, number>();
     places.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
+      const key = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
+      coordinateCounts.set(key, (coordinateCounts.get(key) || 0) + 1);
+    });
+    const coordinateIndexes = new Map<string, number>();
+    places.forEach((place) => {
+      if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
+      const coordinateKey = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
+      const duplicateIndex = coordinateIndexes.get(coordinateKey) || 0;
+      coordinateIndexes.set(coordinateKey, duplicateIndex + 1);
+      const duplicateCount = coordinateCounts.get(coordinateKey) || 1;
+      const ring = Math.floor(duplicateIndex / 8) + 1;
+      const angle = ((duplicateIndex % 8) / 8) * Math.PI * 2;
+      const distance = duplicateCount > 1 ? 0.00012 * ring : 0;
+      const latitude = place.latitude + Math.sin(angle) * distance;
+      const longitude = place.longitude + (Math.cos(angle) * distance) / Math.max(0.25, Math.cos((place.latitude * Math.PI) / 180));
       const meta = labelMeta(place.label);
       const icon = L.divIcon({
         className: "workin-map-marker",
@@ -183,13 +245,12 @@ function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[];
         iconSize: [28, 28],
         iconAnchor: [14, 27],
       });
-      const marker = L.marker([place.latitude, place.longitude], { icon });
+      const marker = L.marker([latitude, longitude], { icon }).addTo(layer);
       const tooltip = document.createElement("div");
       tooltip.className = "text-xs font-bold";
       tooltip.textContent = place.name;
       marker.bindTooltip(tooltip, { direction: "top", offset: [0, -22] });
       marker.on("click", () => onSelect(place.id));
-      layer.addLayer(marker);
       if (selectedId === place.id) selectedMarker = marker;
     });
     if (selectedMarker) {
@@ -206,13 +267,15 @@ function MapCanvas({ places, selectedId, team, onSelect }: { places: MapPlace[];
   );
 }
 
-export default function WalkingMap() {
+export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) {
   const [places, setPlaces] = useState<MapPlace[]>(loadPlaces);
   const [query, setQuery] = useState("");
-  const [labelFilters, setLabelFilters] = useState<string[]>([]);
-  const [teamFilter, setTeamFilter] = useState<Team>("C");
-  const [quarterFilter, setQuarterFilter] = useState<Quarter>(() => (Math.floor(new Date().getMonth() / 3) + 1) as Quarter);
-  const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">("ALL");
+  const preferenceStorageKey = useMemo(() => `cs_workin_map_preferences_v1_${userKey.trim() || "guest"}`, [userKey]);
+  const initialPreferences = useMemo(() => loadMapPreferences(preferenceStorageKey), [preferenceStorageKey]);
+  const [labelFilters, setLabelFilters] = useState<string[]>(initialPreferences.labels);
+  const [teamFilter, setTeamFilter] = useState<Team>(initialPreferences.team);
+  const [quarterFilter, setQuarterFilter] = useState<Quarter>(initialPreferences.quarter);
+  const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">(initialPreferences.kind);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
@@ -236,6 +299,10 @@ export default function WalkingMap() {
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
   }, [places]);
+
+  useEffect(() => {
+    localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
+  }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters]);
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -531,7 +598,7 @@ export default function WalkingMap() {
 
   const mapPanel = (
     <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
-      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} onSelect={selectMapPlace} />
+      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} />
       <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
