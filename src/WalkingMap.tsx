@@ -176,19 +176,13 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       maxBoundsViscosity: 0.8,
     });
     map.setView(teamMapViews.C.center, teamMapViews.C.zoom);
-    const tiles = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      maxNativeZoom: 16,
-      attribution: "Tiles &copy; Esri",
+      attribution: "&copy; OpenStreetMap contributors",
     });
     tiles.on("loading", () => setTilesReady(false));
     tiles.on("load", () => setTilesReady(true));
     tiles.addTo(map);
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
-      maxZoom: 19,
-      maxNativeZoom: 16,
-      pane: "overlayPane",
-    }).addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
