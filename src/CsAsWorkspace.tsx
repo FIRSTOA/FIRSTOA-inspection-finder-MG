@@ -255,6 +255,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const [visibleTeams, setVisibleTeams] = useState<Team[]>(teams);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
+  const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
+  const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
   const [editId, setEditId] = useState("");
   const [newTicket, setNewTicket] = useState<AsTicket | null>(null);
@@ -298,12 +300,6 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     update(deferTicket.id, { date, status: isAsSchedule ? "익일" : deferTicket.status, scheduleType: isAsSchedule ? "익일AS" : deferTicket.scheduleType });
     setDeferId("");
   };
-
-  const teamSummary = teams.map((item) => {
-    const rows = tickets.filter((ticket) => ticket.team === item);
-    const done = rows.filter((ticket) => ticket.status === "완료").length;
-    return { team: item, total: rows.length, done };
-  });
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   const asRows = tickets.filter((ticket) => {
@@ -361,31 +357,17 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         </div>
       </section>}
 
-      {view === "as" && <section className="grid gap-3 lg:grid-cols-4">
-        {teamSummary.map((item) => {
-          const rate = item.total ? Math.round((item.done / item.total) * 100) : 0;
-          return (
-            <button key={item.team} type="button" onClick={() => setTeam(item.team)} className={`rounded-lg border p-4 text-left shadow-sm ${team === item.team ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
-              <div className="flex items-center justify-between">
-                <div className="text-lg font-black text-slate-950">{item.team}팀</div>
-                <div className="text-xs font-black text-blue-600">{item.done}/{item.total} 완료</div>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-blue-600" style={{ width: `${rate}%` }} />
-              </div>
-            </button>
-          );
-        })}
-      </section>}
-
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex min-h-[720px] flex-col lg:flex-row">
-            <aside className="border-b border-slate-200 bg-slate-50/70 p-4 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r">
-              <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
-                <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
-              </button>
-              <div className="mt-4 lg:mt-5">
+            <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r lg:p-4">
+              <div className="grid grid-cols-2 gap-2 lg:block">
+                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
+                  <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
+                </button>
+                <button type="button" onClick={() => setCalendarFiltersOpen((current) => !current)} className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm lg:hidden">필터 {calendarFiltersOpen ? "닫기" : "열기"}</button>
+              </div>
+              <div className={`${calendarFiltersOpen ? "block" : "hidden"} mt-3 lg:mt-5 lg:block`}>
                 <div className="grid grid-cols-2 gap-3 lg:block lg:space-y-5">
                   <div>
                     <div className="mb-2 text-xs font-black text-slate-500">업무 종류</div>
@@ -444,33 +426,41 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 </div>
               ) : (
                 <>
-                <div className="space-y-2 p-3 md:hidden">
-                  {calendarDays.filter((date) => date.slice(0, 7) === currentMonth.slice(0, 7)).map((date) => {
-                    const rows = visibleTickets.filter((ticket) => ticket.date === date);
-                    const isToday = date === todayYmd;
-                    return (
-                      <section key={date} className={`rounded-lg border ${isToday ? "border-blue-300 bg-blue-50/40" : "border-slate-200 bg-white"}`}>
-                        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}>{Number(date.slice(8, 10))}</span>
-                            <span className="text-xs font-bold text-slate-500">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00+09:00`).getDay()]}요일 · {rows.length}건</span>
-                          </div>
-                          <button type="button" onClick={() => setNewTicket(blankTicket(date))} aria-label={`${date} 일정 추가`} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-lg font-black text-blue-600">+</button>
-                        </div>
-                        {rows.length > 0 && <div className="space-y-1.5 p-2">
-                          {rows.map((ticket) => (
-                            <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className={`block w-full rounded-md px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span>
-                                <span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {ticket.scheduleType}</span>
-                              </div>
-                              {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
-                            </button>
-                          ))}
-                        </div>}
-                      </section>
-                    );
-                  })}
+                <div className="md:hidden">
+                  <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                    {["일", "월", "화", "수", "목", "금", "토"].map((day, index) => <div key={day} className={`py-2 text-center text-[11px] font-black ${index === 0 ? "text-rose-500" : index === 6 ? "text-blue-500" : "text-slate-500"}`}>{day}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7">
+                    {calendarDays.map((date) => {
+                      const rows = visibleTickets.filter((ticket) => ticket.date === date);
+                      const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
+                      const isToday = date === todayYmd;
+                      const isSelected = date === mobileSelectedDate;
+                      return (
+                        <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</span>
+                          <span className="mt-1 flex flex-wrap gap-0.5">
+                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-amber-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="border-t border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-sm font-black text-slate-900">{Number(mobileSelectedDate.slice(5, 7))}월 {Number(mobileSelectedDate.slice(8, 10))}일 · {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).length}건</div>
+                      <button type="button" onClick={() => setNewTicket(blankTicket(mobileSelectedDate))} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-black text-white">+ 일정</button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
+                        <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className={`block w-full rounded-md px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {ticket.scheduleType}</span></div>
+                          {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
+                        </button>
+                      ))}
+                      {!visibleTickets.some((ticket) => ticket.date === mobileSelectedDate) && <div className="py-4 text-center text-xs font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
+                    </div>
+                  </div>
                 </div>
                 <div className="hidden overflow-x-auto md:block">
                   <div className="min-w-[760px]">

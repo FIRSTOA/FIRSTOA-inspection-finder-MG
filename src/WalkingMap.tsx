@@ -31,6 +31,7 @@ type MapPlace = {
 };
 
 const storageKey = "cs_workin_map_places_v2";
+const excelHeaders = ["번호", "라벨", "지도에서", "이름", "코멘트", "전화번호", "주소", "상세주소", "위도", "경도", ...Array.from({ length: 15 }, (_, index) => `메모${index + 1}`)];
 const teams: Team[] = ["A", "B", "C", "D"];
 const quarters: Quarter[] = [1, 2, 3, 4];
 const workKinds: { value: WorkKind; label: string }[] = [
@@ -119,9 +120,9 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       maxBounds: [[32.5, 123.5], [39.5, 132]],
       maxBoundsViscosity: 0.8,
     }).setView([36.15, 127.85], 7);
-    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
     });
     tiles.on("loading", () => setTilesReady(false));
     tiles.on("load", () => setTilesReady(true));
@@ -173,7 +174,7 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
 export default function WalkingMap() {
   const [places, setPlaces] = useState<MapPlace[]>(loadPlaces);
   const [query, setQuery] = useState("");
-  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<Team | "ALL">("ALL");
   const [quarterFilter, setQuarterFilter] = useState<Quarter | "ALL">("ALL");
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">("ALL");
@@ -185,6 +186,12 @@ export default function WalkingMap() {
   const [showHidden, setShowHidden] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
   const [draft, setDraft] = useState<MapPlace | null>(null);
+  const [pendingImport, setPendingImport] = useState<MapPlace[]>([]);
+  const [importTeam, setImportTeam] = useState<Team>("C");
+  const [importQuarter, setImportQuarter] = useState<Quarter>(3);
+  const [importKind, setImportKind] = useState<WorkKind>("monthly");
+  const [importMode, setImportMode] = useState<"append" | "replace">("replace");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
@@ -194,7 +201,7 @@ export default function WalkingMap() {
     const keyword = query.trim().toLowerCase();
     return places.filter((place) => {
       if (!place.visible && !showHidden) return false;
-      if (labelFilter && place.label !== labelFilter) return false;
+      if (labelFilters.length && !labelFilters.includes(place.label)) return false;
       if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
       if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
@@ -202,11 +209,10 @@ export default function WalkingMap() {
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [places, query, labelFilter, teamFilter, quarterFilter, kindFilter, showHidden]);
+  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter, showHidden]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
 
-  const selected = places.find((place) => place.id === selectedId) || null;
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
 
   const saveDraft = () => {
@@ -234,6 +240,119 @@ export default function WalkingMap() {
     setCheckedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
 
+  const handleExcelImport = async (file: File) => {
+    const ExcelJS = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await file.arrayBuffer());
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      window.alert("엑셀 시트를 찾을 수 없습니다.");
+      return;
+    }
+    const headers = worksheet.getRow(1).values as Array<unknown>;
+    const headerIndexes = new Map(headers.map((header, index) => [String(header || "").trim(), index]));
+    const rows: Record<string, string | number>[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const values: Record<string, string | number> = {};
+      excelHeaders.forEach((header) => {
+        const cell = row.getCell(headerIndexes.get(header) || 0);
+        values[header] = ["번호", "위도", "경도"].includes(header) ? Number(cell.value) || 0 : cell.text || "";
+      });
+      if (String(values["이름"] || "").trim()) rows.push(values);
+    });
+    const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
+    if (required.some((header) => !headerIndexes.has(header))) {
+      window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
+      return;
+    }
+    const inferredTeam = file.name.match(/수도권([ABCD])/i)?.[1]?.toUpperCase() as Team | undefined;
+    const inferredQuarter = Number(file.name.match(/([1-4])분기/)?.[1]) as Quarter;
+    const inferredKind: WorkKind = /매월/.test(file.name) ? "monthly" : /재계약|계약종료/.test(file.name) ? "renewal" : "quarter";
+    if (inferredTeam) setImportTeam(inferredTeam);
+    if (inferredQuarter) setImportQuarter(inferredQuarter);
+    setImportKind(inferredKind);
+    const baseId = Date.now();
+    setPendingImport(rows.map((row, index) => ({
+      id: baseId + index,
+      number: Number(row["번호"]) || index + 1,
+      team: inferredTeam || "C",
+      quarter: inferredQuarter || 3,
+      kind: inferredKind,
+      label: String(row["라벨"] || "G12").trim(),
+      visible: String(row["지도에서"] || "ON").trim().toUpperCase() !== "OFF",
+      name: String(row["이름"] || "").trim(),
+      comment: String(row["코멘트"] || "").trim(),
+      phone: String(row["전화번호"] || "").replaceAll("_x000d_", "\n").trim(),
+      address: String(row["주소"] || "").trim(),
+      addressDetail: String(row["상세주소"] || "").replaceAll("_x000d_", "\n").trim(),
+      latitude: Number(row["위도"]) || 0,
+      longitude: Number(row["경도"]) || 0,
+      memos: Array.from({ length: 15 }, (_, memoIndex) => String(row[`메모${memoIndex + 1}`] || "").replaceAll("_x000d_", "\n").trim()).filter(Boolean),
+    })).filter((place) => place.name));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const applyExcelImport = () => {
+    const imported = pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind }));
+    setPlaces((current) => importMode === "replace"
+      ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
+      : [...current, ...imported]);
+    setPendingImport([]);
+  };
+
+  const exportExcel = async () => {
+    const ExcelJS = await import("exceljs");
+    const keyword = query.trim().toLowerCase();
+    const exportPlaces = places.filter((place) => {
+      if (labelFilters.length && !labelFilters.includes(place.label)) return false;
+      if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
+      if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
+      if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
+      if (!keyword) return true;
+      return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos].some((value) => value.toLowerCase().includes(keyword));
+    });
+    const rows = exportPlaces.map((place) => {
+      const values: Record<string, string | number> = {
+        "번호": place.number,
+        "라벨": place.label,
+        "지도에서": place.visible ? "ON" : "OFF",
+        "이름": place.name,
+        "코멘트": place.comment,
+        "전화번호": place.phone,
+        "주소": place.address,
+        "상세주소": place.addressDetail,
+        "위도": place.latitude,
+        "경도": place.longitude,
+      };
+      for (let index = 0; index < 15; index += 1) values[`메모${index + 1}`] = place.memos[index] || "";
+      return values;
+    });
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("워킨맵", { views: [{ state: "frozen", ySplit: 1 }] });
+    sheet.addRow(excelHeaders);
+    rows.forEach((row) => sheet.addRow(excelHeaders.map((header) => row[header] ?? "")));
+    sheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+    sheet.columns.forEach((column, index) => {
+      const header = excelHeaders[index];
+      column.width = header?.startsWith("메모") ? 24 : ["이름", "코멘트", "전화번호", "주소", "상세주소"].includes(header) ? 32 : 12;
+    });
+    sheet.autoFilter = { from: "A1", to: "Y1" };
+    const kindName = kindFilter === "ALL" ? "전체" : workKinds.find((item) => item.value === kindFilter)?.label;
+    const filename = `CS워킨맵_${teamFilter === "ALL" ? "전체" : `${teamFilter}팀`}_${quarterFilter === "ALL" ? "전체분기" : `${quarterFilter}분기`}_${kindName}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   const placeList = (
     <div className="flex min-h-0 flex-col bg-white">
       <div className="border-b border-slate-200 p-3">
@@ -249,6 +368,11 @@ export default function WalkingMap() {
         <div className="mt-2 flex gap-2">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-sm font-black text-white">+ 추가</button>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>
+          <button type="button" onClick={exportExcel} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">현재 목록 내보내기</button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
       </div>
 
@@ -305,7 +429,7 @@ export default function WalkingMap() {
         </div>
         <div className="relative flex shrink-0 gap-1.5">
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
-          <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${colorMenuOpen || labelFilter ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상</button>
+          <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
@@ -328,10 +452,10 @@ export default function WalkingMap() {
 
           {colorMenuOpen && (
             <div className="absolute right-0 top-12 w-[250px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
-              <button type="button" onClick={() => setLabelFilter(null)} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilter === null ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
+              <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
               <div className="grid grid-cols-3 gap-2">
                 {mapLabels.map((item) => (
-                  <button key={item.code} type="button" onClick={() => setLabelFilter(labelFilter === item.code ? null : item.code)} title={item.name} className={`flex items-center gap-2 rounded border px-2 py-2 text-xs font-black ${labelFilter === item.code ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>
+                  <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} title={item.name} className={`flex items-center gap-2 rounded border px-2 py-2 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
                     <span className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />{item.code}
                   </button>
                 ))}
@@ -340,21 +464,6 @@ export default function WalkingMap() {
           )}
         </div>
       </div>
-      {selected && mapPlaces.some((place) => place.id === selected.id) && (
-        <div className="absolute bottom-3 left-3 right-3 z-[700] rounded-lg border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:left-auto sm:w-[360px]">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[11px] font-black" style={{ color: labelMeta(selected.label).color }}>{selected.label} · {selected.team}팀 · {selected.quarter}Q · {workKinds.find((item) => item.value === selected.kind)?.label}</div>
-              <div className="mt-1 truncate text-sm font-black text-slate-950">{selected.name}</div>
-              <div className="mt-1 text-xs font-semibold text-slate-500">{selected.address} {selected.addressDetail}</div>
-            </div>
-            <button type="button" onClick={() => setDraft({ ...selected, memos: [...selected.memos] })} className="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">수정</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {selected.memos.slice(0, 4).map((memo, index) => <span key={`${memo}-${index}`} className="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{memo}</span>)}
-          </div>
-        </div>
-      )}
     </div>
   );
 
@@ -374,6 +483,30 @@ export default function WalkingMap() {
           </div>
         </div>
       </section>
+
+      {pendingImport.length > 0 && (
+        <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPendingImport([])}>
+          <div className="w-full rounded-t-xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-black text-blue-600">엑셀 불러오기</div>
+                <div className="mt-1 text-lg font-black text-slate-950">거래처 {pendingImport.length}곳</div>
+              </div>
+              <button type="button" onClick={() => setPendingImport([])} className="h-9 w-9 rounded-md text-xl font-black text-slate-400">×</button>
+            </div>
+            <div className="mt-5 grid grid-cols-3 gap-2">
+              <label className="text-xs font-black text-slate-500">팀<select value={importTeam} onChange={(event) => setImportTeam(event.target.value as Team)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2.5 text-sm">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">분기<select value={importQuarter} onChange={(event) => setImportQuarter(Number(event.target.value) as Quarter)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2.5 text-sm">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">업무<select value={importKind} onChange={(event) => setImportKind(event.target.value as WorkKind)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2.5 text-sm">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
+              <button type="button" onClick={() => setImportMode("replace")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "replace" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>같은 목록 교체</button>
+              <button type="button" onClick={() => setImportMode("append")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "append" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>기존 목록에 추가</button>
+            </div>
+            <button type="button" onClick={applyExcelImport} className="mt-5 w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-black text-white">불러오기 적용</button>
+          </div>
+        </div>
+      )}
 
       {draft && (
         <div className="fixed inset-0 z-[2000] flex items-end bg-slate-950/45 p-0 lg:items-center lg:justify-center lg:p-5" onMouseDown={() => setDraft(null)}>
