@@ -85,7 +85,7 @@ function labelMeta(code: string) {
 }
 
 function isCompleted(place: MapPlace) {
-  return place.label === "G5" || [place.name, place.comment, ...place.memos].some((value) => value.includes("완료"));
+  return place.label === "G5" || place.label === "G12";
 }
 
 function loadPlaces() {
@@ -259,56 +259,66 @@ export default function WalkingMap() {
   };
 
   const handleExcelImport = async (file: File) => {
-    const ExcelJS = await import("exceljs");
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await file.arrayBuffer());
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      window.alert("엑셀 시트를 찾을 수 없습니다.");
-      return;
-    }
-    const headers = worksheet.getRow(1).values as Array<unknown>;
-    const headerIndexes = new Map(headers.map((header, index) => [String(header || "").trim(), index]));
-    const rows: Record<string, string | number>[] = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const values: Record<string, string | number> = {};
-      excelHeaders.forEach((header) => {
-        const cell = row.getCell(headerIndexes.get(header) || 0);
-        values[header] = ["번호", "위도", "경도"].includes(header) ? Number(cell.value) || 0 : cell.text || "";
+    try {
+      if (!file.name.toLowerCase().endsWith(".xlsx")) {
+        window.alert(".xlsx 형식만 불러올 수 있습니다.");
+        return;
+      }
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        window.alert("엑셀 시트를 찾을 수 없습니다.");
+        return;
+      }
+      const headers = worksheet.getRow(1).values as Array<unknown>;
+      const headerIndexes = new Map(headers.map((header, index) => [String(header || "").trim(), index]));
+      const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
+      if (required.some((header) => !headerIndexes.has(header))) {
+        window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
+        return;
+      }
+      const rows: Record<string, string | number>[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const values: Record<string, string | number> = {};
+        excelHeaders.forEach((header) => {
+          const cell = row.getCell(headerIndexes.get(header) || 0);
+          values[header] = ["번호", "위도", "경도"].includes(header) ? Number(cell.value) || 0 : cell.text || "";
+        });
+        if (String(values["이름"] || "").trim()) rows.push(values);
       });
-      if (String(values["이름"] || "").trim()) rows.push(values);
-    });
-    const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
-    if (required.some((header) => !headerIndexes.has(header))) {
-      window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
-      return;
+      const inferredTeam = file.name.match(/수도권([ABCD])/i)?.[1]?.toUpperCase() as Team | undefined;
+      const inferredQuarter = Number(file.name.match(/([1-4])분기/)?.[1]) as Quarter;
+      const inferredKind: WorkKind = /매월/.test(file.name) ? "monthly" : /재계약|계약종료/.test(file.name) ? "renewal" : "quarter";
+      if (inferredTeam) setImportTeam(inferredTeam);
+      if (inferredQuarter) setImportQuarter(inferredQuarter);
+      setImportKind(inferredKind);
+      const baseId = Date.now();
+      setPendingImport(rows.map((row, index) => ({
+        id: baseId + index,
+        number: Number(row["번호"]) || index + 1,
+        team: inferredTeam || "C",
+        quarter: inferredQuarter || 3,
+        kind: inferredKind,
+        label: String(row["라벨"] || "G12").trim(),
+        visible: String(row["지도에서"] || "ON").trim().toUpperCase() !== "OFF",
+        name: String(row["이름"] || "").trim(),
+        comment: String(row["코멘트"] || "").trim(),
+        phone: String(row["전화번호"] || "").replaceAll("_x000d_", "\n").trim(),
+        address: String(row["주소"] || "").trim(),
+        addressDetail: String(row["상세주소"] || "").replaceAll("_x000d_", "\n").trim(),
+        latitude: Number(row["위도"]) || 0,
+        longitude: Number(row["경도"]) || 0,
+        memos: Array.from({ length: 15 }, (_, memoIndex) => String(row[`메모${memoIndex + 1}`] || "").replaceAll("_x000d_", "\n").trim()).filter(Boolean),
+      })).filter((place) => place.name));
+    } catch (error) {
+      console.error(error);
+      window.alert("엑셀 파일을 읽지 못했습니다. 파일이 손상되지 않은 .xlsx 파일인지 확인해 주세요.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-    const inferredTeam = file.name.match(/수도권([ABCD])/i)?.[1]?.toUpperCase() as Team | undefined;
-    const inferredQuarter = Number(file.name.match(/([1-4])분기/)?.[1]) as Quarter;
-    const inferredKind: WorkKind = /매월/.test(file.name) ? "monthly" : /재계약|계약종료/.test(file.name) ? "renewal" : "quarter";
-    if (inferredTeam) setImportTeam(inferredTeam);
-    if (inferredQuarter) setImportQuarter(inferredQuarter);
-    setImportKind(inferredKind);
-    const baseId = Date.now();
-    setPendingImport(rows.map((row, index) => ({
-      id: baseId + index,
-      number: Number(row["번호"]) || index + 1,
-      team: inferredTeam || "C",
-      quarter: inferredQuarter || 3,
-      kind: inferredKind,
-      label: String(row["라벨"] || "G12").trim(),
-      visible: String(row["지도에서"] || "ON").trim().toUpperCase() !== "OFF",
-      name: String(row["이름"] || "").trim(),
-      comment: String(row["코멘트"] || "").trim(),
-      phone: String(row["전화번호"] || "").replaceAll("_x000d_", "\n").trim(),
-      address: String(row["주소"] || "").trim(),
-      addressDetail: String(row["상세주소"] || "").replaceAll("_x000d_", "\n").trim(),
-      latitude: Number(row["위도"]) || 0,
-      longitude: Number(row["경도"]) || 0,
-      memos: Array.from({ length: 15 }, (_, memoIndex) => String(row[`메모${memoIndex + 1}`] || "").replaceAll("_x000d_", "\n").trim()).filter(Boolean),
-    })).filter((place) => place.name));
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const applyExcelImport = () => {
@@ -320,7 +330,7 @@ export default function WalkingMap() {
   };
 
   const exportExcel = async () => {
-    const ExcelJS = await import("exceljs");
+    const ExcelJS = (await import("exceljs")).default;
     const keyword = query.trim().toLowerCase();
     const exportPlaces = places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
@@ -374,6 +384,7 @@ export default function WalkingMap() {
   const placeList = (
     <div className="flex min-h-0 flex-col bg-white">
       <div className="border-b border-slate-200 p-3">
+        <div className="mb-2 truncate text-xs font-black text-blue-700">{conditionTitle}</div>
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
           <div className="flex gap-1.5">
@@ -389,7 +400,7 @@ export default function WalkingMap() {
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>
           <button type="button" onClick={exportExcel} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">현재 목록 내보내기</button>
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
+          <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
       </div>
 
@@ -439,16 +450,13 @@ export default function WalkingMap() {
   const mapPanel = (
     <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
       <MapCanvas places={mapPlaces} selectedId={selectedId} onSelect={setSelectedId} />
-      <div className="absolute left-14 top-3 z-[900] max-w-[calc(100%_-_140px)] truncate rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs font-black text-slate-800 shadow-lg sm:max-w-[420px]">
-        {conditionTitle}
-      </div>
-      <div className="absolute left-14 top-14 z-[900] w-[145px] sm:w-[240px]">
+      <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
           {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
         </div>
       </div>
-      <div className="absolute right-3 top-14 z-[900]">
+      <div className="absolute right-3 top-3 z-[900]">
         <div className="relative flex gap-1">
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
@@ -491,7 +499,7 @@ export default function WalkingMap() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
-                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">G5 또는 완료 메모 기준</div>
+                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">G5 완료 + G12 다음 분기 이관 기준</div>
                 </div>
                 <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
               </div>
