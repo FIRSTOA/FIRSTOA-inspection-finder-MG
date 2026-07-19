@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 type ScheduleType = "AS" | "익일AS" | "물류" | "휴가";
-type CalendarKey = `${Team} ${ScheduleType}`;
+type ScheduleFilter = "AS" | "물류" | "휴가";
 type ViewMode = "list" | "calendar";
 type DayFilter = "today" | "tomorrow" | "scheduled";
 
@@ -25,8 +25,7 @@ export type AsTicket = {
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
-const scheduleTypes: ScheduleType[] = ["AS", "익일AS", "물류", "휴가"];
-const calendarKeys: CalendarKey[] = teams.flatMap((team) => scheduleTypes.map((type) => `${team} ${type}` as CalendarKey));
+const scheduleFilters: ScheduleFilter[] = ["AS", "물류", "휴가"];
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -252,8 +251,8 @@ export function AsReception({ author, onUseField }: { author: string; onUseField
 function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string) => void }) {
   const [tickets, setTicketsState] = useState<AsTicket[]>(loadTickets);
   const [team, setTeam] = useState<Team | "ALL">("ALL");
-  const [visibleCalendars, setVisibleCalendars] = useState<CalendarKey[]>(calendarKeys);
-  const [openCalendarTeams, setOpenCalendarTeams] = useState<Record<Team, boolean>>({ A: false, B: false, C: false, D: false });
+  const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(scheduleFilters);
+  const [visibleTeams, setVisibleTeams] = useState<Team[]>(teams);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
@@ -315,26 +314,21 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   });
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
-  const ticketCalendarKey = (ticket: AsTicket): CalendarKey => `${ticket.team} ${ticket.scheduleType}`;
   const visibleTickets = useMemo(
-    () => tickets.filter((ticket) => visibleCalendars.includes(ticketCalendarKey(ticket))),
-    [tickets, visibleCalendars],
+    () => tickets.filter((ticket) => {
+      const filterType: ScheduleFilter = ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "AS" : ticket.scheduleType;
+      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(filterType);
+    }),
+    [tickets, visibleScheduleTypes, visibleTeams],
   );
   const monthTickets = visibleTickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7));
 
-  const toggleCalendar = (key: CalendarKey) => {
-    setVisibleCalendars((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  const toggleScheduleFilter = (filter: ScheduleFilter) => {
+    setVisibleScheduleTypes((current) => current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]);
   };
 
-  const teamCalendarKeys = (calendarTeam: Team) => scheduleTypes.map((type) => `${calendarTeam} ${type}` as CalendarKey);
-  const toggleTeamCalendars = (calendarTeam: Team) => {
-    const keys = teamCalendarKeys(calendarTeam);
-    setVisibleCalendars((current) => {
-      const allSelected = keys.every((key) => current.includes(key));
-      return allSelected
-        ? current.filter((key) => !keys.includes(key))
-        : Array.from(new Set([...current, ...keys]));
-    });
+  const toggleVisibleTeam = (calendarTeam: Team) => {
+    setVisibleTeams((current) => current.includes(calendarTeam) ? current.filter((item) => item !== calendarTeam) : [...current, calendarTeam]);
   };
 
   const renderTicketCard = (ticket: AsTicket) => (
@@ -393,32 +387,30 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
               </button>
               <div className="mt-4 lg:mt-5">
-                <div className="mb-3 text-sm font-black text-slate-900">내 캘린더</div>
-                <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
-                  {teams.map((calendarTeam) => (
-                    <div key={calendarTeam} className="rounded-md border border-slate-200 bg-white">
-                      <div className="flex items-center justify-between px-2 py-2">
-                        <button type="button" onClick={() => setOpenCalendarTeams((current) => ({ ...current, [calendarTeam]: !current[calendarTeam] }))} className="flex min-w-0 flex-1 items-center justify-between pr-2 text-left text-xs font-black text-slate-800">
-                          <span>{calendarTeam}팀</span><span className="text-slate-400">{openCalendarTeams[calendarTeam] ? "−" : "+"}</span>
-                        </button>
-                        <label className="flex cursor-pointer items-center border-l border-slate-100 pl-2" title={`${calendarTeam}팀 캘린더 전체 선택`}>
-                          <input type="checkbox" checked={teamCalendarKeys(calendarTeam).every((key) => visibleCalendars.includes(key))} onChange={() => toggleTeamCalendars(calendarTeam)} className="h-3.5 w-3.5 accent-blue-600" />
+                <div className="grid grid-cols-2 gap-3 lg:block lg:space-y-5">
+                  <div>
+                    <div className="mb-2 text-xs font-black text-slate-500">업무 종류</div>
+                    <div className="space-y-1 rounded-md border border-slate-200 bg-white p-1">
+                      {scheduleFilters.map((filter) => (
+                        <label key={filter} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                          <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "물류" ? "bg-amber-500" : filter === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />
+                          {filter}
                         </label>
-                      </div>
-                      {openCalendarTeams[calendarTeam] && <div className="border-t border-slate-100 px-1 py-1">
-                        {scheduleTypes.map((type) => {
-                          const key = `${calendarTeam} ${type}` as CalendarKey;
-                          return (
-                            <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                              <input type="checkbox" checked={visibleCalendars.includes(key)} onChange={() => toggleCalendar(key)} className="h-4 w-4 accent-blue-600" />
-                              <span className={`h-2.5 w-2.5 rounded-full ${type === "익일AS" ? "bg-purple-500" : type === "물류" ? "bg-amber-500" : type === "휴가" ? "bg-emerald-500" : "bg-blue-600"}`} />
-                              {type}
-                            </label>
-                          );
-                        })}
-                      </div>}
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-black text-slate-500">담당 팀</div>
+                    <div className="grid grid-cols-2 gap-1 rounded-md border border-slate-200 bg-white p-1 lg:grid-cols-1">
+                      {teams.map((calendarTeam) => (
+                        <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                          <input type="checkbox" checked={visibleTeams.includes(calendarTeam)} onChange={() => toggleVisibleTeam(calendarTeam)} className="h-4 w-4 accent-blue-600" />
+                          {calendarTeam}팀
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </aside>
@@ -452,7 +444,36 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   {!monthTickets.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                <div className="space-y-2 p-3 md:hidden">
+                  {calendarDays.filter((date) => date.slice(0, 7) === currentMonth.slice(0, 7)).map((date) => {
+                    const rows = visibleTickets.filter((ticket) => ticket.date === date);
+                    const isToday = date === todayYmd;
+                    return (
+                      <section key={date} className={`rounded-lg border ${isToday ? "border-blue-300 bg-blue-50/40" : "border-slate-200 bg-white"}`}>
+                        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}>{Number(date.slice(8, 10))}</span>
+                            <span className="text-xs font-bold text-slate-500">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00+09:00`).getDay()]}요일 · {rows.length}건</span>
+                          </div>
+                          <button type="button" onClick={() => setNewTicket(blankTicket(date))} aria-label={`${date} 일정 추가`} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-lg font-black text-blue-600">+</button>
+                        </div>
+                        {rows.length > 0 && <div className="space-y-1.5 p-2">
+                          {rows.map((ticket) => (
+                            <button key={ticket.id} type="button" onClick={() => setEditId(ticket.id)} className={`block w-full rounded-md px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span>
+                                <span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {ticket.scheduleType}</span>
+                              </div>
+                              {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
+                            </button>
+                          ))}
+                        </div>}
+                      </section>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <div className="min-w-[760px]">
                     <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
                       {["일", "월", "화", "수", "목", "금", "토"].map((day, index) => <div key={day} className={`px-2 py-2 text-center text-[11px] font-black ${index === 0 ? "text-rose-500" : index === 6 ? "text-blue-500" : "text-slate-500"}`}>{day}</div>)}
@@ -479,6 +500,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     </div>
                   </div>
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -583,13 +605,13 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
   const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+      <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <b>{title}</b>
           <button type="button" onClick={onClose} className="text-xs font-bold text-slate-400">닫기</button>
         </div>
-        <div className="grid gap-3 p-5 md:grid-cols-2">
+        <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
           <label className="text-xs font-bold text-slate-500">
             팀
             <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
@@ -645,8 +667,8 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+      <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
         <div className="text-lg font-black text-slate-950">익일 일정 변경</div>
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         <div className="mt-5 grid grid-cols-2 gap-2">

@@ -28,7 +28,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="grid min-h-[340px] lg:grid-cols-[0.9fr_1.1fr]">
           <div className="flex flex-col justify-center p-6 lg:p-9">
-            <div className="text-xs font-black uppercase tracking-wide text-blue-600">FIRSTOA CS ERP</div>
+            <div className="text-xs font-black uppercase tracking-wide text-blue-600">FIRSTOA CS SYSTEM</div>
             <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl">
               현장 업무를<br className="hidden sm:block" /> 한 화면에서
             </h2>

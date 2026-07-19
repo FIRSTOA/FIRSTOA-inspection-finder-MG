@@ -108,7 +108,7 @@ export default function WalkingMap() {
         <div className="text-sm font-black text-slate-900">{team === "ALL" ? "CS 전체" : `${team}팀`} {quarter}분기 대상</div>
         <div className="mt-1 text-xs font-semibold text-slate-400">총 {total}건 · 점검 {checked}/{checkTarget} · 계약 {contractDone}/{contracts} · 매월 {monthly}</div>
       </div>
-      <div className="max-h-[640px] divide-y divide-slate-100 overflow-auto">
+      <div className="max-h-[420px] divide-y divide-slate-100 overflow-auto lg:max-h-[640px]">
         {visible.map((place) => (
           <button key={place.id} type="button" onClick={() => setSelectedId(place.id)} className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${selected?.id === place.id ? "bg-blue-50" : "bg-white"}`}>
             <div className="flex items-start gap-3">
@@ -245,7 +245,7 @@ export default function WalkingMap() {
             </div>
             <button type="button" onClick={() => setMapOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">큰 지도 열기</button>
           </div>
-          {mapCanvas(false)}
+          <div className="hidden lg:block">{mapCanvas(false)}</div>
         </div>
       </section>
 
