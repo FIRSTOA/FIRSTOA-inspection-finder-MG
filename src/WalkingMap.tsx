@@ -84,6 +84,10 @@ function labelMeta(code: string) {
   return mapLabels.find((item) => item.code === code) || mapLabels[mapLabels.length - 1];
 }
 
+function isCompleted(place: MapPlace) {
+  return place.label === "G5" || [place.name, place.comment, ...place.memos].some((value) => value.includes("완료"));
+}
+
 function loadPlaces() {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -120,9 +124,9 @@ function MapCanvas({ places, selectedId, onSelect }: { places: MapPlace[]; selec
       maxBounds: [[32.5, 123.5], [39.5, 132]],
       maxBoundsViscosity: 0.8,
     }).setView([36.15, 127.85], 7);
-    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: "&copy; OpenStreetMap &copy; CARTO",
+      attribution: "&copy; OpenStreetMap contributors",
     });
     tiles.on("loading", () => setTilesReady(false));
     tiles.on("load", () => setTilesReady(true));
@@ -180,10 +184,10 @@ export default function WalkingMap() {
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">("ALL");
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
+  const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(places[0]?.id || null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [editMode, setEditMode] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
   const [draft, setDraft] = useState<MapPlace | null>(null);
   const [pendingImport, setPendingImport] = useState<MapPlace[]>([]);
@@ -200,7 +204,6 @@ export default function WalkingMap() {
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return places.filter((place) => {
-      if (!place.visible && !showHidden) return false;
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
       if (teamFilter !== "ALL" && place.team !== teamFilter) return false;
       if (quarterFilter !== "ALL" && place.quarter !== quarterFilter) return false;
@@ -209,9 +212,24 @@ export default function WalkingMap() {
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter, showHidden]);
+  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
+  const currentQuarter = (Math.floor(new Date().getMonth() / 3) + 1) as Quarter;
+  const progressQuarter = quarterFilter === "ALL" ? currentQuarter : quarterFilter;
+  const conditionTitle = `${teamFilter === "ALL" ? "전체 팀" : `${teamFilter}팀`} · ${quarterFilter === "ALL" ? "전체 분기" : `${quarterFilter}분기`} · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
+  const teamProgress = useMemo(() => teams.map((team) => {
+    const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
+    const inspections = rows.filter((place) => place.kind === "quarter" || place.kind === "monthly");
+    const renewals = rows.filter((place) => place.kind === "renewal");
+    return {
+      team,
+      inspectionDone: inspections.filter(isCompleted).length,
+      inspectionTotal: inspections.length,
+      renewalDone: renewals.filter(isCompleted).length,
+      renewalTotal: renewals.length,
+    };
+  }), [places, progressQuarter]);
 
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
 
@@ -359,7 +377,6 @@ export default function WalkingMap() {
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
           <div className="flex gap-1.5">
-            <button type="button" onClick={() => setShowHidden((current) => !current)} className={`rounded-md px-2.5 py-2 text-xs font-black ${showHidden ? "bg-slate-200 text-slate-800" : "border border-slate-200 bg-white text-slate-500"}`}>숨김 포함</button>
             <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`rounded-md px-3 py-2 text-xs font-black ${editMode ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
               {editMode ? "편집 종료" : "목록 편집"}
             </button>
@@ -422,14 +439,20 @@ export default function WalkingMap() {
   const mapPanel = (
     <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
       <MapCanvas places={mapPlaces} selectedId={selectedId} onSelect={setSelectedId} />
-      <div className="absolute left-3 right-3 top-3 z-[900] flex items-start justify-between gap-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-[360px]">
+      <div className="absolute left-14 top-3 z-[900] max-w-[calc(100%_-_140px)] truncate rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs font-black text-slate-800 shadow-lg sm:max-w-[420px]">
+        {conditionTitle}
+      </div>
+      <div className="absolute left-14 top-14 z-[900] w-[145px] sm:w-[240px]">
+        <div className="relative">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
           {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
         </div>
-        <div className="relative flex shrink-0 gap-1.5">
-          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
-          <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); }} className={`rounded-md border px-3 py-2.5 text-xs font-black shadow-lg ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
+      </div>
+      <div className="absolute right-3 top-14 z-[900]">
+        <div className="relative flex gap-1">
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || teamFilter !== "ALL" || quarterFilter !== "ALL" || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
+          <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
+          <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
@@ -459,6 +482,37 @@ export default function WalkingMap() {
                     <span className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />{item.code}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {progressMenuOpen && (
+            <div className="absolute right-0 top-12 w-[310px] max-w-[calc(100vw-24px)] rounded-md border border-slate-200 bg-white p-4 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
+                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">G5 또는 완료 메모 기준</div>
+                </div>
+                <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {teamProgress.map((item) => {
+                  const inspectionRate = item.inspectionTotal ? Math.round((item.inspectionDone / item.inspectionTotal) * 100) : 0;
+                  const renewalRate = item.renewalTotal ? Math.round((item.renewalDone / item.renewalTotal) * 100) : 0;
+                  return (
+                    <div key={item.team} className="rounded-md border border-slate-200 p-3">
+                      <div className="mb-2 text-xs font-black text-slate-900">{item.team}팀</div>
+                      <div className="grid grid-cols-[54px_1fr_72px] items-center gap-2 text-[11px]">
+                        <span className="font-black text-slate-600">점검</span>
+                        <span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspectionRate}%` }} /></span>
+                        <span className="text-right font-black text-slate-700">{item.inspectionDone}/{item.inspectionTotal} · {inspectionRate}%</span>
+                        <span className="font-black text-slate-600">재계약</span>
+                        <span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewalRate}%` }} /></span>
+                        <span className="text-right font-black text-slate-700">{item.renewalDone}/{item.renewalTotal} · {renewalRate}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
