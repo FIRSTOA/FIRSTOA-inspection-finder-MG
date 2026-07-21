@@ -4149,9 +4149,9 @@ export default function App() {
     }
   };
 
-  // 미양식탭: AS 접수내용을 변환하면 출력의 업체명을 인식해 통합이력을 자동으로 띄운다.
+  // 원본 변환 결과에서 업체명을 인식해 점검·AS 모두 통합이력 버튼에 즉시 연결한다.
   useEffect(() => {
-    if (mode !== "blank-report") return;
+    if (mode !== "blank-report" && mode !== "inspection") return;
     const src = listOutput[0]?.content || textOutput || "";
     const v = extractVendorFromText(src);
     if (v && v !== lastBlankVendor.current) {

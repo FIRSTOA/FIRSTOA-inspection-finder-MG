@@ -1,13 +1,21 @@
-/**
- * 통합이력 팝업 (controlled). 자체 거래처 검색박을 가져 점검탭 선택과 무관하게 어떤 거래처든 조회 가능.
- * 9개 카테고리 탭(데이터 있는 것만 색), 탭 클릭 시 해당 카테고리 최근 레코드(최신순). 기존 백엔드 detail 사용.
- */
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Layers3,
+  MapPin,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
 import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
-import { REGIONS, REGION_LABEL, primaryRegion, vendorRegion } from "./region";
+import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
 
 type Props = {
-  vendor: string; // 점검탭에서 선택된 거래처(있으면 초기값)
+  vendor: string;
   accent: string;
   open: boolean;
   onClose: () => void;
@@ -15,353 +23,307 @@ type Props = {
 };
 
 const CAT_ORDER = ["점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
+const ACTIVITY_CATS = ["점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성"];
 const CAT_SHORT: Record<string, string> = {
   점검: "점검", AS: "AS", 초과: "초과", 미수: "미수", 불만: "불만",
-  복합기확장성: "복합기", PC확장성: "PC", 재계약: "재계약", 업체정보: "업체정보",
+  복합기확장성: "복합기", PC확장성: "PC·IT", 재계약: "재계약", 업체정보: "업체정보",
 };
 const DATE_FIELD: Record<string, string> = {
   AS: "작성일", 점검: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일",
   PC확장성: "날짜", 복합기확장성: "등록일", 업체정보: "종료일", 재계약: "계약종료일",
 };
-// 블랙&화이트: 모든 카테고리 동일 먹색 (구분은 라벨로). 활성=검정, 보유=연회색 틴트, 빈=흐림
-const CAT_COLOR: Record<string, string> = {
-  점검: "#334155", AS: "#334155", 초과: "#334155", 미수: "#334155", 불만: "#334155",
-  복합기확장성: "#334155", PC확장성: "#334155", 재계약: "#334155", 업체정보: "#334155",
-};
-
-// 언제/어디팀/누가 한눈에 보이도록 상단 칩으로 뽑을 키들
 const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자"];
 const REGION_KEYS = ["지역", "미팅지역", "시/구"];
-function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val: string } {
-  for (const k of keys) { const v = String(rec[k] ?? "").trim(); if (v) return { key: k, val: v }; }
-  return { key: "", val: "" };
-}
-
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
+
 type SummaryField = { key: string; value: string };
 
-function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; fields: SummaryField[]; album: string } {
-  const dateKey = DATE_FIELD[cat];
-  const date = dateKey ? String(rec[dateKey] ?? "") : "";
-  const skip = new Set([dateKey, ...exclude]);
-  const lines: string[] = [];
-  const fields: SummaryField[] = [];
-  let album = "";
-  for (const [k, v] of Object.entries(rec)) {
-    const s = String(v ?? "").trim();
-    if (!album) { const m = s.match(ALBUM_RX); if (m) album = m[0]; } // 본문 어디든 첨부 링크 추출
-    if (skip.has(k) || k.startsWith("_")) continue; // 내부 컬럼(_원문/_dupKey 등) 숨김
-    if (!s) continue;
-    lines.push(`${k}: ${s}`);
-    fields.push({ key: k, value: s });
+function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val: string } {
+  for (const key of keys) {
+    const value = String(rec[key] ?? "").trim();
+    if (value) return { key, val: value };
   }
-  return { date, lines, fields, album };
+  return { key: "", val: "" };
 }
 
 function recordVendor(rec: Record<string, unknown>) {
   return String(rec._업체명 || rec.업체명 || rec.상호명 || "").trim();
 }
 
+function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]) {
+  const dateKey = DATE_FIELD[cat];
+  const date = dateKey ? String(rec[dateKey] ?? "") : "";
+  const skip = new Set([dateKey, ...exclude]);
+  const fields: SummaryField[] = [];
+  let album = "";
+  for (const [key, value] of Object.entries(rec)) {
+    const text = String(value ?? "").trim();
+    if (!album) album = text.match(ALBUM_RX)?.[0] || "";
+    if (skip.has(key) || key.startsWith("_") || !text) continue;
+    fields.push({ key, value: text });
+  }
+  return { date, fields, album };
+}
+
+function recordRegionCode(rec: Record<string, unknown>, hits: VendorHit[]) {
+  const direct = pick(rec, REGION_KEYS).val;
+  const normalized = normRegion(direct);
+  if (REGIONS.includes(normalized)) return normalized;
+  const vendor = recordVendor(rec);
+  const hit = hits.find((candidate) => candidate.vendor === vendor);
+  const fallback = hit ? primaryRegion(hit) : "";
+  if (REGIONS.includes(fallback)) return fallback;
+  const groupRegions = Array.from(new Set(hits.map(primaryRegion).filter((region) => REGIONS.includes(region))));
+  return groupRegions.length === 1 ? groupRegions[0] : "기타";
+}
+
+function latestRecord(cat: string, rows: Array<Record<string, unknown>>) {
+  const dateKey = DATE_FIELD[cat];
+  return [...rows].sort((left, right) => String(right[dateKey] ?? "").localeCompare(String(left[dateKey] ?? "")))[0];
+}
+
+function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: string) => void }) {
+  const normalizedRegion = normRegion(primaryRegion(hit));
+  const region = REGIONS.includes(normalizedRegion) ? normalizedRegion : "";
+  const categories = CAT_ORDER.filter((cat) => Number(hit.counts?.[cat] || 0) > 0).map((cat) => `${CAT_SHORT[cat]} ${hit.counts[cat]}`);
+  let recentDate = "";
+  let recentRegion = "";
+  Object.values(hit.meta || {}).forEach((entry) => {
+    if (entry?.d && entry.d > recentDate) {
+      recentDate = entry.d;
+      recentRegion = entry.r;
+    }
+  });
+  return <button type="button" onClick={() => onSelect(hit.vendor)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50">
+    <div className="flex items-center gap-2">
+      {region && <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-black text-white">{region}</span>}
+      <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-800">{hit.vendor}</span>
+    </div>
+    {recentDate && <div className="mt-1 text-[11px] font-semibold text-slate-500">최근 {recentDate}{recentRegion ? ` · ${recentRegion}` : ""}</div>}
+    {categories.length > 0 && <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{categories.join(" · ")}</div>}
+  </button>;
+}
+
 export default function UnifiedHistory({ vendor, accent, open, onClose, onError }: Props) {
-  const [override, setOverride] = useState("");
+  const [queryVendor, setQueryVendor] = useState("");
   const [detail, setDetail] = useState<DetailResp | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeCat, setActiveCat] = useState<string>("");
-  const [aliasCount, setAliasCount] = useState(1);
+  const [activeCat, setActiveCat] = useState("전체");
   const [includedHits, setIncludedHits] = useState<VendorHit[]>([]);
+  const [historyRegion, setHistoryRegion] = useState("전체");
+  const [historyVendor, setHistoryVendor] = useState("전체");
+  const [scopeOpen, setScopeOpen] = useState(true);
 
-  // 내부 검색박
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<VendorHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showHits, setShowHits] = useState(false);
-  const [activeRegion, setActiveRegion] = useState<string>("전체");
-  const reqSeq = useRef(0);
-  const loadedFor = useRef<string>("");
+  const [searchRegion, setSearchRegion] = useState("전체");
+  const requestSequence = useRef(0);
+  const loadedFor = useRef("");
 
-  // 통합이력 9개 탭(CAT_ORDER) 중 하나라도 기록 있는 거래처만 (임대현황표 등만 있는 빈 거래처 제외).
-  const base = useMemo(() => hits.filter((h) => CAT_ORDER.some((c) => (h.counts?.[c] || 0) > 0)), [hits]);
-
-  // 지역 탭(전체 + A~E + 기타)
-  const regionTabs = useMemo(() => {
-    const hasEtc = base.some((h) => vendorRegion(h) === "기타");
+  const searchBase = useMemo(() => hits.filter((hit) => CAT_ORDER.some((cat) => Number(hit.counts?.[cat] || 0) > 0)), [hits]);
+  const searchRegionTabs = useMemo(() => {
+    const hasEtc = searchBase.some((hit) => vendorRegion(hit) === "기타");
     return ["전체", ...REGIONS, ...(hasEtc ? ["기타"] : [])];
-  }, [base]);
-  const filteredHits = activeRegion === "전체" ? base : base.filter((h) => vendorRegion(h) === activeRegion);
+  }, [searchBase]);
+  const visibleSearchHits = searchRegion === "전체" ? searchBase : searchBase.filter((hit) => vendorRegion(hit) === searchRegion);
 
-  // FIELD에서 인식한 거래처가 있으면 바로 상세를 열고, 필요할 때만 검색으로 바꾼다.
   useEffect(() => {
     let active = true;
     if (open) queueMicrotask(() => {
       if (!active) return;
       const initialVendor = vendor.trim();
       loadedFor.current = "";
-      setOverride(initialVendor);
+      setQueryVendor(initialVendor);
       setDetail(null);
       setHits([]);
       setQ(initialVendor);
       setActiveCat("전체");
-      setAliasCount(1);
       setIncludedHits([]);
+      setHistoryRegion("전체");
+      setHistoryVendor("전체");
+      setScopeOpen(true);
       setShowHits(false);
     });
     return () => { active = false; };
   }, [open, vendor]);
 
-  // 후보 검색: 처음 열린 거래처명과 같아도 포함 이름을 모두 보여준다.
   useEffect(() => {
     const query = q.trim();
     if (!open || query.length < 2) return;
-    const my = ++reqSeq.current;
-    const h = window.setTimeout(() => {
+    const sequence = ++requestSequence.current;
+    const timer = window.setTimeout(() => {
       setSearching(true);
       searchVendorHistoryCandidates(query)
         .then((response) => {
-          if (my !== reqSeq.current) return;
+          if (sequence !== requestSequence.current) return;
           setHits(response.results || []);
-          setActiveRegion("전체");
+          setSearchRegion("전체");
         })
-        .catch((e) => onError(e.message || "검색 실패"))
-        .finally(() => { if (my === reqSeq.current) setSearching(false); });
-    }, 300);
-    return () => window.clearTimeout(h);
+        .catch((error) => onError(error.message || "검색 실패"))
+        .finally(() => { if (sequence === requestSequence.current) setSearching(false); });
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [q, open, onError]);
 
-  // 상세 로드 (목록에서 고른 거래처 기준)
   useEffect(() => {
-    if (!open || !override) return;
-    if (loadedFor.current === override) return;
+    if (!open || !queryVendor || loadedFor.current === queryVendor) return;
     let active = true;
     Promise.resolve()
       .then(() => {
         if (!active) return null;
         setLoading(true);
         setDetail(null);
-        return getVendorHistoryDetail(override);
+        return getVendorHistoryDetail(queryVendor);
       })
       .then((result) => {
         if (!active || !result) return;
-        const { detail: nextDetail, candidates } = result;
-        setDetail(nextDetail);
-        setIncludedHits(candidates);
-        setAliasCount(Math.max(1, candidates.length));
-        loadedFor.current = override;
+        setDetail(result.detail);
+        setIncludedHits(result.candidates);
+        setHistoryRegion("전체");
+        setHistoryVendor("전체");
         setActiveCat("전체");
+        loadedFor.current = queryVendor;
       })
-      .catch((e) => onError(e.message || "통합이력 조회 실패"))
+      .catch((error) => onError(error.message || "통합이력 조회 실패"))
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [open, override, onError]);
+  }, [open, queryVendor, onError]);
+
+  const allRows = useMemo(() => CAT_ORDER.flatMap((cat) => {
+    const rows = Array.isArray(detail?.[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
+    return rows.map((record) => ({ cat, record }));
+  }), [detail]);
+
+  const regionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allRows.forEach(({ record }) => {
+      const region = recordRegionCode(record, includedHits);
+      counts[region] = (counts[region] || 0) + 1;
+    });
+    return counts;
+  }, [allRows, includedHits]);
+
+  const historyRegionTabs = useMemo(() => ["전체", ...REGIONS.filter((region) => regionCounts[region]), ...(regionCounts.기타 ? ["기타"] : [])], [regionCounts]);
+
+  const rowsForCategory = (cat: string) => {
+    const rows = Array.isArray(detail?.[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
+    return rows.filter((record) => {
+      if (historyRegion !== "전체" && recordRegionCode(record, includedHits) !== historyRegion) return false;
+      if (historyVendor !== "전체" && recordVendor(record) !== historyVendor) return false;
+      return true;
+    });
+  };
+
+  const visibleAliases = useMemo(() => includedHits.filter((hit) => {
+    if (historyRegion === "전체") return true;
+    return allRows.some(({ record }) => recordVendor(record) === hit.vendor && recordRegionCode(record, includedHits) === historyRegion)
+      || vendorRegion(hit) === historyRegion;
+  }), [includedHits, historyRegion, allRows]);
+
+  const totalCount = CAT_ORDER.reduce((sum, cat) => sum + rowsForCategory(cat).length, 0);
+  const latestDate = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => String(record[DATE_FIELD[cat]] || ""))).filter(Boolean).sort().at(-1) || "없음";
+  const records = activeCat === "전체" ? [] : rowsForCategory(activeCat).slice().sort((left, right) => String(right[DATE_FIELD[activeCat]] ?? "").localeCompare(String(left[DATE_FIELD[activeCat]] ?? "")));
+
+  const selectNewVendor = (nextVendor: string) => {
+    setQueryVendor(nextVendor);
+    setQ(nextVendor);
+    setShowHits(false);
+    loadedFor.current = "";
+  };
 
   if (!open) return null;
 
-  const count = (c: string) => (Array.isArray(detail?.[c]) ? (detail![c] as unknown[]).length : 0);
-  const recs = activeCat && activeCat !== "전체" ? ((detail?.[activeCat] as Array<Record<string, unknown>>) || []).slice() : [];
-  const dk = DATE_FIELD[activeCat];
-  if (dk) recs.sort((a, b) => String(b[dk] ?? "").localeCompare(String(a[dk] ?? ""))); // 최신순
-
-  return (
-    <div className="fixed inset-0 z-[70] flex items-end bg-slate-900/40 backdrop-blur-sm sm:items-center sm:justify-center" onClick={onClose}>
-      <div
-        className="flex h-[90vh] w-full flex-col rounded-t-3xl bg-slate-50 sm:h-[85vh] sm:max-w-2xl sm:rounded-3xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 헤더 */}
-        <div className="flex items-center justify-between rounded-t-3xl px-5 py-4 text-white" style={{ background: accent }}>
-          <div className="min-w-0">
-            <div className="truncate text-base font-bold">{detail?.vendor || override || "통합이력"}</div>
-            <div className="text-[11px] opacity-80">거래처 전체 이력{aliasCount > 1 ? ` · 이름 변형 ${aliasCount}개 통합` : ""}</div>
-          </div>
-          <button type="button" onClick={onClose} className="shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
-            닫기
-          </button>
+  return <div className="fixed inset-0 z-[70] flex items-end bg-slate-950/45 sm:items-center sm:justify-center" onClick={onClose}>
+    <div className="flex h-[94vh] w-full flex-col overflow-hidden rounded-t-lg bg-slate-100 shadow-2xl sm:h-[88vh] sm:max-w-4xl sm:rounded-lg" onClick={(event) => event.stopPropagation()}>
+      <header className="flex items-center gap-3 bg-slate-950 px-4 py-3 text-white sm:px-5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/10"><Layers3 size={19} /></span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-black sm:text-base">통합이력</h2>
+          <p className="truncate text-[11px] font-semibold text-slate-400">{queryVendor || "거래처를 검색하세요"}</p>
         </div>
+        <button type="button" onClick={onClose} aria-label="닫기" className="flex h-9 w-9 items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white"><X size={19} /></button>
+      </header>
 
-        {/* 자체 검색박 */}
-        <div className="relative border-b border-slate-200 bg-white px-3 py-2.5">
-          <input
-            value={q}
-            onChange={(e) => {
-              const value = e.target.value;
-              setQ(value);
-              setHits([]);
-              setShowHits(value.trim().length >= 2);
-            }}
-            onFocus={() => hits.length && setShowHits(true)}
-            placeholder="다른 거래처 검색…"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:bg-white"
-          />
-          {showHits && (
-            <div className="absolute left-3 right-3 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-              {searching && <div className="px-3 py-2 text-xs text-slate-400">검색 중…</div>}
-              {!searching && base.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">결과 없음</div>}
-
-              {/* 지역 탭 (전체 / A 강북 … / 기타) */}
-              {!searching && base.length > 0 && (
-                <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
-                  {regionTabs.map((rg) => (
-                    <button
-                      key={rg}
-                      type="button"
-                      onClick={() => setActiveRegion(rg)}
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
-                        activeRegion === rg ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {REGION_LABEL[rg] ? `${rg} ${REGION_LABEL[rg]}` : rg}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {!searching && base.length > 0 && filteredHits.length === 0 && (
-                <div className="px-3 py-2 text-xs text-slate-400">이 지역엔 없어요</div>
-              )}
-              {!searching && filteredHits.map((h) => {
-                const cs = CAT_ORDER.filter((c) => (h.counts?.[c] || 0) > 0).map((c) => `${CAT_SHORT[c]} ${h.counts[c]}`);
-                // 가장 최근 날짜 + 지역(팀) — 겹치는 업체명 구분용
-                let recent: { d: string; r: string } | null = null;
-                for (const k in (h.meta || {})) {
-                  const e = h.meta[k];
-                  if (e?.d && (!recent || e.d > recent.d)) recent = { d: e.d, r: e.r };
-                }
-                const reg = primaryRegion(h);
-                return (
-                  <button
-                    key={h.vendor}
-                    type="button"
-                    onClick={() => { setOverride(h.vendor); setQ(h.vendor); setShowHits(false); }}
-                    className="block w-full border-b border-slate-50 px-3 py-2 text-left last:border-0 hover:bg-slate-50"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {reg && <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>}
-                      <span className="truncate text-sm text-slate-800">{h.vendor}</span>
-                    </div>
-                    {recent && (
-                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
-                        <span>📅 {recent.d}</span>
-                        {recent.r && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">{recent.r}</span>}
-                      </div>
-                    )}
-                    {cs.length > 0 && <div className="mt-0.5 truncate text-[11px] text-slate-400">{cs.join(" · ")}</div>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {!loading && includedHits.length > 0 && (
-          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-black text-slate-600">포함된 거래처 이름 {includedHits.length}개</span>
-              <span className="text-[10px] font-bold text-slate-400">이름·지역을 확인해 구분하세요</span>
-            </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-              {includedHits.map((hit) => {
-                const region = primaryRegion(hit);
-                const total = CAT_ORDER.reduce((sum, category) => sum + Number(hit.counts?.[category] || 0), 0);
-                return <button key={hit.vendor} type="button" onClick={() => { setOverride(hit.vendor); setQ(hit.vendor); setShowHits(false); }} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm">
-                  <span className="flex items-center gap-1 text-[11px] font-black text-slate-800">{region && <span className="rounded bg-slate-700 px-1 text-[9px] text-white">{region}</span>}{hit.vendor}</span>
-                  <span className="mt-0.5 block text-[10px] font-bold text-slate-400">전체 {total}건</span>
-                </button>;
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 9개 카테고리 탭 */}
-        <div className="flex flex-wrap gap-1.5 border-b border-slate-200 bg-white px-3 py-2.5">
-          <button type="button" disabled={!detail} onClick={() => setActiveCat("전체")} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${activeCat === "전체" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}>요약</button>
-          {CAT_ORDER.map((c) => {
-            const n = count(c);
-            const has = n > 0;
-            const active = c === activeCat;
-            const color = CAT_COLOR[c];
-            return (
-              <button
-                key={c}
-                type="button"
-                disabled={!has}
-                onClick={() => setActiveCat(c)}
-                className="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition"
-                style={{
-                  background: active ? color : has ? `${color}1A` : "#F1F5F9",
-                  color: active ? "#fff" : has ? color : "#CBD5E1",
-                  cursor: has ? "pointer" : "default",
-                }}
-              >
-                {CAT_SHORT[c]}{has ? ` ${n}` : ""}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 내용 */}
-        <div className="flex-1 space-y-2 overflow-y-auto p-3">
-          {loading && <div className="py-8 text-center text-sm text-slate-400">불러오는 중…</div>}
-          {!loading && !override && <div className="py-10 text-center text-sm text-slate-400">위 검색창에서 거래처를 골라주세요</div>}
-          {!loading && override && detail && !activeCat && (
-            <div className="py-8 text-center text-sm text-slate-400">표시할 이력이 없어요</div>
-          )}
-          {!loading && detail && activeCat === "전체" && <div className="grid gap-2 sm:grid-cols-2">
-            {CAT_ORDER.map((cat) => {
-              const rows = Array.isArray(detail[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
-              if (!rows.length) return null;
-              const dateKey = DATE_FIELD[cat];
-              const latest = [...rows].sort((a, b) => String(b[dateKey] ?? "").localeCompare(String(a[dateKey] ?? "")))[0];
-              const who = pick(latest, WHO_KEYS);
-              const region = pick(latest, REGION_KEYS);
-              const sourceVendor = recordVendor(latest);
-              const summary = recordSummary(cat, latest, [who.key, region.key]);
-              return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-slate-400">
-                <div className="flex items-center justify-between gap-2"><span className="text-sm font-black text-slate-900">{CAT_SHORT[cat]}</span><span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{rows.length}건</span></div>
-                <div className="mt-2 truncate text-xs font-bold text-slate-700">{sourceVendor || detail.vendor}</div>
-                <div className="mt-0.5 text-[11px] font-bold text-slate-500">최근 {summary.date || "날짜 없음"}{region.val ? ` · ${region.val}` : ""}{who.val ? ` · ${who.val}` : ""}</div>
-                <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{summary.lines.slice(0, 2).join(" · ") || "상세 내용을 확인하세요."}</div>
-              </button>;
-            })}
-            {!CAT_ORDER.some((cat) => Array.isArray(detail[cat]) && (detail[cat] as unknown[]).length > 0) && <div className="col-span-full py-8 text-center text-sm text-slate-400">표시할 이력이 없어요</div>}
-          </div>}
-          {!loading &&
-            recs.map((rec, i) => {
-              const who = pick(rec, WHO_KEYS);
-              const region = pick(rec, REGION_KEYS);
-              const sourceVendor = recordVendor(rec);
-              const { date, fields, album } = recordSummary(activeCat, rec, [who.key, region.key]);
-              return (
-                <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  {/* 언제 · 어디팀 · 누가 */}
-                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2.5">
-                    <span className="mr-auto min-w-0"><span className="block text-sm font-black text-slate-900">{CAT_SHORT[activeCat]} 이력</span>{sourceVendor && <span className="block max-w-[240px] truncate text-[10px] font-bold text-slate-500">{sourceVendor}</span>}</span>
-                    {date && (
-                      <span className="rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: CAT_COLOR[activeCat] }}>
-                        {date}
-                      </span>
-                    )}
-                    {region.val && <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{region.val}</span>}
-                    {who.val && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{who.val}</span>}
-                  </div>
-                  <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
-                    {fields.map((field, j) => (
-                      <div key={`${field.key}-${j}`} className={`bg-white px-3 py-2.5 ${field.value.length > 48 || field.value.includes("\n") ? "sm:col-span-2" : ""}`}>
-                        <div className="text-[10px] font-black text-slate-400">{field.key}</div>
-                        <div className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">{field.value}</div>
-                      </div>
-                    ))}
-                    {!fields.length && <div className="bg-white px-3 py-5 text-center text-xs font-semibold text-slate-400 sm:col-span-2">표시할 상세 내용이 없습니다.</div>}
-                  </div>
-                  {album && (
-                    <a href={album} target="_blank" rel="noreferrer"
-                      className="m-3 inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white">
-                      사진·영상 보기
-                    </a>
-                  )}
-                </div>
-              );
-            })}
-        </div>
+      <div className="relative border-b border-slate-200 bg-white p-3 sm:px-5">
+        <Search size={17} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 sm:left-8" />
+        <input value={q} onChange={(event) => { const value = event.target.value; setQ(value); setHits([]); setShowHits(value.trim().length >= 2); }} onFocus={() => hits.length && setShowHits(true)} placeholder="거래처 이름 검색" className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none focus:border-blue-500 focus:bg-white" />
+        {showHits && <div className="absolute left-3 right-3 top-[54px] z-30 max-h-[55vh] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-xl sm:left-5 sm:right-5">
+          {searching && <div className="px-3 py-3 text-xs font-semibold text-slate-400">검색 중...</div>}
+          {!searching && searchBase.length > 0 && <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-2">{searchRegionTabs.map((region) => <button key={region} type="button" onClick={() => setSearchRegion(region)} className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-black ${searchRegion === region ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}</button>)}</div>}
+          {!searching && visibleSearchHits.map((hit) => <SearchResult key={hit.vendor} hit={hit} onSelect={selectNewVendor} />)}
+          {!searching && visibleSearchHits.length === 0 && <div className="px-3 py-3 text-xs font-semibold text-slate-400">이력이 있는 거래처가 없습니다.</div>}
+        </div>}
       </div>
+
+      {!loading && detail && <section className="border-b border-slate-200 bg-white">
+        <div className="grid grid-cols-3 divide-x divide-slate-200">
+          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">통합 이름</div><div className="mt-1 text-base font-black text-slate-950">{includedHits.length}개</div></div>
+          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">현재 기록</div><div className="mt-1 text-base font-black text-slate-950">{totalCount}건</div></div>
+          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">최근 기록</div><div className="mt-1 truncate text-sm font-black text-slate-950">{latestDate}</div></div>
+        </div>
+        <button type="button" onClick={() => setScopeOpen(!scopeOpen)} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-left sm:px-5"><Building2 size={16} className="text-slate-500" /><span className="flex-1 text-xs font-black text-slate-700">조회 범위</span><span className="text-[10px] font-bold text-slate-400">{historyRegion === "전체" ? "전체 지역" : `${historyRegion} ${REGION_LABEL[historyRegion] || ""}`} · {historyVendor === "전체" ? "전체 이름" : historyVendor}</span><ChevronDown size={16} className={`text-slate-400 transition ${scopeOpen ? "rotate-180" : ""}`} /></button>
+        {scopeOpen && <div className="space-y-3 border-t border-slate-100 bg-slate-50 px-3 py-3 sm:px-5">
+          <div><div className="mb-1.5 text-[10px] font-black text-slate-400">지역</div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{historyRegionTabs.map((region) => <button key={region} type="button" onClick={() => { setHistoryRegion(region); setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-black ${historyRegion === region ? "text-white" : "border border-slate-200 bg-white text-slate-600"}`} style={historyRegion === region ? { background: accent } : undefined}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}<span className="ml-1 opacity-70">{region === "전체" ? allRows.length : regionCounts[region] || 0}</span></button>)}</div></div>
+          <div><div className="mb-1.5 text-[10px] font-black text-slate-400">포함된 거래처 이름</div><div className="flex gap-1.5 overflow-x-auto pb-0.5"><button type="button" onClick={() => { setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-black ${historyVendor === "전체" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체 이름</button>{visibleAliases.map((hit) => {
+            const normalizedAliasRegion = normRegion(primaryRegion(hit));
+            const aliasRegion = REGIONS.includes(normalizedAliasRegion) ? normalizedAliasRegion : "-";
+            return <button key={hit.vendor} type="button" onClick={() => { setHistoryVendor(hit.vendor); setActiveCat("전체"); }} className={`flex max-w-[260px] shrink-0 items-center rounded-md px-2.5 py-1.5 text-[11px] font-black ${historyVendor === hit.vendor ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}><span className="mr-1 shrink-0 text-[9px] text-slate-400">{aliasRegion}</span><span className="truncate">{hit.vendor}</span></button>;
+          })}</div></div>
+        </div>}
+      </section>}
+
+      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-5">
+        <button type="button" onClick={() => setActiveCat("전체")} className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-black ${activeCat === "전체" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>요약 {totalCount || ""}</button>
+        {CAT_ORDER.map((cat) => {
+          const count = rowsForCategory(cat).length;
+          return <button key={cat} type="button" disabled={!count} onClick={() => setActiveCat(cat)} className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-black ${activeCat === cat ? "text-white" : count ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-300"}`} style={activeCat === cat ? { background: accent } : undefined}>{CAT_SHORT[cat]}{count ? ` ${count}` : ""}</button>;
+        })}
+      </nav>
+
+      <main className="flex-1 overflow-y-auto p-3 sm:p-5">
+        {loading && <div className="py-16 text-center text-sm font-semibold text-slate-400">전체 이력을 모으는 중...</div>}
+        {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
+        {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-4 py-3"><h3 className="text-sm font-black text-slate-950">업무별 현황</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">선택한 지역과 거래처 이름에 해당하는 최근 기록입니다.</p></div>
+          <div className="divide-y divide-slate-100">{CAT_ORDER.map((cat) => {
+            const rows = rowsForCategory(cat);
+            if (!rows.length) return null;
+            const latest = latestRecord(cat, rows);
+            const who = pick(latest, WHO_KEYS);
+            const region = recordRegionCode(latest, includedHits);
+            const vendorName = recordVendor(latest) || queryVendor;
+            const summary = recordSummary(cat, latest, [who.key, ...REGION_KEYS]);
+            const preview = summary.fields.slice(0, 2).map((field) => `${field.key} ${field.value.replace(/\s+/g, " ")}`).join(" · ");
+            return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-black text-slate-700">{CAT_SHORT[cat].slice(0, 2)}</span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-black text-slate-950">{CAT_SHORT[cat]}</span><span className="text-[11px] font-black text-blue-600">{rows.length}건</span></span><span className="mt-0.5 block truncate text-xs font-bold text-slate-600">{vendorName}</span><span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{summary.date || "날짜 없음"} · {region}{who.val ? ` · ${who.val}` : ""}{preview ? ` · ${preview}` : ""}</span></span><ChevronRight size={17} className="shrink-0 text-slate-300" /></button>;
+          })}{totalCount === 0 && <div className="py-12 text-center text-sm font-semibold text-slate-400">선택한 범위에 이력이 없습니다.</div>}</div>
+        </section>}
+
+        {!loading && detail && activeCat !== "전체" && <section className="space-y-2">
+          <div className="flex items-end justify-between px-1 pb-1"><div><h3 className="text-sm font-black text-slate-950">{CAT_SHORT[activeCat]} 이력</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">최신순 · 항목을 누르면 전체 내용이 열립니다.</p></div><span className="text-xs font-black text-slate-500">{records.length}건</span></div>
+          {records.map((record, index) => {
+            const who = pick(record, WHO_KEYS);
+            const directRegion = pick(record, REGION_KEYS);
+            const region = recordRegionCode(record, includedHits);
+            const vendorName = recordVendor(record) || queryVendor;
+            const { date, fields, album } = recordSummary(activeCat, record, [who.key, directRegion.key]);
+            const preview = fields.slice(0, 2).map((field) => `${field.key}: ${field.value.replace(/\s+/g, " ")}`).join(" · ");
+            return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden sm:px-4">
+                <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-slate-100 text-slate-700"><CalendarDays size={15} /><span className="mt-0.5 text-[9px] font-black">{date ? date.slice(5).replace("-", "/") : "-"}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-950">{vendorName}</span><span className="mt-0.5 flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="flex items-center gap-0.5"><MapPin size={11} />{region}</span>{who.val && <span className="flex min-w-0 items-center gap-0.5 truncate"><UserRound size={11} />{who.val}</span>}</span>{preview && <span className="mt-1 block truncate text-[11px] font-semibold text-slate-400">{preview}</span>}</span>
+                <ChevronDown size={17} className="shrink-0 text-slate-400 transition group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-slate-200 bg-slate-50">
+                <div className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map((field, fieldIndex) => <div key={`${field.key}-${fieldIndex}`} className={`bg-white px-3 py-2.5 ${field.value.length > 48 || field.value.includes("\n") ? "sm:col-span-2" : ""}`}><div className="text-[10px] font-black text-slate-400">{field.key}</div><div className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">{field.value}</div></div>)}{!fields.length && <div className="bg-white px-3 py-5 text-center text-xs font-semibold text-slate-400 sm:col-span-2">표시할 상세 내용이 없습니다.</div>}</div>
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-[10px] font-bold text-slate-500"><Clock3 size={13} />{date || "날짜 없음"}<span>·</span><Building2 size={13} />{vendorName}{album && <a href={album} target="_blank" rel="noreferrer" className="ml-auto rounded-md bg-slate-900 px-3 py-1.5 text-white">사진·영상 보기</a>}</div>
+              </div>
+            </details>;
+          })}
+          {!records.length && <div className="rounded-lg border border-slate-200 bg-white py-12 text-center text-sm font-semibold text-slate-400">선택한 범위에 이력이 없습니다.</div>}
+        </section>}
+      </main>
     </div>
-  );
+  </div>;
 }
