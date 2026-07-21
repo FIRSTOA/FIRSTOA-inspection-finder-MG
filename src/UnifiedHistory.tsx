@@ -41,26 +41,69 @@ function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val:
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
 type SummaryField = { key: string; value: string };
 
-function vendorAliasKey(value: string) {
+function stripOperationalSuffix(value: string) {
   return value
+    .replace(/\s*\d{1,2}일\s*(?:고정\s*)?마감.*$/g, "")
+    .replace(/\s*(?:고정|매월|분기|월말|말일)\s*마감.*$/g, "")
+    .trim();
+}
+
+function vendorBaseName(value: string) {
+  return stripOperationalSuffix(value.trim())
+    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+\s*/g, "")
+    .replace(/\s*(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
+    .trim();
+}
+
+function vendorAliasKey(value: string) {
+  return vendorBaseName(value)
     .replace(/\s+/g, "")
-    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+/g, "")
-    .replace(/(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
     .replace(/[^0-9a-z가-힣]/gi, "")
     .toLowerCase();
 }
 
 function vendorSearchTerms(value: string) {
   const original = value.trim();
-  const simplified = original
-    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+\s*/g, "")
-    .replace(/\s*(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
-    .trim();
-  return Array.from(new Set([original, simplified].filter((term) => term.length >= 2)));
+  const withoutSchedule = stripOperationalSuffix(original);
+  const base = vendorBaseName(original);
+  return Array.from(new Set([original, withoutSchedule, base].filter((term) => term.length >= 2)));
 }
 
-function hasHistory(detail: DetailResp) {
-  return CAT_ORDER.some((cat) => Array.isArray(detail[cat]) && (detail[cat] as unknown[]).length > 0);
+function mergeVendorHits(hits: VendorHit[]) {
+  const exact = new Map<string, VendorHit>();
+  hits.forEach((hit) => exact.set(hit.vendor, hit));
+  const groups = new Map<string, VendorHit>();
+  exact.forEach((hit) => {
+    const key = vendorAliasKey(hit.vendor) || hit.vendor;
+    const current = groups.get(key);
+    if (!current) {
+      groups.set(key, { ...hit, counts: { ...(hit.counts || {}) }, meta: { ...(hit.meta || {}) } });
+      return;
+    }
+    const preferred = vendorBaseName(hit.vendor).length < vendorBaseName(current.vendor).length ? hit.vendor : current.vendor;
+    const counts = { ...current.counts };
+    Object.entries(hit.counts || {}).forEach(([cat, count]) => { counts[cat] = (counts[cat] || 0) + Number(count || 0); });
+    const meta = { ...current.meta };
+    Object.entries(hit.meta || {}).forEach(([metaKey, value]) => { meta[`${hit.vendor}:${metaKey}`] = value; });
+    groups.set(key, { vendor: preferred, counts, meta });
+  });
+  return Array.from(groups.values());
+}
+
+function mergeDetails(details: DetailResp[], displayVendor: string): DetailResp {
+  const merged: DetailResp = { vendor: displayVendor };
+  CAT_ORDER.forEach((cat) => {
+    const unique = new Map<string, Record<string, unknown>>();
+    details.forEach((detail) => {
+      const rows = Array.isArray(detail[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
+      rows.forEach((row) => {
+        const key = String(row._dupKey || row.id || JSON.stringify(row));
+        unique.set(key, row);
+      });
+    });
+    merged[cat] = Array.from(unique.values());
+  });
+  return merged;
 }
 
 function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; fields: SummaryField[]; album: string } {
@@ -86,6 +129,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const [detail, setDetail] = useState<DetailResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeCat, setActiveCat] = useState<string>("");
+  const [aliasCount, setAliasCount] = useState(1);
 
   // 내부 검색박
   const [q, setQ] = useState("");
@@ -116,6 +160,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       setHits([]);
       setQ(initialVendor);
       setActiveCat("전체");
+      setAliasCount(1);
     }
   }, [open, vendor]);
 
@@ -130,9 +175,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       Promise.all(vendorSearchTerms(query).map((term) => searchVendors(term)))
         .then((responses) => {
           if (my !== reqSeq.current) return;
-          const merged = new Map<string, VendorHit>();
-          responses.flatMap((response) => response.results || []).forEach((hit) => merged.set(hit.vendor, hit));
-          setHits(Array.from(merged.values()));
+          setHits(mergeVendorHits(responses.flatMap((response) => response.results || [])));
         })
         .catch((e) => onError(e.message || "검색 실패"))
         .finally(() => { if (my === reqSeq.current) setSearching(false); });
@@ -149,22 +192,25 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     if (loadedFor.current === override && detail) return;
     setLoading(true);
     setDetail(null);
-    getVendorDetail(override)
-      .then(async (d) => {
-        if (!hasHistory(d)) {
-          const terms = vendorSearchTerms(override);
-          const responses = await Promise.all(terms.map((term) => searchVendors(term)));
-          const alias = vendorAliasKey(override);
-          const candidate = responses.flatMap((response) => response.results || [])
-            .find((hit) => hit.vendor !== override && vendorAliasKey(hit.vendor) === alias && CAT_ORDER.some((cat) => (hit.counts?.[cat] || 0) > 0));
-          if (candidate) {
-            loadedFor.current = "";
-            setOverride(candidate.vendor);
-            setQ(candidate.vendor);
-            return;
-          }
-        }
-        setDetail(d);
+    Promise.all(vendorSearchTerms(override).map((term) => searchVendors(term)))
+      .then(async (responses) => {
+        const aliasKey = vendorAliasKey(override);
+        const aliases = Array.from(new Set([
+          override,
+          ...responses.flatMap((response) => response.results || [])
+            .filter((hit) => vendorAliasKey(hit.vendor) === aliasKey)
+            .map((hit) => hit.vendor),
+        ]));
+        const details = await Promise.all(aliases.map((name) => getVendorDetail(name)));
+        const preferred = [...aliases].sort((left, right) => {
+          const leftBase = vendorBaseName(left);
+          const rightBase = vendorBaseName(right);
+          const leftExact = left === leftBase ? 0 : 1;
+          const rightExact = right === rightBase ? 0 : 1;
+          return leftExact - rightExact || left.length - right.length;
+        })[0] || override;
+        setDetail(mergeDetails(details, preferred));
+        setAliasCount(aliases.length);
         loadedFor.current = override;
         setActiveCat("전체");
       })
@@ -188,8 +234,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         {/* 헤더 */}
         <div className="flex items-center justify-between rounded-t-3xl px-5 py-4 text-white" style={{ background: accent }}>
           <div className="min-w-0">
-            <div className="truncate text-base font-bold">{override || "통합이력"}</div>
-            <div className="text-[11px] opacity-80">거래처 전체 이력</div>
+            <div className="truncate text-base font-bold">{detail?.vendor || override || "통합이력"}</div>
+            <div className="text-[11px] opacity-80">거래처 전체 이력{aliasCount > 1 ? ` · 이름 변형 ${aliasCount}개 통합` : ""}</div>
           </div>
           <button type="button" onClick={onClose} className="shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
             닫기
