@@ -405,6 +405,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const labelsById = labelByIdRef.current;
     const map = L.map(elementRef.current, {
       zoomControl: true,
+      attributionControl: false,
       minZoom: 6,
       fadeAnimation: false,
       markerZoomAnimation: false,
@@ -417,10 +418,19 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       updateWhenIdle: true,
       updateWhenZooming: false,
       keepBuffer: mobile ? 2 : 5,
-      attribution: "&copy; OpenStreetMap contributors",
+      attribution: "",
     });
     tiles.once("load", () => setTilesReady(true));
     tiles.addTo(map);
+    const attribution = L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
+    attribution.addAttribution('<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a>');
+    const attributionElement = attribution.getContainer();
+    if (attributionElement) {
+      attributionElement.style.fontSize = "8px";
+      attributionElement.style.lineHeight = "12px";
+      attributionElement.style.padding = "0 3px";
+      attributionElement.style.background = "rgba(255,255,255,.78)";
+    }
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
@@ -1254,7 +1264,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         if (!place) return null;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
-        return <div className="absolute bottom-1 left-1 right-1 z-[950] overflow-hidden rounded-md border border-slate-300 bg-white/95 shadow-2xl backdrop-blur-sm lg:hidden">
+        return <div className="absolute bottom-0 left-0 right-0 z-[950] overflow-hidden rounded-t-md border-x border-t border-slate-300 bg-white/95 shadow-2xl backdrop-blur-sm lg:hidden">
           {address && <div className="truncate bg-slate-800/90 px-3 py-1.5 text-[11px] font-bold text-white">{address}</div>}
           <div className="flex items-stretch">
             <span className="w-1.5 shrink-0" style={{ backgroundColor: meta.color }} />
@@ -1275,9 +1285,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         {desktopLayout ? <div className="grid h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
           {mapPanel}
-        </div> : <div className="flex h-[calc(100dvh-52px)] min-h-[460px] flex-col">
+        </div> : <div className="flex h-[calc(100dvh-68px)] min-h-[440px] flex-col">
           <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
-          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
+          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
             <button type="button" onClick={() => setMobileView("map")} className={`py-2 text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`py-2 text-xs font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
           </div>
