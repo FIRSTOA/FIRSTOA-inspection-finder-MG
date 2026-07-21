@@ -2471,6 +2471,35 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
   return forms;
 }
 
+function parseSharedDataFromText(text: string): Partial<SharedForm> {
+  const patch: Partial<SharedForm> = {};
+  let section: "" | "parts" | "self" = "";
+  for (const line of text.split("\n")) {
+    if (/^※부품신청※/.test(line)) { section = "parts"; continue; }
+    if (/^※자가신청※/.test(line)) { section = "self"; continue; }
+    const read = (label: string) => parseValueAfterColon(line, label);
+    if (/^레벨\s*:/.test(line)) patch.level = read("레벨");
+    else if (/^보증기간 내 여부\s*:/.test(line)) patch.warranty = read("보증기간 내 여부");
+    else if (/^교체 전 카운터 누적 사용매수\s*:/.test(line)) patch.cumCount = read("교체 전 카운터 누적 사용매수");
+    else if (/^사용 부품 예상 사용매수\s*:/.test(line)) patch.expectedCount = read("사용 부품 예상 사용매수");
+    else if (/^물품명\s*:/.test(line)) patch.partName = read("물품명");
+    else if (/^물품\s*:/.test(line) && section === "self") patch.selfItem = read("물품");
+    else if (/^수량\s*:/.test(line)) {
+      if (section === "self") patch.selfQty = read("수량");
+      else if (section === "parts") patch.partQty = read("수량");
+    } else if (/^출고여부\s*:/.test(line)) {
+      if (section === "self") patch.selfShipped = read("출고여부");
+      else if (section === "parts") patch.partShipped = read("출고여부");
+    } else if (/^도착 시간\s*:/.test(line)) {
+      const [hour = "", minute = ""] = read("도착 시간").split(":");
+      patch.arrivalHour = hour.trim(); patch.arrivalMinute = minute.trim();
+    } else if (/^소요 시간\s*:/.test(line)) {
+      patch.duration = read("소요 시간").replace(/분\s*$/, "").trim();
+    }
+  }
+  return patch;
+}
+
 const PREVIEW_FIELD_LABEL_BY_ITEM_KEY: Partial<Record<keyof PerItemForm, string>> = {
   model: "모델명",
   serial: "시리얼넘버",
@@ -4097,7 +4126,21 @@ export default function App() {
   };
   const handlePreviewBlockChange = (block: ResultBlock, index: number, value: string) => {
     setEditedBlocks((prev: Record<number, string>) => ({ ...prev, [index]: value }));
-    if (block.device === null || (mode !== "inspection" && mode !== "blank-report")) return;
+    if (mode !== "inspection" && mode !== "blank-report") return;
+    const authorValue = value.match(/^작성자\s*[:：]\s*(.*)$/m)?.[1];
+    if (authorValue !== undefined) handleSetAuthor(authorValue.trim());
+    const typeValue = value.match(/^구분\s*[:：]\s*(.*)$/m)?.[1];
+    if (typeValue !== undefined) {
+      const known = ["점검", "AS", "마감", "여분", "세팅"];
+      const values = typeValue.split(/[,·]+/).map((item) => /A\s*\/?\s*S/i.test(item) ? "AS" : item.trim()).filter(Boolean);
+      const selected = values.filter((item) => known.includes(item));
+      const custom = values.find((item) => !known.includes(item)) || "";
+      setReportTypes(custom ? [...selected, "기타"] : selected);
+      setReportTypeOther(custom);
+    }
+    const sharedPatch = parseSharedDataFromText(value);
+    if (Object.keys(sharedPatch).length) setSharedForm((prev) => ({ ...prev, ...sharedPatch }));
+    if (block.device === null) return;
     const parsed = parseItemDataFromText(value, 1)[0];
     if (!parsed) return;
     setItemForms((prev: PerItemForm[]) => prev.map((form: PerItemForm, i: number) =>
