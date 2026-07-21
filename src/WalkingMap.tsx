@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { deleteRows, selectRows, upsertRows } from "./supabase";
+import { deleteRows, selectAllRows, upsertRows } from "./supabase";
 
 type MapLabel = {
   code: string;
@@ -298,6 +298,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const markerByIdRef = useRef<Map<number, L.Marker>>(new Map());
   const [tilesReady, setTilesReady] = useState(false);
 
   useEffect(() => {
@@ -350,7 +351,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
     layer.clearLayers();
-    let selectedMarker: L.Marker | null = null;
+    markerByIdRef.current.clear();
     const coordinateCounts = new Map<string, number>();
     places.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
@@ -372,7 +373,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const meta = labelMeta(place.label);
       const icon = L.divIcon({
         className: "workin-map-marker",
-        html: `<span style="display:block;width:${selectedId === place.id ? 25 : 21}px;height:${selectedId === place.id ? 25 : 21}px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)"></span>`,
+        html: `<span style="display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)"></span>`,
         iconSize: [28, 28],
         iconAnchor: [14, 27],
       });
@@ -380,15 +381,17 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const tooltip = document.createElement("div");
       tooltip.className = "text-xs font-bold";
       tooltip.textContent = place.name;
-      marker.bindTooltip(tooltip, { direction: "top", offset: [0, -22] });
+      marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: false });
       marker.on("click", () => onSelect(place.id));
-      if (selectedId === place.id) selectedMarker = marker;
+      markerByIdRef.current.set(place.id, marker);
     });
-    if (selectedMarker) {
-      const marker = selectedMarker as L.Marker;
-      map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
-    }
-  }, [places, selectedId, onSelect]);
+  }, [places, onSelect]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const marker = selectedId === null ? null : markerByIdRef.current.get(selectedId);
+    if (map && marker) map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
+  }, [selectedId]);
 
   return (
     <div className="relative h-full min-h-[500px] w-full bg-[#dce8ef]">
@@ -426,6 +429,13 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [importMode, setImportMode] = useState<"append" | "replace">("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const loadSharedPlaces = useCallback(async () => {
+    const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
+    setPlaces(remote.map(fromDbPlace));
+    setSyncState("saved");
+    return remote;
+  }, []);
+
   const selectMapPlace = useCallback((id: number) => {
     setSelectedId(id);
     setExpandedId(null);
@@ -440,7 +450,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     let active = true;
     const initializeSharedPlaces = async () => {
       try {
-        const remote = await selectRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
+        const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
         if (!active) return;
         if (remote.length) {
           setPlaces(remote.map(fromDbPlace));
@@ -466,6 +476,27 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     void initializeSharedPlaces();
     return () => { active = false; };
   }, [userKey]);
+
+  useEffect(() => {
+    if (!sharedReady) return;
+    let active = true;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadSharedPlaces().catch((error) => {
+        console.error("Workin map shared refresh failed", error);
+        if (active) setSyncState("error");
+      });
+    };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [sharedReady, loadSharedPlaces]);
 
   useEffect(() => {
     localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
@@ -645,6 +676,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         for (let index = 0; index < imported.length; index += 250) {
           await upsertRows("workin_map_places", imported.slice(index, index + 250).map((place) => toDbPlace(place, userKey)), "id");
         }
+        await loadSharedPlaces();
         setSyncState("saved");
       } catch (error) {
         console.error(error);
@@ -652,9 +684,12 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         return;
       }
     }
-    setPlaces((current) => importMode === "replace"
-      ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
-      : [...current, ...imported]);
+    if (!sharedReady) {
+      setPlaces((current) => importMode === "replace"
+        ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
+        : [...current, ...imported]);
+      window.alert("공용 DB에 연결되지 않아 이 기기에만 저장됐습니다. Supabase의 workin_map_places SQL과 네트워크 연결을 확인해 주세요.");
+    }
     setTeamFilter(importTeam);
     setQuarterFilter(importQuarter);
     setKindFilter(importKind);
@@ -836,7 +871,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
 
           {conditionMenuOpen && (
-            <div className="absolute right-0 top-12 w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
                 {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
@@ -854,7 +889,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           )}
 
           {colorMenuOpen && (
-            <div className="absolute right-0 top-12 w-[250px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
               <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
               <div className="grid grid-cols-3 gap-2">
                 {mapLabels.map((item) => (
@@ -867,7 +902,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           )}
 
           {progressMenuOpen && (
-            <div className="absolute right-0 top-12 max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>

@@ -246,12 +246,19 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     const text = String(payload.text || "");
     if (!text.trim()) return { ok: false, error: "내용이 비어있습니다." };
 
-    let built = buildRecords(text, toKstDate(payload.ts), payload.author || "", "");
+    let sendText = text;
+    if (destination) {
+      const category = destination === "inspection" ? "점검" : "AS";
+      sendText = text.match(/^구분\s*[:：]/m)
+        ? text.replace(/^구분\s*[:：]\s*.*$/m, `구분: ${category}`)
+        : `구분: ${category}\n${text}`;
+    }
+    let built = buildRecords(sendText, toKstDate(payload.ts), payload.author || "", "");
     // 여분/마감/세팅처럼 구분에 점검·AS 문자가 없어도 사용자가 누른 방 기준으로 저장한다.
     if (!built.hasInspect && !built.hasAS && destination) {
-      const forced = text.match(/^구분\s*[:：]/m)
-        ? text.replace(/^구분\s*[:：]\s*(.*)$/m, `구분: ${destination === "inspection" ? "점검" : "AS"}, $1`)
-        : `구분: ${destination === "inspection" ? "점검" : "AS"}\n${text}`;
+      const forced = sendText.match(/^구분\s*[:：]/m)
+        ? sendText.replace(/^구분\s*[:：]\s*(.*)$/m, `구분: ${destination === "inspection" ? "점검" : "AS"}, $1`)
+        : `구분: ${destination === "inspection" ? "점검" : "AS"}\n${sendText}`;
       built = buildRecords(forced, toKstDate(payload.ts), payload.author || "", "");
     }
     if (!built.hasInspect && !built.hasAS) {
@@ -273,7 +280,7 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     let rooms: string[] = [];
     if (anyNew || isExtra || destination) {   // 강제 목적지/자가/부품은 중복이어도 알림 게시
       rooms = destination ? await resolveForcedRoom(destination, built.region) : await resolveRoomsFor(kind, built.region, built.hasAS);
-      for (const room of rooms) await enqueueOutbox(room, text);
+      for (const room of rooms) await enqueueOutbox(room, sendText);
     }
 
     const dest = rooms.length ? `게시 대기: ${rooms.join(", ")}` : "";

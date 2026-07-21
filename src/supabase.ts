@@ -117,6 +117,17 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
   return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
 }
 
+// PostgREST의 기본 1,000행 제한을 넘는 공용 목록을 끝까지 조회한다.
+export async function selectAllRows<T>(table: string, query: string, pageSize = 1000): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const separator = query ? "&" : "";
+    const page = await selectRows<T>(table, `${query}${separator}limit=${pageSize}&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export async function upsertRows(table: string, rows: Record<string, unknown>[], onConflict: string): Promise<void> {
   if (!rows.length) return;
   const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {

@@ -4237,7 +4237,12 @@ export default function App() {
     await saveVisit({
       ...visitMeta, vendor, author, workDate: kstDate(), arrivalTime, grade: visitMeta.grade || parsedGrade,
       machineCount: visitMeta.machineCount || (mode === "logistics" && kind === "delivery" ? logisticsQuantity : mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : mode === "air-purifier" ? 1 : 0),
-      workKinds: Array.from(new Set([...visitMeta.workKinds, kind, ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []), ...(reportTypes.includes("AS") ? ["as" as WorkKind] : [])])),
+      workKinds: Array.from(new Set([
+        ...visitMeta.workKinds,
+        kind,
+        ...(!destination && reportTypes.includes("점검") ? ["inspection" as WorkKind] : []),
+        ...(!destination && reportTypes.includes("AS") ? ["as" as WorkKind] : []),
+      ])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
     }, target);
   };
@@ -4337,7 +4342,26 @@ export default function App() {
   const addInspectionDevice = (info: DeviceInfo) => {
     const parts = inspectionDeviceParts(buildResultText());
     if (!parts.devices.length) {
-      showToast("먼저 기존 점검 양식을 불러오세요", "error");
+      const firstForm = { ...EMPTY_ITEM_FORM, ...info, location: cleanDeviceLocation(info.location, 1) };
+      const blankHeader = [
+        `작성자: ${author}`,
+        "구분: 점검",
+        "레벨: 1",
+        "등급:",
+        "업체명:",
+        "부서명:",
+        "지역:",
+        "키맨/접수자:",
+        ITEM_DIVIDER,
+      ];
+      const firstDevice = ["1.", ...(firstForm.location ? firstForm.location.split("\n") : []), ...NEW_DEVICE_LINES];
+      setTextOutput([...blankHeader, ...firstDevice, ...STANDARD_PARTS_SECTION].join("\n"));
+      setListOutput([]);
+      setItemForms([firstForm]);
+      setSharedForm((current) => ({ ...current, author, level: current.level || "1" }));
+      setReportTypes(["점검"]);
+      setSelectedItem(0);
+      showToast("새 점검 양식을 만들었어요", "success");
       return;
     }
     const nextIndex = parts.devices.length;
@@ -4439,7 +4463,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
-        <div className="fixed inset-0 z-[80] flex" onClick={() => setMenuOpen(false)}>
+        <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
           <div className="h-full w-64 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-slate-100 px-5 py-4">
               <div className="text-lg font-bold text-slate-900">FIRSTOA CS SYSTEM</div>
