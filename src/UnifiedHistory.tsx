@@ -3,7 +3,7 @@
  * 9개 카테고리 탭(데이터 있는 것만 색), 탭 클릭 시 해당 카테고리 최근 레코드(최신순). 기존 백엔드 detail 사용.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getVendorDetail, searchVendors, type DetailResp, type VendorHit } from "./api";
+import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
 import { REGIONS, REGION_LABEL, primaryRegion, vendorRegion } from "./region";
 
 type Props = {
@@ -20,15 +20,14 @@ const CAT_SHORT: Record<string, string> = {
   복합기확장성: "복합기", PC확장성: "PC", 재계약: "재계약", 업체정보: "업체정보",
 };
 const DATE_FIELD: Record<string, string> = {
-  AS: "작성일", 점검: "작성일", 초과: "날짜", 불만: "날짜", 미수: "입력일",
-  PC확장성: "날짜", 복합기확장성: "등록일", 업체정보: "종료일", 재계약: "날짜",
+  AS: "작성일", 점검: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일",
+  PC확장성: "날짜", 복합기확장성: "등록일", 업체정보: "종료일", 재계약: "계약종료일",
 };
 // 블랙&화이트: 모든 카테고리 동일 먹색 (구분은 라벨로). 활성=검정, 보유=연회색 틴트, 빈=흐림
 const CAT_COLOR: Record<string, string> = {
   점검: "#334155", AS: "#334155", 초과: "#334155", 미수: "#334155", 불만: "#334155",
   복합기확장성: "#334155", PC확장성: "#334155", 재계약: "#334155", 업체정보: "#334155",
 };
-const MAX_RECORDS = 8;
 
 // 언제/어디팀/누가 한눈에 보이도록 상단 칩으로 뽑을 키들
 const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자"];
@@ -40,71 +39,6 @@ function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val:
 
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
 type SummaryField = { key: string; value: string };
-
-function stripOperationalSuffix(value: string) {
-  return value
-    .replace(/\s*\d{1,2}일\s*(?:고정\s*)?마감.*$/g, "")
-    .replace(/\s*(?:고정|매월|분기|월말|말일)\s*마감.*$/g, "")
-    .trim();
-}
-
-function vendorBaseName(value: string) {
-  return stripOperationalSuffix(value.trim())
-    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+\s*/g, "")
-    .replace(/\s*(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
-    .trim();
-}
-
-function vendorAliasKey(value: string) {
-  return vendorBaseName(value)
-    .replace(/\s+/g, "")
-    .replace(/[^0-9a-z가-힣]/gi, "")
-    .toLowerCase();
-}
-
-function vendorSearchTerms(value: string) {
-  const original = value.trim();
-  const withoutSchedule = stripOperationalSuffix(original);
-  const base = vendorBaseName(original);
-  return Array.from(new Set([original, withoutSchedule, base].filter((term) => term.length >= 2)));
-}
-
-function mergeVendorHits(hits: VendorHit[]) {
-  const exact = new Map<string, VendorHit>();
-  hits.forEach((hit) => exact.set(hit.vendor, hit));
-  const groups = new Map<string, VendorHit>();
-  exact.forEach((hit) => {
-    const key = vendorAliasKey(hit.vendor) || hit.vendor;
-    const current = groups.get(key);
-    if (!current) {
-      groups.set(key, { ...hit, counts: { ...(hit.counts || {}) }, meta: { ...(hit.meta || {}) } });
-      return;
-    }
-    const preferred = vendorBaseName(hit.vendor).length < vendorBaseName(current.vendor).length ? hit.vendor : current.vendor;
-    const counts = { ...current.counts };
-    Object.entries(hit.counts || {}).forEach(([cat, count]) => { counts[cat] = (counts[cat] || 0) + Number(count || 0); });
-    const meta = { ...current.meta };
-    Object.entries(hit.meta || {}).forEach(([metaKey, value]) => { meta[`${hit.vendor}:${metaKey}`] = value; });
-    groups.set(key, { vendor: preferred, counts, meta });
-  });
-  return Array.from(groups.values());
-}
-
-function mergeDetails(details: DetailResp[], displayVendor: string): DetailResp {
-  const merged: DetailResp = { vendor: displayVendor };
-  CAT_ORDER.forEach((cat) => {
-    const unique = new Map<string, Record<string, unknown>>();
-    details.forEach((detail) => {
-      const rows = Array.isArray(detail[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
-      rows.forEach((row) => {
-        const key = String(row._dupKey || row.id || JSON.stringify(row));
-        unique.set(key, row);
-      });
-    });
-    merged[cat] = Array.from(unique.values());
-  });
-  return merged;
-}
 
 function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; fields: SummaryField[]; album: string } {
   const dateKey = DATE_FIELD[cat];
@@ -124,12 +58,17 @@ function recordSummary(cat: string, rec: Record<string, unknown>, exclude: strin
   return { date, lines, fields, album };
 }
 
+function recordVendor(rec: Record<string, unknown>) {
+  return String(rec._업체명 || rec.업체명 || rec.상호명 || "").trim();
+}
+
 export default function UnifiedHistory({ vendor, accent, open, onClose, onError }: Props) {
   const [override, setOverride] = useState("");
   const [detail, setDetail] = useState<DetailResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeCat, setActiveCat] = useState<string>("");
   const [aliasCount, setAliasCount] = useState(1);
+  const [includedHits, setIncludedHits] = useState<VendorHit[]>([]);
 
   // 내부 검색박
   const [q, setQ] = useState("");
@@ -152,7 +91,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
 
   // FIELD에서 인식한 거래처가 있으면 바로 상세를 열고, 필요할 때만 검색으로 바꾼다.
   useEffect(() => {
-    if (open) {
+    let active = true;
+    if (open) queueMicrotask(() => {
+      if (!active) return;
       const initialVendor = vendor.trim();
       loadedFor.current = "";
       setOverride(initialVendor);
@@ -161,62 +102,56 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       setQ(initialVendor);
       setActiveCat("전체");
       setAliasCount(1);
-    }
+      setIncludedHits([]);
+      setShowHits(false);
+    });
+    return () => { active = false; };
   }, [open, vendor]);
 
-  // 후보 검색 (이미 고른 거래처와 같은 검색어면 목록을 다시 띄우지 않음)
+  // 후보 검색: 처음 열린 거래처명과 같아도 포함 이름을 모두 보여준다.
   useEffect(() => {
     const query = q.trim();
-    if (!open || query.length < 2 || query === override) { setHits([]); return; }
-    setSearching(true);
-    setShowHits(true);
+    if (!open || query.length < 2) return;
     const my = ++reqSeq.current;
     const h = window.setTimeout(() => {
-      Promise.all(vendorSearchTerms(query).map((term) => searchVendors(term)))
-        .then((responses) => {
+      setSearching(true);
+      searchVendorHistoryCandidates(query)
+        .then((response) => {
           if (my !== reqSeq.current) return;
-          setHits(mergeVendorHits(responses.flatMap((response) => response.results || [])));
+          setHits(response.results || []);
+          setActiveRegion("전체");
         })
         .catch((e) => onError(e.message || "검색 실패"))
         .finally(() => { if (my === reqSeq.current) setSearching(false); });
     }, 300);
     return () => window.clearTimeout(h);
-  }, [q, open, override, onError]);
-
-  // 결과 바뀌면 지역 탭 초기화
-  useEffect(() => { setActiveRegion("전체"); }, [hits]);
+  }, [q, open, onError]);
 
   // 상세 로드 (목록에서 고른 거래처 기준)
   useEffect(() => {
-    if (!open || !override) { setDetail(null); return; }
-    if (loadedFor.current === override && detail) return;
-    setLoading(true);
-    setDetail(null);
-    Promise.all(vendorSearchTerms(override).map((term) => searchVendors(term)))
-      .then(async (responses) => {
-        const aliasKey = vendorAliasKey(override);
-        const aliases = Array.from(new Set([
-          override,
-          ...responses.flatMap((response) => response.results || [])
-            .filter((hit) => vendorAliasKey(hit.vendor) === aliasKey)
-            .map((hit) => hit.vendor),
-        ]));
-        const details = await Promise.all(aliases.map((name) => getVendorDetail(name)));
-        const preferred = [...aliases].sort((left, right) => {
-          const leftBase = vendorBaseName(left);
-          const rightBase = vendorBaseName(right);
-          const leftExact = left === leftBase ? 0 : 1;
-          const rightExact = right === rightBase ? 0 : 1;
-          return leftExact - rightExact || left.length - right.length;
-        })[0] || override;
-        setDetail(mergeDetails(details, preferred));
-        setAliasCount(aliases.length);
+    if (!open || !override) return;
+    if (loadedFor.current === override) return;
+    let active = true;
+    Promise.resolve()
+      .then(() => {
+        if (!active) return null;
+        setLoading(true);
+        setDetail(null);
+        return getVendorHistoryDetail(override);
+      })
+      .then((result) => {
+        if (!active || !result) return;
+        const { detail: nextDetail, candidates } = result;
+        setDetail(nextDetail);
+        setIncludedHits(candidates);
+        setAliasCount(Math.max(1, candidates.length));
         loadedFor.current = override;
         setActiveCat("전체");
       })
       .catch((e) => onError(e.message || "통합이력 조회 실패"))
-      .finally(() => setLoading(false));
-  }, [open, override, detail, onError]);
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [open, override, onError]);
 
   if (!open) return null;
 
@@ -246,7 +181,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         <div className="relative border-b border-slate-200 bg-white px-3 py-2.5">
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setQ(value);
+              setHits([]);
+              setShowHits(value.trim().length >= 2);
+            }}
             onFocus={() => hits.length && setShowHits(true)}
             placeholder="다른 거래처 검색…"
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:bg-white"
@@ -311,6 +251,25 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           )}
         </div>
 
+        {!loading && includedHits.length > 0 && (
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-black text-slate-600">포함된 거래처 이름 {includedHits.length}개</span>
+              <span className="text-[10px] font-bold text-slate-400">이름·지역을 확인해 구분하세요</span>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+              {includedHits.map((hit) => {
+                const region = primaryRegion(hit);
+                const total = CAT_ORDER.reduce((sum, category) => sum + Number(hit.counts?.[category] || 0), 0);
+                return <button key={hit.vendor} type="button" onClick={() => { setOverride(hit.vendor); setQ(hit.vendor); setShowHits(false); }} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm">
+                  <span className="flex items-center gap-1 text-[11px] font-black text-slate-800">{region && <span className="rounded bg-slate-700 px-1 text-[9px] text-white">{region}</span>}{hit.vendor}</span>
+                  <span className="mt-0.5 block text-[10px] font-bold text-slate-400">전체 {total}건</span>
+                </button>;
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 9개 카테고리 탭 */}
         <div className="flex flex-wrap gap-1.5 border-b border-slate-200 bg-white px-3 py-2.5">
           <button type="button" disabled={!detail} onClick={() => setActiveCat("전체")} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${activeCat === "전체" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}>요약</button>
@@ -353,25 +312,28 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               const latest = [...rows].sort((a, b) => String(b[dateKey] ?? "").localeCompare(String(a[dateKey] ?? "")))[0];
               const who = pick(latest, WHO_KEYS);
               const region = pick(latest, REGION_KEYS);
+              const sourceVendor = recordVendor(latest);
               const summary = recordSummary(cat, latest, [who.key, region.key]);
               return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-slate-400">
                 <div className="flex items-center justify-between gap-2"><span className="text-sm font-black text-slate-900">{CAT_SHORT[cat]}</span><span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{rows.length}건</span></div>
-                <div className="mt-2 text-xs font-bold text-slate-600">최근 {summary.date || "날짜 없음"}{who.val ? ` · ${who.val}` : ""}</div>
+                <div className="mt-2 truncate text-xs font-bold text-slate-700">{sourceVendor || detail.vendor}</div>
+                <div className="mt-0.5 text-[11px] font-bold text-slate-500">최근 {summary.date || "날짜 없음"}{region.val ? ` · ${region.val}` : ""}{who.val ? ` · ${who.val}` : ""}</div>
                 <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{summary.lines.slice(0, 2).join(" · ") || "상세 내용을 확인하세요."}</div>
               </button>;
             })}
             {!CAT_ORDER.some((cat) => Array.isArray(detail[cat]) && (detail[cat] as unknown[]).length > 0) && <div className="col-span-full py-8 text-center text-sm text-slate-400">표시할 이력이 없어요</div>}
           </div>}
           {!loading &&
-            recs.slice(0, MAX_RECORDS).map((rec, i) => {
+            recs.map((rec, i) => {
               const who = pick(rec, WHO_KEYS);
               const region = pick(rec, REGION_KEYS);
+              const sourceVendor = recordVendor(rec);
               const { date, fields, album } = recordSummary(activeCat, rec, [who.key, region.key]);
               return (
                 <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   {/* 언제 · 어디팀 · 누가 */}
                   <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2.5">
-                    <span className="mr-auto text-sm font-black text-slate-900">{CAT_SHORT[activeCat]} 이력</span>
+                    <span className="mr-auto min-w-0"><span className="block text-sm font-black text-slate-900">{CAT_SHORT[activeCat]} 이력</span>{sourceVendor && <span className="block max-w-[240px] truncate text-[10px] font-bold text-slate-500">{sourceVendor}</span>}</span>
                     {date && (
                       <span className="rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: CAT_COLOR[activeCat] }}>
                         {date}
@@ -398,9 +360,6 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 </div>
               );
             })}
-          {!loading && activeCat && recs.length > MAX_RECORDS && (
-            <div className="py-1 text-center text-[11px] text-slate-400">최신 {MAX_RECORDS}건만 표시 (+{recs.length - MAX_RECORDS}건)</div>
-          )}
         </div>
       </div>
     </div>

@@ -45,6 +45,88 @@ export type VendorHit = {
 };
 export type SearchResp = { results: VendorHit[]; total: number; error?: string };
 
+type HistorySearchTable = {
+  table: string;
+  category: string;
+  dateField: string;
+  regionField: string;
+};
+
+const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
+  { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역" },
+  { table: "as_records", category: "AS", dateField: "작성일", regionField: "지역" },
+  { table: "overage_adjust", category: "초과", dateField: "방문일", regionField: "지역" },
+  { table: "misu", category: "미수", dateField: "입력일", regionField: "지역" },
+  { table: "bulman", category: "불만", dateField: "방문일", regionField: "지역" },
+  { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
+  { table: "copier_expansion", category: "복합기확장성", dateField: "등록일", regionField: "실제미팅주소" },
+  { table: "recontract", category: "재계약", dateField: "계약종료일", regionField: "지역" },
+];
+
+type HistoryRows = { config: HistorySearchTable; rows: Array<Record<string, unknown>> };
+const historySearchCache = new Map<string, { at: number; promise: Promise<HistoryRows[]> }>();
+
+function historySearchTerm(value: string) {
+  return value.trim()
+    .replace(/\s*\d{1,2}일\s*(?:고정\s*)?마감.*$/g, "")
+    .replace(/\s*(?:고정|매월|분기|월말|말일)\s*마감.*$/g, "")
+    .replace(/(?:\(주\)|㈜|주식회사|유한회사)/g, " ")
+    .replace(/\s*(?:의원|병원|클리닉)\s*$/g, "")
+    .replace(/[,*%()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchHistoryRows(value: string): Promise<HistoryRows[]> {
+  const term = historySearchTerm(value);
+  if (term.length < 2) return [];
+  const key = term.toLowerCase();
+  const cached = historySearchCache.get(key);
+  if (cached && Date.now() - cached.at < 15_000) return cached.promise;
+  const filter = `${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(term)}*&limit=500`;
+  const promise = Promise.all(HISTORY_SEARCH_TABLES.map(async (config) => ({
+    config,
+    rows: await selectRows<Record<string, unknown>>(config.table, `select=*&${filter}`).catch(() => []),
+  })));
+  historySearchCache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+function mergeHistoryHits(hits: VendorHit[]) {
+  const merged = new Map<string, VendorHit>();
+  hits.forEach((hit) => {
+    const key = hit.vendor.trim();
+    if (!key) return;
+    const current = merged.get(key) || { vendor: key, counts: {}, meta: {} };
+    const counts = { ...current.counts };
+    Object.entries(hit.counts || {}).forEach(([category, count]) => {
+      counts[category] = Math.max(counts[category] || 0, Number(count || 0));
+    });
+    const meta = { ...current.meta };
+    Object.entries(hit.meta || {}).forEach(([category, entry]) => {
+      if (!meta[category] || String(entry?.d || "") > String(meta[category]?.d || "")) meta[category] = entry;
+    });
+    merged.set(key, { vendor: key, counts, meta });
+  });
+  return Array.from(merged.values()).sort((left, right) => left.vendor.localeCompare(right.vendor, "ko"));
+}
+
+function hitsFromHistoryRows(results: HistoryRows[]): VendorHit[] {
+  const hits = new Map<string, VendorHit>();
+  results.forEach(({ config, rows }) => rows.forEach((row) => {
+    const vendor = String(row._업체명 || row.업체명 || row.상호명 || "").trim();
+    if (!vendor) return;
+    const current = hits.get(vendor) || { vendor, counts: {}, meta: {} };
+    current.counts[config.category] = (current.counts[config.category] || 0) + 1;
+    const date = String(row[config.dateField] || row.created_at || "").slice(0, 10);
+    const region = String(row[config.regionField] || "").trim();
+    const previous = current.meta[config.category];
+    if (!previous || date >= String(previous.d || "")) current.meta[config.category] = { d: date, r: region };
+    hits.set(vendor, current);
+  }));
+  return Array.from(hits.values());
+}
+
 // 통합이력 상세: 카테고리별 레코드 배열 (백엔드 getVendorDetailFromIndex 출력)
 export type DetailResp = { vendor: string; error?: string } & Record<
   string,
@@ -84,6 +166,50 @@ export async function getVendorDetail(vendor: string): Promise<DetailResp> {
   } catch (e) {
     return { vendor: v, error: (e as Error).message };
   }
+}
+
+// 통합이력 전용 포함 검색. RPC 인덱스가 누락돼도 원본 이력 테이블에서 후보를 복구한다.
+export async function searchVendorHistoryCandidates(q: string): Promise<SearchResp> {
+  const query = String(q || "").trim();
+  if (query.length < 2) return { results: [], total: 0 };
+  const terms = Array.from(new Set([query, historySearchTerm(query)].filter((term) => term.length >= 2)));
+  const [indexed, sourceRows] = await Promise.all([Promise.all(terms.map(searchVendors)), fetchHistoryRows(query)]);
+  const results = mergeHistoryHits([...indexed.flatMap((result) => result.results || []), ...hitsFromHistoryRows(sourceRows)]);
+  return { results, total: results.length, error: indexed.find((result) => result.error)?.error };
+}
+
+export async function getVendorHistoryDetail(q: string): Promise<{ detail: DetailResp; candidates: VendorHit[] }> {
+  const query = String(q || "").trim();
+  if (!query) return { detail: { vendor: "" }, candidates: [] };
+  const terms = Array.from(new Set([query, historySearchTerm(query)].filter((term) => term.length >= 2)));
+  const [indexed, sourceRows, indexedDetails] = await Promise.all([
+    Promise.all(terms.map(searchVendors)),
+    fetchHistoryRows(query),
+    Promise.all(terms.map(getVendorDetail)),
+  ]);
+  const candidates = mergeHistoryHits([...indexed.flatMap((result) => result.results || []), ...hitsFromHistoryRows(sourceRows)]);
+  const detail: DetailResp = { vendor: query };
+  HISTORY_SEARCH_TABLES.forEach((config) => {
+    const directRows = sourceRows.find((result) => result.config.table === config.table)?.rows || [];
+    const indexedRows = indexedDetails.flatMap((indexedDetail) => Array.isArray(indexedDetail[config.category])
+      ? indexedDetail[config.category] as Array<Record<string, unknown>>
+      : []);
+    const unique = new Map<string, Record<string, unknown>>();
+    [...indexedRows, ...directRows].forEach((row) => {
+      const key = String(row._dupKey || row.id || JSON.stringify(row));
+      unique.set(key, row);
+    });
+    detail[config.category] = Array.from(unique.values());
+  });
+  // 원본 테이블을 모르는 업체정보 등은 기존 상세 RPC 결과를 그대로 보존한다.
+  indexedDetails.forEach((indexedDetail) => Object.entries(indexedDetail).forEach(([category, rows]) => {
+    if (category === "vendor" || category === "error" || !Array.isArray(rows)) return;
+    const existing = Array.isArray(detail[category]) ? detail[category] as Array<Record<string, unknown>> : [];
+    const unique = new Map<string, Record<string, unknown>>();
+    [...existing, ...rows].forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
+    detail[category] = Array.from(unique.values());
+  }));
+  return { detail, candidates };
 }
 
 // 점검/AS 최근 양식(원문 재사용) → jeomgeom/as_records 직접 조회
