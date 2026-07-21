@@ -399,6 +399,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
 
   useEffect(() => {
     if (!elementRef.current || mapRef.current) return;
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
     const markerById = markerByIdRef.current;
     const markerSignatures = markerSignatureRef.current;
     const labelsById = labelByIdRef.current;
@@ -415,7 +416,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       maxZoom: 19,
       updateWhenIdle: true,
       updateWhenZooming: false,
-      keepBuffer: 5,
+      keepBuffer: mobile ? 2 : 5,
       attribution: "&copy; OpenStreetMap contributors",
     });
     tiles.once("load", () => setTilesReady(true));
@@ -445,7 +446,8 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const persistView = () => {
       saveTeamMapView(viewStorageKey, team, map);
       window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), 80);
+      const mobile = window.matchMedia("(max-width: 1023px)").matches;
+      refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), mobile ? 140 : 80);
     };
     map.on("moveend zoomend", persistView);
     return () => {
@@ -458,7 +460,8 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const map = mapRef.current;
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
-    const renderBounds = map.getBounds().pad(0.12);
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    const renderBounds = map.getBounds().pad(mobile ? 0.02 : 0.12);
     const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
     const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
       const key = addressGroupKey(place);
@@ -501,7 +504,8 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
       const groupTitle = group.map((item) => item.name).join("\n");
       const groupSelected = group.some((item) => item.id === selectedId);
-      const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, groupLabel, group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
+      const permanentLabel = !mobile || map.getZoom() >= 14 || groupSelected;
+      const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, groupLabel, permanentLabel ? "label" : "marker", group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
       const currentMarker = markerByIdRef.current.get(place.id);
       if (currentMarker && markerSignatureRef.current.get(place.id) === signature) {
         const currentLabel = labelByIdRef.current.get(place.id);
@@ -526,7 +530,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
         if (group.length === 1) onSelect(place.id);
         else marker.openPopup();
       });
-      marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
+      marker.bindTooltip(tooltip, { permanent: permanentLabel, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
       if (group.length === 1) marker.on("click", () => onSelect(place.id));
       else {
         const popup = document.createElement("div");
@@ -592,6 +596,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
+  const [mapSelectionRevision, setMapSelectionRevision] = useState(0);
+  const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const [editMode, setEditMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
   const [draft, setDraft] = useState<MapPlace | null>(null);
@@ -601,6 +607,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [importKind, setImportKind] = useState<WorkKind>("monthly");
   const [importMode, setImportMode] = useState<"append" | "replace">("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectionSourceRef = useRef<"map" | "list" | "reveal" | "other">("other");
 
   const loadSharedPlaces = useCallback(async () => {
     const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
@@ -611,9 +618,17 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   }, []);
 
   const selectMapPlace = useCallback((id: number) => {
+    selectionSourceRef.current = "map";
     setSelectedId(id);
     setExpandedId(null);
-    if (window.matchMedia("(max-width: 1023px)").matches) setMobileView("list");
+    setMapSelectionRevision((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktopLayout(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -688,10 +703,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   useEffect(() => {
     if (selectedId === null) return;
+    const source = selectionSourceRef.current;
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    if (source === "list" || source === "other" || (mobile && source === "map")) return;
+    if (mobile && mobileView !== "list") return;
     window.requestAnimationFrame(() => {
       document.querySelector(`[data-place-id="${selectedId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [selectedId, mobileView]);
+  }, [selectedId, mobileView, mapSelectionRevision]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1036,6 +1055,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <div className="group flex items-start gap-3 px-3 py-3">
               <button type="button" onClick={() => {
                 if (editMode) return toggleChecked(place.id);
+                selectionSourceRef.current = "list";
                 if (selectedId !== place.id) {
                   setSelectedId(place.id);
                   setExpandedId(null);
@@ -1106,7 +1126,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   );
 
   const mapPanel = (
-    <div className="relative h-full min-h-[540px] overflow-hidden bg-slate-100">
+    <div className="relative h-full min-h-0 overflow-hidden bg-slate-100 lg:min-h-[540px]">
       <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} />
       <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
@@ -1195,24 +1215,53 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           )}
         </div>
       </div>
+      {mobileView === "map" && selectedId !== null && (() => {
+        const place = places.find((item) => item.id === selectedId);
+        if (!place) return null;
+        const meta = labelMeta(place.label);
+        return <div className="absolute bottom-3 left-3 right-3 z-[950] rounded-lg border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm lg:hidden">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-4 w-4 shrink-0 rounded-full border-2 border-white shadow" style={{ backgroundColor: meta.color }} />
+            <button type="button" onClick={() => {
+              selectionSourceRef.current = "reveal";
+              setExpandedId(null);
+              setMobileView("list");
+            }} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-black text-slate-950">{place.name}</span>
+              <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address || "상세 정보 보기"}</span>
+            </button>
+            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="h-8 w-8 shrink-0 rounded-md text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => {
+              selectionSourceRef.current = "reveal";
+              setExpandedId(null);
+              setMobileView("list");
+            }} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">목록에서 보기</button>
+            <button type="button" onClick={() => {
+              selectionSourceRef.current = "reveal";
+              setExpandedId(place.id);
+              setMobileView("list");
+            }} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-black text-white">상세 보기</button>
+          </div>
+        </div>;
+      })()}
     </div>
   );
 
   return (
     <div>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="hidden h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)] lg:grid">
+        {desktopLayout ? <div className="grid h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
           {mapPanel}
-        </div>
-
-        <div className="lg:hidden">
-          <div className="h-[calc(100dvh-150px)] min-h-[520px]">{mobileView === "map" ? mapPanel : placeList}</div>
-          <div className="grid grid-cols-2 border-t border-slate-200 bg-white">
+        </div> : <div className="flex h-[calc(100dvh-150px)] min-h-[520px] flex-col">
+          <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
+          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[max(0.35rem,env(safe-area-inset-bottom))] shadow-[0_-4px_14px_rgba(15,23,42,0.08)]">
             <button type="button" onClick={() => setMobileView("map")} className={`py-3 text-sm font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
-            <button type="button" onClick={() => setMobileView("list")} className={`py-3 text-sm font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
+            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`py-3 text-sm font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
           </div>
-        </div>
+        </div>}
       </section>
 
       {pendingImport.length > 0 && (

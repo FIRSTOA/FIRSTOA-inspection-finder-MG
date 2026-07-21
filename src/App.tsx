@@ -17,7 +17,7 @@ import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ReportTypeSelector from "./ReportTypeSelector";
-import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
+import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
 import { uploadPhoto, createAlbum, selectAllRows } from "./supabase";
 
@@ -3718,7 +3718,8 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
-  const [workinInspectionMatch, setWorkinInspectionMatch] = useState<FieldWorkinMapRow | null>(null);
+  const [workinInspectionMatch, setWorkinInspectionMatch] = useState<{ place: FieldWorkinMapRow; lastInspection: string } | null>(null);
+  const workinVisitCacheRef = useRef<{ loadedAt: number; rows: VisitRow[] }>({ loadedAt: 0, rows: [] });
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
   const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
   const toastTimerRef = useRef<number | null>(null);
@@ -4145,7 +4146,7 @@ export default function App() {
   }, [mode, listOutput, textOutput]);
 
   useEffect(() => {
-    if (mode !== "inspection" && mode !== "blank-report") {
+    if (mode !== "blank-report") {
       setWorkinInspectionMatch(null);
       return;
     }
@@ -4159,8 +4160,20 @@ export default function App() {
     let active = true;
     const timer = window.setTimeout(() => {
       const quarter = Math.floor(new Date().getMonth() / 3) + 1;
-      void selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos&quarter=eq.${quarter}&kind=eq.quarter`)
-        .then((rows) => {
+      const historyStart = new Date();
+      historyStart.setFullYear(historyStart.getFullYear() - 2);
+      const cachedVisits = workinVisitCacheRef.current;
+      const visitsPromise = Date.now() - cachedVisits.loadedAt < 5 * 60_000
+        ? Promise.resolve(cachedVisits.rows)
+        : getTeamVisits(kstDate(historyStart), kstDate()).then((rows) => {
+          workinVisitCacheRef.current = { loadedAt: Date.now(), rows };
+          return rows;
+        });
+      void Promise.all([
+        selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos&quarter=eq.${quarter}&kind=eq.quarter`),
+        visitsPromise,
+      ])
+        .then(([rows, visits]) => {
           if (!active) return;
           const ranked = rows.map((row) => {
             const rowText = matchToken([row.name, row.comment, ...(row.memos || [])].join(" "));
@@ -4173,7 +4186,21 @@ export default function App() {
             });
             return { row, score };
           }).filter((item) => item.score >= 60 && item.row.label !== "G5" && item.row.label !== "G12").sort((left, right) => right.score - left.score);
-          setWorkinInspectionMatch(ranked[0]?.row || null);
+          const place = ranked[0]?.row;
+          if (!place) {
+            setWorkinInspectionMatch(null);
+            return;
+          }
+          const placeVendor = matchVendor(place.name);
+          const lastInspection = visits
+            .filter((visit) => visit.visited && visit.workKinds.includes("inspection"))
+            .filter((visit) => {
+              const visitVendor = matchVendor(visit.vendor);
+              return (vendorKey.length >= 4 && visitVendor.length >= 4 && (visitVendor.includes(vendorKey) || vendorKey.includes(visitVendor)))
+                || (placeVendor.length >= 4 && visitVendor.length >= 4 && (visitVendor.includes(placeVendor) || placeVendor.includes(visitVendor)));
+            })
+            .sort((left, right) => right.workDate.localeCompare(left.workDate))[0]?.workDate || "";
+          setWorkinInspectionMatch({ place, lastInspection });
         })
         .catch((error) => { console.error("FIELD workin map match failed", error); if (active) setWorkinInspectionMatch(null); });
     }, 350);
@@ -4791,7 +4818,7 @@ export default function App() {
         </div>
 
         {workinInspectionMatch && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <div className="flex items-start gap-3"><span className="mt-0.5 text-lg">!</span><div className="min-w-0"><div className="text-sm font-black text-amber-900">워킨맵 분기점검 대상과 일치합니다</div><div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{workinInspectionMatch.name} · {workinInspectionMatch.team}팀 · {workinInspectionMatch.quarter}분기 · {workinInspectionMatch.label}</div><div className="mt-1 text-[11px] font-bold text-amber-700">AS 처리와 함께 분기점검이 가능한지 확인해 주세요.</div></div></div>
+          <div className="flex items-start gap-3"><span className="mt-0.5 text-lg">!</span><div className="min-w-0"><div className="text-sm font-black text-amber-900">워킨맵 분기점검 대상과 일치합니다</div><div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{workinInspectionMatch.place.name} · {workinInspectionMatch.place.team}팀 · {workinInspectionMatch.place.quarter}분기 · {workinInspectionMatch.place.label}</div><div className="mt-1 text-xs font-black text-amber-900">마지막 점검일: {workinInspectionMatch.lastInspection || "확인되지 않음"}</div><div className="mt-1 text-[11px] font-bold text-amber-700">AS 처리와 함께 분기점검이 가능한지 확인해 주세요.</div></div></div>
         </div>}
 
         {/* Processing form — 미양식 + 점검 */}

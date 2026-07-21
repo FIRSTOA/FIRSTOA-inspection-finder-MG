@@ -39,11 +39,36 @@ function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val:
 }
 
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
-function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; album: string } {
+type SummaryField = { key: string; value: string };
+
+function vendorAliasKey(value: string) {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+/g, "")
+    .replace(/(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
+    .replace(/[^0-9a-z가-힣]/gi, "")
+    .toLowerCase();
+}
+
+function vendorSearchTerms(value: string) {
+  const original = value.trim();
+  const simplified = original
+    .replace(/^(?:\(주\)|㈜|주식회사|유한회사)+\s*/g, "")
+    .replace(/\s*(?:의원|병원|클리닉|센터|본점|지점)+$/g, "")
+    .trim();
+  return Array.from(new Set([original, simplified].filter((term) => term.length >= 2)));
+}
+
+function hasHistory(detail: DetailResp) {
+  return CAT_ORDER.some((cat) => Array.isArray(detail[cat]) && (detail[cat] as unknown[]).length > 0);
+}
+
+function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]): { date: string; lines: string[]; fields: SummaryField[]; album: string } {
   const dateKey = DATE_FIELD[cat];
   const date = dateKey ? String(rec[dateKey] ?? "") : "";
   const skip = new Set([dateKey, ...exclude]);
   const lines: string[] = [];
+  const fields: SummaryField[] = [];
   let album = "";
   for (const [k, v] of Object.entries(rec)) {
     const s = String(v ?? "").trim();
@@ -51,8 +76,9 @@ function recordSummary(cat: string, rec: Record<string, unknown>, exclude: strin
     if (skip.has(k) || k.startsWith("_")) continue; // 내부 컬럼(_원문/_dupKey 등) 숨김
     if (!s) continue;
     lines.push(`${k}: ${s}`);
+    fields.push({ key: k, value: s });
   }
-  return { date, lines, album };
+  return { date, lines, fields, album };
 }
 
 export default function UnifiedHistory({ vendor, accent, open, onClose, onError }: Props) {
@@ -101,8 +127,13 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     setShowHits(true);
     const my = ++reqSeq.current;
     const h = window.setTimeout(() => {
-      searchVendors(query)
-        .then((r) => { if (my === reqSeq.current) setHits(r.results || []); })
+      Promise.all(vendorSearchTerms(query).map((term) => searchVendors(term)))
+        .then((responses) => {
+          if (my !== reqSeq.current) return;
+          const merged = new Map<string, VendorHit>();
+          responses.flatMap((response) => response.results || []).forEach((hit) => merged.set(hit.vendor, hit));
+          setHits(Array.from(merged.values()));
+        })
         .catch((e) => onError(e.message || "검색 실패"))
         .finally(() => { if (my === reqSeq.current) setSearching(false); });
     }, 300);
@@ -119,7 +150,20 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     setLoading(true);
     setDetail(null);
     getVendorDetail(override)
-      .then((d) => {
+      .then(async (d) => {
+        if (!hasHistory(d)) {
+          const terms = vendorSearchTerms(override);
+          const responses = await Promise.all(terms.map((term) => searchVendors(term)));
+          const alias = vendorAliasKey(override);
+          const candidate = responses.flatMap((response) => response.results || [])
+            .find((hit) => hit.vendor !== override && vendorAliasKey(hit.vendor) === alias && CAT_ORDER.some((cat) => (hit.counts?.[cat] || 0) > 0));
+          if (candidate) {
+            loadedFor.current = "";
+            setOverride(candidate.vendor);
+            setQ(candidate.vendor);
+            return;
+          }
+        }
         setDetail(d);
         loadedFor.current = override;
         setActiveCat("전체");
@@ -276,28 +320,33 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             recs.slice(0, MAX_RECORDS).map((rec, i) => {
               const who = pick(rec, WHO_KEYS);
               const region = pick(rec, REGION_KEYS);
-              const { date, lines, album } = recordSummary(activeCat, rec, [who.key, region.key]);
+              const { date, fields, album } = recordSummary(activeCat, rec, [who.key, region.key]);
               return (
-                <div key={i} className="rounded-2xl bg-white p-3 shadow-sm">
+                <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   {/* 언제 · 어디팀 · 누가 */}
-                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <span className="mr-auto text-sm font-black text-slate-900">{CAT_SHORT[activeCat]} 이력</span>
                     {date && (
                       <span className="rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: CAT_COLOR[activeCat] }}>
-                        📅 {date}
+                        {date}
                       </span>
                     )}
                     {region.val && <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{region.val}</span>}
                     {who.val && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{who.val}</span>}
                   </div>
-                  <div className="space-y-0.5">
-                    {lines.map((ln, j) => (
-                      <div key={j} className="break-words text-xs leading-snug text-slate-600">{ln}</div>
+                  <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
+                    {fields.map((field, j) => (
+                      <div key={`${field.key}-${j}`} className={`bg-white px-3 py-2.5 ${field.value.length > 48 || field.value.includes("\n") ? "sm:col-span-2" : ""}`}>
+                        <div className="text-[10px] font-black text-slate-400">{field.key}</div>
+                        <div className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">{field.value}</div>
+                      </div>
                     ))}
+                    {!fields.length && <div className="bg-white px-3 py-5 text-center text-xs font-semibold text-slate-400 sm:col-span-2">표시할 상세 내용이 없습니다.</div>}
                   </div>
                   {album && (
                     <a href={album} target="_blank" rel="noreferrer"
-                      className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-[11px] font-bold text-white">
-                      📷 사진·영상 보기
+                      className="m-3 inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white">
+                      사진·영상 보기
                     </a>
                   )}
                 </div>
