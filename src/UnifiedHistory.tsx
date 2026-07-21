@@ -50,9 +50,18 @@ function recordVendor(rec: Record<string, unknown>) {
   return String(rec._업체명 || rec.업체명 || rec.상호명 || "").trim();
 }
 
+function displayDate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  const isoDate = raw.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  if (isoDate) return isoDate;
+  const localDate = raw.match(/(\d{4})[./](\d{1,2})[./](\d{1,2})/);
+  if (localDate) return `${localDate[1]}-${localDate[2].padStart(2, "0")}-${localDate[3].padStart(2, "0")}`;
+  return raw;
+}
+
 function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]) {
   const dateKey = DATE_FIELD[cat];
-  const date = dateKey ? String(rec[dateKey] ?? "") : "";
+  const date = dateKey ? displayDate(rec[dateKey]) : "";
   const skip = new Set([dateKey, ...exclude]);
   const fields: SummaryField[] = [];
   let album = "";
@@ -223,7 +232,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   }), [includedHits, historyRegion, allRows]);
 
   const totalCount = CAT_ORDER.reduce((sum, cat) => sum + rowsForCategory(cat).length, 0);
-  const latestDate = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => String(record[DATE_FIELD[cat]] || ""))).filter(Boolean).sort().at(-1) || "없음";
+  const latestDate = displayDate(ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => String(record[DATE_FIELD[cat]] || ""))).filter(Boolean).sort().at(-1)) || "없음";
   const records = activeCat === "전체" ? [] : rowsForCategory(activeCat).slice().sort((left, right) => String(right[DATE_FIELD[activeCat]] ?? "").localeCompare(String(left[DATE_FIELD[activeCat]] ?? "")));
 
   const selectNewVendor = (nextVendor: string) => {
