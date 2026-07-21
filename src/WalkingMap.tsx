@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
+import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, upsertRows } from "./supabase";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
@@ -405,13 +406,22 @@ function styleMapLabel(element: HTMLDivElement, active: boolean) {
   element.style.boxShadow = active ? "0 4px 12px rgba(15, 23, 42, .28)" : "";
 }
 
-function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void }) {
+type CurrentPosition = {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  revision: number;
+};
+
+const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect, currentPosition }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void; currentPosition: CurrentPosition | null }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const markerByIdRef = useRef(new Map<number, L.Marker>());
+  const canvasRendererRef = useRef<L.Canvas | null>(null);
+  const markerByIdRef = useRef(new Map<number, L.Marker | L.CircleMarker>());
   const markerSignatureRef = useRef(new Map<number, string>());
   const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
+  const locationLayerRef = useRef<L.LayerGroup | null>(null);
   const [tilesReady, setTilesReady] = useState(false);
   const [viewportRevision, setViewportRevision] = useState(0);
 
@@ -435,7 +445,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       maxZoom: 19,
       updateWhenIdle: true,
       updateWhenZooming: false,
-      keepBuffer: mobile ? 3 : 5,
+      keepBuffer: mobile ? 1 : 4,
       attribution: "",
     });
     tiles.once("load", () => setTilesReady(true));
@@ -450,6 +460,8 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       attributionElement.style.background = "rgba(255,255,255,.78)";
     }
     markerLayerRef.current = L.layerGroup().addTo(map);
+    locationLayerRef.current = L.layerGroup().addTo(map);
+    canvasRendererRef.current = L.canvas({ padding: 0.18 });
     mapRef.current = map;
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
     observer.observe(elementRef.current);
@@ -459,6 +471,8 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
+      locationLayerRef.current = null;
+      canvasRendererRef.current = null;
       markerById.clear();
       markerSignatures.clear();
       labelsById.clear();
@@ -469,12 +483,12 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const map = mapRef.current;
     if (!map) return;
     const view = loadTeamMapView(viewStorageKey, team);
-    map.setView(view.center, view.zoom, { animate: true });
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    map.setView(view.center, view.zoom, { animate: !mobile });
     let refreshTimer = 0;
     const persistView = () => {
       saveTeamMapView(viewStorageKey, team, map);
       window.clearTimeout(refreshTimer);
-      const mobile = window.matchMedia("(max-width: 1023px)").matches;
       refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), mobile ? 320 : 100);
     };
     map.on("moveend zoomend", persistView);
@@ -491,7 +505,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const mobile = window.matchMedia("(max-width: 1023px)").matches;
     // 모바일은 화면 가장자리에서 마커를 자주 제거·생성하면 이동이 끊겨 보인다.
     // 넉넉한 완충 범위를 유지해 작은 지도 이동에서는 기존 마커를 재사용한다.
-    const renderBounds = map.getBounds().pad(mobile ? 0.35 : 0.12);
+    const renderBounds = map.getBounds().pad(mobile ? 0.08 : 0.12);
     const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
     const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
       const key = addressGroupKey(place);
@@ -534,7 +548,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
       const groupTitle = group.map((item) => item.name).join("\n");
       const groupSelected = group.some((item) => item.id === selectedId);
-      const permanentLabel = !mobile || map.getZoom() >= 14 || groupSelected;
+      const permanentLabel = !mobile || map.getZoom() >= 15 || groupSelected;
       const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, groupLabel, permanentLabel ? "label" : "marker", group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
       const currentMarker = markerByIdRef.current.get(place.id);
       if (currentMarker && markerSignatureRef.current.get(place.id) === signature) {
@@ -542,25 +556,43 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
         if (currentLabel) styleMapLabel(currentLabel, groupSelected);
         return;
       }
-      if (currentMarker) layer.removeLayer(currentMarker);
-      const icon = L.divIcon({
-        className: "workin-map-marker",
-        html: `<span style="position:relative;display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style="position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 27],
-      });
-      const marker = L.marker(displayPosition, { icon }).addTo(layer);
-      const tooltip = document.createElement("div");
-      tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
-      tooltip.textContent = groupLabel;
-      tooltip.title = groupTitle;
-      styleMapLabel(tooltip, groupSelected);
-      tooltip.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (group.length === 1) onSelect(place.id);
-        else marker.openPopup();
-      });
-      marker.bindTooltip(tooltip, { permanent: permanentLabel, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
+      if (currentMarker) {
+        layer.removeLayer(currentMarker);
+        group.forEach((item) => labelByIdRef.current.delete(item.id));
+      }
+      let marker: L.Marker | L.CircleMarker;
+      if (mobile && !permanentLabel && canvasRendererRef.current) {
+        marker = L.circleMarker(displayPosition, {
+          renderer: canvasRendererRef.current,
+          radius: group.length > 1 ? 8 : 6,
+          color: "#ffffff",
+          fillColor: meta.color,
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(layer);
+      } else {
+        const icon = L.divIcon({
+          className: "workin-map-marker",
+          html: `<span style="position:relative;display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style="position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 27],
+        });
+        marker = L.marker(displayPosition, { icon }).addTo(layer);
+      }
+      let tooltip: HTMLDivElement | null = null;
+      if (permanentLabel) {
+        tooltip = document.createElement("div");
+        tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
+        tooltip.textContent = groupLabel;
+        tooltip.title = groupTitle;
+        styleMapLabel(tooltip, groupSelected);
+        tooltip.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (group.length === 1) onSelect(place.id);
+          else marker.openPopup();
+        });
+        marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
+      }
       if (group.length === 1) marker.on("click", () => onSelect(place.id));
       else {
         const popup = document.createElement("div");
@@ -582,7 +614,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       }
       markerByIdRef.current.set(place.id, marker);
       markerSignatureRef.current.set(place.id, signature);
-      group.forEach((item) => labelByIdRef.current.set(item.id, tooltip));
+      if (tooltip) group.forEach((item) => labelByIdRef.current.set(item.id, tooltip));
     });
   }, [places, onSelect, selectedId, viewportRevision]);
 
@@ -597,13 +629,38 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     if (map && place) map.panTo([place.latitude, place.longitude], { animate: true, duration: 0.25 });
   }, [selectedId, places]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = locationLayerRef.current;
+    if (!map || !layer || !currentPosition) return;
+    const point: L.LatLngExpression = [currentPosition.latitude, currentPosition.longitude];
+    layer.clearLayers();
+    L.circle(point, {
+      radius: Math.max(15, currentPosition.accuracy),
+      color: "#2563eb",
+      fillColor: "#60a5fa",
+      fillOpacity: 0.14,
+      weight: 1,
+      interactive: false,
+    }).addTo(layer);
+    L.circleMarker(point, {
+      radius: 7,
+      color: "#ffffff",
+      fillColor: "#2563eb",
+      fillOpacity: 1,
+      weight: 3,
+      interactive: false,
+    }).addTo(layer);
+    map.panTo(point, { animate: true, duration: 0.25 });
+  }, [currentPosition]);
+
   return (
     <div className="relative h-full min-h-[500px] w-full bg-[#dce8ef]">
       <div ref={elementRef} className="h-full w-full" aria-label="전국 거래처 지도" />
       {!tilesReady && <div className="pointer-events-none absolute inset-0 z-[800] flex items-center justify-center bg-slate-100/75 text-sm font-black text-slate-500">지도 불러오는 중</div>}
     </div>
   );
-}
+});
 
 export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) {
   const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
@@ -611,6 +668,11 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [sharedReady, setSharedReady] = useState(false);
   const [syncState, setSyncState] = useState<"loading" | "saved" | "error">("loading");
   const [query, setQuery] = useState("");
+  const [mapQuery, setMapQuery] = useState("");
+  const [mapSearchFocused, setMapSearchFocused] = useState(false);
+  const [currentPosition, setCurrentPosition] = useState<CurrentPosition | null>(null);
+  const [locationTracking, setLocationTracking] = useState(false);
+  const locationWatchRef = useRef<number | null>(null);
   const preferenceStorageKey = useMemo(() => `cs_workin_map_preferences_v1_${userKey.trim() || "guest"}`, [userKey]);
   const initialPreferences = useMemo(() => loadMapPreferences(preferenceStorageKey), [preferenceStorageKey]);
   const [labelFilters, setLabelFilters] = useState<string[]>(initialPreferences.labels);
@@ -639,6 +701,48 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [importMode, setImportMode] = useState<"append" | "replace">("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectionSourceRef = useRef<"map" | "list" | "reveal" | "other">("other");
+
+  const stopLocationTracking = useCallback(() => {
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+    locationWatchRef.current = null;
+    setLocationTracking(false);
+  }, []);
+
+  const toggleLocationTracking = useCallback(() => {
+    if (locationTracking) {
+      stopLocationTracking();
+      return;
+    }
+    if (!navigator.geolocation) {
+      window.alert("이 기기에서는 현재 위치를 사용할 수 없습니다.");
+      return;
+    }
+    setLocationTracking(true);
+    locationWatchRef.current = navigator.geolocation.watchPosition(
+      (position) => setCurrentPosition((current) => {
+        const now = Date.now();
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const barelyMoved = current
+          && Math.abs(current.latitude - latitude) < 0.00005
+          && Math.abs(current.longitude - longitude) < 0.00005
+          && now - current.revision < 10_000;
+        return barelyMoved ? current : { latitude, longitude, accuracy: position.coords.accuracy, revision: now };
+      }),
+      (error) => {
+        stopLocationTracking();
+        const message = error.code === error.PERMISSION_DENIED
+          ? "현재 위치 권한을 허용해 주세요."
+          : "현재 위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+        window.alert(message);
+      },
+      { enableHighAccuracy: false, maximumAge: 15_000, timeout: 12_000 },
+    );
+  }, [locationTracking, stopLocationTracking]);
+
+  useEffect(() => () => {
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+  }, []);
 
   const loadSharedPlaces = useCallback(async () => {
     const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
@@ -781,17 +885,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     });
   }, [selectedId, mobileView, mapSelectionRevision]);
 
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
+  const scopedPlaces = useMemo(() => {
     const rows = places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
       if (place.team !== teamFilter) return false;
       if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
-      if (!keyword) return true;
-      return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
-        .some((value) => value.toLowerCase().includes(keyword));
+      return true;
     });
     if (kindFilter !== "renewal" || renewalOrder === "default") return rows;
     const year = new Date().getFullYear();
@@ -802,7 +903,21 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       if (rightEnd === undefined) return -1;
       return renewalOrder === "asc" ? leftEnd - rightEnd : rightEnd - leftEnd;
     });
-  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder]);
+
+  const filtered = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return scopedPlaces;
+    return scopedPlaces.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
+      .some((value) => value.toLowerCase().includes(keyword)));
+  }, [query, scopedPlaces]);
+
+  const mapSearchResults = useMemo(() => {
+    const keyword = mapQuery.trim().toLowerCase();
+    if (!keyword) return [];
+    return scopedPlaces.filter((place) => [place.name, place.comment, place.address, place.addressDetail]
+      .some((value) => value.toLowerCase().includes(keyword))).slice(0, 8);
+  }, [mapQuery, scopedPlaces]);
 
   const inspectionHistoryByPlace = useMemo(() => {
     const indexed = inspectionVisits
@@ -842,7 +957,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     };
   }, [inspectionHistoryByPlace, mobileDetailId, places]);
 
-  const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
+  const mapPlaces = useMemo(() => scopedPlaces.filter((place) => place.visible), [scopedPlaces]);
   const progressQuarter = quarterFilter;
   const progressYear = new Date().getFullYear();
   const progressDates = quarterDates(progressYear, progressQuarter);
@@ -1217,13 +1332,50 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const mapPanel = (
     <div className="relative h-full min-h-0 overflow-hidden bg-slate-100 lg:min-h-[540px]">
-      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} />
+      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
       <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처 검색" className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500" />
-          {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
+          <input
+            value={mapQuery}
+            onChange={(event) => setMapQuery(event.target.value)}
+            onFocus={() => setMapSearchFocused(true)}
+            onBlur={() => window.setTimeout(() => setMapSearchFocused(false), 120)}
+            placeholder="거래처 검색"
+            className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
+          />
+          {mapQuery && <button type="button" onClick={() => setMapQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
+          {mapSearchFocused && mapQuery.trim() && (
+            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white shadow-2xl">
+              {mapSearchResults.map((place) => (
+                <button
+                  key={place.id}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    selectMapPlace(place.id);
+                    setMapQuery(place.name);
+                    setMapSearchFocused(false);
+                  }}
+                  className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50 active:bg-blue-100"
+                >
+                  <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                </button>
+              ))}
+              {!mapSearchResults.length && <div className="px-3 py-3 text-xs font-bold text-slate-400">현재 조건에 맞는 거래처가 없습니다.</div>}
+            </div>
+          )}
         </div>
       </div>
+      <button
+        type="button"
+        onClick={toggleLocationTracking}
+        title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"}
+        aria-pressed={locationTracking}
+        className={`absolute left-3 top-[5.75rem] z-[900] flex h-10 w-10 items-center justify-center rounded-md border text-xl font-black shadow-lg ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+      >
+        <LocateFixed size={19} strokeWidth={2.4} />
+      </button>
       <div className="absolute right-3 top-3 z-[900]">
         <div className="relative flex gap-1">
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
