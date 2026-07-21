@@ -596,6 +596,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
+  const [mobileDetailId, setMobileDetailId] = useState<number | null>(null);
   const [mapSelectionRevision, setMapSelectionRevision] = useState(0);
   const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const [editMode, setEditMode] = useState(false);
@@ -630,6 +631,18 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+
+  useEffect(() => {
+    if (mobileDetailId === null) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileDetailId(null); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileDetailId]);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
@@ -751,6 +764,27 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   }, [inspectionVisits, places]);
 
   const latestInspectionByPlace = useMemo(() => new Map(places.map((place) => [place.id, inspectionHistoryByPlace.get(place.id)?.[0]?.workDate || ""])), [inspectionHistoryByPlace, places]);
+
+  const mobileDetail = useMemo(() => {
+    if (mobileDetailId === null) return null;
+    const place = places.find((item) => item.id === mobileDetailId);
+    if (!place) return null;
+    const snapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
+    const currentCounts = snapshots[0]?.counts || "";
+    const previousCounts = snapshots[1]?.counts || "";
+    const currentBlack = counterValue(currentCounts, "흑");
+    const previousBlack = counterValue(previousCounts, "흑");
+    const currentColor = counterValue(currentCounts, "컬");
+    const previousColor = counterValue(previousCounts, "컬");
+    return {
+      place,
+      snapshots,
+      blackDiff: currentBlack !== null && previousBlack !== null ? currentBlack - previousBlack : null,
+      colorDiff: currentColor !== null && previousColor !== null ? currentColor - previousColor : null,
+      tonerChanges: supplyChanges(snapshots[0]?.toner || "", snapshots[1]?.toner || ""),
+      spareChanges: supplyChanges(snapshots[0]?.spare || "", snapshots[1]?.spare || ""),
+    };
+  }, [inspectionHistoryByPlace, mobileDetailId, places]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
   const progressQuarter = quarterFilter;
@@ -1219,30 +1253,16 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         const place = places.find((item) => item.id === selectedId);
         if (!place) return null;
         const meta = labelMeta(place.label);
-        return <div className="absolute bottom-3 left-3 right-3 z-[950] rounded-lg border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm lg:hidden">
-          <div className="flex items-start gap-3">
-            <span className="mt-1 h-4 w-4 shrink-0 rounded-full border-2 border-white shadow" style={{ backgroundColor: meta.color }} />
-            <button type="button" onClick={() => {
-              selectionSourceRef.current = "reveal";
-              setExpandedId(null);
-              setMobileView("list");
-            }} className="min-w-0 flex-1 text-left">
+        const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
+        return <div className="absolute bottom-1 left-1 right-1 z-[950] overflow-hidden rounded-md border border-slate-300 bg-white/95 shadow-2xl backdrop-blur-sm lg:hidden">
+          {address && <div className="truncate bg-slate-800/90 px-3 py-1.5 text-[11px] font-bold text-white">{address}</div>}
+          <div className="flex items-stretch">
+            <span className="w-1.5 shrink-0" style={{ backgroundColor: meta.color }} />
+            <button type="button" onClick={() => setMobileDetailId(place.id)} className="min-w-0 flex-1 px-3 py-2.5 text-left active:bg-slate-50">
               <span className="block truncate text-sm font-black text-slate-950">{place.name}</span>
-              <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address || "상세 정보 보기"}</span>
+              <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || "상세 정보 보기"}</span>
             </button>
-            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="h-8 w-8 shrink-0 rounded-md text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => {
-              selectionSourceRef.current = "reveal";
-              setExpandedId(null);
-              setMobileView("list");
-            }} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">목록에서 보기</button>
-            <button type="button" onClick={() => {
-              selectionSourceRef.current = "reveal";
-              setExpandedId(place.id);
-              setMobileView("list");
-            }} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-black text-white">상세 보기</button>
+            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="w-10 shrink-0 border-l border-slate-100 text-lg font-black text-slate-400 active:bg-slate-100">×</button>
           </div>
         </div>;
       })()}
@@ -1251,18 +1271,67 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   return (
     <div>
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm max-lg:rounded-none max-lg:border-0 max-lg:shadow-none">
         {desktopLayout ? <div className="grid h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
           {mapPanel}
-        </div> : <div className="flex h-[calc(100dvh-150px)] min-h-[520px] flex-col">
+        </div> : <div className="flex h-[calc(100dvh-52px)] min-h-[460px] flex-col">
           <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
-          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[max(0.35rem,env(safe-area-inset-bottom))] shadow-[0_-4px_14px_rgba(15,23,42,0.08)]">
-            <button type="button" onClick={() => setMobileView("map")} className={`py-3 text-sm font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
-            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`py-3 text-sm font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
+          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
+            <button type="button" onClick={() => setMobileView("map")} className={`py-2 text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
+            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`py-2 text-xs font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
           </div>
         </div>}
       </section>
+
+      {mobileDetail && !desktopLayout && (() => {
+        const { place, snapshots, blackDiff, colorDiff, tonerChanges, spareChanges } = mobileDetail;
+        const meta = labelMeta(place.label);
+        const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
+        const phone = place.phone.match(/0\d{1,2}-?\d{3,4}-?\d{4}/)?.[0] || "";
+        return <div className="fixed inset-0 z-[2300] flex flex-col bg-slate-50 text-slate-900 lg:hidden">
+          <header className="shrink-0 border-b-4 bg-[#087EA4] pt-[env(safe-area-inset-top)] text-white" style={{ borderBottomColor: meta.color }}>
+            <div className="flex h-14 items-center gap-2 px-3">
+              <button type="button" onClick={() => setMobileDetailId(null)} aria-label="뒤로" className="flex h-10 w-10 items-center justify-center text-3xl font-light">‹</button>
+              <div className="min-w-0 flex-1 text-lg font-black">상세보기</div>
+              <button type="button" onClick={() => { setDraft({ ...place, memos: [...place.memos] }); setMobileDetailId(null); }} className="px-2 py-2 text-sm font-black">수정</button>
+            </div>
+          </header>
+          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <section className="border-b-8 border-slate-100 px-4 py-4">
+              <div className="flex items-start gap-3">
+                <span className="mt-1 h-5 w-5 shrink-0 rounded-full border-2 border-white shadow" style={{ backgroundColor: meta.color }} />
+                <div className="min-w-0 flex-1"><div className="text-lg font-black leading-7">{place.name}</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-5 text-slate-500">{place.comment || "기기 정보 없음"}</div></div>
+              </div>
+            </section>
+            <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b border-slate-100 px-4 py-4">
+              <span className="text-xl text-slate-400">⌖</span>
+              <div className="whitespace-pre-wrap text-sm font-bold leading-6">{address || "주소 정보 없음"}</div>
+              {address && <a href={`https://map.naver.com/p/search/${encodeURIComponent(address)}`} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-3 py-2 text-xs font-black text-slate-600">길찾기</a>}
+            </section>
+            <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b-8 border-slate-100 px-4 py-4">
+              <span className="text-xl text-slate-400">☎</span>
+              <div className="whitespace-pre-wrap text-sm font-bold leading-6">{place.phone || "연락처 정보 없음"}</div>
+              {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="rounded-full border border-slate-300 px-3 py-2 text-xs font-black text-slate-600">전화</a>}
+            </section>
+            <section className="border-b-8 border-slate-100 px-4 py-4">
+              <div className="text-xs font-black text-slate-400">업무 정보</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded bg-slate-100 px-2 py-1">{place.team}팀</span><span className="rounded bg-slate-100 px-2 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}</span><span className="rounded bg-slate-100 px-2 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
+            </section>
+            {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
+              <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
+              {snapshots.length ? <div className="mt-3 space-y-3">
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div></div></div>)}
+                {snapshots.length > 1 && <div className="space-y-2"><div className="flex flex-wrap gap-2"><span className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">흑백 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매 사용`}</span><span className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">컬러 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매 사용`}</span></div>{tonerChanges.length > 0 && <div className="text-xs font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-xs font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
+              </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
+            </section>}
+            <section className="px-4 py-4">
+              <div className="text-xs font-black text-slate-400">메모</div>
+              {place.memos.length ? <div className="mt-2 divide-y divide-slate-100">{place.memos.map((memo, index) => <div key={`${place.id}-mobile-memo-${index}`} className="whitespace-pre-wrap py-3 text-sm font-semibold leading-6">{memo}</div>)}</div> : <div className="mt-2 text-sm font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
+            </section>
+          </main>
+        </div>;
+      })()}
 
       {pendingImport.length > 0 && (
         <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPendingImport([])}>
