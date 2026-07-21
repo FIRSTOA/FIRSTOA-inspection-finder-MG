@@ -77,6 +77,28 @@ function historySearchTerm(value: string) {
     .trim();
 }
 
+function historySearchTerms(value: string) {
+  const query = value.trim();
+  const normalized = historySearchTerm(query);
+  const withoutAddress = normalized
+    .replace(/\s+(?:서울(?:특별시)?|부산(?:광역시)?|대구(?:광역시)?|인천(?:광역시)?|광주(?:광역시)?|대전(?:광역시)?|울산(?:광역시)?|세종(?:특별자치시)?|경기(?:도)?|강원(?:특별자치도|도)?|충청[남북]도|전라[남북]도|경상[남북]도|제주(?:특별자치도|도)?)\s+.*$/u, "")
+    .replace(/\s+[가-힣]+(?:시|군|구)\s+.*$/u, "")
+    .replace(/\s+[가-힣0-9·._()-]+(?:로|길)\s*\d+(?:-\d+)?(?:\s.*)?$/u, "")
+    .trim();
+  return Array.from(new Set([query, normalized, withoutAddress].filter((term) => term.length >= 2)));
+}
+
+function mergeHistoryRows(groups: HistoryRows[][]): HistoryRows[] {
+  return HISTORY_SEARCH_TABLES.map((config) => {
+    const unique = new Map<string, Record<string, unknown>>();
+    groups.forEach((group) => {
+      const rows = group.find((result) => result.config.table === config.table)?.rows || [];
+      rows.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
+    });
+    return { config, rows: Array.from(unique.values()) };
+  });
+}
+
 async function fetchHistoryRows(value: string): Promise<HistoryRows[]> {
   const term = historySearchTerm(value);
   if (term.length < 2) return [];
@@ -172,8 +194,9 @@ export async function getVendorDetail(vendor: string): Promise<DetailResp> {
 export async function searchVendorHistoryCandidates(q: string): Promise<SearchResp> {
   const query = String(q || "").trim();
   if (query.length < 2) return { results: [], total: 0 };
-  const terms = Array.from(new Set([query, historySearchTerm(query)].filter((term) => term.length >= 2)));
-  const [indexed, sourceRows] = await Promise.all([Promise.all(terms.map(searchVendors)), fetchHistoryRows(query)]);
+  const terms = historySearchTerms(query);
+  const [indexed, sourceGroups] = await Promise.all([Promise.all(terms.map(searchVendors)), Promise.all(terms.map(fetchHistoryRows))]);
+  const sourceRows = mergeHistoryRows(sourceGroups);
   const results = mergeHistoryHits([...indexed.flatMap((result) => result.results || []), ...hitsFromHistoryRows(sourceRows)]);
   return { results, total: results.length, error: indexed.find((result) => result.error)?.error };
 }
@@ -181,13 +204,17 @@ export async function searchVendorHistoryCandidates(q: string): Promise<SearchRe
 export async function getVendorHistoryDetail(q: string): Promise<{ detail: DetailResp; candidates: VendorHit[] }> {
   const query = String(q || "").trim();
   if (!query) return { detail: { vendor: "" }, candidates: [] };
-  const terms = Array.from(new Set([query, historySearchTerm(query)].filter((term) => term.length >= 2)));
-  const [indexed, sourceRows, indexedDetails] = await Promise.all([
+  const terms = historySearchTerms(query);
+  const [indexed, sourceGroups] = await Promise.all([
     Promise.all(terms.map(searchVendors)),
-    fetchHistoryRows(query),
-    Promise.all(terms.map(getVendorDetail)),
+    Promise.all(terms.map(fetchHistoryRows)),
   ]);
-  const candidates = mergeHistoryHits([...indexed.flatMap((result) => result.results || []), ...hitsFromHistoryRows(sourceRows)]);
+  const sourceRows = mergeHistoryRows(sourceGroups);
+  const allCandidates = mergeHistoryHits([...indexed.flatMap((result) => result.results || []), ...hitsFromHistoryRows(sourceRows)]);
+  const candidates = allCandidates.filter((candidate) => Object.entries(candidate.counts || {})
+    .some(([category, count]) => category !== "임대현황표" && Number(count || 0) > 0));
+  const exactVendors = candidates.length ? candidates.map((candidate) => candidate.vendor) : terms;
+  const indexedDetails = await Promise.all(Array.from(new Set(exactVendors)).map(getVendorDetail));
   const detail: DetailResp = { vendor: query };
   HISTORY_SEARCH_TABLES.forEach((config) => {
     const directRows = sourceRows.find((result) => result.config.table === config.table)?.rows || [];
@@ -195,7 +222,8 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
       ? indexedDetail[config.category] as Array<Record<string, unknown>>
       : []);
     const unique = new Map<string, Record<string, unknown>>();
-    [...indexedRows, ...directRows].forEach((row) => {
+    // 원본 테이블 조회가 가능하면 그 결과를 기준으로 삼아 RPC 상세와의 이중 집계를 막는다.
+    (directRows.length ? directRows : indexedRows).forEach((row) => {
       const key = String(row._dupKey || row.id || JSON.stringify(row));
       unique.set(key, row);
     });
@@ -204,6 +232,7 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
   // 원본 테이블을 모르는 업체정보 등은 기존 상세 RPC 결과를 그대로 보존한다.
   indexedDetails.forEach((indexedDetail) => Object.entries(indexedDetail).forEach(([category, rows]) => {
     if (category === "vendor" || category === "error" || !Array.isArray(rows)) return;
+    if (HISTORY_SEARCH_TABLES.some((config) => config.category === category)) return;
     const existing = Array.isArray(detail[category]) ? detail[category] as Array<Record<string, unknown>> : [];
     const unique = new Map<string, Record<string, unknown>>();
     [...existing, ...rows].forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
