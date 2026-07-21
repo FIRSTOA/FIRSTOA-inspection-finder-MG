@@ -278,6 +278,47 @@ function dateDaysAgo(days: number) {
   return kstDate(date);
 }
 
+function deviceSerial(place: MapPlace) {
+  const parts = place.comment.split("/").map((value) => value.trim()).filter(Boolean);
+  return [...parts].reverse().find((value) => /^[A-Z0-9-]{5,}$/i.test(value.replace(/\s/g, "")))?.replace(/\s/g, "") || "";
+}
+
+function deviceVisitText(visit: VisitRow, place: MapPlace) {
+  const source = visit.sourceText || visit.note || "";
+  const serial = deviceSerial(place);
+  if (!serial || !source.toUpperCase().includes(serial.toUpperCase())) return source;
+  const blocks = source.split(/\n(?=\d+\.\s*(?:\n|$))/);
+  return blocks.find((block) => block.toUpperCase().includes(serial.toUpperCase())) || source;
+}
+
+function visitMetric(text: string, label: string) {
+  return text.match(new RegExp(`^${label}\\s*[:：]\\s*(.*)$`, "mi"))?.[1]?.trim() || "";
+}
+
+function counterValue(value: string, label: "흑" | "컬") {
+  const match = value.match(new RegExp(`${label}\\s*[-:]?\\s*([\\d,]+)`, "i"));
+  return match ? Number(match[1].replaceAll(",", "")) : null;
+}
+
+function supplyChanges(current: string, previous: string) {
+  return ["K", "C", "M", "Y", "폐"].flatMap((label) => {
+    const pattern = new RegExp(`${label}\\s*[-:]?\\s*(\\d+)`, "i");
+    const before = previous.match(pattern)?.[1];
+    const after = current.match(pattern)?.[1];
+    return before !== undefined && after !== undefined ? [`${label} ${before}→${after}`] : [];
+  });
+}
+
+function visitSnapshot(visit: VisitRow, place: MapPlace) {
+  const text = deviceVisitText(visit, place);
+  return {
+    date: visit.workDate,
+    counts: visitMetric(text, "매수"),
+    toner: visitMetric(text, "토너잔량"),
+    spare: visitMetric(text, "여분"),
+  };
+}
+
 function normalizePlaces(source: MapPlace[]) {
   return source.map((place, index) => ({
     ...place,
@@ -675,22 +716,22 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     });
   }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder]);
 
-  const latestInspectionByPlace = useMemo(() => {
-    const latestByVendor = new Map<string, string>();
-    const visitKeys: Array<{ key: string; workDate: string }> = [];
-    inspectionVisits.forEach((visit) => {
-      const key = vendorMatchKey(visit.vendor);
-      if (!key) return;
-      visitKeys.push({ key, workDate: visit.workDate });
-      if (!latestByVendor.get(key) || visit.workDate > latestByVendor.get(key)!) latestByVendor.set(key, visit.workDate);
-    });
-    visitKeys.sort((left, right) => right.workDate.localeCompare(left.workDate));
+  const inspectionHistoryByPlace = useMemo(() => {
+    const indexed = inspectionVisits
+      .map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) }))
+      .filter((item) => item.key)
+      .sort((left, right) => right.visit.workDate.localeCompare(left.visit.workDate));
     return new Map(places.map((place) => {
       const key = vendorMatchKey(place.name);
-      const fuzzy = key.length >= 5 ? visitKeys.find((visit) => visit.key.length >= 5 && (visit.key.includes(key) || key.includes(visit.key)))?.workDate : "";
-      return [place.id, latestByVendor.get(key) || fuzzy || ""];
+      const exact = indexed.filter((item) => item.key === key).map((item) => item.visit);
+      const matches = exact.length ? exact : key.length >= 5
+        ? indexed.filter((item) => item.key.length >= 5 && (item.key.includes(key) || key.includes(item.key))).map((item) => item.visit)
+        : [];
+      return [place.id, matches.slice(0, 2)];
     }));
   }, [inspectionVisits, places]);
+
+  const latestInspectionByPlace = useMemo(() => new Map(places.map((place) => [place.id, inspectionHistoryByPlace.get(place.id)?.[0]?.workDate || ""])), [inspectionHistoryByPlace, places]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
   const progressQuarter = quarterFilter;
@@ -705,12 +746,15 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
     const monthlyInspections = rows.filter((place) => place.kind === "monthly");
     const renewals = rows.filter((place) => place.kind === "renewal");
-    const renewalDates = renewals.map((place) => ({ place, grade: renewalGrade(place), end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; grade: string; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end) && item.grade !== "V").sort((a, b) => a.end.key - b.end.key);
+    const managedRenewals = renewals.filter((place) => renewalGrade(place) !== "V");
+    const renewalDates = managedRenewals.filter((place) => place.label !== "G5").map((place) => ({ place, grade: renewalGrade(place), end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; grade: string; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
     const renewalMonths = renewalQuarterMonths(progressQuarter).map((month) => [`${month}월`, renewalDates.filter((item) => item.end.month === month).length] as const);
     return {
       team,
       inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
       inspectionTotal: quarterlyInspections.length + monthlyInspections.length * 3,
+      renewalDone: managedRenewals.filter((place) => place.label === "G5").length,
+      renewalTotal: managedRenewals.length,
       urgentRenewals: (["S", "SS"] as const).map((grade) => ({ grade, renewal: renewalDates.find((item) => item.grade === grade) || null })),
       renewalMonths,
     };
@@ -948,7 +992,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
             {([['default', '기본순'], ['asc', '종료 빠른순'], ['desc', '종료 나중순']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setRenewalOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${renewalOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {["ALL", "S", "SS", "N", "NN", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
+            {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
           </div>
         </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -980,6 +1024,13 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           const checked = checkedIds.includes(place.id);
           const lastInspection = latestInspectionByPlace.get(place.id) || "";
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
+          const inspectionSnapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
+          const currentCounts = inspectionSnapshots[0]?.counts || "";
+          const previousCounts = inspectionSnapshots[1]?.counts || "";
+          const blackDiff = counterValue(currentCounts, "흑") !== null && counterValue(previousCounts, "흑") !== null ? counterValue(currentCounts, "흑")! - counterValue(previousCounts, "흑")! : null;
+          const colorDiff = counterValue(currentCounts, "컬") !== null && counterValue(previousCounts, "컬") !== null ? counterValue(currentCounts, "컬")! - counterValue(previousCounts, "컬")! : null;
+          const tonerChanges = supplyChanges(inspectionSnapshots[0]?.toner || "", inspectionSnapshots[1]?.toner || "");
+          const spareChanges = supplyChanges(inspectionSnapshots[0]?.spare || "", inspectionSnapshots[1]?.spare || "");
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
@@ -1025,6 +1076,16 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                       <div className="font-black text-slate-400">업무 정보</div>
                       <div className="mt-1 font-semibold leading-5">{place.label} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
                     </div>
+                    {place.kind === "quarter" && <div>
+                      <div className="font-black text-slate-400">최근 점검 비교</div>
+                      {inspectionSnapshots.length ? <div className="mt-1 space-y-2">
+                        {inspectionSnapshots.map((snapshot, index) => <div key={`${place.id}-history-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-2">
+                          <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
+                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div></div>
+                        </div>)}
+                        {inspectionSnapshots.length > 1 && <div className="space-y-1"><div className="flex flex-wrap gap-1"><span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">흑백 사용 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매`}</span><span className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">컬러 사용 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매`}</span></div>{tonerChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
+                      </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
+                    </div>}
                     <div>
                       <div className="font-black text-slate-400">메모</div>
                       {place.memos.length ? (
@@ -1102,6 +1163,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <div className="mt-3 space-y-3">
                 {teamProgress.map((item) => {
                   const inspectionRate = item.inspectionTotal ? Math.round((item.inspectionDone / item.inspectionTotal) * 100) : 0;
+                  const renewalRate = item.renewalTotal ? Math.round((item.renewalDone / item.renewalTotal) * 100) : 0;
                   const remaining = Math.max(0, item.inspectionTotal - item.inspectionDone);
                   return (
                     <div key={item.team} className="rounded-md border border-slate-200 p-3">
@@ -1116,7 +1178,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                         <span className="font-bold text-slate-600">말일 10일 전 · {daysToEarlyEnd}일</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToEarlyEnd, 3)}</span><span className="font-black text-slate-900">{dailyTarget(remaining, daysToEarlyEnd, 4)}</span>
                       </div>
                       <div className="mt-3 border-t border-slate-100 pt-3">
-                        <div className="text-[10px] font-black text-emerald-700">재계약 현황</div>
+                        <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-black text-emerald-700">재계약 현황</div><div className="text-[10px] font-black text-emerald-700">완료 {item.renewalDone}/{item.renewalTotal} · {renewalRate}%</div></div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-emerald-50"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewalRate}%` }} /></div>
                         <div className="mt-1 space-y-1">
                           {item.urgentRenewals.map(({ grade, renewal }) => renewal
                             ? <div key={grade} className="flex items-start gap-1.5 text-[11px] font-black leading-4 text-slate-800"><span className="shrink-0 rounded bg-emerald-100 px-1.5 text-emerald-700">{grade}</span><span className="min-w-0">{renewal.place.name}<span className="ml-1 text-rose-600">{renewal.end.date}</span></span></div>

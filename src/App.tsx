@@ -19,7 +19,7 @@ import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState
 import ReportTypeSelector from "./ReportTypeSelector";
 import { kstDate, saveVisit, type VisitDraft, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
-import { uploadPhoto, createAlbum } from "./supabase";
+import { uploadPhoto, createAlbum, selectAllRows } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -2029,6 +2029,27 @@ const EMPTY_SHARED_FORM: SharedForm = {
   selfItem: "", selfQty: "", selfShipped: "",
   arrivalHour: "", arrivalMinute: "", duration: "",
 };
+
+type FieldWorkinMapRow = {
+  id: number;
+  team: string;
+  quarter: number;
+  kind: string;
+  label: string;
+  name: string;
+  comment: string;
+  memos: string[];
+};
+
+function matchToken(value: string) {
+  return value.replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
+}
+
+function matchVendor(value: string) {
+  return matchToken(value
+    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
+    .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, ""));
+}
 const FIXED_INSPECTION_LEVEL = "1";
 const FIXED_INSPECTION_REPORT_TYPES = ["점검"];
 
@@ -3697,6 +3718,7 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [workinInspectionMatch, setWorkinInspectionMatch] = useState<FieldWorkinMapRow | null>(null);
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
   const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
   const toastTimerRef = useRef<number | null>(null);
@@ -4122,6 +4144,42 @@ export default function App() {
     }
   }, [mode, listOutput, textOutput]);
 
+  useEffect(() => {
+    if (mode !== "inspection" && mode !== "blank-report") {
+      setWorkinInspectionMatch(null);
+      return;
+    }
+    const vendor = currentVendor || extractVendorFromText(listOutput[0]?.content || textOutput || "");
+    const vendorKey = matchVendor(vendor);
+    const devices = itemForms.map((item) => ({ model: matchToken(item.model), serial: matchToken(item.serial), asset: matchToken(item.asset) }));
+    if (!vendorKey && !devices.some((item) => item.serial || item.asset)) {
+      setWorkinInspectionMatch(null);
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      const quarter = Math.floor(new Date().getMonth() / 3) + 1;
+      void selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos&quarter=eq.${quarter}&kind=eq.quarter`)
+        .then((rows) => {
+          if (!active) return;
+          const ranked = rows.map((row) => {
+            const rowText = matchToken([row.name, row.comment, ...(row.memos || [])].join(" "));
+            const rowVendor = matchVendor(row.name);
+            let score = 0;
+            devices.forEach((device) => {
+              if (device.serial.length >= 5 && rowText.includes(device.serial)) score = Math.max(score, 100);
+              if (device.asset.length >= 4 && rowText.includes(device.asset)) score = Math.max(score, 80);
+              if (vendorKey.length >= 4 && rowVendor.length >= 4 && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor)) && device.model.length >= 3 && rowText.includes(device.model)) score = Math.max(score, 60);
+            });
+            return { row, score };
+          }).filter((item) => item.score >= 60 && item.row.label !== "G5" && item.row.label !== "G12").sort((left, right) => right.score - left.score);
+          setWorkinInspectionMatch(ranked[0]?.row || null);
+        })
+        .catch((error) => { console.error("FIELD workin map match failed", error); if (active) setWorkinInspectionMatch(null); });
+    }, 350);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [currentVendor, itemForms, listOutput, mode, textOutput]);
+
   const buildResultText = () => {
     let text = resultBlocks
       .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? mergeBlockEdit(b.text, editedBlocks[i]) : b.text))
@@ -4168,6 +4226,8 @@ export default function App() {
   };
 
   const [sending, setSending] = useState(false);
+  const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
+  const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
@@ -4180,6 +4240,7 @@ export default function App() {
     if (files.length) {
       setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
       photoLinkRef.current = ""; // 새 사진 추가 → 캐시 무효화
+      setPhotoPrompt(null);
     }
     e.target.value = "";
   };
@@ -4254,7 +4315,7 @@ export default function App() {
     }, target);
   };
 
-  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination) => {
+  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false) => {
     let target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
@@ -4262,6 +4323,10 @@ export default function App() {
     }
     if (mode === "replacement") {
       showToast("교체양식은 복사 전용입니다. 퍼스트전산 채널에 붙여넣어 주세요.", "error");
+      return;
+    }
+    if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
+      setPhotoPrompt({ kind, destination });
       return;
     }
     if (sending) return;
@@ -4724,6 +4789,10 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {workinInspectionMatch && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-3"><span className="mt-0.5 text-lg">!</span><div className="min-w-0"><div className="text-sm font-black text-amber-900">워킨맵 분기점검 대상과 일치합니다</div><div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{workinInspectionMatch.name} · {workinInspectionMatch.team}팀 · {workinInspectionMatch.quarter}분기 · {workinInspectionMatch.label}</div><div className="mt-1 text-[11px] font-bold text-amber-700">AS 처리와 함께 분기점검이 가능한지 확인해 주세요.</div></div></div>
+        </div>}
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
@@ -5207,6 +5276,19 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {photoPrompt && <div className="fixed inset-0 z-[2200] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPhotoPrompt(null)}>
+        <div className="w-full rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-sm sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="text-lg font-black text-slate-950">현장사진이 없습니다</div>
+          <div className="mt-2 text-sm font-semibold leading-6 text-slate-500">사진을 추가하거나, 사진이 필요 없는 업무라면 그대로 전송할 수 있습니다.</div>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => sendPhotoInputRef.current?.click()} className="rounded-lg bg-blue-600 px-3 py-3 text-sm font-black text-white">사진 업로드</button>
+            <button type="button" onClick={() => { const pending = photoPrompt; setPhotoPrompt(null); void handleSendAll(pending.kind, pending.destination, true); }} className="rounded-lg border border-slate-300 px-3 py-3 text-sm font-black text-slate-700">사진 불필요</button>
+          </div>
+          <button type="button" onClick={() => setPhotoPrompt(null)} className="mt-2 w-full rounded-lg py-2.5 text-sm font-bold text-slate-400">취소</button>
+          <input ref={sendPhotoInputRef} type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
+        </div>
+      </div>}
 
       {/* 통합이력 팝업 (controlled) */}
       <UnifiedHistory

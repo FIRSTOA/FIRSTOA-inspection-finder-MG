@@ -80,10 +80,17 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   }, [base]);
   const filteredHits = activeRegion === "전체" ? base : base.filter((h) => vendorRegion(h) === activeRegion);
 
-  // 팝업 열릴 때: 점검탭에서 고른 거래처명을 검색창에 미리 채우고 "목록"을 보여준다(자동 선택 X).
-  // 같은 회사라도 업체명 표기가 다른 경우가 있어, 사용자가 목록에서 직접 고르게 한다.
+  // FIELD에서 인식한 거래처가 있으면 바로 상세를 열고, 필요할 때만 검색으로 바꾼다.
   useEffect(() => {
-    if (open) { setOverride(""); setDetail(null); setHits([]); setQ(""); }
+    if (open) {
+      const initialVendor = vendor.trim();
+      loadedFor.current = "";
+      setOverride(initialVendor);
+      setDetail(null);
+      setHits([]);
+      setQ(initialVendor);
+      setActiveCat("전체");
+    }
   }, [open, vendor]);
 
   // 후보 검색 (이미 고른 거래처와 같은 검색어면 목록을 다시 띄우지 않음)
@@ -115,8 +122,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       .then((d) => {
         setDetail(d);
         loadedFor.current = override;
-        const first = CAT_ORDER.find((c) => Array.isArray(d[c]) && (d[c] as unknown[]).length > 0);
-        setActiveCat(first || "");
+        setActiveCat("전체");
       })
       .catch((e) => onError(e.message || "통합이력 조회 실패"))
       .finally(() => setLoading(false));
@@ -125,7 +131,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   if (!open) return null;
 
   const count = (c: string) => (Array.isArray(detail?.[c]) ? (detail![c] as unknown[]).length : 0);
-  let recs = activeCat ? ((detail?.[activeCat] as Array<Record<string, unknown>>) || []).slice() : [];
+  const recs = activeCat && activeCat !== "전체" ? ((detail?.[activeCat] as Array<Record<string, unknown>>) || []).slice() : [];
   const dk = DATE_FIELD[activeCat];
   if (dk) recs.sort((a, b) => String(b[dk] ?? "").localeCompare(String(a[dk] ?? ""))); // 최신순
 
@@ -217,6 +223,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
 
         {/* 9개 카테고리 탭 */}
         <div className="flex flex-wrap gap-1.5 border-b border-slate-200 bg-white px-3 py-2.5">
+          <button type="button" disabled={!detail} onClick={() => setActiveCat("전체")} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${activeCat === "전체" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}>요약</button>
           {CAT_ORDER.map((c) => {
             const n = count(c);
             const has = n > 0;
@@ -248,6 +255,23 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           {!loading && override && detail && !activeCat && (
             <div className="py-8 text-center text-sm text-slate-400">표시할 이력이 없어요</div>
           )}
+          {!loading && detail && activeCat === "전체" && <div className="grid gap-2 sm:grid-cols-2">
+            {CAT_ORDER.map((cat) => {
+              const rows = Array.isArray(detail[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
+              if (!rows.length) return null;
+              const dateKey = DATE_FIELD[cat];
+              const latest = [...rows].sort((a, b) => String(b[dateKey] ?? "").localeCompare(String(a[dateKey] ?? "")))[0];
+              const who = pick(latest, WHO_KEYS);
+              const region = pick(latest, REGION_KEYS);
+              const summary = recordSummary(cat, latest, [who.key, region.key]);
+              return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-slate-400">
+                <div className="flex items-center justify-between gap-2"><span className="text-sm font-black text-slate-900">{CAT_SHORT[cat]}</span><span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{rows.length}건</span></div>
+                <div className="mt-2 text-xs font-bold text-slate-600">최근 {summary.date || "날짜 없음"}{who.val ? ` · ${who.val}` : ""}</div>
+                <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{summary.lines.slice(0, 2).join(" · ") || "상세 내용을 확인하세요."}</div>
+              </button>;
+            })}
+            {!CAT_ORDER.some((cat) => Array.isArray(detail[cat]) && (detail[cat] as unknown[]).length > 0) && <div className="col-span-full py-8 text-center text-sm text-slate-400">표시할 이력이 없어요</div>}
+          </div>}
           {!loading &&
             recs.slice(0, MAX_RECORDS).map((rec, i) => {
               const who = pick(rec, WHO_KEYS);
