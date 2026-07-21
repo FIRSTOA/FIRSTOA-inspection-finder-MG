@@ -47,6 +47,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [loadingForms, setLoadingForms] = useState(false);
   const [activeRegion, setActiveRegion] = useState<string>("전체");
   const [sortMode, setSortMode] = useState<"recent" | "name">("recent");
+  const [activeType, setActiveType] = useState<"전체" | "점검" | "AS">("전체");
 
   const reqSeq = useRef(0);
 
@@ -102,24 +103,28 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     [hits]
   );
 
-  // 탭: 전체 + A~E(고정) + 기타(확인 안 된 게 있을 때만)
-  const regionTabs = useMemo(() => {
-    const hasEtc = base.some((h) => vendorRegion(h) === "기타");
-    return ["전체", ...REGIONS, ...(hasEtc ? ["기타"] : [])];
-  }, [base]);
+  const typeBase = activeType === "전체" ? base : base.filter((hit) => Number(hit.counts?.[activeType] || 0) > 0);
+  const hitRegion = (hit: VendorHit) => {
+    if (activeType !== "전체") {
+      const region = normRegion(String(hit.meta?.[activeType]?.r || ""));
+      if (REGIONS.includes(region)) return region;
+    }
+    return vendorRegion(hit);
+  };
+  const regionTabs = ["전체", ...REGIONS, ...(typeBase.some((hit) => hitRegion(hit) === "기타") ? ["기타"] : [])];
 
   // 결과 바뀌면 지역 탭 초기화
   useEffect(() => { setActiveRegion("전체"); }, [hits]);
 
   const hitLatestDate = (hit: VendorHit) => {
     const entries = Object.entries(hit.meta || {})
-      .filter(([gubun, entry]) => (gubun === "점검" || gubun === "AS") && entry?.d)
+      .filter(([gubun, entry]) => (activeType === "전체" ? gubun === "점검" || gubun === "AS" : gubun === activeType) && entry?.d)
       .filter(([, entry]) => activeRegion === "전체" || normRegion(String(entry.r || "")) === activeRegion);
     return entries.map(([, entry]) => entry.d).sort().at(-1) || "";
   };
 
   // 기본은 최근 점검·AS 순. 필요할 때 이름순으로 전환한다.
-  const filtered = (activeRegion === "전체" ? base : base.filter((h) => vendorRegion(h) === activeRegion))
+  const filtered = (activeRegion === "전체" ? typeBase : typeBase.filter((hit) => hitRegion(hit) === activeRegion))
     .slice()
     .sort((a, b) => sortMode === "recent"
       ? hitLatestDate(b).localeCompare(hitLatestDate(a)) || a.vendor.localeCompare(b.vendor)
@@ -129,6 +134,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     () => forms.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
     [forms],
   );
+  const visibleForms = activeType === "전체" ? sortedForms : sortedForms.filter((form) => form.gubun === activeType);
 
   return (
     <div>
@@ -169,11 +175,16 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             {!searching && base.length > 0 && (
               <div className="border-b border-slate-100 bg-slate-50">
                 <div className="flex items-center justify-between gap-2 px-3 pt-2">
-                  <span className="text-[11px] font-semibold text-slate-400">검색 결과 {base.length}곳</span>
+                  <span className="text-[11px] font-semibold text-slate-400">검색 결과 {typeBase.length}곳</span>
                   <div className="flex rounded-md bg-slate-200/70 p-0.5">
                     <button type="button" onClick={() => setSortMode("recent")} className={`rounded px-2 py-1 text-[10px] font-bold ${sortMode === "recent" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>최근순</button>
                     <button type="button" onClick={() => setSortMode("name")} className={`rounded px-2 py-1 text-[10px] font-bold ${sortMode === "name" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>이름순</button>
                   </div>
+                </div>
+                <div className="flex gap-1 px-2 pt-1.5">
+                  {(["전체", "점검", "AS"] as const).map((type) => (
+                    <button key={type} type="button" onClick={() => { setActiveType(type); setActiveRegion("전체"); }} className={`rounded-md px-3 py-1.5 text-xs font-black ${activeType === type ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{type}</button>
+                  ))}
                 </div>
                 <div className="flex gap-1 overflow-x-auto px-2 py-1.5">
                 {regionTabs.map((rg) => (
@@ -198,15 +209,15 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             {!searching && base.length > 0 && (
               <div className="max-h-64 overflow-y-auto">
                 {filtered.length === 0 && (
-                  <div className="px-3.5 py-2.5 text-sm text-slate-400">이 지역엔 없어요</div>
+                  <div className="px-3.5 py-2.5 text-sm text-slate-400">선택한 구분·지역에 기록이 없어요</div>
                 )}
                 {filtered.map((h) => {
                   const showAll = activeRegion === "전체";
                   const j = h.meta?.["점검"];
                   const a = h.meta?.["AS"];
-                  const jShow = j && (showAll || normRegion(String(j.r || "")) === activeRegion) ? j : undefined;
-                  const aShow = a && (showAll || normRegion(String(a.r || "")) === activeRegion) ? a : undefined;
-                  const reg = primaryRegion(h);
+                  const jShow = activeType !== "AS" && j && (showAll || normRegion(String(j.r || "")) === activeRegion) ? j : undefined;
+                  const aShow = activeType !== "점검" && a && (showAll || normRegion(String(a.r || "")) === activeRegion) ? a : undefined;
+                  const reg = hitRegion(h) || primaryRegion(h);
                   return (
                     <button
                       key={h.vendor}
@@ -242,7 +253,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
               <div className="text-[11px] font-bold text-slate-400">선택한 거래처</div>
               <div className="truncate text-sm font-black text-slate-900">{vendor}</div>
             </div>
-            {!loadingForms && <div className="shrink-0 text-xs font-bold text-slate-400">최신순 · {forms.length}건</div>}
+            {!loadingForms && <div className="shrink-0 text-xs font-bold text-slate-400">{activeType} 최신순 · {visibleForms.length}건</div>}
           </div>
           {loadingForms && <div className="px-1 py-3 text-sm text-slate-400">양식 불러오는 중…</div>}
           {!loadingForms && forms.length === 0 && (
@@ -251,7 +262,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             </div>
           )}
           <div className="space-y-2.5">
-            {sortedForms.map((f, i) => {
+            {visibleForms.map((f, i) => {
               const st = GUBUN_STYLE[f.gubun] ?? GUBUN_STYLE["점검"];
               const isAS = f.gubun === "AS";
               const chips: string[] = [];
