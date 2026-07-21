@@ -4573,18 +4573,6 @@ export default function App() {
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   const detectedDraftMode = draftInput.trim() ? detectUnifiedInputMode(draftInput) : null;
-  const pasteOriginalInput = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text.trim()) {
-        showToast("클립보드에 붙여넣을 내용이 없습니다.", "error");
-        return;
-      }
-      setDraftInput(text);
-    } catch {
-      showToast("브라우저 권한 때문에 자동 붙여넣기를 사용할 수 없습니다. 입력칸을 길게 눌러 붙여넣어 주세요.", "error");
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -5121,12 +5109,11 @@ export default function App() {
             className="flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-white sm:max-w-lg sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="border-b border-slate-100 px-4 py-3">
               <div>
                 <div className="text-sm font-bold text-slate-900">원본 입력</div>
                 <div className="mt-0.5 text-[11px] font-semibold text-slate-400">점검 양식 또는 AS 접수 원본을 자동으로 구분합니다.</div>
               </div>
-              <button type="button" onClick={() => void pasteOriginalInput()} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 active:bg-slate-100">붙여넣기</button>
             </div>
             <div className="flex min-h-10 items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
               {detectedDraftMode ? (
