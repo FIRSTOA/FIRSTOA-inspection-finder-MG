@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, upsertRows } from "./supabase";
+import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 
 type MapLabel = {
   code: string;
@@ -253,6 +254,30 @@ function renewalGrade(place: MapPlace) {
   return place.name.match(/^(?:\d{4}\/)?\d*(SS|NN|S|N|V)(?=[^A-Z]|$)/i)?.[1]?.toUpperCase() || "";
 }
 
+function addressGroupKey(place: MapPlace) {
+  const address = (place.address.trim() || place.addressDetail.trim()).replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
+  return address || `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
+}
+
+function vendorMatchKey(value: string) {
+  return value
+    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
+    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?/i, "")
+    .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "")
+    .replace(/[^0-9a-z가-힣]/gi, "")
+    .toLowerCase();
+}
+
+function daysBetween(from: string, to: string) {
+  return Math.max(0, Math.floor((new Date(`${to}T12:00:00+09:00`).getTime() - new Date(`${from}T12:00:00+09:00`).getTime()) / 86_400_000));
+}
+
+function dateDaysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return kstDate(date);
+}
+
 function normalizePlaces(source: MapPlace[]) {
   return source.map((place, index) => ({
     ...place,
@@ -394,22 +419,31 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     if (!map || !layer) return;
     const renderBounds = map.getBounds().pad(0.12);
     const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
-    const visibleIds = new Set(visiblePlaces.map((place) => place.id));
+    const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
+      const key = addressGroupKey(place);
+      const current = groups.get(key) || [];
+      current.push(place);
+      groups.set(key, current);
+      return groups;
+    }, new Map<string, MapPlace[]>()).values());
+    const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
+    const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
     markerByIdRef.current.forEach((marker, id) => {
       if (visibleIds.has(id)) return;
       layer.removeLayer(marker);
       markerByIdRef.current.delete(id);
       markerSignatureRef.current.delete(id);
-      labelByIdRef.current.delete(id);
     });
+    labelByIdRef.current.forEach((_, id) => { if (!visiblePlaceIds.has(id)) labelByIdRef.current.delete(id); });
     const coordinateCounts = new Map<string, number>();
-    visiblePlaces.forEach((place) => {
+    groupedPlaces.forEach(([place]) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const key = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
       coordinateCounts.set(key, (coordinateCounts.get(key) || 0) + 1);
     });
     const coordinateIndexes = new Map<string, number>();
-    visiblePlaces.forEach((place) => {
+    groupedPlaces.forEach((group) => {
+      const place = group[0];
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const coordinateKey = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
       const duplicateIndex = coordinateIndexes.get(coordinateKey) || 0;
@@ -423,40 +457,66 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const displayPoint = L.point(basePoint.x + Math.cos(angle) * distance, basePoint.y + Math.sin(angle) * distance);
       const displayPosition = map.layerPointToLatLng(displayPoint);
       const meta = labelMeta(place.label);
-      const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, compactMapName(place.name), place.name].join("|");
+      const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
+      const groupTitle = group.map((item) => item.name).join("\n");
+      const groupSelected = group.some((item) => item.id === selectedId);
+      const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, groupLabel, group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
       const currentMarker = markerByIdRef.current.get(place.id);
       if (currentMarker && markerSignatureRef.current.get(place.id) === signature) {
         const currentLabel = labelByIdRef.current.get(place.id);
-        if (currentLabel) styleMapLabel(currentLabel, selectedId === place.id);
+        if (currentLabel) styleMapLabel(currentLabel, groupSelected);
         return;
       }
       if (currentMarker) layer.removeLayer(currentMarker);
       const icon = L.divIcon({
         className: "workin-map-marker",
-        html: `<span style="display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)"></span>`,
+        html: `<span style="position:relative;display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style="position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`,
         iconSize: [28, 28],
         iconAnchor: [14, 27],
       });
       const marker = L.marker(displayPosition, { icon }).addTo(layer);
       const tooltip = document.createElement("div");
       tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
-      tooltip.textContent = compactMapName(place.name);
-      tooltip.title = place.name;
-      styleMapLabel(tooltip, selectedId === place.id);
+      tooltip.textContent = groupLabel;
+      tooltip.title = groupTitle;
+      styleMapLabel(tooltip, groupSelected);
       tooltip.addEventListener("click", (event) => {
         event.stopPropagation();
-        onSelect(place.id);
+        if (group.length === 1) onSelect(place.id);
+        else marker.openPopup();
       });
       marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
-      marker.on("click", () => onSelect(place.id));
+      if (group.length === 1) marker.on("click", () => onSelect(place.id));
+      else {
+        const popup = document.createElement("div");
+        popup.className = "min-w-[220px] max-w-[280px] space-y-1";
+        const heading = document.createElement("div");
+        heading.className = "border-b border-slate-200 px-2 pb-2 text-xs font-black text-slate-500";
+        heading.textContent = `같은 주소 · ${group.length}곳`;
+        popup.appendChild(heading);
+        group.forEach((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "block w-full rounded px-2 py-2 text-left text-xs font-bold hover:bg-slate-100";
+          button.textContent = item.name;
+          button.addEventListener("click", () => { onSelect(item.id); marker.closePopup(); });
+          popup.appendChild(button);
+        });
+        marker.bindPopup(popup, { closeButton: true, maxHeight: 260 });
+        marker.on("click", () => marker.openPopup());
+      }
       markerByIdRef.current.set(place.id, marker);
       markerSignatureRef.current.set(place.id, signature);
-      labelByIdRef.current.set(place.id, tooltip);
+      group.forEach((item) => labelByIdRef.current.set(item.id, tooltip));
     });
   }, [places, onSelect, selectedId, viewportRevision]);
 
   useEffect(() => {
-    labelByIdRef.current.forEach((element, id) => styleMapLabel(element, selectedId === id));
+    new Set(labelByIdRef.current.values()).forEach((element) => styleMapLabel(element, false));
+    if (selectedId !== null) {
+      const selectedLabel = labelByIdRef.current.get(selectedId);
+      if (selectedLabel) styleMapLabel(selectedLabel, true);
+    }
     const map = mapRef.current;
     const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
     if (map && place) map.panTo([place.latitude, place.longitude], { animate: true, duration: 0.25 });
@@ -482,6 +542,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [teamFilter, setTeamFilter] = useState<Team>(initialPreferences.team);
   const [quarterFilter, setQuarterFilter] = useState<Quarter>(initialPreferences.quarter);
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">(initialPreferences.kind);
+  const [renewalOrder, setRenewalOrder] = useState<"default" | "asc" | "desc">("default");
+  const [renewalGradeFilter, setRenewalGradeFilter] = useState("ALL");
+  const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
@@ -515,6 +578,16 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(places));
   }, [places]);
+
+  useEffect(() => {
+    let active = true;
+    void getTeamVisits(dateDaysAgo(370), kstDate())
+      .then((rows) => {
+        if (active) setInspectionVisits(rows.filter((row) => row.visited && row.workKinds.includes("inspection")));
+      })
+      .catch((error) => console.error("Workin map visit history load failed", error));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -581,16 +654,43 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return places.filter((place) => {
+    const rows = places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
       if (place.team !== teamFilter) return false;
       if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
+      if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
       if (!keyword) return true;
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter]);
+    if (kindFilter !== "renewal" || renewalOrder === "default") return rows;
+    const year = new Date().getFullYear();
+    return [...rows].sort((left, right) => {
+      const leftEnd = projectedContractEnd(left, year, quarterFilter)?.key;
+      const rightEnd = projectedContractEnd(right, year, quarterFilter)?.key;
+      if (leftEnd === undefined) return rightEnd === undefined ? 0 : 1;
+      if (rightEnd === undefined) return -1;
+      return renewalOrder === "asc" ? leftEnd - rightEnd : rightEnd - leftEnd;
+    });
+  }, [places, query, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder]);
+
+  const latestInspectionByPlace = useMemo(() => {
+    const latestByVendor = new Map<string, string>();
+    const visitKeys: Array<{ key: string; workDate: string }> = [];
+    inspectionVisits.forEach((visit) => {
+      const key = vendorMatchKey(visit.vendor);
+      if (!key) return;
+      visitKeys.push({ key, workDate: visit.workDate });
+      if (!latestByVendor.get(key) || visit.workDate > latestByVendor.get(key)!) latestByVendor.set(key, visit.workDate);
+    });
+    visitKeys.sort((left, right) => right.workDate.localeCompare(left.workDate));
+    return new Map(places.map((place) => {
+      const key = vendorMatchKey(place.name);
+      const fuzzy = key.length >= 5 ? visitKeys.find((visit) => visit.key.length >= 5 && (visit.key.includes(key) || key.includes(visit.key)))?.workDate : "";
+      return [place.id, latestByVendor.get(key) || fuzzy || ""];
+    }));
+  }, [inspectionVisits, places]);
 
   const mapPlaces = useMemo(() => filtered.filter((place) => place.visible), [filtered]);
   const progressQuarter = quarterFilter;
@@ -843,6 +943,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
+        {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+          <div className="grid grid-cols-3 gap-1">
+            {([['default', '기본순'], ['asc', '종료 빠른순'], ['desc', '종료 나중순']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setRenewalOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${renewalOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
+          </div>
+          <div className="flex gap-1 overflow-x-auto pb-0.5">
+            {["ALL", "S", "SS", "N", "NN", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
+          </div>
+        </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>
           <button type="button" onClick={exportExcel} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">현재 목록 내보내기</button>
@@ -870,12 +978,18 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         {filtered.map((place) => {
           const meta = labelMeta(place.label);
           const checked = checkedIds.includes(place.id);
+          const lastInspection = latestInspectionByPlace.get(place.id) || "";
+          const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
               <button type="button" onClick={() => {
                 if (editMode) return toggleChecked(place.id);
-                setSelectedId(place.id);
+                if (selectedId !== place.id) {
+                  setSelectedId(place.id);
+                  setExpandedId(null);
+                  return;
+                }
                 setExpandedId((current) => current === place.id ? null : place.id);
               }} className="flex min-w-0 flex-1 items-start gap-3 text-left">
                 {editMode ? (
@@ -887,6 +1001,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   <span className="block text-sm font-black leading-5 text-slate-900">{place.name}</span>
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {place.team}팀 · {place.quarter}Q · {workKinds.find((item) => item.value === place.kind)?.label}{!place.visible ? " · 지도 숨김" : ""}</span>
+                  {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
