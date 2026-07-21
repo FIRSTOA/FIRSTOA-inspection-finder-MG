@@ -107,6 +107,7 @@ function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: st
     <div className="flex items-center gap-2">
       {region && <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-black text-white">{region}</span>}
       <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-800">{hit.vendor}</span>
+      {hit.matchedBy && <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">{hit.matchedBy}</span>}
     </div>
     {recentDate && <div className="mt-1 text-[11px] font-semibold text-slate-500">최근 {recentDate}{recentRegion ? ` · ${recentRegion}` : ""}</div>}
     {categories.length > 0 && <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{categories.join(" · ")}</div>}

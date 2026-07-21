@@ -42,6 +42,7 @@ export type VendorHit = {
   vendor: string;
   counts: Record<string, number>;
   meta: VendorMeta;
+  matchedBy?: string;
 };
 export type SearchResp = { results: VendorHit[]; total: number; error?: string };
 
@@ -128,7 +129,7 @@ function mergeHistoryHits(hits: VendorHit[]) {
     Object.entries(hit.meta || {}).forEach(([category, entry]) => {
       if (!meta[category] || String(entry?.d || "") > String(meta[category]?.d || "")) meta[category] = entry;
     });
-    merged.set(key, { vendor: key, counts, meta });
+    merged.set(key, { vendor: key, counts, meta, matchedBy: current.matchedBy || hit.matchedBy });
   });
   return Array.from(merged.values()).sort((left, right) => left.vendor.localeCompare(right.vendor, "ko"));
 }
@@ -159,16 +160,56 @@ export type DetailResp = { vendor: string; error?: string } & Record<
 
 // 거래처 검색(접두) → Supabase search_vendors RPC → {results, total}
 type RpcHit = { vendor: string; counts: Record<string, number>; meta: VendorMeta; total: number };
+
+async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
+  const encoded = encodeURIComponent(query);
+  const serial = encodeURIComponent("시리얼넘버");
+  const asset = encodeURIComponent("자산기번");
+  const filter = `select=*&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
+  const sources = await Promise.all([
+    selectRows<Record<string, unknown>>("jeomgeom", filter).then((rows) => ({ category: "점검", rows })).catch(() => ({ category: "점검", rows: [] })),
+    selectRows<Record<string, unknown>>("as_records", filter).then((rows) => ({ category: "AS", rows })).catch(() => ({ category: "AS", rows: [] })),
+  ]);
+  const hits = new Map<string, VendorHit>();
+  sources.forEach(({ category, rows }) => rows.forEach((row) => {
+    const vendor = String(row._업체명 || row.업체명 || row.상호명 || "").trim();
+    if (!vendor) return;
+    const current = hits.get(vendor) || { vendor, counts: {}, meta: {} };
+    current.counts[category] = (current.counts[category] || 0) + 1;
+    const date = String(row.작성일 || row.created_at || "").slice(0, 10);
+    const previous = current.meta[category];
+    if (!previous || date >= String(previous.d || "")) {
+      current.meta[category] = {
+        d: date,
+        r: String(row.지역 || ""),
+        model: String(row.모델명 || ""),
+        author: String(row.작성자 || ""),
+        count: 1,
+      };
+    }
+    const serialValue = String(row.시리얼넘버 || "").toLowerCase();
+    const assetValue = String(row.자산기번 || "").toLowerCase();
+    const needle = query.toLowerCase();
+    current.matchedBy = serialValue.includes(needle) ? "시리얼 일치" : assetValue.includes(needle) ? "자산기번 일치" : "기기번호 일치";
+    hits.set(vendor, current);
+  }));
+  return Array.from(hits.values());
+}
+
 export async function searchVendors(q: string): Promise<SearchResp> {
   const query = String(q || "").trim();
   if (query.length < 1) return { results: [], total: 0 };
   try {
-    const rows = await rpc<RpcHit[]>("search_vendors", { q: query });
-    const results: VendorHit[] = rows.map((r) => ({
+    const [rows, machineHits] = await Promise.all([
+      rpc<RpcHit[]>("search_vendors", { q: query }).catch(() => []),
+      searchMachineIdentity(query),
+    ]);
+    const indexed: VendorHit[] = rows.map((r) => ({
       vendor: r.vendor,
       counts: r.counts || {},
       meta: r.meta || {},
     }));
+    const results = mergeHistoryHits([...indexed, ...machineHits]);
     return { results, total: results.length };
   } catch (e) {
     return { results: [], total: 0, error: (e as Error).message };

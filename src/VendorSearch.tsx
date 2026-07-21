@@ -141,7 +141,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             if (vendor) setVendor("");
           }}
           onFocus={() => hits.length && setShowHits(true)}
-          placeholder="업체명·주소 일부 입력"
+          placeholder="업체명·주소·자산기번·시리얼 검색"
           autoFocus
           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[15px] outline-none transition focus:border-slate-300 focus:bg-white"
           style={{ borderColor: query ? accent : undefined }}
@@ -219,6 +219,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                           <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>
                         )}
                         <span className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</span>
+                        {h.matchedBy && <span className="ml-auto shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{h.matchedBy}</span>}
                       </div>
                       <div className="mt-1 space-y-0.5">
                         {jShow && <MetaLine gubun="점검" e={jShow} />}
