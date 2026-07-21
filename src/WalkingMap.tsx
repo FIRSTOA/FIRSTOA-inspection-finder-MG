@@ -292,7 +292,13 @@ function deviceVisitText(visit: VisitRow, place: MapPlace) {
 }
 
 function visitMetric(text: string, label: string) {
-  return text.match(new RegExp(`^${label}\\s*[:：]\\s*(.*)$`, "mi"))?.[1]?.trim() || "";
+  const nextField = "작성자|구분|레벨|등급|업체명|부서명|지역|키맨\\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항|도착 시간|소요 시간";
+  const match = text.match(new RegExp(`(?:^|\\n)${label}\\s*[:：]\\s*([\\s\\S]*?)(?=\\n(?:${nextField})\\s*[:：]|\\n[-_=ㅡ]{5,}|\\n※|$)`, "i"));
+  return (match?.[1] || "").trim().replace(/\n+/g, " · ");
+}
+
+function visitSpareLocation(spare: string) {
+  return spare.match(/(?:보관\s*)?위치\s*[:：]?\s*([^·/]+)/i)?.[1]?.trim() || "";
 }
 
 function counterValue(value: string, label: "흑" | "컬") {
@@ -311,12 +317,24 @@ function supplyChanges(current: string, previous: string) {
 
 function visitSnapshot(visit: VisitRow, place: MapPlace) {
   const text = deviceVisitText(visit, place);
+  const spare = visitMetric(text, "여분");
   return {
     date: visit.workDate,
     counts: visitMetric(text, "매수"),
     toner: visitMetric(text, "토너잔량"),
-    spare: visitMetric(text, "여분"),
+    spare,
+    spareLocation: visitSpareLocation(spare),
   };
+}
+
+type InspectionArchiveRow = Record<string, unknown>;
+
+function archiveText(row: InspectionArchiveRow) {
+  const raw = String(row["_원문"] || "").trim();
+  if (raw) return raw;
+  return ["모델명", "시리얼넘버", "자산기번", "매수", "토너잔량", "폐통", "여분"]
+    .map((label) => `${label}: ${String(row[label] || "").trim()}`)
+    .join("\n");
 }
 
 function normalizePlaces(source: MapPlace[]) {
@@ -417,7 +435,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       maxZoom: 19,
       updateWhenIdle: true,
       updateWhenZooming: false,
-      keepBuffer: mobile ? 2 : 5,
+      keepBuffer: mobile ? 3 : 5,
       attribution: "",
     });
     tiles.once("load", () => setTilesReady(true));
@@ -457,7 +475,7 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       saveTeamMapView(viewStorageKey, team, map);
       window.clearTimeout(refreshTimer);
       const mobile = window.matchMedia("(max-width: 1023px)").matches;
-      refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), mobile ? 140 : 80);
+      refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), mobile ? 320 : 100);
     };
     map.on("moveend zoomend", persistView);
     return () => {
@@ -471,7 +489,9 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
     const mobile = window.matchMedia("(max-width: 1023px)").matches;
-    const renderBounds = map.getBounds().pad(mobile ? 0.02 : 0.12);
+    // 모바일은 화면 가장자리에서 마커를 자주 제거·생성하면 이동이 끊겨 보인다.
+    // 넉넉한 완충 범위를 유지해 작은 지도 이동에서는 기존 마커를 재사용한다.
+    const renderBounds = map.getBounds().pad(mobile ? 0.35 : 0.12);
     const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
     const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
       const key = addressGroupKey(place);
@@ -660,9 +680,35 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   useEffect(() => {
     let active = true;
-    void getTeamVisits(dateDaysAgo(370), kstDate())
-      .then((rows) => {
-        if (active) setInspectionVisits(rows.filter((row) => row.visited && row.workKinds.includes("inspection")));
+    const startDate = dateDaysAgo(370);
+    // 과거 visit_logs에 원문이 없는 기록만 보완한다. 목록 전체를 빠르게
+    // 받을 수 있도록 큰 _원문 대신 비교에 필요한 열만 조회한다.
+    const archiveSelect = encodeURIComponent("작성일,_업체명,업체명,모델명,시리얼넘버,자산기번,매수,토너잔량,폐통,여분");
+    const archiveDate = encodeURIComponent("작성일");
+    void Promise.all([
+      getTeamVisits(startDate, kstDate()),
+      selectAllRows<InspectionArchiveRow>("jeomgeom", `select=${archiveSelect}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`),
+    ])
+      .then(([rows, archiveRows]) => {
+        if (!active) return;
+        const archiveByDate = new Map<string, InspectionArchiveRow[]>();
+        archiveRows.forEach((row) => {
+          const date = String(row["작성일"] || "").slice(0, 10);
+          const list = archiveByDate.get(date) || [];
+          list.push(row);
+          archiveByDate.set(date, list);
+        });
+        const inspections = rows.filter((row) => row.visited && row.workKinds.includes("inspection")).map((visit) => {
+          if (visit.sourceText.trim()) return visit;
+          const visitKey = vendorMatchKey(visit.vendor);
+          const candidates = archiveByDate.get(visit.workDate) || [];
+          const archive = candidates.find((row) => {
+            const archiveKey = vendorMatchKey(String(row["_업체명"] || row["업체명"] || ""));
+            return archiveKey === visitKey || (archiveKey.length >= 5 && visitKey.length >= 5 && (archiveKey.includes(visitKey) || visitKey.includes(archiveKey)));
+          });
+          return archive ? { ...visit, sourceText: archiveText(archive) } : visit;
+        });
+        setInspectionVisits(inspections);
       })
       .catch((error) => console.error("Workin map visit history load failed", error));
     return () => { active = false; };
@@ -1145,7 +1191,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                       {inspectionSnapshots.length ? <div className="mt-1 space-y-2">
                         {inspectionSnapshots.map((snapshot, index) => <div key={`${place.id}-history-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-2">
                           <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
-                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div></div>
+                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
                         </div>)}
                         {inspectionSnapshots.length > 1 && <div className="space-y-1"><div className="flex flex-wrap gap-1"><span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">흑백 사용 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매`}</span><span className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">컬러 사용 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매`}</span></div>{tonerChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
@@ -1287,9 +1333,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           {mapPanel}
         </div> : <div className="flex h-[calc(100dvh-68px)] min-h-[440px] flex-col">
           <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
-          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
-            <button type="button" onClick={() => setMobileView("map")} className={`py-2 text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>지도</button>
-            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`py-2 text-xs font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>목록</button>
+          <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
+            <button type="button" onClick={() => setMobileView("map")} className={`pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "bg-white text-slate-500"}`}>지도</button>
+            <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "bg-white text-slate-500"}`}>목록</button>
           </div>
         </div>}
       </section>
@@ -1331,7 +1377,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
             {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
               {snapshots.length ? <div className="mt-3 space-y-3">
-                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div></div></div>)}
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
                 {snapshots.length > 1 && <div className="space-y-2"><div className="flex flex-wrap gap-2"><span className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">흑백 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매 사용`}</span><span className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">컬러 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매 사용`}</span></div>{tonerChanges.length > 0 && <div className="text-xs font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-xs font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
             </section>}
