@@ -294,12 +294,22 @@ function blankPlace(number: number): MapPlace {
   };
 }
 
+function compactMapName(name: string, maxLength = 17) {
+  const compact = name.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}…` : compact;
+}
+
+function samePlaces(current: MapPlace[], next: MapPlace[]) {
+  if (current.length !== next.length) return false;
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
 function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const markerByIdRef = useRef<Map<number, L.Marker>>(new Map());
   const [tilesReady, setTilesReady] = useState(false);
+  const [viewportRevision, setViewportRevision] = useState(0);
 
   useEffect(() => {
     if (!elementRef.current || mapRef.current) return;
@@ -339,7 +349,10 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     if (!map) return;
     const view = loadTeamMapView(viewStorageKey, team);
     map.setView(view.center, view.zoom, { animate: true });
-    const persistView = () => saveTeamMapView(viewStorageKey, team, map);
+    const persistView = () => {
+      saveTeamMapView(viewStorageKey, team, map);
+      setViewportRevision((current) => current + 1);
+    };
     map.on("moveend zoomend", persistView);
     return () => {
       map.off("moveend zoomend", persistView);
@@ -351,15 +364,16 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
     layer.clearLayers();
-    markerByIdRef.current.clear();
+    const renderBounds = map.getBounds().pad(0.35);
+    const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
     const coordinateCounts = new Map<string, number>();
-    places.forEach((place) => {
+    visiblePlaces.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const key = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
       coordinateCounts.set(key, (coordinateCounts.get(key) || 0) + 1);
     });
     const coordinateIndexes = new Map<string, number>();
-    places.forEach((place) => {
+    visiblePlaces.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
       const coordinateKey = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
       const duplicateIndex = coordinateIndexes.get(coordinateKey) || 0;
@@ -379,19 +393,23 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       });
       const marker = L.marker([latitude, longitude], { icon }).addTo(layer);
       const tooltip = document.createElement("div");
-      tooltip.className = "text-xs font-bold";
-      tooltip.textContent = place.name;
-      marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: false });
+      tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
+      tooltip.textContent = compactMapName(place.name);
+      tooltip.title = place.name;
+      tooltip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelect(place.id);
+      });
+      marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
       marker.on("click", () => onSelect(place.id));
-      markerByIdRef.current.set(place.id, marker);
     });
-  }, [places, onSelect]);
+  }, [places, onSelect, viewportRevision]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const marker = selectedId === null ? null : markerByIdRef.current.get(selectedId);
-    if (map && marker) map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
-  }, [selectedId]);
+    const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
+    if (map && place) map.panTo([place.latitude, place.longitude], { animate: true, duration: 0.25 });
+  }, [selectedId, places]);
 
   return (
     <div className="relative h-full min-h-[500px] w-full bg-[#dce8ef]">
@@ -431,7 +449,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const loadSharedPlaces = useCallback(async () => {
     const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
-    setPlaces(remote.map(fromDbPlace));
+    const next = remote.map(fromDbPlace);
+    setPlaces((current) => samePlaces(current, next) ? current : next);
     setSyncState("saved");
     return remote;
   }, []);

@@ -2113,9 +2113,14 @@ function parseMail(line: string): { black: string; color: string; largeColor: st
 }
 
 function parseToner(line: string): { K: string; C: string; M: string; Y: string } {
-  const m = line.match(/^토너잔량\s*:\s*K(\S*)\s+C(\S*)\s+M(\S*)\s+Y(\S*)/);
-  if (!m) return { K: "", C: "", M: "", Y: "" };
-  return { K: normToken(m[1]), C: normToken(m[2]), M: normToken(m[3]), Y: normToken(m[4]) };
+  const body = line.replace(/^토너잔량\s*[:：]?\s*/i, "").replace(/토너\s*/gi, "");
+  const read = (color: "K" | "C" | "M" | "Y") => {
+    const match = body.match(new RegExp(`(?:^|[\\s,;/]|\\d)${color}\\s*[-:=]?\\s*(-?\\s*\\d+|-)`, "i"));
+    if (!match) return "";
+    const value = match[1].replace(/\s/g, "");
+    return normToken(value === "-" ? "" : value.replace(/^-/, ""));
+  };
+  return { K: read("K"), C: read("C"), M: read("M"), Y: read("Y") };
 }
 
 function parseValueAfterColon(line: string, label: string): string {
@@ -2179,12 +2184,14 @@ function groupedSpareTokenCount(raw: string, token: SpareToken): number | null {
 }
 function expandSpareGroups(raw: string): string {
   return raw
+    .replace(/토너\s*(?=[KCMY])/gi, "")
     .replace(/(?:컬러\s*)?토너\s*[-:=]?\s*(\d+)\s*(?:세트|set)/gi, (_all, n: string) => `K${n} C${n} M${n} Y${n}`)
     .replace(/(?:KCMY|CMYK)\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/gi, (_all, n: string) => `K${n} C${n} M${n} Y${n}`)
     .replace(/CMY\s*[-:=]?\s*(\d+)\s*(?:개씩|세트)?/gi, (_all, n: string) => `C${n} M${n} Y${n}`);
 }
 function spareTokenCount(raw: string, token: SpareToken): number | null {
-  const m = raw.match(spareTokenRegex(token));
+  const normalized = expandSpareGroups(raw);
+  const m = normalized.match(spareTokenRegex(token));
   if (m) {
     const value = m[3].replace(/\s/g, "");
     return value === "-" ? null : Number(value.replace(/^-/, ""));

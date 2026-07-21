@@ -31,15 +31,25 @@ function downloadUrl(url: string, title: string) { return `${url}?download=${enc
 
 function extractVisitContacts(text: string): Contact[] {
   const lines = text.replaceAll("\r", "").split("\n").map((line) => line.trim()).filter(Boolean);
-  const names: string[] = [];
-  const phones: string[] = [];
   const contacts: Contact[] = [];
   const relevant = /(키맨(?:\/접수자)?|접수자(?:성함|연락처)?|고객명|연락처|전화번호|일반전화)/;
   const internal = /(방문담당자|영업담당자|요청담당자|수리배정|작성자)/;
   const fieldLine = /^(?:작성자|구분|레벨|등급|업체명|부서명|지역|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|특이사항|도착 시간|소요 시간)\s*[:：]/;
   let inContactBlock = false;
+  let pendingName = "";
+  const phonePattern = /(?:01[016789]|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}/g;
+  const cleanName = (value: string) => value.replace(/^[\s/|,;:：-]+|[\s/|,;:：-]+$/g, "").trim();
+  const addContact = (name: string, phone: string) => {
+    const normalizedPhone = cleanPhone(phone);
+    const existing = contacts.find((contact) => contact.phone === normalizedPhone);
+    if (existing) {
+      if (!existing.name && name) existing.name = name;
+      return;
+    }
+    contacts.push(newContact(name, normalizedPhone));
+  };
   for (const line of lines) {
-    if (/^[_=ㅡ─-]{3,}$/.test(line) || fieldLine.test(line)) inContactBlock = false;
+    if (/^[_=ㅡ─-]{3,}$/.test(line) || fieldLine.test(line)) { inContactBlock = false; pendingName = ""; }
     const startsContact = relevant.test(line) && !internal.test(line);
     if (startsContact) inContactBlock = true;
     if ((!startsContact && !inContactBlock) || internal.test(line)) continue;
@@ -48,22 +58,28 @@ function extractVisitContacts(text: string): Contact[] {
       : startsContact
         ? line.replace(/^.*?(?:키맨(?:\/접수자)?|접수자(?:성함|연락처)?|고객명|연락처|전화번호|일반전화)\s*/, "")
         : line;
-    const linePhones = [...line.matchAll(/(?:01[016789]|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}/g)].map((match) => cleanPhone(match[0]));
+    const matches = [...payload.matchAll(phonePattern)];
     const rawName = payload
-      .replace(/(?:01[016789]|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}/g, "")
+      .replace(phonePattern, "")
       .replace(/[/|,]+$/g, "").trim();
-    if ((startsContact || inContactBlock) && rawName && !/^0+$/.test(rawName) && !/(기종|모델|주소|시리얼)/.test(rawName)) names.push(rawName);
-    linePhones.forEach((phone) => phones.push(phone));
-    payload.split(/\s*[/|,]\s*/).forEach((segment) => {
-      const phone = segment.match(/(?:01[016789]|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}/)?.[0];
-      const name = segment.replace(/(?:01[016789]|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}/g, "").trim();
-      if (phone && name && !/(기종|모델|주소|시리얼)/.test(name)) contacts.push(newContact(name, phone));
+    if (!matches.length) {
+      if (rawName && !/^0+$/.test(rawName) && !/(기종|모델|주소|시리얼)/.test(rawName)) pendingName = cleanName(rawName);
+      continue;
+    }
+    matches.forEach((match, index) => {
+      const start = match.index || 0;
+      const end = start + match[0].length;
+      const previousEnd = index ? (matches[index - 1].index || 0) + matches[index - 1][0].length : 0;
+      const nextStart = index + 1 < matches.length ? (matches[index + 1].index || payload.length) : payload.length;
+      const before = cleanName(payload.slice(previousEnd, start));
+      const after = cleanName(payload.slice(end, nextStart));
+      const sameLineName = after || before;
+      const name = sameLineName && !/(기종|모델|주소|시리얼)/.test(sameLineName) ? sameLineName : pendingName;
+      addContact(name, match[0]);
+      if (pendingName && name === pendingName) pendingName = "";
     });
   }
-  phones.forEach((phone, index) => {
-    if (!contacts.some((contact) => contact.phone === phone)) contacts.push(newContact(names[index] || names[0] || `고객 ${index + 1}`, phone));
-  });
-  return contacts.filter((contact, index, rows) => rows.findIndex((item) => item.phone === contact.phone) === index).slice(0, 6);
+  return contacts.slice(0, 6);
 }
 
 function visitType(visit: VisitRow) { if (visit.workKinds.includes("as")) return "AS"; if (visit.workKinds.includes("inspection")) return "점검"; return visit.workKinds.map((kind) => WORK_LABELS[kind]).join("·") || "방문 업무"; }
@@ -159,7 +175,7 @@ export function HappyCallWorkspace({ author }: { author: string }) {
       <div className="max-h-[calc(100dvh-290px)] divide-y overflow-y-auto xl:max-h-[700px]">{rows.map((visit) => { const status = recordMap.get(visit.id)?.status || "pending"; return <button key={visit.id} onClick={() => choose(visit)} className={`block w-full p-4 text-left hover:bg-slate-50 ${selectedId === visit.id ? "bg-blue-50" : ""}`}><div className="flex justify-between gap-3"><div><div className="text-sm font-black">{visit.vendor}</div><div className="mt-1 text-xs font-semibold text-slate-500">{visit.workDate} · {visitType(visit)} · {visit.author}</div></div><span className="shrink-0 text-[10px] font-black text-blue-600">{statusLabel(status)}</span></div></button>; })}{!loading && !rows.length && <div className="p-12 text-center text-sm text-slate-400">방문기록이 없습니다.</div>}</div>
     </section>
     <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:block">{detail}</section>
-    {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex justify-end border-b bg-white px-4 py-2"><button type="button" onClick={() => setSelectedId("")} className="h-9 w-9 rounded-full bg-slate-100 text-xl text-slate-500" aria-label="닫기">×</button></div>{detail}</section></div>}
+    {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 pt-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><button type="button" onClick={() => setSelectedId("")} className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/80 text-xl text-white shadow-lg" aria-label="닫기">×</button>{detail}</section></div>}
   </div>;
 }
 
@@ -195,7 +211,7 @@ export function PromoWorkspace({ author }: { author: string }) {
     <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} className="rounded-md bg-blue-600 px-3 py-2.5 text-sm font-black text-white">문자 발송</button><button onClick={() => void send("email")} className="rounded-md border border-blue-200 px-3 py-2.5 text-sm font-black text-blue-700">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-md border px-3 py-2.5 text-center text-sm font-black">원본 열기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-md border px-3 py-2.5 text-center text-sm font-black">파일 저장</a></div>
   </div> : <div className="flex min-h-[400px] items-center justify-center text-sm font-semibold text-slate-400">홍보물을 선택하세요.</div>;
   return <div className="space-y-4"><section className="flex items-end justify-between gap-3 rounded-lg border bg-white p-4 shadow-sm sm:p-5"><div><h2 className="text-xl font-black">홍보물 센터</h2><p className="mt-1 hidden text-sm font-semibold text-slate-500 sm:block">방문 업체를 불러오거나 직접 입력해 문자·메일·인쇄합니다.</p></div><button onClick={() => setUploadOpen(true)} className="shrink-0 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white">+ 자료 등록</button></section><div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(470px,.9fr)]"><section className="rounded-lg border bg-white shadow-sm"><div className="grid grid-cols-3 gap-2 border-b p-3 sm:grid-cols-6">{["전체", ...promoCategories].map((item) => <button key={item} onClick={() => setCategory(item)} className={`rounded-md px-1 py-2 text-[11px] font-black sm:text-xs ${category === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}</div><div className="grid grid-cols-2 gap-3 p-3 sm:p-4 lg:grid-cols-3">{visible.map((item) => <button key={item.id} onClick={() => setSelectedId(item.id)} className={`overflow-hidden rounded-md border text-left ${selectedId === item.id ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"}`}><div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100"><MaterialPreview material={item} compact /></div><div className="p-3"><span className="text-[10px] font-black text-blue-600">{item.category}</span><div className="mt-1 line-clamp-2 text-sm font-black">{item.title}</div></div></button>)}</div></section><section className="hidden rounded-lg border bg-white p-5 shadow-sm xl:block">{detail}</section></div>
-    {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex justify-end border-b bg-white px-4 py-2"><button type="button" onClick={() => setSelectedId("")} className="h-9 w-9 rounded-full bg-slate-100 text-xl text-slate-500" aria-label="닫기">×</button></div>{detail}</section></div>}
+    {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 pt-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><button type="button" onClick={() => setSelectedId("")} className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/80 text-xl text-white shadow-lg" aria-label="닫기">×</button>{detail}</section></div>}
     {uploadOpen && <div className="fixed inset-0 z-[2200] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setUploadOpen(false)}><div className="w-full rounded-t-xl bg-white p-5 sm:max-w-lg sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}><div className="flex justify-between"><div className="text-lg font-black">홍보물 등록</div><button onClick={() => setUploadOpen(false)} className="text-xl text-slate-400">×</button></div><div className="mt-5 space-y-4"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="자료 제목" className="w-full rounded-md border p-3 text-sm" /><select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)} className="w-full rounded-md border bg-white p-3 text-sm">{promoCategories.map((item) => <option key={item}>{item}</option>)}</select><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="자료 설명" className="w-full rounded-md border p-3 text-sm" /><button onClick={() => fileRef.current?.click()} className="w-full rounded-md border border-dashed p-5 text-sm font-black">{file ? file.name : "이미지 또는 PDF 선택"}</button><input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} /><button disabled={uploading || !title.trim() || !file} onClick={() => void upload()} className="w-full rounded-md bg-blue-600 p-3 text-sm font-black text-white disabled:opacity-40">{uploading ? "등록 중" : "홍보물 센터에 등록"}</button></div></div></div>}
   </div>;
 }
