@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTeamVisits, kstDate, WORK_LABELS, type VisitRow } from "./visits";
 import { insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
 
@@ -11,13 +11,13 @@ type PromoMaterial = { id: string; title: string; category: string; description:
 const happycallDays = 7;
 const promoCategories = ["IT", "소프트웨어", "퇴사자 보안", "복합기", "기타"];
 const happycallDefaults = [
-  { id: "default-check", title: "기본 확인형", body: "[퍼스트전산] {고객명}님, {방문일} {업무}을 담당한 {담당자}입니다. 방문 후 기기는 잘 사용하고 계신가요? 불편한 점이 남아 있다면 회사 대표번호로 말씀해 주세요." },
-  { id: "default-short", title: "짧은 만족 확인형", body: "[퍼스트전산] {고객명}님, 오늘 {업무} 후 불편 없이 사용 중이신지 확인드립니다. 추가 도움이 필요하시면 대표번호로 연락 부탁드립니다. 담당 {담당자}" },
-  { id: "default-care", title: "추가 관리형", body: "[퍼스트전산] {고객명}님, {업체명} 방문 담당 {담당자}입니다. 처리 후 같은 증상이 반복되거나 다른 불편이 생기면 말씀해 주세요. 빠르게 확인하겠습니다." },
+  { id: "00000000-0000-0000-0000-000000000101", context: "happycall" as const, title: "점검 기본 확인형", body: "[퍼스트전산] {고객명}님, {방문일} 점검을 담당한 {담당자}입니다. 점검 후 기기는 잘 사용하고 계신가요? 불편한 점이 있다면 대표번호로 말씀해 주세요.", active: true, created_by: "SYSTEM" },
+  { id: "00000000-0000-0000-0000-000000000102", context: "happycall" as const, title: "AS 기본 확인형", body: "[퍼스트전산] {고객명}님, {방문일} AS를 담당한 {담당자}입니다. 처리한 증상은 다시 발생하지 않고 잘 사용 중이신가요? 같은 증상이 반복되면 대표번호로 말씀해 주세요.", active: true, created_by: "SYSTEM" },
+  { id: "00000000-0000-0000-0000-000000000103", context: "happycall" as const, title: "짧은 만족 확인형", body: "[퍼스트전산] {고객명}님, 오늘 {업무} 후 불편 없이 사용 중이신지 확인드립니다. 추가 도움이 필요하시면 대표번호로 연락 부탁드립니다. 담당 {담당자}", active: true, created_by: "SYSTEM" },
 ];
 const promotionDefaults = [
-  { id: "default-info", title: "자료 안내형", body: "[퍼스트전산] {고객명}님께 업무에 도움이 될 {자료명} 자료를 보내드립니다.\n{자료설명}\n{자료링크}" },
-  { id: "default-consult", title: "상담 연결형", body: "[퍼스트전산] {고객명}님, 방문 중 말씀드린 {자료명} 안내자료입니다. 검토 후 궁금한 점이나 상담이 필요하시면 대표번호로 연락해 주세요.\n{자료링크}" },
+  { id: "00000000-0000-0000-0000-000000000201", context: "promotion" as const, title: "자료 안내형", body: "[퍼스트전산] {고객명}님께 업무에 도움이 될 {자료명} 자료를 보내드립니다.\n{자료설명}\n{자료링크}", active: true, created_by: "SYSTEM" },
+  { id: "00000000-0000-0000-0000-000000000202", context: "promotion" as const, title: "상담 연결형", body: "[퍼스트전산] {고객명}님, 방문 중 말씀드린 {자료명} 안내자료입니다. 검토 후 궁금한 점이나 상담이 필요하시면 대표번호로 연락해 주세요.\n{자료링크}", active: true, created_by: "SYSTEM" },
 ];
 
 function dateBefore(days: number) { const date = new Date(); date.setDate(date.getDate() - days); return kstDate(date); }
@@ -105,48 +105,75 @@ function ContactsEditor({ contacts, onChange, email = false }: { contacts: Conta
 function useMessageTemplates(context: "happycall" | "promotion", author: string) {
   const defaults = context === "happycall" ? happycallDefaults : promotionDefaults;
   const [custom, setCustom] = useState<MessageTemplate[]>([]);
-  const reload = () => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`).then(setCustom).catch(() => setCustom([]));
-  useEffect(() => { void reload(); }, [context]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reload = useCallback(() => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`).then(setCustom).catch(() => setCustom([])), [context]);
+  useEffect(() => {
+    void reload();
+    const refresh = () => { if (document.visibilityState === "visible") void reload(); };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [reload]);
   const save = async (body: string) => {
-    const title = window.prompt("문구 이름을 입력하세요.");
+    const title = window.prompt("전 직원에게 공유할 새 문구 이름을 입력하세요.");
     if (!title?.trim() || !body.trim()) return;
+    if (!window.confirm(`'${title.trim()}' 문구를 회사 공용으로 추가할까요?\n모든 직원에게 동일하게 표시됩니다.`)) return;
     await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
     await reload();
   };
   const update = async (id: string, body: string) => {
     const current = custom.find((item) => item.id === id);
     if (!current) return save(body);
-    const title = window.prompt("문구 이름", current.title);
+    const title = window.prompt("회사 공용 문구 이름", current.title);
     if (!title?.trim() || !body.trim()) return;
+    if (!window.confirm(`'${current.title}' 공용 문구를 수정할까요?\n변경 내용은 모든 직원에게 반영됩니다.`)) return;
     await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
     await reload();
   };
-  const remove = async (id: string) => { await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { active: false }); await reload(); };
+  const remove = async (id: string) => {
+    const current = custom.find((item) => item.id === id);
+    if (!current || !window.confirm(`'${current.title}' 공용 문구를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
+    await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { active: false });
+    await reload();
+  };
   return { templates: custom.length ? custom : defaults, save, update, remove, editableIds: new Set(custom.map((item) => item.id)) };
 }
 
-function TemplateBar({ context, author, body, onApply }: { context: "happycall" | "promotion"; author: string; body: string; onApply: (body: string) => void }) {
+function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
   const { templates, save, update, remove, editableIds } = useMessageTemplates(context, author);
   const [selected, setSelected] = useState(templates[0]?.id || "");
+  const appliedRevision = useRef("");
   const selectedId = templates.some((item) => item.id === selected) ? selected : templates[0]?.id || "";
-  return <div className="grid grid-cols-3 gap-2">
+  useEffect(() => {
+    if (!applyRevision || appliedRevision.current === applyRevision || !templates.length) return;
+    const preferred = templates.find((item) => item.title === preferredTitle) || templates[0];
+    appliedRevision.current = applyRevision;
+    setSelected(preferred.id);
+    onApply(preferred.body);
+  }, [applyRevision, onApply, preferredTitle, templates]);
+  return <div className="grid grid-cols-3 gap-2 rounded-md border border-blue-100 bg-blue-50/50 p-2">
+    <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
     <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
-    <button type="button" onClick={() => void save(body)} className="rounded-md border border-blue-200 px-2 py-2 text-xs font-black text-blue-600">새 문구</button>
-    <button type="button" onClick={() => void update(selectedId, body)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-black text-slate-700">수정 저장</button>
-    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-40">삭제</button>
+    <button type="button" onClick={() => void save(body)} className="rounded-md border border-blue-200 bg-white px-2 py-2 text-xs font-black text-blue-600">공용 추가</button>
+    <button type="button" onClick={() => void update(selectedId, body)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">공용 수정</button>
+    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-40">공용 삭제</button>
   </div>;
 }
 
 export function HappyCallWorkspace({ author }: { author: string }) {
   const [visits, setVisits] = useState<VisitRow[]>([]); const [records, setRecords] = useState<HappycallRecord[]>([]);
-  const [selectedId, setSelectedId] = useState(""); const [contacts, setContacts] = useState<Contact[]>([]); const [message, setMessage] = useState(happycallDefaults[0].body);
+  const [selectedId, setSelectedId] = useState(""); const [contacts, setContacts] = useState<Contact[]>([]); const [message, setMessage] = useState("");
   const [filter, setFilter] = useState<"pending" | "scheduled" | "cancelled" | "sent" | "all">("pending"); const [kindFilter, setKindFilter] = useState<"inspection" | "as">("inspection"); const [scheduleAt, setScheduleAt] = useState(defaultScheduleTime); const [loading, setLoading] = useState(true); const [sending, setSending] = useState(false); const [notice, setNotice] = useState("");
   useEffect(() => { let active = true; setLoading(true); const history = selectRows<HappycallRecord>("happycall_messages", "select=*&order=created_at.desc").catch(() => [] as HappycallRecord[]); Promise.all([getTeamVisits(dateBefore(happycallDays - 1), kstDate()), history]).then(([visitRows, recordRows]) => { if (!active) return; setVisits(visitRows.filter((visit) => visit.visited && (visit.workKinds.includes("inspection") || visit.workKinds.includes("as"))).reverse()); setRecords(recordRows); }).catch((error) => active && setNotice((error as Error).message)).finally(() => active && setLoading(false)); return () => { active = false; }; }, []);
   const recordMap = useMemo(() => new Map(records.map((record) => [record.visit_id, record])), [records]);
   const rows = visits.filter((visit) => visit.workKinds.includes(kindFilter) && (filter === "all" || (recordMap.get(visit.id)?.status || "pending") === filter)); const selected = visits.find((visit) => visit.id === selectedId); const selectedRecord = selected ? recordMap.get(selected.id) : undefined;
-  const choose = (visit: VisitRow) => { const record = recordMap.get(visit.id); const found = record?.recipients?.length ? record.recipients.map((item) => ({ ...item, id: item.id || crypto.randomUUID() })) : extractVisitContacts(visit.sourceText || visit.note); setSelectedId(visit.id); setContacts(found.length ? found : [newContact()]); setMessage(record?.message || (visit.workKinds.includes("as") ? happycallDefaults[1].body : happycallDefaults[0].body)); setScheduleAt(record?.scheduled_at ? new Date(new Date(record.scheduled_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : defaultScheduleTime()); setNotice(found.length ? `${found.length}명의 고객 정보를 불러왔습니다.` : "원문에서 연락처를 찾지 못했습니다. 직접 입력해 주세요."); };
+  const choose = (visit: VisitRow) => { const record = recordMap.get(visit.id); const found = record?.recipients?.length ? record.recipients.map((item) => ({ ...item, id: item.id || crypto.randomUUID() })) : extractVisitContacts(visit.sourceText || visit.note); setSelectedId(visit.id); setContacts(found.length ? found : [newContact()]); setMessage(record?.message || ""); setScheduleAt(record?.scheduled_at ? new Date(new Date(record.scheduled_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : defaultScheduleTime()); setNotice(found.length ? `${found.length}명의 고객 정보를 불러왔습니다.` : "원문에서 연락처를 찾지 못했습니다. 직접 입력해 주세요."); };
   const saveRecord = async (status: HappycallStatus, error = "", extras: Partial<HappycallRecord> = {}) => { if (!selected) return; const first = contacts[0] || newContact(); const row = { visit_id: selected.id, author, recipient: first.phone, keyman: first.name, message, recipients: contacts, status, sent_at: status === "sent" ? new Date().toISOString() : null, error, ...extras }; await upsertRow("happycall_messages", row, "visit_id"); setRecords((current) => [row as HappycallRecord, ...current.filter((item) => item.visit_id !== selected.id)]); };
   const send = async () => { if (!selected) return; const targets = contacts.filter((contact) => contact.selected && validPhone(contact.phone)); if (!targets.length) return setNotice("발송할 휴대전화 번호를 선택해 주세요."); setSending(true); try { for (const contact of targets) { const text = applyTokens(message, { 고객명: contact.name || "고객", 업체명: selected.vendor, 담당자: selected.author, 업무: visitType(selected), 방문일: selected.workDate }); await invokeEdgeFunction("customer-message-send", { channel: "sms", type: "happycall", visitId: selected.id, to: contact.phone, text, vendor: selected.vendor, author }); } await saveRecord("sent"); setNotice(`${targets.length}명에게 대표번호로 발송했습니다.`); } catch (error) { const detail = (error as Error).message; try { await saveRecord("failed", detail); } catch { /* preserve send error */ } setNotice(`발송 실패: ${detail}`); } finally { setSending(false); } };
   const schedule = async () => { if (!selected) return; const targets = contacts.filter((contact) => contact.selected && validPhone(contact.phone)); const scheduledDate = new Date(scheduleAt); if (!targets.length) return setNotice("예약할 휴대전화 번호를 선택해 주세요."); if (!scheduleAt || scheduledDate.getTime() <= Date.now()) return setNotice("현재보다 이후 시간을 선택해 주세요."); setSending(true); try { const jobIds: string[] = []; for (const contact of targets) { const id = crypto.randomUUID(); const text = applyTokens(message, { 고객명: contact.name || "고객", 업체명: selected.vendor, 담당자: selected.author, 업무: visitType(selected), 방문일: selected.workDate }); await upsertRow("message_jobs", { id, source_type: "happycall", source_id: selected.id, channel: "sms", recipient: contact.phone, message: text, payload: { type: "happycall", visitId: selected.id, vendor: selected.vendor, author }, scheduled_at: scheduledDate.toISOString(), status: "scheduled", created_by: author }, "id"); jobIds.push(id); } await saveRecord("scheduled", "", { scheduled_at: scheduledDate.toISOString(), job_ids: jobIds }); setNotice(`${targets.length}명 발송을 ${scheduledDate.toLocaleString("ko-KR")}로 예약했습니다.`); } catch (error) { setNotice(`예약 실패: ${(error as Error).message}`); } finally { setSending(false); } };
@@ -154,7 +181,7 @@ export function HappyCallWorkspace({ author }: { author: string }) {
   const detail = selected ? <div className="flex min-h-0 flex-col">
     <div className="border-b pb-3"><div className="text-xs font-black text-blue-600">{selected.workDate} · {visitType(selected)}</div><div className="mt-1 text-lg font-black">{selected.vendor}</div></div>
     <div className="mt-4"><div className="mb-2 text-xs font-black text-slate-500">발송 대상</div><ContactsEditor contacts={contacts} onChange={setContacts} /></div>
-    <div className="mt-4"><TemplateBar context="happycall" author={author} body={message} onApply={setMessage} /></div>
+    <div className="mt-4"><TemplateBar context="happycall" author={author} body={message} onApply={setMessage} preferredTitle={selected.workKinds.includes("as") ? "AS 기본 확인형" : "점검 기본 확인형"} applyRevision={selectedRecord?.message ? "" : selected.id} /></div>
     <textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm leading-6" />
     <div className="text-[10px] font-bold text-slate-400">사용 가능: {'{고객명}'} {'{업체명}'} {'{담당자}'} {'{업무}'} {'{방문일}'}</div>
     <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-black text-slate-500">예약 발송 시간<input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label></div>
@@ -191,7 +218,7 @@ function MaterialPreview({ material, compact = false }: { material: PromoMateria
 
 export function PromoWorkspace({ author }: { author: string }) {
   const [materials, setMaterials] = useState<PromoMaterial[]>([]); const [visits, setVisits] = useState<VisitRow[]>([]); const [selectedId, setSelectedId] = useState(""); const [sourceVisitId, setSourceVisitId] = useState(""); const [visitPickerOpen, setVisitPickerOpen] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>([newContact()]); const [message, setMessage] = useState(promotionDefaults[0].body); const [category, setCategory] = useState("전체"); const [uploadOpen, setUploadOpen] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([newContact()]); const [message, setMessage] = useState(""); const [category, setCategory] = useState("전체"); const [uploadOpen, setUploadOpen] = useState(false);
   const [title, setTitle] = useState(""); const [uploadCategory, setUploadCategory] = useState(promoCategories[0]); const [description, setDescription] = useState(""); const [file, setFile] = useState<File | null>(null); const [uploading, setUploading] = useState(false); const [notice, setNotice] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
   const reload = () => selectRows<PromoMaterial>("promo_materials", "select=*&active=eq.true&order=created_at.desc").then(setMaterials).catch((error) => setNotice((error as Error).message));
   useEffect(() => { void reload(); void getTeamVisits(dateBefore(30), kstDate()).then((rows) => setVisits(rows.filter((visit) => visit.visited).reverse())); }, []);
@@ -215,8 +242,9 @@ export function PromoWorkspace({ author }: { author: string }) {
       </div>}
     </div>
     <div className="mt-3"><ContactsEditor contacts={contacts} onChange={setContacts} email /></div>
-    <div className="mt-4"><TemplateBar context="promotion" author={author} body={message} onApply={setMessage} /></div>
+    <div className="mt-4"><TemplateBar context="promotion" author={author} body={message} onApply={setMessage} preferredTitle="자료 안내형" applyRevision={selected.id} /></div>
     <textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm leading-6" />
+    <div className="mt-1 text-[10px] font-bold text-slate-400">이 칸만 고치면 현재 발송에만 적용됩니다. 전체 문구를 바꾸려면 공용 수정 버튼을 누르세요.</div>
     {notice && <div className="mt-3 rounded-md bg-slate-100 p-3 text-xs font-bold text-slate-600">{notice}</div>}
     <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} className="rounded-md bg-blue-600 px-3 py-2.5 text-sm font-black text-white">문자 발송</button><button onClick={() => void send("email")} className="rounded-md border border-blue-200 px-3 py-2.5 text-sm font-black text-blue-700">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-md border px-3 py-2.5 text-center text-sm font-black">원본 열기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-md border px-3 py-2.5 text-center text-sm font-black">파일 저장</a></div>
   </div> : <div className="flex min-h-[400px] items-center justify-center text-sm font-semibold text-slate-400">홍보물을 선택하세요.</div>;
