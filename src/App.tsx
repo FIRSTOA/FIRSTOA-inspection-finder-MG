@@ -231,7 +231,7 @@ function buildItemTitleLine(cleaned: string[], blockIndex: number): string {
     return cleaned
       .slice(startIdx, modelIndex)
       .filter((l: string) => l.trim() && !/:/.test(l))
-      .join(" ")
+      .join("\n")
       .trim();
   };
 
@@ -241,12 +241,13 @@ function buildItemTitleLine(cleaned: string[], blockIndex: number): string {
     const num = titleMatch[1] || titleMatch[2] || titleMatch[3];
     let rest = (titleMatch[4] || "").trim();
     const loc = gatherLoc(1);
-    if (loc) rest = rest ? `${rest} ${loc}` : loc;
-    return rest ? `${num}. ${rest}` : `${num}.`;
+    if (loc) rest = rest ? `${rest}\n${loc}` : loc;
+    return rest ? `${num}.\n${rest}` : `${num}.`;
   }
 
   if (modelIndex > 0 && firstLine && !/:/.test(firstLine)) {
-    return `${blockIndex + 1}. ${firstLine.trim()}`;
+    const location = gatherLoc(0);
+    return location ? `${blockIndex + 1}.\n${location}` : `${blockIndex + 1}.`;
   }
 
   return `${blockIndex + 1}.`;
@@ -1971,6 +1972,7 @@ function runSelfTests(): TestResult[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 type PerItemForm = {
+  location: string;
   model: string;
   serial: string;
   asset: string;
@@ -1992,6 +1994,7 @@ type PerItemForm = {
 };
 
 const EMPTY_ITEM_FORM: PerItemForm = {
+  location: "",
   model: "", serial: "", asset: "", content: "",
   processContent: "",
   mailBlack: "", mailColor: "", mailLargeColor: "", mailTotal: "",
@@ -2057,6 +2060,21 @@ function normToken(s: string): string {
 
 function dashIfEmpty(s: string): string {
   return s.trim() ? s.trim() : "-";
+}
+
+function cleanDeviceLocation(value: string, itemNumber?: number): string {
+  const divider = /^\s*[_=ㅡ─-]{3,}\s*$/;
+  const lines = String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !divider.test(line));
+  if (!lines.length) return "";
+  const numbered = lines[0].match(/^\s*(\d+)\s*[.)]\s*(.*)$/);
+  if (numbered && (!itemNumber || Number(numbered[1]) === itemNumber)) {
+    if (numbered[2].trim()) lines[0] = numbered[2].trim();
+    else lines.shift();
+  }
+  return lines.join("\n");
 }
 
 function applyReportTypeSelection(text: string, selected: string[], other: string): string {
@@ -2227,6 +2245,7 @@ function applyProcessingFormV2(
   let itemIdx = -1;
   let section: "" | "parts" | "self" = "";
   let skipCont = false;
+  let skipOriginalLocation = false;
   const out: string[] = [];
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
@@ -2245,8 +2264,16 @@ function applyProcessingFormV2(
     if (starts[li]) {
       itemIdx++;
       section = "";
-      out.push(line);
+      const location = cleanDeviceLocation(itemForms[itemIdx]?.location || "", itemIdx + 1);
+      out.push(`${itemIdx + 1}.`);
+      if (location) out.push(...location.split("\n"));
+      skipOriginalLocation = true;
       continue;
+    }
+    if (skipOriginalLocation) {
+      if (/^모델명\s*:/.test(line)) skipOriginalLocation = false;
+      else if (!isDividerLine(line) && !FIELD_MARKER_REGEX.test(line)) continue;
+      else skipOriginalLocation = false;
     }
     if (/^※부품신청※/.test(line)) { section = "parts"; out.push(line); continue; }
     if (/^※자가신청※/.test(line)) { section = "self"; out.push(line); continue; }
@@ -2368,17 +2395,47 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
   let collecting: "process" | "spare" | "note" | null = null;
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
+  if (!starts.some(Boolean)) {
+    const firstContent = lines.findIndex((line) => line.trim() !== "");
+    if (firstContent >= 0 && /^\s*\d+\./.test(lines[firstContent])) starts[firstContent] = true;
+  }
+  let collectingLocation = false;
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
-    if (starts[li]) { idx++; collecting = null; continue; }
+    if (starts[li]) {
+      idx++;
+      collecting = null;
+      collectingLocation = true;
+      const sameLine = line.match(/^\s*\d+\.\s*(.*)$/)?.[1] || "";
+      forms[idx].location = cleanDeviceLocation(sameLine, idx + 1);
+      continue;
+    }
     if (isDividerLine(line) || /^※/.test(line)) { collecting = null; continue; }
     if (idx < 0 || idx >= count) continue;
 
-    if (/^모델명\s*:/.test(line)) { forms[idx].model = parseValueAfterColon(line, "모델명"); collecting = null; continue; }
+    if (/^모델명\s*:/.test(line)) { forms[idx].model = parseValueAfterColon(line, "모델명"); collecting = null; collectingLocation = false; continue; }
+    if (collectingLocation && line.trim() && !isDividerLine(line) && !FIELD_MARKER_REGEX.test(line)) {
+      const locationLine = cleanDeviceLocation(line, idx + 1);
+      if (locationLine) forms[idx].location = forms[idx].location ? `${forms[idx].location}\n${locationLine}` : locationLine;
+      continue;
+    }
     if (/^시리얼넘버\s*:/.test(line)) { forms[idx].serial = parseValueAfterColon(line, "시리얼넘버"); collecting = null; continue; }
     if (/^자산기번\s*:/.test(line)) { forms[idx].asset = parseValueAfterColon(line, "자산기번"); collecting = null; continue; }
     if (/^내용\s*:/.test(line)) { forms[idx].content = parseValueAfterColon(line, "내용"); collecting = null; continue; }
+    if (/^매수\s*:/.test(line)) {
+      const mail = parseMail(line);
+      forms[idx].mailBlack = mail.black; forms[idx].mailColor = mail.color;
+      forms[idx].mailLargeColor = mail.largeColor; forms[idx].mailTotal = mail.total;
+      collecting = null; continue;
+    }
+    if (/^토너잔량\s*:/.test(line)) {
+      const toner = parseToner(line);
+      forms[idx].tonerK = toner.K; forms[idx].tonerC = toner.C;
+      forms[idx].tonerM = toner.M; forms[idx].tonerY = toner.Y;
+      collecting = null; continue;
+    }
+    if (/^폐통\s*:/.test(line)) { forms[idx].waste = parseValueAfterColon(line, "폐통").replace(/%\s*$/, "").trim(); collecting = null; continue; }
     if (/^처리내용\s*:/.test(line)) {
       forms[idx].processContent = parseValueAfterColon(line, "처리내용");
       collecting = "process";
@@ -2695,8 +2752,8 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
   );
 }
 
-type DeviceInfo = Pick<PerItemForm, "model" | "serial" | "asset" | "content">;
-const EMPTY_DEVICE_INFO: DeviceInfo = { model: "", serial: "", asset: "", content: "" };
+type DeviceInfo = Pick<PerItemForm, "location" | "model" | "serial" | "asset" | "content">;
+const EMPTY_DEVICE_INFO: DeviceInfo = { location: "", model: "", serial: "", asset: "", content: "" };
 
 function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMove, onReorder, onRemove }: {
   forms: PerItemForm[];
@@ -2717,13 +2774,14 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
   const beginEdit = (index: number | "new") => {
     setEditing(index);
     setDraft(index === "new" ? { ...EMPTY_DEVICE_INFO } : {
+      location: forms[index]?.location || "",
       model: forms[index]?.model || "", serial: forms[index]?.serial || "",
       asset: forms[index]?.asset || "", content: forms[index]?.content || "",
     });
     setOpen(true);
   };
   const save = () => {
-    if (!draft.model.trim() && !draft.serial.trim() && !draft.asset.trim()) return;
+    if (!Object.values(draft).some((value) => value.trim())) return;
     if (editing === "new") onAdd(draft);
     else if (typeof editing === "number") onUpdate(editing, draft);
     setEditing(null);
@@ -2787,8 +2845,13 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
           </div>
         </div>
         {editing !== null ? <div className="space-y-2 overflow-y-auto p-4">
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-500">기기위치</span>
+            <textarea autoFocus value={draft.location} onChange={(e) => setDraft((prev) => ({ ...prev, location: e.target.value }))} rows={2} placeholder={'예: 201호\n기업부설연구소'} className="mt-1 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" />
+            <span className="mt-1 block text-[10px] text-slate-400">기기 번호는 자동으로 붙습니다. 여러 줄 입력도 가능합니다.</span>
+          </label>
           {([['model','모델명'],['serial','시리얼넘버'],['asset','자산기번'],['content','내용']] as [keyof DeviceInfo,string][]).map(([key, label]) =>
-            <label key={key} className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input autoFocus={key === "model"} value={draft[key]} onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" /></label>)}
+            <label key={key} className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input value={draft[key]} onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-base outline-none focus:border-slate-500" /></label>)}
           <div className="flex gap-2 pt-2"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">뒤로</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">{editing === "new" ? "기기 추가" : "정보 저장"}</button></div>
         </div> : <div className="flex-1 overflow-y-auto p-2">
           {forms.map((_, i) => <div key={i} data-device-index={i} className={`mb-1 flex items-stretch gap-1 rounded-xl border p-1.5 transition ${rowClass(i)}`}>
@@ -3455,6 +3518,7 @@ const FORM_DRIVEN_PREFIXES = new Set<string>([
   // shared header
   "작성자", "레벨",
   // per-item (inspection)
+  "모델명", "시리얼넘버", "자산기번", "내용",
   "처리내용", "매수", "토너잔량", "폐통", "여분",
   "한틴이카유무", "주차비지원유무", "특이사항",
   // shared footer / 부품·자가
@@ -3475,7 +3539,7 @@ function linePrefix(line: string): string {
 
 // Merge the user's manual edit of a block with the freshly form-driven base.
 // Lines whose prefix is form-driven take the form's value; every other line
-// keeps the user's text (기기위치, 모델명, 시리얼넘버, 내용, 등급 등).
+// keeps the user's text. The device lead is driven by the location form.
 function mergeBlockEdit(formBase: string, userEdit: string): string {
   // 처리내용 등 여러 줄 필드는 첫 라벨 줄뿐 아니라 다음 필드 전까지를 통째로 교체한다.
   // 기존 Map 방식만 사용하면 라벨 없는 2번째 줄부터가 사라질 수 있다.
@@ -3493,7 +3557,19 @@ function mergeBlockEdit(formBase: string, userEdit: string): string {
     targetLines.splice(targetStart, endOf(targetLines, targetStart) - targetStart, ...sourceLines.slice(sourceStart, endOf(sourceLines, sourceStart)));
     return targetLines.join("\n");
   };
-  let mergedEdit = replaceMultiline(userEdit, formBase, "처리내용");
+  const replaceDeviceLead = (target: string, source: string): string => {
+    const sourceLines = source.split("\n");
+    const targetLines = target.split("\n");
+    const sourceStart = sourceLines.findIndex((line) => /^\s*\d+\./.test(line));
+    const targetStart = targetLines.findIndex((line) => /^\s*\d+\./.test(line));
+    const sourceModel = sourceLines.findIndex((line, i) => i > sourceStart && /^모델명\s*:/.test(line));
+    const targetModel = targetLines.findIndex((line, i) => i > targetStart && /^모델명\s*:/.test(line));
+    if (sourceStart < 0 || targetStart < 0 || sourceModel < 0 || targetModel < 0) return target;
+    targetLines.splice(targetStart, targetModel - targetStart, ...sourceLines.slice(sourceStart, sourceModel));
+    return targetLines.join("\n");
+  };
+  let mergedEdit = replaceDeviceLead(userEdit, formBase);
+  mergedEdit = replaceMultiline(mergedEdit, formBase, "처리내용");
   mergedEdit = replaceMultiline(mergedEdit, formBase, "여분");
   mergedEdit = replaceMultiline(mergedEdit, formBase, "특이사항");
   const baseByPrefix = new Map<string, string>();
@@ -3721,20 +3797,9 @@ export default function App() {
   const replacementFilled = Object.entries(replacementForm).some(([key, value]) => key !== "owner" && String(value).trim() !== "");
   const replacementText = useMemo(() => buildReplacementText(replacementForm), [replacementForm]);
   const [reportTypes, setReportTypes] = useState<string[]>(
-    Array.isArray(ss.reportTypes) ? (ss.reportTypes as string[]) : [],
+    Array.isArray(ss.reportTypes) ? (ss.reportTypes as string[]) : (mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []),
   );
   const [reportTypeOther, setReportTypeOther] = useState<string>((ss.reportTypeOther as string) ?? "");
-
-  useEffect(() => {
-    if (mode !== "inspection") return;
-    if (sharedForm.level !== FIXED_INSPECTION_LEVEL) {
-      setSharedForm((prev: SharedForm) => ({ ...prev, level: FIXED_INSPECTION_LEVEL }));
-    }
-    if (reportTypes.length !== 1 || reportTypes[0] !== FIXED_INSPECTION_REPORT_TYPES[0]) {
-      setReportTypes(FIXED_INSPECTION_REPORT_TYPES);
-    }
-    if (reportTypeOther) setReportTypeOther("");
-  }, [mode, sharedForm.level, reportTypes, reportTypeOther]);
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
   const isCat = mode === "bulman" || mode === "misu" || mode === "recontract" || mode === "overage-adjust";
@@ -3807,8 +3872,8 @@ export default function App() {
       setSelectedItem(s.selectedItem);
       setEditedBlocks(s.editedBlocks);
       setAirForm(s.airForm);
-      setReportTypes(next === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : s.reportTypes);
-      setReportTypeOther(next === "inspection" ? "" : s.reportTypeOther);
+      setReportTypes(s.reportTypes);
+      setReportTypeOther(s.reportTypeOther);
       // 미양식 복원 시 통합이력 팝업이 자동으로 다시 뜨지 않게 마지막 인식 업체명을 맞춰둔다.
       if (next === "blank-report") {
         lastBlankVendor.current = extractVendorFromText(s.listOutput[0]?.content || s.textOutput || "");
@@ -4235,13 +4300,13 @@ export default function App() {
     const nextIndex = parts.devices.length;
     const nextDevices = [...parts.devices, [`${nextIndex + 1}.`, ...NEW_DEVICE_LINES]];
     setTextOutput(rebuildInspectionDevices(parts.header, nextDevices, parts.footer));
-    setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM, ...info }]);
+    setItemForms((prev) => [...prev, { ...EMPTY_ITEM_FORM, ...info, location: cleanDeviceLocation(info.location, nextIndex + 1) }]);
     setSelectedItem(nextIndex);
     showToast(`${nextIndex + 1}번 기기를 추가했어요`);
   };
 
   const updateInspectionDevice = (index: number, info: DeviceInfo) => {
-    setItemForms((prev) => prev.map((form, i) => i === index ? { ...form, ...info } : form));
+    setItemForms((prev) => prev.map((form, i) => i === index ? { ...form, ...info, location: cleanDeviceLocation(info.location, index + 1) } : form));
     setSelectedItem(index);
   };
 
@@ -4682,7 +4747,7 @@ export default function App() {
               <div className="space-y-2">
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
-                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
+                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
                   return (
                     <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2" style={{ borderLeft: `4px solid ${active ? config.accent : "transparent"}` }}>
                       <textarea
@@ -4757,7 +4822,7 @@ export default function App() {
             <div ref={resultScrollRef} className="relative space-y-1.5 overflow-y-auto pb-2" style={{ maxHeight: "30vh" }}>
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
-                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
+                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
                   return (
                     <div
                       key={i}
