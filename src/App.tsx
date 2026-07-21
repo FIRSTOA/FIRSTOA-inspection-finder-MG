@@ -4593,14 +4593,6 @@ export default function App() {
                   </div>}
                 </div>
               ))}
-              <a
-                href="/manual/field-manual.svg"
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"
-              >
-                사용 매뉴얼 이미지 ↗
-              </a>
             </nav>
           </div>
           <div className="flex-1 bg-black/30" />
