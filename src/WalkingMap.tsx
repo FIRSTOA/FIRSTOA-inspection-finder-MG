@@ -50,7 +50,9 @@ type DbMapPlace = {
 };
 
 const storageKey = "cs_workin_map_places_v2";
-const excelHeaders = ["번호", "라벨", "지도에서", "이름", "코멘트", "전화번호", "주소", "상세주소", "위도", "경도", ...Array.from({ length: 15 }, (_, index) => `메모${index + 1}`)];
+const excelBaseHeaders = ["번호", "라벨", "지도에서", "이름", "코멘트", "전화번호", "주소", "상세주소", "위도", "경도"];
+const defaultMemoColumnCount = 15;
+const memoHeaders = (count: number) => Array.from({ length: count }, (_, index) => `메모${index + 1}`);
 const teams: Team[] = ["A", "B", "C", "D"];
 const quarters: Quarter[] = [1, 2, 3, 4];
 const workKinds: { value: WorkKind; label: string }[] = [
@@ -245,6 +247,12 @@ function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarte
   };
 }
 
+function renewalGrade(place: MapPlace) {
+  const memoGrade = place.memos.map((memo) => memo.trim().toUpperCase()).find((memo) => /^(V|SS|S|NN|N)$/.test(memo));
+  if (memoGrade) return memoGrade;
+  return place.name.match(/^(?:\d{4}\/)?\d*(SS|NN|S|N|V)(?=[^A-Z]|$)/i)?.[1]?.toUpperCase() || "";
+}
+
 function normalizePlaces(source: MapPlace[]) {
   return source.map((place, index) => ({
     ...place,
@@ -304,15 +312,30 @@ function samePlaces(current: MapPlace[], next: MapPlace[]) {
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
+function styleMapLabel(element: HTMLDivElement, active: boolean) {
+  element.style.background = active ? "#0f172a" : "";
+  element.style.color = active ? "#ffffff" : "";
+  element.style.padding = active ? "5px 7px" : "";
+  element.style.margin = active ? "-5px -7px" : "";
+  element.style.borderRadius = active ? "4px" : "";
+  element.style.boxShadow = active ? "0 4px 12px rgba(15, 23, 42, .28)" : "";
+}
+
 function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const markerByIdRef = useRef(new Map<number, L.Marker>());
+  const markerSignatureRef = useRef(new Map<number, string>());
+  const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
   const [tilesReady, setTilesReady] = useState(false);
   const [viewportRevision, setViewportRevision] = useState(0);
 
   useEffect(() => {
     if (!elementRef.current || mapRef.current) return;
+    const markerById = markerByIdRef.current;
+    const markerSignatures = markerSignatureRef.current;
+    const labelsById = labelByIdRef.current;
     const map = L.map(elementRef.current, {
       zoomControl: true,
       minZoom: 6,
@@ -341,6 +364,9 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
+      markerById.clear();
+      markerSignatures.clear();
+      labelsById.clear();
     };
   }, []);
 
@@ -349,12 +375,15 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     if (!map) return;
     const view = loadTeamMapView(viewStorageKey, team);
     map.setView(view.center, view.zoom, { animate: true });
+    let refreshTimer = 0;
     const persistView = () => {
       saveTeamMapView(viewStorageKey, team, map);
-      setViewportRevision((current) => current + 1);
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => setViewportRevision((current) => current + 1), 80);
     };
     map.on("moveend zoomend", persistView);
     return () => {
+      window.clearTimeout(refreshTimer);
       map.off("moveend zoomend", persistView);
     };
   }, [team, viewStorageKey]);
@@ -363,9 +392,16 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
     const map = mapRef.current;
     const layer = markerLayerRef.current;
     if (!map || !layer) return;
-    layer.clearLayers();
-    const renderBounds = map.getBounds().pad(0.35);
+    const renderBounds = map.getBounds().pad(0.12);
     const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
+    const visibleIds = new Set(visiblePlaces.map((place) => place.id));
+    markerByIdRef.current.forEach((marker, id) => {
+      if (visibleIds.has(id)) return;
+      layer.removeLayer(marker);
+      markerByIdRef.current.delete(id);
+      markerSignatureRef.current.delete(id);
+      labelByIdRef.current.delete(id);
+    });
     const coordinateCounts = new Map<string, number>();
     visiblePlaces.forEach((place) => {
       if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
@@ -379,33 +415,48 @@ function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect }: { pla
       const duplicateIndex = coordinateIndexes.get(coordinateKey) || 0;
       coordinateIndexes.set(coordinateKey, duplicateIndex + 1);
       const duplicateCount = coordinateCounts.get(coordinateKey) || 1;
-      const ring = Math.floor(duplicateIndex / 8) + 1;
-      const angle = ((duplicateIndex % 8) / 8) * Math.PI * 2;
-      const distance = duplicateCount > 1 ? 0.00012 * ring : 0;
-      const latitude = place.latitude + Math.sin(angle) * distance;
-      const longitude = place.longitude + (Math.cos(angle) * distance) / Math.max(0.25, Math.cos((place.latitude * Math.PI) / 180));
+      const spreadIndex = Math.max(0, duplicateIndex - 1);
+      const ring = Math.floor(spreadIndex / 8) + 1;
+      const angle = ((spreadIndex % 8) / 8) * Math.PI * 2;
+      const basePoint = map.latLngToLayerPoint([place.latitude, place.longitude]);
+      const distance = duplicateCount > 1 && duplicateIndex > 0 ? 38 * ring : 0;
+      const displayPoint = L.point(basePoint.x + Math.cos(angle) * distance, basePoint.y + Math.sin(angle) * distance);
+      const displayPosition = map.layerPointToLatLng(displayPoint);
       const meta = labelMeta(place.label);
+      const signature = [displayPosition.lat.toFixed(7), displayPosition.lng.toFixed(7), meta.color, compactMapName(place.name), place.name].join("|");
+      const currentMarker = markerByIdRef.current.get(place.id);
+      if (currentMarker && markerSignatureRef.current.get(place.id) === signature) {
+        const currentLabel = labelByIdRef.current.get(place.id);
+        if (currentLabel) styleMapLabel(currentLabel, selectedId === place.id);
+        return;
+      }
+      if (currentMarker) layer.removeLayer(currentMarker);
       const icon = L.divIcon({
         className: "workin-map-marker",
         html: `<span style="display:block;width:21px;height:21px;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)"></span>`,
         iconSize: [28, 28],
         iconAnchor: [14, 27],
       });
-      const marker = L.marker([latitude, longitude], { icon }).addTo(layer);
+      const marker = L.marker(displayPosition, { icon }).addTo(layer);
       const tooltip = document.createElement("div");
       tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
       tooltip.textContent = compactMapName(place.name);
       tooltip.title = place.name;
+      styleMapLabel(tooltip, selectedId === place.id);
       tooltip.addEventListener("click", (event) => {
         event.stopPropagation();
         onSelect(place.id);
       });
       marker.bindTooltip(tooltip, { permanent: true, direction: "top", offset: [0, -22], opacity: 0.92, interactive: true });
       marker.on("click", () => onSelect(place.id));
+      markerByIdRef.current.set(place.id, marker);
+      markerSignatureRef.current.set(place.id, signature);
+      labelByIdRef.current.set(place.id, tooltip);
     });
-  }, [places, onSelect, viewportRevision]);
+  }, [places, onSelect, selectedId, viewportRevision]);
 
   useEffect(() => {
+    labelByIdRef.current.forEach((element, id) => styleMapLabel(element, selectedId === id));
     const map = mapRef.current;
     const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
     if (map && place) map.panTo([place.latitude, place.longitude], { animate: true, duration: 0.25 });
@@ -554,13 +605,13 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
     const monthlyInspections = rows.filter((place) => place.kind === "monthly");
     const renewals = rows.filter((place) => place.kind === "renewal");
-    const renewalDates = renewals.map((place) => ({ place, end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
+    const renewalDates = renewals.map((place) => ({ place, grade: renewalGrade(place), end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; grade: string; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end) && item.grade !== "V").sort((a, b) => a.end.key - b.end.key);
     const renewalMonths = renewalQuarterMonths(progressQuarter).map((month) => [`${month}월`, renewalDates.filter((item) => item.end.month === month).length] as const);
     return {
       team,
       inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
       inspectionTotal: quarterlyInspections.length + monthlyInspections.length * 3,
-      urgentRenewal: renewalDates[0] || null,
+      urgentRenewals: (["S", "SS"] as const).map((grade) => ({ grade, renewal: renewalDates.find((item) => item.grade === grade) || null })),
       renewalMonths,
     };
   }), [places, progressQuarter, progressYear]);
@@ -631,6 +682,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         const name = String(header || "").trim();
         if (name) headerIndexes.set(name, index);
       });
+      const importedMemoCount = Math.max(defaultMemoColumnCount, ...Array.from(headerIndexes.keys()).map((header) => Number(header.match(/^메모(\d+)$/)?.[1] || 0)));
+      const importedHeaders = [...excelBaseHeaders, ...memoHeaders(importedMemoCount)];
       const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
       if (required.some((header) => !headerIndexes.has(header))) {
         window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
@@ -640,7 +693,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
         const values: Record<string, string | number> = {};
-        excelHeaders.forEach((header) => {
+        importedHeaders.forEach((header) => {
           const cell = row.getCell(headerIndexes.get(header) || 0);
           values[header] = ["번호", "위도", "경도"].includes(header) ? Number(cell.value) || 0 : cell.text || "";
         });
@@ -668,7 +721,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         addressDetail: String(row["상세주소"] || "").replaceAll("_x000d_", "\n").trim(),
         latitude: Number(row["위도"]) || 0,
         longitude: Number(row["경도"]) || 0,
-        memos: Array.from({ length: 15 }, (_, memoIndex) => String(row[`메모${memoIndex + 1}`] || "").replaceAll("_x000d_", "\n").trim()).filter(Boolean),
+        memos: Array.from({ length: importedMemoCount }, (_, memoIndex) => String(row[`메모${memoIndex + 1}`] || "").replaceAll("_x000d_", "\n").trim()).filter(Boolean),
       })).filter((place) => place.name));
     } catch (error) {
       console.error(error);
@@ -726,6 +779,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       if (!keyword) return true;
       return [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos].some((value) => value.toLowerCase().includes(keyword));
     });
+    const exportMemoCount = Math.max(defaultMemoColumnCount, ...exportPlaces.map((place) => place.memos.length));
+    const exportHeaders = [...excelBaseHeaders, ...memoHeaders(exportMemoCount)];
     const rows = exportPlaces.map((place) => {
       const values: Record<string, string | number> = {
         "번호": place.number,
@@ -739,23 +794,23 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         "위도": place.latitude,
         "경도": place.longitude,
       };
-      for (let index = 0; index < 15; index += 1) values[`메모${index + 1}`] = place.memos[index] || "";
+      for (let index = 0; index < exportMemoCount; index += 1) values[`메모${index + 1}`] = place.memos[index] || "";
       return values;
     });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("워킨맵", { views: [{ state: "frozen", ySplit: 1 }] });
-    sheet.addRow(excelHeaders);
-    rows.forEach((row) => sheet.addRow(excelHeaders.map((header) => row[header] ?? "")));
+    sheet.addRow(exportHeaders);
+    rows.forEach((row) => sheet.addRow(exportHeaders.map((header) => row[header] ?? "")));
     sheet.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
       cell.alignment = { vertical: "middle", horizontal: "center" };
     });
     sheet.columns.forEach((column, index) => {
-      const header = excelHeaders[index];
+      const header = exportHeaders[index];
       column.width = header?.startsWith("메모") ? 24 : ["이름", "코멘트", "전화번호", "주소", "상세주소"].includes(header) ? 32 : 12;
     });
-    sheet.autoFilter = { from: "A1", to: "Y1" };
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: exportHeaders.length } };
     const kindName = kindFilter === "ALL" ? "전체" : workKinds.find((item) => item.value === kindFilter)?.label;
     const filename = `CS워킨맵_${teamFilter}팀_${quarterFilter}분기_${kindName}.xlsx`;
     const buffer = await workbook.xlsx.writeBuffer();
@@ -947,7 +1002,11 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                       </div>
                       <div className="mt-3 border-t border-slate-100 pt-3">
                         <div className="text-[10px] font-black text-emerald-700">재계약 현황</div>
-                        {item.urgentRenewal ? <div className="mt-1 text-[11px] font-black leading-4 text-slate-800">가장 급함: {item.urgentRenewal.place.name}<span className="ml-1 text-rose-600">{item.urgentRenewal.end.date}</span></div> : <div className="mt-1 text-[10px] font-bold text-slate-400">계약종료년월이 입력된 재계약 건이 없습니다.</div>}
+                        <div className="mt-1 space-y-1">
+                          {item.urgentRenewals.map(({ grade, renewal }) => renewal
+                            ? <div key={grade} className="flex items-start gap-1.5 text-[11px] font-black leading-4 text-slate-800"><span className="shrink-0 rounded bg-emerald-100 px-1.5 text-emerald-700">{grade}</span><span className="min-w-0">{renewal.place.name}<span className="ml-1 text-rose-600">{renewal.end.date}</span></span></div>
+                            : <div key={grade} className="text-[10px] font-bold text-slate-400">{grade}급 재계약 건이 없습니다.</div>)}
+                        </div>
                         {item.renewalMonths.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{item.renewalMonths.map(([month, count]) => <span key={month} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{month} {count}건</span>)}</div>}
                       </div>
                     </div>
@@ -1030,8 +1089,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
               <div className="lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-xs font-black text-slate-500">메모 {draft.memos.length}/15</div>
-                  <button type="button" disabled={draft.memos.length >= 15} onClick={() => setDraft({ ...draft, memos: [...draft.memos, ""] })} className="rounded-md border border-blue-200 px-3 py-1.5 text-xs font-black text-blue-600 disabled:opacity-40">+ 메모 추가</button>
+                  <div className="text-xs font-black text-slate-500">메모 {draft.memos.length}개</div>
+                  <button type="button" onClick={() => setDraft({ ...draft, memos: [...draft.memos, ""] })} className="rounded-md border border-blue-200 px-3 py-1.5 text-xs font-black text-blue-600">+ 메모 추가</button>
                 </div>
                 <div className="space-y-2">
                   {draft.memos.map((memo, index) => (
