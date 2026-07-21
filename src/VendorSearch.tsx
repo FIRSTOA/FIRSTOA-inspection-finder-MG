@@ -126,7 +126,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             if (vendor) setVendor("");
           }}
           onFocus={() => hits.length && setShowHits(true)}
-          placeholder="거래처명 입력 (예: 가락중학교)"
+          placeholder="업체명·주소 일부 입력"
           autoFocus
           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[15px] outline-none transition focus:border-slate-300 focus:bg-white"
           style={{ borderColor: query ? accent : undefined }}
@@ -152,7 +152,9 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
 
             {/* 지역 탭 (전체 / A 강북 / B 강서 / C 강남 / D 경기 / E 지방 / 기타) */}
             {!searching && base.length > 0 && (
-              <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+              <div className="border-b border-slate-100 bg-slate-50">
+                <div className="px-3 pt-2 text-[11px] font-semibold text-slate-400">검색 결과 {base.length}곳</div>
+                <div className="flex gap-1 overflow-x-auto px-2 py-1.5">
                 {regionTabs.map((rg) => (
                   <button
                     key={rg}
@@ -167,6 +169,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                     {REGION_LABEL[rg] ? `${rg} ${REGION_LABEL[rg]}` : rg}
                   </button>
                 ))}
+                </div>
               </div>
             )}
 
@@ -212,6 +215,13 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
       {/* 선택된 거래처의 구분별 최근 양식 */}
       {vendor && (
         <div className="mt-4">
+          <div className="mb-2 flex items-end justify-between px-1">
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-slate-400">선택한 거래처</div>
+              <div className="truncate text-sm font-black text-slate-900">{vendor}</div>
+            </div>
+            {!loadingForms && <div className="shrink-0 text-xs font-bold text-slate-400">최근 양식 {forms.length}건</div>}
+          </div>
           {loadingForms && <div className="px-1 py-3 text-sm text-slate-400">양식 불러오는 중…</div>}
           {!loadingForms && forms.length === 0 && (
             <div className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
