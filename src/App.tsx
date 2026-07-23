@@ -17,6 +17,8 @@ import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
+import ContactChangeForm from "./ContactChangeForm";
+import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
@@ -47,7 +49,7 @@ import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
-  | "logistics" | "replacement" | "bulman" | "misu" | "overage-adjust" | "recontract";
+  | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract";
 
 type CopyResult = {
   ok: boolean;
@@ -95,6 +97,7 @@ const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: str
   pc: { icon: "💻", title: "확장성 업무", description: "거래처의 PC·소프트웨어 현황과 홍보·견적 내용을 기록합니다." },
   logistics: { icon: "📦", title: "물류 업무", description: "납품·교체·철수·이전·셋팅 업무와 물품 상태를 기록합니다." },
   replacement: { icon: "🔁", title: "교체양식", description: "퍼스트전산 채널에 복사해서 붙여넣는 교체 전용 양식을 작성합니다." },
+  "contact-change": { icon: "👤", title: "담당자/주소 변경", description: "거래처 담당자 또는 주소 변경 전·후 정보와 명함 사진을 정리합니다." },
   bulman: { icon: "📣", title: "불만 방문", description: "거래처 불만 내용과 방문 처리결과를 정해진 양식으로 기록합니다." },
   misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록하고 지역별 미수방으로 전송합니다." },
   "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
@@ -145,6 +148,7 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
   },
   logistics: { label: "물류", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   replacement: { label: "교체양식", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  "contact-change": { label: "담당자/주소 변경", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   bulman: { label: "불만", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   misu: { label: "미수", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   "overage-adjust": { label: "초과조정", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
@@ -2040,7 +2044,21 @@ type FieldWorkinMapRow = {
   name: string;
   comment: string;
   memos: string[];
+  updated_at?: string;
 };
+
+type WorkinInspectionMatch = {
+  place: FieldWorkinMapRow;
+  lastInspection: string;
+  status: "recommended" | "waiting" | "completed" | "carried";
+  daysSinceInspection: number | null;
+};
+
+function workinStatusDate(place: FieldWorkinMapRow): string {
+  const marker = place.label === "G5" ? "[G5 완료]" : "[G12 이관]";
+  const history = [...(place.memos || [])].reverse().find((memo) => memo.startsWith(marker));
+  return history?.match(/\d{4}-\d{2}-\d{2}/)?.[0] || place.updated_at?.slice(0, 10) || "확인되지 않음";
+}
 
 function matchToken(value: string) {
   return value.replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
@@ -3590,35 +3608,84 @@ function extractVendorFromText(text: string): string {
   return m ? m[1].trim() : "";
 }
 
-// 키맨/접수자 문자열 → [{label, name, phone}]. 여러 명(전화 2개 이상)이면 분리.
-const PHONE_RE = /(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|\d{2,4}-\d{3,4}-\d{4})/;
-export function parseKeymen_(raw: string): { label: string; name: string; phone: string }[] {
-  const s0 = String(raw || "").trim();
-  if (!s0) return [];
-  // "이연철님 박현수님"처럼 공백+님으로 붙은 여러 명 → 님 뒤를 경계로.
-  const s = s0.replace(/님/g, "님|");
-  let parts = s.split(/[,/;·\n|]+/).map((x) => x.trim()).filter(Boolean);
-  if (parts.length <= 1) {
-    const phones = s0.match(new RegExp(PHONE_RE, "g"));
-    if (phones && phones.length >= 2) {
-      parts = [];
-      let rest = s0;
-      for (const ph of phones) {
-        const idx = rest.indexOf(ph);
-        parts.push(rest.slice(0, idx + ph.length).trim());
-        rest = rest.slice(idx + ph.length);
-      }
-      if (rest.trim()) parts[parts.length - 1] += " " + rest.trim();
+// 키맨/접수자 문자열 → [{label, name, phone}].
+// 이름과 번호의 줄이 갈라지거나 한 줄에 여러 명이 붙은 경우도 전화번호를 기준으로 짝지어 준다.
+const PHONE_PATTERN = "(?:01[016789][\\s-]?\\d{3,4}[\\s-]?\\d{4}|\\d{2,4}-\\d{3,4}-\\d{4})";
+const cleanKeymanName = (value: string) => value
+  .replace(new RegExp(PHONE_PATTERN, "g"), " ")
+  .replace(/^(?:키맨\/접수자|접수자|연락처|전화번호)\s*[:：]?\s*/i, "")
+  .replace(/\([^)]*\)/g, " ")
+  .replace(/(?:님)(?=\s|$)/g, "")
+  .replace(/^[\s,;/·|]+|[\s,;/·|]+$/g, "")
+  .replace(/\s+/g, " ")
+  .trim();
+
+function parseKeymen_(raw: string): { label: string; name: string; phone: string }[] {
+  const lines = String(raw || "").replace(/\r/g, "\n").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const contacts: { name: string; phone: string }[] = [];
+  let pendingName = "";
+
+  for (const sourceLine of lines) {
+    const line = sourceLine.replace(/^["']|["']$/g, "").trim();
+    const matches = [...line.matchAll(new RegExp(PHONE_PATTERN, "g"))];
+    if (!matches.length) {
+      const name = cleanKeymanName(line);
+      if (!name || /^(유|무|유\/무)$/.test(name) || /처리내용|특이사항|필히작성/.test(name)) continue;
+      const last = contacts.at(-1);
+      if (last && !last.name) last.name = name;
+      else pendingName = pendingName ? `${pendingName} ${name}` : name;
+      continue;
     }
+
+    const fragments = matches.map((match, index) => line.slice(
+      index === 0 ? 0 : (matches[index - 1].index || 0) + matches[index - 1][0].length,
+      match.index,
+    ));
+    fragments.push(line.slice((matches.at(-1)?.index || 0) + (matches.at(-1)?.[0].length || 0)));
+    const consumedFragments = new Set<number>();
+
+    matches.forEach((match, index) => {
+      let name = consumedFragments.has(index) ? "" : cleanKeymanName(fragments[index]);
+      if (!name && !consumedFragments.has(index + 1)) {
+        name = cleanKeymanName(fragments[index + 1]);
+        if (name) consumedFragments.add(index + 1);
+      }
+      if (!name && pendingName) {
+        name = pendingName;
+        pendingName = "";
+      }
+      contacts.push({ name, phone: match[0].replace(/\s+/g, "-") });
+    });
   }
-  return parts
-    .map((p) => {
-      const m = p.match(PHONE_RE);
-      const phone = m ? m[0].trim() : "";
-      const name = p.replace(phone, "").replace(/\([^)]*\)/g, "").replace(/님/g, "").replace(/[()]/g, "").replace(/\s+/g, " ").trim();
-      return { label: p.trim(), name, phone };
-    })
-    .filter((k) => (k.name || k.phone) && !/^(유|무|유\/무)$/.test(k.name) && !/처리내용|특이사항|필히작성/.test(k.label));
+  if (pendingName) contacts.push({ name: pendingName, phone: "" });
+
+  const deduped = new Map<string, { name: string; phone: string }>();
+  contacts.forEach((contact, index) => {
+    const key = contact.phone.replace(/\D/g, "") || `name:${contact.name}:${index}`;
+    const previous = deduped.get(key);
+    if (!previous) deduped.set(key, contact);
+    else if (!previous.name && contact.name) previous.name = contact.name;
+  });
+  return [...deduped.values()]
+    .filter((contact) => contact.name || contact.phone)
+    .map((contact) => ({
+      ...contact,
+      label: [contact.name, contact.phone].filter(Boolean).join(" "),
+    }));
+}
+
+function extractKeymanRaw(text: string): string {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const start = lines.findIndex((line) => /^\s*키맨\/접수자\s*[:：]/.test(line));
+  if (start < 0) return "";
+  const values = [lines[start].replace(/^\s*키맨\/접수자\s*[:：]\s*/, "")];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isDividerLine(line) || FIELD_MARKER_REGEX.test(line) || /^\s*\d+\s*\./.test(line)) break;
+    values.push(line);
+  }
+  return values.join("\n").trim();
 }
 
 export default function App() {
@@ -3660,7 +3727,7 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
-  const [workinInspectionMatch, setWorkinInspectionMatch] = useState<{ place: FieldWorkinMapRow; lastInspection: string } | null>(null);
+  const [workinInspectionMatch, setWorkinInspectionMatch] = useState<WorkinInspectionMatch | null>(null);
   const workinVisitCacheRef = useRef<{ loadedAt: number; rows: VisitRow[] }>({ loadedAt: 0, rows: [] });
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
   const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
@@ -3797,6 +3864,9 @@ export default function App() {
   const [replacementForm, setReplacementForm] = useState<ReplacementFormState>({ ...EMPTY_REPLACEMENT_FORM });
   const replacementFilled = Object.entries(replacementForm).some(([key, value]) => key !== "owner" && String(value).trim() !== "");
   const replacementText = useMemo(() => buildReplacementText(replacementForm), [replacementForm]);
+  const [contactChangeForm, setContactChangeForm] = useState<ContactChangeFormState>({ ...EMPTY_CONTACT_CHANGE_FORM });
+  const contactChangeFilled = Object.values(contactChangeForm).some((value) => value.trim() !== "");
+  const contactChangeText = useMemo(() => buildContactChangeText(contactChangeForm, author), [contactChangeForm, author]);
   const [reportTypes, setReportTypes] = useState<string[]>(
     Array.isArray(ss.reportTypes) ? (ss.reportTypes as string[]) : (mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []),
   );
@@ -3822,9 +3892,10 @@ export default function App() {
     }
     if (mode === "logistics") return logisticsFilled ? [{ text: logisticsText, device: null }] : [];
     if (mode === "replacement") return replacementFilled ? [{ text: replacementText, device: null }] : [];
+    if (mode === "contact-change") return contactChangeFilled ? [{ text: contactChangeText, device: null }] : [];
     if (isCat) return catFilled ? [{ text: catText, device: null }] : [];
     return [];
-  }, [mode, displayedTextOutput, displayedList, pcSubTab, pcText, pcFilled, copierExpansionText, copierExpansionFilled, logisticsText, logisticsFilled, replacementText, replacementFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
+  }, [mode, displayedTextOutput, displayedList, pcSubTab, pcText, pcFilled, copierExpansionText, copierExpansionFilled, logisticsText, logisticsFilled, replacementText, replacementFilled, contactChangeText, contactChangeFilled, isCat, catText, catFilled, reportTypes, reportTypeOther]);
 
   const blockJoiner = mode === "inspection" ? "\n" : "\n\n";
 
@@ -4024,9 +4095,7 @@ export default function App() {
     const company = pick(/업체명\s*[:：]\s*(.+)/);
     const region = pick(/지역\s*[:：]\s*(.+)/);
     const grade = pick(/등급\s*[:：]\s*(.+)/);
-    // 키맨/접수자는 여러 줄일 수 있음(이름1 전화1\n이름2 전화2) → 구분선/다음항목 전까지 통째로.
-    const kmM = text.match(/키맨\/접수자\s*[:：]\s*([\s\S]*?)(?=[\r\n]\s*(?:[ㅡ\-_=]{3,}|\d+\s*\.)|$)/);
-    const keymanRaw = kmM ? kmM[1].trim() : "";
+    const keymanRaw = extractKeymanRaw(text);
     return { grade, company, region, keymen: parseKeymen_(keymanRaw), author };
   };
 
@@ -4112,7 +4181,7 @@ export default function App() {
           return rows;
         });
       void Promise.all([
-        selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos&quarter=eq.${quarter}&kind=eq.quarter`),
+        selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}&kind=eq.quarter`),
         visitsPromise,
       ])
         .then(([rows, visits]) => {
@@ -4127,7 +4196,7 @@ export default function App() {
               if (vendorKey.length >= 4 && rowVendor.length >= 4 && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor)) && device.model.length >= 3 && rowText.includes(device.model)) score = Math.max(score, 60);
             });
             return { row, score };
-          }).filter((item) => item.score >= 60 && item.row.label !== "G5" && item.row.label !== "G12").sort((left, right) => right.score - left.score);
+          }).filter((item) => item.score >= 60).sort((left, right) => right.score - left.score);
           const place = ranked[0]?.row;
           if (!place) {
             setWorkinInspectionMatch(null);
@@ -4142,7 +4211,17 @@ export default function App() {
                 || (placeVendor.length >= 4 && visitVendor.length >= 4 && (visitVendor.includes(placeVendor) || placeVendor.includes(visitVendor)));
             })
             .sort((left, right) => right.workDate.localeCompare(left.workDate))[0]?.workDate || "";
-          setWorkinInspectionMatch({ place, lastInspection });
+          const daysSinceInspection = lastInspection
+            ? Math.max(0, Math.floor((new Date(`${kstDate()}T00:00:00`).getTime() - new Date(`${lastInspection}T00:00:00`).getTime()) / 86_400_000))
+            : null;
+          const status: WorkinInspectionMatch["status"] = place.label === "G5"
+            ? "completed"
+            : place.label === "G12"
+              ? "carried"
+              : daysSinceInspection !== null && daysSinceInspection < 60
+                ? "waiting"
+                : "recommended";
+          setWorkinInspectionMatch({ place, lastInspection, status, daysSinceInspection });
         })
         .catch((error) => { console.error("FIELD workin map match failed", error); if (active) setWorkinInspectionMatch(null); });
     }, 350);
@@ -4290,8 +4369,8 @@ export default function App() {
       showToast("보낼 내용이 없어요", "error");
       return;
     }
-    if (mode === "replacement") {
-      showToast("교체양식은 복사 전용입니다. 퍼스트전산 채널에 붙여넣어 주세요.", "error");
+    if (mode === "replacement" || mode === "contact-change") {
+      showToast(`${config.label}은 복사 전용입니다. 복사한 내용을 지정 채널에 붙여넣어 주세요.`, "error");
       return;
     }
     if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
@@ -4372,6 +4451,7 @@ export default function App() {
     setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM });
     setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
     setReplacementForm({ ...EMPTY_REPLACEMENT_FORM });
+    setContactChangeForm({ ...EMPTY_CONTACT_CHANGE_FORM });
     setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
@@ -4488,7 +4568,7 @@ export default function App() {
   };
 
 
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (isCat && catFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
@@ -4659,7 +4739,7 @@ export default function App() {
               );
             })}
             {(() => {
-              const moreActive = mode === "replacement" || mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
+              const moreActive = mode === "replacement" || mode === "contact-change" || mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
               return (
                 <button
                   type="button"
@@ -4675,7 +4755,7 @@ export default function App() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
               <div className="absolute right-1 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                {([["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"]] as [string, Mode][]).map(([label, target]) => (
+                {([["담당자/주소 변경", "contact-change"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"]] as [string, Mode][]).map(([label, target]) => (
                   <button
                     key={label}
                     type="button"
@@ -4744,16 +4824,32 @@ export default function App() {
               <div className="mt-0.5 text-xs leading-5 text-slate-500">{FIELD_GUIDES[mode].description}</div>
             </div>
           </div>
-          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && mode !== "replacement" && (
+          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && mode !== "replacement" && mode !== "contact-change" && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-800">
               카톡방 자동전송은 아직 준비 중입니다. 내용을 작성한 뒤 하단의 <b>복사</b> 버튼을 눌러 카톡방에 붙여넣어 주세요.
             </div>
           )}
         </div>
 
-        {workinInspectionMatch && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <div className="flex items-start gap-3"><span className="mt-0.5 text-lg">!</span><div className="min-w-0"><div className="text-sm font-black text-amber-900">워킨맵 분기점검 대상과 일치합니다</div><div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{workinInspectionMatch.place.name} · {workinInspectionMatch.place.team}팀 · {workinInspectionMatch.place.quarter}분기 · {workinInspectionMatch.place.label}</div><div className="mt-1 text-xs font-black text-amber-900">마지막 점검일: {workinInspectionMatch.lastInspection || "확인되지 않음"}</div><div className="mt-1 text-[11px] font-bold text-amber-700">AS 처리와 함께 분기점검이 가능한지 확인해 주세요.</div></div></div>
-        </div>}
+        {workinInspectionMatch && (() => {
+          const statusConfig = {
+            recommended: { title: "분기점검 권장", detail: "AS 처리와 함께 분기점검이 가능한지 확인해 주세요.", wrap: "border-amber-300 bg-amber-50", text: "text-amber-900", sub: "text-amber-700" },
+            waiting: { title: "분기점검 방문 대기", detail: `60일 기준까지 ${Math.max(0, 60 - (workinInspectionMatch.daysSinceInspection || 0))}일 남았습니다.`, wrap: "border-blue-200 bg-blue-50", text: "text-blue-950", sub: "text-blue-700" },
+            completed: { title: "분기점검 완료", detail: `완료 표시일: ${workinStatusDate(workinInspectionMatch.place)}`, wrap: "border-emerald-200 bg-emerald-50", text: "text-emerald-950", sub: "text-emerald-700" },
+            carried: { title: "다음 분기 이관", detail: `이관 표시일: ${workinStatusDate(workinInspectionMatch.place)}`, wrap: "border-slate-300 bg-slate-50", text: "text-slate-950", sub: "text-slate-600" },
+          }[workinInspectionMatch.status];
+          return <div className={`rounded-xl border px-4 py-3 ${statusConfig.wrap}`}>
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-lg">{workinInspectionMatch.status === "completed" ? "✓" : workinInspectionMatch.status === "carried" ? "→" : "!"}</span>
+              <div className="min-w-0">
+                <div className={`text-sm font-black ${statusConfig.text}`}>{statusConfig.title}</div>
+                <div className={`mt-1 text-xs font-semibold leading-5 ${statusConfig.sub}`}>{workinInspectionMatch.place.name} · {workinInspectionMatch.place.team}팀 · {workinInspectionMatch.place.quarter}분기 · {workinInspectionMatch.place.label}</div>
+                <div className={`mt-1 text-xs font-black ${statusConfig.text}`}>마지막 점검일: {workinInspectionMatch.lastInspection || "확인되지 않음"}{workinInspectionMatch.daysSinceInspection !== null ? ` · ${workinInspectionMatch.daysSinceInspection}일 경과` : ""}</div>
+                <div className={`mt-1 text-[11px] font-bold ${statusConfig.sub}`}>{statusConfig.detail}</div>
+              </div>
+            </div>
+          </div>;
+        })()}
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
@@ -4826,6 +4922,7 @@ export default function App() {
         {mode === "logistics" && <LogisticsForm form={logisticsForm} setForm={setLogisticsForm} author={author} setAuthor={handleSetAuthor} />}
 
         {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
+        {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
@@ -4897,7 +4994,7 @@ export default function App() {
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
                 </>
-              ) : mode === "replacement" ? (
+              ) : mode === "replacement" || mode === "contact-change" ? (
                 <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
@@ -4997,7 +5094,7 @@ export default function App() {
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
-            </> : mode === "replacement" ? (
+            </> : mode === "replacement" || mode === "contact-change" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
             {(mode === "inspection" || mode === "blank-report") && (

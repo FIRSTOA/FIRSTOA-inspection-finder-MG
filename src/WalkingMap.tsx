@@ -81,7 +81,7 @@ const mapLabels: MapLabel[] = [
   { code: "G9", name: "장기 관리", color: "#c6a273" },
   { code: "G10", name: "AS 집중 관리", color: "#139fe4" },
   { code: "G11", name: "휴면·보류", color: "#1f744a" },
-  { code: "G12", name: "기타", color: "#343434" },
+  { code: "G12", name: "다음 분기 이관", color: "#343434" },
 ];
 
 type MapPreferences = {
@@ -378,6 +378,13 @@ function toDbPlace(place: MapPlace, userKey: string): Record<string, unknown> {
     latitude: place.latitude, longitude: place.longitude, memos: place.memos, updated_by: userKey,
     updated_at: new Date().toISOString(),
   };
+}
+
+function withLabelHistory(place: MapPlace, previousLabel?: string): MapPlace {
+  if (place.label === previousLabel || (place.label !== "G5" && place.label !== "G12")) return place;
+  const date = kstDate();
+  const entry = place.label === "G5" ? `[G5 완료] ${date}` : `[G12 이관] ${date}`;
+  return place.memos.includes(entry) ? place : { ...place, memos: [...place.memos, entry] };
 }
 
 function blankPlace(number: number): MapPlace {
@@ -988,17 +995,19 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const saveDraft = () => {
     if (!draft || !draft.name.trim()) return;
+    const previous = places.find((place) => place.id === draft.id);
+    const savedDraft = withLabelHistory(draft, previous?.label);
     if (sharedReady) {
       setSyncState("loading");
-      void upsertRows("workin_map_places", [toDbPlace(draft, userKey)], "id")
+      void upsertRows("workin_map_places", [toDbPlace(savedDraft, userKey)], "id")
         .then(() => setSyncState("saved"))
         .catch((error) => { console.error(error); setSyncState("error"); });
     }
-    setPlaces((current) => current.some((place) => place.id === draft.id)
-      ? current.map((place) => place.id === draft.id ? draft : place)
-      : [...current, draft]);
-    setSelectedId(draft.id);
-    setExpandedId(draft.id);
+    setPlaces((current) => current.some((place) => place.id === savedDraft.id)
+      ? current.map((place) => place.id === savedDraft.id ? savedDraft : place)
+      : [...current, savedDraft]);
+    setSelectedId(savedDraft.id);
+    setExpandedId(savedDraft.id);
     setDraft(null);
   };
 
@@ -1016,14 +1025,17 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   };
 
   const bulkSetLabel = (label: string) => {
-    const changed = places.filter((place) => checkedIds.includes(place.id)).map((place) => ({ ...place, label }));
+    const changed = places
+      .filter((place) => checkedIds.includes(place.id))
+      .map((place) => withLabelHistory({ ...place, label }, place.label));
     if (sharedReady && changed.length) {
       setSyncState("loading");
       void upsertRows("workin_map_places", changed.map((place) => toDbPlace(place, userKey)), "id")
         .then(() => setSyncState("saved"))
         .catch((error) => { console.error(error); setSyncState("error"); });
     }
-    setPlaces((current) => current.map((place) => checkedIds.includes(place.id) ? { ...place, label } : place));
+    const changedById = new Map(changed.map((place) => [place.id, place]));
+    setPlaces((current) => current.map((place) => changedById.get(place.id) || place));
   };
 
   const toggleChecked = (id: number) => {
@@ -1578,7 +1590,27 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
             <div className="grid gap-4 p-4 lg:grid-cols-2">
               <label className="text-xs font-black text-slate-500">번호<input type="number" value={draft.number} onChange={(event) => setDraft({ ...draft, number: Number(event.target.value) })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm text-slate-900" /></label>
-              <label className="text-xs font-black text-slate-500">라벨<select value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{mapLabels.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></label>
+              <div className="lg:col-span-2">
+                <div className="text-xs font-black text-slate-500">라벨</div>
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
+                  {mapLabels.map((item) => {
+                    const active = draft.label === item.code;
+                    return <button
+                      key={item.code}
+                      type="button"
+                      onClick={() => setDraft({ ...draft, label: item.code })}
+                      className={`min-h-12 rounded-md border px-2 py-1.5 text-left transition ${active ? "border-slate-950 ring-2 ring-slate-300" : "border-slate-200 hover:border-slate-400"}`}
+                      style={{ background: active ? item.color : `${item.color}18` }}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: item.color }} />
+                        <b className={active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white" : "text-slate-950"}>{item.code}</b>
+                      </span>
+                      <span className={`mt-0.5 block text-[10px] font-bold leading-3 ${active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white/90" : "text-slate-500"}`}>{item.name}</span>
+                    </button>;
+                  })}
+                </div>
+              </div>
               <label className="text-xs font-black text-slate-500">담당 팀<select value={draft.team || "C"} onChange={(event) => setDraft({ ...draft, team: event.target.value as Team })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
               <label className="text-xs font-black text-slate-500">분기<select value={draft.quarter || 3} onChange={(event) => setDraft({ ...draft, quarter: Number(event.target.value) as Quarter })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
               <label className="text-xs font-black text-slate-500 lg:col-span-2">업무<select value={draft.kind || "quarter"} onChange={(event) => setDraft({ ...draft, kind: event.target.value as WorkKind })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
