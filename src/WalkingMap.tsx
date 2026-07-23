@@ -70,18 +70,18 @@ const teamMapViews: Record<Team, { center: [number, number]; zoom: number }> = {
 };
 
 const mapLabels: MapLabel[] = [
-  { code: "G1", name: "신규·초기 방문", color: "#ff8458" },
-  { code: "G2", name: "매월 점검", color: "#ffb51b" },
-  { code: "G3", name: "분기 점검", color: "#ff2f68" },
-  { code: "G4", name: "계약 종료 임박", color: "#b22998" },
+  { code: "G1", name: "", color: "#ff8458" },
+  { code: "G2", name: "", color: "#ffb51b" },
+  { code: "G3", name: "", color: "#ff2f68" },
+  { code: "G4", name: "", color: "#b22998" },
   { code: "G5", name: "점검 완료", color: "#087fa2" },
-  { code: "G6", name: "확장성 관리", color: "#25b44b" },
-  { code: "G7", name: "미수·확인 필요", color: "#b56ef3" },
-  { code: "G8", name: "교체·철수 예정", color: "#896347" },
-  { code: "G9", name: "장기 관리", color: "#c6a273" },
-  { code: "G10", name: "AS 집중 관리", color: "#139fe4" },
-  { code: "G11", name: "휴면·보류", color: "#1f744a" },
-  { code: "G12", name: "다음 분기 이관", color: "#343434" },
+  { code: "G6", name: "", color: "#25b44b" },
+  { code: "G7", name: "", color: "#b56ef3" },
+  { code: "G8", name: "", color: "#896347" },
+  { code: "G9", name: "", color: "#c6a273" },
+  { code: "G10", name: "", color: "#139fe4" },
+  { code: "G11", name: "", color: "#1f744a" },
+  { code: "G12", name: "이관", color: "#343434" },
 ];
 
 type MapPreferences = {
@@ -1606,7 +1606,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                         <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: item.color }} />
                         <b className={active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white" : "text-slate-950"}>{item.code}</b>
                       </span>
-                      <span className={`mt-0.5 block text-[10px] font-bold leading-3 ${active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white/90" : "text-slate-500"}`}>{item.name}</span>
+                      {item.name && <span className={`mt-0.5 block text-[10px] font-bold leading-3 ${active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white/90" : "text-slate-500"}`}>{item.name}</span>}
                     </button>;
                   })}
                 </div>

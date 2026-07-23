@@ -21,8 +21,8 @@ import ContactChangeForm from "./ContactChangeForm";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, type LogisticsFormState, type SendDestination } from "./api";
-import { uploadPhoto, createAlbum, selectAllRows } from "./supabase";
+import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, type LogisticsFormState, type SendDestination } from "./api";
+import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -4363,13 +4363,103 @@ export default function App() {
     }, target);
   };
 
+  const syncWorkinMapAfterInspection = async (target: string): Promise<string> => {
+    const workDate = kstDate();
+    const month = Number(workDate.slice(5, 7));
+    const quarter = (Math.floor((month - 1) / 3) + 1);
+    const monthIndex = (month - 1) % 3;
+    const monthlyLabel = (["G2", "G3", "G5"] as const)[monthIndex];
+    const parsedItems = parseItemDataFromText(target, Math.max(1, itemForms.length));
+    const devices = parsedItems.map((item) => ({
+      model: matchToken(item.model || ""),
+      serial: matchToken(item.serial || ""),
+      asset: matchToken(item.asset || ""),
+    }));
+    const vendor = extractVendorFromText(target) || currentVendor;
+    const vendorKey = matchVendor(vendor);
+    const rows = await selectAllRows<FieldWorkinMapRow>(
+      "workin_map_places",
+      `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}`,
+    );
+    const ranked = rows
+      .filter((row) => row.kind === "quarter" || row.kind === "monthly")
+      .map((row) => {
+        const rowText = matchToken([row.name, row.comment, ...(row.memos || [])].join(" "));
+        const rowVendor = matchVendor(row.name);
+        let score = 0;
+        devices.forEach((device) => {
+          if (device.serial.length >= 5 && rowText.includes(device.serial)) score = Math.max(score, 100);
+          if (device.asset.length >= 4 && rowText.includes(device.asset)) score = Math.max(score, 90);
+          if (
+            vendorKey.length >= 4
+            && rowVendor.length >= 4
+            && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor))
+            && device.model.length >= 3
+            && rowText.includes(device.model)
+          ) score = Math.max(score, 60);
+        });
+        return { row, score };
+      })
+      .filter(({ score }) => score >= 60);
+
+    const strong = ranked.filter(({ score }) => score >= 90);
+    const matched = strong.length
+      ? strong
+      : (["quarter", "monthly"] as const).flatMap((kind) => {
+          const candidates = ranked.filter(({ row }) => row.kind === kind);
+          return candidates.length === 1 ? candidates : [];
+        });
+    if (!matched.length) {
+      return ranked.length > 1
+        ? "워킨맵 후보가 여러 곳이라 자동 색칠하지 않았습니다"
+        : "워킨맵에서 일치 거래처를 찾지 못했습니다";
+    }
+
+    let changed = 0;
+    const changedRows: Array<{ id: number; label: string; memos: string[] }> = [];
+    for (const { row } of matched) {
+      if (row.label === "G12") continue;
+      const nextLabel = row.kind === "monthly" ? monthlyLabel : "G5";
+      const monthlyRank: Record<string, number> = { G1: 0, G2: 1, G3: 2, G5: 3 };
+      if (row.kind === "monthly" && (monthlyRank[row.label] || 0) >= monthlyRank[nextLabel]) continue;
+      if (row.kind === "quarter" && row.label === "G5") continue;
+      const history = nextLabel === "G5"
+        ? `[G5 완료] ${workDate}`
+        : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}`;
+      const memos = (row.memos || []).includes(history) ? row.memos : [...(row.memos || []), history];
+      await updateRows("workin_map_places", `id=eq.${row.id}`, {
+        label: nextLabel,
+        memos,
+        updated_by: author,
+        updated_at: new Date().toISOString(),
+      });
+      changedRows.push({ id: row.id, label: nextLabel, memos });
+      changed += 1;
+    }
+    if (changedRows.length) {
+      setWorkinInspectionMatch((current) => {
+        if (!current) return current;
+        const updated = changedRows.find((row) => row.id === current.place.id);
+        if (!updated) return current;
+        return {
+          ...current,
+          place: { ...current.place, label: updated.label, memos: updated.memos, updated_at: new Date().toISOString() },
+          status: updated.label === "G5" ? "completed" : current.status,
+        };
+      });
+    }
+    return changed
+      ? `워킨맵 ${changed}곳 자동 반영`
+      : "워킨맵은 이미 해당 단계로 반영되어 있습니다";
+  };
+
   const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false) => {
     let target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
       return;
     }
-    if (mode === "replacement" || mode === "contact-change") {
+    if (mode === "replacement") {
       showToast(`${config.label}은 복사 전용입니다. 복사한 내용을 지정 채널에 붙여넣어 주세요.`, "error");
       return;
     }
@@ -4386,6 +4476,13 @@ export default function App() {
     } catch (e) {
       setSending(false);
       showToast("사진 업로드 실패: " + ((e as Error).message || "오류"), "error");
+      return;
+    }
+
+    if (mode === "contact-change") {
+      const res = await sendContactChangeForm(target);
+      setSending(false);
+      showToast(res.ok ? (res.message || "담당자/주소 변경방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
     }
 
@@ -4430,6 +4527,14 @@ export default function App() {
       ts: new Date().toISOString(),
     }, kind, destination);
     if (res.ok && kind === "normal") try { await recordVisit(target, destination); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+    if (res.ok && kind === "normal" && destination === "inspection") {
+      try {
+        const workinMessage = await syncWorkinMapAfterInspection(target);
+        res.message = `${res.message || "전송 완료"} · ${workinMessage}`;
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 워킨맵 반영 실패: ${(e as Error).message}`;
+      }
+    }
     setSending(false);
     if (res.ok) {
       showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
@@ -4922,7 +5027,7 @@ export default function App() {
         {mode === "logistics" && <LogisticsForm form={logisticsForm} setForm={setLogisticsForm} author={author} setAuthor={handleSetAuthor} />}
 
         {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
-        {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} />}
+        {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} onLoad={loadSharedFromInspect} onError={(message) => showToast(message, "error")} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
@@ -4994,7 +5099,7 @@ export default function App() {
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
                 </>
-              ) : mode === "replacement" || mode === "contact-change" ? (
+              ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
@@ -5094,7 +5199,7 @@ export default function App() {
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
-            </> : mode === "replacement" || mode === "contact-change" ? (
+            </> : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
             {(mode === "inspection" || mode === "blank-report") && (

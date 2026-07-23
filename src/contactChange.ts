@@ -27,7 +27,6 @@ export function buildContactChangeText(form: ContactChangeFormState, author: str
     `퍼스트전산직원 : ${author}`,
     `수도권지역 : ${form.region}`,
     `구분 : ${form.category}`,
-    "",
     `사유 : ${form.reason}`,
     `등급 : ${form.grade}`,
     `변경전: ${form.before}`,

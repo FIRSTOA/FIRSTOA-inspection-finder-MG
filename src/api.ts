@@ -374,6 +374,7 @@ const FIXED_ROOM = {
   logistics: "완료방(납품,철수,교체)",
   pcIt: "PC/IT/피씨/확장성고객등록및영업",
   copierExpansion: "영업확장성미션 : 퍼스트조국진대리, 퍼스트신정훈프로, 퍼스트홍대경프로",
+  contactChange: "신)담당자/명의/주소변경등 특이사항",
 } as const;
 
 const REGION_ROOMS: Record<string, Record<string, string>> = {
@@ -627,6 +628,22 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
     }
     for (const room of rooms) await enqueueOutbox(room, text);
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
+export async function sendContactChangeForm(text: string): Promise<SaveResp> {
+  try {
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    let room = testRoom;
+    if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
+      const map = await getRoomMap();
+      room = map["담당자변경|*"] || map["담당자/주소변경|*"] || FIXED_ROOM.contactChange;
+    }
+    await enqueueOutbox(room, text);
+    return { ok: true, message: `게시 대기: ${room}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
