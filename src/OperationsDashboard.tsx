@@ -3,12 +3,17 @@ import {
   ACTIVITY_LABELS,
   OPERATIONS_TEAMS,
   getActivityEvents,
+  logisticsKindForEvent,
+  setActivityEventCancelled,
+  teamForAuthor,
   type ActivityEvent,
   type ActivityKind,
 } from "./operations";
 import { kstDate, weekRange } from "./visits";
 
 type Period = "week" | "month" | "quarter" | "year";
+type Props = { author: string };
+type FilterKey = "all" | "inspection" | "as" | "logistics_main" | "logistics_etc" | "expansion" | "contact_change" | "complaint" | "misu" | "overage" | "recontract" | "replacement";
 
 const ACTIVITY_KINDS = Object.keys(ACTIVITY_LABELS) as ActivityKind[];
 const CATEGORY_TONES: Record<ActivityKind, string> = {
@@ -24,6 +29,19 @@ const CATEGORY_TONES: Record<ActivityKind, string> = {
   recontract: "bg-emerald-50 text-emerald-700",
   replacement: "bg-teal-50 text-teal-700",
 };
+const FILTER_OPTIONS: Array<{ key: Exclude<FilterKey, "all">; label: string; tone: string }> = [
+  { key: "inspection", label: "점검", tone: CATEGORY_TONES.inspection },
+  { key: "as", label: "AS", tone: CATEGORY_TONES.as },
+  { key: "logistics_main", label: "물류", tone: CATEGORY_TONES.logistics },
+  { key: "logistics_etc", label: "기타", tone: "bg-slate-100 text-slate-700" },
+  { key: "expansion", label: "확장성", tone: CATEGORY_TONES.expansion_it },
+  { key: "complaint", label: "불만", tone: CATEGORY_TONES.complaint },
+  { key: "misu", label: "미수", tone: CATEGORY_TONES.misu },
+  { key: "overage", label: "초과조정", tone: CATEGORY_TONES.overage },
+  { key: "recontract", label: "재계약", tone: CATEGORY_TONES.recontract },
+  { key: "contact_change", label: "담당자·주소 변경", tone: CATEGORY_TONES.contact_change },
+  { key: "replacement", label: "교체양식", tone: CATEGORY_TONES.replacement },
+];
 
 function lastDateOfMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
@@ -31,25 +49,47 @@ function lastDateOfMonth(year: number, month: number) {
 
 function rangeFor(period: Period, year: number, month: number, quarter: number, anchor: string) {
   if (period === "week") return weekRange(anchor);
-  if (period === "month") {
-    return { start: `${year}-${String(month).padStart(2, "0")}-01`, end: lastDateOfMonth(year, month) };
-  }
+  if (period === "month") return { start: `${year}-${String(month).padStart(2, "0")}-01`, end: lastDateOfMonth(year, month) };
   if (period === "quarter") {
     const startMonth = (quarter - 1) * 3 + 1;
-    const endMonth = startMonth + 2;
     return {
       start: `${year}-${String(startMonth).padStart(2, "0")}-01`,
-      end: lastDateOfMonth(year, endMonth),
+      end: lastDateOfMonth(year, startMonth + 2),
     };
   }
   return { start: `${year}-01-01`, end: `${year}-12-31` };
 }
 
 function countByCategory(events: ActivityEvent[]) {
-  return Object.fromEntries(ACTIVITY_KINDS.map((kind) => [kind, events.filter((event) => event.category === kind).length])) as Record<ActivityKind, number>;
+  return Object.fromEntries(
+    ACTIVITY_KINDS.map((kind) => [kind, events.filter((event) => event.category === kind).length]),
+  ) as Record<ActivityKind, number>;
 }
 
-export default function OperationsDashboard() {
+function isLogisticsEtc(event: ActivityEvent) {
+  return event.category === "logistics" && ["여분", "마감"].includes(logisticsKindForEvent(event));
+}
+
+function matchesFilter(event: ActivityEvent, filter: FilterKey) {
+  if (filter === "all") return true;
+  if (filter === "logistics_main") return event.category === "logistics" && !isLogisticsEtc(event);
+  if (filter === "logistics_etc") return isLogisticsEtc(event);
+  if (filter === "expansion") return event.category === "expansion_it" || event.category === "expansion_copier";
+  return event.category === filter;
+}
+
+function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">) {
+  return events.filter((event) => matchesFilter(event, filter)).length;
+}
+
+function eventDisplayLabel(event: ActivityEvent) {
+  if (isLogisticsEtc(event)) return "기타";
+  if (event.category === "logistics") return "물류";
+  if (event.category === "expansion_it" || event.category === "expansion_copier") return "확장성";
+  return ACTIVITY_LABELS[event.category];
+}
+
+export default function OperationsDashboard({ author }: Props) {
   const today = kstDate();
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
@@ -59,10 +99,12 @@ export default function OperationsDashboard() {
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
   const [team, setTeam] = useState("전체");
-  const [category, setCategory] = useState<"all" | ActivityKind>("all");
+  const [category, setCategory] = useState<FilterKey>("all");
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loadedRange, setLoadedRange] = useState("");
   const [loadError, setLoadError] = useState<{ range: string; message: string } | null>(null);
+  const [updatingId, setUpdatingId] = useState("");
+  const [notice, setNotice] = useState("");
   const range = useMemo(() => rangeFor(period, year, month, quarter, anchor), [period, year, month, quarter, anchor]);
   const rangeKey = `${range.start}:${range.end}`;
   const error = loadError?.range === rangeKey ? loadError.message : "";
@@ -78,56 +120,90 @@ export default function OperationsDashboard() {
         setLoadedRange(`${range.start}:${range.end}`);
       })
       .catch((reason) => {
-        if (!active) return;
-        setLoadError({ range: `${range.start}:${range.end}`, message: (reason as Error).message });
+        if (active) setLoadError({ range: `${range.start}:${range.end}`, message: (reason as Error).message });
       });
     return () => { active = false; };
   }, [range.start, range.end]);
 
-  const filtered = useMemo(() => events.filter((event) =>
-    (team === "전체" || event.team === team)
-    && (category === "all" || event.category === category)), [events, team, category]);
-  const categories = useMemo(() => countByCategory(filtered), [filtered]);
+  const nonManagerEvents = useMemo(
+    () => events.filter((event) => teamForAuthor(event.author) !== "팀장"),
+    [events],
+  );
+  const activeEvents = useMemo(() => nonManagerEvents.filter((event) => event.status !== "cancelled"), [nonManagerEvents]);
+  const cancelledEvents = useMemo(() => nonManagerEvents.filter((event) => event.status === "cancelled"), [nonManagerEvents]);
+  const cancelledFiltered = useMemo(
+    () => cancelledEvents.filter((event) =>
+      (team === "전체" || event.team === team)
+      && matchesFilter(event, category)),
+    [cancelledEvents, team, category],
+  );
+  const categoryScoped = useMemo(
+    () => activeEvents.filter((event) => matchesFilter(event, category)),
+    [activeEvents, category],
+  );
+  const filtered = useMemo(
+    () => categoryScoped.filter((event) => team === "전체" || event.team === team),
+    [categoryScoped, team],
+  );
+  const teamScopedAllCategories = useMemo(
+    () => activeEvents.filter((event) => team === "전체" || event.team === team),
+    [activeEvents, team],
+  );
   const vendors = useMemo(() => new Set(filtered.map((event) => event.vendor.trim()).filter(Boolean)).size, [filtered]);
   const people = useMemo(() => new Set(filtered.map((event) => event.author).filter(Boolean)).size, [filtered]);
   const machineCount = useMemo(() => filtered.reduce((sum, event) => sum + Number(event.machineCount || 0), 0), [filtered]);
 
   const teamRows = useMemo(() => {
+    const max = Math.max(1, ...OPERATIONS_TEAMS.map((name) => categoryScoped.filter((event) => event.team === name).length));
     return OPERATIONS_TEAMS.map((name) => {
-      const rows = filtered.filter((event) => event.team === name);
+      const rows = categoryScoped.filter((event) => event.team === name);
       return {
         name,
         total: rows.length,
         people: new Set(rows.map((event) => event.author)).size,
-        vendors: new Set(rows.map((event) => event.vendor).filter(Boolean)).size,
-        categories: countByCategory(rows),
+        width: `${Math.max(0, Math.round((rows.length / max) * 100))}%`,
       };
-    }).filter((row) => row.total > 0 || ["A", "B", "C", "D"].includes(row.name));
-  }, [filtered]);
+    });
+  }, [categoryScoped]);
 
   const peopleRows = useMemo(() => {
     const map = new Map<string, ActivityEvent[]>();
     filtered.forEach((event) => map.set(event.author, [...(map.get(event.author) || []), event]));
     return Array.from(map.entries())
-      .map(([author, rows]) => ({
-        author,
+      .map(([name, rows]) => ({
+        name,
         team: rows[0]?.team || "미지정",
         total: rows.length,
         vendors: new Set(rows.map((event) => event.vendor).filter(Boolean)).size,
-        machines: rows.reduce((sum, event) => sum + Number(event.machineCount || 0), 0),
         categories: countByCategory(rows),
       }))
-      .sort((a, b) => b.total - a.total || a.author.localeCompare(b.author, "ko"));
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "ko"));
   }, [filtered]);
-  const recentRows = useMemo(() => filtered.slice(0, 50), [filtered]);
+
+  const changeCancelled = async (event: ActivityEvent, cancelled: boolean) => {
+    if (cancelled && !window.confirm("이 기록을 운영현황 집계에서 제외할까요?\n카톡과 원본 DB 기록은 삭제되지 않습니다.")) return;
+    setUpdatingId(event.id);
+    setNotice("");
+    try {
+      await setActivityEventCancelled(event.id, cancelled, author);
+      setEvents((current) => current.map((row) => row.id === event.id
+        ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
+        : row));
+      setNotice(cancelled ? "집계에서 제외했습니다." : "집계 기록으로 복원했습니다.");
+    } catch (reason) {
+      setNotice(`처리하지 못했습니다: ${(reason as Error).message}`);
+    } finally {
+      setUpdatingId("");
+    }
+  };
 
   return (
-    <div className="space-y-4 pb-16">
+    <div className="space-y-3 pb-16">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-xl font-black text-slate-950">CS 운영현황</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">성과 평가가 아니라 업무량·누락·팀 운영 상태를 확인하는 통합 현황입니다.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
           </div>
           <div className="grid grid-cols-4 rounded-md bg-slate-100 p-1">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
@@ -135,85 +211,135 @@ export default function OperationsDashboard() {
             ))}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold" />}
-          {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
-          {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
-          {period === "quarter" && <div className="flex gap-1">{[1, 2, 3, 4].map((value) => <button key={value} type="button" onClick={() => setQuarter(value)} className={`rounded-md px-3 py-2 text-xs font-black ${quarter === value ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>{value}분기</button>)}</div>}
-          <span className="rounded-md bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">{range.start} ~ {range.end}</span>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold" />}
+          {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
+          {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
+          {period === "quarter" && <select value={quarter} onChange={(event) => setQuarter(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}분기</option>)}</select>}
+          <span className="mr-auto rounded-md bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">{range.start} ~ {range.end}</span>
+
+          <div className="flex rounded-md bg-slate-100 p-1">
+            {["전체", ...OPERATIONS_TEAMS].map((value) => (
+              <button key={value} type="button" onClick={() => setTeam(value)} className={`rounded px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
+            ))}
+          </div>
+          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
+            <option value="all">전체 업무</option>
+            {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </select>
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {["전체", "A", "B", "C", "D", "팀장", "미지정"].map((value) => (
-            <button key={value} type="button" onClick={() => setTeam(value)} className={`shrink-0 rounded-md px-3 py-2 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{value === "전체" ? "전체 팀" : value.length === 1 ? `${value}팀` : value}</button>
-          ))}
-        </div>
-        <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
-          <button type="button" onClick={() => setCategory("all")} className={`shrink-0 rounded-md px-3 py-2 text-xs font-black ${category === "all" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600"}`}>전체 업무</button>
-          {ACTIVITY_KINDS.map((kind) => <button key={kind} type="button" onClick={() => setCategory(kind)} className={`shrink-0 rounded-md px-3 py-2 text-xs font-black ${category === kind ? "bg-blue-600 text-white" : CATEGORY_TONES[kind]}`}>{ACTIVITY_LABELS[kind]}</button>)}
-        </div>
-      </section>
-
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 supabase/operations.sql을 한 번 실행해 주세요.</span></div>}
+      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요.</span></div>}
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
+      {notice && <div className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white">{notice}</div>}
 
-      {!loading && !error && <>
-        <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {[["업무 기록", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><div className="text-xs font-bold text-slate-500">{label}</div><div className="mt-2 text-2xl font-black text-slate-950">{value}</div></div>
-          ))}
-        </section>
+      {!loading && !error && (
+        <>
+          <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {[["업무", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+                <div className="text-xs font-bold text-slate-400">{label}</div>
+                <div className="mt-1 text-2xl font-black text-slate-950">{value}</div>
+              </div>
+            ))}
+          </section>
 
-        <section>
-          <div className="mb-2"><h3 className="text-base font-black text-slate-950">업무별 현황</h3><p className="text-xs font-semibold text-slate-400">업무 성격이 다르므로 건수를 서로 점수처럼 합산하지 않습니다.</p></div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-            {ACTIVITY_KINDS.map((kind) => <button key={kind} type="button" onClick={() => setCategory(category === kind ? "all" : kind)} className="rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm"><span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-black ${CATEGORY_TONES[kind]}`}>{ACTIVITY_LABELS[kind]}</span><div className="mt-3 text-2xl font-black text-slate-950">{categories[kind]}<span className="ml-1 text-xs text-slate-400">건</span></div></button>)}
-          </div>
-        </section>
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h3 className="font-black text-slate-950">업무 구성</h3>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 xl:grid-cols-6">
+              {FILTER_OPTIONS.map((option) => (
+                <button key={option.key} type="button" onClick={() => setCategory(category === option.key ? "all" : option.key)} className={`flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 ${category === option.key ? "bg-blue-50" : ""}`}>
+                  <span className={`rounded px-2 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
+                  <b className="text-lg text-slate-950">{filterCount(teamScopedAllCategories, option.key)}</b>
+                </button>
+              ))}
+            </div>
+          </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">팀별 현황</h3><p className="text-xs font-semibold text-slate-400">팀 업무량과 참여 인원을 함께 봅니다.</p></div>
-            <div className="divide-y divide-slate-100">{teamRows.map((row) => <button key={row.name} type="button" onClick={() => setTeam(row.name)} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-3 text-left hover:bg-slate-50"><div><b className="text-sm text-slate-900">{row.name.length === 1 ? `${row.name}팀` : row.name}</b><div className="mt-1 text-[11px] font-semibold text-slate-400">거래처 {row.vendors}곳</div></div><div className="text-right"><div className="text-lg font-black text-slate-950">{row.total}건</div></div><div className="w-12 text-right text-xs font-bold text-slate-500">{row.people}명</div></button>)}</div>
-          </div>
+          <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">팀별 현황</h3></div>
+              <div className="divide-y divide-slate-100">
+                {teamRows.map((row) => (
+                  <button key={row.name} type="button" onClick={() => setTeam(team === row.name ? "전체" : row.name)} className="block w-full px-4 py-3 text-left hover:bg-slate-50">
+                    <div className="flex items-center justify-between text-sm"><b>{row.name}팀</b><span><b>{row.total}</b>건 · {row.people}명</span></div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: row.width }} /></div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">개인별 현황</h3><p className="text-xs font-semibold text-slate-400">순위가 아니라 담당 분포와 기록 누락을 확인합니다.</p></div>
-            <div className="divide-y divide-slate-100 md:hidden">{peopleRows.map((row) => <div key={row.author} className="px-4 py-3"><div className="flex items-center justify-between"><div><b className="text-sm text-slate-900">{row.author}</b><span className="ml-2 text-[11px] font-black text-slate-400">{row.team}팀</span></div><b className="text-base text-slate-950">{row.total}건</b></div><div className="mt-2 flex flex-wrap gap-1">{ACTIVITY_KINDS.filter((kind) => row.categories[kind] > 0).map((kind) => <span key={kind} className={`rounded px-1.5 py-0.5 text-[10px] font-black ${CATEGORY_TONES[kind]}`}>{ACTIVITY_LABELS[kind]} {row.categories[kind]}</span>)}</div></div>)}</div>
-            <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3">작성자</th><th className="px-3 py-3">팀</th><th className="px-3 py-3 text-right">전체</th><th className="px-3 py-3 text-right">거래처</th><th className="px-3 py-3 text-right">점검</th><th className="px-3 py-3 text-right">AS</th><th className="px-3 py-3 text-right">물류</th><th className="px-3 py-3 text-right">확장성</th><th className="px-3 py-3 text-right">미수·불만</th><th className="px-3 py-3 text-right">계약·변경</th></tr></thead><tbody>{peopleRows.map((row) => <tr key={row.author} className="border-b border-slate-100 last:border-0"><td className="px-4 py-3 font-black text-slate-900">{row.author}</td><td className="px-3 py-3 text-slate-500">{row.team}</td><td className="px-3 py-3 text-right font-black">{row.total}</td><td className="px-3 py-3 text-right">{row.vendors}</td><td className="px-3 py-3 text-right">{row.categories.inspection}</td><td className="px-3 py-3 text-right">{row.categories.as}</td><td className="px-3 py-3 text-right">{row.categories.logistics}</td><td className="px-3 py-3 text-right">{row.categories.expansion_it + row.categories.expansion_copier}</td><td className="px-3 py-3 text-right">{row.categories.misu + row.categories.complaint}</td><td className="px-3 py-3 text-right">{row.categories.recontract + row.categories.overage + row.categories.contact_change + row.categories.replacement}</td></tr>)}</tbody></table></div>
-          </div>
-        </section>
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">인원별 현황</h3></div>
+              {peopleRows.length === 0 ? (
+                <div className="p-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다.</div>
+              ) : (
+                <>
+                  <div className="divide-y divide-slate-100 md:hidden">
+                    {peopleRows.map((row) => (
+                      <div key={row.name} className="px-4 py-3">
+                        <div className="flex items-center justify-between"><b className="text-sm">{row.name} <span className="text-xs text-slate-400">{row.team}팀</span></b><b>{row.total}건</b></div>
+                        <div className="mt-1 text-xs font-semibold text-slate-400">거래처 {row.vendors}곳</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full min-w-[760px] text-sm">
+                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타</th><th>확장성</th><th>고객·계약관리</th></tr></thead>
+                      <tbody>{peopleRows.map((row) => {
+                        const personEvents = filtered.filter((event) => event.author === row.name);
+                        return <tr key={row.name} className="border-b border-slate-100 last:border-0 text-center"><td className="px-4 py-3 text-left font-black">{row.name}</td><td>{row.team}</td><td className="font-black">{row.total}</td><td>{row.vendors}</td><td>{row.categories.inspection}</td><td>{row.categories.as}</td><td>{filterCount(personEvents, "logistics_main")}</td><td>{filterCount(personEvents, "logistics_etc")}</td><td>{filterCount(personEvents, "expansion")}</td><td>{row.categories.misu + row.categories.complaint + row.categories.recontract + row.categories.overage + row.categories.contact_change + row.categories.replacement}</td></tr>;
+                      })}</tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <div><h3 className="font-black text-slate-950">업무 기록 확인</h3><p className="text-xs font-semibold text-slate-400">현재 조건의 최근 50건입니다. 원문은 필요한 기록만 펼쳐 봅니다.</p></div>
-            <span className="shrink-0 text-xs font-black text-slate-500">{filtered.length}건</span>
-          </div>
-          {recentRows.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm font-semibold text-slate-400">선택한 기간에 기록이 없습니다.</div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {recentRows.map((event) => (
+          <details className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+              <div><h3 className="font-black text-slate-950">업무 기록 확인</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">오전송은 원문을 남긴 채 집계에서 제외할 수 있습니다.</p></div>
+              <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
+            </summary>
+            <div className="divide-y divide-slate-100 border-t border-slate-200">
+              {filtered.slice(0, 50).map((event) => (
                 <details key={event.id} className="group">
                   <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                    <span className={`rounded-md px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{ACTIVITY_LABELS[event.category]}</span>
-                    <span className="min-w-0">
-                      <b className="block truncate text-sm text-slate-900">{event.vendor || "거래처 미기재"}</b>
-                      <span className="mt-0.5 block text-[11px] font-semibold text-slate-400">{event.activityDate} · {event.team}팀 · {event.author}</span>
-                    </span>
-                    <span className="text-xs font-black text-slate-400 group-open:text-blue-600">{event.machineCount ? `${event.machineCount}대` : "보기"}</span>
+                    <span className={`rounded px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{eventDisplayLabel(event)}</span>
+                    <span className="min-w-0"><b className="block truncate text-sm">{event.vendor || "거래처 미기재"}</b><span className="text-[11px] font-semibold text-slate-400">{event.activityDate} · {event.team}팀 · {event.author}</span></span>
+                    <span className="text-xs font-bold text-slate-400">{event.machineCount ? `${event.machineCount}대` : "보기"}</span>
                   </summary>
                   <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
-                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-slate-600">{event.sourceText || "저장된 원문이 없습니다."}</pre>
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-slate-600">{event.sourceText || "저장된 원문이 없습니다."}</pre>
+                    <div className="mt-3 flex justify-end"><button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, true)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-50">집계 제외</button></div>
                   </div>
                 </details>
               ))}
+              {!filtered.length && <div className="p-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다.</div>}
             </div>
+          </details>
+
+          {cancelledFiltered.length > 0 && (
+            <details className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-600"><span>집계 제외 기록</span><span>{cancelledFiltered.length}건</span></summary>
+              <div className="divide-y divide-slate-100 border-t border-slate-200">
+                {cancelledFiltered.slice(0, 50).map((event) => (
+                  <div key={event.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className={`rounded px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{eventDisplayLabel(event)}</span>
+                    <div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-500 line-through">{event.vendor || "거래처 미기재"}</b><span className="text-[11px] text-slate-400">{event.activityDate} · {event.author}</span></div>
+                    <button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, false)} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-50">복원</button>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
-        </section>
-      </>}
+        </>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 import type { LogisticsFormState } from "./api";
-const categories = ["납품", "교체", "철수", "이전", "셋팅(세팅)", "이전세팅", "기타"];
+const categories = ["납품", "교체", "세팅", "이전", "철수", "여분", "마감", "기타"];
 
 function TextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return <label className="block"><span className="text-xs font-semibold text-slate-500">{label}</span><input value={value} onChange={(e)=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"/></label>;

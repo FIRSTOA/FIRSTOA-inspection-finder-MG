@@ -24,7 +24,7 @@ import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, type LogisticsFormState, type SendDestination } from "./api";
 import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
-import { saveActivityEvent, type ActivityKind } from "./operations";
+import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -4884,7 +4884,11 @@ export default function App() {
           vendor: logisticsForm.vendor,
           quantity: 1,
           machineCount: quantity,
-          metadata: { logisticsCategory: logisticsForm.category },
+          metadata: {
+            logisticsCategory: normalizeLogisticsKind(
+              logisticsForm.category === "기타" ? logisticsForm.categoryOther : logisticsForm.category,
+            ),
+          },
         });
       } catch (e) {
         res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
@@ -5228,7 +5232,7 @@ export default function App() {
 
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
-        {screen === "operations" && <OperationsDashboard />}
+        {screen === "operations" && <OperationsDashboard author={author} />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}

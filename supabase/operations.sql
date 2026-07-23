@@ -12,8 +12,14 @@ create table if not exists public.activity_events (
   machine_count integer not null default 0,
   source_text text,
   metadata jsonb not null default '{}'::jsonb,
+  status text not null default 'active' check (status in ('active', 'cancelled')),
+  cancelled_at timestamptz,
+  cancelled_by text,
   "_dupKey" text not null
 );
+alter table public.activity_events add column if not exists status text not null default 'active';
+alter table public.activity_events add column if not exists cancelled_at timestamptz;
+alter table public.activity_events add column if not exists cancelled_by text;
 
 create unique index if not exists activity_events_dupkey_idx
   on public.activity_events("_dupKey");
@@ -27,11 +33,14 @@ create index if not exists activity_events_category_idx
 alter table public.activity_events enable row level security;
 drop policy if exists "activity_events anon read" on public.activity_events;
 drop policy if exists "activity_events anon insert" on public.activity_events;
+drop policy if exists "activity_events anon update" on public.activity_events;
 create policy "activity_events anon read"
   on public.activity_events for select to anon using (true);
 create policy "activity_events anon insert"
   on public.activity_events for insert to anon with check (true);
-grant select, insert on public.activity_events to anon;
+create policy "activity_events anon update"
+  on public.activity_events for update to anon using (true) with check (true);
+grant select, insert, update on public.activity_events to anon;
 
 -- 기존 일일방문 원장을 최초 1회 운영현황으로 가져옵니다.
 -- 이후 FIELD 전송은 웹앱이 activity_events에 직접 기록합니다.
