@@ -8,6 +8,7 @@ import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
+import OperationsDashboard from "./OperationsDashboard";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
@@ -23,6 +24,7 @@ import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, type LogisticsFormState, type SendDestination } from "./api";
 import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
+import { saveActivityEvent, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
@@ -4496,6 +4498,16 @@ export default function App() {
     }
 
     const result = await copyTextToClipboard(target);
+    if (result.ok && mode === "replacement") {
+      try {
+        await recordOperation("replacement", target, {
+          vendor: replacementForm.company,
+          metadata: { action: "copy" },
+        });
+      } catch (e) {
+        result.message += ` · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
+    }
     showToast(result.message, result.ok ? "success" : "error");
   };
 
@@ -4503,7 +4515,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth" | "operations">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
@@ -4587,6 +4599,33 @@ export default function App() {
       ])),
       minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
     }, target);
+  };
+
+  const recordOperation = async (
+    category: ActivityKind,
+    target: string,
+    options: {
+      vendor?: string;
+      quantity?: number;
+      machineCount?: number;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ) => {
+    const vendor = options.vendor
+      || extractVendorFromText(target)
+      || logisticsForm.vendor
+      || (pcSubTab === "copier" ? copierExpansionForm.company : pcForm.company)
+      || String(curCatForm["업체명"] || currentVendor || "");
+    await saveActivityEvent({
+      activityDate: kstDate(),
+      author,
+      category,
+      vendor,
+      quantity: options.quantity ?? 1,
+      machineCount: options.machineCount ?? 0,
+      sourceText: target,
+      metadata: options.metadata,
+    });
   };
 
   const syncWorkinMapAfterInspection = async (target: string): Promise<WorkinSyncResult> => {
@@ -4806,6 +4845,13 @@ export default function App() {
 
     if (mode === "contact-change") {
       const res = await sendContactChangeForm(target);
+      if (res.ok) try {
+        await recordOperation("contact_change", target, {
+          vendor: contactChangeForm.company,
+        });
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
       setSending(false);
       showToast(res.ok ? (res.message || "담당자/주소 변경방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -4817,6 +4863,13 @@ export default function App() {
         ? await sendCopierExpansionForm(copierExpansionForm, author, target, new Date().toISOString())
         : await sendPcForm(pcForm, author, target, new Date().toISOString());
       if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      if (res.ok) try {
+        await recordOperation(pcSubTab === "copier" ? "expansion_copier" : "expansion_it", target, {
+          vendor: pcSubTab === "copier" ? copierExpansionForm.company : pcForm.company,
+        });
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -4825,6 +4878,17 @@ export default function App() {
     if (mode === "logistics") {
       const res = await sendLogisticsForm(logisticsForm, author, target, new Date().toISOString());
       if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      if (res.ok) try {
+        const quantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
+        await recordOperation("logistics", target, {
+          vendor: logisticsForm.vendor,
+          quantity: 1,
+          machineCount: quantity,
+          metadata: { logisticsCategory: logisticsForm.category },
+        });
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
       setSending(false);
       showToast(res.ok ? (res.message || "물류방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -4834,6 +4898,17 @@ export default function App() {
     if (isCat) {
       const res = await sendCategoryForm(mode, curCatForm, author, target, new Date().toISOString());
       if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      if (res.ok) try {
+        const category: ActivityKind = mode === "bulman" ? "complaint"
+          : mode === "misu" ? "misu"
+            : mode === "recontract" ? "recontract"
+              : "overage";
+        await recordOperation(category, target, {
+          metadata: { formMode: mode },
+        });
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
       return;
@@ -4854,6 +4929,16 @@ export default function App() {
       ts: new Date().toISOString(),
     }, kind, destination);
     if (res.ok && kind === "normal") try { await recordVisit(target, destination); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+    if (res.ok && kind === "normal" && (destination === "inspection" || destination === "as")) {
+      try {
+        await recordOperation(destination === "inspection" ? "inspection" : "as", target, {
+          machineCount: Math.max(1, itemForms.length),
+          metadata: { destination },
+        });
+      } catch (e) {
+        res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
+      }
+    }
     if (res.ok && kind === "normal" && destination === "inspection") {
       try {
         latestWorkinResult = await syncWorkinMapAfterInspection(target);
@@ -5014,7 +5099,7 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
-    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
+    { title: "내근 업무", items: [["operations", "CS 운영현황"], ["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
@@ -5143,6 +5228,7 @@ export default function App() {
 
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
+        {screen === "operations" && <OperationsDashboard />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
