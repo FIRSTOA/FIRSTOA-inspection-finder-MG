@@ -442,20 +442,15 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     const text = String(payload.text || "");
     if (!text.trim()) return { ok: false, error: "내용이 비어있습니다." };
 
-    let sendText = text;
-    if (destination) {
-      const category = destination === "inspection" ? "점검" : "AS";
-      sendText = text.match(/^구분\s*[:：]/m)
-        ? text.replace(/^구분\s*[:：]\s*.*$/m, `구분: ${category}`)
-        : `구분: ${category}\n${text}`;
-    }
+    // 목적지 버튼은 카톡방만 고른다. 사용자가 작성한 구분은 그대로 전송한다.
+    const sendText = text;
     let built = buildRecords(sendText, toKstDate(payload.ts), payload.author || "", "");
     // 여분/마감/세팅처럼 구분에 점검·AS 문자가 없어도 사용자가 누른 방 기준으로 저장한다.
     if (!built.hasInspect && !built.hasAS && destination) {
-      const forced = sendText.match(/^구분\s*[:：]/m)
+      const storageText = sendText.match(/^구분\s*[:：]/m)
         ? sendText.replace(/^구분\s*[:：]\s*(.*)$/m, `구분: ${destination === "inspection" ? "점검" : "AS"}, $1`)
         : `구분: ${destination === "inspection" ? "점검" : "AS"}\n${sendText}`;
-      built = buildRecords(forced, toKstDate(payload.ts), payload.author || "", "");
+      built = buildRecords(storageText, toKstDate(payload.ts), payload.author || "", "");
     }
     if (!built.hasInspect && !built.hasAS) {
       return { ok: false, error: `구분에 점검/AS가 없어 저장 대상이 아닙니다. (mode=${payload.mode || "?"})` };

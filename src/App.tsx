@@ -3583,80 +3583,6 @@ function AirPurifierFormPanel({
 // Main component
 // ────────────────────────────────────────────────────────────────────────────
 
-// Prefixes whose lines are owned by the form. When the user types directly
-// into a result block, lines NOT in this set are preserved across subsequent
-// form changes; lines IN this set are re-driven by the form (so the form
-// stays the source of truth for them).
-const FORM_DRIVEN_PREFIXES = new Set<string>([
-  // shared header
-  "작성자", "레벨",
-  // per-item (inspection)
-  "모델명", "시리얼넘버", "자산기번", "내용",
-  "처리내용", "매수", "토너잔량", "폐통", "여분",
-  "한틴이카유무", "주차비지원유무", "특이사항",
-  // shared footer / 부품·자가
-  "보증기간 내 여부",
-  "교체 전 카운터 누적 사용매수", "사용 부품 예상 사용매수",
-  "물품명", "물품", "수량", "출고여부",
-  "도착 시간", "소요 시간",
-  // air-purifier
-  "필터리셋", "필터교체",
-]);
-
-function linePrefix(line: string): string {
-  const t = line.replace(/^\s+/, "");
-  const idx = t.indexOf(":");
-  if (idx === -1) return "";
-  return t.slice(0, idx).trim();
-}
-
-// Merge the user's manual edit of a block with the freshly form-driven base.
-// Lines whose prefix is form-driven take the form's value; every other line
-// keeps the user's text. The device lead is driven by the location form.
-function mergeBlockEdit(formBase: string, userEdit: string): string {
-  // 처리내용 등 여러 줄 필드는 첫 라벨 줄뿐 아니라 다음 필드 전까지를 통째로 교체한다.
-  // 기존 Map 방식만 사용하면 라벨 없는 2번째 줄부터가 사라질 수 있다.
-  const replaceMultiline = (target: string, source: string, label: string): string => {
-    const sourceLines = source.split("\n");
-    const targetLines = target.split("\n");
-    const startOf = (lines: string[]) => lines.findIndex((line) => new RegExp(`^${label}\\s*:`).test(line));
-    const endOf = (lines: string[], start: number) => {
-      let end = start + 1;
-      while (end < lines.length && !FIELD_MARKER_REGEX.test(lines[end]) && !isDividerLine(lines[end]) && !/^※/.test(lines[end])) end++;
-      return end;
-    };
-    const sourceStart = startOf(sourceLines); const targetStart = startOf(targetLines);
-    if (sourceStart < 0 || targetStart < 0) return target;
-    targetLines.splice(targetStart, endOf(targetLines, targetStart) - targetStart, ...sourceLines.slice(sourceStart, endOf(sourceLines, sourceStart)));
-    return targetLines.join("\n");
-  };
-  const replaceDeviceLead = (target: string, source: string): string => {
-    const sourceLines = source.split("\n");
-    const targetLines = target.split("\n");
-    const sourceStart = sourceLines.findIndex((line) => /^\s*\d+\./.test(line));
-    const targetStart = targetLines.findIndex((line) => /^\s*\d+\./.test(line));
-    const sourceModel = sourceLines.findIndex((line, i) => i > sourceStart && /^모델명\s*:/.test(line));
-    const targetModel = targetLines.findIndex((line, i) => i > targetStart && /^모델명\s*:/.test(line));
-    if (sourceStart < 0 || targetStart < 0 || sourceModel < 0 || targetModel < 0) return target;
-    targetLines.splice(targetStart, targetModel - targetStart, ...sourceLines.slice(sourceStart, sourceModel));
-    return targetLines.join("\n");
-  };
-  let mergedEdit = replaceDeviceLead(userEdit, formBase);
-  mergedEdit = replaceMultiline(mergedEdit, formBase, "처리내용");
-  mergedEdit = replaceMultiline(mergedEdit, formBase, "여분");
-  mergedEdit = replaceMultiline(mergedEdit, formBase, "특이사항");
-  const baseByPrefix = new Map<string, string>();
-  for (const line of formBase.split("\n")) {
-    const p = linePrefix(line);
-    if (p && FORM_DRIVEN_PREFIXES.has(p)) baseByPrefix.set(p, line);
-  }
-  return mergedEdit.split("\n").map((line: string) => {
-    const p = linePrefix(line);
-    if (p && baseByPrefix.has(p)) return baseByPrefix.get(p) as string;
-    return line;
-  }).join("\n");
-}
-
 // 생성된 양식/결과 텍스트에서 "업체명: X" 줄을 찾아 거래처명을 뽑는다.
 // 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
 function extractVendorFromText(text: string): string {
@@ -3827,8 +3753,8 @@ export default function App() {
     return [];
   }, [mode, displayedTextOutput, listOutput]);
 
-  // Form changes do NOT discard manual edits; mergeBlockEdit re-applies the
-  // form's values to form-driven lines while preserving everything else.
+  // Manual preview edits stay verbatim. Form controls patch only the field
+  // explicitly changed, so typing/deleting in the textarea never moves the caret.
   const setItemF = <K extends keyof PerItemForm>(key: K, value: PerItemForm[K]) => {
     setItemForms((prev: PerItemForm[]) => prev.map((f: PerItemForm, i: number) =>
       i === selectedItem ? { ...f, [key]: value } : f,
@@ -4225,7 +4151,7 @@ export default function App() {
 
   const buildResultText = () => {
     let text = resultBlocks
-      .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? mergeBlockEdit(b.text, editedBlocks[i]) : b.text))
+      .map((b: ResultBlock, i: number) => (editedBlocks[i] !== undefined ? editedBlocks[i] : b.text))
       .join(blockJoiner);
     if ((mode === "inspection" || mode === "blank-report") && reportTypes.length) {
       text = applyReportTypeSelection(text, reportTypes, reportTypeOther);
@@ -4925,7 +4851,7 @@ export default function App() {
               <div className="space-y-2">
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
-                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
+                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
                   return (
                     <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2" style={{ borderLeft: `4px solid ${active ? config.accent : "transparent"}` }}>
                       <textarea
@@ -5000,7 +4926,7 @@ export default function App() {
             <div ref={resultScrollRef} className="relative space-y-1.5 overflow-y-auto pb-2" style={{ maxHeight: "30vh" }}>
                 {resultBlocks.map((block: ResultBlock, i: number) => {
                   const active = block.device !== null && block.device === selectedItem;
-                  const text = editedBlocks[i] !== undefined ? mergeBlockEdit(block.text, editedBlocks[i]) : block.text;
+                  const text = editedBlocks[i] !== undefined ? editedBlocks[i] : block.text;
                   return (
                     <div
                       key={i}
