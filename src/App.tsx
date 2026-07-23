@@ -5103,12 +5103,13 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
-    { title: "내근 업무", items: [["operations", "CS 운영현황"], ["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
+    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string]];
-  const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items)];
+  const bottomItems = [["operations", "업무현황"]] as [typeof screen, string][];
+  const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -5149,6 +5150,15 @@ export default function App() {
                   </div>}
                 </div>
               ))}
+              <div className="border-t border-slate-200 pt-2">
+                {bottomItems.map(([key, label]) => (
+                  <button key={key} type="button"
+                    onClick={() => { setScreen(key); setMenuOpen(false); }}
+                    className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </nav>
           </div>
           <div className="flex-1 bg-black/30" />
@@ -5190,6 +5200,15 @@ export default function App() {
                 </div>}
               </div>
             ))}
+            <div className="border-t border-white/10 pt-4">
+              {bottomItems.map(([key, label]) => (
+                <button key={key} type="button" title={label} onClick={() => setScreen(key)}
+                  className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                  <span>{sidebarCollapsed ? "현황" : label}</span>
+                  {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                </button>
+              ))}
+            </div>
           </nav>
           <div className={`border-t border-white/10 py-4 text-xs text-slate-400 ${sidebarCollapsed ? "px-2 text-center" : "px-5"}`}>{sidebarCollapsed ? (author?.slice(0, 1) || "-") : (author || "작성자 미선택")}</div>
       </aside>

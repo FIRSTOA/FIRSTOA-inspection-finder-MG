@@ -99,6 +99,7 @@ export default function OperationsDashboard({ author }: Props) {
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
   const [team, setTeam] = useState("전체");
+  const [member, setMember] = useState("전체");
   const [category, setCategory] = useState<FilterKey>("all");
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loadedRange, setLoadedRange] = useState("");
@@ -134,21 +135,34 @@ export default function OperationsDashboard({ author }: Props) {
   const cancelledFiltered = useMemo(
     () => cancelledEvents.filter((event) =>
       (team === "전체" || event.team === team)
+      && (member === "전체" || event.author === member)
       && matchesFilter(event, category)),
-    [cancelledEvents, team, category],
+    [cancelledEvents, team, member, category],
   );
   const categoryScoped = useMemo(
     () => activeEvents.filter((event) => matchesFilter(event, category)),
     [activeEvents, category],
   );
   const filtered = useMemo(
-    () => categoryScoped.filter((event) => team === "전체" || event.team === team),
-    [categoryScoped, team],
+    () => categoryScoped.filter((event) =>
+      (team === "전체" || event.team === team)
+      && (member === "전체" || event.author === member)),
+    [categoryScoped, team, member],
   );
   const teamScopedAllCategories = useMemo(
-    () => activeEvents.filter((event) => team === "전체" || event.team === team),
-    [activeEvents, team],
+    () => activeEvents.filter((event) =>
+      (team === "전체" || event.team === team)
+      && (member === "전체" || event.author === member)),
+    [activeEvents, team, member],
   );
+  const memberOptions = useMemo(() => {
+    const names = activeEvents
+      .filter((event) => team === "전체" || event.team === team)
+      .map((event) => event.author.trim())
+      .filter(Boolean);
+    if (member !== "전체") names.push(member);
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [activeEvents, team, member]);
   const vendors = useMemo(() => new Set(filtered.map((event) => event.vendor.trim()).filter(Boolean)).size, [filtered]);
   const people = useMemo(() => new Set(filtered.map((event) => event.author).filter(Boolean)).size, [filtered]);
   const machineCount = useMemo(() => filtered.reduce((sum, event) => sum + Number(event.machineCount || 0), 0), [filtered]);
@@ -202,7 +216,7 @@ export default function OperationsDashboard({ author }: Props) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-xl font-black text-slate-950">CS 운영현황</h2>
+            <h2 className="text-xl font-black text-slate-950">업무현황</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
           </div>
           <div className="grid grid-cols-4 rounded-md bg-slate-100 p-1">
@@ -221,9 +235,13 @@ export default function OperationsDashboard({ author }: Props) {
 
           <div className="flex rounded-md bg-slate-100 p-1">
             {["전체", ...OPERATIONS_TEAMS].map((value) => (
-              <button key={value} type="button" onClick={() => setTeam(value)} className={`rounded px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
+              <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
             ))}
           </div>
+          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
+            <option value="전체">전체 팀원</option>
+            {memberOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
           <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
             <option value="all">전체 업무</option>
             {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
@@ -265,7 +283,7 @@ export default function OperationsDashboard({ author }: Props) {
               <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">팀별 현황</h3></div>
               <div className="divide-y divide-slate-100">
                 {teamRows.map((row) => (
-                  <button key={row.name} type="button" onClick={() => setTeam(team === row.name ? "전체" : row.name)} className="block w-full px-4 py-3 text-left hover:bg-slate-50">
+                  <button key={row.name} type="button" onClick={() => { setTeam(team === row.name ? "전체" : row.name); setMember("전체"); }} className="block w-full px-4 py-3 text-left hover:bg-slate-50">
                     <div className="flex items-center justify-between text-sm"><b>{row.name}팀</b><span><b>{row.total}</b>건 · {row.people}명</span></div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: row.width }} /></div>
                   </button>
@@ -280,19 +298,27 @@ export default function OperationsDashboard({ author }: Props) {
               ) : (
                 <>
                   <div className="divide-y divide-slate-100 md:hidden">
-                    {peopleRows.map((row) => (
-                      <div key={row.name} className="px-4 py-3">
-                        <div className="flex items-center justify-between"><b className="text-sm">{row.name} <span className="text-xs text-slate-400">{row.team}팀</span></b><b>{row.total}건</b></div>
-                        <div className="mt-1 text-xs font-semibold text-slate-400">거래처 {row.vendors}곳</div>
-                      </div>
-                    ))}
+                    {peopleRows.map((row) => {
+                      const personEvents = filtered.filter((event) => event.author === row.name);
+                      return (
+                        <button key={row.name} type="button" onClick={() => setMember(row.name)} className={`block w-full px-4 py-3 text-left ${member === row.name ? "bg-blue-50" : ""}`}>
+                          <div className="flex items-center justify-between"><b className="text-sm">{row.name} <span className="text-xs text-slate-400">{row.team}팀</span></b><b>{row.total}건</b></div>
+                          <div className="mt-1 text-xs font-semibold text-slate-400">거래처 {row.vendors}곳</div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {FILTER_OPTIONS.filter((option) => filterCount(personEvents, option.key) > 0).map((option) => (
+                              <span key={option.key} className={`rounded px-2 py-1 text-[10px] font-black ${option.tone}`}>{option.label} {filterCount(personEvents, option.key)}</span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[760px] text-sm">
-                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타</th><th>확장성</th><th>고객·계약관리</th></tr></thead>
+                    <table className="w-full min-w-[1320px] text-sm">
+                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타</th><th>확장성</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
                       <tbody>{peopleRows.map((row) => {
                         const personEvents = filtered.filter((event) => event.author === row.name);
-                        return <tr key={row.name} className="border-b border-slate-100 last:border-0 text-center"><td className="px-4 py-3 text-left font-black">{row.name}</td><td>{row.team}</td><td className="font-black">{row.total}</td><td>{row.vendors}</td><td>{row.categories.inspection}</td><td>{row.categories.as}</td><td>{filterCount(personEvents, "logistics_main")}</td><td>{filterCount(personEvents, "logistics_etc")}</td><td>{filterCount(personEvents, "expansion")}</td><td>{row.categories.misu + row.categories.complaint + row.categories.recontract + row.categories.overage + row.categories.contact_change + row.categories.replacement}</td></tr>;
+                        return <tr key={row.name} onClick={() => setMember(row.name)} className={`cursor-pointer border-b border-slate-100 text-center last:border-0 hover:bg-slate-50 ${member === row.name ? "bg-blue-50" : ""}`}><td className="px-4 py-3 text-left font-black">{row.name}</td><td>{row.team}</td><td className="font-black">{row.total}</td><td>{row.vendors}</td><td>{row.categories.inspection}</td><td>{row.categories.as}</td><td>{filterCount(personEvents, "logistics_main")}</td><td>{filterCount(personEvents, "logistics_etc")}</td><td>{filterCount(personEvents, "expansion")}</td><td>{row.categories.complaint}</td><td>{row.categories.misu}</td><td>{row.categories.overage}</td><td>{row.categories.recontract}</td><td>{row.categories.contact_change}</td><td>{row.categories.replacement}</td></tr>;
                       })}</tbody>
                     </table>
                   </div>
