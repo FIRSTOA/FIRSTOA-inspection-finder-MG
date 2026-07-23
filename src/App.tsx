@@ -4582,14 +4582,20 @@ export default function App() {
     const logisticsCategory = mode === "logistics" ? (logisticsForm.category === "기타" ? logisticsForm.categoryOther : logisticsForm.category) : "";
     const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" :
       mode === "logistics" && /여분|마감/.test(logisticsCategory) ? "etc" : visitKindForMode();
+    const reportLogisticsKind = reportTypes.includes("여분") ? "여분"
+      : reportTypes.includes("마감") ? "마감"
+        : reportTypes.includes("세팅") ? "세팅"
+          : "";
     const selectedFieldKinds: WorkKind[] = destination
       ? [
           ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []),
           ...(reportTypes.includes("AS") ? ["as" as WorkKind] : []),
+          ...(reportLogisticsKind === "세팅" ? ["delivery" as WorkKind] : []),
+          ...(["여분", "마감"].includes(reportLogisticsKind) ? ["etc" as WorkKind] : []),
         ]
       : [];
-    const recordedKinds = selectedFieldKinds.length ? selectedFieldKinds : [kind];
-    const primaryKind = recordedKinds[0];
+    const recordedKinds = selectedFieldKinds.length ? selectedFieldKinds : (reportTypes.length ? [] : [kind]);
+    const primaryKind = recordedKinds[0] || kind;
     const existingMinutes = Number(visitMeta.minutes[primaryKind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
     const logisticsQuantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
@@ -4641,11 +4647,20 @@ export default function App() {
       ...(reportTypes.includes("점검") ? ["inspection" as ActivityKind] : []),
       ...(reportTypes.includes("AS") ? ["as" as ActivityKind] : []),
     ];
-    if (!categories.length) categories.push(destination === "inspection" ? "inspection" : "as");
+    const reportLogisticsKind = reportTypes.includes("여분") ? "여분"
+      : reportTypes.includes("마감") ? "마감"
+        : reportTypes.includes("세팅") ? "세팅"
+          : "";
+    if (!categories.length && !reportLogisticsKind && !reportTypes.length) {
+      categories.push(destination === "inspection" ? "inspection" : "as");
+    }
     await Promise.all(categories.map((category) => recordOperation(category, target, {
       machineCount: Math.max(1, itemForms.length),
       metadata: { destination, reportTypes: [...reportTypes] },
-    })));
+    })).concat(reportLogisticsKind ? [recordOperation("logistics", target, {
+      machineCount: Math.max(1, itemForms.length),
+      metadata: { destination, reportTypes: [...reportTypes], logisticsCategory: reportLogisticsKind },
+    })] : []));
   };
 
   const syncWorkinMapAfterInspection = async (target: string): Promise<WorkinSyncResult> => {
