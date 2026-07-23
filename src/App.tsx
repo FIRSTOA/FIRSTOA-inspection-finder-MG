@@ -2054,6 +2054,52 @@ type WorkinInspectionMatch = {
   daysSinceInspection: number | null;
 };
 
+type WorkinDeviceSyncStatus = "updated" | "already" | "carried" | "missing" | "ambiguous";
+
+type WorkinDeviceSyncResult = {
+  index: number;
+  location: string;
+  model: string;
+  serial: string;
+  asset: string;
+  status: WorkinDeviceSyncStatus;
+  details: string[];
+  matchedRows: number;
+  changedRows: number;
+};
+
+type WorkinSyncResult = {
+  totalDevices: number;
+  updatedDevices: number;
+  alreadyDevices: number;
+  carriedDevices: number;
+  reviewDevices: number;
+  changedRows: number;
+  devices: WorkinDeviceSyncResult[];
+};
+
+function workinSyncSummary(result: WorkinSyncResult): string {
+  const parts = [
+    `반영 완료 ${result.updatedDevices}대`,
+    `이미 반영 ${result.alreadyDevices}대`,
+    `다음 분기 이관 ${result.carriedDevices}대`,
+  ];
+  if (result.reviewDevices) parts.push(`확인 필요 ${result.reviewDevices}대`);
+  return `기기 ${result.totalDevices}대 · ${parts.join(" · ")} · 워킨맵 ${result.changedRows}건 변경`;
+}
+
+const WORKIN_SYNC_STATUS_META: Record<WorkinDeviceSyncStatus, {
+  label: string;
+  badge: string;
+  panel: string;
+}> = {
+  updated: { label: "반영 완료", badge: "bg-emerald-100 text-emerald-800", panel: "border-emerald-200 bg-emerald-50" },
+  already: { label: "이미 반영", badge: "bg-blue-100 text-blue-800", panel: "border-blue-200 bg-blue-50" },
+  carried: { label: "다음 분기 이관", badge: "bg-slate-200 text-slate-700", panel: "border-slate-300 bg-slate-50" },
+  missing: { label: "일치 항목 없음", badge: "bg-rose-100 text-rose-800", panel: "border-rose-200 bg-rose-50" },
+  ambiguous: { label: "후보 확인 필요", badge: "bg-amber-100 text-amber-900", panel: "border-amber-300 bg-amber-50" },
+};
+
 function workinStatusDate(place: FieldWorkinMapRow): string {
   const marker = place.label === "G5" ? "[G5 완료]" : "[G12 이관]";
   const history = [...(place.memos || [])].reverse().find((memo) => memo.startsWith(marker));
@@ -3838,7 +3884,11 @@ export default function App() {
   const [inputText, setInputText] = useState<string>("");
   const [textOutput, setTextOutput] = useState<string>((ss.textOutput as string) ?? "");
   const [listOutput, setListOutput] = useState<ResultItem[]>((ss.listOutput as ResultItem[]) ?? []);
-  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    text: string;
+    kind: "success" | "warning" | "error";
+    action?: "workin-details";
+  } | null>(null);
   const [itemForms, setItemForms] = useState<PerItemForm[]>(
     Array.isArray(ss.itemForms) && ss.itemForms.length
       ? (ss.itemForms as PerItemForm[]).map((f) => ({ ...EMPTY_ITEM_FORM, ...f }))
@@ -3861,6 +3911,8 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [workinInspectionMatch, setWorkinInspectionMatch] = useState<WorkinInspectionMatch | null>(null);
+  const [workinSyncResult, setWorkinSyncResult] = useState<WorkinSyncResult | null>(null);
+  const [workinSyncDetailsOpen, setWorkinSyncDetailsOpen] = useState(false);
   const workinVisitCacheRef = useRef<{ loadedAt: number; rows: VisitRow[] }>({ loadedAt: 0, rows: [] });
   const [photoBusy, setPhotoBusy] = useState<boolean>(false);
   const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(true);
@@ -4080,13 +4132,17 @@ export default function App() {
     if (container && el) container.scrollTop = el.offsetTop - container.offsetTop;
   }, [selectedItem]);
 
-  const showToast = (text: string, kind: "success" | "error" = "success") => {
+  const showToast = (
+    text: string,
+    kind: "success" | "warning" | "error" = "success",
+    options: { duration?: number; action?: "workin-details" } = {},
+  ) => {
     if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
-    setToast({ text, kind });
+    setToast({ text, kind, action: options.action });
     toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
       toastTimerRef.current = null;
-    }, 3000);
+    }, options.duration ?? 3000);
   };
 
   const resetOutputs = () => {
@@ -4533,14 +4589,19 @@ export default function App() {
     }, target);
   };
 
-  const syncWorkinMapAfterInspection = async (target: string): Promise<string> => {
+  const syncWorkinMapAfterInspection = async (target: string): Promise<WorkinSyncResult> => {
     const workDate = kstDate();
     const month = Number(workDate.slice(5, 7));
     const quarter = (Math.floor((month - 1) / 3) + 1);
     const monthIndex = (month - 1) % 3;
     const monthlyLabel = (["G2", "G3", "G5"] as const)[monthIndex];
     const parsedItems = parseItemDataFromText(target, Math.max(1, itemForms.length));
-    const devices = parsedItems.map((item) => ({
+    const devices = parsedItems.map((item, index) => ({
+      index,
+      location: item.location,
+      rawModel: item.model,
+      rawSerial: item.serial,
+      rawAsset: item.asset,
       model: matchToken(item.model || ""),
       serial: matchToken(item.serial || ""),
       asset: matchToken(item.asset || ""),
@@ -4551,61 +4612,145 @@ export default function App() {
       "workin_map_places",
       `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}`,
     );
-    const ranked = rows
+    const searchableRows = rows
       .filter((row) => row.kind === "quarter" || row.kind === "monthly")
-      .map((row) => {
-        const rowText = matchToken([row.name, row.comment, ...(row.memos || [])].join(" "));
-        const rowVendor = matchVendor(row.name);
-        let score = 0;
-        devices.forEach((device) => {
-          if (device.serial.length >= 5 && rowText.includes(device.serial)) score = Math.max(score, 100);
-          if (device.asset.length >= 4 && rowText.includes(device.asset)) score = Math.max(score, 90);
-          if (
-            vendorKey.length >= 4
-            && rowVendor.length >= 4
-            && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor))
-            && device.model.length >= 3
-            && rowText.includes(device.model)
-          ) score = Math.max(score, 60);
-        });
-        return { row, score };
-      })
-      .filter(({ score }) => score >= 60);
+      .map((row) => ({
+        row,
+        rowText: matchToken([row.name, row.comment, ...(row.memos || [])].join(" ")),
+        rowVendor: matchVendor(row.name),
+      }));
 
-    const strong = ranked.filter(({ score }) => score >= 90);
-    const matched = strong.length
-      ? strong
-      : (["quarter", "monthly"] as const).flatMap((kind) => {
-          const candidates = ranked.filter(({ row }) => row.kind === kind);
-          return candidates.length === 1 ? candidates : [];
-        });
-    if (!matched.length) {
-      return ranked.length > 1
-        ? "워킨맵 후보가 여러 곳이라 자동 색칠하지 않았습니다"
-        : "워킨맵에서 일치 거래처를 찾지 못했습니다";
-    }
-
-    let changed = 0;
+    const deviceResults: WorkinDeviceSyncResult[] = [];
+    const processedRowIds = new Set<number>();
     const changedRows: Array<{ id: number; label: string; memos: string[] }> = [];
-    for (const { row } of matched) {
-      if (row.label === "G12") continue;
-      const nextLabel = row.kind === "monthly" ? monthlyLabel : "G5";
-      const monthlyRank: Record<string, number> = { G1: 0, G2: 1, G3: 2, G5: 3 };
-      if (row.kind === "monthly" && (monthlyRank[row.label] || 0) >= monthlyRank[nextLabel]) continue;
-      if (row.kind === "quarter" && row.label === "G5") continue;
-      const history = nextLabel === "G5"
-        ? `[G5 완료] ${workDate}`
-        : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}`;
-      const memos = (row.memos || []).includes(history) ? row.memos : [...(row.memos || []), history];
-      await updateRows("workin_map_places", `id=eq.${row.id}`, {
-        label: nextLabel,
-        memos,
-        updated_by: author,
-        updated_at: new Date().toISOString(),
+    const monthlyRank: Record<string, number> = { G1: 0, G2: 1, G3: 2, G5: 3 };
+
+    for (const device of devices) {
+      const serialMatches = device.serial.length >= 5
+        ? searchableRows.filter(({ rowText }) => rowText.includes(device.serial))
+        : [];
+      const assetMatches = device.asset.length >= 4
+        ? searchableRows.filter(({ rowText }) => rowText.includes(device.asset))
+        : [];
+      const vendorModelMatches = vendorKey.length >= 4 && device.model.length >= 3
+        ? searchableRows.filter(({ rowText, rowVendor }) =>
+            rowVendor.length >= 4
+            && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor))
+            && rowText.includes(device.model))
+        : [];
+      const matchBasis = serialMatches.length
+        ? "시리얼"
+        : assetMatches.length
+          ? "자산기번"
+          : vendorModelMatches.length
+            ? "업체명+기종"
+            : "";
+      const candidates = serialMatches.length
+        ? serialMatches
+        : assetMatches.length
+          ? assetMatches
+          : vendorModelMatches;
+      const weakInputAmbiguous = !serialMatches.length
+        && !assetMatches.length
+        && vendorModelMatches.length > 0
+        && devices.filter((item) => item.model && item.model === device.model).length > 1;
+      const details: string[] = [];
+      const selectedRows: FieldWorkinMapRow[] = [];
+      let ambiguous = false;
+
+      if (!candidates.length) {
+        deviceResults.push({
+          index: device.index,
+          location: device.location,
+          model: device.rawModel,
+          serial: device.rawSerial,
+          asset: device.rawAsset,
+          status: "missing",
+          details: ["워킨맵에서 일치 항목을 찾지 못했습니다."],
+          matchedRows: 0,
+          changedRows: 0,
+        });
+        continue;
+      }
+
+      if (weakInputAmbiguous) {
+        ambiguous = true;
+        details.push("같은 기종이 여러 대라 업체명+기종만으로는 기기를 구분할 수 없습니다.");
+      } else {
+        (["quarter", "monthly"] as const).forEach((kind) => {
+          const kindCandidates = candidates.filter(({ row }) => row.kind === kind);
+          if (kindCandidates.length === 1) {
+            selectedRows.push(kindCandidates[0].row);
+          } else if (kindCandidates.length > 1) {
+            ambiguous = true;
+            details.push(`${kind === "quarter" ? "분기점검" : "매월점검"} 후보 ${kindCandidates.length}곳 · 자동 반영 제외`);
+          }
+        });
+      }
+
+      let changedForDevice = 0;
+      let hasUpdated = false;
+      let hasCarried = false;
+      for (const row of selectedRows) {
+        const kindLabel = row.kind === "monthly" ? "매월점검" : "분기점검";
+        if (row.label === "G12") {
+          hasCarried = true;
+          details.push(`${kindLabel}: 다음 분기 이관(G12) · ${workinStatusDate(row)}`);
+          continue;
+        }
+        const nextLabel = row.kind === "monthly" ? monthlyLabel : "G5";
+        const alreadyApplied = row.kind === "monthly"
+          ? (monthlyRank[row.label] || 0) >= monthlyRank[nextLabel]
+          : row.label === "G5";
+        if (alreadyApplied) {
+          details.push(`${kindLabel}: 이미 반영(${row.label}) · ${workinStatusDate(row)}`);
+          continue;
+        }
+        if (processedRowIds.has(row.id)) {
+          hasUpdated = true;
+          details.push(`${kindLabel}: 같은 워킨맵 항목에 함께 반영`);
+          continue;
+        }
+        const history = nextLabel === "G5"
+          ? `[G5 완료] ${workDate}`
+          : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}`;
+        const memos = (row.memos || []).includes(history) ? row.memos : [...(row.memos || []), history];
+        await updateRows("workin_map_places", `id=eq.${row.id}`, {
+          label: nextLabel,
+          memos,
+          updated_by: author,
+          updated_at: new Date().toISOString(),
+        });
+        processedRowIds.add(row.id);
+        changedRows.push({ id: row.id, label: nextLabel, memos });
+        changedForDevice += 1;
+        hasUpdated = true;
+        details.push(`${kindLabel}: ${row.label || "미지정"} → ${nextLabel} 반영 완료`);
+      }
+
+      const status: WorkinDeviceSyncStatus = ambiguous
+        ? "ambiguous"
+        : hasUpdated
+          ? "updated"
+          : hasCarried
+            ? "carried"
+            : selectedRows.length
+              ? "already"
+              : "missing";
+      if (matchBasis) details.unshift(`${matchBasis} 기준 매칭`);
+      deviceResults.push({
+        index: device.index,
+        location: device.location,
+        model: device.rawModel,
+        serial: device.rawSerial,
+        asset: device.rawAsset,
+        status,
+        details,
+        matchedRows: selectedRows.length,
+        changedRows: changedForDevice,
       });
-      changedRows.push({ id: row.id, label: nextLabel, memos });
-      changed += 1;
     }
+
     if (changedRows.length) {
       setWorkinInspectionMatch((current) => {
         if (!current) return current;
@@ -4618,9 +4763,19 @@ export default function App() {
         };
       });
     }
-    return changed
-      ? `워킨맵 ${changed}곳 자동 반영`
-      : "워킨맵은 이미 해당 단계로 반영되어 있습니다";
+
+    const result: WorkinSyncResult = {
+      totalDevices: deviceResults.length,
+      updatedDevices: deviceResults.filter((item) => item.status === "updated").length,
+      alreadyDevices: deviceResults.filter((item) => item.status === "already").length,
+      carriedDevices: deviceResults.filter((item) => item.status === "carried").length,
+      reviewDevices: deviceResults.filter((item) => item.status === "missing" || item.status === "ambiguous").length,
+      changedRows: changedRows.length,
+      devices: deviceResults,
+    };
+    setWorkinSyncResult(result);
+    setWorkinSyncDetailsOpen(false);
+    return result;
   };
 
   const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false) => {
@@ -4689,6 +4844,8 @@ export default function App() {
       mode === "blank-report" ? "AS" :
       mode === "air-purifier" ? "청정기" :
       mode === "samsung-note" ? "삼성노트" : String(mode);
+    let latestWorkinResult: WorkinSyncResult | null = null;
+    let workinSyncFailed = false;
     const res = await sendForm({
       text: target,
       vendor: currentVendor,
@@ -4699,15 +4856,25 @@ export default function App() {
     if (res.ok && kind === "normal") try { await recordVisit(target, destination); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
     if (res.ok && kind === "normal" && destination === "inspection") {
       try {
-        const workinMessage = await syncWorkinMapAfterInspection(target);
-        res.message = `${res.message || "전송 완료"} · ${workinMessage}`;
+        latestWorkinResult = await syncWorkinMapAfterInspection(target);
+        res.message = `${res.message || "전송 완료"} · ${workinSyncSummary(latestWorkinResult)}`;
       } catch (e) {
+        workinSyncFailed = true;
         res.message = `${res.message || "전송 완료"} · 워킨맵 반영 실패: ${(e as Error).message}`;
       }
     }
     setSending(false);
     if (res.ok) {
-      showToast(res.message || "전송 완료 — 시트 저장 & 카톡 게시됨", "success");
+      const needsReview = Boolean(latestWorkinResult?.reviewDevices);
+      showToast(
+        res.message || "전송 완료 — 시트 저장 & 카톡 게시됨",
+        needsReview || workinSyncFailed ? "warning" : "success",
+        needsReview
+          ? { duration: 8000, action: "workin-details" }
+          : workinSyncFailed
+            ? { duration: 8000 }
+            : { duration: 4000 },
+      );
     } else {
       showToast("전송 실패: " + (res.error || "알 수 없는 오류"), "error");
     }
@@ -4729,6 +4896,8 @@ export default function App() {
     setContactChangeForm({ ...EMPTY_CONTACT_CHANGE_FORM });
     setReportTypes(mode === "inspection" ? FIXED_INSPECTION_REPORT_TYPES : []);
     setReportTypeOther("");
+    setWorkinSyncResult(null);
+    setWorkinSyncDetailsOpen(false);
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
     try { localStorage.removeItem("session_v1"); } catch { /* ignore */ }
@@ -5125,6 +5294,42 @@ export default function App() {
             </div>
           </div>;
         })()}
+
+        {workinSyncResult && (
+          <div className={`rounded-xl border px-4 py-3 ${workinSyncResult.reviewDevices ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-black text-slate-950">최근 워킨맵 반영 결과</div>
+                <div className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                  기기 {workinSyncResult.totalDevices}대 · 워킨맵 {workinSyncResult.changedRows}건 변경
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWorkinSyncResult(null)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg text-slate-400 hover:bg-white hover:text-slate-700"
+                aria-label="워킨맵 반영 결과 닫기"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-black">
+              <span className="rounded-md bg-emerald-100 px-2 py-1 text-emerald-800">반영 완료 {workinSyncResult.updatedDevices}</span>
+              <span className="rounded-md bg-blue-100 px-2 py-1 text-blue-800">이미 반영 {workinSyncResult.alreadyDevices}</span>
+              <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">다음 분기 이관 {workinSyncResult.carriedDevices}</span>
+              {workinSyncResult.reviewDevices > 0 && (
+                <span className="rounded-md bg-amber-200 px-2 py-1 text-amber-950">확인 필요 {workinSyncResult.reviewDevices}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setWorkinSyncDetailsOpen(true)}
+              className="mt-2 w-full rounded-lg border border-slate-300 bg-white py-2 text-xs font-black text-slate-700 hover:border-slate-400"
+            >
+              기기별 상세보기
+            </button>
+          </div>
+        )}
 
         {/* Processing form — 미양식 + 점검 */}
         {showForm && (
@@ -5636,6 +5841,63 @@ export default function App() {
         </div>
       </div>}
 
+      {workinSyncDetailsOpen && workinSyncResult && (
+        <div
+          className="fixed inset-0 z-[2300] flex items-end bg-slate-950/50 sm:items-center sm:justify-center sm:p-4"
+          onMouseDown={() => setWorkinSyncDetailsOpen(false)}
+        >
+          <section
+            className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+              <div>
+                <h2 className="text-base font-black text-slate-950">워킨맵 기기별 반영 결과</h2>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{workinSyncSummary(workinSyncResult)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWorkinSyncDetailsOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-xl text-slate-500"
+                aria-label="상세보기 닫기"
+              >
+                ×
+              </button>
+            </header>
+            <div className="space-y-2 overflow-y-auto p-3 sm:p-5">
+              {workinSyncResult.devices.map((device) => {
+                const meta = WORKIN_SYNC_STATUS_META[device.status];
+                return (
+                  <article key={device.index} className={`rounded-xl border p-3 ${meta.panel}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-black leading-5 text-slate-950">
+                          {device.index + 1}. {device.location || device.model || "기기 정보 미입력"}
+                        </div>
+                        {(device.location && device.model) && (
+                          <div className="mt-0.5 text-xs font-bold text-slate-600">{device.model}</div>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-black ${meta.badge}`}>{meta.label}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
+                      <span>시리얼 {device.serial || "-"}</span>
+                      <span>자산기번 {device.asset || "-"}</span>
+                      <span>매칭 {device.matchedRows}건</span>
+                    </div>
+                    <div className="mt-2 space-y-1 border-t border-slate-200/80 pt-2">
+                      {device.details.map((detail, index) => (
+                        <div key={`${device.index}-${index}`} className="text-xs font-semibold leading-5 text-slate-700">{detail}</div>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* 통합이력 팝업 (controlled) */}
       <UnifiedHistory
         vendor={currentVendor}
@@ -5648,13 +5910,27 @@ export default function App() {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl px-5 py-3 text-center text-base font-bold leading-6 shadow-2xl"
+          className="fixed left-1/2 top-4 z-[2400] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm font-bold leading-6 shadow-2xl sm:text-base"
           style={{
-            background: toast.kind === "success" ? "#065F46" : "#991B1B",
+            background: toast.kind === "success" ? "#065F46" : toast.kind === "warning" ? "#92400E" : "#991B1B",
             color: "white",
           }}
         >
-          {toast.text}
+          <div>{toast.text}</div>
+          {toast.action === "workin-details" && workinSyncResult && (
+            <button
+              type="button"
+              onClick={() => {
+                if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+                setToast(null);
+                setWorkinSyncDetailsOpen(true);
+              }}
+              className="mt-2 rounded-lg border border-white/50 bg-white/15 px-4 py-1.5 text-xs font-black text-white hover:bg-white/25"
+            >
+              상세보기
+            </button>
+          )}
         </div>
       )}
     </div>
