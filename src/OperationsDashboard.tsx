@@ -5,10 +5,12 @@ import {
   getActivityEvents,
   logisticsKindForEvent,
   setActivityEventCancelled,
+  setActivityEventsCancelledBySource,
   teamForAuthor,
   type ActivityEvent,
   type ActivityKind,
 } from "./operations";
+import { setVisitsCancelledBySource } from "./visits";
 import { kstDate, weekRange } from "./visits";
 
 type Period = "week" | "month" | "quarter" | "year";
@@ -33,8 +35,8 @@ const FILTER_OPTIONS: Array<{ key: Exclude<FilterKey, "all">; label: string; ton
   { key: "inspection", label: "점검", tone: CATEGORY_TONES.inspection },
   { key: "as", label: "AS", tone: CATEGORY_TONES.as },
   { key: "logistics_main", label: "물류", tone: CATEGORY_TONES.logistics },
-  { key: "logistics_etc", label: "기타", tone: "bg-slate-100 text-slate-700" },
-  { key: "expansion", label: "확장성", tone: CATEGORY_TONES.expansion_it },
+  { key: "logistics_etc", label: "기타(여분,마감)", tone: "bg-slate-100 text-slate-700" },
+  { key: "expansion", label: "확장성(IT,복합기)", tone: CATEGORY_TONES.expansion_it },
   { key: "complaint", label: "불만", tone: CATEGORY_TONES.complaint },
   { key: "misu", label: "미수", tone: CATEGORY_TONES.misu },
   { key: "overage", label: "초과조정", tone: CATEGORY_TONES.overage },
@@ -83,9 +85,9 @@ function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">)
 }
 
 function eventDisplayLabel(event: ActivityEvent) {
-  if (isLogisticsEtc(event)) return "기타";
+  if (isLogisticsEtc(event)) return "기타(여분,마감)";
   if (event.category === "logistics") return "물류";
-  if (event.category === "expansion_it" || event.category === "expansion_copier") return "확장성";
+  if (event.category === "expansion_it" || event.category === "expansion_copier") return "확장성(IT,복합기)";
   return ACTIVITY_LABELS[event.category];
 }
 
@@ -195,15 +197,35 @@ export default function OperationsDashboard({ author }: Props) {
   }, [filtered]);
 
   const changeCancelled = async (event: ActivityEvent, cancelled: boolean) => {
-    if (cancelled && !window.confirm("이 기록을 운영현황 집계에서 제외할까요?\n카톡과 원본 DB 기록은 삭제되지 않습니다.")) return;
+    const sourceText = event.sourceText || "";
+    const grouped = Boolean(sourceText.trim());
+    const prompt = grouped
+      ? (cancelled
+        ? "이 전송을 오전송으로 처리할까요?\n업무현황, 주간현황판, 일일방문일지에서 함께 제외됩니다. 카톡 메시지와 원본 DB는 삭제되지 않습니다."
+        : "이 전송의 오전송 처리를 복원할까요?\n업무현황, 주간현황판, 일일방문일지에 다시 반영됩니다.")
+      : (cancelled ? "이 기록을 업무현황 집계에서 제외할까요?" : "이 기록을 다시 집계에 반영할까요?");
+    if (!window.confirm(prompt)) return;
     setUpdatingId(event.id);
     setNotice("");
     try {
-      await setActivityEventCancelled(event.id, cancelled, author);
-      setEvents((current) => current.map((row) => row.id === event.id
-        ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
-        : row));
-      setNotice(cancelled ? "집계에서 제외했습니다." : "집계 기록으로 복원했습니다.");
+      if (grouped) {
+        await Promise.all([
+          setActivityEventsCancelledBySource(sourceText, event.author, event.activityDate, cancelled, author),
+          setVisitsCancelledBySource(sourceText, event.author, event.activityDate, cancelled, author),
+        ]);
+        setEvents((current) => current.map((row) => (
+          row.sourceText === sourceText && row.author === event.author && row.activityDate === event.activityDate
+            ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
+            : row
+        )));
+        setNotice(cancelled ? "오전송 처리했습니다. 모든 업무 집계에서 제외됩니다." : "오전송 처리를 복원했습니다.");
+      } else {
+        await setActivityEventCancelled(event.id, cancelled, author);
+        setEvents((current) => current.map((row) => row.id === event.id
+          ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
+          : row));
+        setNotice(cancelled ? "업무현황 집계에서 제외했습니다." : "집계 기록으로 복원했습니다.");
+      }
     } catch (reason) {
       setNotice(`처리하지 못했습니다: ${(reason as Error).message}`);
     } finally {
@@ -315,7 +337,7 @@ export default function OperationsDashboard({ author }: Props) {
                   </div>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[1320px] text-sm">
-                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타</th><th>확장성</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
+                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타(여분,마감)</th><th>확장성(IT,복합기)</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
                       <tbody>{peopleRows.map((row) => {
                         const personEvents = filtered.filter((event) => event.author === row.name);
                         return <tr key={row.name} onClick={() => setMember(row.name)} className={`cursor-pointer border-b border-slate-100 text-center last:border-0 hover:bg-slate-50 ${member === row.name ? "bg-blue-50" : ""}`}><td className="px-4 py-3 text-left font-black">{row.name}</td><td>{row.team}</td><td className="font-black">{row.total}</td><td>{row.vendors}</td><td>{row.categories.inspection}</td><td>{row.categories.as}</td><td>{filterCount(personEvents, "logistics_main")}</td><td>{filterCount(personEvents, "logistics_etc")}</td><td>{filterCount(personEvents, "expansion")}</td><td>{row.categories.complaint}</td><td>{row.categories.misu}</td><td>{row.categories.overage}</td><td>{row.categories.recontract}</td><td>{row.categories.contact_change}</td><td>{row.categories.replacement}</td></tr>;
@@ -342,7 +364,7 @@ export default function OperationsDashboard({ author }: Props) {
                   </summary>
                   <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
                     <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-slate-600">{event.sourceText || "저장된 원문이 없습니다."}</pre>
-                    <div className="mt-3 flex justify-end"><button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, true)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-50">집계 제외</button></div>
+                    <div className="mt-3 flex justify-end"><button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, true)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-50">{event.sourceText ? "오전송 처리" : "집계 제외"}</button></div>
                   </div>
                 </details>
               ))}

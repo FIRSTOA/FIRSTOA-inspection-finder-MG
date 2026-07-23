@@ -168,4 +168,14 @@ export async function setActivityEventCancelled(id: string, cancelled: boolean, 
   });
 }
 
+export async function setActivityEventsCancelledBySource(sourceText: string, author: string, activityDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
+  if (!sourceText.trim()) return;
+  const query = `source_text=eq.${encodeURIComponent(sourceText)}&author=eq.${encodeURIComponent(author)}&activity_date=eq.${activityDate}`;
+  await updateRows("activity_events", query, {
+    status: cancelled ? "cancelled" : "active",
+    cancelled_at: cancelled ? new Date().toISOString() : null,
+    cancelled_by: cancelled ? cancelledBy : null,
+  });
+}
+
 export const OPERATIONS_TEAMS: Array<Exclude<AuthorTeam, "팀장">> = ["A", "B", "C", "D"];

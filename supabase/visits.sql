@@ -24,7 +24,11 @@ alter table public.visit_logs add column if not exists work_kinds text[] not nul
 alter table public.visit_logs add column if not exists grade text;
 alter table public.visit_logs add column if not exists contract_ended boolean not null default false;
 alter table public.visit_logs add column if not exists source_text text;
+alter table public.visit_logs add column if not exists status text not null default 'active' check (status in ('active', 'cancelled'));
+alter table public.visit_logs add column if not exists cancelled_at timestamptz;
+alter table public.visit_logs add column if not exists cancelled_by text;
 create index if not exists visit_logs_author_date_idx on public.visit_logs(author, work_date desc);
+create index if not exists visit_logs_status_date_idx on public.visit_logs(status, work_date desc);
 
 create table if not exists public.weekly_notes (
   id uuid primary key default gen_random_uuid(),
@@ -392,6 +396,7 @@ alter table public.copier_expansion enable row level security;
 -- 현재 앱이 anon 기반이므로 기존 운영 방식과 맞춘 정책. 직원 로그인 도입 시 auth.uid() 기반으로 교체한다.
 drop policy if exists "visit_logs anon read" on public.visit_logs;
 drop policy if exists "visit_logs anon insert" on public.visit_logs;
+drop policy if exists "visit_logs anon update" on public.visit_logs;
 drop policy if exists "weekly_notes anon all" on public.weekly_notes;
 drop policy if exists "office_logs anon all" on public.office_logs;
 drop policy if exists "quarterly_plans anon all" on public.quarterly_plans;
@@ -420,6 +425,7 @@ drop policy if exists "copier_expansion anon read" on public.copier_expansion;
 drop policy if exists "copier_expansion anon insert" on public.copier_expansion;
 create policy "visit_logs anon read" on public.visit_logs for select to anon using (true);
 create policy "visit_logs anon insert" on public.visit_logs for insert to anon with check (true);
+create policy "visit_logs anon update" on public.visit_logs for update to anon using (true) with check (true);
 create policy "weekly_notes anon all" on public.weekly_notes for all to anon using (true) with check (true);
 create policy "office_logs anon all" on public.office_logs for all to anon using (true) with check (true);
 create policy "quarterly_plans anon all" on public.quarterly_plans for all to anon using (true) with check (true);
@@ -445,7 +451,7 @@ create policy "pc_expansion anon read" on public.pc_expansion for select to anon
 create policy "pc_expansion anon insert" on public.pc_expansion for insert to anon with check (true);
 create policy "copier_expansion anon read" on public.copier_expansion for select to anon using (true);
 create policy "copier_expansion anon insert" on public.copier_expansion for insert to anon with check (true);
-grant select, insert on public.visit_logs to anon;
+grant select, insert, update on public.visit_logs to anon;
 grant select, insert, update on public.weekly_notes to anon;
 grant select, insert, update on public.office_logs to anon;
 grant select, insert, update on public.quarterly_plans to anon;
