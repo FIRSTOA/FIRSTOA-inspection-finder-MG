@@ -4582,7 +4582,15 @@ export default function App() {
     const logisticsCategory = mode === "logistics" ? (logisticsForm.category === "기타" ? logisticsForm.categoryOther : logisticsForm.category) : "";
     const kind: WorkKind = destination === "inspection" ? "inspection" : destination === "as" ? "as" :
       mode === "logistics" && /여분|마감/.test(logisticsCategory) ? "etc" : visitKindForMode();
-    const existingMinutes = Number(visitMeta.minutes[kind] || 0);
+    const selectedFieldKinds: WorkKind[] = destination
+      ? [
+          ...(reportTypes.includes("점검") ? ["inspection" as WorkKind] : []),
+          ...(reportTypes.includes("AS") ? ["as" as WorkKind] : []),
+        ]
+      : [];
+    const recordedKinds = selectedFieldKinds.length ? selectedFieldKinds : [kind];
+    const primaryKind = recordedKinds[0];
+    const existingMinutes = Number(visitMeta.minutes[primaryKind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
     const logisticsQuantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
     const arrivalTime = visitMeta.arrivalTime || (mode === "air-purifier"
@@ -4593,11 +4601,11 @@ export default function App() {
       machineCount: visitMeta.machineCount || (mode === "logistics" && kind === "delivery" ? logisticsQuantity : mode === "inspection" || mode === "blank-report" ? Math.max(1, itemForms.length) : mode === "air-purifier" ? 1 : 0),
       workKinds: Array.from(new Set([
         ...visitMeta.workKinds,
-        kind,
+        ...recordedKinds,
         ...(!destination && reportTypes.includes("점검") ? ["inspection" as WorkKind] : []),
         ...(!destination && reportTypes.includes("AS") ? ["as" as WorkKind] : []),
       ])),
-      minutes: { ...visitMeta.minutes, [kind]: existingMinutes || formDuration },
+      minutes: { ...visitMeta.minutes, [primaryKind]: existingMinutes || formDuration },
     }, target);
   };
 
@@ -4626,6 +4634,18 @@ export default function App() {
       sourceText: target,
       metadata: options.metadata,
     });
+  };
+
+  const recordFieldOperations = async (target: string, destination: SendDestination) => {
+    const categories: ActivityKind[] = [
+      ...(reportTypes.includes("점검") ? ["inspection" as ActivityKind] : []),
+      ...(reportTypes.includes("AS") ? ["as" as ActivityKind] : []),
+    ];
+    if (!categories.length) categories.push(destination === "inspection" ? "inspection" : "as");
+    await Promise.all(categories.map((category) => recordOperation(category, target, {
+      machineCount: Math.max(1, itemForms.length),
+      metadata: { destination, reportTypes: [...reportTypes] },
+    })));
   };
 
   const syncWorkinMapAfterInspection = async (target: string): Promise<WorkinSyncResult> => {
@@ -4935,15 +4955,12 @@ export default function App() {
     if (res.ok && kind === "normal") try { await recordVisit(target, destination); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
     if (res.ok && kind === "normal" && (destination === "inspection" || destination === "as")) {
       try {
-        await recordOperation(destination === "inspection" ? "inspection" : "as", target, {
-          machineCount: Math.max(1, itemForms.length),
-          metadata: { destination },
-        });
+        await recordFieldOperations(target, destination);
       } catch (e) {
         res.message = `${res.message || "전송 완료"} · 운영현황 기록 실패: ${(e as Error).message}`;
       }
     }
-    if (res.ok && kind === "normal" && destination === "inspection") {
+    if (res.ok && kind === "normal" && destination === "inspection" && reportTypes.includes("점검")) {
       try {
         latestWorkinResult = await syncWorkinMapAfterInspection(target);
         res.message = `${res.message || "전송 완료"} · ${workinSyncSummary(latestWorkinResult)}`;
