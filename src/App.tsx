@@ -2574,7 +2574,27 @@ const PREVIEW_FIELD_LABEL_BY_ITEM_KEY: Partial<Record<keyof PerItemForm, string>
   notes: "특이사항",
 };
 
-function patchPreviewField(text: string, label: string, value: string): string {
+const PREVIEW_ITEM_FIELD_ORDER = [
+  "모델명",
+  "시리얼넘버",
+  "자산기번",
+  "내용",
+  "처리내용",
+  "매수",
+  "토너잔량",
+  "폐통",
+  "여분",
+  "한틴이카유무",
+  "주차비지원유무",
+  "특이사항",
+] as const;
+
+function patchPreviewField(
+  text: string,
+  label: string,
+  value: string,
+  fieldOrder: readonly string[] = [],
+): string {
   const lines = text.split("\n");
   const start = lines.findIndex((line) => new RegExp(`^${label}\\s*:`).test(line));
   const valueLines = String(value || "").split("\n");
@@ -2588,9 +2608,122 @@ function patchPreviewField(text: string, label: string, value: string): string {
     lines.splice(start, end - start, ...replacement);
     return lines.join("\n");
   }
-  const insertAt = lines.findIndex((line) => isDividerLine(line) || /^※/.test(line));
+
+  const fieldPosition = fieldOrder.indexOf(label);
+  const laterLabels = fieldPosition >= 0 ? fieldOrder.slice(fieldPosition + 1) : [];
+  let insertAt = -1;
+  for (const laterLabel of laterLabels) {
+    insertAt = lines.findIndex((line) => new RegExp(`^${laterLabel}\\s*:`).test(line));
+    if (insertAt >= 0) break;
+  }
+  if (insertAt < 0) {
+    insertAt = lines.findIndex((line) => isDividerLine(line) || /^※/.test(line));
+  }
   lines.splice(insertAt >= 0 ? insertAt : lines.length, 0, ...replacement);
   return lines.join("\n");
+}
+
+function patchPreviewDeviceLocation(text: string, value: string, deviceIndex: number): string {
+  const lines = text.split("\n");
+  const itemStart = lines.findIndex((line) => /^\s*\d+\./.test(line));
+  if (itemStart < 0) return text;
+  const modelAt = lines.findIndex((line, index) => index > itemStart && /^모델명\s*:/.test(line));
+  if (modelAt < 0) return text;
+  const location = cleanDeviceLocation(String(value || ""), deviceIndex + 1);
+  const replacement = [`${deviceIndex + 1}.`, ...(location ? location.split("\n") : [])];
+  lines.splice(itemStart, modelAt - itemStart, ...replacement);
+  return lines.join("\n");
+}
+
+function previewItemFieldPatch(
+  key: keyof PerItemForm,
+  form: PerItemForm,
+): { label: string; value: string } | null {
+  if (key === "mailBlack" || key === "mailColor" || key === "mailLargeColor" || key === "mailTotal") {
+    return {
+      label: "매수",
+      value: `흑${dashIfEmpty(form.mailBlack.trim())} 컬${dashIfEmpty(form.mailColor.trim())} 큰컬${dashIfEmpty(form.mailLargeColor.trim())} 합${dashIfEmpty(form.mailTotal.trim())}`,
+    };
+  }
+  if (key === "tonerK" || key === "tonerC" || key === "tonerM" || key === "tonerY") {
+    return {
+      label: "토너잔량",
+      value: `K${dashIfEmpty(form.tonerK.trim())} C${dashIfEmpty(form.tonerC.trim())} M${dashIfEmpty(form.tonerM.trim())} Y${dashIfEmpty(form.tonerY.trim())}`,
+    };
+  }
+  if (key === "waste") {
+    return { label: "폐통", value: form.waste.trim() ? `${form.waste.trim()}%` : "" };
+  }
+  const label = PREVIEW_FIELD_LABEL_BY_ITEM_KEY[key];
+  return label ? { label, value: String(form[key] ?? "") } : null;
+}
+
+const PREVIEW_PART_FIELD_ORDER = [
+  "보증기간 내 여부",
+  "교체 전 카운터 누적 사용매수",
+  "사용 부품 예상 사용매수",
+  "물품명",
+  "수량",
+  "출고여부",
+] as const;
+const PREVIEW_SELF_FIELD_ORDER = ["물품", "수량", "출고여부"] as const;
+const PREVIEW_FOOTER_FIELD_ORDER = ["도착 시간", "소요 시간"] as const;
+
+function patchPreviewSectionField(
+  text: string,
+  sectionHeading: string,
+  label: string,
+  value: string,
+  fieldOrder: readonly string[],
+): string {
+  const lines = text.split("\n");
+  const sectionStart = lines.findIndex((line) => line.trim() === sectionHeading);
+  if (sectionStart < 0) return text;
+  let sectionEnd = lines.findIndex((line, index) => index > sectionStart && /^※/.test(line));
+  if (sectionEnd < 0) sectionEnd = lines.length;
+  const sectionText = lines.slice(sectionStart, sectionEnd).join("\n");
+  const patched = patchPreviewField(sectionText, label, value, fieldOrder).split("\n");
+  lines.splice(sectionStart, sectionEnd - sectionStart, ...patched);
+  return lines.join("\n");
+}
+
+function patchPreviewFooterField(text: string, label: string, value: string): string {
+  const lines = text.split("\n");
+  let footerStart = -1;
+  lines.forEach((line, index) => {
+    if (/^※/.test(line)) footerStart = index;
+  });
+  const start = footerStart >= 0 ? footerStart + 1 : 0;
+  const footerText = lines.slice(start).join("\n");
+  const patched = patchPreviewField(footerText, label, value, PREVIEW_FOOTER_FIELD_ORDER).split("\n");
+  lines.splice(start, lines.length - start, ...patched);
+  return lines.join("\n");
+}
+
+function previewSharedFieldPatch(
+  key: keyof SharedForm,
+  form: SharedForm,
+): { label: string; value: string; section?: "parts" | "self" | "footer" | "header" } | null {
+  if (key === "level") return { label: "레벨", value: form.level, section: "header" };
+  if (key === "warranty") return { label: "보증기간 내 여부", value: form.warranty, section: "parts" };
+  if (key === "cumCount") return { label: "교체 전 카운터 누적 사용매수", value: form.cumCount, section: "parts" };
+  if (key === "expectedCount") return { label: "사용 부품 예상 사용매수", value: form.expectedCount, section: "parts" };
+  if (key === "partName") return { label: "물품명", value: form.partName, section: "parts" };
+  if (key === "partQty") return { label: "수량", value: form.partQty, section: "parts" };
+  if (key === "partShipped") return { label: "출고여부", value: form.partShipped, section: "parts" };
+  if (key === "selfItem") return { label: "물품", value: form.selfItem, section: "self" };
+  if (key === "selfQty") return { label: "수량", value: form.selfQty, section: "self" };
+  if (key === "selfShipped") return { label: "출고여부", value: form.selfShipped, section: "self" };
+  if (key === "arrivalHour" || key === "arrivalMinute") {
+    const value = form.arrivalHour
+      ? `${form.arrivalHour}:${form.arrivalMinute || "00"}`
+      : "";
+    return { label: "도착 시간", value, section: "footer" };
+  }
+  if (key === "duration") {
+    return { label: "소요 시간", value: form.duration.trim() ? `${form.duration.trim()}분` : "", section: "footer" };
+  }
+  return null;
 }
 
 type ResultBlock = { text: string; device: number | null };
@@ -3823,23 +3956,60 @@ export default function App() {
   // Manual preview edits stay verbatim. Form controls patch only the field
   // explicitly changed, so typing/deleting in the textarea never moves the caret.
   const setItemF = <K extends keyof PerItemForm>(key: K, value: PerItemForm[K]) => {
+    const nextForm: PerItemForm = {
+      ...(itemForms[selectedItem] ?? EMPTY_ITEM_FORM),
+      [key]: value,
+    };
     setItemForms((prev: PerItemForm[]) => prev.map((f: PerItemForm, i: number) =>
       i === selectedItem ? { ...f, [key]: value } : f,
     ));
-    const label = PREVIEW_FIELD_LABEL_BY_ITEM_KEY[key];
-    if (label) {
-      const blockIndex = resultBlocks.findIndex((block: ResultBlock) => block.device === selectedItem);
-      if (blockIndex >= 0) {
-        setEditedBlocks((prev: Record<number, string>) => (
-          prev[blockIndex] === undefined
-            ? prev
-            : { ...prev, [blockIndex]: patchPreviewField(prev[blockIndex], label, String(value ?? "")) }
-        ));
-      }
+    const blockIndex = resultBlocks.findIndex((block: ResultBlock) => block.device === selectedItem);
+    if (blockIndex >= 0) {
+      setEditedBlocks((prev: Record<number, string>) => {
+        if (prev[blockIndex] === undefined) return prev;
+        const nextText = key === "location"
+          ? patchPreviewDeviceLocation(prev[blockIndex], String(value ?? ""), selectedItem)
+          : (() => {
+              const patch = previewItemFieldPatch(key, nextForm);
+              return patch
+                ? patchPreviewField(prev[blockIndex], patch.label, patch.value, PREVIEW_ITEM_FIELD_ORDER)
+                : prev[blockIndex];
+            })();
+        return nextText === prev[blockIndex] ? prev : { ...prev, [blockIndex]: nextText };
+      });
     }
   };
   const setSharedF = <K extends keyof SharedForm>(key: K, value: SharedForm[K]) => {
+    const nextShared: SharedForm = { ...sharedForm, [key]: value };
     setSharedForm((prev: SharedForm) => ({ ...prev, [key]: value }));
+    const patch = previewSharedFieldPatch(key, nextShared);
+    if (!patch) return;
+    setEditedBlocks((prev: Record<number, string>) => {
+      let changed = false;
+      const next = { ...prev };
+      Object.entries(prev).forEach(([rawIndex, text]) => {
+        const index = Number(rawIndex);
+        const block = resultBlocks[index];
+        if (!block) return;
+        let patched = text;
+        if (patch.section === "header") {
+          if (block.device === null && index === 0) {
+            patched = patchPreviewField(text, patch.label, patch.value, ["작성자", "구분", "레벨"]);
+          }
+        } else if (patch.section === "parts" && text.includes("※부품신청※")) {
+          patched = patchPreviewSectionField(text, "※부품신청※", patch.label, patch.value, PREVIEW_PART_FIELD_ORDER);
+        } else if (patch.section === "self" && text.includes("※자가신청※")) {
+          patched = patchPreviewSectionField(text, "※자가신청※", patch.label, patch.value, PREVIEW_SELF_FIELD_ORDER);
+        } else if (patch.section === "footer" && block.device === null && text.includes("※부품신청※")) {
+          patched = patchPreviewFooterField(text, patch.label, patch.value);
+        }
+        if (patched !== text) {
+          next[index] = patched;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
   };
   const setAirF = <K extends keyof AirPurifierForm>(key: K, value: AirPurifierForm[K]) => {
     setAirForm((prev: AirPurifierForm) => ({ ...prev, [key]: value }));
