@@ -65,11 +65,17 @@ function getOrCreateTestSheet_(spreadsheet, sourceSheet, category) {
 }
 
 function fieldValue_(category, header, data, request, labels) {
+  const submittedAt = new Date(request.submittedAt || new Date());
+  const copierPeriod = category === "expansion_copier" ? {
+    "년월": Utilities.formatDate(submittedAt, "Asia/Seoul", "yy년 MM월"),
+    "주차": `${isoWeek_(submittedAt)}주차`,
+  } : {};
   const base = {
     "웹앱 전송ID": request.jobId,
     "날짜": request.submittedAt,
     "등록일": request.submittedAt,
     "작성자": request.author,
+    ...copierPeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -108,6 +114,14 @@ function fieldValue_(category, header, data, request, labels) {
   if (data[key] !== undefined && data[key] !== "") return data[key];
   if (labels[header] !== undefined) return labels[header];
   return labels[key];
+}
+
+function isoWeek_(date) {
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  return Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
 }
 
 function parseLabeledText_(text) {
