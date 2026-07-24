@@ -4879,7 +4879,7 @@ export default function App() {
     }
 
     if (mode === "contact-change") {
-      const res = await sendContactChangeForm(target);
+      const res = await sendContactChangeForm(contactChangeForm, author, target, new Date().toISOString());
       if (res.ok) try {
         await recordOperation("contact_change", target, {
           vendor: contactChangeForm.company,

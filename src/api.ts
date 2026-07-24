@@ -8,9 +8,10 @@
 
 import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
-import { insertRecord, getConfig, getRoomMap, enqueueOutbox, rpc, selectRows, insertRow } from "./supabase";
+import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, invokeEdgeFunction, rpc, selectRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
+import type { ContactChangeFormState } from "./contactChange";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
 
@@ -549,6 +550,20 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
       const fallback = map[s.roomKey] || testRoom;
       rooms = [regionRoom(schemaKey, String((regionKey && form[regionKey]) || ""), fallback)];
     }
+    if (schemaKey === "bulman") {
+      const automation = await queueFieldAutomation({
+        category: "complaint",
+        author,
+        vendor,
+        region: String((regionKey && form[regionKey]) || ""),
+        room: rooms[0] || "",
+        text,
+        data: form,
+        dupKey: String(row["_dupKey"]),
+      });
+      if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+      return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
+    }
     for (const room of rooms) await enqueueOutbox(room, text);
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
   } catch (e) {
@@ -580,11 +595,68 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt]; }
-    for (const room of rooms) await enqueueOutbox(room, text);
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
+    const automation = await queueFieldAutomation({
+      category: "expansion_it",
+      author,
+      vendor,
+      region: form.region,
+      room: rooms[0] || "",
+      text,
+      data: form,
+      dupKey: String(row["_dupKey"]),
+    });
+    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
+}
+
+function isEnabled(value: unknown): boolean {
+  return String(value || "").toLowerCase() === "true";
+}
+
+async function queueFieldAutomation(input: {
+  category: FieldSheetSyncCategory;
+  author: string;
+  vendor: string;
+  region?: string;
+  room: string;
+  text: string;
+  data: Record<string, unknown>;
+  dupKey: string;
+}): Promise<{ message: string }> {
+  const id = crypto.randomUUID();
+  let job: "new" | "dup";
+  try {
+    job = await enqueueFieldSheetSyncJob({
+      id,
+      category: input.category,
+      author: input.author,
+      vendor: input.vendor,
+      region: input.region,
+      room: input.room,
+      sourceText: input.text,
+      payload: { data: input.data },
+      dupKey: input.dupKey,
+    });
+  } catch {
+    // SQL 배포 전에도 야간 카카오 오발송이 일어나지 않도록 전송은 보류한다.
+    return { message: "자동화 설정 전 · 카카오 전송 보류" };
+  }
+  if (job === "dup") return { message: "기존 자동화 기록 확인" };
+
+  const cfg = await getConfig();
+  let sheetMessage = "시트 동기화 대기";
+  if (isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) {
+    try {
+      const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
+      sheetMessage = result.status === "synced" ? `시트 ${result.row ? `${result.row}행` : "저장"} 완료` : "시트 동기화 보류";
+    } catch {
+      sheetMessage = "시트 재시도 대기";
+    }
+  }
+  return { message: `${sheetMessage} · ${isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED) ? "카카오 전송 설정됨" : "카카오 전송 보류"}` };
 }
 
 // 복합기(기타) 확장성 폼 → 복합기 확장성 저장 + 확장성 방 전송.
@@ -626,14 +698,23 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       const map = await getRoomMap();
       rooms = [map["복합기확장성|*"] || FIXED_ROOM.copierExpansion];
     }
-    for (const room of rooms) await enqueueOutbox(room, text);
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
+    const automation = await queueFieldAutomation({
+      category: "expansion_copier",
+      author,
+      vendor,
+      room: rooms[0] || "",
+      text,
+      data: form,
+      dupKey: String(row["_dupKey"]),
+    });
+    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
 }
 
-export async function sendContactChangeForm(text: string): Promise<SaveResp> {
+export async function sendContactChangeForm(form: ContactChangeFormState, author: string, text: string, ts?: string): Promise<SaveResp> {
   try {
     const cfg = await getConfig();
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
@@ -642,8 +723,18 @@ export async function sendContactChangeForm(text: string): Promise<SaveResp> {
       const map = await getRoomMap();
       room = map["담당자변경|*"] || map["담당자/주소변경|*"] || FIXED_ROOM.contactChange;
     }
-    await enqueueOutbox(room, text);
-    return { ok: true, message: `게시 대기: ${room}` };
+    const automation = await queueFieldAutomation({
+      category: "contact_change",
+      author,
+      vendor: form.company,
+      region: form.region,
+      room,
+      text,
+      data: form,
+      dupKey: md5(["contact_change", toKstDate(ts), author, form.company, form.category, form.reason, form.before, form.after].join("|")),
+    });
+    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
+    return { ok: true, message: automation.message };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }

@@ -219,3 +219,29 @@ export async function enqueueOutbox(room: string, text: string): Promise<void> {
     throw new Error(`발신큐 적재 실패(${res.status}): ${t.slice(0, 120)}`);
   }
 }
+
+export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint";
+
+export async function enqueueFieldSheetSyncJob(job: {
+  id: string;
+  category: FieldSheetSyncCategory;
+  author: string;
+  vendor: string;
+  region?: string;
+  room?: string;
+  sourceText: string;
+  payload: Record<string, unknown>;
+  dupKey: string;
+}): Promise<InsertResult> {
+  return insertRow("field_sheet_sync_jobs", {
+    id: job.id,
+    category: job.category,
+    author: job.author,
+    vendor: job.vendor,
+    region: job.region || "",
+    room: job.room || "",
+    source_text: job.sourceText,
+    payload: job.payload,
+    "_dupKey": job.dupKey,
+  });
+}
