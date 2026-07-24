@@ -1108,7 +1108,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       const pace = gap >= 0 ? "순조" : gap >= -0.1 ? "주의" : "스퍼트 필요";
       return { team, inspTotal, inspDone, renewTotal, renewDone, inspWeekly, renewWeekly, inspBaseline: inspDone - inspDated, renewBaseline: renewDone - renewDated, pace };
     });
-    return { weeks, elapsedRatio, teams: teamRows };
+    return { weeks, elapsedRatio, teams: teamRows, endDate: fmtDate(dates.end), earlyEndDate: fmtDate(dates.earlyEnd) };
   }, [places, progressQuarter, progressYear]);
 
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
@@ -1835,9 +1835,11 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                               const renewWeekPct = row.renewTotal ? (renewN / row.renewTotal) * 100 : 0;
                               const isNow = todayKst >= week.start && todayKst <= week.end;
                               const isFuture = week.start > todayKst;
+                              const isEnd = weeklyAnalysis.endDate >= week.start && weeklyAnalysis.endDate <= week.end;
+                              const isEarly = weeklyAnalysis.earlyEndDate >= week.start && weeklyAnalysis.earlyEndDate <= week.end;
                               return (
-                                <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isFuture ? "text-slate-300" : ""}`}>
-                                  <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span></td>
+                                <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isEnd ? "bg-rose-50" : isEarly ? "bg-amber-50" : isFuture ? "text-slate-300" : ""}`}>
+                                  <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span>{isEarly && <span className="ml-1 rounded bg-amber-200 px-1 text-[9px] font-black text-amber-800">말일-10일</span>}{isEnd && <span className="ml-1 rounded bg-rose-200 px-1 text-[9px] font-black text-rose-800">말일</span>}</td>
                                   <td className="py-1 text-center text-blue-700">{inspN ? `+${inspN}` : "·"}</td>
                                   <td className="py-1 text-center text-emerald-700">{renewN ? `+${renewN}` : "·"}</td>
                                   <td className="py-1 text-center font-black text-blue-700">{inspN ? `${inspWeekPct.toFixed(1)}%` : "·"}</td>
