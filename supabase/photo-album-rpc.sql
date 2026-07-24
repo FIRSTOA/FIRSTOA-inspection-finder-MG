@@ -1,7 +1,6 @@
--- 사진 앨범은 외부 공유 링크로 조회하므로, 생성/조회 경로를 RPC로 고정합니다.
--- Storage 파일 업로드와 앨범 DB 저장의 권한 문제를 분리합니다.
+-- Creates and reads photo albums through RPC while keeping Storage uploads separate.
 alter table public.photo_albums
-  add column if not exists category text not null default '현장',
+  add column if not exists category text not null default 'field',
   add column if not exists author text,
   add column if not exists region text,
   add column if not exists source_type text not null default 'field';
@@ -9,7 +8,7 @@ alter table public.photo_albums
 create or replace function public.create_photo_album(
   p_urls text[],
   p_vendor text,
-  p_category text default '현장',
+  p_category text default 'field',
   p_author text default '',
   p_region text default '',
   p_source_type text default 'field'
