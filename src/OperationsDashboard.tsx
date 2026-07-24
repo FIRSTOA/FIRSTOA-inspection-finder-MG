@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ACTIVITY_LABELS,
   OPERATIONS_TEAMS,
@@ -113,7 +113,7 @@ export default function OperationsDashboard({ author }: Props) {
   const error = loadError?.range === rangeKey ? loadError.message : "";
   const loading = loadedRange !== rangeKey && !error;
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let active = true;
     getActivityEvents(range.start, range.end)
       .then((rows) => {
@@ -127,6 +127,16 @@ export default function OperationsDashboard({ author }: Props) {
       });
     return () => { active = false; };
   }, [range.start, range.end]);
+
+  useEffect(() => load(), [load]);
+
+  // 다른 화면에서 오발송 처리 후 돌아오거나 탭이 다시 활성화되면 최신 집계로 새로고침한다.
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== "hidden") load(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [load]);
 
   const nonManagerEvents = useMemo(
     () => events.filter((event) => teamForAuthor(event.author) !== "팀장"),
