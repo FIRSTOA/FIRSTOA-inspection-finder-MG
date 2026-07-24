@@ -108,6 +108,9 @@ export default function OperationsDashboard({ author }: Props) {
   const [loadError, setLoadError] = useState<{ range: string; message: string } | null>(null);
   const [updatingId, setUpdatingId] = useState("");
   const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batching, setBatching] = useState(false);
+  const toggleSelect = (id: string) => setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const range = useMemo(() => rangeFor(period, year, month, quarter, anchor), [period, year, month, quarter, anchor]);
   const rangeKey = `${range.start}:${range.end}`;
   const error = loadError?.range === rangeKey ? loadError.message : "";
@@ -243,6 +246,42 @@ export default function OperationsDashboard({ author }: Props) {
     }
   };
 
+  const batchCancel = async () => {
+    const targets = filtered.filter((event) => selected.has(event.id));
+    if (!targets.length) { setSelected(new Set()); return; }
+    setBatching(true);
+    setNotice("");
+    try {
+      const doneSources = new Set<string>();
+      for (const event of targets) {
+        const sourceText = event.sourceText || "";
+        if (sourceText.trim()) {
+          const key = `${sourceText}|${event.author}|${event.activityDate}`;
+          if (doneSources.has(key)) continue;
+          doneSources.add(key);
+          await Promise.all([
+            setActivityEventsCancelledBySource(sourceText, event.author, event.activityDate, true, author),
+            setVisitsCancelledBySource(sourceText, event.author, event.activityDate, true, author),
+          ]);
+        } else {
+          await setActivityEventCancelled(event.id, true, author);
+        }
+      }
+      setEvents((current) => current.map((row) => {
+        const hit = targets.some((t) => (t.sourceText || "").trim()
+          ? row.sourceText === t.sourceText && row.author === t.author && row.activityDate === t.activityDate
+          : row.id === t.id);
+        return hit ? { ...row, status: "cancelled", cancelledBy: author } : row;
+      }));
+      setNotice(`${targets.length}건 오발송 처리했습니다. 모든 업무 집계에서 제외됩니다.`);
+      setSelected(new Set());
+    } catch (reason) {
+      setNotice(`처리하지 못했습니다: ${(reason as Error).message}`);
+    } finally {
+      setBatching(false);
+    }
+  };
+
   return (
     <div className="space-y-3 pb-16">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -364,10 +403,27 @@ export default function OperationsDashboard({ author }: Props) {
               <div><h3 className="font-black text-slate-950">업무 기록 확인</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">오전송은 원문을 남긴 채 집계에서 제외할 수 있습니다.</p></div>
               <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
             </summary>
+            {filtered.length > 0 && (() => {
+              const visible = filtered.slice(0, 50);
+              const allChecked = visible.every((e) => selected.has(e.id));
+              return (
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-600">
+                    <input type="checkbox" checked={allChecked} onChange={(e) => setSelected(e.target.checked ? new Set(visible.map((x) => x.id)) : new Set())} className="h-4 w-4 accent-rose-500" />
+                    전체선택{selected.size > 0 ? ` · ${selected.size}건` : ""}
+                  </label>
+                  <div className="flex gap-2">
+                    {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">해제</button>}
+                    <button type="button" onClick={() => void batchCancel()} disabled={batching || selected.size === 0} className="rounded-md bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-40">{batching ? "처리중…" : "선택 오발송"}</button>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="divide-y divide-slate-100 border-t border-slate-200">
               {filtered.slice(0, 50).map((event) => (
                 <details key={event.id} className="group">
-                  <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                  <summary className="grid cursor-pointer list-none grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                    <input type="checkbox" checked={selected.has(event.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelect(event.id)} className="h-4 w-4 accent-rose-500" />
                     <span className={`rounded px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{eventDisplayLabel(event)}</span>
                     <span className="min-w-0"><b className="block truncate text-sm">{event.vendor || "거래처 미기재"}</b><span className="text-[11px] font-semibold text-slate-400">{event.activityDate} · {event.team}팀 · {event.author}</span></span>
                     <span className="text-xs font-bold text-slate-400">{event.machineCount ? `${event.machineCount}대` : "보기"}</span>
