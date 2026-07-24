@@ -726,6 +726,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisTeamsOpen, setAnalysisTeamsOpen] = useState<Record<string, boolean>>(() => ({ [teamFilter]: true }));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
@@ -1073,11 +1074,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     const elapsedRatio = Math.min(1, Math.max(0, elapsedBiz / totalBiz));
     const weekIndex = (date: string) => weeks.findIndex((week) => date >= week.start && date <= week.end);
     const teamRows = teams.map((team) => {
-      const quarterly = places.filter((place) => place.team === team && place.quarter === progressQuarter && place.kind === "quarter");
-      const renewals = places.filter((place) => place.team === team && place.quarter === progressQuarter && place.kind === "renewal" && renewalGrade(place) !== "V");
-      const inspTotal = quarterly.length;
+      const scoped = places.filter((place) => place.team === team && place.quarter === progressQuarter);
+      const quarterly = scoped.filter((place) => place.kind === "quarter");
+      const monthly = scoped.filter((place) => place.kind === "monthly");
+      const renewals = scoped.filter((place) => place.kind === "renewal" && renewalGrade(place) !== "V");
+      // 매월점검은 3개월치라 total은 ×3, 완료는 라벨별 단위(G2×1·G3×2·G5×3)로 센다.
+      const inspTotal = quarterly.length + monthly.length * 3;
       const renewTotal = renewals.length;
-      const inspDone = quarterly.filter(isCompleted).length;
+      const inspDone = quarterly.filter(isCompleted).length + monthly.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0);
       const renewDone = renewals.filter((place) => place.label === "G5").length;
       const inspWeekly = weeks.map(() => 0);
       const renewWeekly = weeks.map(() => 0);
@@ -1087,6 +1091,12 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         if (!isCompleted(place)) continue;
         const index = weekIndex(completionDate(place));
         if (index >= 0) { inspWeekly[index] += 1; inspDated += 1; }
+      }
+      for (const place of monthly) {
+        const units = monthlyInspectionUnits(place);
+        if (!units) continue;
+        const index = weekIndex(completionDate(place)); // 완료일 메모는 G5/G12에만 남는다
+        if (index >= 0) { inspWeekly[index] += units; inspDated += units; }
       }
       for (const place of renewals) {
         if (place.label !== "G5") continue;
@@ -1505,7 +1515,6 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
-          <button type="button" onClick={() => { setAnalysisOpen(true); setProgressMenuOpen(false); setConditionMenuOpen(false); setColorMenuOpen(false); }} className="rounded-md border border-slate-200 bg-white px-2 py-2.5 text-[11px] font-black text-slate-700 shadow-lg sm:px-3 sm:text-xs">주차분석</button>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
@@ -1545,7 +1554,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
                   <div className="mt-0.5 text-[10px] font-bold text-slate-400">{progressYear}년 · 남은 영업일 {daysToQuarterEnd}일</div>
                 </div>
-                <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
+                <div className="flex items-center gap-1.5">
+                  <button type="button" onClick={() => { setAnalysisOpen(true); setProgressMenuOpen(false); }} className="rounded-md bg-blue-600 px-2.5 py-1.5 text-[11px] font-black text-white hover:bg-blue-700">주차분석</button>
+                  <button type="button" onClick={() => setProgressMenuOpen(false)} className="h-7 w-7 rounded text-lg font-black text-slate-400 hover:bg-slate-100">×</button>
+                </div>
               </div>
               <div className="mt-3 space-y-3">
                 {teamProgress.map((item) => {
@@ -1777,55 +1789,72 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                 const renewPct = row.renewTotal ? Math.round((row.renewDone / row.renewTotal) * 100) : 0;
                 const elapsedPct = Math.round(weeklyAnalysis.elapsedRatio * 100);
                 const paceTone = row.pace === "순조" ? "bg-emerald-100 text-emerald-700" : row.pace === "주의" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
-                let cumulative = row.inspBaseline;
+                const open = analysisTeamsOpen[row.team] ?? false;
+                let cumInsp = row.inspBaseline;
+                let cumRenew = row.renewBaseline;
                 return (
-                  <div key={row.team} className="rounded-lg border border-slate-200 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-black text-slate-900">{row.team}팀</div>
-                      <span className={`rounded px-2 py-0.5 text-[11px] font-black ${paceTone}`}>{row.pace}</span>
-                    </div>
-                    <div className="mt-1.5 grid grid-cols-2 gap-2">
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] font-black text-blue-700"><span>점검</span><span>{row.inspDone}/{row.inspTotal} · {inspPct}%</span></div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspPct}%` }} /></div>
+                  <div key={row.team} className="overflow-hidden rounded-lg border border-slate-200">
+                    <button type="button" onClick={() => setAnalysisTeamsOpen((current) => ({ ...current, [row.team]: !open }))} className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-slate-900">{row.team}팀</span>
+                        <span className="text-[11px] font-bold text-blue-700">점검 {inspPct}%</span>
+                        <span className="text-[11px] font-bold text-emerald-700">재계약 {renewPct}%</span>
                       </div>
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] font-black text-emerald-700"><span>재계약</span><span>{row.renewDone}/{row.renewTotal} · {renewPct}%</span></div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-emerald-50"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewPct}%` }} /></div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-2 py-0.5 text-[11px] font-black ${paceTone}`}>{row.pace}</span>
+                        <span className="text-[10px] font-black text-slate-400">{open ? "▲" : "▼"}</span>
                       </div>
-                    </div>
-                    <div className="mt-2 text-[11px] font-bold text-slate-500">경과 {elapsedPct}% 대비 점검 {inspPct}% → <span className={row.pace === "스퍼트 필요" ? "text-rose-600" : row.pace === "주의" ? "text-amber-600" : "text-emerald-600"}>{row.pace === "스퍼트 필요" ? "스퍼트 올려야 함" : row.pace === "주의" ? "속도 주의" : "순조롭게 진행 중"}</span></div>
-                    {(row.inspBaseline > 0 || row.renewBaseline > 0) && <div className="mt-2 text-[10px] font-bold text-slate-400">추적 전 완료(날짜 미기록): 점검 {row.inspBaseline} · 재계약 {row.renewBaseline} — 아래 주차엔 이후 색칠분만 집계</div>}
-                    <table className="mt-1.5 w-full border-collapse text-[11px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400">
-                          <th className="py-1 text-left font-black">주차</th>
-                          <th className="py-1 text-center font-black">점검</th>
-                          <th className="py-1 text-center font-black">재계약</th>
-                          <th className="py-1 text-center font-black">점검 누적%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {weeklyAnalysis.weeks.map((week, index) => {
-                          cumulative += row.inspWeekly[index];
-                          const cumPct = row.inspTotal ? Math.round((cumulative / row.inspTotal) * 100) : 0;
-                          const isNow = todayKst >= week.start && todayKst <= week.end;
-                          const isFuture = week.start > todayKst;
-                          return (
-                            <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isFuture ? "text-slate-300" : ""}`}>
-                              <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span></td>
-                              <td className="py-1 text-center text-blue-700">{row.inspWeekly[index] ? `+${row.inspWeekly[index]}` : "·"}</td>
-                              <td className="py-1 text-center text-emerald-700">{row.renewWeekly[index] ? `+${row.renewWeekly[index]}` : "·"}</td>
-                              <td className="py-1 text-center text-slate-500">{cumPct}%</td>
+                    </button>
+                    {open && (
+                      <div className="border-t border-slate-100 p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] font-black text-blue-700"><span>점검</span><span>{row.inspDone}/{row.inspTotal} · {inspPct}%</span></div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspPct}%` }} /></div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] font-black text-emerald-700"><span>재계약</span><span>{row.renewDone}/{row.renewTotal} · {renewPct}%</span></div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-emerald-50"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewPct}%` }} /></div>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-[11px] font-bold text-slate-500">경과 {elapsedPct}% 대비 점검 {inspPct}% → <span className={row.pace === "스퍼트 필요" ? "text-rose-600" : row.pace === "주의" ? "text-amber-600" : "text-emerald-600"}>{row.pace === "스퍼트 필요" ? "스퍼트 올려야 함" : row.pace === "주의" ? "속도 주의" : "순조롭게 진행 중"}</span></div>
+                        {(row.inspBaseline > 0 || row.renewBaseline > 0) && <div className="mt-2 text-[10px] font-bold text-slate-400">추적 전 완료(날짜 미기록): 점검 {row.inspBaseline} · 재계약 {row.renewBaseline} — 아래 주차엔 이후 색칠분만 집계</div>}
+                        <table className="mt-1.5 w-full border-collapse text-[11px]">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-slate-400">
+                              <th className="py-1 text-left font-black">주차</th>
+                              <th className="py-1 text-center font-black">점검</th>
+                              <th className="py-1 text-center font-black">재계약</th>
+                              <th className="py-1 text-center font-black">점검 달성률</th>
+                              <th className="py-1 text-center font-black">재계약 달성률</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          </thead>
+                          <tbody>
+                            {weeklyAnalysis.weeks.map((week, index) => {
+                              cumInsp += row.inspWeekly[index];
+                              cumRenew += row.renewWeekly[index];
+                              const inspCumPct = row.inspTotal ? Math.round((cumInsp / row.inspTotal) * 100) : 0;
+                              const renewCumPct = row.renewTotal ? Math.round((cumRenew / row.renewTotal) * 100) : 0;
+                              const isNow = todayKst >= week.start && todayKst <= week.end;
+                              const isFuture = week.start > todayKst;
+                              return (
+                                <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isFuture ? "text-slate-300" : ""}`}>
+                                  <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span></td>
+                                  <td className="py-1 text-center text-blue-700">{row.inspWeekly[index] ? `+${row.inspWeekly[index]}` : "·"}</td>
+                                  <td className="py-1 text-center text-emerald-700">{row.renewWeekly[index] ? `+${row.renewWeekly[index]}` : "·"}</td>
+                                  <td className="py-1 text-center font-black text-blue-700">{inspCumPct}%</td>
+                                  <td className="py-1 text-center font-black text-emerald-700">{renewCumPct}%</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준입니다. 과거 완료분은 완료일 기록이 없어 주차에 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
+              <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준 · 매월점검은 G2×1·G3×2·G5×3로 환산. 과거 완료분은 완료일 기록이 없어 주차엔 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
             </div>
           </div>
         </div>
