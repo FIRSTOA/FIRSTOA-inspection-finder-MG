@@ -4254,7 +4254,13 @@ export default function App() {
   };
   // 거래처 전환 시 함께 비워야 하는 현장 사진 상태.
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
-  const photoLinkRef = useRef<string>("");
+  // 실제 파일은 한 번만 올리고, 업무별 앨범 링크는 각각 만든다.
+  const photoUploadUrlsRef = useRef<string[] | null>(null);
+  const photoAlbumLinksRef = useRef<Record<string, string>>({});
+  const clearPhotoCache = () => {
+    photoUploadUrlsRef.current = null;
+    photoAlbumLinksRef.current = {};
+  };
   const [visitMeta, setVisitMeta] = useState<VisitDraft>({
     visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false,
     workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
@@ -4270,7 +4276,7 @@ export default function App() {
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
-    photoLinkRef.current = "";
+    clearPhotoCache();
   };
   const confirmInputModal = () => {
     const isNewSource = draftInput.trim() !== inputText.trim();
@@ -4525,7 +4531,7 @@ export default function App() {
     const files = Array.from(e.target.files || []);
     if (files.length) {
       setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
-      photoLinkRef.current = ""; // 새 사진 추가 → 캐시 무효화
+      clearPhotoCache();
       setPhotoPrompt(null);
     }
     e.target.value = "";
@@ -4536,7 +4542,7 @@ export default function App() {
       if (p) URL.revokeObjectURL(p.url);
       return prev.filter((_, i) => i !== idx);
     });
-    photoLinkRef.current = "";
+    clearPhotoCache();
   };
 
   const photoAlbumContext = () => {
@@ -4562,11 +4568,16 @@ export default function App() {
   // 첨부 사진 병렬 업로드(동시 4개) → 업무 메타데이터가 있는 앨범 1건 생성 → 모아보기 링크 반환.
   const ensurePhotoLink = async (): Promise<string> => {
     if (!photos.length) return "";
-    if (photoLinkRef.current) return photoLinkRef.current;
-    const now = new Date();
     const context = photoAlbumContext();
+    const albumKey = [context.sourceType, context.vendor, context.region]
+      .map((value) => String(value || "").trim())
+      .join("|");
+    const cachedAlbumLink = photoAlbumLinksRef.current[albumKey];
+    if (cachedAlbumLink) return cachedAlbumLink;
+    const now = new Date();
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-    const urls: string[] = new Array(photos.length);
+    const existingUrls = photoUploadUrlsRef.current;
+    const urls: string[] = existingUrls && existingUrls.length === photos.length ? existingUrls : new Array(photos.length);
     let nextIdx = 0, done = 0;
     const worker = async () => {
       while (nextIdx < photos.length) {
@@ -4585,7 +4596,10 @@ export default function App() {
         showToast(`첨부 ${done}/${photos.length} 올리는 중…`);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
+    if (!existingUrls || existingUrls.length !== photos.length) {
+      await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
+      photoUploadUrlsRef.current = urls;
+    }
     const albumId = await createAlbum(urls, context.vendor || currentVendor || "미기재", {
       category: context.category,
       author,
@@ -4599,8 +4613,9 @@ export default function App() {
         sortOrder: index + 1,
       })),
     });
-    photoLinkRef.current = `${window.location.origin}${window.location.pathname}?album=${albumId}`;
-    return photoLinkRef.current;
+    const link = `${window.location.origin}${window.location.pathname}?album=${albumId}`;
+    photoAlbumLinksRef.current[albumKey] = link;
+    return link;
   };
 
   const visitKindForMode = (): WorkKind =>
@@ -5042,7 +5057,7 @@ export default function App() {
     setSelectedItem(0);
     setAirForm(EMPTY_AIR_FORM);
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
-    photoLinkRef.current = "";
+    clearPhotoCache();
     setPcForm({ ...EMPTY_PC_FORM });
     setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM });
     setLogisticsForm({ ...EMPTY_LOGISTICS_FORM });
