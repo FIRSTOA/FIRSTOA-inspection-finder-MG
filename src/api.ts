@@ -541,7 +541,8 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
 
     let rooms: string[] = [];
     const cfg = await getConfig();
-    const r = schemaKey === "bulman" && isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow(s.table, row);
+    // 시트 테스트 모드는 외부 시트의 대상만 바꾼다. 웹앱 원본 DB는 항상 저장한다.
+    const r = await insertRow(s.table, row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else {
@@ -589,7 +590,8 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
     };
     let rooms: string[] = [];
     const cfg = await getConfig();
-    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("pc_expansion", row);
+    // 시트 테스트 중에도 확장성 IT 원본은 Supabase에 남겨야 통합이력·집계가 맞다.
+    const r = await insertRow("pc_expansion", row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt]; }
@@ -689,7 +691,8 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
     };
     let rooms: string[] = [];
     const cfg = await getConfig();
-    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("mfp_expansion", {
+    // 시트 테스트 중에도 확장성 복합기 원본은 Supabase에 남겨야 통합이력·집계가 맞다.
+    const r = await insertRow("mfp_expansion", {
       "등록일": row["등록일"],
       "등록자": row["등록자"],
       "전략영업담당자": row["전략영업담당자"],
