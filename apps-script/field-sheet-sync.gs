@@ -73,6 +73,10 @@ function fieldValue_(category, header, data, request, labels) {
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
+  // Edge Function AI가 시트의 실제 헤더 기준으로 정리한 값은 우선 적용합니다.
+  const sheetValues = data && data._sheetValues;
+  if (sheetValues && Object.prototype.hasOwnProperty.call(sheetValues, header)) return sheetValues[header];
+
   const maps = {
     expansion_it: {
       "사무/설계/디자인/개발": "purpose", "세부사양": "spec", "지역": "region", "업체명": "company", "등급": "grade",
