@@ -1332,19 +1332,6 @@ function extractDepartment(text: string): string {
   return "";
 }
 
-function storageFolderName(value: string) {
-  const normalized = String(value || "미기재").trim().normalize("NFKC") || "미기재";
-  const ascii = normalized
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 42);
-  const hash = Array.from(normalized)
-    .reduce((current, character) => ((current * 31) + (character.codePointAt(0) || 0)) >>> 0, 2166136261)
-    .toString(36);
-  return `${ascii || "vendor"}-${hash}`;
-}
-
 const ADDRESS_START_PATTERN = new RegExp(
   `(?:^|\\s)(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|${SEOUL_DISTRICTS.join("|")})\\s+`
 );
@@ -4565,7 +4552,11 @@ export default function App() {
       const category = mode === "bulman" ? "불만" : mode === "misu" ? "미수" : mode === "recontract" ? "재계약" : "초과조정";
       return { category, sourceType: mode, vendor: String(curCatForm["업체명"] || currentVendor), region: String(curCatForm["지역"] || "") };
     }
-    return { category: mode === "blank-report" ? "AS" : "점검", sourceType: mode === "blank-report" ? "as" : "inspection", vendor: currentVendor, region: "" };
+    const hasInspection = reportTypes.includes("점검");
+    const hasAs = reportTypes.includes("AS");
+    if (hasInspection && hasAs) return { category: "점검·AS", sourceType: "inspection_as", vendor: currentVendor, region: "" };
+    if (hasAs || mode === "blank-report") return { category: "AS", sourceType: "as", vendor: currentVendor, region: "" };
+    return { category: "점검", sourceType: "inspection", vendor: currentVendor, region: "" };
   };
 
   // 첨부 사진 병렬 업로드(동시 4개) → 업무 메타데이터가 있는 앨범 1건 생성 → 모아보기 링크 반환.
@@ -4574,8 +4565,7 @@ export default function App() {
     if (photoLinkRef.current) return photoLinkRef.current;
     const now = new Date();
     const context = photoAlbumContext();
-    const albumId = crypto.randomUUID();
-    const folder = `field/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${context.sourceType}/${storageFolderName(context.vendor || currentVendor)}/${albumId}`;
+    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const urls: string[] = new Array(photos.length);
     let nextIdx = 0, done = 0;
     const worker = async () => {
@@ -4585,19 +4575,18 @@ export default function App() {
         if (f.type.startsWith("video/")) {
           // 동영상은 원본 그대로 업로드 (다운스케일/변환 X)
           const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
-          urls[i] = await uploadPhoto(`${folder}/${String(i + 1).padStart(2, "0")}.${ext}`, f, f.type || "video/mp4");
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4");
         } else {
           const dataUrl = await fileToDownscaledDataUrl(f, 1600);
           const blob = await (await fetch(dataUrl)).blob();
-          urls[i] = await uploadPhoto(`${folder}/${String(i + 1).padStart(2, "0")}.jpg`, blob, "image/jpeg");
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
         }
         done++;
         showToast(`첨부 ${done}/${photos.length} 올리는 중…`);
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
-    await createAlbum(urls, context.vendor || currentVendor || "미기재", {
-      id: albumId,
+    const albumId = await createAlbum(urls, context.vendor || currentVendor || "미기재", {
       category: context.category,
       author,
       region: context.region,
