@@ -962,16 +962,19 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       const list = byKey.get(key);
       if (list) list.push({ place, end }); else byKey.set(key, [{ place, end }]);
     }
-    const result = new Map<number, { quarter: Quarter; isPrev: boolean; end: ReturnType<typeof contractEnd> }>();
+    const result = new Map<number, { quarter: Quarter; isPrev: boolean; dueLabel: string }>();
     if (!byKey.size) return result;
+    // 종료월은 이번 점검분기(같은 해)로 확정되므로 연도는 올해로 투영해 표시한다.
+    // (자동연장 계약이라 데이터의 최초 종료연도(예: 21년)가 아니라 현재 주기 기준이 맞다.)
+    const dueYear = String(baseYear).slice(2);
     for (const place of places) {
       if (place.kind !== "quarter" || place.team !== teamFilter) continue;
       const key = vendorMatchKey(place.name);
       const matches = key ? byKey.get(key) : undefined;
       if (!matches || !matches.length) continue;
-      const best = [...matches].sort((a, b) => (a.end?.key || Infinity) - (b.end?.key || Infinity))[0];
+      const best = [...matches].sort((a, b) => (a.end?.month || 99) - (b.end?.month || 99))[0];
       const isPrev = best.place.quarter === prevQuarter;
-      result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, end: best.end });
+      result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "" });
     }
     return result;
   }, [places, teamFilter, quarterFilter]);
@@ -1324,7 +1327,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {place.team}팀 · {place.quarter}Q · {workKinds.find((item) => item.value === place.kind)?.label}{!place.visible ? " · 지도 숨김" : ""}</span>
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {place.kind === "quarter" && renewalMatch && <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.end ? `종료 ${renewalMatch.end.label}` : "종료월 확인필요"}</span>}
+                  {place.kind === "quarter" && renewalMatch && <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
