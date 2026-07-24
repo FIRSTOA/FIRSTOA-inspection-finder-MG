@@ -1,6 +1,5 @@
--- photos는 공개 버킷이므로 파일 URL 열람에는 storage.objects SELECT 정책이 필요 없습니다.
--- 아래 블록은 photos 버킷을 대상으로 한 SELECT 정책만 제거합니다.
--- 업로드(INSERT) 정책은 건드리지 않습니다.
+-- photos 버킷은 공개 URL로만 읽습니다. storage.objects SELECT 정책은 필요하지 않습니다.
+-- 아래 정책은 photos 버킷에만 적용되며, 다른 Storage 버킷에는 영향을 주지 않습니다.
 do $$
 declare
   policy_name text;
@@ -17,15 +16,22 @@ begin
   end loop;
 end $$;
 
-update storage.buckets set public = true where id = 'photos';
+insert into storage.buckets (id, name, public)
+values ('photos', 'photos', true)
+on conflict (id) do update set public = true;
 
--- FIELD 웹앱이 photos 버킷에 새 파일을 올리고 같은 경로를 갱신할 수 있게 합니다.
+-- FIELD 웹앱은 anon 키로 업로드합니다. public 역할은 anon/로그인 사용자를 포함하지만
+-- bucket_id = 'photos' 조건 때문에 photos 이외 파일에는 절대 적용되지 않습니다.
 drop policy if exists "photos anon insert" on storage.objects;
 drop policy if exists "photos anon update" on storage.objects;
-create policy "photos anon insert"
-on storage.objects for insert to anon
+drop policy if exists "photos public insert" on storage.objects;
+drop policy if exists "photos public update" on storage.objects;
+
+create policy "photos public insert"
+on storage.objects for insert to public
 with check (bucket_id = 'photos');
-create policy "photos anon update"
-on storage.objects for update to anon
+
+create policy "photos public update"
+on storage.objects for update to public
 using (bucket_id = 'photos')
 with check (bucket_id = 'photos');
