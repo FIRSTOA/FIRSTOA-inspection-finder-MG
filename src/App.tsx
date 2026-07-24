@@ -4880,7 +4880,7 @@ export default function App() {
 
     if (mode === "contact-change") {
       const res = await sendContactChangeForm(contactChangeForm, author, target, new Date().toISOString());
-      if (res.ok) try {
+      if (res.ok && !res.testMode) try {
         await recordOperation("contact_change", target, {
           vendor: contactChangeForm.company,
         });
@@ -4897,8 +4897,8 @@ export default function App() {
       const res = pcSubTab === "copier"
         ? await sendCopierExpansionForm(copierExpansionForm, author, target, new Date().toISOString())
         : await sendPcForm(pcForm, author, target, new Date().toISOString());
-      if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
-      if (res.ok) try {
+      if (res.ok && !res.testMode) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      if (res.ok && !res.testMode) try {
         await recordOperation(pcSubTab === "copier" ? "expansion_copier" : "expansion_it", target, {
           vendor: pcSubTab === "copier" ? copierExpansionForm.company : pcForm.company,
         });
@@ -4912,8 +4912,8 @@ export default function App() {
 
     if (mode === "logistics") {
       const res = await sendLogisticsForm(logisticsForm, author, target, new Date().toISOString());
-      if (res.ok) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
-      if (res.ok) try {
+      if (res.ok && !res.testMode) try { await recordVisit(target); } catch (e) { res.message = `${res.message || "전송 완료"} · 방문집계 실패: ${(e as Error).message}`; }
+      if (res.ok && !res.testMode) try {
         const quantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
         await recordOperation("logistics", target, {
           vendor: logisticsForm.vendor,

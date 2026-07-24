@@ -351,7 +351,7 @@ export async function getInspForms(vendor: string): Promise<InspFormsResp> {
 
 // 완성 양식 → 시트 저장 + 카톡 알림 큐 적재 (POST).
 // 단순요청(text/plain)이라 프리플라이트 없이 GAS doPost(action=save) 호출.
-export type SaveResp = { ok?: boolean; message?: string; error?: string };
+export type SaveResp = { ok?: boolean; message?: string; error?: string; testMode?: boolean };
 export type SavePayload = {
   text: string;            // 완성된 양식 전체 텍스트 (카톡에 게시될 내용)
   vendor?: string;         // 거래처명
@@ -539,10 +539,9 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     row["_원문"] = text;
     row["_dupKey"] = md5([s.category, vendor, author, toKstDate(ts), ...fields.map((f) => form[f.key] || "")].join("|"));
 
-    const r = await insertRow(s.table, row);
-
     let rooms: string[] = [];
     const cfg = await getConfig();
+    const r = schemaKey === "bulman" && isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow(s.table, row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else {
@@ -562,7 +561,7 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
         dupKey: String(row["_dupKey"]),
       });
       if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
-      return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
+      return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
     }
     for (const room of rooms) await enqueueOutbox(room, text);
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
@@ -588,10 +587,9 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
       "_업체명": vendor, "_출처": "웹앱:IT통합", "_원문": text,
       "_dupKey": md5([vendor, date, form.spec, form.qty, form.amount, form.timing, form.appeal].join("|")),
     };
-    const r = await insertRow("pc_expansion", row);
-
     let rooms: string[] = [];
     const cfg = await getConfig();
+    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("pc_expansion", row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt]; }
@@ -606,7 +604,7 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
       dupKey: String(row["_dupKey"]),
     });
     if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
@@ -625,7 +623,7 @@ async function queueFieldAutomation(input: {
   text: string;
   data: Record<string, unknown>;
   dupKey: string;
-}): Promise<{ message: string }> {
+}): Promise<{ message: string; testMode: boolean }> {
   const id = crypto.randomUUID();
   let job: "new" | "dup";
   try {
@@ -642,11 +640,12 @@ async function queueFieldAutomation(input: {
     });
   } catch {
     // SQL 배포 전에도 야간 카카오 오발송이 일어나지 않도록 전송은 보류한다.
-    return { message: "자동화 설정 전 · 카카오 전송 보류" };
+    return { message: "자동화 설정 전 · 카카오 전송 보류", testMode: false };
   }
-  if (job === "dup") return { message: "기존 자동화 기록 확인" };
-
   const cfg = await getConfig();
+  const testMode = isEnabled(cfg.FIELD_SHEET_TEST_MODE);
+  if (job === "dup") return { message: "기존 자동화 기록 확인", testMode };
+
   let sheetMessage = "시트 동기화 대기";
   if (isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) {
     try {
@@ -656,7 +655,7 @@ async function queueFieldAutomation(input: {
       sheetMessage = "시트 재시도 대기";
     }
   }
-  return { message: `${sheetMessage} · ${isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED) ? "카카오 전송 설정됨" : "카카오 전송 보류"}` };
+  return { message: `${sheetMessage} · ${isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED) ? "카카오 전송 설정됨" : "카카오 전송 보류"}`, testMode };
 }
 
 // 복합기(기타) 확장성 폼 → 복합기 확장성 저장 + 확장성 방 전송.
@@ -688,10 +687,9 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       "_원문": text,
       "_dupKey": md5([vendor, date, form.itemRaw, form.expectedAmount, form.expectedOrderMonth, form.notes].join("|")),
     };
-    const r = await insertRow("copier_expansion", row);
-
     let rooms: string[] = [];
     const cfg = await getConfig();
+    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("copier_expansion", row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else {
@@ -708,7 +706,7 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       dupKey: String(row["_dupKey"]),
     });
     if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}` };
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
@@ -734,7 +732,7 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
       dupKey: md5(["contact_change", toKstDate(ts), author, form.company, form.category, form.reason, form.before, form.after].join("|")),
     });
     if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
-    return { ok: true, message: automation.message };
+    return { ok: true, message: automation.message, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
