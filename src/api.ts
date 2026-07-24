@@ -61,7 +61,7 @@ const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   { table: "misu", category: "미수", dateField: "입력일", regionField: "지역" },
   { table: "bulman", category: "불만", dateField: "방문일", regionField: "지역" },
   { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
-  { table: "copier_expansion", category: "복합기확장성", dateField: "등록일", regionField: "실제미팅주소" },
+  { table: "mfp_expansion", category: "복합기확장성", dateField: "등록일", regionField: "미팅지역" },
   { table: "recontract", category: "재계약", dateField: "계약종료일", regionField: "지역" },
 ];
 
@@ -689,7 +689,50 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
     };
     let rooms: string[] = [];
     const cfg = await getConfig();
-    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("copier_expansion", row);
+    const r = isEnabled(cfg.FIELD_SHEET_TEST_MODE) ? "new" : await insertRow("mfp_expansion", {
+      "등록일": row["등록일"],
+      "등록자": row["등록자"],
+      "전략영업담당자": row["전략영업담당자"],
+      "상호": row["상호명"],
+      "업종": row["업종및인원매출"],
+      "매출액(억)": "미기재",
+      "인원수": "미기재",
+      "프로젝트주소": row["실제미팅주소"],
+      "미팅지역": "미기재",
+      "도로명주소": row["실제미팅주소"],
+      "세부주소": "미기재",
+      "키맨성함+직함": row["성함및직함"],
+      "키맨전화번호": row["연락처"],
+      "키맨 성향": "미기재",
+      "영업 접근 전략": "미기재",
+      "의사결정 파급력": row["의사결정파급력"],
+      "개인 히스토리": row["개인히스토리"],
+      "프로젝트": row["프로젝트진행상황"],
+      "품목(원문)": row["품목원문"],
+      "연계영업": "미기재",
+      "관심품목(세분화)": "미기재",
+      "수주 가능성(A/B/C)": "미기재",
+      "예상 발주금액(만원)": row["예상발주금액만원"],
+      "예상 발주시기(YYYY-MM)": row["예상발주시기"],
+      "현재 경쟁사/장비": "미기재",
+      "경쟁사 불만(PainPoint)": "미기재",
+      "계약 종료(예정)일": row["계약종료예정일"],
+      "진행상황(원문)": row["프로젝트진행상황"],
+      "최종결과(대기 등)": "대기",
+      "영업진행상황": row["프로젝트진행상황"],
+      "첫등록내용": row["특이사항미팅내용"],
+      "특이사항": row["특이사항미팅내용"],
+      "거래처등급": row["관리등급"],
+      "영업등급": "미기재",
+      "체크일": "미기재",
+      "[신규통합] 현재 관리등급": row["관리등급"],
+      "[AI 자동완성 개입 여부]": "웹앱 직접입력",
+      "_업체명": vendor,
+      "_출처": "웹앱:복합기확장성",
+      "_원문": text,
+      "_dupKey": row["_dupKey"],
+      "_raw": form,
+    });
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
     else {
