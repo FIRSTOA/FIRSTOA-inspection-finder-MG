@@ -259,7 +259,6 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [saved, setSaved] = useState("");
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const autoSaveTimer = useRef<number | null>(null);
-  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let alive = true; setLoading(true); setError("");
@@ -272,7 +271,7 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
       .catch((e) => { if (alive) setError((e as Error).message); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [author, kind, range.start, range.end, editWeek.start, selectedDay, reloadTick]);
+  }, [author, kind, range.start, range.end, editWeek.start, selectedDay]);
 
   const scheduleWeeklySave = (nextNote: WeeklyNote) => {
     if (kind !== "weekly" || loading) return;
@@ -360,7 +359,7 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="text-lg font-bold text-slate-900">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
           ].map(([l, v]) => <div key={String(l)} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
-          <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} author={author} onCancelled={() => setReloadTick((t) => t + 1)} />
+          <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} author={author} onCancelledKeys={(keys) => setRows((prev) => prev.filter((r) => !keys.has(`${r.author}|${r.workDate}|${r.sourceText}`)))} />
         </div>
         <section className="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-slate-900">내근 업무 입력</h3><p className="text-xs text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs text-slate-500">복귀시간<input type="time" value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-md border border-slate-300 px-2 py-1.5" /></label></div>
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label><label className="text-[10px] text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label></div>)}</div>
@@ -499,21 +498,34 @@ function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, qu
   </section>;
 }
 
-function HierarchicalVisitList({ period, rows, year, month, quarter, start, end, author, onCancelled }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string; author?: string; onCancelled?: () => void }) {
+function HierarchicalVisitList({ period, rows, year, month, quarter, start, end, author, onCancelledKeys }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string; author?: string; onCancelledKeys?: (keys: Set<string>) => void }) {
   const [open, setOpen] = useState(false);
-  const [cancelling, setCancelling] = useState("");
-  const cancelSend = async (r: VisitRow) => {
-    if (!r.sourceText.trim()) { window.alert("원문 정보가 없어 자동 오발송 처리를 할 수 없는 기록입니다."); return; }
-    if (!window.confirm(`${r.vendor} (${shortDate(r.workDate)}) 전송을 오발송 처리할까요?\n일일방문·주간현황판·업무현황·운영현황에서 함께 제외됩니다. (되돌리기 가능)`)) return;
-    setCancelling(r.id);
+  const [cancelling, setCancelling] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selectable = !!onCancelledKeys;
+  const toggleSelect = (id: string) => setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  const batchCancel = async () => {
+    if (!selected.size || !onCancelledKeys) return;
+    const targets = rows.filter((r) => selected.has(r.id) && r.sourceText.trim());
+    if (!targets.length) { setSelected(new Set()); return; }
+    setCancelling(true);
     try {
-      await setVisitsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
-      await setActivityEventsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
-      onCancelled?.();
+      const done = new Set<string>();
+      const keys = new Set<string>();
+      for (const r of targets) {
+        const key = `${r.author}|${r.workDate}|${r.sourceText}`;
+        keys.add(key);
+        if (done.has(key)) continue;
+        done.add(key);
+        await setVisitsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
+        await setActivityEventsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
+      }
+      onCancelledKeys(keys); // 낙관적 제거: 재조회 없이 목록에서 바로 빠짐(위로 안 튐)
+      setSelected(new Set());
     } catch (e) {
       window.alert("오발송 처리 실패: " + (e as Error).message);
     } finally {
-      setCancelling("");
+      setCancelling(false);
     }
   };
   const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
@@ -551,7 +563,7 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end,
     ];
     return <div className="flex flex-wrap gap-1.5">{items.map(([label, value]) => <span key={label} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600"><b className="mr-1 text-slate-400">{label}</b>{value}</span>)}</div>;
   };
-  const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="flex items-center justify-end gap-2 text-right text-xs text-slate-500"><div>{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div>{onCancelled && <button type="button" onClick={() => cancelSend(r)} disabled={cancelling === r.id} className="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">{cancelling === r.id ? "처리중…" : "오발송"}</button>}</div></div>)}</div>;
+  const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <label key={r.id} className={`grid gap-2 px-5 py-3 md:items-center ${selectable ? "cursor-pointer md:grid-cols-[28px_90px_1fr_auto]" : "md:grid-cols-[90px_1fr_auto]"} ${selected.has(r.id) ? "bg-rose-50/60" : ""}`}>{selectable && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="h-4 w-4 accent-rose-500" />}<div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="text-right text-xs text-slate-500">{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div></label>)}</div>;
   const leafDay = (date: string, depth = 0) => {
     const list = grouped[date] || [];
     const key = `day:${date}`;
@@ -575,5 +587,5 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end,
     return <div key={key} className="border-b border-l-4 border-l-blue-500 border-b-slate-100 bg-blue-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{mb.label} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
   };
   const title = period === "day" ? "금일 방문 상세" : period === "week" ? "주간 방문 상세" : period === "month" ? "월간 방문 상세" : period === "quarter" ? "분기 방문 상세" : "연간 방문 상세";
-  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
+  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-lg font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && selectable && selected.size > 0 && <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-rose-200 bg-rose-50 px-5 py-2.5"><span className="text-sm font-bold text-rose-700">{selected.size}건 선택됨</span><div className="flex gap-2"><button type="button" onClick={() => setSelected(new Set())} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">해제</button><button type="button" onClick={batchCancel} disabled={cancelling} className="rounded-md bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">{cancelling ? "처리중…" : "선택 오발송"}</button></div></div>}{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
 }
