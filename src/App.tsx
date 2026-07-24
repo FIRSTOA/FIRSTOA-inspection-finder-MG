@@ -4590,6 +4590,13 @@ export default function App() {
       author,
       region: context.region,
       sourceType: context.sourceType,
+      assets: urls.map((publicUrl, index) => ({
+        publicUrl,
+        storagePath: publicUrl.split("/photos/")[1] || "",
+        fileName: photos[index]?.file.name || `${index + 1}.jpg`,
+        mimeType: photos[index]?.file.type || "image/jpeg",
+        sortOrder: index + 1,
+      })),
     });
     photoLinkRef.current = `${window.location.origin}${window.location.pathname}?album=${albumId}`;
     return photoLinkRef.current;

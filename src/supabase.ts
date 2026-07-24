@@ -195,6 +195,7 @@ export type PhotoAlbumMeta = {
   author?: string;
   region?: string;
   sourceType?: string;
+  assets?: Array<{ publicUrl: string; storagePath: string; fileName: string; mimeType: string; sortOrder: number }>;
 };
 
 export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlbumMeta = {}): Promise<string> {
@@ -213,7 +214,26 @@ export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlb
   });
   if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`앨범 생성 실패(${res.status}): ${t.slice(0, 160)}`); }
   const rows = (await res.json()) as Array<{ id: string }>;
-  return rows[0].id;
+  const albumId = rows[0].id;
+  if (meta.assets?.length) {
+    const assetRes = await fetch(`${REST}/photo_assets?on_conflict=album_id,public_url`, {
+      method: "POST",
+      headers: { ...BASE_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(meta.assets.map((asset) => ({
+        album_id: albumId,
+        public_url: asset.publicUrl,
+        storage_path: asset.storagePath,
+        file_name: asset.fileName,
+        mime_type: asset.mimeType,
+        sort_order: asset.sortOrder,
+      }))),
+    });
+    if (!assetRes.ok) {
+      const detail = await assetRes.text().catch(() => "");
+      throw new Error(`사진 목록 생성 실패(${assetRes.status}): ${detail.slice(0, 160)}`);
+    }
+  }
+  return albumId;
 }
 
 export async function getAlbum(id: string): Promise<{ vendor: string; urls: string[]; created_at: string }> {
