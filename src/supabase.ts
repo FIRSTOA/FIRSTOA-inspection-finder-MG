@@ -216,7 +216,8 @@ export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlb
   });
   if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`앨범 생성 실패(${res.status}): ${t.slice(0, 160)}`); }
   const rows = (await res.json()) as Array<{ id: string }>;
-  const albumId = rows[0].id;
+  const albumId = rows[0]?.id || meta.id;
+  if (!albumId) throw new Error("앨범 ID를 확인하지 못했습니다.");
   if (meta.assets?.length) {
     const assetRes = await fetch(`${REST}/photo_assets?on_conflict=album_id,public_url`, {
       method: "POST",
@@ -232,7 +233,9 @@ export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlb
     });
     if (!assetRes.ok) {
       const detail = await assetRes.text().catch(() => "");
-      throw new Error(`사진 목록 생성 실패(${assetRes.status}): ${detail.slice(0, 160)}`);
+      // 사진 색인은 기존 사진을 정리하기 위한 보조 기능이다.
+      // 앨범과 실제 파일은 이미 저장됐으므로, 색인 테이블 미설정이 현장 전송을 막으면 안 된다.
+      console.warn(`사진 목록 색인 건너뜀(${assetRes.status}): ${detail.slice(0, 160)}`);
     }
   }
   return albumId;
