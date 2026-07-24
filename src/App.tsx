@@ -1334,7 +1334,15 @@ function extractDepartment(text: string): string {
 
 function storageFolderName(value: string) {
   const normalized = String(value || "미기재").trim().normalize("NFKC") || "미기재";
-  return normalized.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 70) || "미기재";
+  const ascii = normalized
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 42);
+  const hash = Array.from(normalized)
+    .reduce((current, character) => ((current * 31) + (character.codePointAt(0) || 0)) >>> 0, 2166136261)
+    .toString(36);
+  return `${ascii || "vendor"}-${hash}`;
 }
 
 const ADDRESS_START_PATTERN = new RegExp(
