@@ -22,7 +22,7 @@ export const EMPTY_PC_FORM: PcFormState = {
 
 export function buildPcText(f: PcFormState, author: string): string {
   return [
-    "/PC DB 활용", "*사양",
+    "PC DB 활용", "*사양",
     `사무/설계/디자인/개발: ${f.purpose}`, `세부사양: ${f.spec}`,
     `작성자: ${author}`, `지역: ${f.region}`, `업체명: ${f.company}`, `등급: ${f.grade}`,
     `업체담당자: ${f.vendorContact}`, `연락처: ${f.contact}`, `IT담당자: ${f.itContact}`,
