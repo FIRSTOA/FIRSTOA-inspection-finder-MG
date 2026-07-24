@@ -32,7 +32,7 @@ function appendFieldSheetRow_(request) {
   if (!sourceSheet) throw new Error("대상 시트 탭을 찾지 못했습니다.");
   const sheet = request.testMode ? getOrCreateTestSheet_(spreadsheet, sourceSheet, request.category) : sourceSheet;
 
-  const headerRow = 1;
+  const headerRow = findHeaderRow_(sheet, request.category);
   const headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
   const data = request.payload && request.payload.data || {};
   const labelValues = parseLabeledText_(request.sourceText || "");
@@ -52,6 +52,20 @@ function appendFieldSheetRow_(request) {
   });
 
   return { row, sheet: sheet.getName() };
+}
+
+function findHeaderRow_(sheet, category) {
+  const signatures = {
+    expansion_it: ["업체명", "세부사양"],
+    expansion_copier: ["상호", "등록자"],
+    contact_change: ["업체명", "변경전"],
+    complaint: ["업체명", "불만내용"],
+  };
+  const required = signatures[category] || [];
+  const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
+  const values = sheet.getRange(1, 1, rows, sheet.getLastColumn()).getDisplayValues();
+  const index = values.findIndex((row) => required.every((header) => row.includes(header)));
+  return index >= 0 ? index + 1 : 1;
 }
 
 function getOrCreateTestSheet_(spreadsheet, sourceSheet, category) {
