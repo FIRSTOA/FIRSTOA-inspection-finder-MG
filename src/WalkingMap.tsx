@@ -943,19 +943,24 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
 
   const latestInspectionByPlace = useMemo(() => new Map(places.map((place) => [place.id, inspectionHistoryByPlace.get(place.id)?.[0]?.workDate || ""])), [inspectionHistoryByPlace, places]);
 
-  // 분기점검 간략보기용: 같은 팀 기준 이번/전분기 재계약 워킹맵에 같은 거래처가 있는지와 계약종료월.
-  // (재계약은 점검보다 한 달 앞서 진행돼 분기가 겹치므로 전분기 재계약까지 확인한다.)
+  // 분기점검 간략보기용: 같은 팀 기준 이번/전분기 재계약 워킨맵에 같은 거래처가 있는지와 계약종료월.
+  // 재계약은 점검보다 한 달 앞서 진행돼 분기가 겹치므로, 이번 점검분기(예: 3Q=7,8,9월)에 계약이
+  // 종료되는 건만 추린다. → 재계약 3Q(8,9,10) 중 8·9월 + 재계약 2Q(5,6,7) 중 7월이 걸린다.
   const renewalMatchByPlaceId = useMemo(() => {
     const prevQuarter = (quarterFilter === 1 ? 4 : quarterFilter - 1) as Quarter;
     const baseYear = new Date().getFullYear();
-    const byKey = new Map<string, MapPlace[]>();
+    const startMonth = (quarterFilter - 1) * 3;
+    const inspectionMonths = [startMonth + 1, startMonth + 2, startMonth + 3];
+    const byKey = new Map<string, { place: MapPlace; end: ReturnType<typeof contractEnd> }[]>();
     for (const place of places) {
       if (place.kind !== "renewal" || place.team !== teamFilter) continue;
       if (place.quarter !== quarterFilter && place.quarter !== prevQuarter) continue;
+      const end = contractEnd(place, baseYear);
+      if (end && !inspectionMonths.includes(end.month)) continue; // 종료월이 점검분기 밖이면 제외
       const key = vendorMatchKey(place.name);
       if (!key) continue;
       const list = byKey.get(key);
-      if (list) list.push(place); else byKey.set(key, [place]);
+      if (list) list.push({ place, end }); else byKey.set(key, [{ place, end }]);
     }
     const result = new Map<number, { quarter: Quarter; isPrev: boolean; end: ReturnType<typeof contractEnd> }>();
     if (!byKey.size) return result;
@@ -964,10 +969,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       const key = vendorMatchKey(place.name);
       const matches = key ? byKey.get(key) : undefined;
       if (!matches || !matches.length) continue;
-      const best = matches
-        .map((match) => ({ match, end: contractEnd(match, baseYear) }))
-        .sort((a, b) => (a.end?.key || Infinity) - (b.end?.key || Infinity))[0];
-      const isPrev = best.match.quarter === prevQuarter;
+      const best = [...matches].sort((a, b) => (a.end?.key || Infinity) - (b.end?.key || Infinity))[0];
+      const isPrev = best.place.quarter === prevQuarter;
       result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, end: best.end });
     }
     return result;
@@ -1321,7 +1324,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {place.team}팀 · {place.quarter}Q · {workKinds.find((item) => item.value === place.kind)?.label}{!place.visible ? " · 지도 숨김" : ""}</span>
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {place.kind === "quarter" && renewalMatch && <span className="mt-1 block rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-black text-rose-600">🔁 재계약 {renewalMatch.quarter}Q{renewalMatch.isPrev ? "(전분기)" : ""} 워킹맵{renewalMatch.end ? ` · 종료 ${renewalMatch.end.label}` : ""}</span>}
+                  {place.kind === "quarter" && renewalMatch && <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.end ? `종료 ${renewalMatch.end.label}` : "종료월 확인필요"}</span>}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
