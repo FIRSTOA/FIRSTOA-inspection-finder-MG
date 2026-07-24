@@ -726,7 +726,7 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       "영업등급": "미기재",
       "체크일": "미기재",
       "[신규통합] 현재 관리등급": row["관리등급"],
-      "[AI 자동완성 개입 여부]": "웹앱 직접입력",
+      "[AI 자동완성 개입 여부": "웹앱 직접입력",
       "_업체명": vendor,
       "_출처": "웹앱:복합기확장성",
       "_원문": text,
