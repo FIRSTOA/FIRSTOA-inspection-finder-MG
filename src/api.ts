@@ -761,6 +761,24 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
 export async function sendContactChangeForm(form: ContactChangeFormState, author: string, text: string, ts?: string): Promise<SaveResp> {
   try {
     const cfg = await getConfig();
+    const changeDate = toKstDate(ts);
+    const dupKey = md5(["contact_change", changeDate, author, form.company, form.category, form.reason, form.before, form.after].join("|"));
+    const photoLink = text.match(/https?:\/\/\S+\?album=[a-z0-9-]+/i)?.[0] || "";
+    await insertRow("contact_changes", {
+      change_date: changeDate,
+      author,
+      company: form.company,
+      region: form.region,
+      category: form.category,
+      reason: form.reason,
+      grade: form.grade,
+      before_text: form.before,
+      after_text: form.after,
+      notes: form.notes,
+      source_text: text,
+      photo_link: photoLink,
+      "_dupKey": dupKey,
+    });
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     let room = testRoom;
     if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
@@ -775,7 +793,7 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
       room,
       text,
       data: form,
-      dupKey: md5(["contact_change", toKstDate(ts), author, form.company, form.category, form.reason, form.before, form.after].join("|")),
+      dupKey,
     });
     if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
     return { ok: true, message: automation.message, testMode: automation.testMode };
