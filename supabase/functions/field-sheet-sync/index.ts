@@ -83,6 +83,51 @@ async function enrichCopierPayload(input: { sourceText: string; data: Record<str
   }
 }
 
+// 불만 시트/AI 헤더 (bulman 레거시 AI 컬럼과 동일). _sheetValues 로 시트에 기입되고 DB에도 역기입한다.
+const COMPLAINT_AI_HEADERS = ["고객감정상태", "AI_불만유형", "AI_불만항목", "사실확인", "대안제시", "재발방지"];
+
+async function enrichComplaintPayload(input: { sourceText: string; data: Record<string, unknown>; author: string; apiKey: string }) {
+  if (!input.apiKey) return {};
+  const prompt = [
+    "너는 퍼스트전산 CS팀의 고객 불만 분석 담당자다.",
+    "아래 웹앱 불만 접수 입력을 사실에 근거해 분석하고, 지정된 헤더별 값으로 정리한다.",
+    "반드시 JSON 객체 하나만 출력한다. 키는 제공된 헤더명만 사용한다.",
+    "입력에 없는 사실·수치·약속·금액을 지어내지 않는다. 알 수 없으면 '미기재'로 둔다.",
+    "'고객감정상태'는 고객의 감정·태도를 짧게 요약한다 (예: 불만 누적, 비용 부담 거부감).",
+    "'AI_불만유형'은 불만의 큰 분류를, 'AI_불만항목'은 세부 항목을 쉼표로 정리한다.",
+    "'사실확인'은 입력에서 확인되는 객관적 사실만 간결히 정리한다.",
+    "'대안제시'는 입력에 언급된 제안·조치를 정리하고, 없으면 '미기재'로 둔다.",
+    "'재발방지'는 동일 불만 재발을 막기 위한 실행 가능한 방안을 입력 근거 범위에서 제안한다.",
+    "",
+    `[작성자] ${input.author}`,
+    "[웹앱 구조화 입력]",
+    JSON.stringify(input.data),
+    "",
+    "[작성 원문]",
+    input.sourceText,
+    "",
+    "[반환할 헤더]",
+    JSON.stringify(COMPLAINT_AI_HEADERS),
+  ].join("\n");
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: Deno.env.get("FIELD_SHEET_AI_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini",
+        input: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+      }),
+    });
+    if (!response.ok) return {};
+    const raw = parseObject(textFromResponse(await response.json()));
+    return Object.fromEntries(COMPLAINT_AI_HEADERS.map((header) => [header, raw[header] || "미기재"]));
+  } catch {
+    return {};
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
@@ -118,6 +163,8 @@ Deno.serve(async (req) => {
     const sourceData = sourcePayload.data && typeof sourcePayload.data === "object" ? sourcePayload.data : {};
     const sheetValues = job.category === "expansion_copier"
       ? await enrichCopierPayload({ sourceText: job.source_text || "", data: sourceData, author: job.author || "", apiKey: openAiKey })
+      : job.category === "complaint"
+      ? await enrichComplaintPayload({ sourceText: job.source_text || "", data: sourceData, author: job.author || "", apiKey: openAiKey })
       : {};
     const payload = Object.keys(sheetValues).length
       ? { ...sourcePayload, data: { ...sourceData, _sheetValues: sheetValues } }
@@ -146,6 +193,17 @@ Deno.serve(async (req) => {
       headers: { ...headers, Prefer: "return=minimal" },
       body: JSON.stringify({ sheet_status: "synced", sheet_row: sheetData.row || null, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
     });
+
+    // 불만: AI 분석 결과를 bulman 원본 행에도 역기입한다(_dupKey 매칭). 사용자가 직접 쓴 재발방지는 보존.
+    if (job.category === "complaint" && Object.keys(sheetValues).length && job._dupKey) {
+      const dbPatch: Record<string, unknown> = { ...sheetValues };
+      if (String(sourceData["재발방지"] || "").trim()) delete dbPatch["재발방지"];
+      await fetch(`${rest}/bulman?_dupKey=eq.${encodeURIComponent(job._dupKey)}`, {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify(dbPatch),
+      }).catch(() => {});
+    }
     return Response.json({ ok: true, status: "synced", row: sheetData.row || null, sheet: sheetData.sheet || "" }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });

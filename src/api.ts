@@ -539,6 +539,20 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     row["_원문"] = text;
     row["_dupKey"] = md5([s.category, vendor, author, toKstDate(ts), ...fields.map((f) => form[f.key] || "")].join("|"));
 
+    // 불만: 정식(레거시) 컬럼·날짜도 함께 채워 시트·AI·통합이력 정합성을 맞춘다.
+    // (담당자 필드는 "이름 010-0000-0000" 형태라 이름/연락처로 분리한다.)
+    if (schemaKey === "bulman") {
+      const contact = String(form["담당자"] || "").trim();
+      const phone = contact.match(/01[016-9][-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] || "";
+      const name = contact.replace(phone, "").trim();
+      row["날짜"] = toKstDate(ts);
+      row["접수/처리"] = form["최종상태"] || "접수";
+      row["거래처담당자"] = name || contact;
+      row["거래처연락처"] = phone;
+      row["불만내용"] = form["불편내용"] || "";
+      row["불만항목"] = form["불만정도"] || "";
+    }
+
     let rooms: string[] = [];
     const cfg = await getConfig();
     // 시트 테스트 모드는 외부 시트의 대상만 바꾼다. 웹앱 원본 DB는 항상 저장한다.

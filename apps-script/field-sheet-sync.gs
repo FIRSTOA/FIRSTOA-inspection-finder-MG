@@ -94,6 +94,9 @@ function fieldValue_(category, header, column, data, request, labels) {
     "년월": Utilities.formatDate(submittedAt, "Asia/Seoul", "yy-MM"),
     "유입": "웹앱",
   } : {};
+  const complaintPeriod = category === "complaint" ? {
+    "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "yyyy-MM-dd"),
+  } : {};
   const base = {
     "웹앱 전송ID": request.jobId,
     "날짜": request.submittedAt,
@@ -101,6 +104,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     "작성자": request.author,
     ...copierPeriod,
     ...contactPeriod,
+    ...complaintPeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -127,8 +131,8 @@ function fieldValue_(category, header, column, data, request, labels) {
       "구분": "category", "사유": "reason", "변경전": "before", "변경후": "after",
     },
     complaint: {
-      "접수/처리": "_complaintReceipt", "등급": "grade", "업체명": "company", "거래처담당자": "담당자/연락처",
-      "거래처연락처": "담당자/연락처", "불만내용": "불편내용", "불만유형": "불만유형", "불만항목": "불만정도",
+      "접수/처리": "_complaintReceipt", "등급": "등급", "업체명": "업체명", "거래처담당자": "_contactName",
+      "거래처연락처": "_contactPhone", "불만내용": "불편내용", "불만유형": "불만유형", "불만항목": "불만정도",
     },
   };
   const key = maps[category] && maps[category][header];
@@ -136,6 +140,11 @@ function fieldValue_(category, header, column, data, request, labels) {
   if (key === "_author") return request.author;
   if (key === "_webInput") return "웹앱 직접입력";
   if (key === "_complaintReceipt") return "불만접수";
+  if (key === "_contactName" || key === "_contactPhone") {
+    var contact = String(data["담당자"] || labels["담당자/연락처"] || "").trim();
+    var phone = (contact.match(/01[016-9][-\s.]?\d{3,4}[-\s.]?\d{4}/) || [""])[0];
+    return key === "_contactPhone" ? phone : (contact.replace(phone, "").trim() || contact);
+  }
   if (data[key] !== undefined && data[key] !== "") return data[key];
   if (labels[header] !== undefined) return labels[header];
   return labels[key];

@@ -40,7 +40,7 @@ export const CATEGORY_SCHEMAS: Record<string, FormSchema> = {
     ],
   },
   bulman: {
-    title: "/불만접수", category: "불만", table: "bulman", roomKey: "불만|*",
+    title: "불만접수", category: "불만", table: "bulman", roomKey: "불만|*",
     sections: [
       { title: "기본정보", fields: [
         T("작성자", "작성자", "author"), REGION("region"), GRADE("grade"),
