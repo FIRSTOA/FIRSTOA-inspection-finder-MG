@@ -18,3 +18,14 @@ begin
 end $$;
 
 update storage.buckets set public = true where id = 'photos';
+
+-- FIELD 웹앱이 photos 버킷에 새 파일을 올리고 같은 경로를 갱신할 수 있게 합니다.
+drop policy if exists "photos anon insert" on storage.objects;
+drop policy if exists "photos anon update" on storage.objects;
+create policy "photos anon insert"
+on storage.objects for insert to anon
+with check (bucket_id = 'photos');
+create policy "photos anon update"
+on storage.objects for update to anon
+using (bucket_id = 'photos')
+with check (bucket_id = 'photos');
