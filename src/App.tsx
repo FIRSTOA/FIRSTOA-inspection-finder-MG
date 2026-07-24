@@ -4539,12 +4539,31 @@ export default function App() {
     photoLinkRef.current = "";
   };
 
-  // 첨부 사진 병렬 업로드(동시 4개) → 앨범 1건 생성 → 모아보기 링크 1개 반환(캐시).
+  const photoAlbumContext = () => {
+    if (mode === "pc") {
+      return pcSubTab === "copier"
+        ? { category: "확장성 복합기", sourceType: "expansion_copier", vendor: copierExpansionForm.company, region: "" }
+        : { category: "확장성 IT", sourceType: "expansion_it", vendor: pcForm.company, region: pcForm.region };
+    }
+    if (mode === "contact-change") return { category: "담당자/주소 변경", sourceType: "contact_change", vendor: contactChangeForm.company, region: contactChangeForm.region };
+    if (mode === "logistics") return { category: "물류", sourceType: "logistics", vendor: logisticsForm.vendor, region: "" };
+    if (mode === "replacement") return { category: "교체", sourceType: "replacement", vendor: replacementForm.company, region: "" };
+    if (isCat) {
+      const category = mode === "bulman" ? "불만" : mode === "misu" ? "미수" : mode === "recontract" ? "재계약" : "초과조정";
+      return { category, sourceType: mode, vendor: String(curCatForm["업체명"] || currentVendor), region: String(curCatForm["지역"] || "") };
+    }
+    return { category: mode === "blank-report" ? "AS" : "점검", sourceType: mode === "blank-report" ? "as" : "inspection", vendor: currentVendor, region: "" };
+  };
+
+  // 첨부 사진 병렬 업로드(동시 4개) → 업무 메타데이터가 있는 앨범 1건 생성 → 모아보기 링크 반환.
   const ensurePhotoLink = async (): Promise<string> => {
     if (!photos.length) return "";
     if (photoLinkRef.current) return photoLinkRef.current;
     const now = new Date();
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    const context = photoAlbumContext();
+    const albumId = crypto.randomUUID();
+    const folder = `${ymd}/${context.sourceType}/${albumId}`;
     const urls: string[] = new Array(photos.length);
     let nextIdx = 0, done = 0;
     const worker = async () => {
@@ -4554,18 +4573,24 @@ export default function App() {
         if (f.type.startsWith("video/")) {
           // 동영상은 원본 그대로 업로드 (다운스케일/변환 X)
           const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
-          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4");
+          urls[i] = await uploadPhoto(`${folder}/${String(i + 1).padStart(2, "0")}.${ext}`, f, f.type || "video/mp4");
         } else {
           const dataUrl = await fileToDownscaledDataUrl(f, 1600);
           const blob = await (await fetch(dataUrl)).blob();
-          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
+          urls[i] = await uploadPhoto(`${folder}/${String(i + 1).padStart(2, "0")}.jpg`, blob, "image/jpeg");
         }
         done++;
         showToast(`첨부 ${done}/${photos.length} 올리는 중…`);
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
-    const albumId = await createAlbum(urls, currentVendor);
+    await createAlbum(urls, context.vendor || currentVendor || "미기재", {
+      id: albumId,
+      category: context.category,
+      author,
+      region: context.region,
+      sourceType: context.sourceType,
+    });
     photoLinkRef.current = `${window.location.origin}${window.location.pathname}?album=${albumId}`;
     return photoLinkRef.current;
   };

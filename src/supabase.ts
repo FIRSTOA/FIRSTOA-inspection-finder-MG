@@ -189,11 +189,27 @@ export async function invokeEdgeFunction<T>(name: string, body: Record<string, u
 }
 
 // 사진 여러 장 → 앨범 1건 생성, id 반환. (링크 1개로 모아보기)
-export async function createAlbum(urls: string[], vendor: string): Promise<string> {
+export type PhotoAlbumMeta = {
+  id?: string;
+  category?: string;
+  author?: string;
+  region?: string;
+  sourceType?: string;
+};
+
+export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlbumMeta = {}): Promise<string> {
   const res = await fetch(`${REST}/photo_albums`, {
     method: "POST",
     headers: { ...BASE_HEADERS, Prefer: "return=representation" },
-    body: JSON.stringify({ urls, vendor }),
+    body: JSON.stringify({
+      ...(meta.id ? { id: meta.id } : {}),
+      urls,
+      vendor,
+      category: meta.category || "현장",
+      author: meta.author || "",
+      region: meta.region || "",
+      source_type: meta.sourceType || "field",
+    }),
   });
   if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`앨범 생성 실패(${res.status}): ${t.slice(0, 160)}`); }
   const rows = (await res.json()) as Array<{ id: string }>;
