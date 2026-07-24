@@ -31,7 +31,7 @@ export type VisitRow = VisitDraft & {
 
 export const WORK_LABELS: Record<WorkKind, string> = {
   inspection: "점검", as: "AS", delivery: "납품/반출/교체/셋팅", etc: "기타(여분,마감)",
-  pc: "PC·IT 홍보", misu: "미수", bulman: "불만", recontract: "재계약", overage: "초과조정",
+  pc: "확장성(IT,복합기)", misu: "미수", bulman: "불만", recontract: "재계약", overage: "초과조정",
 };
 
 export function kstDate(d = new Date()): string {
