@@ -59,11 +59,24 @@ export async function insertRecord(table: "jeomgeom" | "as_records", row: Row): 
   throw new Error(`저장 실패(${res.status}): ${t.slice(0, 200)}`);
 }
 
-// 범용 단일행 insert. on_conflict=_dupKey 무시(중복이면 dup). 201/200 신규, 409 중복.
+// 범용 단일행 insert. 먼저 _dupKey를 조회해 중복을 막는다.
+// 일부 기존 테이블은 _dupKey 고유 제약이 없으므로 PostgREST on_conflict에는 의존하지 않는다.
 export async function insertRow(table: string, row: Record<string, unknown>): Promise<InsertResult> {
-  const res = await fetch(`${REST}/${table}?on_conflict=_dupKey`, {
+  const dupKey = String(row._dupKey || "").trim();
+  if (dupKey) {
+    const duplicateRes = await fetch(
+      `${REST}/${table}?_dupKey=eq.${encodeURIComponent(dupKey)}&select=_dupKey&limit=1`,
+      { headers: BASE_HEADERS },
+    );
+    if (duplicateRes.ok) {
+      const existing = await duplicateRes.json().catch(() => []);
+      if (Array.isArray(existing) && existing.length) return "dup";
+    }
+  }
+
+  const res = await fetch(`${REST}/${table}`, {
     method: "POST",
-    headers: { ...BASE_HEADERS, Prefer: "resolution=ignore-duplicates,return=minimal" },
+    headers: { ...BASE_HEADERS, Prefer: "return=minimal" },
     body: JSON.stringify(row),
   });
   if (res.status === 201 || res.status === 200) return "new";
