@@ -1332,6 +1332,11 @@ function extractDepartment(text: string): string {
   return "";
 }
 
+function storageFolderName(value: string) {
+  const normalized = String(value || "미기재").trim().normalize("NFKC") || "미기재";
+  return normalized.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 70) || "미기재";
+}
+
 const ADDRESS_START_PATTERN = new RegExp(
   `(?:^|\\s)(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|${SEOUL_DISTRICTS.join("|")})\\s+`
 );
@@ -4560,10 +4565,9 @@ export default function App() {
     if (!photos.length) return "";
     if (photoLinkRef.current) return photoLinkRef.current;
     const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const context = photoAlbumContext();
     const albumId = crypto.randomUUID();
-    const folder = `${ymd}/${context.sourceType}/${albumId}`;
+    const folder = `field/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${context.sourceType}/${storageFolderName(context.vendor || currentVendor)}/${albumId}`;
     const urls: string[] = new Array(photos.length);
     let nextIdx = 0, done = 0;
     const worker = async () => {

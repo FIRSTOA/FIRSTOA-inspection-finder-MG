@@ -19,6 +19,11 @@ create table if not exists public.photo_assets (
   unique(album_id, public_url)
 );
 
+alter table public.photo_assets
+  add column if not exists organized_path text,
+  add column if not exists archived_at timestamptz,
+  add column if not exists archive_error text;
+
 alter table public.photo_assets enable row level security;
 drop policy if exists "photo assets anon read" on public.photo_assets;
 drop policy if exists "photo assets anon insert" on public.photo_assets;
@@ -85,5 +90,6 @@ where position(a.id::text in coalesce(j.source_text, '')) > 0;
 
 create index if not exists photo_assets_album_idx on public.photo_assets(album_id, sort_order);
 create index if not exists photo_assets_path_idx on public.photo_assets(storage_path);
+create index if not exists photo_assets_organized_idx on public.photo_assets(organized_path) where organized_path is not null;
 create index if not exists photo_albums_category_created_idx on public.photo_albums(category, created_at desc);
 create index if not exists photo_albums_vendor_created_idx on public.photo_albums(vendor, created_at desc);
