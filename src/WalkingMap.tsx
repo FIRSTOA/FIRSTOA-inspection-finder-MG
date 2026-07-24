@@ -726,7 +726,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [analysisTeamsOpen, setAnalysisTeamsOpen] = useState<Record<string, boolean>>(() => ({ [teamFilter]: true }));
+  const [analysisTeamsOpen, setAnalysisTeamsOpen] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
@@ -1790,8 +1790,6 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                 const elapsedPct = Math.round(weeklyAnalysis.elapsedRatio * 100);
                 const paceTone = row.pace === "순조" ? "bg-emerald-100 text-emerald-700" : row.pace === "주의" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
                 const open = analysisTeamsOpen[row.team] ?? false;
-                let cumInsp = row.inspBaseline;
-                let cumRenew = row.renewBaseline;
                 return (
                   <div key={row.team} className="overflow-hidden rounded-lg border border-slate-200">
                     <button type="button" onClick={() => setAnalysisTeamsOpen((current) => ({ ...current, [row.team]: !open }))} className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-slate-50">
@@ -1831,19 +1829,19 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                           </thead>
                           <tbody>
                             {weeklyAnalysis.weeks.map((week, index) => {
-                              cumInsp += row.inspWeekly[index];
-                              cumRenew += row.renewWeekly[index];
-                              const inspCumPct = row.inspTotal ? Math.round((cumInsp / row.inspTotal) * 100) : 0;
-                              const renewCumPct = row.renewTotal ? Math.round((cumRenew / row.renewTotal) * 100) : 0;
+                              const inspN = row.inspWeekly[index];
+                              const renewN = row.renewWeekly[index];
+                              const inspWeekPct = row.inspTotal ? (inspN / row.inspTotal) * 100 : 0;
+                              const renewWeekPct = row.renewTotal ? (renewN / row.renewTotal) * 100 : 0;
                               const isNow = todayKst >= week.start && todayKst <= week.end;
                               const isFuture = week.start > todayKst;
                               return (
                                 <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isFuture ? "text-slate-300" : ""}`}>
                                   <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span></td>
-                                  <td className="py-1 text-center text-blue-700">{row.inspWeekly[index] ? `+${row.inspWeekly[index]}` : "·"}</td>
-                                  <td className="py-1 text-center text-emerald-700">{row.renewWeekly[index] ? `+${row.renewWeekly[index]}` : "·"}</td>
-                                  <td className="py-1 text-center font-black text-blue-700">{inspCumPct}%</td>
-                                  <td className="py-1 text-center font-black text-emerald-700">{renewCumPct}%</td>
+                                  <td className="py-1 text-center text-blue-700">{inspN ? `+${inspN}` : "·"}</td>
+                                  <td className="py-1 text-center text-emerald-700">{renewN ? `+${renewN}` : "·"}</td>
+                                  <td className="py-1 text-center font-black text-blue-700">{inspN ? `${inspWeekPct.toFixed(1)}%` : "·"}</td>
+                                  <td className="py-1 text-center font-black text-emerald-700">{renewN ? `${renewWeekPct.toFixed(1)}%` : "·"}</td>
                                 </tr>
                               );
                             })}
