@@ -107,7 +107,9 @@ export async function getRoomMap(): Promise<Record<string, string>> {
 export async function uploadPhoto(path: string, file: Blob, contentType = "image/jpeg"): Promise<string> {
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/photos/${path}`, {
     method: "POST",
-    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType, "x-upsert": "true" },
+    // 새 앨범 UUID 아래에만 저장하므로 덮어쓰기는 필요 없다.
+    // x-upsert를 쓰면 Storage가 기존 객체 조회 권한까지 요구해 RLS 오류가 날 수 있다.
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType },
     body: file,
   });
   if (!res.ok) {
