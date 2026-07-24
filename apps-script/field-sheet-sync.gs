@@ -46,6 +46,9 @@ function appendFieldSheetRow_(request) {
     const previous = sheet.getRange(previousRow, column);
     const formula = previous.getFormula();
     if (formula) previous.copyTo(sheet.getRange(row, column), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+    if (request.category === "contact_change" && column === 13 && !formula) {
+      sheet.getRange(row, column).setFormula('=LET(v, INDEX($G:$G, ROW()), IF(v="","", COUNTIF($G$3:INDEX($G:$G, ROW()), v) & "차"))');
+    }
     const value = fieldValue_(request.category, header, column, data, request, labelValues);
     if (value !== undefined) sheet.getRange(row, column).setValue(value);
   });
