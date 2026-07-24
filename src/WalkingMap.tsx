@@ -234,6 +234,39 @@ function renewalQuarterMonths(quarter: Quarter) {
   return quarter === 1 ? [2, 3, 4] : quarter === 2 ? [5, 6, 7] : quarter === 3 ? [8, 9, 10] : [11, 12, 1];
 }
 
+function fmtDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// G5(완료)/G12(이관) 라벨을 달 때 메모에 "[G5 완료] YYYY-MM-DD"가 기록된다. 그 완료일을 읽는다.
+function completionDate(place: MapPlace) {
+  for (const memo of place.memos) {
+    const match = memo.match(/^\[(?:G5 완료|G12 이관)\]\s*(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  return "";
+}
+
+// 분기를 월요일 기준 주차로 나눈다.
+function quarterWeeks(year: number, quarter: Quarter) {
+  const startMonth = (quarter - 1) * 3;
+  const qStart = new Date(year, startMonth, 1);
+  const qEnd = new Date(year, startMonth + 3, 0);
+  const cursor = new Date(qStart);
+  const day = cursor.getDay();
+  cursor.setDate(cursor.getDate() + (day === 0 ? -6 : 1 - day));
+  const weeks: Array<{ label: string; start: string; end: string }> = [];
+  let n = 1;
+  while (cursor <= qEnd) {
+    const weekEnd = new Date(cursor);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weeks.push({ label: `${n}주`, start: fmtDate(cursor), end: fmtDate(weekEnd) });
+    cursor.setDate(cursor.getDate() + 7);
+    n += 1;
+  }
+  return weeks;
+}
+
 // 진행률 요약에서만 자동연장된 계약의 종료월을 현재 주기로 투영한다.
 function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarter) {
   const original = contractEnd(place, baseYear);
@@ -692,6 +725,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
@@ -1003,6 +1037,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const mapPlaces = useMemo(() => scopedPlaces.filter((place) => place.visible), [scopedPlaces]);
   const progressQuarter = quarterFilter;
   const progressYear = new Date().getFullYear();
+  const todayKst = kstDate();
   const progressDates = quarterDates(progressYear, progressQuarter);
   const progressStart = new Date() > progressDates.start ? new Date() : progressDates.start;
   const daysToQuarterEnd = businessDaysBetween(progressStart, progressDates.end);
@@ -1026,6 +1061,45 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       renewalMonths,
     };
   }), [places, progressQuarter, progressYear]);
+
+  // 팀별 주차 분석: 워킨맵 색칠(G5 완료) 기준. 완료일 메모로 주차별 신규 완료를 집계하고,
+  // 완료일이 없는 기존 완료분은 "추적 전 완료" 베이스라인으로 잡아 누적%를 맞춘다.
+  const weeklyAnalysis = useMemo(() => {
+    const weeks = quarterWeeks(progressYear, progressQuarter);
+    const dates = quarterDates(progressYear, progressQuarter);
+    const totalBiz = businessDaysBetween(dates.start, dates.end) || 1;
+    const now = new Date();
+    const elapsedBiz = businessDaysBetween(dates.start, now < dates.end ? now : dates.end);
+    const elapsedRatio = Math.min(1, Math.max(0, elapsedBiz / totalBiz));
+    const weekIndex = (date: string) => weeks.findIndex((week) => date >= week.start && date <= week.end);
+    const teamRows = teams.map((team) => {
+      const quarterly = places.filter((place) => place.team === team && place.quarter === progressQuarter && place.kind === "quarter");
+      const renewals = places.filter((place) => place.team === team && place.quarter === progressQuarter && place.kind === "renewal" && renewalGrade(place) !== "V");
+      const inspTotal = quarterly.length;
+      const renewTotal = renewals.length;
+      const inspDone = quarterly.filter(isCompleted).length;
+      const renewDone = renewals.filter((place) => place.label === "G5").length;
+      const inspWeekly = weeks.map(() => 0);
+      const renewWeekly = weeks.map(() => 0);
+      let inspDated = 0;
+      let renewDated = 0;
+      for (const place of quarterly) {
+        if (!isCompleted(place)) continue;
+        const index = weekIndex(completionDate(place));
+        if (index >= 0) { inspWeekly[index] += 1; inspDated += 1; }
+      }
+      for (const place of renewals) {
+        if (place.label !== "G5") continue;
+        const index = weekIndex(completionDate(place));
+        if (index >= 0) { renewWeekly[index] += 1; renewDated += 1; }
+      }
+      const doneRatio = inspTotal ? inspDone / inspTotal : 1;
+      const gap = doneRatio - elapsedRatio;
+      const pace = gap >= 0 ? "순조" : gap >= -0.1 ? "주의" : "스퍼트 필요";
+      return { team, inspTotal, inspDone, renewTotal, renewDone, inspWeekly, renewWeekly, inspBaseline: inspDone - inspDated, renewBaseline: renewDone - renewDated, pace };
+    });
+    return { weeks, elapsedRatio, teams: teamRows };
+  }, [places, progressQuarter, progressYear]);
 
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
 
@@ -1431,6 +1505,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
+          <button type="button" onClick={() => { setAnalysisOpen(true); setProgressMenuOpen(false); setConditionMenuOpen(false); setColorMenuOpen(false); }} className="rounded-md border border-slate-200 bg-white px-2 py-2.5 text-[11px] font-black text-slate-700 shadow-lg sm:px-3 sm:text-xs">주차분석</button>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
@@ -1681,6 +1756,76 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
             <div className="sticky bottom-0 flex gap-2 border-t border-slate-200 bg-white p-4">
               <button type="button" onClick={deleteDraft} className="rounded-md border border-rose-200 px-4 py-2.5 text-sm font-black text-rose-600">삭제</button>
               <button type="button" onClick={saveDraft} disabled={!draft.name.trim()} className="ml-auto rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {analysisOpen && (
+        <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/50 p-3" onClick={() => setAnalysisOpen(false)}>
+          <div className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <div className="text-base font-black text-slate-950">{progressQuarter}분기 팀별 주차 분석</div>
+                <div className="mt-0.5 text-[11px] font-bold text-slate-400">{progressYear}년 · 분기 경과 {Math.round(weeklyAnalysis.elapsedRatio * 100)}% · 남은 영업일 {daysToQuarterEnd}일</div>
+              </div>
+              <button type="button" onClick={() => setAnalysisOpen(false)} className="h-8 w-8 shrink-0 rounded text-xl font-black text-slate-400 hover:bg-slate-100">×</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              {weeklyAnalysis.teams.map((row) => {
+                const inspPct = row.inspTotal ? Math.round((row.inspDone / row.inspTotal) * 100) : 0;
+                const renewPct = row.renewTotal ? Math.round((row.renewDone / row.renewTotal) * 100) : 0;
+                const elapsedPct = Math.round(weeklyAnalysis.elapsedRatio * 100);
+                const paceTone = row.pace === "순조" ? "bg-emerald-100 text-emerald-700" : row.pace === "주의" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+                let cumulative = row.inspBaseline;
+                return (
+                  <div key={row.team} className="rounded-lg border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-black text-slate-900">{row.team}팀</div>
+                      <span className={`rounded px-2 py-0.5 text-[11px] font-black ${paceTone}`}>{row.pace}</span>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] font-black text-blue-700"><span>점검</span><span>{row.inspDone}/{row.inspTotal} · {inspPct}%</span></div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-blue-600" style={{ width: `${inspPct}%` }} /></div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] font-black text-emerald-700"><span>재계약</span><span>{row.renewDone}/{row.renewTotal} · {renewPct}%</span></div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-emerald-50"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewPct}%` }} /></div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] font-bold text-slate-500">경과 {elapsedPct}% 대비 점검 {inspPct}% → <span className={row.pace === "스퍼트 필요" ? "text-rose-600" : row.pace === "주의" ? "text-amber-600" : "text-emerald-600"}>{row.pace === "스퍼트 필요" ? "스퍼트 올려야 함" : row.pace === "주의" ? "속도 주의" : "순조롭게 진행 중"}</span></div>
+                    {(row.inspBaseline > 0 || row.renewBaseline > 0) && <div className="mt-2 text-[10px] font-bold text-slate-400">추적 전 완료(날짜 미기록): 점검 {row.inspBaseline} · 재계약 {row.renewBaseline} — 아래 주차엔 이후 색칠분만 집계</div>}
+                    <table className="mt-1.5 w-full border-collapse text-[11px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400">
+                          <th className="py-1 text-left font-black">주차</th>
+                          <th className="py-1 text-center font-black">점검</th>
+                          <th className="py-1 text-center font-black">재계약</th>
+                          <th className="py-1 text-center font-black">점검 누적%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {weeklyAnalysis.weeks.map((week, index) => {
+                          cumulative += row.inspWeekly[index];
+                          const cumPct = row.inspTotal ? Math.round((cumulative / row.inspTotal) * 100) : 0;
+                          const isNow = todayKst >= week.start && todayKst <= week.end;
+                          const isFuture = week.start > todayKst;
+                          return (
+                            <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isFuture ? "text-slate-300" : ""}`}>
+                              <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span></td>
+                              <td className="py-1 text-center text-blue-700">{row.inspWeekly[index] ? `+${row.inspWeekly[index]}` : "·"}</td>
+                              <td className="py-1 text-center text-emerald-700">{row.renewWeekly[index] ? `+${row.renewWeekly[index]}` : "·"}</td>
+                              <td className="py-1 text-center text-slate-500">{cumPct}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+              <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준입니다. 과거 완료분은 완료일 기록이 없어 주차에 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
             </div>
           </div>
         </div>
