@@ -214,22 +214,14 @@ export type PhotoAlbumMeta = {
 };
 
 export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlbumMeta = {}): Promise<string> {
-  const res = await fetch(`${REST}/photo_albums`, {
-    method: "POST",
-    headers: { ...BASE_HEADERS, Prefer: "return=representation" },
-    body: JSON.stringify({
-      ...(meta.id ? { id: meta.id } : {}),
-      urls,
-      vendor,
-      category: meta.category || "현장",
-      author: meta.author || "",
-      region: meta.region || "",
-      source_type: meta.sourceType || "field",
-    }),
+  const albumId = await rpc<string>("create_photo_album", {
+    p_urls: urls,
+    p_vendor: vendor,
+    p_category: meta.category || "현장",
+    p_author: meta.author || "",
+    p_region: meta.region || "",
+    p_source_type: meta.sourceType || "field",
   });
-  if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`앨범 생성 실패(${res.status}): ${t.slice(0, 160)}`); }
-  const rows = (await res.json()) as Array<{ id: string }>;
-  const albumId = rows[0]?.id || meta.id;
   if (!albumId) throw new Error("앨범 ID를 확인하지 못했습니다.");
   if (meta.assets?.length) {
     const assetRes = await fetch(`${REST}/photo_assets?on_conflict=album_id,public_url`, {
@@ -255,9 +247,7 @@ export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlb
 }
 
 export async function getAlbum(id: string): Promise<{ vendor: string; urls: string[]; created_at: string }> {
-  const res = await fetch(`${REST}/photo_albums?id=eq.${encodeURIComponent(id)}&select=vendor,urls,created_at`, { headers: BASE_HEADERS });
-  if (!res.ok) throw new Error(`앨범 조회 실패(${res.status})`);
-  const rows = (await res.json()) as Array<{ vendor: string; urls: string[]; created_at: string }>;
+  const rows = await rpc<Array<{ vendor: string; urls: string[]; created_at: string }>>("get_photo_album", { p_id: id });
   if (!rows.length) throw new Error("앨범을 찾을 수 없어요");
   return rows[0];
 }
