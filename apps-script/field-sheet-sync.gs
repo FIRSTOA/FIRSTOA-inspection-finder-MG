@@ -36,7 +36,6 @@ function appendFieldSheetRow_(request) {
   const headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
   const data = request.payload && request.payload.data || {};
   const labelValues = parseLabeledText_(request.sourceText || "");
-  const valueFor = (header) => fieldValue_(request.category, header, data, request, labelValues);
   const previousRow = Math.max(headerRow + 1, sheet.getLastRow());
   sheet.insertRowAfter(previousRow);
   const row = previousRow + 1;
@@ -47,7 +46,7 @@ function appendFieldSheetRow_(request) {
     const previous = sheet.getRange(previousRow, column);
     const formula = previous.getFormula();
     if (formula) previous.copyTo(sheet.getRange(row, column), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
-    const value = valueFor(header);
+    const value = fieldValue_(request.category, header, column, data, request, labelValues);
     if (value !== undefined) sheet.getRange(row, column).setValue(value);
   });
 
@@ -78,11 +77,19 @@ function getOrCreateTestSheet_(spreadsheet, sourceSheet, category) {
   return testSheet;
 }
 
-function fieldValue_(category, header, data, request, labels) {
+function fieldValue_(category, header, column, data, request, labels) {
+  // 담당자·주소 변경 표는 A:M까지만 사용합니다. 오른쪽 보조 영역의 같은 헤더는 건드리지 않습니다.
+  if (category === "contact_change" && column > 13) return undefined;
+
   const submittedAt = new Date(request.submittedAt || new Date());
   const copierPeriod = category === "expansion_copier" ? {
     "년월": Utilities.formatDate(submittedAt, "Asia/Seoul", "yy년 MM월"),
     "주차": `${isoWeek_(submittedAt)}주차`,
+  } : {};
+  const contactPeriod = category === "contact_change" ? {
+    "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "yyyy-MM-dd"),
+    "년월": Utilities.formatDate(submittedAt, "Asia/Seoul", "yy-MM"),
+    "유입": "웹앱",
   } : {};
   const base = {
     "웹앱 전송ID": request.jobId,
@@ -90,6 +97,7 @@ function fieldValue_(category, header, data, request, labels) {
     "등록일": request.submittedAt,
     "작성자": request.author,
     ...copierPeriod,
+    ...contactPeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -112,8 +120,8 @@ function fieldValue_(category, header, data, request, labels) {
       "계약 종료(예정)일": "contractEndDate", "특이사항": "notes", "거래처등급": "grade", "[AI 자동완성 개입 여부]": "_webInput",
     },
     contact_change: {
-      "유입": "_webInput", "담당자": "_author", "등급": "grade", "업체명": "company", "지역": "region",
-      "구분": "category", "사유": "reason", "변경전": "before", "변경후": "after", "등록요청": "_webInput",
+      "담당자": "_author", "등급": "grade", "업체명": "company", "지역": "region",
+      "구분": "category", "사유": "reason", "변경전": "before", "변경후": "after",
     },
     complaint: {
       "접수/처리": "_complaintReceipt", "등급": "grade", "업체명": "company", "거래처담당자": "담당자/연락처",
