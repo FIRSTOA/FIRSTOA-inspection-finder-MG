@@ -366,9 +366,9 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label><label className="text-[10px] text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label></div>)}</div>
           <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-md bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
-      </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} author={author} onCancelled={() => setReloadTick((t) => t + 1)} /></div> : <div className="flex flex-col gap-6">
+      </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
         <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} />
-        <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} author={author} onCancelled={() => setReloadTick((t) => t + 1)} /></div>
+        <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
       </div>}
     </>}
   </div>;
@@ -499,7 +499,7 @@ function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, qu
   </section>;
 }
 
-function HierarchicalVisitList({ period, rows, year, month, quarter, start, end, author, onCancelled }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string; author: string; onCancelled: () => void }) {
+function HierarchicalVisitList({ period, rows, year, month, quarter, start, end, author, onCancelled }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string; author?: string; onCancelled?: () => void }) {
   const [open, setOpen] = useState(false);
   const [cancelling, setCancelling] = useState("");
   const cancelSend = async (r: VisitRow) => {
@@ -509,7 +509,7 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end,
     try {
       await setVisitsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
       await setActivityEventsCancelledBySource(r.sourceText, r.author, r.workDate, true, author || r.author);
-      onCancelled();
+      onCancelled?.();
     } catch (e) {
       window.alert("오발송 처리 실패: " + (e as Error).message);
     } finally {
@@ -551,7 +551,7 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end,
     ];
     return <div className="flex flex-wrap gap-1.5">{items.map(([label, value]) => <span key={label} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600"><b className="mr-1 text-slate-400">{label}</b>{value}</span>)}</div>;
   };
-  const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="flex items-center justify-end gap-2 text-right text-xs text-slate-500"><div>{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div><button type="button" onClick={() => cancelSend(r)} disabled={cancelling === r.id} className="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">{cancelling === r.id ? "처리중…" : "오발송"}</button></div></div>)}</div>;
+  const visitRows = (list: VisitRow[]) => <div className="divide-y divide-slate-100">{list.map((r) => <div key={r.id} className="grid gap-2 px-5 py-3 md:grid-cols-[90px_1fr_auto] md:items-center"><div className="text-xs font-semibold text-slate-400">{r.arrivalTime || "시간 미입력"}</div><div><div className="font-semibold text-slate-800">{r.vendor} {r.grade && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.grade}</span>}</div><div className="mt-1 flex flex-wrap gap-1">{!r.visited && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">미방문</span>}{r.workKinds.map((k) => <span key={k} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</span>)}</div></div><div className="flex items-center justify-end gap-2 text-right text-xs text-slate-500"><div>{r.machineCount > 0 && <div>{r.machineCount}대</div>}<div className="font-semibold">{hm(r.workKinds.reduce((n, k) => n + Number(r.minutes[k] || 0), 0))}</div></div>{onCancelled && <button type="button" onClick={() => cancelSend(r)} disabled={cancelling === r.id} className="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">{cancelling === r.id ? "처리중…" : "오발송"}</button>}</div></div>)}</div>;
   const leafDay = (date: string, depth = 0) => {
     const list = grouped[date] || [];
     const key = `day:${date}`;
