@@ -109,7 +109,7 @@ export function buildCatText(schemaKey: string, form: Record<string, string>, au
   if (!s) return "";
   const lines: string[] = [s.title];
   for (const sec of s.sections) {
-    lines.push(`■ ${sec.title}`);
+    lines.push("", `■ ${sec.title}`);
     for (const f of sec.fields) {
       const v = f.fill === "author" ? author : (form[f.key] || "");
       lines.push(`${f.label}: ${v}`);
