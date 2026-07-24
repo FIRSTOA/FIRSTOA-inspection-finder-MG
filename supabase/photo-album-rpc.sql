@@ -23,14 +23,14 @@ declare
   new_id uuid;
 begin
   insert into public.photo_albums (urls, vendor, category, author, region, source_type)
-  values (p_urls, p_vendor, p_category, p_author, p_region, p_source_type)
+  values (to_jsonb(p_urls), p_vendor, p_category, p_author, p_region, p_source_type)
   returning id into new_id;
   return new_id;
 end;
 $$;
 
 create or replace function public.get_photo_album(p_id uuid)
-returns table (vendor text, urls text[], created_at timestamptz)
+returns table (vendor text, urls jsonb, created_at timestamptz)
 language sql
 security definer
 set search_path = public
