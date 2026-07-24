@@ -267,6 +267,17 @@ function quarterWeeks(year: number, quarter: Quarter) {
   return weeks;
 }
 
+// 미수 입력일 형식이 2025-12-09 / 2025.12.10 / 2026.7.2 로 섞여 있어 비교용으로 정규화한다.
+function normMisuDate(value: string) {
+  const match = String(value).match(/(\d{4})[.\-/]\s*(\d{1,2})(?:[.\-/]\s*(\d{1,2}))?/);
+  return match ? `${match[1]}-${match[2].padStart(2, "0")}-${(match[3] || "1").padStart(2, "0")}` : "";
+}
+
+function misuBalanceLabel(value: string) {
+  const digits = String(value).replace(/[^\d]/g, "");
+  return digits ? `${Number(digits).toLocaleString()}원` : String(value || "").trim();
+}
+
 // 진행률 요약에서만 자동연장된 계약의 종료월을 현재 주기로 투영한다.
 function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarter) {
   const original = contractEnd(place, baseYear);
@@ -722,6 +733,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [renewalOrder, setRenewalOrder] = useState<"default" | "asc" | "desc">("default");
   const [renewalGradeFilter, setRenewalGradeFilter] = useState("ALL");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
+  const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
@@ -857,6 +869,30 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         setInspectionVisits(inspections);
       })
       .catch((error) => console.error("Workin map visit history load failed", error));
+    return () => { active = false; };
+  }, []);
+
+  // 현재 미수: 미수팀 시트(_출처가 "시트:...")만 사용(카톡은 과거 이력이라 제외). 거래처별 최신 1건.
+  useEffect(() => {
+    let active = true;
+    const select = encodeURIComponent("_업체명,미수개월,미수잔액,입력일,_출처");
+    const sourceCol = encodeURIComponent("_출처");
+    void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*`)
+      .then((rows) => {
+        if (!active) return;
+        const map = new Map<string, { months: string; balance: string; date: string }>();
+        for (const row of rows) {
+          const key = vendorMatchKey(String(row["_업체명"] || ""));
+          if (!key) continue;
+          const digits = String(row["미수잔액"] || "").replace(/[^\d]/g, "");
+          if (!digits || Number(digits) === 0) continue; // 잔액 0 = 해소된 건, 현재 미수 아님
+          const date = normMisuDate(String(row["입력일"] || ""));
+          const prev = map.get(key);
+          if (!prev || date > prev.date) map.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date });
+        }
+        setMisuByVendor(map);
+      })
+      .catch((error) => console.error("Misu load failed", error));
     return () => { active = false; };
   }, []);
 
@@ -1381,6 +1417,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           const lastInspection = latestInspectionByPlace.get(place.id) || "";
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
+          const misu = misuByVendor.get(vendorMatchKey(place.name));
+          const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
+          const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const inspectionSnapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
           const currentCounts = inspectionSnapshots[0]?.counts || "";
           const previousCounts = inspectionSnapshots[1]?.counts || "";
@@ -1409,9 +1448,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                 <span className="min-w-0">
                   <span className="block text-sm font-black leading-5 text-slate-900">{place.name}</span>
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
-                  <span className="mt-1 block text-[11px] font-bold" style={{ color: meta.color }}>{place.label} · {place.team}팀 · {place.quarter}Q · {workKinds.find((item) => item.value === place.kind)?.label}{!place.visible ? " · 지도 숨김" : ""}</span>
+                  {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
                   {place.kind === "quarter" && renewalMatch && <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>}
+                  {misu && <span className="mt-1 block text-[11px] font-black text-amber-600">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
