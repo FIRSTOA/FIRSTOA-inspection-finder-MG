@@ -5389,13 +5389,13 @@ export default function App() {
           {moreOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
-              <div className="absolute right-1 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+              <div className="absolute right-1 top-full z-20 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 {([["담당자/주소 변경", "contact-change"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"]] as [string, Mode][]).map(([label, target]) => (
                   <button
                     key={label}
                     type="button"
                     onClick={() => { setMoreOpen(false); if (mode !== target) handleModeChange(target); }}
-                    className={`block w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 ${mode === target ? "font-bold text-slate-900" : "text-slate-600"}`}
+                    className={`block w-full whitespace-nowrap px-4 py-2.5 text-left text-sm hover:bg-slate-50 ${mode === target ? "font-bold text-slate-900" : "text-slate-600"}`}
                   >
                     {label}
                   </button>
