@@ -836,8 +836,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     localStorage.setItem(storageKey, JSON.stringify(places));
   }, [places]);
 
-  useEffect(() => {
-    let active = true;
+  const loadInspectionVisits = useCallback(() => {
     const startDate = dateDaysAgo(370);
     // 과거 visit_logs에 원문이 없는 기록만 보완한다. 목록 전체를 빠르게
     // 받을 수 있도록 큰 _원문 대신 비교에 필요한 열만 조회한다.
@@ -848,7 +847,6 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       selectAllRows<InspectionArchiveRow>("jeomgeom", `select=${archiveSelect}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`),
     ])
       .then(([rows, archiveRows]) => {
-        if (!active) return;
         const archiveByDate = new Map<string, InspectionArchiveRow[]>();
         archiveRows.forEach((row) => {
           const date = String(row["작성일"] || "").slice(0, 10);
@@ -869,17 +867,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         setInspectionVisits(inspections);
       })
       .catch((error) => console.error("Workin map visit history load failed", error));
-    return () => { active = false; };
   }, []);
 
   // 현재 미수: 미수팀 시트(_출처가 "시트:...")만 사용(카톡은 과거 이력이라 제외). 거래처별 최신 1건.
-  useEffect(() => {
-    let active = true;
+  const loadMisu = useCallback(() => {
     const select = encodeURIComponent("_업체명,미수개월,미수잔액,입력일,_출처");
     const sourceCol = encodeURIComponent("_출처");
     void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*`)
       .then((rows) => {
-        if (!active) return;
         const map = new Map<string, { months: string; balance: string; date: string }>();
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
@@ -893,8 +888,18 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         setMisuByVendor(map);
       })
       .catch((error) => console.error("Misu load failed", error));
-    return () => { active = false; };
   }, []);
+
+  useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
+  useEffect(() => { loadMisu(); }, [loadMisu]);
+
+  // 점검 방문일·미수는 창 포커스/탭 복귀 시 최신으로 다시 불러온다(재계약/색칠처럼).
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); } };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [loadInspectionVisits, loadMisu]);
 
   useEffect(() => {
     let active = true;
@@ -1033,7 +1038,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       const list = byKey.get(key);
       if (list) list.push({ place, end }); else byKey.set(key, [{ place, end }]);
     }
-    const result = new Map<number, { quarter: Quarter; isPrev: boolean; dueLabel: string }>();
+    const result = new Map<number, { quarter: Quarter; isPrev: boolean; dueLabel: string; done: boolean }>();
     if (!byKey.size) return result;
     // 종료월은 이번 점검분기(같은 해)로 확정되므로 연도는 올해로 투영해 표시한다.
     // (자동연장 계약이라 데이터의 최초 종료연도(예: 21년)가 아니라 현재 주기 기준이 맞다.)
@@ -1045,7 +1050,8 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       if (!matches || !matches.length) continue;
       const best = [...matches].sort((a, b) => (a.end?.month || 99) - (b.end?.month || 99))[0];
       const isPrev = best.place.quarter === prevQuarter;
-      result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "" });
+      const done = matches.every((match) => match.place.label === "G5");
+      result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "", done });
     }
     return result;
   }, [places, teamFilter, quarterFilter]);
@@ -1450,7 +1456,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {place.kind === "quarter" && renewalMatch && <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>}
+                  {place.kind === "quarter" && renewalMatch && (renewalMatch.done
+                    ? <span className="mt-1 block text-[11px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
+                    : <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
                   {misu && <span className="mt-1 block text-[11px] font-black text-amber-600">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
                 </span>
               </button>
