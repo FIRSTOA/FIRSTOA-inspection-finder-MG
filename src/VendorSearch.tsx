@@ -4,7 +4,7 @@
  *   → "불러오기"가 _원문을 변환기에 주입(onLoadForm)한다. 점검+AS는 점검으로 병합.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { searchVendors, getInspForms, type InspForm, type VendorHit, type VendorMetaEntry } from "./api";
+import { searchVendors, getInspForms, getVendorIdentifiers, type InspForm, type VendorHit, type VendorIdent, type VendorMetaEntry } from "./api";
 import { REGIONS, REGION_LABEL, normRegion, primaryRegion, vendorRegion } from "./region";
 
 type Props = {
@@ -46,6 +46,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [forms, setForms] = useState<InspForm[]>([]);
   const [loadingForms, setLoadingForms] = useState(false);
   const [previewKey, setPreviewKey] = useState("");
+  const [idents, setIdents] = useState<Record<string, VendorIdent>>({});
   const [activeRegion, setActiveRegion] = useState<string>("전체");
   const [sortMode, setSortMode] = useState<"recent" | "name">("recent");
   const [activeType, setActiveType] = useState<"전체" | "점검" | "AS">("전체");
@@ -103,6 +104,15 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     () => hits.filter((h) => (h.counts?.["점검"] || 0) > 0 || (h.counts?.["AS"] || 0) > 0),
     [hits]
   );
+
+  // 후보 업체들의 최신 기번/자산기번을 일괄 조회해 드롭다운에 표시한다.
+  useEffect(() => {
+    const vendors = base.map((h) => h.vendor);
+    if (!vendors.length) { setIdents({}); return; }
+    let alive = true;
+    void getVendorIdentifiers(vendors).then((map) => { if (alive) setIdents(map); }).catch(() => {});
+    return () => { alive = false; };
+  }, [base]);
 
   const typeBase = activeType === "전체" ? base : base.filter((hit) => Number(hit.counts?.[activeType] || 0) > 0);
   const hitRegion = (hit: VendorHit) => {
@@ -236,6 +246,14 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                       <div className="mt-1 space-y-0.5">
                         {jShow && <MetaLine gubun="점검" e={jShow} />}
                         {aShow && <MetaLine gubun="AS" e={aShow} />}
+                        {(() => {
+                          const ident = idents[h.vendor];
+                          if (!ident || (!ident.serial && !ident.asset)) return null;
+                          const parts: string[] = [];
+                          if (ident.serial) parts.push(`기번 ${ident.serial}${ident.deviceMore > 0 ? ` 외 ${ident.deviceMore}대` : ""}`);
+                          if (ident.asset) parts.push(`자산 ${ident.asset}`);
+                          return <div className="truncate text-[11px] text-slate-400">{parts.join(" · ")}</div>;
+                        })()}
                       </div>
                     </button>
                   );

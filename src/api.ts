@@ -229,6 +229,41 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   return out.slice(0, 30);
 }
 
+// 검색 후보 업체들의 최신 기번/자산기번 일괄 조회 — 거래처검색 드롭다운 표시용.
+export type VendorIdent = { serial: string; asset: string; deviceMore: number };
+export async function getVendorIdentifiers(vendors: string[]): Promise<Record<string, VendorIdent>> {
+  const list = Array.from(new Set(vendors.map((v) => v.trim()).filter(Boolean))).slice(0, 30);
+  if (!list.length) return {};
+  const quoted = `(${list.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(",")})`;
+  const filter = `${encodeURIComponent("_업체명")}=in.${encodeURIComponent(quoted)}`;
+  const sel = encodeURIComponent("_업체명,시리얼넘버,자산기번,작성일");
+  const run = async (table: string) => {
+    try { return await selectRows<Record<string, unknown>>(table, `select=${sel}&${filter}&order=${encodeURIComponent("작성일")}.desc&limit=300`); }
+    catch { return [] as Record<string, unknown>[]; }
+  };
+  const rows = [...await run("jeomgeom"), ...await run("as_records")]
+    .sort((a, b) => String(b["작성일"] || "").localeCompare(String(a["작성일"] || "")));
+  const out: Record<string, VendorIdent> = {};
+  const serialSets = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const v = String(r["_업체명"] || "").trim();
+    if (!v) continue;
+    const serial = String(r["시리얼넘버"] || "").trim();
+    const asset = String(r["자산기번"] || "").trim();
+    const cur = out[v] || { serial: "", asset: "", deviceMore: 0 };
+    if (!cur.serial && serial) cur.serial = serial;
+    if (!cur.asset && asset) cur.asset = asset;
+    out[v] = cur;
+    if (serial) {
+      const set = serialSets.get(v) || new Set<string>();
+      set.add(serial.toLowerCase());
+      serialSets.set(v, set);
+    }
+  }
+  for (const [v, set] of serialSets) if (out[v]) out[v].deviceMore = Math.max(0, set.size - 1);
+  return out;
+}
+
 // 같은 업체의 임대 기기 수 — 여러 대 중 선택임을 알려 기기 오선택을 막는다.
 export async function countLeaseDevices(vendor: string): Promise<number> {
   const v = String(vendor || "").trim();
