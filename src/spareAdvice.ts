@@ -129,7 +129,7 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
   };
 }
 
-// 자가신청 물품 표기 (K → K토너, 폐통 → 폐토너통)
+// 자가신청 물품 표기 (예: "K토너2 폐통1")
 export function spareNeedItems(needsList: SpareNeed[]) {
-  return needsList.map((need) => `${need.label === "폐통" ? "폐토너통" : `${need.label}토너`} ${need.count}개`);
+  return needsList.map((need) => `${need.label === "폐통" ? "폐통" : `${need.label}토너`}${need.count}`);
 }

@@ -387,7 +387,6 @@ function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?
 type SelfRequestSnapshot = { model?: string; serial?: string; asset?: string; counts?: string; toner?: string; waste?: string; spare?: string };
 function buildSelfRequestText(author: string, vendor: string, place: MapPlace, snapshot: SelfRequestSnapshot | undefined, needsList: SpareNeed[]) {
   const items = spareNeedItems(needsList);
-  const totalCount = needsList.reduce((sum, need) => sum + need.count, 0);
   return [
     `작성자:${author}`,
     "구분: 점검",
@@ -422,9 +421,9 @@ function buildSelfRequestText(author: string, vendor: string, place: MapPlace, s
     "출고여부:",
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "※자가신청※",
-    `물품: ${items.join(" · ")}`,
-    `수량: ${totalCount || ""}`,
-    "출고여부:",
+    `물품: ${items.join(" ")}`,
+    "수량:",
+    "출고여부: 출고부탁드립니다",
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "도착 시간:",
     "소요 시간:",

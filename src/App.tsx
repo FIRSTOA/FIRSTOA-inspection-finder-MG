@@ -5690,6 +5690,8 @@ export default function App() {
                 <>
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
+                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
+                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
                 </>
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
