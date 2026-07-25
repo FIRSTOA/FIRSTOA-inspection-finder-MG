@@ -5195,7 +5195,9 @@ export default function App() {
     skipAutoRef.current = true;
     setListOutput([{ content: fieldText }]);
     setTextOutput("");
-    const nextForms = [parseItemDataFromText(fieldText, 1)[0]];
+    // 다기기 양식(1. 2. …)이면 기기 수만큼 파싱한다.
+    const deviceCount = Math.max(1, (fieldText.match(/^\d+\.\s*$/gm) || []).length);
+    const nextForms = parseItemDataFromText(fieldText, deviceCount);
     setItemForms(nextForms.length ? nextForms : [{ ...EMPTY_ITEM_FORM }]);
     setSharedForm(EMPTY_SHARED_FORM);
     setSelectedItem(0);
