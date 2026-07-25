@@ -45,6 +45,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [vendor, setVendor] = useState("");
   const [forms, setForms] = useState<InspForm[]>([]);
   const [loadingForms, setLoadingForms] = useState(false);
+  const [previewKey, setPreviewKey] = useState("");
   const [activeRegion, setActiveRegion] = useState<string>("전체");
   const [sortMode, setSortMode] = useState<"recent" | "name">("recent");
   const [activeType, setActiveType] = useState<"전체" | "점검" | "AS">("전체");
@@ -265,8 +266,12 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             {visibleForms.map((f, i) => {
               const st = GUBUN_STYLE[f.gubun] ?? GUBUN_STYLE["점검"];
               const isAS = f.gubun === "AS";
+              const key = `${f.gubun}-${f.date}-${i}`;
+              const previewOpen = previewKey === key;
               const chips: string[] = [];
               if (f.model) chips.push(f.model);
+              if (f.serial) chips.push(`S/N ${f.serial}`);
+              if (f.asset) chips.push(`자산 ${f.asset}`);
               if (f.count) chips.push(`${f.count}대`);
               if (f.region) chips.push(f.region);
               if (f.author) chips.push(f.author);
@@ -283,16 +288,29 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                       <span className="shrink-0 text-sm font-medium text-slate-600">{f.date || "-"}</span>
                     </div>
                     {f.text && (
-                      <button
-                        type="button"
-                        onClick={() => onLoadForm(f.text)}
-                        className="shrink-0 rounded-xl px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition active:scale-95"
-                        style={{ background: accent }}
-                      >
-                        불러오기
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewKey(previewOpen ? "" : key)}
+                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition active:scale-95 ${previewOpen ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600"}`}
+                        >
+                          {previewOpen ? "접기" : "미리보기"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onLoadForm(f.text)}
+                          className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition active:scale-95"
+                          style={{ background: accent }}
+                        >
+                          불러오기
+                        </button>
+                      </div>
                     )}
                   </div>
+
+                  {previewOpen && f.text && (
+                    <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-sans text-xs leading-5 text-slate-700">{f.text}</pre>
+                  )}
 
                   {/* 기종·댓수·지역·작성자 칩 */}
                   {chips.length > 0 && (
