@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -34,14 +34,17 @@ const teamAssignees: Record<Team, string[]> = {
 };
 
 const storageKey = "cs_as_tickets_v4";
-const todayYmd = formatDate(new Date());
-const tomorrowYmd = nextBusinessDay(todayYmd);
+// 날짜는 호출 시점마다 계산한다 — 모듈 로드 시 고정하면 자정 이후 금일/익일 분류가 전부 어긋난다.
+const getTodayYmd = () => formatDate(new Date());
+const getTomorrowYmd = () => nextBusinessDay(getTodayYmd());
+const todayYmdAtLoad = getTodayYmd();
+const tomorrowYmdAtLoad = nextBusinessDay(todayYmdAtLoad);
 
 const defaultTickets: AsTicket[] = [
   {
     id: "as-1",
     team: "A",
-    date: todayYmd,
+    date: todayYmdAtLoad,
     time: "09:30",
     vendor: "11SO클릭스벤처파트너스(유)",
     contact: "010-5422-5078 정무열님",
@@ -57,7 +60,7 @@ const defaultTickets: AsTicket[] = [
   {
     id: "as-2",
     team: "B",
-    date: todayYmd,
+    date: todayYmdAtLoad,
     time: "11:00",
     vendor: "25법률사무소 남산",
     contact: "02-000-0000",
@@ -73,7 +76,7 @@ const defaultTickets: AsTicket[] = [
   {
     id: "as-3",
     team: "C",
-    date: tomorrowYmd,
+    date: tomorrowYmdAtLoad,
     time: "14:00",
     vendor: "27NN유어세무회계컨설팅",
     contact: "010-1111-2222",
@@ -89,7 +92,7 @@ const defaultTickets: AsTicket[] = [
   {
     id: "as-4",
     team: "D",
-    date: todayYmd,
+    date: todayYmdAtLoad,
     time: "16:30",
     vendor: "9SS유니메오",
     contact: "010-3333-4444",
@@ -138,7 +141,7 @@ function monthGrid(date: string) {
 
 function normalizeTicketSchedule(ticket: AsTicket): AsTicket {
   if (ticket.scheduleType === "물류" || ticket.scheduleType === "휴가") return ticket;
-  const isFuture = ticket.date > todayYmd;
+  const isFuture = ticket.date > getTodayYmd();
   const nextStatus = ticket.status === "완료"
     ? "완료"
     : isFuture
@@ -249,6 +252,13 @@ export function AsReception({ author, onUseField }: { author: string; onUseField
 }
 
 function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string) => void }) {
+  const todayYmd = getTodayYmd();
+  const tomorrowYmd = getTomorrowYmd();
+  const [, setDateTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (getTodayYmd() !== todayYmd) setDateTick((tick) => tick + 1); }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [todayYmd]);
   const [tickets, setTicketsState] = useState<AsTicket[]>(loadTickets);
   const [team, setTeam] = useState<Team | "ALL">("ALL");
   const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(scheduleFilters);
@@ -648,11 +658,12 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
 }
 
 function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ticket: AsTicket; customDate: string; onCustomDate: (date: string) => void; onClose: () => void; onApply: (date: string) => void }) {
+  const today = getTodayYmd();
   const options = [
-    ["익일", tomorrowYmd],
-    ["1주", addDays(todayYmd, 7)],
-    ["1달", addMonths(todayYmd, 1)],
-    ["3달", addMonths(todayYmd, 3)],
+    ["익일", getTomorrowYmd()],
+    ["1주", addDays(today, 7)],
+    ["1달", addMonths(today, 1)],
+    ["3달", addMonths(today, 3)],
   ] as const;
 
   return (

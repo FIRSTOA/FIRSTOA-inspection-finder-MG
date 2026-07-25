@@ -13,7 +13,8 @@ function normSerial(value: string) {
 
 // 소형기(A4) 모델 번호 — 이 목록 외에는 전부 A3(대형)로 본다.
 // 소형 컬러: 2100·2101·5521·5526·8900·5473·305 / 소형 흑백: 5700
-const SMALL_MODEL = /(?<!\d)(2100|2101|5521|5526|8900|5473|305|5700)(?!\d)/;
+// lookbehind 미사용(구형 iOS Safari<16.4에서 모듈 로드 실패 방지) — 숫자 경계는 (^|\D)로 판정.
+const SMALL_MODEL = /(?:^|\D)(2100|2101|5521|5526|8900|5473|305|5700)(?!\d)/;
 // 토너 여분 대상이 아닌 기기 — 공기청정기(샤오미·블루스카이 등)·세단기.
 const NON_TONER_DEVICE = /샤오미|블루스카이|공기청정|공청|세단기|세절기|파쇄기/i;
 // 잉크젯(HP 등) — 여분 1세트면 충분.
@@ -21,7 +22,7 @@ const INKJET = /\bHP\b|잉크/i;
 
 export function counterOf(counts: string, label: string): number | null {
   // "컬"이 "큰컬"에 걸리지 않게 lookbehind로 구분한다.
-  const pattern = label === "컬" ? "(?<!큰)컬\\s*[-:]?\\s*([\\d,]+)" : `${label}\\s*[-:]?\\s*([\\d,]+)`;
+  const pattern = label === "컬" ? "(?:^|[^큰])컬\\s*[-:]?\\s*([\\d,]+)" : `${label}\\s*[-:]?\\s*([\\d,]+)`;
   const match = String(counts).match(new RegExp(pattern, "i"));
   return match ? Number(match[1].replace(/,/g, "")) : null;
 }

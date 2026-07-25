@@ -758,13 +758,15 @@ export async function sendLogisticsForm(form: LogisticsFormState, author: string
     const result = await insertRow("logistics_records", row);
     const cfg = await getConfig();
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    const testMode = String(cfg.TEST_MODE || "true").toLowerCase() === "true";
     let room = testRoom;
-    if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
+    if (!testMode) {
       const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
     }
     // 사용자가 명시적으로 전송했으므로 중복 저장이어도 알림은 보낸다.
     await enqueueOutbox(room, text);
-    return { ok: true, message: `${result === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${room}` };
+    // testMode를 반환해야 호출부(App)의 "!res.testMode" 방문집계 게이트가 동작한다(예전엔 undefined라 항상 통과).
+    return { ok: true, message: `${result === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${room}`, testMode };
   } catch (e) { return { ok: false, error: (e as Error).message || "네트워크 오류" }; }
 }
 

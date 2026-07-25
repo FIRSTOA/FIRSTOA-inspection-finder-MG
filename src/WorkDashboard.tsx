@@ -272,11 +272,25 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
     return () => { alive = false; };
   }, [author, kind, range.start, range.end, editWeek.start, selectedDay]);
 
+  // 디바운스 대기 중인 주간노트를 기억해, 주차 전환/화면 이탈 시 유실 없이 즉시 저장(flush)한다.
+  const pendingWeeklyRef = useRef<{ weekStart: string; note: WeeklyNote } | null>(null);
+  const flushWeeklySave = () => {
+    const pending = pendingWeeklyRef.current;
+    if (!pending) return;
+    pendingWeeklyRef.current = null;
+    if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
+    void saveWeeklyNote(author, pending.weekStart, pending.note).catch(() => {});
+  };
+  useEffect(() => () => flushWeeklySave(), [editWeek.start]); // 주차가 바뀌기 직전 flush
+  useEffect(() => () => flushWeeklySave(), []); // 언마운트 시 flush
+
   const scheduleWeeklySave = (nextNote: WeeklyNote) => {
     if (kind !== "weekly" || loading) return;
     if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
+    pendingWeeklyRef.current = { weekStart: editWeek.start, note: nextNote };
     setAutoSaveStatus("saving");
     autoSaveTimer.current = window.setTimeout(async () => {
+      pendingWeeklyRef.current = null;
       setSaving("weekly");
       setError("");
       try {

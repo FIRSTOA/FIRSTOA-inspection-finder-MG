@@ -883,6 +883,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
+  const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
@@ -1061,8 +1062,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           if (!prev || date > prev.date) map.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date });
         }
         setMisuByVendor(map);
+        setMisuFailed(false);
       })
-      .catch((error) => console.error("Misu load failed", error));
+      .catch((error) => { console.error("Misu load failed", error); setMisuFailed(true); }); // 실패를 "미수 없음"으로 오해하지 않게 표시
   }, []);
 
   useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
@@ -1672,6 +1674,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         </div>
         <div className="mt-2 flex gap-2">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+          {misuFailed && <span className="self-center whitespace-nowrap rounded bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
         {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
