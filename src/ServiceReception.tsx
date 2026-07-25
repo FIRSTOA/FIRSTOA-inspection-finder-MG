@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { searchLeaseList, getAsHistory, type LeaseHit } from "./api";
+import { searchLeaseList, getAsHistory, findWorkinMapName, type LeaseHit } from "./api";
 import { kstDate } from "./visits";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -18,6 +18,13 @@ function pick(lease: LeaseHit | null, ...keys: string[]) {
 function fmtDot(value: string) {
   const m = String(value).match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
   return m ? `${m[1]}. ${Number(m[2])}. ${Number(m[3])}` : String(value || "").trim();
+}
+function fmtDotYY(value: string) {
+  return fmtDot(value).replace(/^\d{2}(\d{2})\./, "$1.");
+}
+function korMD(date: string) {
+  const m = String(date).match(/\d{4}-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[1])}월 ${Number(m[2])}일` : String(date || "");
 }
 function fmtWon(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
@@ -66,6 +73,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [lease, setLease] = useState<LeaseHit | null>(null);
   const [manual, setManual] = useState<Manual>(EMPTY_MANUAL);
   const [asHistory, setAsHistory] = useState<{ date: string; content: string }[]>([]);
+  const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
 
   const runSearch = async () => {
@@ -84,14 +92,16 @@ export default function ServiceReception({ author }: { author: string }) {
     setLease(hit);
     setResults([]);
     setAsHistory([]);
+    setWorkinName("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const serial = pick(hit, "시리얼번호(기번)", "기번");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial));
+    if (vendor) setWorkinName(await findWorkinMapName(vendor));
   };
 
   const report = useMemo(() => {
     if (!lease) return "";
-    const 업체명 = pick(lease, "거래처명", "_업체명", "업체명");
+    const 업체명 = workinName || pick(lease, "거래처명", "_업체명", "업체명");
     const 등급 = pick(lease, "등급");
     const 모델명 = pick(lease, "모델명", "기종");
     const 기번 = pick(lease, "시리얼번호(기번)", "기번");
@@ -121,7 +131,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const 구분 = type === "IT AS" ? "IT A/S" : "A/S";
     const T = "\t";
     const lines = [
-      `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDot(종료일)}${T}지역${T}${지역}${T}접수일${T}${receiptDay()}`,
+      `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${지역}${T}접수일${T}${receiptDay()}`,
       `기번${T}${기번}${T}자산번호${T}${자산번호}`,
       `접수유형${T}${route}${T}접수분야${T}${구분}`,
       `임대리스트순번${T}${순}${T}장비소유주${T}${장비소유주}`,
@@ -146,11 +156,11 @@ export default function ServiceReception({ author }: { author: string }) {
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
       `AS접수횟수(시리얼기준)${T}${asHistory.length}회`,
       `AS접수히스토리(시리얼기준)`,
-      asHistory.length ? asHistory.map((h) => `■ 날짜: ${h.date}\n■ 내용: ${h.content}`).join("\n\n") : "없음",
+      asHistory.length ? asHistory.map((h) => `■ 날짜: ${korMD(h.date)}\n■ 내용: ${h.content}`).join("\n\n") : "없음",
       `자가사용내역(최근6개월)`,
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, route, type]);
+  }, [lease, manual, asHistory, route, type, workinName]);
 
   const copyReport = async () => {
     if (!report) return;

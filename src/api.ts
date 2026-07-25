@@ -229,6 +229,27 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   return out.slice(0, 30);
 }
 
+// 워킨맵 이름 조회 — 카톡 보고용 업체명(예: "17N주식회사 무암 (Mooam)-분기마감")을 그대로 쓰기 위함.
+function coreVendorKey(name: string) {
+  return String(name || "").replace(/\(.*?\)/g, "").replace(/㈜|주식회사|유한회사|\(주\)/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
+}
+export async function findWorkinMapName(vendor: string): Promise<string> {
+  const core = coreVendorKey(vendor);
+  if (core.length < 2) return "";
+  const nameCol = encodeURIComponent("name");
+  const probe = core.slice(0, 4);
+  try {
+    const rows = await selectRows<{ name?: string }>("workin_map_places", `select=name&${nameCol}=ilike.*${encodeURIComponent(probe)}*&limit=30`);
+    const hit = rows.find((r) => {
+      const k = coreVendorKey(r.name || "");
+      return k.includes(core) || core.includes(k);
+    });
+    return hit?.name || "";
+  } catch {
+    return "";
+  }
+}
+
 // AS 접수이력 — 업체명 기준(기번은 임대리스트와 as_records가 다를 수 있어 업체명이 안전). 시리얼도 보조로.
 export async function getAsHistory(vendor: string, serial: string): Promise<{ date: string; content: string }[]> {
   const dateCol = encodeURIComponent("작성일");
