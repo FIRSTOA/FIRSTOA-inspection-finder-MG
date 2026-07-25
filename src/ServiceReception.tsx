@@ -91,6 +91,14 @@ function shiftMonths(date: string, months: number) {
   d.setMonth(d.getMonth() + months);
   return kstDate(d);
 }
+// 임대리스트 거래처명에 붙는 엑셀 잔재(_x000d_)와 뒷줄 키맨 메모를 떼고 첫 줄만 쓴다.
+function cleanVendorName(value: string) {
+  return String(value || "").split(/_x000d_|\r|\n/)[0].trim();
+}
+// 24시간제 HH:MM (ko-KR + hour12:false 조합이 환경에 따라 12시간제로 나오는 문제 회피)
+function kstNowHM() {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+}
 function teamFromRegion(region: string) {
   const m = String(region || "").match(/수도권([A-D])/);
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
@@ -101,11 +109,11 @@ function receptionToFieldText(row: ServiceReceptionRow) {
     `작성자:${row.author || ""}`,
     "구분: AS",
     "레벨:1",
-    "등급:",
-    `업체명:${row.vendor}`,
+    `등급:${row.grade || ""}`,
+    `업체명:${cleanVendorName(row.vendor)}`,
     "부서명:",
     `지역:${teamFromRegion(row.region)}`,
-    "키맨/접수자:",
+    `키맨/접수자:${[row.receiver_phone, row.receiver_name].filter(Boolean).join(" ")}`,
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "1.",
     `모델명: ${row.model}`,
@@ -119,7 +127,7 @@ function receptionToFieldText(row: ServiceReceptionRow) {
     "여분: K- C- M- Y- 폐-",
     "한틴이카유무:",
     "주차비지원유무:",
-    `특이사항: ${[row.paid, row.notes].filter(Boolean).join(" / ")}`,
+    "특이사항:",
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "※부품신청※",
     "보증기간 내 여부 :",
@@ -142,7 +150,7 @@ function receptionToFieldText(row: ServiceReceptionRow) {
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
-  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
 }
 function shiftDate(date: string, days: number) {
   const d = new Date(`${date}T12:00:00+09:00`);
@@ -357,6 +365,9 @@ export default function ServiceReception({ author, onUseField }: { author: strin
       serial: pick(lease, "시리얼번호(기번)", "기번"),
       model: pick(lease, "모델명", "기종"),
       region,
+      grade: pick(lease, "등급"),
+      receiver_name: manual.접수자성함.trim(),
+      receiver_phone: manual.접수자연락처.trim(),
       title: manual.제목,
       symptom: manual.증상,
       paid: manual.유상무상,
@@ -427,14 +438,14 @@ export default function ServiceReception({ author, onUseField }: { author: strin
     setScheduleBusyId(row.id);
     try {
       const today = kstDate();
-      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(row.vendor)}&limit=1`).catch(() => []);
-      if (dup.length && !window.confirm(`오늘 ${row.vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return;
-      const nowTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+      const vendor = cleanVendorName(row.vendor);
+      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
+      if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return;
       await upsertRow("as_tickets", {
         id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        team: teamFromRegion(row.region), date: today, time: nowTime,
-        vendor: row.vendor, contact: "", address: "", department: "",
-        model: row.model, serial: row.serial,
+        team: teamFromRegion(row.region), date: today, time: kstNowHM(),
+        vendor, contact: [row.receiver_phone, row.receiver_name].filter(Boolean).join(" "), address: "", department: "",
+        model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade,
         issue: [row.title, row.symptom].filter(Boolean).join(" / ").slice(0, 500) || "서비스접수 연동",
         assignee: "", status: "접수", scheduleType: "AS",
       }, "id");

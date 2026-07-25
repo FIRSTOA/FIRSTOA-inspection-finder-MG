@@ -20,6 +20,8 @@ export type AsTicket = {
   department: string;
   model: string;
   serial: string;
+  asset: string;
+  grade: string;
   issue: string;
   assignee: string;
   status: AsStatus;
@@ -100,6 +102,8 @@ function blankTicket(date: string): AsTicket {
     department: "",
     model: "",
     serial: "",
+    asset: "",
+    grade: "",
     issue: "",
     assignee: "",
     status: "접수",
@@ -112,6 +116,8 @@ function loadTickets(): AsTicket[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
     return Array.isArray(parsed) ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => normalizeTicketSchedule({
+      asset: "",
+      grade: "",
       ...ticket,
       status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
       scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
@@ -121,10 +127,10 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,issue,assignee,status,scheduleType";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,issue,assignee,status,scheduleType";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -179,7 +185,7 @@ function buildFieldAsText(ticket: AsTicket, author: string) {
     `작성자:${author || ticket.assignee || ""}`,
     "구분: AS",
     "레벨:1",
-    "등급:",
+    `등급:${ticket.grade || ""}`,
     `업체명:${ticket.vendor}`,
     `부서명:${ticket.department}`,
     `지역:${ticket.team}`,
@@ -188,7 +194,7 @@ function buildFieldAsText(ticket: AsTicket, author: string) {
     "1.",
     `모델명: ${ticket.model}`,
     `시리얼넘버: ${ticket.serial}`,
-    "자산기번:",
+    `자산기번: ${ticket.asset || ""}`.trimEnd(),
     `내용: ${ticket.issue}`,
     "처리내용:",
     "매수:흑- 컬- 큰컬- 합-",
@@ -197,7 +203,7 @@ function buildFieldAsText(ticket: AsTicket, author: string) {
     "여분: K- C- M- Y- 폐-",
     "한틴이카유무:",
     "주차비지원유무:",
-    `특이사항: 방문일정 ${ticket.date} ${ticket.time} / 주소 ${ticket.address} / 담당 ${ticket.assignee || "미배정"}`,
+    "특이사항:",
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "※부품신청※",
     "보증기간 내 여부 :",
@@ -213,7 +219,7 @@ function buildFieldAsText(ticket: AsTicket, author: string) {
     "수량:",
     "출고여부:",
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
-    `도착 시간: ${ticket.time}`,
+    "도착 시간:",
     "소요 시간:",
   ].join("\n");
 }
@@ -660,6 +666,8 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           <Field label="주소" value={draft.address} onChange={(value) => set("address", value)} />
           <Field label="기종" value={draft.model} onChange={(value) => set("model", value)} />
           <Field label="시리얼" value={draft.serial} onChange={(value) => set("serial", value)} />
+          <Field label="자산기번" value={draft.asset || ""} onChange={(value) => set("asset", value)} />
+          <Field label="등급" value={draft.grade || ""} onChange={(value) => set("grade", value)} />
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             접수내용
             <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={5} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
