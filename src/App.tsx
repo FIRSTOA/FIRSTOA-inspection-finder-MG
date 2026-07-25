@@ -5282,7 +5282,8 @@ export default function App() {
               {sidebarCollapsed ? "›" : "‹"}
             </button>
           </div>
-          <nav className={`flex-1 space-y-5 py-4 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
+          <nav className={`min-h-0 flex-1 space-y-4 overflow-y-auto py-4 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
+            <div className="space-y-1">
             {standaloneItems.map(([key, label]) => (
               <button key={key} type="button" title={label} onClick={() => setScreen(key)}
                 className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
@@ -5290,6 +5291,7 @@ export default function App() {
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
+            </div>
             {navGroups.map((group) => (
               <div key={group.title}>
                 <button type="button" title={group.title} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : toggleNavGroup(group.title)} className={`mb-1 flex w-full items-center rounded-md py-2 text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "justify-center px-1" : "justify-between px-3 text-left"}`}>
@@ -5307,16 +5309,16 @@ export default function App() {
                 </div>}
               </div>
             ))}
-            <div className="border-t border-white/10 pt-4">
-              {bottomItems.map(([key, label]) => (
-                <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                  className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                  <span>{sidebarCollapsed ? "현황" : label}</span>
-                  {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                </button>
-              ))}
-            </div>
           </nav>
+          <div className={`shrink-0 border-t border-white/10 py-3 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
+            {bottomItems.map(([key, label]) => (
+              <button key={key} type="button" title={label} onClick={() => setScreen(key)}
+                className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                <span>{sidebarCollapsed ? "현황" : label}</span>
+                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+              </button>
+            ))}
+          </div>
           <div className={`border-t border-white/10 py-4 text-xs text-slate-400 ${sidebarCollapsed ? "px-2 text-center" : "px-5"}`}>{sidebarCollapsed ? (author?.slice(0, 1) || "-") : (author || "작성자 미선택")}</div>
       </aside>
 
@@ -5324,7 +5326,7 @@ export default function App() {
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0F172A] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
-        <header className={`mb-2.5 flex items-center justify-between ${screen === "walkingMap" ? "mb-0 h-12 bg-[#0F172A] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 bg-[#0F172A] px-3 py-5 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : ""}`}>
+        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-12 bg-[#0F172A] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-12 bg-[#0F172A] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : "mb-2.5"}`}>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
               className={`flex h-8 w-8 items-center justify-center rounded-md border transition active:scale-95 lg:hidden ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-white/15 bg-white/10 hover:bg-white/20"}`}>
