@@ -278,6 +278,14 @@ function misuBalanceLabel(value: string) {
   return digits ? `${Number(digits).toLocaleString()}원` : String(value || "").trim();
 }
 
+// 매월점검 이름 맨 앞 숫자 = 마감일(1~31). 세금계산서용 카운터 검침을 위해 이 날 3~5일 전에 방문한다.
+function monthlyClosingDay(name: string) {
+  const match = String(name).match(/^\s*(\d{1,2})/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  return day >= 1 && day <= 31 ? day : null;
+}
+
 // 진행률 요약에서만 자동연장된 계약의 종료월을 현재 주기로 투영한다.
 function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarter) {
   const original = contractEnd(place, baseYear);
@@ -735,7 +743,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [quarterHasRenewal, setQuarterHasRenewal] = useState(false);
   const [quarterHasMisu, setQuarterHasMisu] = useState(false);
   const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
-  const [monthlyOrder, setMonthlyOrder] = useState<"default" | "date">("default");
+  const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">("default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
@@ -1051,19 +1059,19 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         return renewalOrder === "asc" ? leftEnd - rightEnd : rightEnd - leftEnd;
       });
     }
-    // 매월점검 날짜순: 최근 점검일 오래된 순(이력 없으면 최우선).
-    if (kindFilter === "monthly" && monthlyOrder === "date") {
+    // 매월점검 마감일순: 이름 맨 앞 숫자(마감일 1~31) 오름차순. 마감일 없으면 뒤로.
+    if (kindFilter === "monthly" && monthlyOrder === "closing") {
       return [...rows].sort((left, right) => {
-        const leftDate = latestInspectionByPlace.get(left.id) || "";
-        const rightDate = latestInspectionByPlace.get(right.id) || "";
-        if (!leftDate && !rightDate) return 0;
-        if (!leftDate) return -1;
-        if (!rightDate) return 1;
-        return leftDate.localeCompare(rightDate);
+        const leftDay = monthlyClosingDay(left.name);
+        const rightDay = monthlyClosingDay(right.name);
+        if (leftDay === null && rightDay === null) return 0;
+        if (leftDay === null) return 1;
+        if (rightDay === null) return -1;
+        return leftDay - rightDay;
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, latestInspectionByPlace]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1429,8 +1437,9 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
         </div>}
         {kindFilter === "monthly" && <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-2 gap-1">
-            {([['default', '기본순'], ['date', '날짜순(오래된순)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
+            {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
+          <div className="mt-1 text-[10px] font-bold text-slate-400">이름 앞 숫자 = 마감일. 검침·세금계산서 위해 3~5일 전 방문용.</div>
         </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>
