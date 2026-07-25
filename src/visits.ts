@@ -1,5 +1,5 @@
 import { md5 } from "./md5";
-import { insertRow, selectRows, updateRows, upsertRow } from "./supabase";
+import { insertRow, selectAllRowsFast, selectRows, updateRows, upsertRow } from "./supabase";
 
 export type WorkKind = "inspection" | "as" | "delivery" | "etc" | "pc" | "misu" | "bulman" | "recontract" | "overage";
 
@@ -81,8 +81,8 @@ type DbVisit = { id: string; created_at: string; work_date: string; author: stri
 
 export async function getVisits(author: string, start: string, end: string): Promise<VisitRow[]> {
   if (!author) return [];
-  const q = `select=*&author=eq.${encodeURIComponent(author)}&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled&order=work_date.asc,arrival_time.asc,created_at.asc`;
-  const rows = await selectRows<DbVisit>("visit_logs", q);
+  const q = `select=*&author=eq.${encodeURIComponent(author)}&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled&order=work_date.asc,arrival_time.asc,created_at.asc,id.asc`;
+  const rows = await selectAllRowsFast<DbVisit>("visit_logs", q);
   return rows.map((r) => ({
     id: r.id, created_at: r.created_at, workDate: r.work_date, author: r.author, vendor: r.vendor,
     visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0,
@@ -93,8 +93,8 @@ export async function getVisits(author: string, start: string, end: string): Pro
 }
 
 export async function getTeamVisits(start: string, end: string): Promise<VisitRow[]> {
-  const q = `select=*&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled&order=work_date.asc,arrival_time.asc,created_at.asc`;
-  const rows = await selectRows<DbVisit>("visit_logs", q);
+  const q = `select=*&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled&order=work_date.asc,arrival_time.asc,created_at.asc,id.asc`;
+  const rows = await selectAllRowsFast<DbVisit>("visit_logs", q);
   return rows.map((r) => ({
     id: r.id, created_at: r.created_at, workDate: r.work_date, author: r.author, vendor: r.vendor,
     visited: r.visited, arrivalTime: r.arrival_time || "", machineCount: r.machine_count || 0,

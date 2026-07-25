@@ -1,6 +1,6 @@
 import { AUTHOR_BOOK, AUTHOR_TEAMS, type AuthorTeam } from "./authors";
 import { md5 } from "./md5";
-import { insertRow, selectRows, updateRows } from "./supabase";
+import { insertRow, selectAllRowsFast, updateRows } from "./supabase";
 
 export type ActivityKind =
   | "inspection"
@@ -138,9 +138,10 @@ type DbActivityEvent = {
 };
 
 export async function getActivityEvents(start: string, end: string): Promise<ActivityEvent[]> {
-  const rows = await selectRows<DbActivityEvent>(
+  // 1,000행 절단 방지: 전체 페이지네이션 + id 타이브레이커로 페이지 경계 중복/누락 차단.
+  const rows = await selectAllRowsFast<DbActivityEvent>(
     "activity_events",
-    `select=*&activity_date=gte.${start}&activity_date=lte.${end}&order=activity_date.desc,created_at.desc`,
+    `select=*&activity_date=gte.${start}&activity_date=lte.${end}&order=activity_date.desc,created_at.desc,id.desc`,
   );
   return rows.map((row) => ({
     id: row.id,

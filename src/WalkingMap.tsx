@@ -995,9 +995,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const archiveDate = encodeURIComponent("작성일");
     const fetchArchive = async () => {
       try {
-        return await selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(`${baseCols},_기번목록`)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`);
+        return await selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(`${baseCols},_기번목록`)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc,id.desc`);
       } catch {
-        return selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(baseCols)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`);
+        return selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(baseCols)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc,id.desc`);
       }
     };
     void Promise.all([
@@ -1048,7 +1048,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const loadMisu = useCallback(() => {
     const select = encodeURIComponent("_업체명,미수개월,미수잔액,입력일,_출처");
     const sourceCol = encodeURIComponent("_출처");
-    void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*`)
+    void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`)
       .then((rows) => {
         const map = new Map<string, { months: string; balance: string; date: string }>();
         for (const row of rows) {
