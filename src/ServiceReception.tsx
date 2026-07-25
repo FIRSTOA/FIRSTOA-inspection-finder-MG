@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  searchLeaseList, getAsHistory, findWorkinMapName, sendServiceReception,
+  searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
   saveServiceReception, getServiceReceptions, setServiceReceptionStatus,
-  type LeaseHit, type ServiceReceptionRow,
+  type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot,
 } from "./api";
 import { kstDate } from "./visits";
 
@@ -26,9 +26,13 @@ function fmtDot(value: string) {
 function fmtDotYY(value: string) {
   return fmtDot(value).replace(/^\d{2}(\d{2})\./, "$1.");
 }
-function korMD(date: string) {
-  const m = String(date).match(/\d{4}-(\d{2})-(\d{2})/);
-  return m ? `${Number(m[1])}월 ${Number(m[2])}일` : String(date || "");
+function korYMD(date: string) {
+  const m = String(date).match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1].slice(2)}년 ${Number(m[2])}월 ${Number(m[3])}일` : String(date || "");
+}
+function counterOf(counts: string, label: string) {
+  const m = String(counts).match(new RegExp(`${label}\\s*([0-9,]+)`));
+  return m ? Number(m[1].replace(/,/g, "")) : null;
 }
 function fmtWon(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
@@ -94,7 +98,8 @@ export default function ServiceReception({ author }: { author: string }) {
   const [lease, setLease] = useState<LeaseHit | null>(null);
   const [manual, setManual] = useState<Manual>(EMPTY_MANUAL);
   const [manualVendor, setManualVendor] = useState("");
-  const [asHistory, setAsHistory] = useState<{ date: string; content: string }[]>([]);
+  const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
+  const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -135,12 +140,18 @@ export default function ServiceReception({ author }: { author: string }) {
     setLease(hit);
     setResults([]);
     setAsHistory([]);
+    setSnapshots([]);
     setWorkinName("");
     setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const serial = pick(hit, "시리얼번호(기번)", "기번");
-    if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial));
-    if (vendor) setWorkinName(await findWorkinMapName(vendor));
+    const assetNo = pick(hit, "자산번호");
+    if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
+    if (vendor) {
+      const [name, snaps] = await Promise.all([findWorkinMapName(vendor), getRecentInspections(vendor)]);
+      setWorkinName(name);
+      setSnapshots(snaps);
+    }
   };
 
   const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || manualVendor.trim();
@@ -175,6 +186,25 @@ export default function ServiceReception({ author }: { author: string }) {
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
     const 교체일로부터 = /\d{4}[.\-/]/.test(교체일) ? `${monthsBetween(교체일, kstDate())}사용중` : "";
     const 구분 = type === "IT AS" ? "IT A/S" : "A/S";
+    // AS이력: 이 기기(시리얼/자산기번 일치)만 우선. 기기교체 등으로 일치가 없으면 업체기준으로 폴백해 표기.
+    const serialEntries = asHistory.filter((h) => h.serialMatch);
+    const basisEntries = serialEntries.length ? serialEntries : asHistory;
+    const basisLabel = serialEntries.length ? "시리얼기준" : "업체기준";
+    // 자가사용내역: 최근 점검 2회(전방문/전전방문) 매수·토너·여분 비교.
+    const usage: string[] = [];
+    const [snap0, snap1] = snapshots;
+    if (snap0) usage.push(`■ 전방문 ${snap0.date} · 매수 ${snap0.counts || "-"} · 토너 ${snap0.toner || "-"} · 여분 ${snap0.spare || "-"}`);
+    if (snap1) usage.push(`■ 전전방문 ${snap1.date} · 매수 ${snap1.counts || "-"} · 토너 ${snap1.toner || "-"} · 여분 ${snap1.spare || "-"}`);
+    if (snap0 && snap1) {
+      const parts: string[] = [];
+      const bk = counterOf(snap0.counts, "흑");
+      const bkPrev = counterOf(snap1.counts, "흑");
+      const cl = counterOf(snap0.counts, "컬");
+      const clPrev = counterOf(snap1.counts, "컬");
+      if (bk !== null && bkPrev !== null) parts.push(`흑 ${(bk - bkPrev).toLocaleString()}매`);
+      if (cl !== null && clPrev !== null) parts.push(`컬 ${(cl - clPrev).toLocaleString()}매`);
+      if (parts.length) usage.push(`■ 두 방문 사용량: ${parts.join(" · ")}`);
+    }
     const T = "\t";
     const lines = [
       `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,
@@ -200,13 +230,14 @@ export default function ServiceReception({ author }: { author: string }) {
       `상태${T}${manual.증상}`,
       `참고사항${T}${manual.참고사항}`,
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
-      `AS접수횟수(시리얼기준)${T}${asHistory.length}회`,
-      `AS접수히스토리(시리얼기준)`,
-      asHistory.length ? asHistory.map((h) => `■ 날짜: ${korMD(h.date)}\n■ 내용: ${h.content}`).join("\n\n") : "없음",
+      `AS접수횟수(${basisLabel})${T}${basisEntries.length}회`,
+      `AS접수히스토리(${basisLabel})`,
+      basisEntries.length ? basisEntries.map((h) => `■ 날짜: ${korYMD(h.date)}\n■ 내용: ${h.content}`).join("\n\n") : "없음",
       `자가사용내역(최근6개월)`,
+      usage.length ? usage.join("\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, route, type, workinName, region]);
+  }, [lease, manual, asHistory, snapshots, route, type, workinName, region]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -238,7 +269,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor("");
   };
 
@@ -368,7 +399,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 <span>지역 {region || "-"}</span>
                 <span>종료 {pick(lease, "종료일") || "-"}</span>
                 <span>미수 {pick(lease, "미수개월수") || "0"}개월</span>
-                <span className="text-rose-600">{asHistory.length ? `AS이력 ${asHistory.length}회` : "AS이력 없음"}</span>
+                <span className="text-rose-600">{asHistory.length ? `AS이력 기기 ${asHistory.filter((h) => h.serialMatch).length}회 · 업체 ${asHistory.length}회` : "AS이력 없음"}</span>
               </div>
             </div>}
             {!lease && type === "원격이관" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명 직접 입력 (임대리스트 미매칭 시)

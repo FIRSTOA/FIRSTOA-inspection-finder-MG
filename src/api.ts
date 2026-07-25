@@ -288,30 +288,76 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
   }
 }
 
-// AS 접수이력 — 업체명 기준(기번은 임대리스트와 as_records가 다를 수 있어 업체명이 안전). 시리얼도 보조로.
-export async function getAsHistory(vendor: string, serial: string): Promise<{ date: string; content: string }[]> {
+// AS 접수이력. 시리얼/자산기번 일치(serialMatch)를 우선 판별하고, 업체명은 법인표기·부서명 변형에
+// 대응하도록 핵심어(coreVendorKey)로 넓게 찾은 뒤 클라이언트에서 거른다.
+export type AsHistoryEntry = { date: string; content: string; serialMatch: boolean };
+function normId(value: string) {
+  return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
+}
+export async function getAsHistory(vendor: string, serial: string, assetNo = ""): Promise<AsHistoryEntry[]> {
   const dateCol = encodeURIComponent("작성일");
   const run = async (col: string, val: string) => {
     if (!val.trim()) return [] as Record<string, unknown>[];
     try {
-      return await selectRows<Record<string, unknown>>("as_records", `select=*&${encodeURIComponent(col)}=ilike.*${encodeURIComponent(val.trim())}*&order=${dateCol}.desc&limit=20`);
+      return await selectRows<Record<string, unknown>>("as_records", `select=*&${encodeURIComponent(col)}=ilike.*${encodeURIComponent(val.trim())}*&order=${dateCol}.desc&limit=60`);
     } catch {
       return [] as Record<string, unknown>[];
     }
   };
-  const rows = [...await run("_업체명", vendor), ...await run("시리얼넘버", serial)];
+  const core = coreVendorKey(vendor);
+  const probe = core.slice(0, 4);
+  const vendorRows = probe.length >= 2
+    ? (await run("_업체명", probe)).filter((r) => {
+        const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
+        return key.includes(core) || core.includes(key);
+      })
+    : [];
+  const idRows = [
+    ...await run("시리얼넘버", serial), ...await run("자산기번", serial),
+    ...await run("시리얼넘버", assetNo), ...await run("자산기번", assetNo),
+  ];
+  const leaseIds = [normId(serial), normId(assetNo)].filter((v) => v.length >= 3);
   const seen = new Set<string>();
-  const out: { date: string; content: string }[] = [];
-  for (const r of rows) {
+  const out: AsHistoryEntry[] = [];
+  for (const r of [...idRows, ...vendorRows]) {
     const content = String(r["내용"] || "").trim();
     if (!content) continue;
     const date = String(r["작성일"] || "").slice(0, 10);
     const key = `${date}|${content.slice(0, 24)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ date, content });
+    const rowIds = [normId(String(r["시리얼넘버"] || "")), normId(String(r["자산기번"] || ""))].filter((v) => v.length >= 3);
+    const serialMatch = leaseIds.some((a) => rowIds.some((b) => a === b || a.includes(b) || b.includes(a)));
+    out.push({ date, content, serialMatch });
   }
-  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
+}
+
+// 자가사용내역 대체: 최근 점검 2회(전방문·전전방문)의 매수/토너잔량/여분을 불러와 비교 근거로 쓴다.
+export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string };
+export async function getRecentInspections(vendor: string): Promise<InspectionSnapshot[]> {
+  const core = coreVendorKey(vendor);
+  const probe = core.slice(0, 4);
+  if (probe.length < 2) return [];
+  const dateCol = encodeURIComponent("작성일");
+  try {
+    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=40`);
+    return rows
+      .filter((r) => {
+        const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
+        return key.includes(core) || core.includes(key);
+      })
+      .map((r) => ({
+        date: String(r["작성일"] || "").slice(0, 10),
+        counts: String(r["매수"] || "").trim(),
+        toner: String(r["토너잔량"] || "").trim(),
+        spare: String(r["여분"] || "").trim(),
+      }))
+      .filter((s) => s.date)
+      .slice(0, 2);
+  } catch {
+    return [];
+  }
 }
 
 export async function searchVendors(q: string): Promise<SearchResp> {
