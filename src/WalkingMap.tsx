@@ -990,11 +990,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const startDate = dateDaysAgo(370);
     // 과거 visit_logs에 원문이 없는 기록만 보완한다. 목록 전체를 빠르게
     // 받을 수 있도록 큰 _원문 대신 비교에 필요한 열만 조회한다.
-    const archiveSelect = encodeURIComponent("작성일,_업체명,업체명,모델명,시리얼넘버,자산기번,매수,토너잔량,폐통,여분");
+    // _기번목록(전 기기 기번 배열)은 jeomgeom-serial-index.sql 실행 후 생기므로 실패 시 없이 재시도.
+    const baseCols = "작성일,_업체명,업체명,모델명,시리얼넘버,자산기번,매수,토너잔량,폐통,여분";
     const archiveDate = encodeURIComponent("작성일");
+    const fetchArchive = async () => {
+      try {
+        return await selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(`${baseCols},_기번목록`)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`);
+      } catch {
+        return selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(baseCols)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`);
+      }
+    };
     void Promise.all([
       getTeamVisits(startDate, kstDate()),
-      selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${archiveSelect}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`),
+      fetchArchive(),
     ])
       .then(([rows, archiveRows]) => {
         const archiveByDate = new Map<string, InspectionArchiveRow[]>();
@@ -1016,13 +1024,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         });
         setInspectionVisits(inspections);
         // 원본(jeomgeom) 행도 매칭 풀로 보관 — 방문기록이 없어도 업체명/기번으로 이력을 찾을 수 있게.
-        setArchiveVisits(archiveRows.map((row) => ({
-          workDate: String(row["작성일"] || "").slice(0, 10),
-          vendor: String(row["_업체명"] || row["업체명"] || "").trim(),
-          sourceText: archiveText(row),
-          note: "",
-          idKeys: [normalizeIdKey(String(row["시리얼넘버"] || "")), normalizeIdKey(String(row["자산기번"] || ""))].filter((key) => key.length >= 4),
-        })).filter((row) => row.workDate && (row.vendor || row.idKeys.length)));
+        // _기번목록엔 그 방문 양식의 모든 기기 기번이 들어 있어 이름이 달라도 기기로 매칭된다.
+        setArchiveVisits(archiveRows.map((row) => {
+          const listed = Array.isArray(row["_기번목록"]) ? (row["_기번목록"] as unknown[]).map((v) => String(v)) : [];
+          const idKeys = Array.from(new Set(
+            [...listed, String(row["시리얼넘버"] || ""), String(row["자산기번"] || "")]
+              .map(normalizeIdKey)
+              .filter((key) => key.length >= 4),
+          ));
+          return {
+            workDate: String(row["작성일"] || "").slice(0, 10),
+            vendor: String(row["_업체명"] || row["업체명"] || "").trim(),
+            sourceText: archiveText(row),
+            note: "",
+            idKeys,
+          };
+        }).filter((row) => row.workDate && (row.vendor || row.idKeys.length)));
       })
       .catch((error) => console.error("Workin map visit history load failed", error));
   }, []);
@@ -1291,17 +1308,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     if (targetId === null || deviceHistoryCache[targetId] !== undefined) return;
     const place = places.find((item) => item.id === targetId);
     if (!place || place.kind !== "quarter") return;
-    const vendor = (inspectionHistoryByPlace.get(targetId) || [])[0]?.vendor || "";
-    if (!vendor) { setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] })); return; }
+    // 같은 자리라도 시기마다 업체명이 다를 수 있어(법인 변경 등) 매칭된 이름 변형 전부에서 찾는다.
+    const vendors = Array.from(new Set((inspectionHistoryByPlace.get(targetId) || []).map((visit) => visit.vendor).filter(Boolean))).slice(0, 3);
+    if (!vendors.length) { setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] })); return; }
     const serialKey = normalizeIdKey(deviceSerial(place));
     const modelKey = normalizeIdKey(place.comment.split("/")[0] || "");
     let alive = true;
     void (async () => {
       try {
-        const rows = await selectRows<Record<string, unknown>>(
+        const groups = await Promise.all(vendors.map((vendorName) => selectRows<Record<string, unknown>>(
           "jeomgeom",
-          `select=${encodeURIComponent("작성일,_원문")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(vendor)}&order=${encodeURIComponent("작성일")}.desc&limit=10`,
-        );
+          `select=${encodeURIComponent("작성일,_업체명,_원문")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(vendorName)}&order=${encodeURIComponent("작성일")}.desc&limit=10`,
+        ).catch(() => [] as Record<string, unknown>[])));
+        const rows = groups.flat().sort((a, b) => String(b["작성일"] || "").localeCompare(String(a["작성일"] || "")));
         const out: VisitLike[] = [];
         const seen = new Set<string>();
         for (const row of rows) {
@@ -1315,7 +1334,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           if (!block && blocks.length === 1 && serialKey.length < 4) block = blocks[0];
           if (!block) continue;
           seen.add(date);
-          out.push({ workDate: date, vendor, sourceText: block, note: "" });
+          out.push({ workDate: date, vendor: String(row["_업체명"] || "").trim(), sourceText: block, note: "" });
           if (out.length >= 2) break;
         }
         if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: out }));
