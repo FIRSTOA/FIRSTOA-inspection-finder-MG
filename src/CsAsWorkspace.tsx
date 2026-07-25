@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -37,75 +38,9 @@ const storageKey = "cs_as_tickets_v4";
 // 날짜는 호출 시점마다 계산한다 — 모듈 로드 시 고정하면 자정 이후 금일/익일 분류가 전부 어긋난다.
 const getTodayYmd = () => formatDate(new Date());
 const getTomorrowYmd = () => nextBusinessDay(getTodayYmd());
-const todayYmdAtLoad = getTodayYmd();
-const tomorrowYmdAtLoad = nextBusinessDay(todayYmdAtLoad);
 
-const defaultTickets: AsTicket[] = [
-  {
-    id: "as-1",
-    team: "A",
-    date: todayYmdAtLoad,
-    time: "09:30",
-    vendor: "11SO클릭스벤처파트너스(유)",
-    contact: "010-5422-5078 정무열님",
-    address: "서울 강남구 강남대로 320",
-    department: "본사",
-    model: "APEOSPORT-C2060",
-    serial: "227683",
-    issue: "출력물 줄감 및 소음",
-    assignee: "",
-    status: "접수",
-    scheduleType: "AS",
-  },
-  {
-    id: "as-2",
-    team: "B",
-    date: todayYmdAtLoad,
-    time: "11:00",
-    vendor: "25법률사무소 남산",
-    contact: "02-000-0000",
-    address: "강서 권역",
-    department: "사무실",
-    model: "D420",
-    serial: "792090564870",
-    issue: "용지 걸림 반복",
-    assignee: "권태혁",
-    status: "배정",
-    scheduleType: "AS",
-  },
-  {
-    id: "as-3",
-    team: "C",
-    date: tomorrowYmdAtLoad,
-    time: "14:00",
-    vendor: "27NN유어세무회계컨설팅",
-    contact: "010-1111-2222",
-    address: "강남 권역",
-    department: "회계팀",
-    model: "SL-X3220NR",
-    serial: "0A6XBJWC000ANJ",
-    issue: "스캔 전송 불가",
-    assignee: "이민구",
-    status: "익일",
-    scheduleType: "익일AS",
-  },
-  {
-    id: "as-4",
-    team: "D",
-    date: todayYmdAtLoad,
-    time: "16:30",
-    vendor: "9SS유니메오",
-    contact: "010-3333-4444",
-    address: "경기 권역",
-    department: "관리사무소",
-    model: "AP C3060",
-    serial: "C3060-0001",
-    issue: "토너 인식 오류",
-    assignee: "양승원",
-    status: "완료",
-    scheduleType: "AS",
-  },
-];
+// 옛 데모 시드 티켓 id — 로컬 → 서버 이관 시 제외한다.
+const SEED_IDS = new Set(["as-1", "as-2", "as-3", "as-4"]);
 
 function formatDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -171,16 +106,36 @@ function blankTicket(date: string): AsTicket {
   };
 }
 
-function loadTickets() {
+// 이 기기 캐시(localStorage) — 서버 응답 전 첫 화면과 오프라인 대비용.
+function loadTickets(): AsTicket[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
-    return Array.isArray(parsed) && parsed.length ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => normalizeTicketSchedule({
+    return Array.isArray(parsed) ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => normalizeTicketSchedule({
       ...ticket,
       status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
       scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
-    } as AsTicket)) : defaultTickets.map(normalizeTicketSchedule);
+    } as AsTicket)) : [];
   } catch {
-    return defaultTickets;
+    return [];
+  }
+}
+
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,issue,assignee,status,scheduleType";
+// 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
+function toDbRow(t: AsTicket) {
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+}
+
+// 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
+const migratedKey = "cs_as_tickets_migrated_v1";
+async function migrateLocalOnce() {
+  try {
+    if (localStorage.getItem(migratedKey)) return;
+    const local = loadTickets().filter((ticket) => !SEED_IDS.has(ticket.id));
+    if (local.length) await upsertRows("as_tickets", local.map(toDbRow), "id");
+    localStorage.setItem(migratedKey, "1");
+  } catch {
+    // 서버 연결 실패 — 다음 로드에서 재시도
   }
 }
 
@@ -260,6 +215,34 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     return () => window.clearInterval(timer);
   }, [todayYmd]);
   const [tickets, setTicketsState] = useState<AsTicket[]>(loadTickets);
+  const [syncError, setSyncError] = useState("");
+
+  // 서버(as_tickets)가 원본 — 진입·포커스 복귀·60초 주기로 새로 읽어 팀원 변경분을 반영한다.
+  const refreshTickets = useCallback(async () => {
+    try {
+      const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&order=date.asc,time.asc`);
+      const normalized = rows.map((row) => normalizeTicketSchedule(row));
+      setTicketsState(normalized);
+      try { localStorage.setItem(storageKey, JSON.stringify(normalized)); } catch { /* 캐시 실패 무시 */ }
+      setSyncError("");
+    } catch {
+      setSyncError("일정 서버에 연결하지 못해 이 기기에 저장된 사본을 보여주는 중입니다.");
+    }
+  }, []);
+  useEffect(() => {
+    void migrateLocalOnce().then(refreshTickets);
+    const onFocus = () => { void refreshTickets(); };
+    window.addEventListener("focus", onFocus);
+    const timer = window.setInterval(() => { void refreshTickets(); }, 60_000);
+    return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
+  }, [refreshTickets]);
+
+  const persistRemote = (ticket: AsTicket) => {
+    void upsertRow("as_tickets", toDbRow(ticket), "id").catch(() => setSyncError("일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 수정해 주세요."));
+  };
+  const removeRemote = (id: string) => {
+    void deleteRows("as_tickets", `id=eq.${encodeURIComponent(id)}`).catch(() => setSyncError("일정 서버 삭제에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요."));
+  };
   const [team, setTeam] = useState<Team | "ALL">("ALL");
   const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(scheduleFilters);
   const [visibleTeams, setVisibleTeams] = useState<Team[]>(teams);
@@ -286,12 +269,16 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const update = (id: string, patch: Partial<AsTicket>) => {
-    setTickets(tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket)));
+    const next = tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket));
+    setTickets(next);
+    const changed = next.find((ticket) => ticket.id === id);
+    if (changed) persistRemote(changed);
   };
 
   const removeTicket = (ticket: AsTicket) => {
     if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?`)) return;
     setTickets(tickets.filter((item) => item.id !== ticket.id));
+    removeRemote(ticket.id);
     setEditId("");
   };
 
@@ -351,6 +338,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   return (
     <div className="space-y-5">
+      {!!syncError && <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
       {view === "as" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -593,7 +581,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       )}
 
       {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
-      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { setTickets([...tickets, normalizeTicketSchedule({ ...newTicket, ...patch })]); setNewTicket(null); }} />}
+      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { const created = normalizeTicketSchedule({ ...newTicket, ...patch }); setTickets([...tickets, created]); persistRemote(created); setNewTicket(null); }} />}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
     </div>
   );
