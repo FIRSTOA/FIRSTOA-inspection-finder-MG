@@ -348,7 +348,7 @@ function deviceVisitText(visit: VisitLike, place: MapPlace) {
   const source = visit.sourceText || visit.note || "";
   const serial = deviceSerial(place);
   if (!serial || !source.toUpperCase().includes(serial.toUpperCase())) return source;
-  const blocks = source.split(/\n(?=\d+\.\s*(?:\n|$))/);
+  const blocks = splitDeviceBlocks(source);
   return blocks.find((block) => block.toUpperCase().includes(serial.toUpperCase())) || source;
 }
 
@@ -385,8 +385,16 @@ function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?
 
 // 업체 전체 자가신청 — 최근 방문 양식(모든 기기 블록)을 그대로 불러와 기기별 여분을 분석하고
 // ※자가신청※에 기종별로 집계해 채운다. 예전 "점검방 양식 훑어보고 기종별로 적던" 흐름의 자동화.
+// 기기 블록 분리 — 실제 양식은 "1. 2층 대표실 공청기"처럼 번호 뒤에 위치 텍스트가 붙기도 한다.
+// 여러 분리 방식 중 기기 블록이 가장 많이 나오는 결과를 쓴다.
 function splitDeviceBlocks(source: string) {
-  return source.split(/\n(?=\d+\.\s*(?:\n|$))/).filter((block) => visitMetric(block, "모델명") || visitMetric(block, "시리얼넘버"));
+  const isDevice = (block: string) => visitMetric(block, "모델명") || visitMetric(block, "시리얼넘버");
+  const candidates = [
+    source.split(/\n(?=\d+\.[^\n]*\n\s*(?:부서명|모델명|시리얼넘버)\s*[:：])/), // "N. 위치" 다음 줄이 기기 필드
+    source.split(/\n(?=\d+\.\s*(?:\n|$))/),                                    // "N." 단독 줄
+    source.split(/\n(?=모델명\s*[:：])/),                                        // 번호 없이 모델명부터
+  ].map((blocks) => blocks.filter(isDevice));
+  return candidates.reduce((best, blocks) => (blocks.length > best.length ? blocks : best), [] as string[]);
 }
 
 // 이력 매칭용 원본(jeomgeom)은 기기 1대=1행이라 전체 양식이 아니다. 자가신청 시에만
@@ -1286,6 +1294,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const vendor = (inspectionHistoryByPlace.get(targetId) || [])[0]?.vendor || "";
     if (!vendor) { setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] })); return; }
     const serialKey = normalizeIdKey(deviceSerial(place));
+    const modelKey = normalizeIdKey(place.comment.split("/")[0] || "");
     let alive = true;
     void (async () => {
       try {
@@ -1299,9 +1308,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const text = String(row["_원문"] || "").trim();
           const date = String(row["작성일"] || "").slice(0, 10);
           if (!text || !date || seen.has(date)) continue;
-          if (serialKey.length >= 4 && !normalizeIdKey(text).includes(serialKey)) continue; // 이 기기 블록이 없는 방문 제외
+          // 이 기기의 블록을 찾는다: ① 기번 일치 → ② (기번 오타 대비) 모델명 일치 → ③ 단일기기 양식이면 그대로.
+          const blocks = splitDeviceBlocks(text);
+          let block = serialKey.length >= 4 ? blocks.find((b) => normalizeIdKey(b).includes(serialKey)) : undefined;
+          if (!block && modelKey.length >= 3) block = blocks.find((b) => normalizeIdKey(b).includes(modelKey));
+          if (!block && blocks.length === 1 && serialKey.length < 4) block = blocks[0];
+          if (!block) continue;
           seen.add(date);
-          out.push({ workDate: date, vendor, sourceText: text, note: "" });
+          out.push({ workDate: date, vendor, sourceText: block, note: "" });
           if (out.length >= 2) break;
         }
         if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: out }));
