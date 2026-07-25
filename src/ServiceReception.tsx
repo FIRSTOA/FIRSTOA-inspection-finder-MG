@@ -97,6 +97,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [manualVendor, setManualVendor] = useState("");
   const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
   const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
+  const [snapshotDeviceMatch, setSnapshotDeviceMatch] = useState(true);
   const [deviceSummary, setDeviceSummary] = useState<LeaseDeviceSummary>({ active: 0, items: [] });
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
@@ -139,6 +140,7 @@ export default function ServiceReception({ author }: { author: string }) {
     setResults([]);
     setAsHistory([]);
     setSnapshots([]);
+    setSnapshotDeviceMatch(true);
     setDeviceSummary({ active: 0, items: [] });
     setWorkinName("");
     setActionResult("");
@@ -148,13 +150,14 @@ export default function ServiceReception({ author }: { author: string }) {
     const assetNo = pick(hit, "자산번호");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
     if (vendor) {
-      const [name, snaps, devices] = await Promise.all([
+      const [name, recent, devices] = await Promise.all([
         findWorkinMapName(vendor),
-        getRecentInspections(vendor),
+        getRecentInspections(vendor, serial, assetNo),
         getLeaseDeviceSummary(exactVendor || vendor),
       ]);
       setWorkinName(name);
-      setSnapshots(snaps);
+      setSnapshots(recent.snapshots);
+      setSnapshotDeviceMatch(recent.deviceMatch);
       setDeviceSummary(devices);
     }
   };
@@ -207,9 +210,11 @@ export default function ServiceReception({ author }: { author: string }) {
     // 자가사용내역: 최근 점검 2회(전방문/전전방문) + 기간 포함 사용량 + 여분·폐통 지급 권장(워킨맵과 동일 로직).
     const usage: string[] = [];
     const [snap0, snap1] = snapshots;
+    if (snapshots.length && !snapshotDeviceMatch) usage.push(`※ 이 기기(자산·기번) 점검기록이 없어 업체 기록 기준입니다 — 다른 기기 기록일 수 있음`);
     if (snap0) usage.push(`■ 전방문 ${snap0.date} · 매수 ${snap0.counts || "-"} · 여분 ${snap0.spare || "-"}${snap0.waste ? ` · 폐통 ${snap0.waste}` : ""}`);
     if (snap1) usage.push(`■ 전전방문 ${snap1.date} · 매수 ${snap1.counts || "-"} · 여분 ${snap1.spare || "-"}${snap1.waste ? ` · 폐통 ${snap1.waste}` : ""}`);
     const advice = usageSpareAdvice(snap0, snap1, `${모델명} ${pick(lease, "기종")}`);
+    if (advice?.warning) usage.push(`■ 주의: ${advice.warning}`);
     if (advice?.usageLine) usage.push(`■ 사용량: ${advice.usageLine}`);
     if (advice) usage.push(`■ 여분 분석: ${advice.adviceLine}`);
     const T = "\t";
@@ -244,10 +249,10 @@ export default function ServiceReception({ author }: { author: string }) {
         return `■ 날짜: ${korYMD(h.date)}${device ? `\n■ 기기: ${device}` : ""}\n■ 내용: ${h.content}`;
       }).join("\n\n") : "없음",
       `자가사용내역(최근6개월)`,
-      usage.length ? usage.join("\n") : "점검 기록 없음",
+      usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, snapshots, route, type, workinName, region]);
+  }, [lease, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -279,7 +284,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor("");
   };
 

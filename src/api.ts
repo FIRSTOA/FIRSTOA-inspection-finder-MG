@@ -396,31 +396,41 @@ export async function getAsHistory(vendor: string, serial: string, assetNo = "")
   return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
 }
 
-// 자가사용내역 대체: 최근 점검 2회(전방문·전전방문)의 매수/토너잔량/여분을 불러와 비교 근거로 쓴다.
-export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string; waste: string };
-export async function getRecentInspections(vendor: string): Promise<InspectionSnapshot[]> {
+// 자가사용내역 대체: 최근 점검 2회(전방문·전전방문). 선택한 기기(시리얼/자산기번) 기록을 우선하고,
+// 없으면 업체 기록으로 폴백(deviceMatch=false → 다른 기기 기록일 수 있음을 표기).
+export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string; waste: string; serial: string };
+export type RecentInspections = { snapshots: InspectionSnapshot[]; deviceMatch: boolean };
+export async function getRecentInspections(vendor: string, serial = "", assetNo = ""): Promise<RecentInspections> {
   const core = coreVendorKey(vendor);
   const probe = core.slice(0, 4);
-  if (probe.length < 2) return [];
+  if (probe.length < 2) return { snapshots: [], deviceMatch: false };
   const dateCol = encodeURIComponent("작성일");
   try {
-    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=40`);
-    return rows
-      .filter((r) => {
-        const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
-        return key.includes(core) || core.includes(key);
-      })
+    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통,시리얼넘버,자산기번")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=60`);
+    const vendorRows = rows.filter((r) => {
+      const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
+      return key.includes(core) || core.includes(key);
+    });
+    const leaseIds = [normId(serial), normId(assetNo)].filter((v) => v.length >= 3);
+    const deviceRows = leaseIds.length ? vendorRows.filter((r) => {
+      const ids = [normId(String(r["시리얼넘버"] || "")), normId(String(r["자산기번"] || ""))].filter((v) => v.length >= 3);
+      return leaseIds.some((a) => ids.some((b) => a === b || a.includes(b) || b.includes(a)));
+    }) : [];
+    const chosen = deviceRows.length ? deviceRows : vendorRows;
+    const snapshots = chosen
       .map((r) => ({
         date: String(r["작성일"] || "").slice(0, 10),
         counts: String(r["매수"] || "").trim(),
         toner: String(r["토너잔량"] || "").trim(),
         spare: String(r["여분"] || "").trim(),
         waste: String(r["폐통"] || "").trim(),
+        serial: String(r["시리얼넘버"] || "").trim(),
       }))
       .filter((s) => s.date)
       .slice(0, 2);
+    return { snapshots, deviceMatch: deviceRows.length > 0 };
   } catch {
-    return [];
+    return { snapshots: [], deviceMatch: false };
   }
 }
 
