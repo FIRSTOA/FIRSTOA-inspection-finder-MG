@@ -1972,11 +1972,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   return (
     <div>
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm max-lg:rounded-none max-lg:border-0 max-lg:shadow-none">
-        {desktopLayout ? <div className="grid h-[calc(100vh-145px)] min-h-[620px] grid-cols-[340px_minmax(0,1fr)]">
+      <section className="overflow-hidden bg-white">
+        {desktopLayout ? <div className="grid h-[calc(100dvh-48px)] min-h-[520px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
           {mapPanel}
-        </div> : <div className="flex h-[calc(100dvh-68px)] min-h-[440px] flex-col">
+        </div> : <div className="flex h-[calc(100dvh-48px)] min-h-[440px] flex-col">
           <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
           <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
             <button type="button" onClick={() => setMobileView("map")} className={`pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "bg-white text-slate-500"}`}>지도</button>
