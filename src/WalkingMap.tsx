@@ -1321,22 +1321,28 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           `select=${encodeURIComponent("작성일,_업체명,_원문")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(vendorName)}&order=${encodeURIComponent("작성일")}.desc&limit=10`,
         ).catch(() => [] as Record<string, unknown>[])));
         const rows = groups.flat().sort((a, b) => String(b["작성일"] || "").localeCompare(String(a["작성일"] || "")));
-        const out: VisitLike[] = [];
-        const seen = new Set<string>();
-        for (const row of rows) {
-          const text = String(row["_원문"] || "").trim();
-          const date = String(row["작성일"] || "").slice(0, 10);
-          if (!text || !date || seen.has(date)) continue;
-          // 이 기기의 블록을 찾는다: ① 기번 일치 → ② (기번 오타 대비) 모델명 일치 → ③ 단일기기 양식이면 그대로.
-          const blocks = splitDeviceBlocks(text);
-          let block = serialKey.length >= 4 ? blocks.find((b) => normalizeIdKey(b).includes(serialKey)) : undefined;
-          if (!block && modelKey.length >= 3) block = blocks.find((b) => normalizeIdKey(b).includes(modelKey));
-          if (!block && blocks.length === 1 && serialKey.length < 4) block = blocks[0];
-          if (!block) continue;
-          seen.add(date);
-          out.push({ workDate: date, vendor: String(row["_업체명"] || "").trim(), sourceText: block, note: "" });
-          if (out.length >= 2) break;
-        }
+        // 이 기기의 블록을 찾는다: 기번 일치가 원칙. 기번이 모든 기록에 전혀 없을 때만(코멘트 오타 의심)
+        // 모델명 폴백을 쓴다 — 같은 모델 다른 기기(교체 전 기기 등)를 잘못 끌어오지 않도록.
+        const collect = (useModelFallback: boolean) => {
+          const out: VisitLike[] = [];
+          const seen = new Set<string>();
+          for (const row of rows) {
+            const text = String(row["_원문"] || "").trim();
+            const date = String(row["작성일"] || "").slice(0, 10);
+            if (!text || !date || seen.has(date)) continue;
+            const blocks = splitDeviceBlocks(text);
+            let block = serialKey.length >= 4 ? blocks.find((b) => normalizeIdKey(b).includes(serialKey)) : undefined;
+            if (!block && useModelFallback && modelKey.length >= 3) block = blocks.find((b) => normalizeIdKey(b).includes(modelKey));
+            if (!block && blocks.length === 1 && serialKey.length < 4) block = blocks[0];
+            if (!block) continue;
+            seen.add(date);
+            out.push({ workDate: date, vendor: String(row["_업체명"] || "").trim(), sourceText: block, note: "" });
+            if (out.length >= 2) break;
+          }
+          return out;
+        };
+        let out = collect(false);
+        if (!out.length) out = collect(true);
         if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: out }));
       } catch {
         if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] }));
