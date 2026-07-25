@@ -86,6 +86,11 @@ export async function insertRow(table: string, row: Record<string, unknown>): Pr
 }
 
 // 범용 upsert. 주간 목표/회고처럼 동일 키의 내용을 다시 저장할 때 사용한다.
+// TEST_MODE 판정 공용 — 미설정이면 안전하게 테스트 취급(true). 8곳 인라인 복붙을 통합.
+export function isTestModeValue(value: unknown) {
+  return String(value ?? "true").toLowerCase() === "true";
+}
+
 export async function upsertRow(table: string, row: Record<string, unknown>, onConflict: string): Promise<void> {
   const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
     method: "POST",

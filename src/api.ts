@@ -8,12 +8,13 @@
 
 import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
-import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
+import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, isTestModeValue, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
+import { normalizeId as normId } from "./ids";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -335,7 +336,7 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
     if (!text.trim()) return { ok: false, error: "전송할 양식이 없습니다." };
     const cfg = await getConfig();
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-    const testMode = String(cfg.TEST_MODE || "true").toLowerCase() === "true";
+    const testMode = isTestModeValue(cfg.TEST_MODE);
     let room = testRoom;
     if (!testMode) {
       const map = await getRoomMap();
@@ -358,9 +359,7 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
 // AS 접수이력. 시리얼/자산기번 일치(serialMatch)를 우선 판별하고, 업체명은 법인표기·부서명 변형에
 // 대응하도록 핵심어(coreVendorKey)로 넓게 찾은 뒤 클라이언트에서 거른다.
 export type AsHistoryEntry = { date: string; content: string; serialMatch: boolean; serial: string; asset: string; model: string };
-function normId(value: string) {
-  return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
-}
+
 export async function getAsHistory(vendor: string, serial: string, assetNo = ""): Promise<AsHistoryEntry[]> {
   const dateCol = encodeURIComponent("작성일");
   const run = async (col: string, val: string) => {
@@ -666,7 +665,7 @@ function regionRoom(schemaKey: string, region: string, fallback: string): string
 async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-  if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
+  if (isTestModeValue(cfg.TEST_MODE)) return [testRoom];
 
   const map = await getRoomMap();
   if (kind === "자가") return [map["자가|*"] || "자가(토너 폐통) 여분토너요청방"];
@@ -681,7 +680,7 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
 async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-  if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") return [testRoom];
+  if (isTestModeValue(cfg.TEST_MODE)) return [testRoom];
   const map = await getRoomMap();
   const key = normRegion(region);
   const room = map[`${destination === "inspection" ? "점검" : "AS"}|${key}`];
@@ -763,7 +762,7 @@ export async function sendLogisticsForm(form: LogisticsFormState, author: string
     const result = await insertRow("logistics_records", row);
     const cfg = await getConfig();
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-    const testMode = String(cfg.TEST_MODE || "true").toLowerCase() === "true";
+    const testMode = isTestModeValue(cfg.TEST_MODE);
     let room = testRoom;
     if (!testMode) {
       const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
@@ -812,7 +811,7 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     // 시트 테스트 모드는 외부 시트의 대상만 바꾼다. 웹앱 원본 DB는 항상 저장한다.
     const r = await insertRow(s.table, row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    if (isTestModeValue(cfg.TEST_MODE)) rooms = [testRoom];
     else {
       const map = await getRoomMap();
       const fallback = map[s.roomKey] || testRoom;
@@ -861,7 +860,7 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
     // 시트 테스트 중에도 확장성 IT 원본은 Supabase에 남겨야 통합이력·집계가 맞다.
     const r = await insertRow("pc_expansion", row);
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    if (isTestModeValue(cfg.TEST_MODE)) rooms = [testRoom];
     else { const map = await getRoomMap(); rooms = [map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt]; }
     const automation = await queueFieldAutomation({
       category: "expansion_it",
@@ -1006,7 +1005,7 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       "_raw": form,
     });
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
-    if (String(cfg.TEST_MODE || "true").toLowerCase() === "true") rooms = [testRoom];
+    if (isTestModeValue(cfg.TEST_MODE)) rooms = [testRoom];
     else {
       const map = await getRoomMap();
       rooms = [map["복합기확장성|*"] || FIXED_ROOM.copierExpansion];
@@ -1050,7 +1049,7 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
     });
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";
     let room = testRoom;
-    if (String(cfg.TEST_MODE || "true").toLowerCase() !== "true") {
+    if (!isTestModeValue(cfg.TEST_MODE)) {
       const map = await getRoomMap();
       room = map["담당자변경|*"] || map["담당자/주소변경|*"] || FIXED_ROOM.contactChange;
     }

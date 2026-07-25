@@ -3,6 +3,7 @@ import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
+import { normalizeId as normalizeIdKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 
@@ -340,9 +341,7 @@ function deviceSerial(place: MapPlace) {
 // 점검이력 매칭용 최소 방문 형태 — visit_logs와 jeomgeom(원본) 어느 쪽에서 와도 동일하게 다룬다.
 type VisitLike = { workDate: string; vendor: string; sourceText: string; note: string };
 
-function normalizeIdKey(value: string) {
-  return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
-}
+
 
 function deviceVisitText(visit: VisitLike, place: MapPlace) {
   const source = visit.sourceText || visit.note || "";

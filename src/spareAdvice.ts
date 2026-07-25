@@ -7,9 +7,7 @@
  */
 export type SnapshotLike = { date: string; counts: string; toner: string; spare: string; waste?: string; serial?: string };
 
-function normSerial(value: string) {
-  return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
-}
+import { normalizeId as normSerial } from "./ids";
 
 // 소형기(A4) 모델 번호 — 이 목록 외에는 전부 A3(대형)로 본다.
 // 소형 컬러: 2100·2101·5521·5526·8900·5473·305 / 소형 흑백: 5700
