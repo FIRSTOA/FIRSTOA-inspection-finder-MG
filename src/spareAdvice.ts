@@ -14,6 +14,10 @@ function normSerial(value: string) {
 // 소형기(A4) 모델 번호 — 이 목록 외에는 전부 A3(대형)로 본다.
 // 소형 컬러: 2100·2101·5521·5526·8900·5473·305 / 소형 흑백: 5700
 const SMALL_MODEL = /(?<!\d)(2100|2101|5521|5526|8900|5473|305|5700)(?!\d)/;
+// 토너 여분 대상이 아닌 기기 — 공기청정기(샤오미·블루스카이 등)·세단기.
+const NON_TONER_DEVICE = /샤오미|블루스카이|공기청정|공청|세단기|세절기|파쇄기/i;
+// 잉크젯(HP 등) — 여분 1세트면 충분.
+const INKJET = /\bHP\b|잉크/i;
 
 export function counterOf(counts: string, label: string): number | null {
   // "컬"이 "큰컬"에 걸리지 않게 lookbehind로 구분한다.
@@ -54,6 +58,7 @@ export type UsageSpareAdvice = { usageLine: string; adviceLine: string; warning:
 
 export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: SnapshotLike | undefined, model: string): UsageSpareAdvice | null {
   if (!latest) return null;
+  if (NON_TONER_DEVICE.test(model)) return null; // 공청기·세단기는 여분 분석 대상 아님
 
   // 기간 포함 사용량.
   //  - 기번이 다르면(기기 교체) 비교 전체를 생략한다.
@@ -88,14 +93,15 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
     }
   }
 
-  // 기준: A3컬러=2세트·폐통2 / A4컬러(소형)=3세트 / A3흑백=K2·폐통2 / A4흑백(소형)=K2
+  // 기준: A3컬러=2세트·폐통2 / A4컬러(소형)=3세트 / A3흑백=K2·폐통2 / A4흑백(소형)=K2 / 잉크젯=1세트
+  const isInkjet = INKJET.test(model);
   const isSmall = SMALL_MODEL.test(model);
   // 컬러기 여부 → 세트 구성 색상 (흑백기는 CMY 표기가 없고 '토너1'·'K1' 식으로 적는다)
-  const isColor = (counterOf(latest.counts, "컬") ?? 0) > 0 || /[CMY]\s*[-:]?\s*\d/i.test(latest.toner || "") || /[CMY]\s*[-:]?\s*\d/i.test(latest.spare || "");
+  const isColor = isInkjet || (counterOf(latest.counts, "컬") ?? 0) > 0 || /[CMY]\s*[-:]?\s*\d/i.test(latest.toner || "") || /[CMY]\s*[-:]?\s*\d/i.test(latest.spare || "");
   const colors = isColor ? ["K", "C", "M", "Y"] : ["K"];
-  const targetSets = isSmall && isColor ? 3 : 2;
-  const wasteTarget = isSmall ? 0 : 2;
-  const gradeLabel = `${isSmall ? "A4" : "A3"}${isColor ? "컬러" : "흑백"}`;
+  const targetSets = isInkjet ? 1 : isSmall && isColor ? 3 : 2;
+  const wasteTarget = isInkjet || isSmall ? 0 : 2;
+  const gradeLabel = isInkjet ? "잉크젯" : `${isSmall ? "A4" : "A3"}${isColor ? "컬러" : "흑백"}`;
   const standard = `${gradeLabel} ${isColor ? `${targetSets}세트` : `K${targetSets}`}${wasteTarget ? `·폐통${wasteTarget}` : ""} 기준`;
 
   const wasteText = /^\d+$/.test(String(latest.waste || "").trim()) ? `폐${String(latest.waste).trim()}` : String(latest.waste || "");

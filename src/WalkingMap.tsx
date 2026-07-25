@@ -77,7 +77,7 @@ const mapLabels: MapLabel[] = [
   { code: "G4", name: "", color: "#b22998" },
   { code: "G5", name: "점검 완료", color: "#087fa2" },
   { code: "G6", name: "", color: "#25b44b" },
-  { code: "G7", name: "", color: "#b56ef3" },
+  { code: "G7", name: "공청기", color: "#b56ef3" },
   { code: "G8", name: "", color: "#896347" },
   { code: "G9", name: "", color: "#c6a273" },
   { code: "G10", name: "", color: "#139fe4" },
@@ -1263,7 +1263,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       snapshots,
       latestVisit,
       vendor: latestVisit?.vendor || place.name,
-      advice: usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
+      advice: place.label === "G7" ? null : usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
     };
   }, [inspectionHistoryByPlace, mobileDetailId, places]);
 
@@ -1647,7 +1647,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const inspectionSnapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
-          const spareAdviceResult = usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
+          const spareAdviceResult = place.label === "G7" ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
