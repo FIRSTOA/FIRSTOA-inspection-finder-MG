@@ -5500,11 +5500,6 @@ export default function App() {
               <div className="mt-0.5 text-xs leading-5 text-slate-500">{FIELD_GUIDES[mode].description}</div>
             </div>
           </div>
-          {mode !== "inspection" && mode !== "blank-report" && mode !== "air-purifier" && mode !== "pc" && mode !== "replacement" && mode !== "contact-change" && (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-800">
-              카톡방 자동전송은 아직 준비 중입니다. 내용을 작성한 뒤 하단의 <b>복사</b> 버튼을 눌러 카톡방에 붙여넣어 주세요.
-            </div>
-          )}
         </div>
 
         {(workinInspectionMatch || fieldVendorFlags) && (() => {

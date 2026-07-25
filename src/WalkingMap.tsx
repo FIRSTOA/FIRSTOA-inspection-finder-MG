@@ -885,6 +885,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [mobileDetailId, setMobileDetailId] = useState<number | null>(null);
+  const [comparePopupId, setComparePopupId] = useState<number | null>(null); // 최근 점검 비교 팝업
   const [deviceHistoryCache, setDeviceHistoryCache] = useState<Record<number, VisitLike[]>>({});
   const [mapSelectionRevision, setMapSelectionRevision] = useState(0);
   const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
@@ -1277,9 +1278,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   }, [mapQuery, scopedPlaces]);
 
 
-  const mobileDetail = useMemo(() => {
-    if (mobileDetailId === null) return null;
-    const place = places.find((item) => item.id === mobileDetailId);
+  const buildCompareData = useCallback((placeId: number | null) => {
+    if (placeId === null) return null;
+    const place = places.find((item) => item.id === placeId);
     if (!place) return null;
     const onDemand = deviceHistoryCache[place.id];
     const loading = place.kind === "quarter" && onDemand === undefined;
@@ -1294,12 +1295,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       vendor: latestVisit?.vendor || place.name,
       advice: place.label === "G7" || loading ? null : usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
     };
-  }, [inspectionHistoryByPlace, mobileDetailId, places, deviceHistoryCache]);
+  }, [inspectionHistoryByPlace, places, deviceHistoryCache]);
+  const mobileDetail = useMemo(() => buildCompareData(mobileDetailId), [buildCompareData, mobileDetailId]);
+  const comparePopup = useMemo(() => buildCompareData(comparePopupId), [buildCompareData, comparePopupId]);
 
   // 카드 펼침 시 그 업체의 전체 원문(_원문)을 즉석 조회해 "이 기기 블록이 포함된 방문"만 골라 캐시한다.
   // (이력 풀은 용량 때문에 _원문 없이 첫 기기 열만 갖고 있어 다기기 업체에서 타기기가 표시되는 문제 해결)
   useEffect(() => {
-    const targetId = expandedId ?? mobileDetailId;
+    const targetId = expandedId ?? mobileDetailId ?? comparePopupId;
     if (targetId === null || deviceHistoryCache[targetId] !== undefined) return;
     const place = places.find((item) => item.id === targetId);
     if (!place || place.kind !== "quarter") return;
@@ -1344,7 +1347,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       }
     })();
     return () => { alive = false; };
-  }, [expandedId, mobileDetailId, places, inspectionHistoryByPlace, deviceHistoryCache]);
+  }, [expandedId, mobileDetailId, comparePopupId, places, inspectionHistoryByPlace, deviceHistoryCache]);
 
   // 자가신청 공용 핸들러: 다기기면 전체 원문(_원문)을 즉석 조회해 업체 전체 양식으로, 아니면 단일기기 양식으로.
   const requestSelfForm = async (place: MapPlace, latestVisit: VisitLike | null | undefined, snapshot: SelfRequestSnapshot | undefined, needsList: SpareNeed[], vendorName: string) => {
@@ -1766,17 +1769,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
                   <div className="space-y-3">
                     {place.kind === "quarter" && <div>
-                      <div className="font-black text-slate-400">최근 점검 비교</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-slate-400">최근 점검 비교</span>
+                        <button type="button" onClick={() => setComparePopupId(place.id)} className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">자세히 보기</button>
+                      </div>
                       {historyLoading ? <div className="mt-1 font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
-                      : inspectionSnapshots.length ? <div className="mt-1 space-y-2">
-                        {inspectionSnapshots.map((snapshot, index) => <div key={`${place.id}-history-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-2">
-                          <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
-                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
-                        </div>)}
-                        {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.warning && <div className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">주의 {spareAdviceResult.warning}</div>}{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
+                      : inspectionSnapshots.length ? <div className="mt-1 space-y-1">
+                        <div className="font-semibold text-slate-600">최근 {inspectionSnapshots[0].date}{inspectionSnapshots[1] ? ` · 이전 ${inspectionSnapshots[1].date}` : ""}</div>
+                        {spareAdviceResult && <div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                           const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0];
                           void requestSelfForm(place, latestVisit, inspectionSnapshots[0], spareAdviceResult.needsList, latestVisit?.vendor || place.name);
-                        }} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div></div>}
+                        }} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>
@@ -1980,6 +1983,41 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           </div>
         </div>}
       </section>
+
+      {comparePopup && (() => {
+        const { place, snapshots, loading, latestVisit, vendor: popupVendor, advice } = comparePopup;
+        return <div className="fixed inset-0 z-[2400] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setComparePopupId(null)}>
+          <div className="flex max-h-[85vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-lg sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-xs font-black text-blue-600">최근 점검 비교</div>
+                <div className="truncate text-base font-black text-slate-950">{place.name}</div>
+              </div>
+              <button type="button" onClick={() => setComparePopupId(null)} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+            </div>
+            <div className="min-h-0 space-y-3 overflow-y-auto p-5">
+              {loading ? <div className="py-6 text-center text-sm font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
+              : snapshots.length ? <>
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-popup-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-sm font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
+                  <div className="mt-1.5 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
+                </div>)}
+                {advice && <div className="space-y-1.5">
+                  {advice.warning && <div className="rounded bg-rose-50 px-2.5 py-1.5 text-xs font-black text-rose-700">주의 {advice.warning}</div>}
+                  {advice.usageLine && <div className="rounded bg-blue-50 px-2.5 py-1.5 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}
+                  <div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2.5 py-1.5">
+                    <span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>
+                    {onSelfRequest && <button type="button" onClick={() => {
+                      void requestSelfForm(place, latestVisit, snapshots[0], advice.needsList, popupVendor);
+                      setComparePopupId(null);
+                    }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}
+                  </div>
+                </div>}
+              </> : <div className="py-6 text-center text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
+            </div>
+          </div>
+        </div>;
+      })()}
 
       {mobileDetail && !desktopLayout && (() => {
         const { place, snapshots, loading: historyLoading, latestVisit, vendor: detailVendor, advice } = mobileDetail;
