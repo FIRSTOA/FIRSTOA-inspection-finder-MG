@@ -48,7 +48,8 @@ function spareCounts(text: string) {
   };
 }
 
-export type UsageSpareAdvice = { usageLine: string; adviceLine: string; warning: string };
+export type SpareNeed = { label: string; count: number };
+export type UsageSpareAdvice = { usageLine: string; adviceLine: string; warning: string; needsList: SpareNeed[] };
 
 export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: SnapshotLike | undefined, model: string): UsageSpareAdvice | null {
   if (!latest) return null;
@@ -99,18 +100,19 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
   const wasteText = /^\d+$/.test(String(latest.waste || "").trim()) ? `폐${String(latest.waste).trim()}` : String(latest.waste || "");
   const { map, waste, tonerGeneric, drum, any } = spareCounts(`${latest.spare || ""} ${wasteText}`);
   if (!any) {
-    return { usageLine, warning, adviceLine: `여분 기록 없음 — ${standard}으로 채우도록 확인 필요` };
+    return { usageLine, warning, needsList: [], adviceLine: `여분 기록 없음 — ${standard}으로 채우도록 확인 필요` };
   }
   // 색상 표기 없이 "토너 N"만 적힌 경우(흑백기 관행) — 세트 개수로 간주해 채운다.
   if (!Object.keys(map).length && tonerGeneric !== null) for (const color of colors) map[color] = tonerGeneric;
   const needs: string[] = [];
+  const needsList: SpareNeed[] = [];
   for (const color of colors) {
     const need = targetSets - (map[color] || 0);
-    if (need > 0) needs.push(`${color}${need}`);
+    if (need > 0) { needs.push(`${color}${need}`); needsList.push({ label: color, count: need }); }
   }
   if (wasteTarget) {
     const needWaste = wasteTarget - (waste ?? 0);
-    if (needWaste > 0) needs.push(`폐통${needWaste}`);
+    if (needWaste > 0) { needs.push(`폐통${needWaste}`); needsList.push({ label: "폐통", count: needWaste }); }
   }
   const nowLabel = [
     ...colors.map((color) => `${color}${map[color] || 0}`),
@@ -120,8 +122,14 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
   return {
     usageLine,
     warning,
+    needsList,
     adviceLine: needs.length
       ? `현재 ${nowLabel} → 지급 권장 ${needs.join(" · ")} (${standard})`
       : `현재 ${nowLabel} → 기준 충족, 추가 지급 불필요 (${standard})`,
   };
+}
+
+// 자가신청 물품 표기 (K → K토너, 폐통 → 폐토너통)
+export function spareNeedItems(needsList: SpareNeed[]) {
+  return needsList.map((need) => `${need.label === "폐통" ? "폐토너통" : `${need.label}토너`} ${need.count}개`);
 }

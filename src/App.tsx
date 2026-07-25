@@ -5183,6 +5183,28 @@ export default function App() {
     showToast("AS접수 내용을 FIELD AS양식으로 불러왔어요", "success");
   };
 
+  // 워킨맵 여분 분석 → 자가신청 핸드오프: 양식을 FIELD로 불러와 수량 확인·부품 추가 후 '자가'로 전송한다.
+  const openSelfRequestInField = (fieldText: string) => {
+    modeStateRef.current[mode] = {
+      inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+      reportTypes, reportTypeOther,
+    };
+    setMode("blank-report");
+    setScreen("field");
+    setInputText("");
+    skipAutoRef.current = true;
+    setListOutput([{ content: fieldText }]);
+    setTextOutput("");
+    const nextForms = [parseItemDataFromText(fieldText, 1)[0]];
+    setItemForms(nextForms.length ? nextForms : [{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setSelectedItem(0);
+    setEditedBlocks({});
+    setReportTypes(["점검"]);
+    setReportTypeOther("");
+    showToast("자가신청 양식을 불러왔어요 — 수량 확인 후 '자가'로 전송하세요", "success");
+  };
+
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
@@ -5339,7 +5361,7 @@ export default function App() {
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
         {screen === "growth" && <GrowthHub author={author} />}
-        {screen === "walkingMap" && <WalkingMap userKey={author} />}
+        {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}

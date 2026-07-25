@@ -4,7 +4,7 @@ import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, upsertRows } from "./supabase";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
-import { usageSpareAdvice } from "./spareAdvice";
+import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 
 type MapLabel = {
   code: string;
@@ -383,6 +383,54 @@ function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?
   return [snapshot.model, snapshot.asset && `자산 ${snapshot.asset}`, snapshot.serial && `기번 ${snapshot.serial}`].filter(Boolean).join(" · ");
 }
 
+// 자가신청용 점검 양식 전체 생성 — 워킨맵은 판단만 하고 작성·전송은 FIELD로 넘긴다(핸드오프).
+type SelfRequestSnapshot = { model?: string; serial?: string; asset?: string; counts?: string; toner?: string; waste?: string; spare?: string };
+function buildSelfRequestText(author: string, vendor: string, place: MapPlace, snapshot: SelfRequestSnapshot | undefined, needsList: SpareNeed[]) {
+  const items = spareNeedItems(needsList);
+  const totalCount = needsList.reduce((sum, need) => sum + need.count, 0);
+  return [
+    `작성자:${author}`,
+    "구분: 점검",
+    "레벨:1",
+    "등급:",
+    `업체명:${vendor}`,
+    "부서명:",
+    `지역:${place.team || ""}`,
+    "키맨/접수자:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "1.",
+    `모델명: ${snapshot?.model || place.comment.split("/")[0]?.trim() || ""}`,
+    `시리얼넘버: ${snapshot?.serial || deviceSerial(place)}`,
+    `자산기번: ${snapshot?.asset || ""}`,
+    "내용: 여분 자가신청",
+    "처리내용:",
+    `매수: ${snapshot?.counts || "흑- 컬- 큰컬- 합-"}`,
+    `토너잔량: ${snapshot?.toner || "K- C- M- Y-"}`,
+    `폐통: ${snapshot?.waste || ""}`,
+    `여분: ${snapshot?.spare || ""}`,
+    "한틴이카유무:",
+    "주차비지원유무:",
+    "특이사항:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "※부품신청※",
+    "보증기간 내 여부 :",
+    "교체 전 카운터 누적 사용매수 :",
+    "사용 부품 예상 사용매수 :",
+    "▶ 신청 부품",
+    "물품명:",
+    "수량:",
+    "출고여부:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "※자가신청※",
+    `물품: ${items.join(" · ")}`,
+    `수량: ${totalCount || ""}`,
+    "출고여부:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "도착 시간:",
+    "소요 시간:",
+  ].join("\n");
+}
+
 type InspectionArchiveRow = Record<string, unknown>;
 
 function archiveText(row: InspectionArchiveRow) {
@@ -724,7 +772,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
   );
 });
 
-export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) {
+export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userKey?: string; onSelfRequest?: (text: string) => void }) {
   const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
   const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
   const [sharedReady, setSharedReady] = useState(false);
@@ -1135,6 +1183,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     return {
       place,
       snapshots,
+      vendor: (inspectionHistoryByPlace.get(place.id) || [])[0]?.vendor || place.name,
       advice: usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
     };
   }, [inspectionHistoryByPlace, mobileDetailId, places]);
@@ -1562,7 +1611,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                           <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
                           <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
                         </div>)}
-                        {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.warning && <div className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">주의 {spareAdviceResult.warning}</div>}{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</div></div>}
+                        {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.warning && <div className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">주의 {spareAdviceResult.warning}</div>}{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => onSelfRequest(buildSelfRequestText(userKey, (inspectionHistoryByPlace.get(place.id) || [])[0]?.vendor || place.name, place, inspectionSnapshots[0], spareAdviceResult.needsList))} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div></div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
                     </div>}
                     <div>
@@ -1750,7 +1799,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       </section>
 
       {mobileDetail && !desktopLayout && (() => {
-        const { place, snapshots, advice } = mobileDetail;
+        const { place, snapshots, vendor: detailVendor, advice } = mobileDetail;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
         const phone = place.phone.match(/0\d{1,2}-?\d{3,4}-?\d{4}/)?.[0] || "";
@@ -1787,7 +1836,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
               {snapshots.length ? <div className="mt-3 space-y-3">
                 {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
-                {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">여분 {advice.adviceLine}</div></div>}
+                {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => { onSelfRequest(buildSelfRequestText(userKey, detailVendor, place, snapshots[0], advice.needsList)); setMobileDetailId(null); }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
             </section>}
             <section className="px-4 py-4">
