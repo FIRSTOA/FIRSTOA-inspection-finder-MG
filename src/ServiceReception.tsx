@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
-  saveServiceReception, getServiceReceptions, setServiceReceptionStatus,
+  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, countLeaseDevices,
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot,
 } from "./api";
 import { kstDate } from "./visits";
@@ -100,6 +100,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [manualVendor, setManualVendor] = useState("");
   const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
   const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
+  const [deviceCount, setDeviceCount] = useState(0);
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -141,21 +142,37 @@ export default function ServiceReception({ author }: { author: string }) {
     setResults([]);
     setAsHistory([]);
     setSnapshots([]);
+    setDeviceCount(0);
     setWorkinName("");
     setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
+    const exactVendor = pick(hit, "_업체명");
     const serial = pick(hit, "시리얼번호(기번)", "기번");
     const assetNo = pick(hit, "자산번호");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
     if (vendor) {
-      const [name, snaps] = await Promise.all([findWorkinMapName(vendor), getRecentInspections(vendor)]);
+      const [name, snaps, devices] = await Promise.all([
+        findWorkinMapName(vendor),
+        getRecentInspections(vendor),
+        countLeaseDevices(exactVendor || vendor),
+      ]);
       setWorkinName(name);
       setSnapshots(snaps);
+      setDeviceCount(devices);
     }
   };
 
   const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || manualVendor.trim();
   const region = regionLabel(pick(lease, "담당지역"));
+  // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
+  const resultVendorCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const hit of results) {
+      const key = (hit["_업체명"] || "").trim();
+      if (key) map.set(key, (map.get(key) || 0) + 1);
+    }
+    return map;
+  }, [results]);
 
   const report = useMemo(() => {
     if (!lease) return "";
@@ -269,7 +286,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setDeviceCount(0); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor("");
   };
 
@@ -381,14 +398,27 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
             {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
             {results.length > 0 && <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-              {results.map((hit, index) => <button key={index} type="button" onClick={() => void selectLease(hit)} className="block w-full px-3 py-2.5 text-left hover:bg-blue-50/50">
-                <div className="text-sm font-black text-slate-800">{pick(hit, "거래처명", "_업체명")} <span className="ml-1 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span></div>
-                <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
-              </button>)}
+              {results.map((hit, index) => {
+                const sameVendor = resultVendorCounts.get((hit["_업체명"] || "").trim()) || 0;
+                return (
+                  <button key={index} type="button" onClick={() => void selectLease(hit)} className="block w-full px-3 py-2.5 text-left hover:bg-blue-50/50">
+                    <div className="flex items-center gap-1.5 text-sm font-black text-slate-800">
+                      <span className="truncate">{pick(hit, "거래처명", "_업체명")}</span>
+                      <span className="shrink-0 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span>
+                      {sameVendor > 1 && <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
+                  </button>
+                );
+              })}
             </div>}
             {lease && <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/40 p-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-black text-slate-900">{pick(lease, "거래처명", "_업체명")}{workinName && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}</div>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm font-black text-slate-900">
+                  <span className="truncate">{pick(lease, "거래처명", "_업체명")}</span>
+                  {workinName && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
+                  {deviceCount > 1 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">이 업체 기기 {deviceCount}대 중 선택 — 자산·기번 확인</span>}
+                </div>
                 <button type="button" onClick={resetForm} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">다시 검색</button>
               </div>
               <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 sm:grid-cols-3 lg:grid-cols-4">

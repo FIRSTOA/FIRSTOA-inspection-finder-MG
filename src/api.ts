@@ -229,6 +229,18 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   return out.slice(0, 30);
 }
 
+// 같은 업체의 임대 기기 수 — 여러 대 중 선택임을 알려 기기 오선택을 막는다.
+export async function countLeaseDevices(vendor: string): Promise<number> {
+  const v = String(vendor || "").trim();
+  if (!v) return 0;
+  try {
+    const rows = await selectRows<{ id: number }>("vendor_info", `select=id&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(v)}&limit=100`);
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
 // 워킨맵 이름 조회 — 카톡 보고용 업체명(예: "17N주식회사 무암 (Mooam)-분기마감")을 그대로 쓰기 위함.
 function coreVendorKey(name: string) {
   return String(name || "").replace(/\(.*?\)/g, "").replace(/㈜|주식회사|유한회사|\(주\)/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
