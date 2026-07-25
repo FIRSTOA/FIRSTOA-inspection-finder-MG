@@ -1,5 +1,9 @@
-import { useMemo, useState } from "react";
-import { searchLeaseList, getAsHistory, findWorkinMapName, sendServiceReception, type LeaseHit } from "./api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  searchLeaseList, getAsHistory, findWorkinMapName, sendServiceReception,
+  saveServiceReception, getServiceReceptions, setServiceReceptionStatus,
+  type LeaseHit, type ServiceReceptionRow,
+} from "./api";
 import { kstDate } from "./visits";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -59,6 +63,23 @@ function regionLabel(area: string) {
   for (const [key, team] of DISTRICT_TEAM) if (a.includes(key)) return `수도권${team}`;
   return a;
 }
+function shiftDate(date: string, days: number) {
+  const d = new Date(`${date}T12:00:00+09:00`);
+  d.setDate(d.getDate() + days);
+  return kstDate(d);
+}
+
+const TYPE_TONE: Record<string, string> = {
+  "복합기 AS": "bg-blue-50 text-blue-700",
+  "IT AS": "bg-cyan-50 text-cyan-700",
+  "원격이관": "bg-violet-50 text-violet-700",
+};
+const STATUS_TONE: Record<string, string> = {
+  접수: "bg-slate-100 text-slate-600",
+  전송완료: "bg-emerald-50 text-emerald-700",
+  원격대기: "bg-amber-50 text-amber-700",
+  원격완료: "bg-emerald-50 text-emerald-700",
+};
 
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string };
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "" };
@@ -72,11 +93,31 @@ export default function ServiceReception({ author }: { author: string }) {
   const [searched, setSearched] = useState(false);
   const [lease, setLease] = useState<LeaseHit | null>(null);
   const [manual, setManual] = useState<Manual>(EMPTY_MANUAL);
+  const [manualVendor, setManualVendor] = useState("");
   const [asHistory, setAsHistory] = useState<{ date: string; content: string }[]>([]);
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionResult, setActionResult] = useState("");
+
+  // 접수 현황 리스트
+  const [listDate, setListDate] = useState(kstDate());
+  const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관">("전체");
+  const [openRowId, setOpenRowId] = useState("");
+
+  const loadList = useCallback(async (date: string) => {
+    setListLoading(true);
+    try {
+      setListRows(await getServiceReceptions(date, date));
+    } catch {
+      setListRows([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+  useEffect(() => { void loadList(listDate); }, [listDate, loadList]);
 
   const runSearch = async () => {
     if (!query.trim()) return;
@@ -95,11 +136,15 @@ export default function ServiceReception({ author }: { author: string }) {
     setResults([]);
     setAsHistory([]);
     setWorkinName("");
+    setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const serial = pick(hit, "시리얼번호(기번)", "기번");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial));
     if (vendor) setWorkinName(await findWorkinMapName(vendor));
   };
+
+  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || manualVendor.trim();
+  const region = regionLabel(pick(lease, "담당지역"));
 
   const report = useMemo(() => {
     if (!lease) return "";
@@ -122,7 +167,6 @@ export default function ServiceReception({ author }: { author: string }) {
     const 미수개월Raw = pick(lease, "미수개월수");
     const 미수개월 = 미수개월Raw === "0" ? "" : 미수개월Raw;
     const 키맨 = pick(lease, "키맨");
-    const 지역 = regionLabel(pick(lease, "담당지역"));
     const 코드 = pick(lease, "코드");
     const 틴텍코드 = pick(lease, "틴텍코드");
     const 주소 = pick(lease, "주소(실납품주소,도로명주소)", "주소");
@@ -133,7 +177,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const 구분 = type === "IT AS" ? "IT A/S" : "A/S";
     const T = "\t";
     const lines = [
-      `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${지역}${T}접수일${T}${receiptDay()}`,
+      `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,
       `기번${T}${기번}${T}자산번호${T}${자산번호}`,
       `접수유형${T}${route}${T}접수분야${T}${구분}`,
       `임대리스트순번${T}${순}${T}장비소유주${T}${장비소유주}`,
@@ -147,7 +191,7 @@ export default function ServiceReception({ author }: { author: string }) {
       `일반전화${T}${일반전화}`,
       `미수개월${T}${미수개월}`,
       `★키맨성함/번호${T}${키맨}`,
-      `방문담당자${T}${지역}`,
+      `방문담당자${T}${region}`,
       `한조/틴텍코드${T}${코드} / ${틴텍코드}`,
       `주소${T}${주소}${T}확장성${T}${확장성}`,
       `기종${T}${모델명}${T}기기상태${T}${기기상태}`,
@@ -162,7 +206,7 @@ export default function ServiceReception({ author }: { author: string }) {
       `자가사용내역(최근6개월)`,
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, route, type, workinName]);
+  }, [lease, manual, asHistory, route, type, workinName, region]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -175,95 +219,272 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  const sendReport = async () => {
-    if (!report || sending) return;
-    setSending(true);
-    setSendResult("");
+  const persist = async (status: string, sentRoom = "") => {
+    await saveServiceReception({
+      author, route, type,
+      vendor: vendorName,
+      asset_no: pick(lease, "자산번호"),
+      serial: pick(lease, "시리얼번호(기번)", "기번"),
+      model: pick(lease, "모델명", "기종"),
+      region,
+      title: manual.제목,
+      symptom: manual.증상,
+      paid: manual.유상무상,
+      notes: manual.참고사항,
+      report_text: type === "원격이관" ? "" : report,
+      status,
+      sent_room: sentRoom,
+    });
+  };
+
+  const resetForm = () => {
+    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setQuery(""); setResults([]);
+    setSearched(false); setWorkinName(""); setManualVendor("");
+  };
+
+  // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
+  const handleSave = async () => {
+    if (busy) return;
+    if (!vendorName) { setActionResult("업체를 선택(또는 입력)하세요."); return; }
+    setBusy(true);
+    setActionResult("");
     try {
-      const region = regionLabel(pick(lease, "담당지역"));
-      const res = await sendServiceReception(type === "IT AS" ? "IT" : "AS", region, report);
-      setSendResult(res.ok ? `전송 완료 — ${res.message}` : `전송 실패: ${res.error}`);
+      await persist(type === "원격이관" ? "원격대기" : "접수");
+      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : "접수 저장됨");
+      resetForm();
+      await loadList(listDate);
+    } catch (e) {
+      setActionResult(`저장 실패: ${(e as Error).message}`);
     } finally {
-      setSending(false);
+      setBusy(false);
     }
   };
 
-  const reset = () => { setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setSendResult(""); };
+  // 복합기 AS: 저장 + AS방 전송
+  const handleSaveAndSend = async () => {
+    if (busy || !report) return;
+    setBusy(true);
+    setActionResult("");
+    try {
+      const res = await sendServiceReception("AS", region, report);
+      if (!res.ok) { setActionResult(`전송 실패: ${res.error}`); return; }
+      const room = String(res.message || "").replace("게시 대기: ", "");
+      await persist("전송완료", room);
+      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}`);
+      resetForm();
+      await loadList(listDate);
+    } catch (e) {
+      setActionResult(`처리 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleRemoteDone = async (row: ServiceReceptionRow) => {
+    const next = row.status === "원격대기" ? "원격완료" : "원격대기";
+    try {
+      await setServiceReceptionStatus(row.id, next);
+      setListRows((current) => current.map((r) => r.id === row.id ? { ...r, status: next } : r));
+    } catch (e) {
+      window.alert(`상태 변경 실패: ${(e as Error).message}`);
+    }
+  };
+
+  // ---- 통계 ----
+  const counts = useMemo(() => ({
+    total: listRows.length,
+    copier: listRows.filter((r) => r.type === "복합기 AS").length,
+    it: listRows.filter((r) => r.type === "IT AS").length,
+    remote: listRows.filter((r) => r.type === "원격이관").length,
+    remoteWaiting: listRows.filter((r) => r.status === "원격대기").length,
+  }), [listRows]);
+  const byAuthor = useMemo(() => {
+    const map = new Map<string, { total: number; copier: number; it: number; remote: number }>();
+    for (const r of listRows) {
+      const key = r.author || "미지정";
+      const entry = map.get(key) || { total: 0, copier: 0, it: 0, remote: 0 };
+      entry.total += 1;
+      if (r.type === "복합기 AS") entry.copier += 1;
+      else if (r.type === "IT AS") entry.it += 1;
+      else entry.remote += 1;
+      map.set(key, entry);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
+  }, [listRows]);
+  const filteredRows = useMemo(() => listFilter === "전체" ? listRows : listRows.filter((r) => r.type === listFilter), [listRows, listFilter]);
+  const isToday = listDate === kstDate();
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4">
-      <div>
-        <h2 className="text-xl font-black text-slate-950">서비스 접수</h2>
-        <p className="mt-0.5 text-xs font-semibold text-slate-400">임대리스트에서 거래처를 찾아 카톡 보고용 양식을 자동으로 만듭니다. (작성자 {author})</p>
-      </div>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-black text-slate-400">접수경로</span>
-          {(["카카오", "전화"] as ReceiveRoute[]).map((r) => <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-lg px-3 py-1.5 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{r}</button>)}
-          <span className="ml-2 text-xs font-black text-slate-400">접수유형</span>
-          {(["원격이관", "복합기 AS", "IT AS"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => setType(t)} className={`rounded-lg px-3 py-1.5 text-xs font-black ${type === t ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
+    <div className="space-y-4 pb-16">
+      {/* 헤더 + 요약 */}
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-black text-slate-950">서비스 접수</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">고객 연락(카카오·전화)을 접수하고, 임대리스트 매칭 → 보고 양식 → 팀방 전송까지 처리합니다.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[["오늘 접수", counts.total], ["복합기", counts.copier], ["IT", counts.it], ["원격", counts.remote], ["원격대기", counts.remoteWaiting]].map(([label, value]) => (
+              <div key={String(label)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                <div className="text-[10px] font-bold text-slate-400">{label}{!isToday && label === "오늘 접수" ? ` (${listDate.slice(5)})` : ""}</div>
+                <div className="text-lg font-black text-slate-900">{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        {type === "원격이관" && <div className="mt-2 rounded-lg bg-blue-50 p-2 text-[11px] font-bold text-blue-700">원격이관은 통화로 처리 가능한 건입니다. (v1은 AS 양식 생성 중심)</div>}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="text-xs font-black text-slate-400">임대리스트 검색 (업체명 · 자산기번 · 순번)</div>
-        <div className="mt-1.5 flex gap-2">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
-          <button type="button" onClick={() => void runSearch()} disabled={searching} className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{searching ? "검색중" : "검색"}</button>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)]">
+        {/* ==== 좌: 접수 작성 ==== */}
+        <div className="space-y-4">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black text-slate-400">접수경로</span>
+              {(["카카오", "전화"] as ReceiveRoute[]).map((r) => <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-md px-3.5 py-2 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{r}</button>)}
+              <span className="ml-3 text-xs font-black text-slate-400">접수유형</span>
+              {(["복합기 AS", "IT AS", "원격이관"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded-md px-3.5 py-2 text-xs font-black ${type === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
+              <button type="button" onClick={() => void runSearch()} disabled={searching} className="shrink-0 rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{searching ? "검색중" : "검색"}</button>
+            </div>
+            {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
+            {results.length > 0 && <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
+              {results.map((hit, index) => <button key={index} type="button" onClick={() => void selectLease(hit)} className="block w-full px-3 py-2.5 text-left hover:bg-blue-50/50">
+                <div className="text-sm font-black text-slate-800">{pick(hit, "거래처명", "_업체명")} <span className="ml-1 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span></div>
+                <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
+              </button>)}
+            </div>}
+            {lease && <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/40 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-black text-slate-900">{pick(lease, "거래처명", "_업체명")}{workinName && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}</div>
+                <button type="button" onClick={resetForm} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">다시 검색</button>
+              </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 sm:grid-cols-3 lg:grid-cols-4">
+                <span>모델 {pick(lease, "모델명") || "-"}</span>
+                <span>자산 {pick(lease, "자산번호") || "-"}</span>
+                <span>기번 {pick(lease, "시리얼번호(기번)") || "-"}</span>
+                <span>등급 {pick(lease, "등급") || "-"}</span>
+                <span>지역 {region || "-"}</span>
+                <span>종료 {pick(lease, "종료일") || "-"}</span>
+                <span>미수 {pick(lease, "미수개월수") || "0"}개월</span>
+                <span className="text-rose-600">{asHistory.length ? `AS이력 ${asHistory.length}회` : "AS이력 없음"}</span>
+              </div>
+            </div>}
+            {!lease && type === "원격이관" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명 직접 입력 (임대리스트 미매칭 시)
+              <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="업체명" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            </label>}
+          </section>
+
+          {(lease || (type === "원격이관" && manualVendor.trim())) && <>
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-xs font-black text-slate-400">접수 내용</div>
+              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
+                  <label key={key} className="text-[11px] font-black text-slate-500">{label}
+                    <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                  </label>
+                ))}
+                <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
+                  <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                </label>
+                {type !== "원격이관" && <>
+                  <label className="text-[11px] font-black text-slate-500">유상/무상
+                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">{["무상", "유상", "보증"].map((v) => <option key={v}>{v}</option>)}</select>
+                  </label>
+                  <label className="text-[11px] font-black text-slate-500">교체이력 (예: 1회)
+                    <input value={manual.교체이력} onChange={(e) => setManual({ ...manual, 교체이력: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                  </label>
+                  <label className="text-[11px] font-black text-slate-500">참고사항
+                    <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                  </label>
+                </>}
+                {type === "원격이관" && <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">처리 내용/메모
+                  <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} placeholder="원격 안내 내용, 후속 필요사항 등" className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                </label>}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {type === "복합기 AS" && <button type="button" onClick={() => void handleSaveAndSend()} disabled={busy || !report} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "접수 저장 + AS방 전송"}</button>}
+                {type === "IT AS" && <span className="rounded-md bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-500">IT방 전송은 미정 — 저장 후 복사해 사용</span>}
+                <button type="button" onClick={() => void handleSave()} disabled={busy} className={`rounded-md px-5 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장 (대기)" : "접수 저장"}</button>
+                {actionResult && <span className={`rounded-md px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</span>}
+              </div>
+            </section>
+
+            {type !== "원격이관" && lease && <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-black text-slate-400">카톡 보고용 양식</div>
+                <button type="button" onClick={() => void copyReport()} className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-xs font-black text-slate-700">{copied ? "복사됨 ✓" : "복사"}</button>
+              </div>
+              <textarea value={report} readOnly rows={18} className="mt-2 w-full resize-y rounded-md border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-5 text-slate-700" />
+            </section>}
+          </>}
         </div>
-        {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
-        {results.length > 0 && <div className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-          {results.map((hit, index) => <button key={index} type="button" onClick={() => void selectLease(hit)} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
-            <div className="text-sm font-black text-slate-800">{pick(hit, "거래처명", "_업체명")} <span className="ml-1 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span></div>
-            <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
-          </button>)}
-        </div>}
-      </section>
 
-      {lease && <>
-        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-black text-slate-900">{pick(lease, "거래처명", "_업체명")}</div>
-            <button type="button" onClick={reset} className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-black text-slate-500">다시 검색</button>
-          </div>
-          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] font-semibold text-slate-600 sm:grid-cols-3">
-            <span>모델 {pick(lease, "모델명") || "-"}</span>
-            <span>자산 {pick(lease, "자산번호") || "-"}</span>
-            <span>기번 {pick(lease, "시리얼번호(기번)") || "-"}</span>
-            <span>등급 {pick(lease, "등급") || "-"}</span>
-            <span>지역 {regionLabel(pick(lease, "담당지역")) || "-"}</span>
-            <span>미수 {pick(lease, "미수개월수") || "0"}개월</span>
-          </div>
-        </section>
-
-        <section className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
-          {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"], ["교체이력", "교체이력(예: 1회)"], ["증상", "증상/내용"], ["참고사항", "참고사항"]] as [keyof Manual, string][]).map(([key, label]) => (
-            <label key={key} className={`text-[11px] font-black text-slate-500 ${key === "증상" || key === "참고사항" ? "sm:col-span-2" : ""}`}>{label}
-              {key === "증상" || key === "참고사항"
-                ? <textarea value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-2 py-1.5 text-sm font-semibold text-slate-900" />
-                : <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-semibold text-slate-900" />}
-            </label>
-          ))}
-          <label className="text-[11px] font-black text-slate-500">유상/무상
-            <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm font-semibold text-slate-900">{["무상", "유상", "보증"].map((v) => <option key={v}>{v}</option>)}</select>
-          </label>
-        </section>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-black text-slate-400">카톡 보고용 양식 {asHistory.length > 0 && <span className="text-rose-600">· AS이력 {asHistory.length}회</span>}</div>
-            <div className="flex gap-1.5">
-              <button type="button" onClick={() => void copyReport()} className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-xs font-black text-slate-700">{copied ? "복사됨 ✓" : "복사"}</button>
-              {type !== "원격이관" && <button type="button" onClick={() => void sendReport()} disabled={sending} className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-black text-white disabled:opacity-50">{sending ? "전송중…" : `${type === "IT AS" ? "IT방" : "AS방"} 전송`}</button>}
+        {/* ==== 우: 접수 현황 ==== */}
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6">
+          <div className="border-b border-slate-200 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-950">접수 현황</h3>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => setListDate(shiftDate(listDate, -1))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">‹</button>
+                <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700" />
+                <button type="button" onClick={() => setListDate(shiftDate(listDate, 1))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">›</button>
+                {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white">오늘</button>}
+              </div>
+            </div>
+            <div className="mt-2.5 flex gap-1">
+              {(["전체", "복합기 AS", "IT AS", "원격이관"] as const).map((f) => (
+                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
+                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT AS" ? `IT ${counts.it}` : `원격 ${counts.remote}`}
+                </button>
+              ))}
             </div>
           </div>
-          <textarea value={report} readOnly rows={20} className="mt-2 w-full resize-y rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-[11px] leading-5 text-slate-700" />
-          {sendResult && <div className={`mt-1.5 rounded-md p-2 text-[11px] font-black ${sendResult.startsWith("전송 완료") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{sendResult}</div>}
-          <div className="mt-1 text-[10px] font-bold text-slate-400">전송 시 {type === "IT AS" ? "PC/IT방" : "담당팀 AS방"}으로 게시됩니다. (TEST_MODE 중엔 테스트방)</div>
+
+          <div className="max-h-[52vh] divide-y divide-slate-100 overflow-y-auto">
+            {listLoading && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
+            {!listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listDate.slice(5)} 접수 기록이 없습니다.</div>}
+            {!listLoading && filteredRows.map((row) => (
+              <div key={row.id}>
+                <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
+                  <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT AS" ? "IT" : "원격"}</span>
+                  <span className="min-w-0">
+                    <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
+                    <span className="text-[10px] font-semibold text-slate-400">{row.created_at.slice(11, 16)} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
+                    {row.type === "원격이관" && <span onClick={(e) => { e.stopPropagation(); void toggleRemoteDone(row); }} className={`cursor-pointer rounded px-2 py-1 text-[10px] font-black ${row.status === "원격대기" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-400"}`}>{row.status === "원격대기" ? "완료" : "대기로"}</span>}
+                  </span>
+                </button>
+                {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
+                    <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
+                    <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
+                    <span>유상/무상 {row.paid}</span><span>접수 {row.created_at.slice(11, 16)}</span>
+                  </div>
+                  {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
+                  {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
+                  {row.report_text && <button type="button" onClick={() => void navigator.clipboard.writeText(row.report_text)} className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">양식 다시 복사</button>}
+                </div>}
+              </div>
+            ))}
+          </div>
+
+          {byAuthor.length > 0 && <div className="border-t border-slate-200 p-4">
+            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listDate.slice(5)})</div>
+            <div className="mt-2 space-y-1">
+              {byAuthor.map(([name, stat]) => (
+                <div key={name} className="flex items-center justify-between text-xs">
+                  <span className="font-black text-slate-700">{name}</span>
+                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">복합기 {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span></span>
+                </div>
+              ))}
+            </div>
+          </div>}
         </section>
-      </>}
+      </div>
     </div>
   );
 }

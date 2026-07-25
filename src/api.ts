@@ -8,7 +8,7 @@
 
 import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
-import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, invokeEdgeFunction, rpc, selectRows, type FieldSheetSyncCategory } from "./supabase";
+import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, invokeEdgeFunction, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
@@ -248,6 +248,23 @@ export async function findWorkinMapName(vendor: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+// 서비스접수 기록 (service_receptions) — 리스트·통계·날짜별 조회의 원본.
+export type ServiceReceptionRow = {
+  id: string; created_at: string; receipt_date: string; author: string;
+  route: string; type: string; vendor: string; asset_no: string; serial: string;
+  model: string; region: string; title: string; symptom: string; paid: string;
+  notes: string; report_text: string; status: string; sent_room: string;
+};
+export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<void> {
+  await insertRow("service_receptions", row);
+}
+export async function getServiceReceptions(start: string, end: string): Promise<ServiceReceptionRow[]> {
+  return selectRows<ServiceReceptionRow>("service_receptions", `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc`);
+}
+export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
+  await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
 }
 
 // 서비스접수 보고 양식 → 카톡 전송. IT AS는 PC/IT방, 복합기 AS는 지역 AS방. TEST_MODE면 테스트방.
