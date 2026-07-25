@@ -22,7 +22,7 @@ function summarize(rows: VisitRow[]) {
       if (!r.workKinds.includes(k)) continue;
       const visitCount = r.visited ? 1 : 0;
       const quantity = Math.max(1, Number(r.machineCount) || 0);
-      count[k] += k === "inspection" || k === "delivery" ? quantity : visitCount;
+      count[k] += k === "inspection" || k === "delivery" ? (r.visited ? quantity : 0) : visitCount; // 미방문 행은 건수 제외
       minutes[k] += Number(r.minutes[k] || 0);
     }
     const high = /^(SS|V)/i.test(r.grade.trim());

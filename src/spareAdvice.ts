@@ -39,12 +39,13 @@ export function monthsBetweenDates(from: string, to: string) {
 function spareCounts(text: string) {
   const source = String(text || "");
   const map: Record<string, number> = {};
-  for (const m of source.toUpperCase().matchAll(/([KCMY])\s*[-:]?\s*(\d+)/g)) map[m[1]] = (map[m[1]] || 0) + Number(m[2]);
-  const set = source.match(/(\d+)\s*(?:세트|SET|셋트|셋)/i) || source.match(/각\s*(\d+)/);
+  // 수량은 1~2자리로 제한 — "C4030" 같은 모델번호를 색상 수량으로 오파싱하지 않게 한다.
+  for (const m of source.toUpperCase().matchAll(/([KCMY])\s*[-:]?\s*(\d{1,2})(?!\d)/g)) map[m[1]] = (map[m[1]] || 0) + Number(m[2]);
+  const set = source.match(/(\d{1,2})\s*(?:세트|SET|셋트|셋)/i) || source.match(/각\s*(\d{1,2})(?!\d)/);
   if (set) for (const color of ["K", "C", "M", "Y"]) map[color] = Math.max(map[color] || 0, Number(set[1]));
-  const tonerGeneric = source.match(/토너\s*[-:]?\s*(\d+)/);
-  const drum = source.match(/드럼\s*[-:]?\s*(\d+)/);
-  const waste = source.match(/폐(?:통)?\s*[-:]?\s*(\d+)/);
+  const tonerGeneric = source.match(/토너\s*[-:]?\s*(\d{1,2})(?!\d)/);
+  const drum = source.match(/드럼\s*[-:]?\s*(\d{1,2})(?!\d)/);
+  const waste = source.match(/폐(?:통)?\s*[-:]?\s*(\d{1,2})(?!\d)/);
   return {
     map,
     waste: waste ? Number(waste[1]) : null,
@@ -105,8 +106,8 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
   const gradeLabel = isInkjet ? "잉크젯" : `${isSmall ? "A4" : "A3"}${isColor ? "컬러" : "흑백"}`;
   const standard = `${gradeLabel} ${isColor ? `${targetSets}세트` : `K${targetSets}`}${wasteTarget ? `·폐통${wasteTarget}` : ""} 기준`;
 
-  const wasteText = /^\d+$/.test(String(latest.waste || "").trim()) ? `폐${String(latest.waste).trim()}` : String(latest.waste || "");
-  const { map, waste, tonerGeneric, drum, any } = spareCounts(`${latest.spare || ""} ${wasteText}`);
+  // 주의: latest.waste(폐통 컬럼)는 폐통 '잔량 %'라 여분 수량이 아니다 — 여분 폐통 수는 여분 문자열의 "폐-N"에서만 읽는다.
+  const { map, waste, tonerGeneric, drum, any } = spareCounts(latest.spare || "");
   if (!any) {
     return { usageLine, warning, needsList: [], adviceLine: `여분 기록 없음 — ${standard}으로 채우도록 확인 필요` };
   }

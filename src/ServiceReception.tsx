@@ -64,6 +64,11 @@ function regionLabel(area: string) {
   for (const [key, team] of DISTRICT_TEAM) if (a.includes(key)) return `수도권${team}`;
   return a;
 }
+function kstTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
+  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+}
 function shiftDate(date: string, days: number) {
   const d = new Date(`${date}T12:00:00+09:00`);
   d.setDate(d.getDate() + days);
@@ -526,7 +531,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT AS" ? "IT" : "원격"}</span>
                   <span className="min-w-0">
                     <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
-                    <span className="text-[10px] font-semibold text-slate-400">{row.created_at.slice(11, 16)} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">{kstTime(row.created_at)} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
@@ -537,7 +542,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
                     <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
-                    <span>유상/무상 {row.paid}</span><span>접수 {row.created_at.slice(11, 16)}</span>
+                    <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}

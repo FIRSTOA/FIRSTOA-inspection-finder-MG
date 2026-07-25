@@ -1024,6 +1024,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           return archive ? { ...visit, sourceText: archiveText(archive) } : visit;
         });
         setInspectionVisits(inspections);
+        setDeviceHistoryCache({}); // 새 데이터 기준으로 펼침 이력 다시 조회(오늘 점검분이 캐시에 가려지지 않게)
         // 원본(jeomgeom) 행도 매칭 풀로 보관 — 방문기록이 없어도 업체명/기번으로 이력을 찾을 수 있게.
         // _기번목록엔 그 방문 양식의 모든 기기 기번이 들어 있어 이름이 달라도 기기로 매칭된다.
         setArchiveVisits(archiveRows.map((row) => {

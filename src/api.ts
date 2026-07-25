@@ -339,9 +339,14 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
     let room = testRoom;
     if (!testMode) {
       const map = await getRoomMap();
-      room = kind === "IT"
-        ? (map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt)
-        : (map[`AS|${normRegion(region)}`] || testRoom);
+      if (kind === "IT") {
+        room = map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt;
+      } else {
+        const mapped = map[`AS|${normRegion(region)}`];
+        // 방 매핑이 없는 지역(지방 등)을 테스트방으로 조용히 보내고 '전송완료'로 남기면 접수가 누락된다 — 차단.
+        if (!mapped) return { ok: false, error: `지역(${region || "미지정"})의 AS방 매핑이 없어 전송할 수 없습니다. 복사해서 직접 게시해 주세요.` };
+        room = mapped;
+      }
     }
     await enqueueOutbox(room, text);
     return { ok: true, message: `게시 대기: ${room}`, testMode };
