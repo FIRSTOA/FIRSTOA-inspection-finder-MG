@@ -884,6 +884,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "list">("map");
   const [mobileDetailId, setMobileDetailId] = useState<number | null>(null);
+  const [deviceHistoryCache, setDeviceHistoryCache] = useState<Record<number, VisitLike[]>>({});
   const [mapSelectionRevision, setMapSelectionRevision] = useState(0);
   const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const [editMode, setEditMode] = useState(false);
@@ -1148,12 +1149,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         ? keys.filter((k) => k.length >= 5 && (k.includes(key) || key.includes(k))).flatMap((k) => byKey.get(k) || [])
         : [];
       const serialKey = normalizeIdKey(deviceSerial(place));
-      // 원본(jeomgeom)은 기기 1대=1행이라, 이 장소의 기번과 다른 타기기 조각은 제외한다.
-      // (전체 양식인 visit_logs 항목은 idKeys가 비어 있어 통과하고, 표시 시 기번으로 블록을 추출한다.)
-      const nameMatches = (serialKey.length >= 4
-        ? entryPool.filter((entry) => !entry.idKeys.length || entry.idKeys.some((id) => id === serialKey || id.includes(serialKey) || serialKey.includes(id)))
-        : entryPool
-      ).map((entry) => entry.visit);
+      // 방문일 판단용으로는 업체 매칭 전부 사용(원본은 첫 기기 열만 있어도 방문일은 맞다).
+      // 기기별 정확한 표시는 카드 펼침 시 _원문을 즉석 조회해 해결한다(deviceHistoryCache).
+      const nameMatches = entryPool.map((entry) => entry.visit);
       const serialMatches = serialKey.length >= 4 ? (serialIndex.get(serialKey) || []) : [];
       const seenDates = new Set<string>();
       const merged: VisitLike[] = [];
@@ -1263,16 +1261,56 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     if (mobileDetailId === null) return null;
     const place = places.find((item) => item.id === mobileDetailId);
     if (!place) return null;
-    const snapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
+    const onDemand = deviceHistoryCache[place.id];
+    const loading = place.kind === "quarter" && onDemand === undefined;
+    const entries = onDemand !== undefined ? onDemand : (inspectionHistoryByPlace.get(place.id) || []);
+    const snapshots = loading ? [] : entries.map((visit) => visitSnapshot(visit, place));
     const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0] || null;
     return {
       place,
       snapshots,
+      loading,
       latestVisit,
       vendor: latestVisit?.vendor || place.name,
-      advice: place.label === "G7" ? null : usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
+      advice: place.label === "G7" || loading ? null : usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
     };
-  }, [inspectionHistoryByPlace, mobileDetailId, places]);
+  }, [inspectionHistoryByPlace, mobileDetailId, places, deviceHistoryCache]);
+
+  // 카드 펼침 시 그 업체의 전체 원문(_원문)을 즉석 조회해 "이 기기 블록이 포함된 방문"만 골라 캐시한다.
+  // (이력 풀은 용량 때문에 _원문 없이 첫 기기 열만 갖고 있어 다기기 업체에서 타기기가 표시되는 문제 해결)
+  useEffect(() => {
+    const targetId = expandedId ?? mobileDetailId;
+    if (targetId === null || deviceHistoryCache[targetId] !== undefined) return;
+    const place = places.find((item) => item.id === targetId);
+    if (!place || place.kind !== "quarter") return;
+    const vendor = (inspectionHistoryByPlace.get(targetId) || [])[0]?.vendor || "";
+    if (!vendor) { setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] })); return; }
+    const serialKey = normalizeIdKey(deviceSerial(place));
+    let alive = true;
+    void (async () => {
+      try {
+        const rows = await selectRows<Record<string, unknown>>(
+          "jeomgeom",
+          `select=${encodeURIComponent("작성일,_원문")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(vendor)}&order=${encodeURIComponent("작성일")}.desc&limit=10`,
+        );
+        const out: VisitLike[] = [];
+        const seen = new Set<string>();
+        for (const row of rows) {
+          const text = String(row["_원문"] || "").trim();
+          const date = String(row["작성일"] || "").slice(0, 10);
+          if (!text || !date || seen.has(date)) continue;
+          if (serialKey.length >= 4 && !normalizeIdKey(text).includes(serialKey)) continue; // 이 기기 블록이 없는 방문 제외
+          seen.add(date);
+          out.push({ workDate: date, vendor, sourceText: text, note: "" });
+          if (out.length >= 2) break;
+        }
+        if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: out }));
+      } catch {
+        if (alive) setDeviceHistoryCache((cache) => ({ ...cache, [targetId]: [] }));
+      }
+    })();
+    return () => { alive = false; };
+  }, [expandedId, mobileDetailId, places, inspectionHistoryByPlace, deviceHistoryCache]);
 
   // 자가신청 공용 핸들러: 다기기면 전체 원문(_원문)을 즉석 조회해 업체 전체 양식으로, 아니면 단일기기 양식으로.
   const requestSelfForm = async (place: MapPlace, latestVisit: VisitLike | null | undefined, snapshot: SelfRequestSnapshot | undefined, needsList: SpareNeed[], vendorName: string) => {
@@ -1653,8 +1691,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const misu = misuByVendor.get(vendorMatchKey(place.name));
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
-          const inspectionSnapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
-          const spareAdviceResult = place.label === "G7" ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
+          const onDemandHistory = deviceHistoryCache[place.id];
+          const historyLoading = expandedId === place.id && place.kind === "quarter" && onDemandHistory === undefined;
+          const historyEntries = onDemandHistory !== undefined && onDemandHistory.length ? onDemandHistory : (onDemandHistory !== undefined ? [] : (inspectionHistoryByPlace.get(place.id) || []));
+          const inspectionSnapshots = historyEntries.map((visit) => visitSnapshot(visit, place));
+          const spareAdviceResult = place.label === "G7" || historyLoading ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
@@ -1691,7 +1732,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <div className="space-y-3">
                     {place.kind === "quarter" && <div>
                       <div className="font-black text-slate-400">최근 점검 비교</div>
-                      {inspectionSnapshots.length ? <div className="mt-1 space-y-2">
+                      {historyLoading ? <div className="mt-1 font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
+                      : inspectionSnapshots.length ? <div className="mt-1 space-y-2">
                         {inspectionSnapshots.map((snapshot, index) => <div key={`${place.id}-history-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-2">
                           <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
                           <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
@@ -1700,7 +1742,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                           const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0];
                           void requestSelfForm(place, latestVisit, inspectionSnapshots[0], spareAdviceResult.needsList, latestVisit?.vendor || place.name);
                         }} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div></div>}
-                      </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
+                      </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>
                       <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} /></div>
@@ -1905,7 +1947,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       </section>
 
       {mobileDetail && !desktopLayout && (() => {
-        const { place, snapshots, latestVisit, vendor: detailVendor, advice } = mobileDetail;
+        const { place, snapshots, loading: historyLoading, latestVisit, vendor: detailVendor, advice } = mobileDetail;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
         const phone = place.phone.match(/0\d{1,2}-?\d{3,4}-?\d{4}/)?.[0] || "";
@@ -1926,7 +1968,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             </section>
             {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
-              {snapshots.length ? <div className="mt-3 space-y-3">
+              {historyLoading ? <div className="mt-2 text-sm font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
+              : snapshots.length ? <div className="mt-3 space-y-3">
                 {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
                 {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                   void requestSelfForm(place, latestVisit, snapshots[0], advice.needsList, detailVendor);
