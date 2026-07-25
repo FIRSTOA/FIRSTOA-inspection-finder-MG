@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
-import { deleteRows, selectAllRows, selectAllRowsFast, upsertRows } from "./supabase";
+import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 
@@ -387,6 +387,25 @@ function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?
 // ※자가신청※에 기종별로 집계해 채운다. 예전 "점검방 양식 훑어보고 기종별로 적던" 흐름의 자동화.
 function splitDeviceBlocks(source: string) {
   return source.split(/\n(?=\d+\.\s*(?:\n|$))/).filter((block) => visitMetric(block, "모델명") || visitMetric(block, "시리얼넘버"));
+}
+
+// 이력 매칭용 원본(jeomgeom)은 기기 1대=1행이라 전체 양식이 아니다. 자가신청 시에만
+// 그 날짜의 _원문(모든 기기 블록 포함)을 즉석에서 가져온다.
+async function fetchFullFormText(vendor: string, workDate: string): Promise<string> {
+  if (!vendor.trim()) return "";
+  try {
+    const rows = await selectRows<Record<string, unknown>>(
+      "jeomgeom",
+      `select=${encodeURIComponent("_원문,작성일")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(vendor)}&order=${encodeURIComponent("작성일")}.desc&limit=12`,
+    );
+    const texts = rows
+      .filter((row) => String(row["작성일"] || "").slice(0, 10) === workDate)
+      .map((row) => String(row["_원문"] || "").trim())
+      .filter(Boolean);
+    return texts.sort((a, b) => b.length - a.length)[0] || "";
+  } catch {
+    return "";
+  }
 }
 
 function buildVendorSelfRequestText(author: string, visit: VisitLike): string | null {
@@ -1248,6 +1267,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     };
   }, [inspectionHistoryByPlace, mobileDetailId, places]);
 
+  // 자가신청 공용 핸들러: 다기기면 전체 원문(_원문)을 즉석 조회해 업체 전체 양식으로, 아니면 단일기기 양식으로.
+  const requestSelfForm = async (place: MapPlace, latestVisit: VisitLike | null | undefined, snapshot: SelfRequestSnapshot | undefined, needsList: SpareNeed[], vendorName: string) => {
+    if (!onSelfRequest) return;
+    let multi: string | null = null;
+    if (latestVisit) {
+      let source = latestVisit.sourceText || "";
+      if (splitDeviceBlocks(source).length < 2) {
+        const full = await fetchFullFormText(latestVisit.vendor, latestVisit.workDate);
+        if (full && splitDeviceBlocks(full).length >= 2) source = full;
+      }
+      multi = buildVendorSelfRequestText(userKey, { ...latestVisit, sourceText: source });
+    }
+    onSelfRequest(multi ?? buildSelfRequestText(userKey, vendorName, place, snapshot, needsList));
+  };
+
   const mapPlaces = useMemo(() => scopedPlaces.filter((place) => place.visible), [scopedPlaces]);
   const progressQuarter = quarterFilter;
   const progressYear = new Date().getFullYear();
@@ -1657,8 +1691,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         </div>)}
                         {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.warning && <div className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">주의 {spareAdviceResult.warning}</div>}{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                           const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0];
-                          const multi = latestVisit ? buildVendorSelfRequestText(userKey, latestVisit) : null;
-                          onSelfRequest(multi ?? buildSelfRequestText(userKey, latestVisit?.vendor || place.name, place, inspectionSnapshots[0], spareAdviceResult.needsList));
+                          void requestSelfForm(place, latestVisit, inspectionSnapshots[0], spareAdviceResult.needsList, latestVisit?.vendor || place.name);
                         }} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div></div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
                     </div>}
@@ -1889,8 +1922,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               {snapshots.length ? <div className="mt-3 space-y-3">
                 {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
                 {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
-                  const multi = latestVisit ? buildVendorSelfRequestText(userKey, latestVisit) : null;
-                  onSelfRequest(multi ?? buildSelfRequestText(userKey, detailVendor, place, snapshots[0], advice.needsList));
+                  void requestSelfForm(place, latestVisit, snapshots[0], advice.needsList, detailVendor);
                   setMobileDetailId(null);
                 }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}

@@ -11,8 +11,9 @@ function normSerial(value: string) {
   return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
 }
 
-const A3_PATTERN = /(MX\d|APEOS|DOCU|DC[- ]?\d|X7\d{2}|C2060|C2560|C3060|C2270|C2271|C3370|C3375|C4470|C5570|7845|7855|B7185|B7125)/i;
-const A4_PATTERN = /(SL[- ]?X3|SL[- ]?X4|SL[- ]?C4|SL[- ]?M4|X32\d|X42\d|X28\d|3220|4220|3280|D420|D320|C24\d|C31\d)/i;
+// 소형기(A4) 모델 번호 — 이 목록 외에는 전부 A3(대형)로 본다.
+// 소형 컬러: 2100·2101·5521·5526·8900·5473·305 / 소형 흑백: 5700
+const SMALL_MODEL = /(?<!\d)(2100|2101|5521|5526|8900|5473|305|5700)(?!\d)/;
 
 export function counterOf(counts: string, label: string): number | null {
   // "컬"이 "큰컬"에 걸리지 않게 lookbehind로 구분한다.
@@ -87,15 +88,15 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
     }
   }
 
-  // 기준: 여분 2세트 고정(사용자 판단 여지), 폐통은 A3 분류 시 2개.
-  const grade = A3_PATTERN.test(model) ? "A3" : A4_PATTERN.test(model) ? "A4" : "";
-  const targetSets = 2;
-  const wasteTarget = grade === "A3" ? 2 : 0;
-  const standard = `${targetSets}세트${wasteTarget ? `·폐통${wasteTarget}` : ""} 기준`;
-
-  // 컬러기 여부 → 세트 구성 색상
+  // 기준: A3컬러=2세트·폐통2 / A4컬러(소형)=3세트 / A3흑백=K2·폐통2 / A4흑백(소형)=K2
+  const isSmall = SMALL_MODEL.test(model);
+  // 컬러기 여부 → 세트 구성 색상 (흑백기는 CMY 표기가 없고 '토너1'·'K1' 식으로 적는다)
   const isColor = (counterOf(latest.counts, "컬") ?? 0) > 0 || /[CMY]\s*[-:]?\s*\d/i.test(latest.toner || "") || /[CMY]\s*[-:]?\s*\d/i.test(latest.spare || "");
   const colors = isColor ? ["K", "C", "M", "Y"] : ["K"];
+  const targetSets = isSmall && isColor ? 3 : 2;
+  const wasteTarget = isSmall ? 0 : 2;
+  const gradeLabel = `${isSmall ? "A4" : "A3"}${isColor ? "컬러" : "흑백"}`;
+  const standard = `${gradeLabel} ${isColor ? `${targetSets}세트` : `K${targetSets}`}${wasteTarget ? `·폐통${wasteTarget}` : ""} 기준`;
 
   const wasteText = /^\d+$/.test(String(latest.waste || "").trim()) ? `폐${String(latest.waste).trim()}` : String(latest.waste || "");
   const { map, waste, tonerGeneric, drum, any } = spareCounts(`${latest.spare || ""} ${wasteText}`);
