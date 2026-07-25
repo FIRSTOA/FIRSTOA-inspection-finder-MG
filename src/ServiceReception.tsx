@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { searchLeaseList, getAsHistory, findWorkinMapName, type LeaseHit } from "./api";
+import { searchLeaseList, getAsHistory, findWorkinMapName, sendServiceReception, type LeaseHit } from "./api";
 import { kstDate } from "./visits";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -75,6 +75,8 @@ export default function ServiceReception({ author }: { author: string }) {
   const [asHistory, setAsHistory] = useState<{ date: string; content: string }[]>([]);
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState("");
 
   const runSearch = async () => {
     if (!query.trim()) return;
@@ -173,7 +175,20 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  const reset = () => { setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setQuery(""); setResults([]); setSearched(false); };
+  const sendReport = async () => {
+    if (!report || sending) return;
+    setSending(true);
+    setSendResult("");
+    try {
+      const region = regionLabel(pick(lease, "담당지역"));
+      const res = await sendServiceReception(type === "IT AS" ? "IT" : "AS", region, report);
+      setSendResult(res.ok ? `전송 완료 — ${res.message}` : `전송 실패: ${res.error}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const reset = () => { setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setSendResult(""); };
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4">
@@ -239,10 +254,14 @@ export default function ServiceReception({ author }: { author: string }) {
         <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="text-xs font-black text-slate-400">카톡 보고용 양식 {asHistory.length > 0 && <span className="text-rose-600">· AS이력 {asHistory.length}회</span>}</div>
-            <button type="button" onClick={() => void copyReport()} className="rounded-md bg-slate-900 px-4 py-1.5 text-xs font-black text-white">{copied ? "복사됨 ✓" : "복사"}</button>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => void copyReport()} className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-xs font-black text-slate-700">{copied ? "복사됨 ✓" : "복사"}</button>
+              {type !== "원격이관" && <button type="button" onClick={() => void sendReport()} disabled={sending} className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-black text-white disabled:opacity-50">{sending ? "전송중…" : `${type === "IT AS" ? "IT방" : "AS방"} 전송`}</button>}
+            </div>
           </div>
           <textarea value={report} readOnly rows={20} className="mt-2 w-full resize-y rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-[11px] leading-5 text-slate-700" />
-          <div className="mt-1 text-[10px] font-bold text-slate-400">복사 후 {type === "IT AS" ? "IT" : "AS 팀"} 방에 붙여넣기. (전송·캘린더 자동화는 다음 단계)</div>
+          {sendResult && <div className={`mt-1.5 rounded-md p-2 text-[11px] font-black ${sendResult.startsWith("전송 완료") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{sendResult}</div>}
+          <div className="mt-1 text-[10px] font-bold text-slate-400">전송 시 {type === "IT AS" ? "PC/IT방" : "담당팀 AS방"}으로 게시됩니다. (TEST_MODE 중엔 테스트방)</div>
         </section>
       </>}
     </div>

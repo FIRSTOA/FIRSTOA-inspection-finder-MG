@@ -250,6 +250,27 @@ export async function findWorkinMapName(vendor: string): Promise<string> {
   }
 }
 
+// 서비스접수 보고 양식 → 카톡 전송. IT AS는 PC/IT방, 복합기 AS는 지역 AS방. TEST_MODE면 테스트방.
+export async function sendServiceReception(kind: "IT" | "AS", region: string, text: string): Promise<SaveResp> {
+  try {
+    if (!text.trim()) return { ok: false, error: "전송할 양식이 없습니다." };
+    const cfg = await getConfig();
+    const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+    const testMode = String(cfg.TEST_MODE || "true").toLowerCase() === "true";
+    let room = testRoom;
+    if (!testMode) {
+      const map = await getRoomMap();
+      room = kind === "IT"
+        ? (map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt)
+        : (map[`AS|${normRegion(region)}`] || testRoom);
+    }
+    await enqueueOutbox(room, text);
+    return { ok: true, message: `게시 대기: ${room}`, testMode };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
 // AS 접수이력 — 업체명 기준(기번은 임대리스트와 as_records가 다를 수 있어 업체명이 안전). 시리얼도 보조로.
 export async function getAsHistory(vendor: string, serial: string): Promise<{ date: string; content: string }[]> {
   const dateCol = encodeURIComponent("작성일");
