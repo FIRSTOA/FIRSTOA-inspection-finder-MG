@@ -3,7 +3,7 @@ import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
-import { normalizeId as normalizeIdKey } from "./ids";
+import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 
@@ -314,14 +314,7 @@ function addressGroupKey(place: MapPlace) {
   return address || `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
 }
 
-function vendorMatchKey(value: string) {
-  return value
-    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
-    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?/i, "")
-    .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "")
-    .replace(/[^0-9a-z가-힣]/gi, "")
-    .toLowerCase();
-}
+
 
 function daysBetween(from: string, to: string) {
   return Math.max(0, Math.floor((new Date(`${to}T12:00:00+09:00`).getTime() - new Date(`${from}T12:00:00+09:00`).getTime()) / 86_400_000));

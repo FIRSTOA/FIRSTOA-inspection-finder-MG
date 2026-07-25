@@ -25,7 +25,8 @@ import ContactChangeForm from "./ContactChangeForm";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, type LogisticsFormState, type SendDestination } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination } from "./api";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
@@ -3916,6 +3917,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [workinInspectionMatch, setWorkinInspectionMatch] = useState<WorkinInspectionMatch | null>(null);
+  const [fieldVendorFlags, setFieldVendorFlags] = useState<VendorWorkFlags | null>(null);
   const [workinSyncResult, setWorkinSyncResult] = useState<WorkinSyncResult | null>(null);
   const [workinSyncDetailsOpen, setWorkinSyncDetailsOpen] = useState(false);
   const workinVisitCacheRef = useRef<{ loadedAt: number; rows: VisitRow[] }>({ loadedAt: 0, rows: [] });
@@ -4396,13 +4398,17 @@ export default function App() {
   useEffect(() => {
     if (mode !== "blank-report") {
       setWorkinInspectionMatch(null);
+      setFieldVendorFlags(null);
       return;
     }
     const vendor = currentVendor || extractVendorFromText(listOutput[0]?.content || textOutput || "");
     const vendorKey = matchVendor(vendor);
     const devices = itemForms.map((item) => ({ model: matchToken(item.model), serial: matchToken(item.serial), asset: matchToken(item.asset) }));
+    const rawSerial = itemForms.find((item) => item.serial.trim())?.serial || "";
+    const rawAsset = itemForms.find((item) => item.asset.trim())?.asset || "";
     if (!vendorKey && !devices.some((item) => item.serial || item.asset)) {
       setWorkinInspectionMatch(null);
+      setFieldVendorFlags(null);
       return;
     }
     let active = true;
@@ -4420,9 +4426,13 @@ export default function App() {
       void Promise.all([
         selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}&kind=eq.quarter`),
         visitsPromise,
+        // 방문기록에 없어도 점검 원본(jeomgeom)에 있으면 마지막 점검일로 잡는다 (예: 엘디카본 5월 점검)
+        vendor ? getRecentInspections(vendor, rawSerial, rawAsset).then((recent) => recent.snapshots[0]?.date || "").catch(() => "") : Promise.resolve(""),
+        vendor ? getVendorFlagsBatch([vendor]).then((flags) => flags.get(vendor) || null).catch(() => null) : Promise.resolve(null),
       ])
-        .then(([rows, visits]) => {
+        .then(([rows, visits, jeomgeomDate, vendorFlags]) => {
           if (!active) return;
+          setFieldVendorFlags(vendorFlags);
           const ranked = rows.map((row) => {
             const rowText = matchToken([row.name, row.comment, ...(row.memos || [])].join(" "));
             const rowVendor = matchVendor(row.name);
@@ -4440,7 +4450,7 @@ export default function App() {
             return;
           }
           const placeVendor = matchVendor(place.name);
-          const lastInspection = visits
+          let lastInspection = visits
             .filter((visit) => visit.visited && visit.workKinds.includes("inspection"))
             .filter((visit) => {
               const visitVendor = matchVendor(visit.vendor);
@@ -4448,6 +4458,7 @@ export default function App() {
                 || (placeVendor.length >= 4 && visitVendor.length >= 4 && (visitVendor.includes(placeVendor) || placeVendor.includes(visitVendor)));
             })
             .sort((left, right) => right.workDate.localeCompare(left.workDate))[0]?.workDate || "";
+          if (jeomgeomDate > lastInspection) lastInspection = jeomgeomDate;
           const daysSinceInspection = lastInspection
             ? Math.max(0, Math.floor((new Date(`${kstDate()}T00:00:00`).getTime() - new Date(`${lastInspection}T00:00:00`).getTime()) / 86_400_000))
             : null;
@@ -4460,7 +4471,7 @@ export default function App() {
                 : "recommended";
           setWorkinInspectionMatch({ place, lastInspection, status, daysSinceInspection });
         })
-        .catch((error) => { console.error("FIELD workin map match failed", error); if (active) setWorkinInspectionMatch(null); });
+        .catch((error) => { console.error("FIELD workin map match failed", error); if (active) { setWorkinInspectionMatch(null); setFieldVendorFlags(null); } });
     }, 350);
     return () => { active = false; window.clearTimeout(timer); };
   }, [currentVendor, itemForms, listOutput, mode, textOutput]);
@@ -5496,23 +5507,35 @@ export default function App() {
           )}
         </div>
 
-        {workinInspectionMatch && (() => {
-          const statusConfig = {
-            recommended: { title: "분기점검 권장", detail: "AS 처리와 함께 분기점검이 가능한지 확인해 주세요.", wrap: "border-amber-300 bg-amber-50", text: "text-amber-900", sub: "text-amber-700" },
-            waiting: { title: "분기점검 방문 대기", detail: `60일 기준까지 ${Math.max(0, 60 - (workinInspectionMatch.daysSinceInspection || 0))}일 남았습니다.`, wrap: "border-blue-200 bg-blue-50", text: "text-blue-950", sub: "text-blue-700" },
-            completed: { title: "분기점검 완료", detail: `완료 표시일: ${workinStatusDate(workinInspectionMatch.place)}`, wrap: "border-emerald-200 bg-emerald-50", text: "text-emerald-950", sub: "text-emerald-700" },
-            carried: { title: "다음 분기 이관", detail: `이관 표시일: ${workinStatusDate(workinInspectionMatch.place)}`, wrap: "border-slate-300 bg-slate-50", text: "text-slate-950", sub: "text-slate-600" },
-          }[workinInspectionMatch.status];
-          return <div className={`rounded-xl border px-4 py-3 ${statusConfig.wrap}`}>
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-lg">{workinInspectionMatch.status === "completed" ? "✓" : workinInspectionMatch.status === "carried" ? "→" : "!"}</span>
-              <div className="min-w-0">
-                <div className={`text-sm font-black ${statusConfig.text}`}>{statusConfig.title}</div>
-                <div className={`mt-1 text-xs font-semibold leading-5 ${statusConfig.sub}`}>{workinInspectionMatch.place.name} · {workinInspectionMatch.place.team}팀 · {workinInspectionMatch.place.quarter}분기 · {workinInspectionMatch.place.label}</div>
-                <div className={`mt-1 text-xs font-black ${statusConfig.text}`}>마지막 점검일: {workinInspectionMatch.lastInspection || "확인되지 않음"}{workinInspectionMatch.daysSinceInspection !== null ? ` · ${workinInspectionMatch.daysSinceInspection}일 경과` : ""}</div>
-                <div className={`mt-1 text-[11px] font-bold ${statusConfig.sub}`}>{statusConfig.detail}</div>
-              </div>
-            </div>
+        {(workinInspectionMatch || fieldVendorFlags) && (() => {
+          // AS 처리 중 이중 확인 없이 한눈에 — 워킨맵 사이드탭과 같은 형식의 한 줄 요약들.
+          const match = workinInspectionMatch;
+          const nameInspection = fieldVendorFlags?.inspection || null;
+          const lastLabel = match ? `마지막 점검일: ${match.lastInspection || "확인 안 됨"}${match.daysSinceInspection !== null ? ` (${match.daysSinceInspection}일 경과)` : ""}` : "";
+          const inspectionLine = match
+            ? {
+              recommended: { text: `${match.place.quarter}분기 워킨맵 점검 필요 · ${lastLabel}`, tone: "text-amber-900", wrap: "border-amber-300 bg-amber-50" },
+              waiting: { text: `${match.place.quarter}분기 점검 방문 대기 · ${lastLabel}`, tone: "text-blue-950", wrap: "border-blue-200 bg-blue-50" },
+              completed: { text: `${match.place.quarter}분기 워킨맵 점검 완료 · ${workinStatusDate(match.place)}`, tone: "text-emerald-950", wrap: "border-emerald-200 bg-emerald-50" },
+              carried: { text: `다음 분기 이관 · ${workinStatusDate(match.place)}`, tone: "text-slate-950", wrap: "border-slate-300 bg-slate-50" },
+            }[match.status]
+            : nameInspection
+              ? nameInspection.done
+                ? { text: `${nameInspection.quarter}분기 워킨맵 점검 완료`, tone: "text-emerald-950", wrap: "border-emerald-200 bg-emerald-50" }
+                : nameInspection.carried
+                  ? { text: "다음 분기 이관", tone: "text-slate-950", wrap: "border-slate-300 bg-slate-50" }
+                  : { text: `${nameInspection.quarter}분기 워킨맵 점검 필요 · 마지막 점검일: 확인 안 됨`, tone: "text-amber-900", wrap: "border-amber-300 bg-amber-50" }
+              : null;
+          const misu = fieldVendorFlags?.misu || null;
+          const misuBalance = misu ? (misu.balance.replace(/[^\d]/g, "") ? `${Number(misu.balance.replace(/[^\d]/g, "")).toLocaleString()}원` : misu.balance) : "";
+          const renewal = fieldVendorFlags?.renewal || null;
+          if (!inspectionLine && !misu && !renewal) return null;
+          return <div className={`rounded-xl border px-4 py-3 ${inspectionLine?.wrap || "border-slate-200 bg-white"}`}>
+            {inspectionLine && <div className={`text-sm font-black ${inspectionLine.tone}`}>{inspectionLine.text}</div>}
+            {misu && <div className="mt-1 text-xs font-black text-rose-600">미수 {misu.months ? `${misu.months}개월 · ` : ""}{misuBalance}</div>}
+            {renewal && (renewal.done
+              ? <div className="mt-1 text-xs font-black text-slate-400">재계약 완료 · {renewal.quarter}분기 워킨맵</div>
+              : <div className="mt-1 text-xs font-black text-rose-600">재계약 {renewal.quarter}분기 워킨맵 · {renewal.due ? `종료 ${renewal.due}` : "종료월 확인필요"}</div>)}
           </div>;
         })()}
 

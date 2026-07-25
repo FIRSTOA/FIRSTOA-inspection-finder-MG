@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -139,6 +140,25 @@ async function migrateLocalOnce() {
   }
 }
 
+// 워킨맵·FIELD와 같은 기준의 점검·미수·재계약 상태 배지 — AS 나가는 김에 함께 처리할 일을 바로 보이게.
+function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
+  if (!flags) return null;
+  const misuBalance = flags.misu ? (flags.misu.balance.replace(/[^\d]/g, "") ? `${Number(flags.misu.balance.replace(/[^\d]/g, "")).toLocaleString()}원` : flags.misu.balance) : "";
+  return (
+    <span className="flex flex-wrap gap-1">
+      {flags.inspection && (flags.inspection.done
+        ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-600">점검완료</span>
+        : flags.inspection.carried
+          ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">점검 다음분기</span>
+          : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">{flags.inspection.quarter}분기 점검</span>)}
+      {flags.misu && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-700">미수{flags.misu.months ? ` ${flags.misu.months}개월` : ""}{misuBalance ? ` ${misuBalance}` : ""}</span>}
+      {flags.renewal && (flags.renewal.done
+        ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">재계약 완료</span>
+        : <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">재계약{flags.renewal.due ? ` · 종료 ${flags.renewal.due}` : ""}</span>)}
+    </span>
+  );
+}
+
 function statusClass(status: AsStatus) {
   if (status === "완료") return "border-blue-200 bg-blue-50 text-blue-700";
   if (status === "익일") return "border-purple-200 bg-purple-50 text-purple-700";
@@ -237,6 +257,17 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
   }, [refreshTickets]);
 
+  const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
+  useEffect(() => {
+    const vendors = Array.from(new Set(tickets.map((ticket) => ticket.vendor.trim()).filter(Boolean)));
+    if (!vendors.length) { setVendorFlags(new Map()); return; }
+    let active = true;
+    getVendorFlagsBatch(vendors)
+      .then((flags) => { if (active) setVendorFlags(flags); })
+      .catch(() => { /* 배지 조회 실패는 조용히 넘어간다 — 일정 자체 기능엔 영향 없음 */ });
+    return () => { active = false; };
+  }, [tickets]);
+
   const persistRemote = (ticket: AsTicket) => {
     void upsertRow("as_tickets", toDbRow(ticket), "id").catch(() => setSyncError("일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 수정해 주세요."));
   };
@@ -333,6 +364,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         <span className={`rounded border px-2 py-0.5 text-[11px] font-black ${statusClass(ticket.status)}`}>{ticket.status}</span>
       </div>
       <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.team}팀 {ticket.scheduleType} · 담당 {ticket.assignee || "미배정"} · {ticket.model}</div>
+      <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
     </button>
   );
 
@@ -515,6 +547,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <div className={`mt-2 text-base font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{ticket.vendor}</div>
                     <div className="mt-1 text-sm font-semibold text-slate-600">{ticket.issue}</div>
                     <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.model} · {ticket.serial || "시리얼 미입력"}</div>
+                    <div className="mt-2"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                   </button>
                   {ticket.status === "완료" && <span className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
                 </div>
@@ -553,6 +586,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       <button type="button" onClick={() => setEditId(ticket.id)} className="text-left">
                         <div className="flex items-center gap-2 text-sm font-black text-slate-900">{ticket.vendor}{ticket.status === "완료" && <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                         <div className="mt-1 text-xs font-semibold text-slate-500">{ticket.issue}</div>
+                        <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                       </button>
                     </td>
                     <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
