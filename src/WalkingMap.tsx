@@ -372,8 +372,15 @@ function visitSnapshot(visit: VisitLike, place: MapPlace) {
     spare,
     waste: visitMetric(text, "폐통"),
     serial: visitMetric(text, "시리얼넘버"),
+    model: visitMetric(text, "모델명"),
+    asset: visitMetric(text, "자산기번"),
     spareLocation: visitSpareLocation(spare),
   };
+}
+
+// 스냅샷의 기기 식별 줄 — 기기 교체·혼동을 바로 알아챌 수 있게 모델/자산/기번을 붙인다.
+function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?: string }) {
+  return [snapshot.model, snapshot.asset && `자산 ${snapshot.asset}`, snapshot.serial && `기번 ${snapshot.serial}`].filter(Boolean).join(" · ");
 }
 
 type InspectionArchiveRow = Record<string, unknown>;
@@ -1553,7 +1560,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                       {inspectionSnapshots.length ? <div className="mt-1 space-y-2">
                         {inspectionSnapshots.map((snapshot, index) => <div key={`${place.id}-history-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-2">
                           <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
-                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
+                          <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
                         </div>)}
                         {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.warning && <div className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">주의 {spareAdviceResult.warning}</div>}{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</div></div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
@@ -1779,7 +1786,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
             {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
               {snapshots.length ? <div className="mt-3 space-y-3">
-                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
                 {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">여분 {advice.adviceLine}</div></div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
             </section>}

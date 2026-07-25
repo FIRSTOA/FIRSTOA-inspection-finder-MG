@@ -398,7 +398,7 @@ export async function getAsHistory(vendor: string, serial: string, assetNo = "")
 
 // 자가사용내역 대체: 최근 점검 2회(전방문·전전방문). 선택한 기기(시리얼/자산기번) 기록을 우선하고,
 // 없으면 업체 기록으로 폴백(deviceMatch=false → 다른 기기 기록일 수 있음을 표기).
-export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string; waste: string; serial: string };
+export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string; waste: string; serial: string; model: string; asset: string };
 export type RecentInspections = { snapshots: InspectionSnapshot[]; deviceMatch: boolean };
 export async function getRecentInspections(vendor: string, serial = "", assetNo = ""): Promise<RecentInspections> {
   const core = coreVendorKey(vendor);
@@ -406,7 +406,7 @@ export async function getRecentInspections(vendor: string, serial = "", assetNo 
   if (probe.length < 2) return { snapshots: [], deviceMatch: false };
   const dateCol = encodeURIComponent("작성일");
   try {
-    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통,시리얼넘버,자산기번")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=60`);
+    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통,시리얼넘버,자산기번,모델명")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=60`);
     const vendorRows = rows.filter((r) => {
       const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
       return key.includes(core) || core.includes(key);
@@ -425,6 +425,8 @@ export async function getRecentInspections(vendor: string, serial = "", assetNo 
         spare: String(r["여분"] || "").trim(),
         waste: String(r["폐통"] || "").trim(),
         serial: String(r["시리얼넘버"] || "").trim(),
+        model: String(r["모델명"] || "").trim(),
+        asset: String(r["자산기번"] || "").trim(),
       }))
       .filter((s) => s.date)
       .slice(0, 2);
