@@ -264,15 +264,26 @@ export async function getVendorIdentifiers(vendors: string[]): Promise<Record<st
   return out;
 }
 
-// 같은 업체의 임대 기기 수 — 여러 대 중 선택임을 알려 기기 오선택을 막는다.
-export async function countLeaseDevices(vendor: string): Promise<number> {
+// 같은 업체의 임대중 기기 요약 — 임대종료/소송 행은 제외하고 품목별로 나눠 오선택을 막는다.
+export type LeaseDeviceSummary = { active: number; items: Array<[string, number]> };
+export async function getLeaseDeviceSummary(vendor: string): Promise<LeaseDeviceSummary> {
   const v = String(vendor || "").trim();
-  if (!v) return 0;
+  if (!v) return { active: 0, items: [] };
   try {
-    const rows = await selectRows<{ id: number }>("vendor_info", `select=id&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(v)}&limit=100`);
-    return rows.length;
+    const rows = await selectRows<{ 임대여부?: string; _raw?: Record<string, unknown> }>(
+      "vendor_info",
+      `select=${encodeURIComponent("임대여부,_raw")}&${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(v)}&limit=100`,
+    );
+    const active = rows.filter((r) => String(r["임대여부"] || "").trim() === "임대중");
+    const counts = new Map<string, number>();
+    for (const r of active) {
+      const raw = (r._raw && typeof r._raw === "object" ? r._raw : {}) as Record<string, unknown>;
+      const item = String(raw["품목"] || raw["기종"] || "기타").trim() || "기타";
+      counts.set(item, (counts.get(item) || 0) + 1);
+    }
+    return { active: active.length, items: Array.from(counts.entries()).sort((a, b) => b[1] - a[1]) };
   } catch {
-    return 0;
+    return { active: 0, items: [] };
   }
 }
 
@@ -337,7 +348,7 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
 
 // AS 접수이력. 시리얼/자산기번 일치(serialMatch)를 우선 판별하고, 업체명은 법인표기·부서명 변형에
 // 대응하도록 핵심어(coreVendorKey)로 넓게 찾은 뒤 클라이언트에서 거른다.
-export type AsHistoryEntry = { date: string; content: string; serialMatch: boolean };
+export type AsHistoryEntry = { date: string; content: string; serialMatch: boolean; serial: string; asset: string; model: string };
 function normId(value: string) {
   return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
 }
@@ -375,7 +386,12 @@ export async function getAsHistory(vendor: string, serial: string, assetNo = "")
     seen.add(key);
     const rowIds = [normId(String(r["시리얼넘버"] || "")), normId(String(r["자산기번"] || ""))].filter((v) => v.length >= 3);
     const serialMatch = leaseIds.some((a) => rowIds.some((b) => a === b || a.includes(b) || b.includes(a)));
-    out.push({ date, content, serialMatch });
+    out.push({
+      date, content, serialMatch,
+      serial: String(r["시리얼넘버"] || "").trim(),
+      asset: String(r["자산기번"] || "").trim(),
+      model: String(r["모델명"] || "").trim(),
+    });
   }
   return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
 }

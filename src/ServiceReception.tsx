@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
-  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, countLeaseDevices,
-  type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot,
+  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, getLeaseDeviceSummary,
+  type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
 
@@ -31,8 +31,16 @@ function korYMD(date: string) {
   return m ? `${m[1].slice(2)}년 ${Number(m[2])}월 ${Number(m[3])}일` : String(date || "");
 }
 function counterOf(counts: string, label: string) {
-  const m = String(counts).match(new RegExp(`${label}\\s*([0-9,]+)`));
+  // "컬"이 "큰컬"의 일부에 걸리지 않게 lookbehind로 구분한다.
+  const pattern = label === "컬" ? "(?<!큰)컬\\s*([0-9,]+)" : `${label}\\s*([0-9,]+)`;
+  const m = String(counts).match(new RegExp(pattern));
   return m ? Number(m[1].replace(/,/g, "")) : null;
+}
+// 토너잔량 문자열에서 색상별 수치 추출 (예: "K80 C60 M60 Y70")
+function tonerLevels(text: string) {
+  const map: Record<string, number> = {};
+  for (const m of String(text).toUpperCase().matchAll(/([KCMY])\s*[-:]?\s*(\d{1,3})/g)) map[m[1]] = Number(m[2]);
+  return map;
 }
 function fmtWon(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
@@ -100,7 +108,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [manualVendor, setManualVendor] = useState("");
   const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
   const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
-  const [deviceCount, setDeviceCount] = useState(0);
+  const [deviceSummary, setDeviceSummary] = useState<LeaseDeviceSummary>({ active: 0, items: [] });
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -142,7 +150,7 @@ export default function ServiceReception({ author }: { author: string }) {
     setResults([]);
     setAsHistory([]);
     setSnapshots([]);
-    setDeviceCount(0);
+    setDeviceSummary({ active: 0, items: [] });
     setWorkinName("");
     setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
@@ -154,11 +162,11 @@ export default function ServiceReception({ author }: { author: string }) {
       const [name, snaps, devices] = await Promise.all([
         findWorkinMapName(vendor),
         getRecentInspections(vendor),
-        countLeaseDevices(exactVendor || vendor),
+        getLeaseDeviceSummary(exactVendor || vendor),
       ]);
       setWorkinName(name);
       setSnapshots(snaps);
-      setDeviceCount(devices);
+      setDeviceSummary(devices);
     }
   };
 
@@ -213,14 +221,23 @@ export default function ServiceReception({ author }: { author: string }) {
     if (snap0) usage.push(`■ 전방문 ${snap0.date} · 매수 ${snap0.counts || "-"} · 토너 ${snap0.toner || "-"} · 여분 ${snap0.spare || "-"}`);
     if (snap1) usage.push(`■ 전전방문 ${snap1.date} · 매수 ${snap1.counts || "-"} · 토너 ${snap1.toner || "-"} · 여분 ${snap1.spare || "-"}`);
     if (snap0 && snap1) {
-      const parts: string[] = [];
-      const bk = counterOf(snap0.counts, "흑");
-      const bkPrev = counterOf(snap1.counts, "흑");
-      const cl = counterOf(snap0.counts, "컬");
-      const clPrev = counterOf(snap1.counts, "컬");
-      if (bk !== null && bkPrev !== null) parts.push(`흑 ${(bk - bkPrev).toLocaleString()}매`);
-      if (cl !== null && clPrev !== null) parts.push(`컬 ${(cl - clPrev).toLocaleString()}매`);
-      if (parts.length) usage.push(`■ 두 방문 사용량: ${parts.join(" · ")}`);
+      const useParts: string[] = [];
+      for (const label of ["흑", "컬", "큰컬", "합"]) {
+        const cur = counterOf(snap0.counts, label);
+        const prev = counterOf(snap1.counts, label);
+        if (cur !== null && prev !== null) useParts.push(`${label} ${(cur - prev).toLocaleString()}매`);
+      }
+      if (useParts.length) usage.push(`■ 두 방문 사용량: ${useParts.join(" · ")}`);
+      // 토너잔량 비교 — 잔량이 늘었으면(오차 10 초과) 교체한 것으로 추정한다.
+      const curToner = tonerLevels(snap0.toner);
+      const prevToner = tonerLevels(snap1.toner);
+      const tonerParts: string[] = [];
+      for (const color of ["K", "C", "M", "Y"]) {
+        if (curToner[color] === undefined || prevToner[color] === undefined) continue;
+        const replaced = curToner[color] > prevToner[color] + 10;
+        tonerParts.push(`${color} ${prevToner[color]}→${curToner[color]}${replaced ? "(교체 추정)" : ""}`);
+      }
+      if (tonerParts.length) usage.push(`■ 토너 비교(전전→전): ${tonerParts.join(" · ")}`);
     }
     const T = "\t";
     const lines = [
@@ -249,7 +266,10 @@ export default function ServiceReception({ author }: { author: string }) {
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
       `AS접수횟수(${basisLabel})${T}${basisEntries.length}회`,
       `AS접수히스토리(${basisLabel})`,
-      basisEntries.length ? basisEntries.map((h) => `■ 날짜: ${korYMD(h.date)}\n■ 내용: ${h.content}`).join("\n\n") : "없음",
+      basisEntries.length ? basisEntries.map((h) => {
+        const device = [h.model, h.asset && `자산 ${h.asset}`, h.serial && `기번 ${h.serial}`].filter(Boolean).join(" / ");
+        return `■ 날짜: ${korYMD(h.date)}${device ? `\n■ 기기: ${device}` : ""}\n■ 내용: ${h.content}`;
+      }).join("\n\n") : "없음",
       `자가사용내역(최근6개월)`,
       usage.length ? usage.join("\n") : "점검 기록 없음",
     ];
@@ -286,7 +306,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setDeviceCount(0); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor("");
   };
 
@@ -400,14 +420,17 @@ export default function ServiceReception({ author }: { author: string }) {
             {results.length > 0 && <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
               {results.map((hit, index) => {
                 const sameVendor = resultVendorCounts.get((hit["_업체명"] || "").trim()) || 0;
+                const leaseState = pick(hit, "임대여부");
+                const ended = leaseState && leaseState !== "임대중";
                 return (
-                  <button key={index} type="button" onClick={() => void selectLease(hit)} className="block w-full px-3 py-2.5 text-left hover:bg-blue-50/50">
+                  <button key={index} type="button" onClick={() => void selectLease(hit)} className={`block w-full px-3 py-2.5 text-left hover:bg-blue-50/50 ${ended ? "opacity-60" : ""}`}>
                     <div className="flex items-center gap-1.5 text-sm font-black text-slate-800">
                       <span className="truncate">{pick(hit, "거래처명", "_업체명")}</span>
                       <span className="shrink-0 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span>
+                      {ended && <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
                       {sameVendor > 1 && <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
                     </div>
-                    <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
+                    <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "품목", "모델명", "기종")} · {pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
                   </button>
                 );
               })}
@@ -417,7 +440,8 @@ export default function ServiceReception({ author }: { author: string }) {
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm font-black text-slate-900">
                   <span className="truncate">{pick(lease, "거래처명", "_업체명")}</span>
                   {workinName && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
-                  {deviceCount > 1 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">이 업체 기기 {deviceCount}대 중 선택 — 자산·기번 확인</span>}
+                  {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
+                  {deviceSummary.active > 1 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 자산·기번 확인</span>}
                 </div>
                 <button type="button" onClick={resetForm} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">다시 검색</button>
               </div>
