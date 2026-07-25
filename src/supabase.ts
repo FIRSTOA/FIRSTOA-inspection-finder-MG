@@ -143,6 +143,24 @@ export async function selectAllRows<T>(table: string, query: string, pageSize = 
   }
 }
 
+// 대용량 전체 조회의 병렬판 — 페이지를 동시(concurrency)로 받아 순차 왕복 지연을 줄인다.
+export async function selectAllRowsFast<T>(table: string, query: string, pageSize = 1000, concurrency = 6): Promise<T[]> {
+  const separator = query ? "&" : "";
+  const fetchPage = (offset: number) => selectRows<T>(table, `${query}${separator}limit=${pageSize}&offset=${offset}`);
+  const first = await fetchPage(0);
+  if (first.length < pageSize) return first;
+  const pages: T[][] = [first];
+  for (let offset = pageSize; ; offset += pageSize * concurrency) {
+    const batch = await Promise.all(Array.from({ length: concurrency }, (_, index) => fetchPage(offset + index * pageSize)));
+    let done = false;
+    for (const page of batch) {
+      pages.push(page);
+      if (page.length < pageSize) { done = true; break; }
+    }
+    if (done) return pages.flat();
+  }
+}
+
 export async function upsertRows(table: string, rows: Record<string, unknown>[], onConflict: string): Promise<void> {
   if (!rows.length) return;
   const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {

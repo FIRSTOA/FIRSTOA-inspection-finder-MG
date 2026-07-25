@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
-import { deleteRows, selectAllRows, upsertRows } from "./supabase";
+import { deleteRows, selectAllRows, selectAllRowsFast, upsertRows } from "./supabase";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 
@@ -381,6 +381,27 @@ function visitSnapshot(visit: VisitLike, place: MapPlace) {
 // 스냅샷의 기기 식별 줄 — 기기 교체·혼동을 바로 알아챌 수 있게 모델/자산/기번을 붙인다.
 function snapshotDeviceLabel(snapshot: { model?: string; asset?: string; serial?: string }) {
   return [snapshot.model, snapshot.asset && `자산 ${snapshot.asset}`, snapshot.serial && `기번 ${snapshot.serial}`].filter(Boolean).join(" · ");
+}
+
+// 주소 옆 내비 바로가기 — 네이버지도 / 카카오맵(내비) / T맵(앱 전용 스킴).
+function NavLinks({ place, large }: { place: MapPlace; large?: boolean }) {
+  const address = [place.address, place.addressDetail].filter(Boolean).join(" ").trim();
+  const hasCoord = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && place.latitude !== 0 && place.longitude !== 0;
+  if (!address && !hasCoord) return null;
+  const name = encodeURIComponent((place.name || address).slice(0, 30));
+  const naver = `https://map.naver.com/p/search/${encodeURIComponent(address || place.name)}`;
+  const kakao = hasCoord
+    ? `https://map.kakao.com/link/to/${name},${place.latitude},${place.longitude}`
+    : `https://map.kakao.com/link/search/${encodeURIComponent(address)}`;
+  const tmap = hasCoord ? `tmap://route?goalname=${name}&goalx=${place.longitude}&goaly=${place.latitude}` : "";
+  const cls = large ? "rounded-md px-2.5 py-1.5 text-xs font-black" : "rounded px-1.5 py-0.5 text-[10px] font-black";
+  return (
+    <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>
+      <a href={naver} target="_blank" rel="noreferrer" title="네이버지도" className={`${cls} bg-[#03C75A] text-white`}>N</a>
+      <a href={kakao} target="_blank" rel="noreferrer" title="카카오맵" className={`${cls} bg-[#FEE500] text-slate-900`}>K</a>
+      {tmap && <a href={tmap} title="T맵 (앱)" className={`${cls} bg-rose-500 text-white`}>T</a>}
+    </span>
+  );
 }
 
 // 자가신청용 점검 양식 전체 생성 — 워킨맵은 판단만 하고 작성·전송은 FIELD로 넘긴다(핸드오프).
@@ -862,7 +883,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   }, []);
 
   const loadSharedPlaces = useCallback(async () => {
-    const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
+    const remote = await selectAllRowsFast<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
     const next = remote.map(fromDbPlace);
     setPlaces((current) => samePlaces(current, next) ? current : next);
     setSyncState("saved");
@@ -907,7 +928,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const archiveDate = encodeURIComponent("작성일");
     void Promise.all([
       getTeamVisits(startDate, kstDate()),
-      selectAllRows<InspectionArchiveRow>("jeomgeom", `select=${archiveSelect}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`),
+      selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${archiveSelect}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc`),
     ])
       .then(([rows, archiveRows]) => {
         const archiveByDate = new Map<string, InspectionArchiveRow[]>();
@@ -976,7 +997,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     let active = true;
     const initializeSharedPlaces = async () => {
       try {
-        const remote = await selectAllRows<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
+        const remote = await selectAllRowsFast<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
         if (!active) return;
         if (remote.length) {
           setPlaces(remote.map(fromDbPlace));
@@ -1587,22 +1608,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               {expandedId === place.id && !editMode && (
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
                   <div className="space-y-3">
-                    <div>
-                      <div className="font-black text-slate-400">주소</div>
-                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{[place.address, place.addressDetail].filter(Boolean).join(" ") || "-"}</div>
-                    </div>
-                    <div>
-                      <div className="font-black text-slate-400">연락처</div>
-                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.phone || "-"}</div>
-                    </div>
-                    <div>
-                      <div className="font-black text-slate-400">기기·코멘트</div>
-                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.comment || "-"}</div>
-                    </div>
-                    <div>
-                      <div className="font-black text-slate-400">업무 정보</div>
-                      <div className="mt-1 font-semibold leading-5">{place.label} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
-                    </div>
                     {place.kind === "quarter" && <div>
                       <div className="font-black text-slate-400">최근 점검 비교</div>
                       {inspectionSnapshots.length ? <div className="mt-1 space-y-2">
@@ -1614,13 +1619,31 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
                     </div>}
                     <div>
-                      <div className="font-black text-slate-400">메모</div>
+                      <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} /></div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{[place.address, place.addressDetail].filter(Boolean).join(" ") || "-"}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="font-black text-slate-400">연락처</div>
+                        <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.phone || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="font-black text-slate-400">업무 정보</div>
+                        <div className="mt-1 font-semibold leading-5">{place.label} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-400">기기·코멘트</div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.comment || "-"}</div>
+                    </div>
+                    <details>
+                      <summary className="cursor-pointer font-black text-slate-400">메모 {place.memos.length}개</summary>
                       {place.memos.length ? (
                         <div className="mt-1 divide-y divide-slate-100 border-y border-slate-100">
                           {place.memos.map((memo, index) => <div key={`${place.id}-${index}`} className="whitespace-pre-wrap py-2 font-semibold leading-5">{memo}</div>)}
                         </div>
                       ) : <div className="mt-1 font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
-                    </div>
+                    </details>
                   </div>
                 </div>
               )}
@@ -1817,10 +1840,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="min-w-0 flex-1"><div className="text-lg font-black leading-7">{place.name}</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-5 text-slate-500">{place.comment || "기기 정보 없음"}</div></div>
               </div>
             </section>
+            {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
+              <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
+              {snapshots.length ? <div className="mt-3 space-y-3">
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
+                {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => { onSelfRequest(buildSelfRequestText(userKey, detailVendor, place, snapshots[0], advice.needsList)); setMobileDetailId(null); }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
+              </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
+            </section>}
             <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b border-slate-100 px-4 py-4">
               <span className="text-xl text-slate-400">⌖</span>
               <div className="whitespace-pre-wrap text-sm font-bold leading-6">{address || "주소 정보 없음"}</div>
-              {address && <a href={`https://map.naver.com/p/search/${encodeURIComponent(address)}`} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-3 py-2 text-xs font-black text-slate-600">길찾기</a>}
+              <NavLinks place={place} large />
             </section>
             <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b-8 border-slate-100 px-4 py-4">
               <span className="text-xl text-slate-400">☎</span>
@@ -1831,13 +1861,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <div className="text-xs font-black text-slate-400">업무 정보</div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded bg-slate-100 px-2 py-1">{place.team}팀</span><span className="rounded bg-slate-100 px-2 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}</span><span className="rounded bg-slate-100 px-2 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
             </section>
-            {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
-              <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
-              {snapshots.length ? <div className="mt-3 space-y-3">
-                {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
-                {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => { onSelfRequest(buildSelfRequestText(userKey, detailVendor, place, snapshots[0], advice.needsList)); setMobileDetailId(null); }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
-              </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
-            </section>}
             <section className="px-4 py-4">
               <div className="text-xs font-black text-slate-400">메모</div>
               {place.memos.length ? <div className="mt-2 divide-y divide-slate-100">{place.memos.map((memo, index) => <div key={`${place.id}-mobile-memo-${index}`} className="whitespace-pre-wrap py-3 text-sm font-semibold leading-6">{memo}</div>)}</div> : <div className="mt-2 text-sm font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
