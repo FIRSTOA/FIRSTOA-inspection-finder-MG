@@ -229,18 +229,30 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   return out.slice(0, 30);
 }
 
-// 시리얼(기번) 기준 AS 접수이력 — as_records에서 최신순.
-export async function getAsHistoryBySerial(serial: string): Promise<{ date: string; content: string }[]> {
-  const s = String(serial || "").trim();
-  if (!s) return [];
-  const serialCol = encodeURIComponent("시리얼넘버");
+// AS 접수이력 — 업체명 기준(기번은 임대리스트와 as_records가 다를 수 있어 업체명이 안전). 시리얼도 보조로.
+export async function getAsHistory(vendor: string, serial: string): Promise<{ date: string; content: string }[]> {
   const dateCol = encodeURIComponent("작성일");
-  try {
-    const rows = await selectRows<Record<string, unknown>>("as_records", `select=*&${serialCol}=ilike.*${encodeURIComponent(s)}*&order=${dateCol}.desc&limit=20`);
-    return rows.map((r) => ({ date: String(r["작성일"] || "").slice(0, 10), content: String(r["내용"] || "").trim() })).filter((x) => x.content);
-  } catch {
-    return [];
+  const run = async (col: string, val: string) => {
+    if (!val.trim()) return [] as Record<string, unknown>[];
+    try {
+      return await selectRows<Record<string, unknown>>("as_records", `select=*&${encodeURIComponent(col)}=ilike.*${encodeURIComponent(val.trim())}*&order=${dateCol}.desc&limit=20`);
+    } catch {
+      return [] as Record<string, unknown>[];
+    }
+  };
+  const rows = [...await run("_업체명", vendor), ...await run("시리얼넘버", serial)];
+  const seen = new Set<string>();
+  const out: { date: string; content: string }[] = [];
+  for (const r of rows) {
+    const content = String(r["내용"] || "").trim();
+    if (!content) continue;
+    const date = String(r["작성일"] || "").slice(0, 10);
+    const key = `${date}|${content.slice(0, 24)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ date, content });
   }
+  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
 }
 
 export async function searchVendors(q: string): Promise<SearchResp> {
