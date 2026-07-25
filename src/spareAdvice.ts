@@ -28,15 +28,24 @@ export function monthsBetweenDates(from: string, to: string) {
   return Math.max(1, Math.round(Math.abs(b.getTime() - a.getTime()) / 86_400_000 / 30));
 }
 
-// 여분 문자열에서 색상별 수량·폐통 수량 추출 ("K1 C1 M1 Y1 폐1", "토너1set폐1", "2세트", "각1" 등 대응)
+// 여분 문자열에서 색상별 수량·폐통 수량 추출
+// ("K1 C1 M1 Y1 폐1", "토너1set폐1", "2세트", "각1", "토너 2 드럼 1"(흑백기) 등 대응)
 function spareCounts(text: string) {
   const source = String(text || "");
   const map: Record<string, number> = {};
   for (const m of source.toUpperCase().matchAll(/([KCMY])\s*[-:]?\s*(\d+)/g)) map[m[1]] = (map[m[1]] || 0) + Number(m[2]);
   const set = source.match(/(\d+)\s*(?:세트|SET|셋트|셋)/i) || source.match(/각\s*(\d+)/);
   if (set) for (const color of ["K", "C", "M", "Y"]) map[color] = Math.max(map[color] || 0, Number(set[1]));
+  const tonerGeneric = source.match(/토너\s*[-:]?\s*(\d+)/);
+  const drum = source.match(/드럼\s*[-:]?\s*(\d+)/);
   const waste = source.match(/폐(?:통)?\s*[-:]?\s*(\d+)/);
-  return { map, waste: waste ? Number(waste[1]) : null, any: Object.keys(map).length > 0 || !!waste };
+  return {
+    map,
+    waste: waste ? Number(waste[1]) : null,
+    tonerGeneric: tonerGeneric ? Number(tonerGeneric[1]) : null,
+    drum: drum ? Number(drum[1]) : null,
+    any: Object.keys(map).length > 0 || !!waste || !!tonerGeneric || !!drum,
+  };
 }
 
 export type UsageSpareAdvice = { usageLine: string; adviceLine: string; warning: string };
@@ -44,33 +53,36 @@ export type UsageSpareAdvice = { usageLine: string; adviceLine: string; warning:
 export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: SnapshotLike | undefined, model: string): UsageSpareAdvice | null {
   if (!latest) return null;
 
-  // 기간 포함 사용량 — 두 방문의 기기가 다르거나 카운터가 줄었으면(기기 교체/리셋) 비교를 생략한다.
+  // 기간 포함 사용량.
+  //  - 기번이 다르면(기기 교체) 비교 전체를 생략한다.
+  //  - 기번이 같은데 특정 카운터만 줄었으면(입력 오타 가능) 그 항목만 빼고 나머지는 비교한다.
   let usageLine = "";
   let warning = "";
   if (previous) {
     const latestSerial = normSerial(latest.serial || "");
     const prevSerial = normSerial(previous.serial || "");
     const serialMismatch = latestSerial.length >= 4 && prevSerial.length >= 4 && latestSerial !== prevSerial;
-    const months = monthsBetweenDates(previous.date, latest.date);
-    const parts: string[] = [];
-    let negative = false;
-    for (const label of ["흑", "컬", "큰컬"]) {
-      const cur = counterOf(latest.counts, label);
-      const prev = counterOf(previous.counts, label);
-      if (cur === null || prev === null) continue;
-      if (cur - prev < 0) negative = true;
-      parts.push(`${label} ${(cur - prev).toLocaleString()}매`);
-    }
-    if (serialMismatch || negative) {
-      warning = "전방문·전전방문 기기가 다르거나 카운터가 초기화되어 사용량 비교를 생략합니다 (자산·기번 확인 필요)";
-    } else if (parts.length) {
-      const total = parts.length ? ["흑", "컬", "큰컬"].reduce((sum, label) => {
+    if (serialMismatch) {
+      warning = "전방문·전전방문 기기(기번)가 달라 사용량 비교를 생략합니다";
+    } else {
+      const months = monthsBetweenDates(previous.date, latest.date);
+      const parts: string[] = [];
+      const negatives: string[] = [];
+      let total = 0;
+      for (const label of ["흑", "컬", "큰컬"]) {
         const cur = counterOf(latest.counts, label);
         const prev = counterOf(previous.counts, label);
-        return cur !== null && prev !== null ? sum + (cur - prev) : sum;
-      }, 0) : 0;
-      const monthly = months ? Math.round(total / months) : total;
-      usageLine = `${months}개월간 ${parts.join(" · ")} (월평균 약 ${monthly.toLocaleString()}매)`;
+        if (cur === null || prev === null) continue;
+        const diff = cur - prev;
+        if (diff < 0) { negatives.push(label); continue; }
+        total += diff;
+        parts.push(`${label} ${diff.toLocaleString()}매`);
+      }
+      if (parts.length) {
+        const monthly = months ? Math.round(total / months) : total;
+        usageLine = `${months}개월간 ${parts.join(" · ")} (월평균 약 ${monthly.toLocaleString()}매)`;
+      }
+      if (negatives.length) warning = `${negatives.join("·")} 카운터가 이전보다 작아 해당 항목은 제외했습니다 (입력 오류 가능)`;
     }
   }
 
@@ -85,10 +97,12 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
   const colors = isColor ? ["K", "C", "M", "Y"] : ["K"];
 
   const wasteText = /^\d+$/.test(String(latest.waste || "").trim()) ? `폐${String(latest.waste).trim()}` : String(latest.waste || "");
-  const { map, waste, any } = spareCounts(`${latest.spare || ""} ${wasteText}`);
+  const { map, waste, tonerGeneric, drum, any } = spareCounts(`${latest.spare || ""} ${wasteText}`);
   if (!any) {
     return { usageLine, warning, adviceLine: `여분 기록 없음 — ${standard}으로 채우도록 확인 필요` };
   }
+  // 색상 표기 없이 "토너 N"만 적힌 경우(흑백기 관행) — 세트 개수로 간주해 채운다.
+  if (!Object.keys(map).length && tonerGeneric !== null) for (const color of colors) map[color] = tonerGeneric;
   const needs: string[] = [];
   for (const color of colors) {
     const need = targetSets - (map[color] || 0);
@@ -98,7 +112,11 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
     const needWaste = wasteTarget - (waste ?? 0);
     if (needWaste > 0) needs.push(`폐통${needWaste}`);
   }
-  const nowLabel = [...colors.map((color) => `${color}${map[color] || 0}`), waste !== null ? `폐통${waste}` : ""].filter(Boolean).join(" ");
+  const nowLabel = [
+    ...colors.map((color) => `${color}${map[color] || 0}`),
+    waste !== null ? `폐통${waste}` : "",
+    drum !== null ? `드럼${drum}` : "",
+  ].filter(Boolean).join(" ");
   return {
     usageLine,
     warning,
