@@ -1120,15 +1120,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const inspectionHistoryByPlace = useMemo(() => {
     // 방문기록(visit_logs) + 점검 원본(jeomgeom)을 한 풀로 합쳐 업체명으로 찾고,
     // 워킨맵 코멘트의 기번(시리얼/자산기번)으로도 찾는다 — 이름이 달라도 기기로 매칭.
-    const pool: Array<{ visit: VisitLike; key: string }> = [
-      ...inspectionVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) })),
-      ...archiveVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) })),
+    type PoolEntry = { visit: VisitLike; idKeys: string[] };
+    const pool: Array<PoolEntry & { key: string }> = [
+      ...inspectionVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor), idKeys: [] as string[] })),
+      ...archiveVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor), idKeys: visit.idKeys })),
     ].filter((item) => item.key)
       .sort((left, right) => right.visit.workDate.localeCompare(left.visit.workDate));
-    const byKey = new Map<string, VisitLike[]>();
+    const byKey = new Map<string, PoolEntry[]>();
     for (const item of pool) {
       const list = byKey.get(item.key) || [];
-      list.push(item.visit);
+      list.push({ visit: item.visit, idKeys: item.idKeys });
       byKey.set(item.key, list);
     }
     const keys = Array.from(byKey.keys());
@@ -1143,10 +1144,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return new Map(places.map((place) => {
       const key = vendorMatchKey(place.name);
       const exact = byKey.get(key) || [];
-      const nameMatches = exact.length ? exact : key.length >= 5
+      const entryPool = exact.length ? exact : key.length >= 5
         ? keys.filter((k) => k.length >= 5 && (k.includes(key) || key.includes(k))).flatMap((k) => byKey.get(k) || [])
         : [];
       const serialKey = normalizeIdKey(deviceSerial(place));
+      // 원본(jeomgeom)은 기기 1대=1행이라, 이 장소의 기번과 다른 타기기 조각은 제외한다.
+      // (전체 양식인 visit_logs 항목은 idKeys가 비어 있어 통과하고, 표시 시 기번으로 블록을 추출한다.)
+      const nameMatches = (serialKey.length >= 4
+        ? entryPool.filter((entry) => !entry.idKeys.length || entry.idKeys.some((id) => id === serialKey || id.includes(serialKey) || serialKey.includes(id)))
+        : entryPool
+      ).map((entry) => entry.visit);
       const serialMatches = serialKey.length >= 4 ? (serialIndex.get(serialKey) || []) : [];
       const seenDates = new Set<string>();
       const merged: VisitLike[] = [];
