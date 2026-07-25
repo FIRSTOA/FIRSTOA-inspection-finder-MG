@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
-  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, getLeaseDeviceSummary,
+  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, updateServiceReception, getLeaseDeviceSummary,
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
@@ -102,6 +102,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [savedRowId, setSavedRowId] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState("");
 
   // 접수 현황 리스트
@@ -267,7 +268,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const persist = async (status: string, sentRoom = "") => {
-    await saveServiceReception({
+    return saveServiceReception({
       author, route, type,
       vendor: vendorName,
       asset_no: pick(lease, "자산번호"),
@@ -286,7 +287,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
-    setSearched(false); setWorkinName(""); setManualVendor("");
+    setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null);
   };
 
   // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
@@ -307,17 +308,27 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  // 복합기 AS: 저장 + AS방 전송
+  // 복합기 AS: 저장 + AS방 전송 — 선저장(접수) 후 전송, 성공 시 전송완료로 갱신.
+  // 전송 실패 시 저장된 행을 기억해 재시도에서 중복 저장·중복 카톡을 막는다.
   const handleSaveAndSend = async () => {
     if (busy || !report) return;
     setBusy(true);
     setActionResult("");
     try {
+      let rowId = savedRowId;
+      if (!rowId) {
+        rowId = await persist("접수");
+        setSavedRowId(rowId);
+      }
       const res = await sendServiceReception("AS", region, report);
-      if (!res.ok) { setActionResult(`전송 실패: ${res.error}`); return; }
+      if (!res.ok) {
+        setActionResult(`전송 실패: ${res.error} — 접수는 저장됐어요. 다시 누르면 전송만 재시도합니다.`);
+        return;
+      }
       const room = String(res.message || "").replace("게시 대기: ", "");
-      await persist("전송완료", room);
+      if (rowId) await updateServiceReception(rowId, { status: "전송완료", sent_room: room });
       setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}`);
+      setSavedRowId(null);
       resetForm();
       await loadList(listDate);
     } catch (e) {

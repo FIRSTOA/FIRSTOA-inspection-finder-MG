@@ -151,6 +151,17 @@ Deno.serve(async (req) => {
     if (!job) return Response.json({ error: "동기화 작업을 찾지 못했습니다." }, { status: 404, headers: jsonHeaders });
     if (job.sheet_status === "synced") return Response.json({ ok: true, status: "already_synced", row: job.sheet_row }, { headers: jsonHeaders });
 
+    // 실패 시 last_error/attempts를 job에 남긴다 — 예전엔 실패가 어디에도 기록되지 않아 영구 pending으로 방치됐다.
+    const recordFailure = async (message: string) => {
+      await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ last_error: message.slice(0, 500), attempts: Number(job.attempts || 0) + 1 }),
+      }).catch(() => {});
+    };
+
+    try {
+
     const configRes = await fetch(`${rest}/app_config?select=key,value`, { headers });
     const configRows = await configRes.json();
     const config = Object.fromEntries((configRows || []).map((row: { key: string; value: string }) => [row.key, row.value]));
@@ -188,23 +199,31 @@ Deno.serve(async (req) => {
     const sheetData = await sheetRes.json().catch(() => ({}));
     if (!sheetRes.ok || !sheetData.ok) throw new Error(sheetData.error || `시트 응답 오류(${sheetRes.status})`);
 
-    await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+    // synced 마킹은 응답을 검증한다 — 실패하면 job이 pending인데 성공으로 응답하던 문제 방지.
+    const markRes = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
       method: "PATCH",
       headers: { ...headers, Prefer: "return=minimal" },
       body: JSON.stringify({ sheet_status: "synced", sheet_row: sheetData.row || null, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
     });
+    if (!markRes.ok) throw new Error(`synced 마킹 실패(${markRes.status}) — 시트에는 기록됨(행 ${sheetData.row || "?"})`);
 
     // 불만: AI 분석 결과를 bulman 원본 행에도 역기입한다(_dupKey 매칭). 사용자가 직접 쓴 재발방지는 보존.
     if (job.category === "complaint" && Object.keys(sheetValues).length && job._dupKey) {
       const dbPatch: Record<string, unknown> = { ...sheetValues };
       if (String(sourceData["재발방지"] || "").trim()) delete dbPatch["재발방지"];
-      await fetch(`${rest}/bulman?_dupKey=eq.${encodeURIComponent(job._dupKey)}`, {
+      const backfillRes = await fetch(`${rest}/bulman?_dupKey=eq.${encodeURIComponent(job._dupKey)}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify(dbPatch),
-      }).catch(() => {});
+      }).catch(() => null);
+      if (backfillRes && !backfillRes.ok) console.error(`bulman AI 역기입 실패(${backfillRes.status}) job=${job.id}`);
     }
     return Response.json({ ok: true, status: "synced", row: sheetData.row || null, sheet: sheetData.sheet || "" }, { headers: jsonHeaders });
+    } catch (innerError) {
+      const message = innerError instanceof Error ? innerError.message : String(innerError);
+      await recordFailure(message);
+      throw innerError;
+    }
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }

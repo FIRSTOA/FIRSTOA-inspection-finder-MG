@@ -8,7 +8,7 @@
 
 import { buildRecords } from "./inspectParser";
 import { md5 } from "./md5";
-import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, invokeEdgeFunction, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
+import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
@@ -315,14 +315,18 @@ export type ServiceReceptionRow = {
   model: string; region: string; title: string; symptom: string; paid: string;
   notes: string; report_text: string; status: string; sent_room: string;
 };
-export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<void> {
-  await insertRow("service_receptions", row);
+export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
+  const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
+  return saved?.id || "";
 }
 export async function getServiceReceptions(start: string, end: string): Promise<ServiceReceptionRow[]> {
-  return selectRows<ServiceReceptionRow>("service_receptions", `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc`);
+  return selectRows<ServiceReceptionRow>("service_receptions", `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc,id.desc`);
 }
 export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
+}
+export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room">>): Promise<void> {
+  await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);
 }
 
 // 서비스접수 보고 양식 → 카톡 전송. IT AS는 PC/IT방, 복합기 AS는 지역 AS방. TEST_MODE면 테스트방.
@@ -713,18 +717,18 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     }
 
     const isExtra = kind === "자가" || kind === "부품";
-    let rooms: string[] = [];
-    if (anyNew || isExtra || destination) {   // 강제 목적지/자가/부품은 중복이어도 알림 게시
-      rooms = destination ? await resolveForcedRoom(destination, built.region) : await resolveRoomsFor(kind, built.region, built.hasAS);
-      for (const room of rooms) await enqueueOutbox(room, sendText);
-    }
+    // 중복(재전송)이어도 카톡은 항상 게시한다 — 1차 시도가 저장 후 카톡 적재에서 실패하면
+    // 재전송이 유일한 복구 수단인데, 예전엔 dup이면 건너뛰어 카톡이 영구 누락됐다.
+    // (전송 버튼은 sending 가드로 이중클릭이 막혀 있어 의도적 재전송만 이 경로를 탄다.)
+    const rooms = destination ? await resolveForcedRoom(destination, built.region) : await resolveRoomsFor(kind, built.region, built.hasAS);
+    for (const room of rooms) await enqueueOutbox(room, sendText);
 
     const dest = rooms.length ? `게시 대기: ${rooms.join(", ")}` : "";
     return {
       ok: true,
       message: isExtra
         ? `${kind} 요청 ${dest}`
-        : anyNew ? `저장 완료 — ${dest}` : "이미 저장된 내용입니다(중복).",
+        : anyNew ? `저장 완료 — ${dest}` : `이미 저장된 내용(중복) — ${dest}`,
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
@@ -818,7 +822,7 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
         data: form,
         dupKey: String(row["_dupKey"]),
       });
-      if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+      if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
       return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
     }
     for (const room of rooms) await enqueueOutbox(room, text);
@@ -862,7 +866,7 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
       data: form,
       dupKey: String(row["_dupKey"]),
     });
-    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+    if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
@@ -882,7 +886,7 @@ async function queueFieldAutomation(input: {
   text: string;
   data: Record<string, unknown>;
   dupKey: string;
-}): Promise<{ message: string; testMode: boolean }> {
+}): Promise<{ message: string; testMode: boolean; holdKakao?: boolean }> {
   const id = crypto.randomUUID();
   let job: "new" | "dup";
   try {
@@ -899,7 +903,8 @@ async function queueFieldAutomation(input: {
     });
   } catch {
     // SQL 배포 전에도 야간 카카오 오발송이 일어나지 않도록 전송은 보류한다.
-    return { message: "자동화 설정 전 · 카카오 전송 보류", testMode: false };
+    // holdKakao를 반환해 호출부가 실제로 enqueueOutbox를 건너뛰게 한다(문구만 보류이던 버그 수정).
+    return { message: "자동화 설정 전 · 카카오 전송 보류", testMode: false, holdKakao: true };
   }
   const cfg = await getConfig();
   const testMode = isEnabled(cfg.FIELD_SHEET_TEST_MODE);
@@ -1008,7 +1013,7 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
       data: form,
       dupKey: String(row["_dupKey"]),
     });
-    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
+    if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
@@ -1052,7 +1057,7 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
       data: form,
       dupKey,
     });
-    if (isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
+    if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
     return { ok: true, message: automation.message, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };

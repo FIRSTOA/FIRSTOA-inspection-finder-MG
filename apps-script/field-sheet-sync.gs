@@ -12,6 +12,13 @@ const FIELD_SHEETS = {
 };
 
 function doPost(e) {
+  // 동시 전송 시 getLastRow/insertRow가 얽혀 행이 충돌하지 않도록 스크립트 전역 잠금.
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (waitError) {
+    return json_({ ok: false, error: "다른 동기화가 진행 중입니다. 잠시 후 재시도하세요." });
+  }
   try {
     const request = JSON.parse(e.postData && e.postData.contents || "{}");
     const secret = PropertiesService.getScriptProperties().getProperty("FIELD_SYNC_SECRET");
@@ -21,6 +28,8 @@ function doPost(e) {
     return json_({ ok: true, row: result.row, sheet: result.sheet });
   } catch (error) {
     return json_({ ok: false, error: error && error.message || String(error) });
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -34,6 +43,18 @@ function appendFieldSheetRow_(request) {
 
   const headerRow = findHeaderRow_(sheet, request.category);
   const headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+
+  // 멱등성: 같은 jobId가 이미 기록돼 있으면 그 행을 돌려준다(재시도 시 중복 append 방지).
+  const jobIdCol = headers.indexOf("웹앱 전송ID") + 1;
+  if (jobIdCol > 0 && request.jobId && sheet.getLastRow() > headerRow) {
+    const existing = sheet.getRange(headerRow + 1, jobIdCol, sheet.getLastRow() - headerRow, 1).getDisplayValues();
+    for (let i = 0; i < existing.length; i++) {
+      if (String(existing[i][0]).trim() === String(request.jobId)) {
+        return { row: headerRow + 1 + i, sheet: sheet.getName() };
+      }
+    }
+  }
+
   const data = request.payload && request.payload.data || {};
   const labelValues = parseLabeledText_(request.sourceText || "");
   const previousRow = Math.max(headerRow + 1, sheet.getLastRow());

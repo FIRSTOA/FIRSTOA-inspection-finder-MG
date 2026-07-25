@@ -185,6 +185,21 @@ export async function deleteRows(table: string, query: string): Promise<void> {
   }
 }
 
+// insert 후 생성된 행을 돌려받는다(id 필요 시). 실패는 throw.
+export async function insertRowReturning<T = Record<string, unknown>>(table: string, row: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${REST}/${table}`, {
+    method: "POST",
+    headers: { ...BASE_HEADERS, Prefer: "return=representation" },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`저장 실패 ${table}(${res.status}): ${detail.slice(0, 200)}`);
+  }
+  const rows = await res.json().catch(() => []);
+  return (Array.isArray(rows) ? rows[0] : rows) as T;
+}
+
 export async function updateRows(table: string, query: string, patch: Record<string, unknown>): Promise<void> {
   const res = await fetch(`${REST}/${table}?${query}`, {
     method: "PATCH",
