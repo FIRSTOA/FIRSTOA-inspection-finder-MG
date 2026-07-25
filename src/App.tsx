@@ -5379,7 +5379,7 @@ export default function App() {
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
-        {screen === "serviceReception" && <ServiceReception author={author} />}
+        {screen === "serviceReception" && <ServiceReception author={author} onUseField={openAsTicketInField} />}
         {screen === "reading" && <ReadingHub author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}

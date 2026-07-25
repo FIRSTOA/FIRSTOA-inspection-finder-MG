@@ -5,6 +5,7 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
+import { selectRows, upsertRow } from "./supabase";
 import { usageSpareAdvice } from "./spareAdvice";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -64,6 +65,80 @@ function regionLabel(area: string) {
   for (const [key, team] of DISTRICT_TEAM) if (a.includes(key)) return `수도권${team}`;
   return a;
 }
+type ListPeriod = "day" | "week" | "month" | "quarter";
+const PERIOD_LABEL: Record<ListPeriod, string> = { day: "일일", week: "주간", month: "월간", quarter: "분기" };
+function periodRangeOf(period: ListPeriod, date: string): { start: string; end: string } {
+  if (period === "day") return { start: date, end: date };
+  if (period === "week") {
+    const d = new Date(`${date}T12:00:00+09:00`);
+    const start = shiftDate(date, -((d.getDay() + 6) % 7)); // 월요일 시작
+    return { start, end: shiftDate(start, 6) };
+  }
+  const year = Number(date.slice(0, 4));
+  if (period === "month") {
+    const month = Number(date.slice(5, 7));
+    return { start: `${date.slice(0, 7)}-01`, end: `${date.slice(0, 7)}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}` };
+  }
+  const startMonth = Math.floor((Number(date.slice(5, 7)) - 1) / 3) * 3 + 1;
+  const endMonth = startMonth + 2;
+  return {
+    start: `${year}-${String(startMonth).padStart(2, "0")}-01`,
+    end: `${year}-${String(endMonth).padStart(2, "0")}-${String(new Date(year, endMonth, 0).getDate()).padStart(2, "0")}`,
+  };
+}
+function shiftMonths(date: string, months: number) {
+  const d = new Date(`${date.slice(0, 7)}-01T12:00:00+09:00`);
+  d.setMonth(d.getMonth() + months);
+  return kstDate(d);
+}
+function teamFromRegion(region: string) {
+  const m = String(region || "").match(/수도권([A-D])/);
+  return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
+}
+// 접수 행 → FIELD AS 원본 양식 (일정리스트 buildFieldAsText와 같은 형식)
+function receptionToFieldText(row: ServiceReceptionRow) {
+  return [
+    `작성자:${row.author || ""}`,
+    "구분: AS",
+    "레벨:1",
+    "등급:",
+    `업체명:${row.vendor}`,
+    "부서명:",
+    `지역:${teamFromRegion(row.region)}`,
+    "키맨/접수자:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "1.",
+    `모델명: ${row.model}`,
+    `시리얼넘버: ${row.serial}`,
+    `자산기번: ${row.asset_no || ""}`.trimEnd(),
+    `내용: ${[row.title, row.symptom].filter(Boolean).join(" / ")}`,
+    "처리내용:",
+    "매수:흑- 컬- 큰컬- 합-",
+    "토너잔량:K- C- M- Y-",
+    "폐통:  %",
+    "여분: K- C- M- Y- 폐-",
+    "한틴이카유무:",
+    "주차비지원유무:",
+    `특이사항: ${[row.paid, row.notes].filter(Boolean).join(" / ")}`,
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "※부품신청※",
+    "보증기간 내 여부 :",
+    "교체 전 카운터 누적 사용매수 :",
+    "사용 부품 예상 사용매수 :",
+    "▶ 신청 부품",
+    "물품명:",
+    "수량:",
+    "출고여부:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "※자가신청※",
+    "물품:",
+    "수량:",
+    "출고여부:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "도착 시간:",
+    "소요 시간:",
+  ].join("\n");
+}
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
@@ -90,7 +165,7 @@ const STATUS_TONE: Record<string, string> = {
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string };
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "" };
 
-export default function ServiceReception({ author }: { author: string }) {
+export default function ServiceReception({ author, onUseField }: { author: string; onUseField?: (text: string) => void }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
   const [type, setType] = useState<ReceiveType>("복합기 AS");
   const [query, setQuery] = useState("");
@@ -112,22 +187,24 @@ export default function ServiceReception({ author }: { author: string }) {
 
   // 접수 현황 리스트
   const [listDate, setListDate] = useState(kstDate());
+  const [listPeriod, setListPeriod] = useState<ListPeriod>("day");
   const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관">("전체");
   const [openRowId, setOpenRowId] = useState("");
 
-  const loadList = useCallback(async (date: string) => {
+  const loadList = useCallback(async (date: string, period: ListPeriod = "day") => {
     setListLoading(true);
     try {
-      setListRows(await getServiceReceptions(date, date));
+      const { start, end } = periodRangeOf(period, date);
+      setListRows(await getServiceReceptions(start, end));
     } catch {
       setListRows([]);
     } finally {
       setListLoading(false);
     }
   }, []);
-  useEffect(() => { void loadList(listDate); }, [listDate, loadList]);
+  useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
 
   const runSearch = async () => {
     if (!query.trim()) return;
@@ -305,7 +382,7 @@ export default function ServiceReception({ author }: { author: string }) {
       await persist(type === "원격이관" ? "원격대기" : "접수");
       setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : "접수 저장됨");
       resetForm();
-      await loadList(listDate);
+      await loadList(listDate, listPeriod);
     } catch (e) {
       setActionResult(`저장 실패: ${(e as Error).message}`);
     } finally {
@@ -335,11 +412,37 @@ export default function ServiceReception({ author }: { author: string }) {
       setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}`);
       setSavedRowId(null);
       resetForm();
-      await loadList(listDate);
+      await loadList(listDate, listPeriod);
     } catch (e) {
       setActionResult(`처리 실패: ${(e as Error).message}`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // 접수 → 일정리스트(as_tickets) 등록. 같은 날 같은 업체 일정이 있으면 물어본다.
+  const [scheduleBusyId, setScheduleBusyId] = useState("");
+  const addToSchedule = async (row: ServiceReceptionRow) => {
+    if (scheduleBusyId) return;
+    setScheduleBusyId(row.id);
+    try {
+      const today = kstDate();
+      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(row.vendor)}&limit=1`).catch(() => []);
+      if (dup.length && !window.confirm(`오늘 ${row.vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return;
+      const nowTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+      await upsertRow("as_tickets", {
+        id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        team: teamFromRegion(row.region), date: today, time: nowTime,
+        vendor: row.vendor, contact: "", address: "", department: "",
+        model: row.model, serial: row.serial,
+        issue: [row.title, row.symptom].filter(Boolean).join(" / ").slice(0, 500) || "서비스접수 연동",
+        assignee: "", status: "접수", scheduleType: "AS",
+      }, "id");
+      window.alert("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.");
+    } catch (e) {
+      window.alert(`일정 등록 실패: ${(e as Error).message}`);
+    } finally {
+      setScheduleBusyId("");
     }
   };
 
@@ -507,12 +610,18 @@ export default function ServiceReception({ author }: { author: string }) {
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black text-slate-950">접수 현황</h3>
               <div className="flex items-center gap-1">
-                <button type="button" onClick={() => setListDate(shiftDate(listDate, -1))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">‹</button>
+                <button type="button" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">‹</button>
                 <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700" />
-                <button type="button" onClick={() => setListDate(shiftDate(listDate, 1))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">›</button>
+                <button type="button" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, 1) : listPeriod === "week" ? shiftDate(listDate, 7) : shiftMonths(listDate, listPeriod === "month" ? 1 : 3))} className="h-8 w-8 rounded-md border border-slate-200 text-sm font-black text-slate-500">›</button>
                 {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white">오늘</button>}
               </div>
             </div>
+            <div className="mt-2.5 grid grid-cols-4 rounded-md bg-slate-100 p-1">
+              {(Object.keys(PERIOD_LABEL) as ListPeriod[]).map((p) => (
+                <button key={p} type="button" onClick={() => setListPeriod(p)} className={`rounded px-2 py-1.5 text-[11px] font-black ${listPeriod === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{PERIOD_LABEL[p]}</button>
+              ))}
+            </div>
+            {listPeriod !== "day" && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
             <div className="mt-2.5 flex gap-1">
               {(["전체", "복합기 AS", "IT AS", "원격이관"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
@@ -524,14 +633,14 @@ export default function ServiceReception({ author }: { author: string }) {
 
           <div className="max-h-[52vh] divide-y divide-slate-100 overflow-y-auto">
             {listLoading && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-            {!listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listDate.slice(5)} 접수 기록이 없습니다.</div>}
+            {!listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listPeriod === "day" ? `${listDate.slice(5)} 접수 기록이 없습니다.` : `${PERIOD_LABEL[listPeriod]} 접수 기록이 없습니다.`}</div>}
             {!listLoading && filteredRows.map((row) => (
               <div key={row.id}>
                 <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
                   <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT AS" ? "IT" : "원격"}</span>
                   <span className="min-w-0">
                     <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
-                    <span className="text-[10px] font-semibold text-slate-400">{kstTime(row.created_at)} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
@@ -546,14 +655,18 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
-                  {row.report_text && <button type="button" onClick={() => void navigator.clipboard.writeText(row.report_text)} className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">양식 다시 복사</button>}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.report_text && <button type="button" onClick={() => void navigator.clipboard.writeText(row.report_text)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">양식 다시 복사</button>}
+                    {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black text-blue-700 disabled:opacity-50">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
+                    {row.type !== "원격이관" && onUseField && <button type="button" onClick={() => onUseField(receptionToFieldText(row))} className="rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white">FIELD 변환</button>}
+                  </div>
                 </div>}
               </div>
             ))}
           </div>
 
           {byAuthor.length > 0 && <div className="border-t border-slate-200 p-4">
-            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listDate.slice(5)})</div>
+            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]})</div>
             <div className="mt-2 space-y-1">
               {byAuthor.map(([name, stat]) => (
                 <div key={name} className="flex items-center justify-between text-xs">
