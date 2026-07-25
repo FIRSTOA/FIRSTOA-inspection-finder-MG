@@ -336,7 +336,14 @@ function deviceSerial(place: MapPlace) {
   return [...parts].reverse().find((value) => /^[A-Z0-9-]{5,}$/i.test(value.replace(/\s/g, "")))?.replace(/\s/g, "") || "";
 }
 
-function deviceVisitText(visit: VisitRow, place: MapPlace) {
+// 점검이력 매칭용 최소 방문 형태 — visit_logs와 jeomgeom(원본) 어느 쪽에서 와도 동일하게 다룬다.
+type VisitLike = { workDate: string; vendor: string; sourceText: string; note: string };
+
+function normalizeIdKey(value: string) {
+  return String(value || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
+}
+
+function deviceVisitText(visit: VisitLike, place: MapPlace) {
   const source = visit.sourceText || visit.note || "";
   const serial = deviceSerial(place);
   if (!serial || !source.toUpperCase().includes(serial.toUpperCase())) return source;
@@ -368,7 +375,7 @@ function supplyChanges(current: string, previous: string) {
   });
 }
 
-function visitSnapshot(visit: VisitRow, place: MapPlace) {
+function visitSnapshot(visit: VisitLike, place: MapPlace) {
   const text = deviceVisitText(visit, place);
   const spare = visitMetric(text, "여분");
   return {
@@ -745,6 +752,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
   const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">("default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
+  const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -877,6 +885,14 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           return archive ? { ...visit, sourceText: archiveText(archive) } : visit;
         });
         setInspectionVisits(inspections);
+        // 원본(jeomgeom) 행도 매칭 풀로 보관 — 방문기록이 없어도 업체명/기번으로 이력을 찾을 수 있게.
+        setArchiveVisits(archiveRows.map((row) => ({
+          workDate: String(row["작성일"] || "").slice(0, 10),
+          vendor: String(row["_업체명"] || row["업체명"] || "").trim(),
+          sourceText: archiveText(row),
+          note: "",
+          idKeys: [normalizeIdKey(String(row["시리얼넘버"] || "")), normalizeIdKey(String(row["자산기번"] || ""))].filter((key) => key.length >= 4),
+        })).filter((row) => row.workDate && (row.vendor || row.idKeys.length)));
       })
       .catch((error) => console.error("Workin map visit history load failed", error));
   }, []);
@@ -981,19 +997,46 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   }, [selectedId, mobileView, mapSelectionRevision]);
 
   const inspectionHistoryByPlace = useMemo(() => {
-    const indexed = inspectionVisits
-      .map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) }))
-      .filter((item) => item.key)
+    // 방문기록(visit_logs) + 점검 원본(jeomgeom)을 한 풀로 합쳐 업체명으로 찾고,
+    // 워킨맵 코멘트의 기번(시리얼/자산기번)으로도 찾는다 — 이름이 달라도 기기로 매칭.
+    const pool: Array<{ visit: VisitLike; key: string }> = [
+      ...inspectionVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) })),
+      ...archiveVisits.map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) })),
+    ].filter((item) => item.key)
       .sort((left, right) => right.visit.workDate.localeCompare(left.visit.workDate));
+    const byKey = new Map<string, VisitLike[]>();
+    for (const item of pool) {
+      const list = byKey.get(item.key) || [];
+      list.push(item.visit);
+      byKey.set(item.key, list);
+    }
+    const keys = Array.from(byKey.keys());
+    const serialIndex = new Map<string, VisitLike[]>();
+    for (const row of archiveVisits) {
+      for (const id of row.idKeys) {
+        const list = serialIndex.get(id) || [];
+        list.push(row);
+        serialIndex.set(id, list);
+      }
+    }
     return new Map(places.map((place) => {
       const key = vendorMatchKey(place.name);
-      const exact = indexed.filter((item) => item.key === key).map((item) => item.visit);
-      const matches = exact.length ? exact : key.length >= 5
-        ? indexed.filter((item) => item.key.length >= 5 && (item.key.includes(key) || key.includes(item.key))).map((item) => item.visit)
+      const exact = byKey.get(key) || [];
+      const nameMatches = exact.length ? exact : key.length >= 5
+        ? keys.filter((k) => k.length >= 5 && (k.includes(key) || key.includes(k))).flatMap((k) => byKey.get(k) || [])
         : [];
-      return [place.id, matches.slice(0, 2)];
+      const serialKey = normalizeIdKey(deviceSerial(place));
+      const serialMatches = serialKey.length >= 4 ? (serialIndex.get(serialKey) || []) : [];
+      const seenDates = new Set<string>();
+      const merged: VisitLike[] = [];
+      for (const visit of [...serialMatches, ...nameMatches].sort((a, b) => b.workDate.localeCompare(a.workDate))) {
+        if (seenDates.has(visit.workDate)) continue;
+        seenDates.add(visit.workDate);
+        merged.push(visit);
+      }
+      return [place.id, merged.slice(0, 2)];
     }));
-  }, [inspectionVisits, places]);
+  }, [inspectionVisits, archiveVisits, places]);
 
   const latestInspectionByPlace = useMemo(() => new Map(places.map((place) => [place.id, inspectionHistoryByPlace.get(place.id)?.[0]?.workDate || ""])), [inspectionHistoryByPlace, places]);
 
