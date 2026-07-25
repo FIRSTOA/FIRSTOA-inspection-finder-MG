@@ -1439,7 +1439,6 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           <div className="grid grid-cols-2 gap-1">
             {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
-          <div className="mt-1 text-[10px] font-bold text-slate-400">이름 앞 숫자 = 마감일. 검침·세금계산서 위해 3~5일 전 방문용.</div>
         </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>

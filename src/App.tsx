@@ -12,6 +12,7 @@ import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
+import ServiceReception from "./ServiceReception";
 import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
 import { AsReception, CsCalendar } from "./CsAsWorkspace";
 import ItLearningHistory from "./ItLearningHistory";
@@ -4522,7 +4523,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "daily" | "weekly" | "growth" | "operations" | "contactChanges">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "daily" | "weekly" | "growth" | "operations" | "contactChanges">("field"); // 좌측 메뉴 화면
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
@@ -5188,7 +5189,7 @@ export default function App() {
     { title: "외근 업무", items: [["field", "FIELD"], ["contactChanges", "담당자·주소 변경"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
   const bottomItems = [["operations", "업무현황"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
@@ -5340,6 +5341,7 @@ export default function App() {
         {screen === "walkingMap" && <WalkingMap userKey={author} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
+        {screen === "serviceReception" && <ServiceReception author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}

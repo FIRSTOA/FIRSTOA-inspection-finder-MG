@@ -31,6 +31,7 @@ type Screen =
   | "calendar"
   | "walkingMap"
   | "asReception"
+  | "serviceReception"
   | "happycall"
   | "promoSend"
   | "daily"
@@ -49,7 +50,7 @@ type MenuItem = {
 };
 
 const primaryLinks: MenuItem[] = [
-  { key: "calendar", title: "일정 확인", desc: "팀 일정과 오늘 업무", icon: CalendarDays, tone: "bg-blue-600 text-white" },
+  { key: "serviceReception", title: "서비스접수", desc: "AS 접수·양식·전송", icon: ClipboardList, tone: "bg-rose-600 text-white" },
   { key: "field", title: "FIELD 작성", desc: "양식·사진·업무방 전송", icon: FilePenLine, tone: "bg-slate-950 text-white" },
   { key: "walkingMap", title: "워킨맵", desc: "점검·재계약 대상", icon: MapPinned, tone: "bg-emerald-600 text-white" },
   { key: "asReception", title: "일정리스트", desc: "금일·익일·예정 업무", icon: ClipboardList, tone: "bg-violet-600 text-white" },

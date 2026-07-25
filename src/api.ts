@@ -197,6 +197,52 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   return Array.from(hits.values());
 }
 
+// 임대리스트(vendor_info) 검색 — 서비스접수 자동채움용. 업체명은 즉시, 자산번호/순번은 컬럼 승격 후 동작.
+export type LeaseHit = Record<string, string>;
+export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
+  const kw = String(q || "").trim();
+  if (!kw) return [];
+  const enc = encodeURIComponent;
+  const vendorCol = enc("_업체명");
+  const assetCol = enc("자산번호");
+  const seqCol = enc("순번");
+  const seen = new Set<string>();
+  const out: LeaseHit[] = [];
+  const push = (rows: Array<{ id?: number; _업체명?: string; _raw?: unknown }>) => {
+    for (const r of rows) {
+      const raw = (r._raw && typeof r._raw === "object" ? r._raw : {}) as Record<string, unknown>;
+      const dedup = String(r.id ?? `${r._업체명}-${raw["순"]}`);
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+      const normalized: LeaseHit = { _업체명: String(r._업체명 || "") };
+      for (const [k, v] of Object.entries(raw)) normalized[k] = v == null ? "" : String(v);
+      out.push(normalized);
+    }
+  };
+  const run = async (query: string) => {
+    try { return await selectRows<{ id?: number; _업체명?: string; _raw?: unknown }>("vendor_info", query); }
+    catch { return []; }
+  };
+  push(await run(`select=id,${vendorCol},_raw&${vendorCol}=ilike.*${enc(kw)}*&limit=30`));
+  if (out.length < 30) push(await run(`select=id,${vendorCol},_raw&${assetCol}=ilike.*${enc(kw)}*&limit=30`));
+  if (/^\d+$/.test(kw) && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${seqCol}=eq.${enc(kw)}&limit=30`));
+  return out.slice(0, 30);
+}
+
+// 시리얼(기번) 기준 AS 접수이력 — as_records에서 최신순.
+export async function getAsHistoryBySerial(serial: string): Promise<{ date: string; content: string }[]> {
+  const s = String(serial || "").trim();
+  if (!s) return [];
+  const serialCol = encodeURIComponent("시리얼넘버");
+  const dateCol = encodeURIComponent("작성일");
+  try {
+    const rows = await selectRows<Record<string, unknown>>("as_records", `select=*&${serialCol}=ilike.*${encodeURIComponent(s)}*&order=${dateCol}.desc&limit=20`);
+    return rows.map((r) => ({ date: String(r["작성일"] || "").slice(0, 10), content: String(r["내용"] || "").trim() })).filter((x) => x.content);
+  } catch {
+    return [];
+  }
+}
+
 export async function searchVendors(q: string): Promise<SearchResp> {
   const query = String(q || "").trim();
   if (query.length < 1) return { results: [], total: 0 };
