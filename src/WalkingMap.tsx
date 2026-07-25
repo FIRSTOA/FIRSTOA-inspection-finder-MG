@@ -732,6 +732,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">(initialPreferences.kind);
   const [renewalOrder, setRenewalOrder] = useState<"default" | "asc" | "desc">("default");
   const [renewalGradeFilter, setRenewalGradeFilter] = useState("ALL");
+  const [quarterHasRenewal, setQuarterHasRenewal] = useState(false);
+  const [quarterHasMisu, setQuarterHasMisu] = useState(false);
+  const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
+  const [monthlyOrder, setMonthlyOrder] = useState<"default" | "date">("default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
@@ -968,40 +972,6 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     });
   }, [selectedId, mobileView, mapSelectionRevision]);
 
-  const scopedPlaces = useMemo(() => {
-    const rows = places.filter((place) => {
-      if (labelFilters.length && !labelFilters.includes(place.label)) return false;
-      if (place.team !== teamFilter) return false;
-      if (place.quarter !== quarterFilter) return false;
-      if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
-      if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
-      return true;
-    });
-    if (kindFilter !== "renewal" || renewalOrder === "default") return rows;
-    const year = new Date().getFullYear();
-    return [...rows].sort((left, right) => {
-      const leftEnd = projectedContractEnd(left, year, quarterFilter)?.key;
-      const rightEnd = projectedContractEnd(right, year, quarterFilter)?.key;
-      if (leftEnd === undefined) return rightEnd === undefined ? 0 : 1;
-      if (rightEnd === undefined) return -1;
-      return renewalOrder === "asc" ? leftEnd - rightEnd : rightEnd - leftEnd;
-    });
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder]);
-
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    if (!keyword) return scopedPlaces;
-    return scopedPlaces.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
-      .some((value) => value.toLowerCase().includes(keyword)));
-  }, [query, scopedPlaces]);
-
-  const mapSearchResults = useMemo(() => {
-    const keyword = mapQuery.trim().toLowerCase();
-    if (!keyword) return [];
-    return scopedPlaces.filter((place) => [place.name, place.comment, place.address, place.addressDetail]
-      .some((value) => value.toLowerCase().includes(keyword))).slice(0, 8);
-  }, [mapQuery, scopedPlaces]);
-
   const inspectionHistoryByPlace = useMemo(() => {
     const indexed = inspectionVisits
       .map((visit) => ({ visit, key: vendorMatchKey(visit.vendor) }))
@@ -1055,6 +1025,60 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     }
     return result;
   }, [places, teamFilter, quarterFilter]);
+
+  const scopedPlaces = useMemo(() => {
+    const rows = places.filter((place) => {
+      if (labelFilters.length && !labelFilters.includes(place.label)) return false;
+      if (place.team !== teamFilter) return false;
+      if (place.quarter !== quarterFilter) return false;
+      if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
+      if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
+      // 분기점검 필터: 재계약 유무 / 미수 유무 / 등급(다중) — 모두 AND 조합.
+      if (kindFilter === "quarter") {
+        if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
+        if (quarterHasMisu && !misuByVendor.has(vendorMatchKey(place.name))) return false;
+        if (quarterGrades.length && !quarterGrades.includes(renewalGrade(place))) return false;
+      }
+      return true;
+    });
+    if (kindFilter === "renewal" && renewalOrder !== "default") {
+      const year = new Date().getFullYear();
+      return [...rows].sort((left, right) => {
+        const leftEnd = projectedContractEnd(left, year, quarterFilter)?.key;
+        const rightEnd = projectedContractEnd(right, year, quarterFilter)?.key;
+        if (leftEnd === undefined) return rightEnd === undefined ? 0 : 1;
+        if (rightEnd === undefined) return -1;
+        return renewalOrder === "asc" ? leftEnd - rightEnd : rightEnd - leftEnd;
+      });
+    }
+    // 매월점검 날짜순: 최근 점검일 오래된 순(이력 없으면 최우선).
+    if (kindFilter === "monthly" && monthlyOrder === "date") {
+      return [...rows].sort((left, right) => {
+        const leftDate = latestInspectionByPlace.get(left.id) || "";
+        const rightDate = latestInspectionByPlace.get(right.id) || "";
+        if (!leftDate && !rightDate) return 0;
+        if (!leftDate) return -1;
+        if (!rightDate) return 1;
+        return leftDate.localeCompare(rightDate);
+      });
+    }
+    return rows;
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, latestInspectionByPlace]);
+
+  const filtered = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return scopedPlaces;
+    return scopedPlaces.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
+      .some((value) => value.toLowerCase().includes(keyword)));
+  }, [query, scopedPlaces]);
+
+  const mapSearchResults = useMemo(() => {
+    const keyword = mapQuery.trim().toLowerCase();
+    if (!keyword) return [];
+    return scopedPlaces.filter((place) => [place.name, place.comment, place.address, place.addressDetail]
+      .some((value) => value.toLowerCase().includes(keyword))).slice(0, 8);
+  }, [mapQuery, scopedPlaces]);
+
 
   const mobileDetail = useMemo(() => {
     if (mobileDetailId === null) return null;
@@ -1391,6 +1415,21 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
             {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
+          </div>
+        </div>}
+        {kindFilter === "quarter" && <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+          <div className="flex flex-wrap items-center gap-1">
+            <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500"}`}>재계약 있음</button>
+            <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500"}`}>미수 있음</button>
+            {(quarterHasRenewal || quarterHasMisu || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterGrades([]); }} className="ml-auto rounded px-2 py-1.5 text-[11px] font-black text-slate-400">초기화</button>}
+          </div>
+          <div className="flex gap-1 overflow-x-auto pb-0.5">
+            {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade}</button>)}
+          </div>
+        </div>}
+        {kindFilter === "monthly" && <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+          <div className="grid grid-cols-2 gap-1">
+            {([['default', '기본순'], ['date', '날짜순(오래된순)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
         </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
