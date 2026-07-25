@@ -5,6 +5,7 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
+import { usageSpareAdvice } from "./spareAdvice";
 
 type ReceiveRoute = "카카오" | "전화";
 type ReceiveType = "원격이관" | "복합기 AS" | "IT AS";
@@ -29,18 +30,6 @@ function fmtDotYY(value: string) {
 function korYMD(date: string) {
   const m = String(date).match(/(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[1].slice(2)}년 ${Number(m[2])}월 ${Number(m[3])}일` : String(date || "");
-}
-function counterOf(counts: string, label: string) {
-  // "컬"이 "큰컬"의 일부에 걸리지 않게 lookbehind로 구분한다.
-  const pattern = label === "컬" ? "(?<!큰)컬\\s*([0-9,]+)" : `${label}\\s*([0-9,]+)`;
-  const m = String(counts).match(new RegExp(pattern));
-  return m ? Number(m[1].replace(/,/g, "")) : null;
-}
-// 토너잔량 문자열에서 색상별 수치 추출 (예: "K80 C60 M60 Y70")
-function tonerLevels(text: string) {
-  const map: Record<string, number> = {};
-  for (const m of String(text).toUpperCase().matchAll(/([KCMY])\s*[-:]?\s*(\d{1,3})/g)) map[m[1]] = Number(m[2]);
-  return map;
 }
 function fmtWon(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
@@ -215,30 +204,14 @@ export default function ServiceReception({ author }: { author: string }) {
     const serialEntries = asHistory.filter((h) => h.serialMatch);
     const basisEntries = serialEntries.length ? serialEntries : asHistory;
     const basisLabel = serialEntries.length ? "시리얼기준" : "업체기준";
-    // 자가사용내역: 최근 점검 2회(전방문/전전방문) 매수·토너·여분 비교.
+    // 자가사용내역: 최근 점검 2회(전방문/전전방문) + 기간 포함 사용량 + 여분·폐통 지급 권장(워킨맵과 동일 로직).
     const usage: string[] = [];
     const [snap0, snap1] = snapshots;
-    if (snap0) usage.push(`■ 전방문 ${snap0.date} · 매수 ${snap0.counts || "-"} · 토너 ${snap0.toner || "-"} · 여분 ${snap0.spare || "-"}`);
-    if (snap1) usage.push(`■ 전전방문 ${snap1.date} · 매수 ${snap1.counts || "-"} · 토너 ${snap1.toner || "-"} · 여분 ${snap1.spare || "-"}`);
-    if (snap0 && snap1) {
-      const useParts: string[] = [];
-      for (const label of ["흑", "컬", "큰컬", "합"]) {
-        const cur = counterOf(snap0.counts, label);
-        const prev = counterOf(snap1.counts, label);
-        if (cur !== null && prev !== null) useParts.push(`${label} ${(cur - prev).toLocaleString()}매`);
-      }
-      if (useParts.length) usage.push(`■ 두 방문 사용량: ${useParts.join(" · ")}`);
-      // 토너잔량 비교 — 잔량이 늘었으면(오차 10 초과) 교체한 것으로 추정한다.
-      const curToner = tonerLevels(snap0.toner);
-      const prevToner = tonerLevels(snap1.toner);
-      const tonerParts: string[] = [];
-      for (const color of ["K", "C", "M", "Y"]) {
-        if (curToner[color] === undefined || prevToner[color] === undefined) continue;
-        const replaced = curToner[color] > prevToner[color] + 10;
-        tonerParts.push(`${color} ${prevToner[color]}→${curToner[color]}${replaced ? "(교체 추정)" : ""}`);
-      }
-      if (tonerParts.length) usage.push(`■ 토너 비교(전전→전): ${tonerParts.join(" · ")}`);
-    }
+    if (snap0) usage.push(`■ 전방문 ${snap0.date} · 매수 ${snap0.counts || "-"} · 여분 ${snap0.spare || "-"}${snap0.waste ? ` · 폐통 ${snap0.waste}` : ""}`);
+    if (snap1) usage.push(`■ 전전방문 ${snap1.date} · 매수 ${snap1.counts || "-"} · 여분 ${snap1.spare || "-"}${snap1.waste ? ` · 폐통 ${snap1.waste}` : ""}`);
+    const advice = usageSpareAdvice(snap0, snap1, `${모델명} ${pick(lease, "기종")}`);
+    if (advice?.usageLine) usage.push(`■ 사용량: ${advice.usageLine}`);
+    if (advice) usage.push(`■ 여분 분석: ${advice.adviceLine}`);
     const T = "\t";
     const lines = [
       `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,

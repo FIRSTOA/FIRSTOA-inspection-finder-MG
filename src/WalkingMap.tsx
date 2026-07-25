@@ -4,6 +4,7 @@ import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, upsertRows } from "./supabase";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
+import { usageSpareAdvice } from "./spareAdvice";
 
 type MapLabel = {
   code: string;
@@ -361,20 +362,6 @@ function visitSpareLocation(spare: string) {
   return spare.match(/(?:보관\s*)?위치\s*[:：]?\s*([^·/]+)/i)?.[1]?.trim() || "";
 }
 
-function counterValue(value: string, label: "흑" | "컬") {
-  const match = value.match(new RegExp(`${label}\\s*[-:]?\\s*([\\d,]+)`, "i"));
-  return match ? Number(match[1].replaceAll(",", "")) : null;
-}
-
-function supplyChanges(current: string, previous: string) {
-  return ["K", "C", "M", "Y", "폐"].flatMap((label) => {
-    const pattern = new RegExp(`${label}\\s*[-:]?\\s*(\\d+)`, "i");
-    const before = previous.match(pattern)?.[1];
-    const after = current.match(pattern)?.[1];
-    return before !== undefined && after !== undefined ? [`${label} ${before}→${after}`] : [];
-  });
-}
-
 function visitSnapshot(visit: VisitLike, place: MapPlace) {
   const text = deviceVisitText(visit, place);
   const spare = visitMetric(text, "여분");
@@ -383,6 +370,7 @@ function visitSnapshot(visit: VisitLike, place: MapPlace) {
     counts: visitMetric(text, "매수"),
     toner: visitMetric(text, "토너잔량"),
     spare,
+    waste: visitMetric(text, "폐통"),
     spareLocation: visitSpareLocation(spare),
   };
 }
@@ -1136,19 +1124,10 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
     const place = places.find((item) => item.id === mobileDetailId);
     if (!place) return null;
     const snapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
-    const currentCounts = snapshots[0]?.counts || "";
-    const previousCounts = snapshots[1]?.counts || "";
-    const currentBlack = counterValue(currentCounts, "흑");
-    const previousBlack = counterValue(previousCounts, "흑");
-    const currentColor = counterValue(currentCounts, "컬");
-    const previousColor = counterValue(previousCounts, "컬");
     return {
       place,
       snapshots,
-      blackDiff: currentBlack !== null && previousBlack !== null ? currentBlack - previousBlack : null,
-      colorDiff: currentColor !== null && previousColor !== null ? currentColor - previousColor : null,
-      tonerChanges: supplyChanges(snapshots[0]?.toner || "", snapshots[1]?.toner || ""),
-      spareChanges: supplyChanges(snapshots[0]?.spare || "", snapshots[1]?.spare || ""),
+      advice: usageSpareAdvice(snapshots[0], snapshots[1], `${place.comment} ${place.name}`),
     };
   }, [inspectionHistoryByPlace, mobileDetailId, places]);
 
@@ -1517,12 +1496,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const inspectionSnapshots = (inspectionHistoryByPlace.get(place.id) || []).map((visit) => visitSnapshot(visit, place));
-          const currentCounts = inspectionSnapshots[0]?.counts || "";
-          const previousCounts = inspectionSnapshots[1]?.counts || "";
-          const blackDiff = counterValue(currentCounts, "흑") !== null && counterValue(previousCounts, "흑") !== null ? counterValue(currentCounts, "흑")! - counterValue(previousCounts, "흑")! : null;
-          const colorDiff = counterValue(currentCounts, "컬") !== null && counterValue(previousCounts, "컬") !== null ? counterValue(currentCounts, "컬")! - counterValue(previousCounts, "컬")! : null;
-          const tonerChanges = supplyChanges(inspectionSnapshots[0]?.toner || "", inspectionSnapshots[1]?.toner || "");
-          const spareChanges = supplyChanges(inspectionSnapshots[0]?.spare || "", inspectionSnapshots[1]?.spare || "");
+          const spareAdviceResult = usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
@@ -1580,7 +1554,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
                           <div className="font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
                           <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
                         </div>)}
-                        {inspectionSnapshots.length > 1 && <div className="space-y-1"><div className="flex flex-wrap gap-1"><span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">흑백 사용 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매`}</span><span className="rounded bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">컬러 사용 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매`}</span></div>{tonerChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-[11px] font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
+                        {spareAdviceResult && <div className="space-y-1">{spareAdviceResult.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">사용량 {spareAdviceResult.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</div></div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
                     </div>}
                     <div>
@@ -1768,7 +1742,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
       </section>
 
       {mobileDetail && !desktopLayout && (() => {
-        const { place, snapshots, blackDiff, colorDiff, tonerChanges, spareChanges } = mobileDetail;
+        const { place, snapshots, advice } = mobileDetail;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
         const phone = place.phone.match(/0\d{1,2}-?\d{3,4}-?\d{4}/)?.[0] || "";
@@ -1805,7 +1779,7 @@ export default function WalkingMap({ userKey = "guest" }: { userKey?: string }) 
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
               {snapshots.length ? <div className="mt-3 space-y-3">
                 {snapshots.map((snapshot, index) => <div key={`${place.id}-mobile-${snapshot.date}-${index}`} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><div className="text-sm font-black">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div><div className="mt-1 space-y-1 text-xs font-semibold leading-5 text-slate-600"><div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div></div>)}
-                {snapshots.length > 1 && <div className="space-y-2"><div className="flex flex-wrap gap-2"><span className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">흑백 {blackDiff === null ? "계산 불가" : `${blackDiff.toLocaleString()}매 사용`}</span><span className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">컬러 {colorDiff === null ? "계산 불가" : `${colorDiff.toLocaleString()}매 사용`}</span></div>{tonerChanges.length > 0 && <div className="text-xs font-bold text-slate-600">토너 변화: {tonerChanges.join(" · ")}</div>}{spareChanges.length > 0 && <div className="text-xs font-bold text-slate-600">여분 변화: {spareChanges.join(" · ")}</div>}</div>}
+                {advice && <div className="space-y-2">{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="rounded bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">여분 {advice.adviceLine}</div></div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
             </section>}
             <section className="px-4 py-4">

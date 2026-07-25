@@ -397,14 +397,14 @@ export async function getAsHistory(vendor: string, serial: string, assetNo = "")
 }
 
 // 자가사용내역 대체: 최근 점검 2회(전방문·전전방문)의 매수/토너잔량/여분을 불러와 비교 근거로 쓴다.
-export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string };
+export type InspectionSnapshot = { date: string; counts: string; toner: string; spare: string; waste: string };
 export async function getRecentInspections(vendor: string): Promise<InspectionSnapshot[]> {
   const core = coreVendorKey(vendor);
   const probe = core.slice(0, 4);
   if (probe.length < 2) return [];
   const dateCol = encodeURIComponent("작성일");
   try {
-    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=40`);
+    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=40`);
     return rows
       .filter((r) => {
         const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
@@ -415,6 +415,7 @@ export async function getRecentInspections(vendor: string): Promise<InspectionSn
         counts: String(r["매수"] || "").trim(),
         toner: String(r["토너잔량"] || "").trim(),
         spare: String(r["여분"] || "").trim(),
+        waste: String(r["폐통"] || "").trim(),
       }))
       .filter((s) => s.date)
       .slice(0, 2);
