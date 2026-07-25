@@ -22,6 +22,7 @@ export type AsTicket = {
   serial: string;
   asset: string;
   grade: string;
+  keyman: string;
   issue: string;
   assignee: string;
   status: AsStatus;
@@ -104,6 +105,7 @@ function blankTicket(date: string): AsTicket {
     serial: "",
     asset: "",
     grade: "",
+    keyman: "",
     issue: "",
     assignee: "",
     status: "접수",
@@ -118,6 +120,7 @@ function loadTickets(): AsTicket[] {
     return Array.isArray(parsed) ? parsed.map((ticket: Omit<Partial<AsTicket>, "status"> & { status?: string }) => normalizeTicketSchedule({
       asset: "",
       grade: "",
+      keyman: "",
       ...ticket,
       status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
       scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
@@ -127,10 +130,10 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,issue,assignee,status,scheduleType";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,issue,assignee,status,scheduleType";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -157,7 +160,9 @@ function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
         : flags.inspection.carried
           ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">점검 다음분기</span>
           : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">{flags.inspection.quarter}분기 점검</span>)}
-      {flags.misu && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-700">미수{flags.misu.months ? ` ${flags.misu.months}개월` : ""}{misuBalance ? ` ${misuBalance}` : ""}</span>}
+      {flags.misu && (flags.misu.cleared
+        ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">미수 완납</span>
+        : <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-700">미수{flags.misu.months ? ` ${flags.misu.months}개월` : ""}{misuBalance ? ` ${misuBalance}` : ""}</span>)}
       {flags.renewal && (flags.renewal.done
         ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">재계약 완료</span>
         : <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">재계약{flags.renewal.due ? ` · 종료 ${flags.renewal.due}` : ""}</span>)}
@@ -189,7 +194,8 @@ function buildFieldAsText(ticket: AsTicket, author: string) {
     `업체명:${ticket.vendor}`,
     `부서명:${ticket.department}`,
     `지역:${ticket.team}`,
-    `키맨/접수자:${ticket.contact}`,
+    `키맨/접수자:${ticket.contact ? ` ${ticket.contact}` : ""}`,
+    ...(ticket.keyman ? ticket.keyman.split("\n") : []),
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "1.",
     `모델명: ${ticket.model}`,
@@ -668,6 +674,10 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           <Field label="시리얼" value={draft.serial} onChange={(value) => set("serial", value)} />
           <Field label="자산기번" value={draft.asset || ""} onChange={(value) => set("asset", value)} />
           <Field label="등급" value={draft.grade || ""} onChange={(value) => set("grade", value)} />
+          <label className="text-xs font-bold text-slate-500 md:col-span-2">
+            키맨 정보 <span className="font-semibold text-slate-400">(FIELD 양식의 키맨/접수자 아랫줄에 그대로 들어감)</span>
+            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
+          </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             접수내용
             <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={5} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />

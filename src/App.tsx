@@ -5174,10 +5174,13 @@ export default function App() {
   };
 
   const openAsTicketInField = (fieldText: string) => {
-    modeStateRef.current[mode] = {
-      inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
-      reportTypes, reportTypeOther,
-    };
+    if (mode !== "blank-report") {
+      modeStateRef.current[mode] = {
+        inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+        reportTypes, reportTypeOther,
+      };
+    }
+    delete modeStateRef.current["blank-report"]; // 이전 저장본이 복원돼 새 양식과 섞이지 않게 비운다
     setMode("blank-report");
     setScreen("field");
     setInputText("");
@@ -5194,27 +5197,34 @@ export default function App() {
     showToast("AS접수 내용을 FIELD AS양식으로 불러왔어요", "success");
   };
 
-  // 워킨맵 여분 분석 → 자가신청 핸드오프: 양식을 FIELD로 불러와 수량 확인·부품 추가 후 '자가'로 전송한다.
+  // 워킨맵 여분 분석 → 자가신청 핸드오프.
+  // 점검 원문은 이미 완성된 양식이므로 사진→양식과 같은 경로(점검 모드, 원문 그대로 세팅)를 쓴다.
+  // blank-report 변환기를 거치면 위치 헤더·기기 번호가 재구성되고, 열려 있던 이전 양식 폼과
+  // 병합되는 사고(서리풀 건: 직전 AS 기기·특이사항이 1번 기기에 섞임)가 나서 이 방식으로 바꿨다.
   const openSelfRequestInField = (fieldText: string) => {
-    modeStateRef.current[mode] = {
-      inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
-      reportTypes, reportTypeOther,
-    };
-    setMode("blank-report");
+    if (mode !== "inspection") {
+      modeStateRef.current[mode] = {
+        inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
+        reportTypes, reportTypeOther,
+      };
+    }
+    delete modeStateRef.current["inspection"]; // 이전 점검탭 저장본이 복원돼 섞이지 않게 비운다
+    setMode("inspection");
     setScreen("field");
-    setInputText("");
-    skipAutoRef.current = true;
-    setListOutput([{ content: fieldText }]);
-    setTextOutput("");
-    // 다기기 양식(1. 2. …)이면 기기 수만큼 파싱한다.
-    const deviceCount = Math.max(1, (fieldText.match(/^\d+\.\s*$/gm) || []).length);
-    const nextForms = parseItemDataFromText(fieldText, deviceCount);
-    setItemForms(nextForms.length ? nextForms : [{ ...EMPTY_ITEM_FORM }]);
-    setSharedForm(EMPTY_SHARED_FORM);
+    // "4 ." 처럼 숫자와 점 사이에 공백이 있으면 기기 시작줄로 인식되지 않아 앞 블록에 붙어버린다 — 정규화.
+    const normalized = fieldText.replace(/^(\s*)(\d+)\s+\.(?=\s|$)/gm, "$1$2.");
+    const count = Math.max(1, countInspectionItems(normalized));
+    const forms = parseItemDataFromText(normalized, count);
+    setTextOutput(normalized);
+    setListOutput([]);
+    setItemForms(forms.length ? forms : [{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm({ ...EMPTY_SHARED_FORM, level: FIXED_INSPECTION_LEVEL });
     setSelectedItem(0);
     setEditedBlocks({});
-    setReportTypes(["점검"]);
+    setReportTypes(FIXED_INSPECTION_REPORT_TYPES);
     setReportTypeOther("");
+    skipAutoRef.current = true; // 입력 변경으로 자동 변환이 원문을 덮어쓰지 않게
+    setInputText(normalized);
     showToast("자가신청 양식을 불러왔어요 — 수량 확인 후 '자가'로 전송하세요", "success");
   };
 
@@ -5527,7 +5537,9 @@ export default function App() {
           if (!inspectionLine && !misu && !renewal) return null;
           return <div className={`rounded-xl border px-4 py-3 ${inspectionLine?.wrap || "border-slate-200 bg-white"}`}>
             {inspectionLine && <div className={`text-sm font-black ${inspectionLine.tone}`}>{inspectionLine.text}</div>}
-            {misu && <div className="mt-1 text-xs font-black text-rose-600">미수 {misu.months ? `${misu.months}개월 · ` : ""}{misuBalance}</div>}
+            {misu && (misu.cleared
+              ? <div className="mt-1 text-xs font-black text-slate-400">미수 완납 · 현재 0원{misu.date ? ` (마지막 입력 ${misu.date})` : ""}</div>
+              : <div className="mt-1 text-xs font-black text-rose-600">미수 {misu.months ? `${misu.months}개월 · ` : ""}{misuBalance}</div>)}
             {renewal && (renewal.done
               ? <div className="mt-1 text-xs font-black text-slate-400">재계약 완료 · {renewal.quarter}분기 워킨맵</div>
               : <div className="mt-1 text-xs font-black text-rose-600">재계약 {renewal.quarter}분기 워킨맵 · {renewal.due ? `종료 ${renewal.due}` : "종료월 확인필요"}</div>)}

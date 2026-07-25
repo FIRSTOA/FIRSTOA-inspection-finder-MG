@@ -9,8 +9,9 @@ import { vendorMatchKey } from "./ids";
 export type VendorWorkFlags = {
   // 이번 분기 워킨맵(점검) 등재 여부 — done=G5 완료, carried=G12 이관
   inspection: { quarter: number; label: string; done: boolean; carried: boolean } | null;
-  // 현재 미수(미수팀 시트 출처, 잔액>0) — months "3", balance "1,234,567원"
-  misu: { months: string; balance: string } | null;
+  // 미수 이력(미수팀 시트 출처) — cleared=완납(최신 기록 잔액 0), date=마지막 입력일.
+  // 완납이어도 이력이 있으면 반환한다(처리됐다는 사실 자체가 체크 포인트).
+  misu: { months: string; balance: string; date: string; cleared: boolean } | null;
   // 재계약 워킨맵 등재 — done=매칭 전건 G5, due "26년 8월"
   renewal: { quarter: number; done: boolean; due: string } | null;
 };
@@ -48,7 +49,7 @@ function normMisuDate(value: string) {
 
 type Sources = {
   quarter: number;
-  misu: Map<string, { months: string; balance: string; date: string }>;
+  misu: Map<string, { months: string; balance: string; date: string; cleared: boolean }>;
   inspection: Map<string, { quarter: number; label: string }[]>;
   renewal: Map<string, { quarter: number; label: string; endMonth: number | null }[]>;
 };
@@ -69,15 +70,15 @@ async function loadSources(): Promise<Sources> {
     selectAllRows<PlaceRow>("workin_map_places", `select=name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}`),
   ]);
 
-  const misu = new Map<string, { months: string; balance: string; date: string }>();
+  const misu = new Map<string, { months: string; balance: string; date: string; cleared: boolean }>();
   for (const row of misuRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
     const digits = String(row["미수잔액"] || "").replace(/[^\d]/g, "");
-    if (!digits || Number(digits) === 0) continue; // 잔액 0 = 해소된 건
     const date = normMisuDate(String(row["입력일"] || ""));
     const prev = misu.get(key);
-    if (!prev || date > prev.date) misu.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date });
+    // 완납(잔액 0) 기록도 최신이면 유지 — "언제 완납됐다"를 보여줘야 이중 체크가 없다.
+    if (!prev || date > prev.date) misu.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date, cleared: !digits || Number(digits) === 0 });
   }
 
   const inspection = new Map<string, { quarter: number; label: string }[]>();
@@ -141,7 +142,7 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
         done: insp.every((place) => place.label === "G5"),
         carried: insp.some((place) => place.label === "G12") && insp.every((place) => place.label === "G5" || place.label === "G12"),
       } : null,
-      misu: misu ? { months: misu.months.replace(/개월/g, "").trim(), balance: misu.balance } : null,
+      misu: misu ? { months: misu.months.replace(/개월/g, "").trim(), balance: misu.balance, date: misu.date, cleared: misu.cleared } : null,
       renewal: renew?.length ? (() => {
         const best = [...renew].sort((a, b) => (a.endMonth || 99) - (b.endMonth || 99))[0];
         return {

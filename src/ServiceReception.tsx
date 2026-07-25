@@ -113,7 +113,8 @@ function receptionToFieldText(row: ServiceReceptionRow) {
     `업체명:${cleanVendorName(row.vendor)}`,
     "부서명:",
     `지역:${teamFromRegion(row.region)}`,
-    `키맨/접수자:${[row.receiver_phone, row.receiver_name].filter(Boolean).join(" ")}`,
+    `키맨/접수자:${(row.receiver_name || row.receiver_phone) ? ` 접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : ""}`,
+    ...(row.keyman_info ? row.keyman_info.split("\n") : []),
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "1.",
     `모델명: ${row.model}`,
@@ -368,6 +369,10 @@ export default function ServiceReception({ author, onUseField }: { author: strin
       grade: pick(lease, "등급"),
       receiver_name: manual.접수자성함.trim(),
       receiver_phone: manual.접수자연락처.trim(),
+      keyman_info: [
+        pick(lease, "일반전화") ? `일반전화 ${pick(lease, "일반전화")}` : "",
+        pick(lease, "키맨") ? `★키맨성함/번호 ${pick(lease, "키맨")}` : "",
+      ].filter(Boolean).join("\n"),
       title: manual.제목,
       symptom: manual.증상,
       paid: manual.유상무상,
@@ -444,8 +449,8 @@ export default function ServiceReception({ author, onUseField }: { author: strin
       await upsertRow("as_tickets", {
         id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         team: teamFromRegion(row.region), date: today, time: kstNowHM(),
-        vendor, contact: [row.receiver_phone, row.receiver_name].filter(Boolean).join(" "), address: "", department: "",
-        model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade,
+        vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "", address: "", department: "",
+        model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
         issue: [row.title, row.symptom].filter(Boolean).join(" / ").slice(0, 500) || "서비스접수 연동",
         assignee: "", status: "접수", scheduleType: "AS",
       }, "id");
