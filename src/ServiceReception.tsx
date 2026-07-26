@@ -5,7 +5,8 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
-import { selectRows, upsertRow, uploadPhoto } from "./supabase";
+import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -511,6 +512,57 @@ export default function ServiceReception({ author }: { author: string }) {
     address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
   });
 
+  // 새 주소를 앱 데이터(워킨맵 + Supabase 임대리스트)에 자동 반영.
+  // 임대리스트는 자동 동기화가 없어(수동 1회 적재) 여기서 고쳐도 덮이지 않는다. 구글시트 원본만 수동.
+  const [applyBusyId, setApplyBusyId] = useState("");
+  const applyAddressToApp = async (row: ServiceReceptionRow) => {
+    if (applyBusyId) return;
+    const after = (row.address || "").trim();
+    if (!after) { window.alert("반영할 주소가 비어 있습니다."); return; }
+    if (!window.confirm(`워킨맵과 임대리스트(Supabase)의 주소를 아래로 바꿉니다.\n\n${after}\n\n구글시트 원본은 자동으로 바뀌지 않으니 별도 수정 후 '시트 반영 완료'를 눌러주세요. 계속할까요?`)) return;
+    setApplyBusyId(row.id);
+    try {
+      // 1) 워킨맵: 업체명 매칭되는 모든 지점 주소 갱신 + 메모 기록
+      let mapCount = 0;
+      const key = vendorMatchKey(row.vendor);
+      if (key) {
+        const places = await selectAllRows<{ id: number; name: string; memos: string[] | null }>("workin_map_places", "select=id,name,memos");
+        const matches = places.filter((place) => {
+          const placeKey = vendorMatchKey(place.name || "");
+          return placeKey && (placeKey === key || (placeKey.length >= 5 && key.length >= 5 && (placeKey.includes(key) || key.includes(placeKey))));
+        });
+        for (const match of matches) {
+          const memos = Array.isArray(match.memos) ? match.memos.map(String) : [];
+          memos.push(`[주소반영] ${kstDate()} 서비스접수 기준 → ${after}`.slice(0, 300));
+          await updateRows("workin_map_places", `id=eq.${match.id}`, { address: after, address_detail: "", memos });
+        }
+        mapCount = matches.length;
+      }
+      // 2) 임대리스트(vendor_info): 순번 → 자산번호 → 기번 순으로 해당 기기 행을 찾아 _raw 주소 갱신
+      let leaseUpdated = false;
+      const enc = encodeURIComponent;
+      const finder = row.lease_no ? `${enc("순번")}=eq.${enc(row.lease_no)}`
+        : row.asset_no ? `${enc("자산번호")}=eq.${enc(row.asset_no)}`
+        : row.serial ? `${enc("기번")}=eq.${enc(row.serial)}` : "";
+      if (finder) {
+        const targets = await selectRows<{ id: number; _raw: Record<string, unknown> | null }>("vendor_info", `select=id,_raw&${finder}&limit=1`).catch(() => []);
+        const target = targets[0];
+        if (target && target._raw && typeof target._raw === "object") {
+          const raw = { ...target._raw } as Record<string, unknown>;
+          raw["주소(실납품주소,도로명주소)"] = after;
+          if ("주소" in raw) raw["주소"] = after;
+          await updateRows("vendor_info", `id=eq.${target.id}`, { _raw: raw });
+          leaseUpdated = true;
+        }
+      }
+      window.alert(`반영 완료 — 워킨맵 ${mapCount}곳 · 임대리스트 ${leaseUpdated ? "1건" : "매칭 실패(순번·자산·기번 없음)"}\n구글시트 원본을 수정한 뒤 '시트 반영 완료'를 눌러주세요.`);
+    } catch (e) {
+      window.alert(`반영 실패: ${(e as Error).message}`);
+    } finally {
+      setApplyBusyId("");
+    }
+  };
+
   // 시트 원본 주소를 고친 뒤 누르면 '주소확인' 목록에서 내려간다.
   // 플래그를 지우지 않고 처리자·처리일을 남겨 나중에 누가 반영했는지 추적 가능.
   const resolveAddress = async (row: ServiceReceptionRow) => {
@@ -814,12 +866,18 @@ export default function ServiceReception({ author }: { author: string }) {
                     <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
-                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}{row.address_changed ? (row.address_resolved_at
-                    ? <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
-                    : <>
-                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름 — 시트 주소 확인 필요</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="ml-1.5 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
-                    </>) : null}</div>}
+                  {row.address && <div className="mt-1.5">
+                    <div><b className="text-slate-500">주소</b> {row.address}</div>
+                    {row.address_changed && <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {row.address_resolved_at
+                        ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
+                        : <>
+                          <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름</span>
+                          <button type="button" disabled={applyBusyId === row.id} onClick={(e) => { e.stopPropagation(); void applyAddressToApp(row); }} className="whitespace-nowrap rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵·임대리스트 반영"}</button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="whitespace-nowrap rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
+                        </>}
+                    </div>}
+                  </div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
