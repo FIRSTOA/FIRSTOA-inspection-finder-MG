@@ -25,3 +25,6 @@ alter table public.service_receptions drop constraint if exists service_receptio
 
 -- ③ 일정 티켓에 접수 연결 키
 alter table public.as_tickets add column if not exists "receptionId" text not null default '';
+
+-- 증상 사진 (2026-07-26 추가): 서비스접수 사진 URL 배열
+alter table public.service_receptions add column if not exists photos jsonb not null default '[]'::jsonb;

@@ -5,7 +5,7 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
-import { selectRows, upsertRow } from "./supabase";
+import { selectRows, upsertRow, uploadPhoto } from "./supabase";
 import { usageSpareAdvice } from "./spareAdvice";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -114,6 +114,19 @@ function teamFromRegion(region: string) {
   const m = String(region || "").match(/수도권([A-D])/);
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
 }
+// 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
+async function downscaleImage(file: File, maxSize = 1600): Promise<Blob> {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+  if (scale >= 1) return file;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.85));
+}
+
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
@@ -139,8 +152,8 @@ const STATUS_TONE: Record<string, string> = {
   원격완료: "bg-emerald-50 text-emerald-700",
 };
 
-type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string };
-const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "" };
+type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string; 주소: string };
+const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "", 주소: "" };
 
 export default function ServiceReception({ author }: { author: string }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
@@ -160,6 +173,29 @@ export default function ServiceReception({ author }: { author: string }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savedRowId, setSavedRowId] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<Array<{ url: string; name: string }>>([]);
+  const [confirmAction, setConfirmAction] = useState<"save" | "send" | null>(null);
+  const [confirmChecked, setConfirmChecked] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  const handlePhotoPick = async (files: FileList | null) => {
+    if (!files || !files.length || photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const uploaded: Array<{ url: string; name: string }> = [];
+      for (const file of Array.from(files).slice(0, 6 - photos.length)) {
+        const blob = await downscaleImage(file);
+        const path = `reception/${crypto.randomUUID()}.jpg`;
+        const url = await uploadPhoto(path, blob);
+        uploaded.push({ url, name: file.name });
+      }
+      setPhotos((prev) => [...prev, ...uploaded]);
+    } catch (e) {
+      window.alert(`사진 업로드 실패: ${(e as Error).message}`);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
   const [actionResult, setActionResult] = useState("");
 
   // 접수 현황 리스트
@@ -213,6 +249,7 @@ export default function ServiceReception({ author }: { author: string }) {
     setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const exactVendor = pick(hit, "_업체명");
+    setManual((prev) => ({ ...prev, 주소: pick(hit, "주소(실납품주소,도로명주소)", "주소") }));
     const serial = pick(hit, "시리얼번호(기번)", "기번");
     const assetNo = pick(hit, "자산번호");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
@@ -264,7 +301,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const 키맨 = pick(lease, "키맨");
     const 코드 = pick(lease, "코드");
     const 틴텍코드 = pick(lease, "틴텍코드");
-    const 주소 = pick(lease, "주소(실납품주소,도로명주소)", "주소");
+    const 주소 = manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소");
     const 확장성 = pick(lease, "확장성");
     const 기기상태 = pick(lease, "기기상태");
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
@@ -349,7 +386,9 @@ export default function ServiceReception({ author }: { author: string }) {
         pick(lease, "키맨") ? `★키맨성함/번호 ${pick(lease, "키맨")}` : "",
       ].filter(Boolean).join("\n"),
       lease_no: pick(lease, "순"),
-      address: pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+      address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+      // photos 컬럼 SQL 실행 전에도 일반 저장은 되도록, 사진이 있을 때만 포함
+      ...(photos.length ? { photos: photos.map((photo) => photo.url) } : {}),
       title: manual.제목,
       symptom: manual.증상,
       paid: manual.유상무상,
@@ -362,7 +401,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
-    setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null);
+    setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
   };
 
   // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
@@ -575,6 +614,23 @@ export default function ServiceReception({ author }: { author: string }) {
                 <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
                   <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
                 </label>
+                <label className="text-[11px] font-black text-amber-700 sm:col-span-2 lg:col-span-3">방문 주소 (기사가 가는 주소 — 임대리스트와 다르면 꼭 수정)
+                  <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소 미기재" className="mt-1 w-full rounded-md border border-amber-300 bg-amber-50/40 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                </label>
+                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {photos.map((photo, index) => (
+                      <span key={photo.url} className="relative">
+                        <a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name} className="h-16 w-16 rounded-md border border-slate-200 object-cover" /></a>
+                        <button type="button" onClick={() => setPhotos((prev) => prev.filter((_, i) => i !== index))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">×</button>
+                      </span>
+                    ))}
+                    {photos.length < 6 && <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 text-xl text-slate-400 hover:border-blue-400">
+                      {photoBusy ? "…" : "+"}
+                      <input type="file" accept="image/*" multiple disabled={photoBusy} onChange={(e) => { void handlePhotoPick(e.target.files); e.target.value = ""; }} className="hidden" />
+                    </label>}
+                  </div>
+                </div>
                 {type !== "원격이관" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
                     <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">{["무상", "유상", "보증"].map((v) => <option key={v}>{v}</option>)}</select>
@@ -591,12 +647,59 @@ export default function ServiceReception({ author }: { author: string }) {
                 </label>}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                {type === "복합기 AS" && <button type="button" onClick={() => void handleSaveAndSend()} disabled={busy || !report} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "접수 저장 + AS방 전송"}</button>}
+                {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "접수 저장 + AS방 전송"}</button>}
                 {type === "IT AS" && <span className="rounded-md bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-500">IT방 전송은 미정 — 저장 후 복사해 사용</span>}
-                <button type="button" onClick={() => void handleSave()} disabled={busy} className={`rounded-md px-5 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장 (대기)" : "접수 저장"}</button>
+                <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`rounded-md px-5 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장 (대기)" : "접수 저장"}</button>
                 {actionResult && <span className={`rounded-md px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</span>}
               </div>
             </section>
+
+            {confirmAction && (() => {
+              const checkItems: Array<[string, string, boolean]> = [
+                ["접수경로", route, true],
+                ["접수유형", type, true],
+                ["업체명", vendorName, true],
+                ["기종", pick(lease, "모델명", "기종"), true],
+                ["시리얼(기번)", pick(lease, "시리얼번호(기번)", "기번"), true],
+                ["자산기번", pick(lease, "자산번호"), false],
+                ["접수자 성함", manual.접수자성함.trim(), true],
+                ["접수자 연락처", manual.접수자연락처.trim(), true],
+              ];
+              const missing = checkItems.filter(([, value, required]) => required && !value).length + (manual.주소.trim() ? 0 : 1);
+              return (
+                <div className="fixed inset-0 z-[210] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { setConfirmAction(null); setConfirmChecked(false); }}>
+                  <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <div className="text-xs font-black text-blue-600">{confirmAction === "send" ? "접수 저장 + AS방 전송" : "접수 저장"} 전 확인</div>
+                      <div className="mt-0.5 text-base font-black text-slate-950">{vendorName}</div>
+                    </div>
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+                      <div className={`rounded-lg border-2 p-3 ${manual.주소.trim() ? "border-amber-300 bg-amber-50" : "border-rose-300 bg-rose-50"}`}>
+                        <div className="text-[11px] font-black text-slate-500">🚗 기사가 가는 방문 주소</div>
+                        <div className={`mt-1 text-sm font-black ${manual.주소.trim() ? "text-slate-900" : "text-rose-600"}`}>{manual.주소.trim() || "미기재 — 주소를 확인하세요!"}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                        {checkItems.map(([label, value, required]) => (
+                          <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
+                            <div className="text-[10px] font-black text-slate-400">{label}</div>
+                            <div className={`mt-0.5 truncate text-xs font-black ${value ? "text-slate-800" : required ? "text-rose-600" : "text-slate-400"}`}>{value || "미기재"}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {missing > 0 && <div className="rounded-md bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">빨간 항목 {missing}개 — 그래도 진행하려면 아래 확인에 체크하세요.</div>}
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-3 text-xs font-bold text-slate-700">
+                        <input type="checkbox" checked={confirmChecked} onChange={(e) => setConfirmChecked(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
+                        방문 주소와 접수자·기기 정보를 확인했습니다{confirmAction === "send" ? " (AS방으로 전송됩니다)" : ""}
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                      <button type="button" onClick={() => { setConfirmAction(null); setConfirmChecked(false); }} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+                      <button type="button" disabled={!confirmChecked || busy} onClick={() => { const action = confirmAction; setConfirmAction(null); setConfirmChecked(false); if (action === "send") void handleSaveAndSend(); else void handleSave(); }} className="rounded-md bg-blue-600 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{confirmAction === "send" ? "확인하고 전송" : "확인하고 저장"}</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {type !== "원격이관" && lease && <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
@@ -657,9 +760,12 @@ export default function ServiceReception({ author }: { author: string }) {
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
                     <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
                     <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
+                    <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone ? <a href={`tel:${row.receiver_phone.replace(/[^0-9]/g, "")}`} className="font-black text-blue-600">{row.receiver_phone}</a> : "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
+                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}</div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
+                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">원본 미리보기</button>}
