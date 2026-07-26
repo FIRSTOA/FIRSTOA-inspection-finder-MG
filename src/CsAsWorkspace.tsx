@@ -125,13 +125,11 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate
 
 // 반복 시리즈 지평선: 각 매월 반복 그룹(업체+유형)의 마지막 일정에서 오늘+11개월까지 이어 붙일 행을 계산.
 // 새로고침 때마다 부족분만 만들어 반복이 무기한 이어진다. 중간에 지운 달은 되살리지 않는다(마지막 일정 이후만 연장).
-export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string, viewYm?: string): Record<string, unknown>[] {
+export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Record<string, unknown>[] {
   const existing = new Set(list.map((t) => `${seriesGroupOf(t)}|${t.date}`));
   const [ty, tm] = todayYmd.split("-").map(Number);
   const horizonTotal = ty * 12 + (tm - 1) + 11;
-  const defaultYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
-  // 사용자가 달력에서 더 먼 달을 보고 있으면 그 달까지 생성 (기본은 오늘+11개월)
-  const horizonYm = viewYm && viewYm > defaultYm ? viewYm : defaultYm;
+  const horizonYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
   const latest = new Map<string, AsTicket>();
   for (const t of list) {
     if (!t.repeatMonthly || !t.vendor.trim()) continue;
@@ -142,7 +140,7 @@ export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string, vie
   const rows: Record<string, unknown>[] = [];
   for (const tail of latest.values()) {
     let date = tail.date;
-    for (let guard = 0; guard < 120; guard++) {
+    for (let guard = 0; guard < 24; guard++) {
       date = nextMonthSameDay(date);
       if (date.slice(0, 7) > horizonYm) break;
       const key = `${seriesGroupOf(tail)}|${date}`;
@@ -609,15 +607,6 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
   });
-
-  // 달력에서 미래 달을 열람하면 반복 일정을 그 달까지 즉석 생성 — 부족분이 없으면 아무 것도 안 한다
-  useEffect(() => {
-    const rows = buildSeriesExtensionRows(tickets, getTodayYmd(), currentMonth.slice(0, 7));
-    if (!rows.length) return;
-    setTicketsState((current) => [...current, ...rows.map((row) => normalizeTicketSchedule(row as unknown as AsTicket))]);
-    void trackWrite(upsertRows("as_tickets", rows, "id"), "반복 일정 생성 실패 — 새로고침 후 다시 시도해 주세요.");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonth, tickets]);
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
