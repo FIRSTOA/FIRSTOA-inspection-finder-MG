@@ -4291,6 +4291,7 @@ export default function App() {
     workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
   });
   const clearPreviousVendorWork = (clearVendor = true) => {
+    pendingAsTicketRef.current = null; // 새 원본 작업 — 이전 일정 연결(완료 팝업 대상) 해제
     setItemForms([{ ...EMPTY_ITEM_FORM }]);
     setSharedForm(mode === "inspection" ? { ...EMPTY_SHARED_FORM, level: FIXED_INSPECTION_LEVEL } : EMPTY_SHARED_FORM);
     setAirForm(EMPTY_AIR_FORM);
@@ -5301,6 +5302,7 @@ export default function App() {
       };
     }
     delete modeStateRef.current["inspection"]; // 이전 점검탭 저장본이 복원돼 섞이지 않게 비운다
+    pendingAsTicketRef.current = null; // 자가신청 진입 — 일정 완료 팝업 대상 아님
     setMode("inspection");
     setScreen("field");
     // "4 ." 처럼 숫자와 점 사이에 공백이 있으면 기기 시작줄로 인식되지 않아 앞 블록에 붙어버린다 — 정규화.
