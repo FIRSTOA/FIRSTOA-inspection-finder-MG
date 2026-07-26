@@ -120,12 +120,16 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>): Record<st
   };
 }
 
+function kstNowHM() {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+}
+
 function blankTicket(date: string): AsTicket {
   return {
     id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     team: "A",
     date,
-    time: "09:00",
+    time: kstNowHM(),
     vendor: "",
     contact: "",
     address: "",
@@ -635,7 +639,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                             <div className="space-y-1">
                               {rows.slice(0, 4).map((ticket) => (
                                 <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => setDetailId(ticket.id)} className={`block w-full cursor-grab truncate rounded px-1.5 py-1 text-left text-[11px] font-bold active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                                  {ticket.time} {ticket.vendor || "새 일정"}
+                                  {ticket.vendor || "새 일정"}
                                 </button>
                               ))}
                               {rows.length > 4 && <div className="px-1 text-[10px] font-bold text-slate-400">+{rows.length - 4}개 더보기</div>}
