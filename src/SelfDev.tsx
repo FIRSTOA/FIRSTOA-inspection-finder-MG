@@ -15,6 +15,7 @@ const fmtP = (votes: number) => (Math.round(votes * 2) / 10).toFixed(1); // 추�
 type SelfGoal = {
   id: string; created_at: string; author: string; title: string; memo: string;
   target_date: string | null; done: boolean; done_at: string | null; category?: string;
+  start_date?: string | null; progress?: number;
 };
 
 type AnyPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string };
@@ -212,6 +213,10 @@ function PraiseBoard({ author }: { author: string }) {
   const [toName, setToName] = useState("");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filterTo, setFilterTo] = useState("전체");
+  const [filterFrom, setFilterFrom] = useState("전체");
+  const [editId, setEditId] = useState("");
+  const [editContent, setEditContent] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -236,6 +241,34 @@ function PraiseBoard({ author }: { author: string }) {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [rows, monthKey]);
   const myReceived = rows.filter((row) => row.to_name === author).length;
+  const people = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of rows) { if (row.to_name) names.add(row.to_name); if (row.from_author) names.add(row.from_author); }
+    return Array.from(names).sort();
+  }, [rows]);
+  const visibleRows = useMemo(() => rows.filter((row) =>
+    (filterTo === "전체" || row.to_name === filterTo) && (filterFrom === "전체" || row.from_author === filterFrom)), [rows, filterTo, filterFrom]);
+
+  const saveEditPraise = async () => {
+    if (!editContent.trim()) return;
+    try {
+      await updateRows("praise_posts", `id=eq.${editId}`, { content: editContent.trim() });
+      setRows((current) => current.map((row) => row.id === editId ? { ...row, content: editContent.trim() } : row));
+      setEditId("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const removePraise = async (row: PraisePost) => {
+    if (row.from_author !== author) return;
+    if (!window.confirm("이 칭찬을 삭제할까요?")) return;
+    try {
+      await deleteRows("praise_posts", `id=eq.${row.id}`);
+      setRows((current) => current.filter((r) => r.id !== row.id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const submit = async () => {
     if (busy || !toName || !content.trim()) return;
@@ -256,13 +289,13 @@ function PraiseBoard({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <section className="rounded-xl border border-slate-200 bg-rose-700 p-5 text-white shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">💖 칭찬 릴레이</h2>
-            <p className="mt-1 text-xs font-semibold text-rose-100">잘한 일을 그냥 지나치지 마세요. 익명으로 전해집니다.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-300">잘한 일을 그냥 지나치지 마세요. 익명으로 전해집니다.</p>
           </div>
-          <div className="text-center"><div className="text-lg font-black">{myReceived}</div><div className="text-[10px] font-bold text-rose-100">내가 받은 칭찬</div></div>
+          <div className="text-center"><div className="text-lg font-black">{myReceived}</div><div className="text-[10px] font-bold text-slate-300">내가 받은 칭찬</div></div>
         </div>
       </section>
 
@@ -271,7 +304,7 @@ function PraiseBoard({ author }: { author: string }) {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람은 익명</span></div>
+            <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람 이름이 함께 표시됩니다</span></div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
               <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                 <option value="">받는 사람</option>
@@ -280,19 +313,42 @@ function PraiseBoard({ author }: { author: string }) {
               <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
             </div>
             <div className="mt-2 flex justify-end">
-              <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="rounded-md bg-rose-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "보내는 중…" : "💌 칭찬 보내기"}</button>
+              <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "보내는 중…" : "💌 칭찬 보내기"}</button>
             </div>
           </section>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+              <option value="전체">받은 사람: 전체</option>
+              {people.map((name) => <option key={name} value={name}>받은 사람: {name}</option>)}
+            </select>
+            <select value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+              <option value="전체">보낸 사람: 전체</option>
+              {people.map((name) => <option key={name} value={name}>보낸 사람: {name}</option>)}
+            </select>
+            {(filterTo !== "전체" || filterFrom !== "전체") && <button type="button" onClick={() => { setFilterTo("전체"); setFilterFrom("전체"); }} className="text-[11px] font-black text-slate-400">초기화</button>}
+          </div>
           {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-          {!loading && !rows.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요.</div>}
-          {rows.map((row) => (
-            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.to_name === author ? "border-rose-200 bg-rose-50/40" : "border-slate-200 bg-white"}`}>
+          {!loading && !visibleRows.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 칭찬이 없어요." : "아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요."}</div>}
+          {visibleRows.map((row) => (
+            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.to_name === author ? "border-amber-200 bg-amber-50/30" : "border-slate-200 bg-white"}`}>
               <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
-                <span><b className="text-sm font-black text-rose-600">{row.to_name}</b> 님에게 도착한 칭찬</span>
-                <span>{row.created_at.slice(0, 10)}</span>
+                <span><b className="text-sm font-black text-slate-900">{row.to_name}</b> 님에게 · <span className="font-black text-slate-500">{row.from_author || "익명"}</span>{row.from_author === author ? " (나)" : ""}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {row.from_author === author && editId !== row.id && <>
+                    <button type="button" onClick={() => { setEditId(row.id); setEditContent(row.content); }} className="font-black text-slate-300 hover:text-blue-500">수정</button>
+                    <button type="button" onClick={() => void removePraise(row)} className="font-black text-slate-300 hover:text-rose-500">삭제</button>
+                  </>}
+                  {row.created_at.slice(0, 10)}
+                </span>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{row.content}</p>
+              {editId === row.id ? (
+                <div className="mt-2 flex gap-1.5">
+                  <input value={editContent} onChange={(e) => setEditContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveEditPraise(); }} className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <button type="button" onClick={() => setEditId("")} className="shrink-0 rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500">취소</button>
+                  <button type="button" onClick={() => void saveEditPraise()} className="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">저장</button>
+                </div>
+              ) : <p className="mt-2 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{row.content}</p>}
             </article>
           ))}
         </div>
@@ -302,9 +358,9 @@ function PraiseBoard({ author }: { author: string }) {
           <div className="mt-3 space-y-1.5">
             {!monthlyKing.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 칭찬이 아직 없어요.</div>}
             {monthlyKing.map(([name, count], index) => (
-              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-rose-50 ring-1 ring-rose-200" : "bg-slate-50"}`}>
+              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "👑" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
-                <span className="text-xs font-black text-rose-600">{count}회</span>
+                <span className="text-xs font-black text-amber-600">{count}회</span>
               </div>
             ))}
           </div>
@@ -322,25 +378,35 @@ function GoalsBoard({ author }: { author: string }) {
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [category, setCategory] = useState<string>("기타");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState("");
-  const [editDraft, setEditDraft] = useState({ title: "", memo: "", target_date: "", category: "기타" });
+  const [editDraft, setEditDraft] = useState({ title: "", memo: "", target_date: "", start_date: "", category: "기타" });
 
   const startEdit = (goal: SelfGoal) => {
     setEditId(goal.id);
-    setEditDraft({ title: goal.title, memo: goal.memo, target_date: goal.target_date || "", category: goal.category || "기타" });
+    setEditDraft({ title: goal.title, memo: goal.memo, target_date: goal.target_date || "", start_date: goal.start_date || "", category: goal.category || "기타" });
   };
   const saveEdit = async () => {
     if (!editDraft.title.trim()) return;
     try {
-      await updateRows("self_goals", `id=eq.${editId}`, { title: editDraft.title.trim(), memo: editDraft.memo.trim(), target_date: editDraft.target_date || null, category: editDraft.category });
-      setGoals((current) => current.map((g) => g.id === editId ? { ...g, title: editDraft.title.trim(), memo: editDraft.memo.trim(), target_date: editDraft.target_date || null, category: editDraft.category } : g));
+      const patch = { title: editDraft.title.trim(), memo: editDraft.memo.trim(), target_date: editDraft.target_date || null, start_date: editDraft.start_date || null, category: editDraft.category };
+      await updateRows("self_goals", `id=eq.${editId}`, patch);
+      setGoals((current) => current.map((g) => g.id === editId ? { ...g, ...patch } : g));
       setEditId("");
     } catch (e) {
       setError((e as Error).message);
     }
+  };
+
+  // 진행률: 슬라이더는 로컬로 즉시 반영하고, 손을 뗄 때 저장한다.
+  const setProgressLocal = (id: string, progress: number) => {
+    setGoals((current) => current.map((g) => g.id === id ? { ...g, progress } : g));
+  };
+  const saveProgress = (goal: SelfGoal) => {
+    void updateRows("self_goals", `id=eq.${goal.id}`, { progress: goal.progress ?? 0 }).catch(() => { /* 다음 저장에서 재시도 */ });
   };
 
   const load = useCallback(async () => {
@@ -380,8 +446,8 @@ function GoalsBoard({ author }: { author: string }) {
     if (!author) { setError("작성자를 먼저 선택하세요."); return; }
     setBusy(true);
     try {
-      await insertRow("self_goals", { author, title: title.trim(), memo: memo.trim(), target_date: targetDate || null, category });
-      setTitle(""); setMemo(""); setTargetDate("");
+      await insertRow("self_goals", { author, title: title.trim(), memo: memo.trim(), target_date: targetDate || null, start_date: startDate || kstDate(), category });
+      setTitle(""); setMemo(""); setTargetDate(""); setStartDate("");
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -393,9 +459,9 @@ function GoalsBoard({ author }: { author: string }) {
   const toggleDone = async (goal: SelfGoal) => {
     if (goal.author !== author) return;
     const done = !goal.done;
-    setGoals((current) => current.map((g) => g.id === goal.id ? { ...g, done, done_at: done ? new Date().toISOString() : null } : g));
+    setGoals((current) => current.map((g) => g.id === goal.id ? { ...g, done, done_at: done ? new Date().toISOString() : null, progress: done ? 100 : g.progress } : g));
     try {
-      await updateRows("self_goals", `id=eq.${goal.id}`, { done, done_at: done ? new Date().toISOString() : null });
+      await updateRows("self_goals", `id=eq.${goal.id}`, { done, done_at: done ? new Date().toISOString() : null, ...(done ? { progress: 100 } : {}) });
     } catch {
       await load();
     }
@@ -419,11 +485,14 @@ function GoalsBoard({ author }: { author: string }) {
     if (editId === goal.id) {
       return (
         <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4 shadow-sm">
-          <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)_140px]">
+          <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
             <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
               {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
             </select>
             <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={editDraft.start_date} onChange={(e) => setEditDraft({ ...editDraft, start_date: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
             <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
           </div>
           <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
@@ -443,10 +512,21 @@ function GoalsBoard({ author }: { author: string }) {
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
             {showAll && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-600">{goal.author}</span>}
             <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-black text-emerald-600">{goal.category || "기타"}</span>
-            {goal.target_date && <span>목표일 {goal.target_date}</span>}
+            {(goal.start_date || goal.target_date) && <span>{goal.start_date || "?"} ~ {goal.target_date || "미정"}</span>}
             {ddayLabel && !goal.done && <span className={`rounded px-1.5 py-0.5 font-black ${overdue ? "bg-rose-100 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{ddayLabel}</span>}
             {goal.done && goal.done_at && <span className="text-emerald-600">완료 {goal.done_at.slice(0, 10)}</span>}
           </div>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full transition-all ${goal.done ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${goal.done ? 100 : (goal.progress ?? 0)}%` }} />
+            </div>
+            <span className="w-9 shrink-0 text-right text-[11px] font-black text-slate-500">{goal.done ? 100 : (goal.progress ?? 0)}%</span>
+          </div>
+          {mineGoal && !goal.done && <input type="range" min={0} max={100} step={5} value={goal.progress ?? 0}
+            onChange={(e) => setProgressLocal(goal.id, Number(e.target.value))}
+            onMouseUp={() => saveProgress({ ...goal, progress: goal.progress ?? 0 })}
+            onTouchEnd={() => saveProgress({ ...goal, progress: goal.progress ?? 0 })}
+            className="mt-1 w-full accent-blue-600" />}
         </div>
         {mineGoal && <span className="flex shrink-0 gap-2">
           <button type="button" onClick={() => startEdit(goal)} className="text-[11px] font-black text-slate-300 hover:text-blue-500">수정</button>
@@ -458,16 +538,16 @@ function GoalsBoard({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-emerald-800 p-5 text-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">🎯 나의 목표</h2>
-            <p className="mt-1 text-xs font-semibold text-emerald-100">자격증·스터디·습관 — 개인 목표를 걸고 완료를 쌓아가세요.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-300">자격증·스터디·습관 — 개인 목표를 걸고 완료를 쌓아가세요.</p>
           </div>
           <div className="flex gap-4 text-center">
-            <div><div className="text-lg font-black">{mine.length}</div><div className="text-[10px] font-bold text-emerald-100">내 목표</div></div>
-            <div><div className="text-lg font-black">{myDone}</div><div className="text-[10px] font-bold text-emerald-100">완료</div></div>
-            <div><div className="text-lg font-black">{mine.length ? Math.round((myDone / mine.length) * 100) : 0}%</div><div className="text-[10px] font-bold text-emerald-100">달성률</div></div>
+            <div><div className="text-lg font-black">{mine.length}</div><div className="text-[10px] font-bold text-slate-300">내 목표</div></div>
+            <div><div className="text-lg font-black">{myDone}</div><div className="text-[10px] font-bold text-slate-300">완료</div></div>
+            <div><div className="text-lg font-black">{mine.length ? Math.round((myDone / mine.length) * 100) : 0}%</div><div className="text-[10px] font-bold text-slate-300">달성률</div></div>
           </div>
         </div>
       </section>
@@ -478,12 +558,19 @@ function GoalsBoard({ author }: { author: string }) {
         <div className="space-y-4">
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">새 목표 추가</div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)_150px]">
+            <div className="mt-2 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
               <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
                 {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
               </select>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="목표 (예: 정보처리기사 필기 합격, 매주 책 1권)" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-              <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-black text-slate-400">시작일 (비우면 오늘)
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              </label>
+              <label className="text-[10px] font-black text-slate-400">완료 목표일
+                <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              </label>
             </div>
             <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
             <div className="mt-2 flex justify-end">

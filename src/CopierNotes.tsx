@@ -17,11 +17,13 @@ const BRANDS: Record<string, string[]> = {
   교세라: ["2100", "2101", "5521", "5526"],
   브라더: ["5700", "8900"],
   오키: ["5473"],
+  기타: [],
 };
 const BRAND_NAMES = Object.keys(BRANDS);
 const BRAND_TONE: Record<string, string> = {
   삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
   교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
+  기타: "bg-slate-100 text-slate-600",
 };
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };

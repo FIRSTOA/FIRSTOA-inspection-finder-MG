@@ -6,7 +6,7 @@
  * 엔드포인트는 검색용과 동일 배포(URL 고정 — "기존 배포 편집→새 버전").
  */
 
-import { buildRecords } from "./inspectParser";
+import { buildRecords, type Row } from "./inspectParser";
 import { md5 } from "./md5";
 import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, isTestModeValue, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
@@ -15,6 +15,7 @@ import type { ContactChangeFormState } from "./contactChange";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
 import { normalizeId as normId } from "./ids";
+import { inferBrand } from "./copierBrand";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -705,6 +706,35 @@ async function resolveForcedRoom(destination: SendDestination, region: string): 
 // 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).
 //  kind: normal=지역 점검방 또는 AS방 단일 전송, 자가=여분토너요청방, 부품=부품요청방.
 //  자가/부품은 알림 목적이라 중복(이미 저장)이어도 해당 방으로는 항상 게시한다.
+// AS 저장 시 복합기 학습·처리이력(copier_notes)에도 자동 적재 — 실패해도 전송에는 영향 없음.
+// source(unique)로 중복 적재를 막는다. 공청기·세단기는 제외.
+async function addCopierNoteFromAs(row: Row) {
+  try {
+    const model = String(row["모델명"] || "").trim();
+    const symptom = String(row["내용"] || "").trim();
+    const solution = String(row["처리내용"] || "").trim();
+    if (!model || solution.length < 4) return;
+    if (/샤오미|블루스카이|공기청정|공청|세단기|세절기/.test(model)) return;
+    await insertRow("copier_notes", {
+      author: String(row["작성자"] || ""),
+      brand: inferBrand(model),
+      model,
+      kind: "처리이력",
+      title: (symptom || model).slice(0, 80),
+      content: [
+        symptom && `증상: ${symptom}`,
+        `처리: ${solution}`,
+        row["지역"] && `지역: ${row["지역"]}`,
+        row["레벨"] && `레벨: ${row["레벨"]}`,
+        row["업체명"] && `업체: ${row["업체명"]}`,
+      ].filter(Boolean).join("\n"),
+      source: `field:${String(row["_dupKey"] || "")}`,
+    });
+  } catch {
+    // 학습 적재 실패는 무시(다음 AS에서 다시 쌓임)
+  }
+}
+
 export async function sendForm(payload: SavePayload, kind: SendKind = "normal", destination?: SendDestination): Promise<SaveResp> {
   try {
     const text = String(payload.text || "");
@@ -732,7 +762,7 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     }
     if (built.as) {
       const r = await insertRecord("as_records", built.as);
-      if (r === "new") anyNew = true;
+      if (r === "new") { anyNew = true; void addCopierNoteFromAs(built.as); }
     }
 
     const isExtra = kind === "자가" || kind === "부품";
