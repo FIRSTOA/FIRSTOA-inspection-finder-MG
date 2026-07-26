@@ -16,6 +16,11 @@ function onOpen() {
     .addItem('드라이브 수신함 지금 적재', 'ingestFromDriveFolder')
     .addItem('드라이브 자동적재 끄기', 'disableDriveIngest')
     .addSeparator()
+    .addItem('임대리스트 → Supabase 동기화 미리보기', 'previewLeaseSupabaseSync')
+    .addItem('임대리스트 → Supabase 지금 동기화', 'syncLeaseToSupabase')
+    .addItem('임대리스트 Supabase 주간 트리거 켜기 (월 5시)', 'installLeaseSupabaseTrigger')
+    .addItem('임대리스트 Supabase 주간 트리거 끄기', 'removeLeaseSupabaseTrigger')
+    .addSeparator()
     .addItem('바로가기 탭 생성/갱신', 'buildShortcutSheet')
     .addItem('접근 권한 점검', 'diagAccess')
     .addToUi();
