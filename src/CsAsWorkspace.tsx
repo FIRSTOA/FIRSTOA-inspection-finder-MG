@@ -568,10 +568,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const removeTicket = (ticket: AsTicket) => {
-    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?`)) return;
+    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?`)) return false;
     setTickets(tickets.filter((item) => item.id !== ticket.id));
     removeRemote(ticket.id);
     setEditId("");
+    return true;
   };
 
   const toggleDone = (ticket: AsTicket) => {
@@ -724,9 +725,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <div key={ticket.id} className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
                       <div className="w-14 flex-none text-xs font-black text-slate-500">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</div>
                       <div className="min-w-0 flex-1">{renderTicketCard(ticket)}</div>
-                      <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
-                      <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
-                      <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
+                      <div className="grid flex-none grid-cols-2 gap-1.5">
+                        <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
+                        <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
+                        <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
+                      </div>
                     </div>
                   ))}
                   {!monthTickets.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
@@ -837,6 +841,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => toggleDone(ticket)} className={`flex-1 rounded-md border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
               </article>
             ))}
@@ -880,6 +885,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
                         <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
                         <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
+                        <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
                       </div>
                     </td>
                   </tr>
@@ -975,6 +981,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-md border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>
                 </div>
               </div>
             </div>
