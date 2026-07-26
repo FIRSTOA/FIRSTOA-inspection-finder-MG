@@ -20,6 +20,63 @@ type RecordType = "all" | "growth" | "learning" | "challenge" | "special";
 type RecordPeriod = "month" | "quarter";
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
+// 엑셀 클립보드 파서: 멀티라인 셀은 "…"로 감싸이고 내부 따옴표는 ""로 온다.
+// 단순 줄바꿈 분리를 쓰면 멀티라인 목표가 여러 행으로 쪼개진다.
+function parseClipboardGrid(text: string): string[][] {
+  const grid: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const src = text.replace(/\r/g, "");
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { cell += '"'; i++; }
+        else quoted = false;
+      } else cell += ch;
+      continue;
+    }
+    if (ch === '"' && cell === "") { quoted = true; continue; }
+    if (ch === "\t") { row.push(cell); cell = ""; continue; }
+    if (ch === "\n") { row.push(cell); grid.push(row); row = []; cell = ""; continue; }
+    cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); grid.push(row); }
+  return grid.filter((cells) => cells.some((value) => value.trim()));
+}
+
+const EDIT_COLORS: Array<[string, string]> = [["#0f172a", "기본"], ["#dc2626", "빨강"], ["#2563eb", "파랑"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
+
+// 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
+function RichGoalEditor({ initialHtml, onChange, className }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const emit = () => { const el = ref.current; if (el) onChange(el.innerHTML, el.innerText); };
+  const applyColor = (color: string) => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand("foreColor", false, color);
+    emit();
+  };
+  return (
+    <div>
+      <div ref={ref} contentEditable suppressContentEditableWarning
+        dangerouslySetInnerHTML={{ __html: initialHtml }}
+        onInput={emit} onBlur={emit}
+        className={`min-h-[96px] whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900 outline-none focus:border-blue-400 ${className || ""}`} />
+      <div className="mt-1 flex items-center gap-1">
+        <span className="mr-0.5 text-[9px] font-bold text-slate-400">드래그 후 색</span>
+        {EDIT_COLORS.map(([value, label]) => (
+          <button key={label} type="button" title={label} onMouseDown={(e) => { e.preventDefault(); applyColor(value); }}
+            className="h-4 w-4 rounded-full border" style={{ backgroundColor: value, borderColor: value }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const recordTypes = [
   ["growth", "성장노트"],
   ["learning", "배운 점"],
@@ -339,28 +396,20 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     }
   };
 
-  // 목표 글자색 팔레트 (시트처럼 색으로 상태 표시)
-  const GOAL_COLORS: Array<[string, string]> = [["", "기본"], ["#2563eb", "파랑"], ["#dc2626", "빨강"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
-  const ColorDots = ({ goal }: { goal: LevelGoal }) => (
-    <span className="flex items-center gap-1">
-      {GOAL_COLORS.map(([value, label]) => (
-        <button key={label} type="button" title={label} onClick={() => setGoal(goal.id, { color: value })}
-          className={`h-4 w-4 rounded-full border ${goal.color === value || (!goal.color && !value) ? "ring-2 ring-offset-1 ring-slate-400" : ""} ${value ? "" : "bg-white"}`}
-          style={value ? { backgroundColor: value, borderColor: value } : { borderColor: "#cbd5e1" }} />
-      ))}
-    </span>
-  );
+  // 목표 부분 색칠 에디터 — 텍스트를 드래그로 선택한 뒤 색 버튼을 누르면 그 부분만 색이 바뀐다.
+  // 서식은 titleHtml에, 검색·요약용 순수 텍스트는 title에 함께 저장한다.
+  const goalHtmlOf = (goal: LevelGoal) => goal.titleHtml
+    || (goal.color ? `<span style="color:${goal.color}">` : "")
+      + String(goal.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
+      + (goal.color ? "</span>" : "");
 
+  // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
   // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
   const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "1개월차", "2개월차", "3개월차"] as const;
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteRoles, setPasteRoles] = useState<string[]>([]);
-  const pasteGrid = useMemo(() => pasteText
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.split("\t"))
-    .filter((cells) => cells.some((cell) => cell.trim())), [pasteText]);
+  const pasteGrid = useMemo(() => parseClipboardGrid(pasteText), [pasteText]);
   useEffect(() => {
     // 컬럼 역할 자동 추정: 구분 값이면 '구분', 등급이면 '등급', 가장 긴 텍스트 열은 '목표'
     const cols = Math.max(0, ...pasteGrid.map((cells) => cells.length));
@@ -377,6 +426,16 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       if (avg > goalLen) { goalLen = avg; goalCol = c; }
     }
     if (goalCol >= 0) roles[goalCol] = "목표";
+    // 목표 뒤에 오는 숫자-only 열 두 개는 현재레벨 → 목표레벨로 추정
+    if (goalCol >= 0) {
+      const numericAfter: number[] = [];
+      for (let c = goalCol + 1; c < cols; c++) {
+        const values = pasteGrid.map((cells) => (cells[c] || "").trim()).filter(Boolean);
+        if (values.length && values.every((v) => /^\d{1,3}$/.test(v))) numericAfter.push(c);
+      }
+      if (numericAfter[0] !== undefined && roles[numericAfter[0]] === "무시") roles[numericAfter[0]] = "현재레벨";
+      if (numericAfter[1] !== undefined && roles[numericAfter[1]] === "무시") roles[numericAfter[1]] = "목표레벨";
+    }
     setPasteRoles(roles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pasteGrid.length, pasteText]);
@@ -770,14 +829,13 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
               <div className="flex items-center justify-between"><b className="text-sm text-blue-800">기본업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-md bg-white text-rose-500">×</button></div>
               <div className="mt-3 grid grid-cols-2 gap-2"><select value={goal.category} onChange={(e) => setGoal(goal.id, { category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></div>
-              <textarea value={goal.title} onChange={(e) => setGoal(goal.id, { title: e.target.value })} rows={4} style={goal.color ? { color: goal.color } : undefined} className="mt-2 w-full rounded-md border border-slate-300 bg-white p-3 text-sm font-bold leading-6" />
-              <div className="mt-1.5"><ColorDots goal={goal} /></div>
+              <div className="mt-2"><RichGoalEditor key={goal.id} initialHtml={goalHtmlOf(goal)} onChange={(html, text) => setGoal(goal.id, { titleHtml: html, title: text })} /></div>
               <div className="mt-2 grid grid-cols-2 gap-2">{[["현재레벨", "currentLevel"], ["목표레벨", "targetLevel"], ["요청예산", "budget"], ["예산반영", "reflectedBudget"]] .map(([label, key]) => <label key={key} className="text-[10px] font-bold text-slate-500">{label}<input value={String(goal[key as keyof LevelGoal] || "")} onChange={(e) => setGoal(goal.id, { [key]: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>)}</div>
               <label className="mt-2 block text-[10px] font-bold text-slate-500">진도율<input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>
             </article>)}
             {missionGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-orange-100 bg-orange-50/40 p-4">
               <div className="flex items-center justify-between"><b className="text-sm text-orange-800">미션업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-md bg-white text-rose-500">×</button></div>
-              <textarea value={goal.title} onChange={(e) => setGoal(goal.id, { title: e.target.value })} rows={4} className="mt-3 w-full rounded-md border border-orange-200 bg-white p-3 text-sm font-bold leading-6 text-orange-800" />
+              <div className="mt-3"><RichGoalEditor key={goal.id} initialHtml={goalHtmlOf(goal)} onChange={(html, text) => setGoal(goal.id, { titleHtml: html, title: text })} className="border-orange-200" /></div>
               <div className="mt-2 grid grid-cols-2 gap-2"><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select><input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} placeholder="진도율 %" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.budget} onChange={(e) => setGoal(goal.id, { budget: e.target.value })} placeholder="요청예산" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.reflectedBudget || ""} onChange={(e) => setGoal(goal.id, { reflectedBudget: e.target.value })} placeholder="예산반영" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /></div>
             </article>)}
           </div>
@@ -803,7 +861,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                       <>
                         <td className="border border-slate-300 p-2"><select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="w-24 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold">{PLAN_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
                         <td className="border border-slate-300 p-2"><select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="w-16 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
-                        <td className="border border-slate-300 p-2"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} style={g.color ? { color: g.color } : undefined} className="w-full min-w-[430px] resize-y rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900" /><div className="mt-1"><ColorDots goal={g} /></div></td>
+                        <td className="border border-slate-300 p-2"><div className="min-w-[430px]"><RichGoalEditor key={g.id} initialHtml={goalHtmlOf(g)} onChange={(html, text) => setGoal(g.id, { titleHtml: html, title: text })} /></div></td>
                         <td className="border border-slate-300 p-2"><input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} className="w-12 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
                         <td className="border border-slate-300 p-2"><input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} className="w-12 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
                         <td className="border border-slate-300 p-2"><input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} className="w-20 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
@@ -814,7 +872,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                     ) : <td colSpan={9} className="border border-slate-300 bg-slate-50 p-2 text-center text-xs text-slate-300">기본업무 없음</td>}
                     {m ? (
                       <>
-                        <td className="border border-slate-300 p-2"><textarea value={m.title} onChange={(e) => setGoal(m.id, { title: e.target.value })} rows={4} className="w-full min-w-[300px] resize-y rounded border border-orange-200 bg-white p-2 text-sm font-bold leading-5 text-orange-700" /></td>
+                        <td className="border border-slate-300 p-2"><div className="min-w-[300px]"><RichGoalEditor key={m.id} initialHtml={goalHtmlOf(m)} onChange={(html, text) => setGoal(m.id, { titleHtml: html, title: text })} className="border-orange-200" /></div></td>
                         <td className="border border-slate-300 p-2"><select value={m.grade || ""} onChange={(e) => setGoal(m.id, { grade: e.target.value })} className="w-16 rounded border border-orange-200 bg-white px-2 py-1.5 text-sm"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
                         <td className="border border-slate-300 p-2"><input value={m.budget} onChange={(e) => setGoal(m.id, { budget: e.target.value })} className="w-20 rounded border border-orange-200 px-2 py-1.5 text-sm" /></td>
                         <td className="border border-slate-300 p-2"><input value={m.reflectedBudget || ""} onChange={(e) => setGoal(m.id, { reflectedBudget: e.target.value })} className="w-20 rounded border border-orange-200 px-2 py-1.5 text-sm" /></td>
