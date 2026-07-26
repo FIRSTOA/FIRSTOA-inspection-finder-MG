@@ -176,6 +176,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [photos, setPhotos] = useState<Array<{ url: string; name: string }>>([]);
   const [confirmAction, setConfirmAction] = useState<"save" | "send" | null>(null);
   const [confirmChecked, setConfirmChecked] = useState(false);
+  const [scheduleToo, setScheduleToo] = useState(true); // 저장하면서 일정리스트에도 등록
   const [photoBusy, setPhotoBusy] = useState(false);
 
   const handlePhotoPick = async (files: FileList | null) => {
@@ -387,6 +388,8 @@ export default function ServiceReception({ author }: { author: string }) {
       ].filter(Boolean).join("\n"),
       lease_no: pick(lease, "순"),
       address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+      // 임대리스트 주소와 다르게 접수된 건 표시 — 시트 원본 주소 정비 대상 목록이 된다
+      ...(manual.주소.trim() && manual.주소.trim() !== pick(lease, "주소(실납품주소,도로명주소)", "주소") ? { address_changed: true } : {}),
       // photos 컬럼 SQL 실행 전에도 일반 저장은 되도록, 사진이 있을 때만 포함
       ...(photos.length ? { photos: photos.map((photo) => photo.url) } : {}),
       title: manual.제목,
@@ -411,8 +414,12 @@ export default function ServiceReception({ author }: { author: string }) {
     setBusy(true);
     setActionResult("");
     try {
-      await persist(type === "원격이관" ? "원격대기" : "접수");
-      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : "접수 저장됨");
+      const rowId = await persist(type === "원격이관" ? "원격대기" : "접수");
+      let scheduled = false;
+      if (scheduleToo && type !== "원격이관") {
+        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
+      }
+      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`);
       resetForm();
       await loadList(listDate, listPeriod);
     } catch (e) {
@@ -441,7 +448,11 @@ export default function ServiceReception({ author }: { author: string }) {
       }
       const room = String(res.message || "").replace("게시 대기: ", "");
       if (rowId) await updateServiceReception(rowId, { status: "전송완료", sent_room: room });
-      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}`);
+      let scheduled = false;
+      if (scheduleToo && rowId) {
+        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 전송은 유효 */ }
+      }
+      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}`);
       setSavedRowId(null);
       resetForm();
       await loadList(listDate, listPeriod);
@@ -452,32 +463,53 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  // 접수 → 일정리스트(as_tickets) 등록. 같은 날 같은 업체 일정이 있으면 물어본다.
+  // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
+  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address">, confirmDup: boolean) => {
+    const today = kstDate();
+    const vendor = cleanVendorName(row.vendor);
+    if (confirmDup) {
+      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
+      if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
+    }
+    await upsertRow("as_tickets", {
+      id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      team: teamFromRegion(row.region), date: today, time: kstNowHM(),
+      vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
+      address: row.address || "", department: deptFromAddress(row.address || ""),
+      model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
+      issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
+      assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
+    }, "id");
+    return true;
+  };
+
   const [scheduleBusyId, setScheduleBusyId] = useState("");
   const addToSchedule = async (row: ServiceReceptionRow) => {
     if (scheduleBusyId) return;
     setScheduleBusyId(row.id);
     try {
-      const today = kstDate();
-      const vendor = cleanVendorName(row.vendor);
-      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
-      if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return;
-      await upsertRow("as_tickets", {
-        id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        team: teamFromRegion(row.region), date: today, time: kstNowHM(),
-        vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
-        address: row.address || "", department: deptFromAddress(row.address || ""),
-        model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
-        issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
-        assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
-      }, "id");
-      window.alert("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.");
+      const created = await createTicketFromReception(row, true);
+      if (created) window.alert("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.");
     } catch (e) {
       window.alert(`일정 등록 실패: ${(e as Error).message}`);
     } finally {
       setScheduleBusyId("");
     }
   };
+
+  // 저장 직후 자동 일정 등록에 쓸 현재 폼 스냅샷
+  const formSnapshotForTicket = (id: string) => ({
+    id, vendor: vendorName, region,
+    model: pick(lease, "모델명", "기종"), serial: pick(lease, "시리얼번호(기번)", "기번"),
+    asset_no: pick(lease, "자산번호"), grade: pick(lease, "등급"),
+    keyman_info: [
+      pick(lease, "일반전화") ? `일반전화 ${pick(lease, "일반전화")}` : "",
+      pick(lease, "키맨") ? `★키맨성함/번호 ${pick(lease, "키맨")}` : "",
+    ].filter(Boolean).join("\n"),
+    receiver_name: manual.접수자성함.trim(), receiver_phone: manual.접수자연락처.trim(),
+    title: manual.제목, symptom: manual.증상,
+    address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+  });
 
   const removeReception = async (row: ServiceReceptionRow) => {
     if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)`)) return;
@@ -688,6 +720,10 @@ export default function ServiceReception({ author }: { author: string }) {
                       </div>
                       {missing > 0 && <div className="rounded-md bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">빨간 항목 {missing}개 — 그래도 진행하려면 아래 확인에 체크하세요.</div>}
                       <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-3 text-xs font-bold text-slate-700">
+                        <input type="checkbox" checked={scheduleToo} onChange={(e) => setScheduleToo(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
+                        저장하면서 일정리스트에도 등록 (오늘 날짜, 담당자 미배정)
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-3 text-xs font-bold text-slate-700">
                         <input type="checkbox" checked={confirmChecked} onChange={(e) => setConfirmChecked(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
                         방문 주소와 접수자·기기 정보를 확인했습니다{confirmAction === "send" ? " (AS방으로 전송됩니다)" : ""}
                       </label>
@@ -751,6 +787,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     {(row.title || row.symptom) && <span className="block truncate text-[11px] font-semibold text-slate-600">{row.title || "제목 없음"}{row.symptom ? ` — ${row.symptom}` : ""}</span>}
                   </span>
                   <span className="flex items-center gap-1.5">
+                    {row.address_changed && <span className="rounded bg-amber-100 px-1.5 py-1 text-[10px] font-black text-amber-800" title="임대리스트와 다른 주소로 접수됨">📍</span>}
                     <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
                     {row.type === "원격이관" && <span onClick={(e) => { e.stopPropagation(); void toggleRemoteDone(row); }} className={`cursor-pointer rounded px-2 py-1 text-[10px] font-black ${row.status === "원격대기" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-400"}`}>{row.status === "원격대기" ? "완료" : "대기로"}</span>}
                   </span>
@@ -760,10 +797,10 @@ export default function ServiceReception({ author }: { author: string }) {
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
                     <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
                     <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
-                    <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone ? <a href={`tel:${row.receiver_phone.replace(/[^0-9]/g, "")}`} className="font-black text-blue-600">{row.receiver_phone}</a> : "-"}</span>
+                    <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
-                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}</div>}
+                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}{row.address_changed ? <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름 — 시트 주소 확인 필요</span> : null}</div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}

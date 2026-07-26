@@ -318,7 +318,7 @@ export type ServiceReceptionRow = {
   model: string; region: string; title: string; symptom: string; paid: string;
   notes: string; report_text: string; status: string; sent_room: string;
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
-  lease_no: string; address: string; deleted?: boolean; photos?: string[] | null;
+  lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
