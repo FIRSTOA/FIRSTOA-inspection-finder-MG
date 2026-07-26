@@ -108,9 +108,12 @@ export function nextMonthSameDay(date: string): string {
 // 매월 반복 티켓 완료 시 다음 달 일정 행 생성 (일정리스트·FIELD 전송 팝업 공용)
 export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate?: string): Record<string, unknown> {
   const base = ticket as unknown as AsTicket;
+  const date = targetDate || nextMonthSameDay(base.date);
+  const kind = base.scheduleType === "익일AS" ? "AS" : base.scheduleType;
   return {
-    id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    team: base.team, date: targetDate || nextMonthSameDay(base.date), time: base.time,
+    // 결정적 id: 같은 업체·유형·날짜 반복 일정은 어느 기기가 만들어도 같은 행으로 upsert된다
+    id: `rep|${base.vendor.trim()}|${kind}|${date}`,
+    team: base.team, date, time: base.time,
     vendor: base.vendor, contact: base.contact, address: base.address, department: base.department,
     model: base.model, serial: base.serial, asset: base.asset || "", grade: base.grade || "",
     keyman: base.keyman || "", receptionId: "", repeatMonthly: true,
@@ -118,6 +121,36 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate
     status: base.assignee ? "배정" : "접수",
     scheduleType: base.scheduleType === "익일AS" ? "AS" : base.scheduleType,
   };
+}
+
+// 반복 시리즈 지평선: 각 매월 반복 그룹(업체+유형)의 마지막 일정에서 오늘+11개월까지 이어 붙일 행을 계산.
+// 새로고침 때마다 부족분만 만들어 반복이 무기한 이어진다. 중간에 지운 달은 되살리지 않는다(마지막 일정 이후만 연장).
+export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Record<string, unknown>[] {
+  const groupOf = (t: AsTicket) => `${t.vendor.trim()}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
+  const existing = new Set(list.map((t) => `${groupOf(t)}|${t.date}`));
+  const [ty, tm] = todayYmd.split("-").map(Number);
+  const horizonTotal = ty * 12 + (tm - 1) + 11;
+  const horizonYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
+  const latest = new Map<string, AsTicket>();
+  for (const t of list) {
+    if (!t.repeatMonthly || !t.vendor.trim()) continue;
+    const g = groupOf(t);
+    const prev = latest.get(g);
+    if (!prev || t.date > prev.date) latest.set(g, t);
+  }
+  const rows: Record<string, unknown>[] = [];
+  for (const tail of latest.values()) {
+    let date = tail.date;
+    for (let guard = 0; guard < 24; guard++) {
+      date = nextMonthSameDay(date);
+      if (date.slice(0, 7) > horizonYm) break;
+      const key = `${groupOf(tail)}|${date}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      rows.push(buildMonthlyCloneRow(tail as unknown as Record<string, unknown>, date));
+    }
+  }
+  return rows;
 }
 
 function kstNowHM() {
@@ -311,7 +344,13 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (pendingWritesRef.current > 0) return; // 저장/삭제 반영 중 — 다음 주기에 새로고침
     try {
       const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&order=date.asc,time.asc`);
-      const normalized = rows.map((row) => normalizeTicketSchedule(row));
+      let normalized = rows.map((row) => normalizeTicketSchedule(row));
+      // 매월 반복 그룹을 오늘+11개월까지 자동 연장 (부족분만 생성 — 반복이 무기한 이어짐)
+      const extension = buildSeriesExtensionRows(normalized, getTodayYmd());
+      if (extension.length) {
+        normalized = [...normalized, ...extension.map((row) => normalizeTicketSchedule(row as unknown as AsTicket))];
+        void upsertRows("as_tickets", extension, "id").catch(() => { /* 다음 새로고침에서 재시도 */ });
+      }
       setTicketsState(normalized);
       try { localStorage.setItem(storageKey, JSON.stringify(normalized)); } catch { /* 캐시 실패 무시 */ }
       setSyncError("");
@@ -439,6 +478,23 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     }
   };
 
+  // 매월 반복 중지: 이후(오늘 이후 날짜) 미완료 반복 일정을 지우고, 지난 일정들의 반복 플래그도 꺼서
+  // 새로고침 자동 연장이 시리즈를 되살리지 않게 한다.
+  const stopMonthlySeries = (base: AsTicket) => {
+    const groupOf = (t: AsTicket) => `${t.vendor.trim()}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
+    const g = groupOf(base);
+    const members = tickets.filter((t) => t.id !== base.id && groupOf(t) === g && t.repeatMonthly);
+    if (!members.length) return;
+    const future = members.filter((t) => t.date > base.date && t.status !== "완료");
+    if (future.length && !window.confirm(`매월 반복을 중지할까요?\n예정된 반복 일정 ${future.length}건이 함께 삭제됩니다.`)) return;
+    const futureIds = new Set(future.map((t) => t.id));
+    const rest = members.filter((t) => !futureIds.has(t.id)).map((t) => ({ ...t, repeatMonthly: false }));
+    const restIds = new Set(rest.map((t) => t.id));
+    setTicketsState((current) => current.filter((t) => !futureIds.has(t.id)).map((t) => (restIds.has(t.id) ? { ...t, repeatMonthly: false } : t)));
+    for (const t of future) void trackWrite(deleteRows("as_tickets", `id=eq.${encodeURIComponent(t.id)}`), "반복 일정 삭제 실패 — 새로고침 후 다시 시도해 주세요.");
+    if (rest.length) void trackWrite(upsertRows("as_tickets", rest.map(toDbRow), "id"), "반복 중지 저장 실패 — 새로고침 후 다시 시도해 주세요.");
+  };
+
   const update = (id: string, patch: Partial<AsTicket>) => {
     const before = tickets.find((ticket) => ticket.id === id);
     const next = tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket));
@@ -446,6 +502,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     const changed = next.find((ticket) => ticket.id === id);
     if (changed) persistRemote(changed);
     if (changed?.repeatMonthly && before && (!before.repeatMonthly || before.date !== changed.date)) ensureMonthlySeries(changed);
+    if (changed && before?.repeatMonthly && !changed.repeatMonthly) stopMonthlySeries(changed);
     // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 현황에도 반영 (완료/익일/접수)
     if (changed && before && changed.receptionId && changed.status !== before.status) {
       const mapped = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : "접수";
@@ -660,15 +717,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onDoubleClick={() => setNewTicket(blankTicket(date))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
-                            <button type="button" onClick={() => setNewTicket(blankTicket(date))} className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</button>
+                          <div key={date} onClick={() => setNewTicket(blankTicket(date))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                            <button type="button" className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 4).map((ticket) => (
-                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => setDetailId(ticket.id)} className={`block w-full cursor-grab truncate rounded px-1.5 py-1 text-left text-[11px] font-bold active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={(event) => { event.stopPropagation(); setDetailId(ticket.id); }} className={`block w-full cursor-grab truncate rounded px-1.5 py-1 text-left text-[11px] font-bold active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
                                   {ticket.vendor || "새 일정"}
                                 </button>
                               ))}
-                              {rows.length > 4 && <div className="px-1 text-[10px] font-bold text-slate-400">+{rows.length - 4}개 더보기</div>}
+                              {rows.length > 4 && <div onClick={(event) => event.stopPropagation()} className="px-1 text-[10px] font-bold text-slate-400">+{rows.length - 4}개 더보기</div>}
                             </div>
                           </div>
                         );
