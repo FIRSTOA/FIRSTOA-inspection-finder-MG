@@ -42,3 +42,8 @@ create policy "as_tickets anon insert" on public.as_tickets for insert to anon w
 create policy "as_tickets anon update" on public.as_tickets for update to anon using (true) with check (true);
 create policy "as_tickets anon delete" on public.as_tickets for delete to anon using (true);
 grant select, insert, update, delete on public.as_tickets to anon;
+
+-- 포인트 점검 유형 추가 (2026-07-27)
+alter table public.as_tickets drop constraint if exists "as_tickets_scheduleType_check";
+alter table public.as_tickets add constraint "as_tickets_scheduleType_check"
+  check ("scheduleType" in ('AS', '익일AS', '물류', '휴가', '포인트 점검'));
