@@ -224,8 +224,10 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
     try { return await selectRows<{ id?: number; _업체명?: string; _raw?: unknown }>("vendor_info", query); }
     catch { return []; }
   };
+  const serialCol = enc("기번");
   push(await run(`select=id,${vendorCol},_raw&${vendorCol}=ilike.*${enc(kw)}*&limit=30`));
   if (out.length < 30) push(await run(`select=id,${vendorCol},_raw&${assetCol}=ilike.*${enc(kw)}*&limit=30`));
+  if (kw.length >= 4 && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${serialCol}=ilike.*${enc(kw)}*&limit=30`));
   if (/^\d+$/.test(kw) && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${seqCol}=eq.${enc(kw)}&limit=30`));
   return out.slice(0, 30);
 }
@@ -316,18 +318,24 @@ export type ServiceReceptionRow = {
   model: string; region: string; title: string; symptom: string; paid: string;
   notes: string; report_text: string; status: string; sent_room: string;
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
+  lease_no: string; address: string; deleted?: boolean;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
   return saved?.id || "";
 }
 export async function getServiceReceptions(start: string, end: string): Promise<ServiceReceptionRow[]> {
-  return selectRows<ServiceReceptionRow>("service_receptions", `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc,id.desc`);
+  const base = `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc,id.desc`;
+  try {
+    return await selectRows<ServiceReceptionRow>("service_receptions", `${base}&deleted=eq.false`);
+  } catch {
+    return selectRows<ServiceReceptionRow>("service_receptions", base); // deleted 컬럼 SQL 실행 전 호환
+  }
 }
 export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
 }
-export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room">>): Promise<void> {
+export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted">>): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);
 }
 

@@ -832,7 +832,8 @@ function extractTableKeyman(rawText: string): string {
     lines.push(name);
   }
 
-  const landlineMatch = rawText.match(/일반전화\s+(0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/);
+  // "T:02-..." 처럼 접두가 붙은 표기도 허용
+  const landlineMatch = rawText.match(/일반전화\s+(?:T\s*:)?\s*(0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/);
   if (landlineMatch) {
     lines.push(landlineMatch[1].trim());
   }
@@ -846,11 +847,18 @@ function extractTableKeyman(rawText: string): string {
       .filter(Boolean);
     lines.push(...inner);
   } else {
-    const keymanMatch = rawText.match(
-      /★?키맨성함\/번호\s+([^\n\t]+?)(?=\s*(?:\n|\t|방문담당자|한조\/틴텍코드|주소|확장성|$))/
-    );
-    if (keymanMatch) {
-      lines.push(keymanMatch[1].trim());
+    // 따옴표 없는 멀티라인 키맨: 첫 줄 + 라벨 없는 연속 줄(둘째 키맨 등)을 다음 라벨 전까지 이어붙인다.
+    const rawLines = rawText.split(/\r?\n/);
+    const keymanLineIdx = rawLines.findIndex((line) => /★?키맨성함\/번호/.test(line));
+    if (keymanLineIdx >= 0) {
+      const first = rawLines[keymanLineIdx].replace(/.*★?키맨성함\/번호[\t ]*/, "").trim();
+      if (first) lines.push(first);
+      const stopLabel = /방문담당자|한조\/틴텍코드|주소|확장성|기종|기기상태|유상\/무상|제목|상태|참고사항|교체이력|AS접수|자가사용내역|미수개월|여분 분석/;
+      for (let i = keymanLineIdx + 1; i < rawLines.length; i++) {
+        const line = rawLines[i].trim();
+        if (!line || stopLabel.test(line) || line.includes("\t")) break;
+        lines.push(line);
+      }
     }
   }
 

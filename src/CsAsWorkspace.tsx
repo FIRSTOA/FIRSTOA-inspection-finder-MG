@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
+import { setServiceReceptionStatus } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
 type Team = "A" | "B" | "C" | "D";
@@ -23,6 +24,7 @@ export type AsTicket = {
   asset: string;
   grade: string;
   keyman: string;
+  receptionId: string;
   issue: string;
   assignee: string;
   status: AsStatus;
@@ -106,6 +108,7 @@ function blankTicket(date: string): AsTicket {
     asset: "",
     grade: "",
     keyman: "",
+    receptionId: "",
     issue: "",
     assignee: "",
     status: "접수",
@@ -121,6 +124,7 @@ function loadTickets(): AsTicket[] {
       asset: "",
       grade: "",
       keyman: "",
+      receptionId: "",
       ...ticket,
       status: ticket.status === "미루기" ? "익일" : (ticket.status || "접수"),
       scheduleType: ticket.scheduleType || (ticket.status === "미루기" || ticket.status === "익일" ? "익일AS" : "AS"),
@@ -130,10 +134,10 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,issue,assignee,status,scheduleType";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,issue,assignee,status,scheduleType";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -186,27 +190,28 @@ function scheduleColor(type: ScheduleType, completed = false) {
 }
 
 function buildFieldAsText(ticket: AsTicket, author: string) {
+  // 접수 보고양식을 FIELD에 복붙했을 때(formatPrinterReport)와 완전히 같은 형식.
   return [
     `작성자:${author || ticket.assignee || ""}`,
-    "구분: AS",
+    "구분:A/S",
     "레벨:1",
     `등급:${ticket.grade || ""}`,
     `업체명:${ticket.vendor}`,
     `부서명:${ticket.department}`,
     `지역:${ticket.team}`,
-    `키맨/접수자:${ticket.contact ? ` ${ticket.contact}` : ""}`,
+    `키맨/접수자:${ticket.contact}`,
     ...(ticket.keyman ? ticket.keyman.split("\n") : []),
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "1.",
-    `모델명: ${ticket.model}`,
-    `시리얼넘버: ${ticket.serial}`,
-    `자산기번: ${ticket.asset || ""}`.trimEnd(),
+    `모델명:${ticket.model}`,
+    `시리얼넘버:${ticket.serial}`,
+    `자산기번: ${ticket.asset || ""}`,
     `내용: ${ticket.issue}`,
     "처리내용:",
     "매수:흑- 컬- 큰컬- 합-",
     "토너잔량:K- C- M- Y-",
     "폐통:  %",
-    "여분: K- C- M- Y- 폐-",
+    "여분:  K- C- M- Y- 폐-",
     "한틴이카유무:",
     "주차비지원유무:",
     "특이사항:",
@@ -312,10 +317,16 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const update = (id: string, patch: Partial<AsTicket>) => {
+    const before = tickets.find((ticket) => ticket.id === id);
     const next = tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket));
     setTickets(next);
     const changed = next.find((ticket) => ticket.id === id);
     if (changed) persistRemote(changed);
+    // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 현황에도 반영 (완료/익일/접수)
+    if (changed && before && changed.receptionId && changed.status !== before.status) {
+      const mapped = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : "접수";
+      void setServiceReceptionStatus(changed.receptionId, mapped).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
+    }
   };
 
   const removeTicket = (ticket: AsTicket) => {
@@ -583,6 +594,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">
                   <th className="px-3 py-3">팀</th>
                   <th className="px-3 py-3">일정</th>
+                  <th className="px-3 py-3">업체명</th>
                   <th className="px-3 py-3">접수내용</th>
                   <th className="px-3 py-3">기기</th>
                   <th className="px-3 py-3">담당자</th>
@@ -597,9 +609,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4">
                       <button type="button" onClick={() => setEditId(ticket.id)} className="text-left">
                         <div className="flex items-center gap-2 text-sm font-black text-slate-900">{ticket.vendor}{ticket.status === "완료" && <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
-                        <div className="mt-1 text-xs font-semibold text-slate-500">{ticket.issue}</div>
                         <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                       </button>
+                    </td>
+                    <td className="px-3 py-4">
+                      <button type="button" onClick={() => setEditId(ticket.id)} className="text-left text-xs font-semibold text-slate-600">{ticket.issue || "-"}</button>
                     </td>
                     <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
                     <td className="px-3 py-4">
@@ -618,7 +632,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </tr>
                 ))}
                 {!scheduleRows.length && (
-                  <tr><td colSpan={6} className="px-3 py-10 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-10 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</td></tr>
                 )}
               </tbody>
             </table>

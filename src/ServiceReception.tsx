@@ -99,33 +99,49 @@ function cleanVendorName(value: string) {
 function kstNowHM() {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
 }
+// 주소에서 층/호 추출 — FIELD 복붙 변환기(extractDepartment)와 같은 규칙으로 부서명을 만든다.
+function deptFromAddress(text: string): string {
+  const basement = text.match(/(지하\s*\d+층|B\s*\d+층)/i);
+  if (basement) return basement[1].replace(/\s+/g, "");
+  const spaced = text.match(/(?:^|\s)(\d{1,2})층/);
+  if (spaced) return `${spaced[1]}층`;
+  const merged = text.match(/(\d+)층/);
+  if (merged) return merged[1].length <= 2 ? `${merged[1]}층` : `${merged[1].slice(-1)}층`;
+  const ho = text.match(/(\d+호)/);
+  return ho ? ho[1] : "";
+}
 function teamFromRegion(region: string) {
   const m = String(region || "").match(/수도권([A-D])/);
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
 }
-// 접수 행 → FIELD AS 원본 양식 (일정리스트 buildFieldAsText와 같은 형식)
+// 접수 행 → FIELD AS 원본 양식 — 접수 보고양식을 FIELD에 복붙했을 때와 완전히 같은 형식.
+// (내용=증상만, 부서명=주소의 층/호, 구분:A/S · 키맨은 접수자 줄 + 키맨 정보 줄들)
 function receptionToFieldText(row: ServiceReceptionRow) {
+  const keymanLines = [
+    (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
+    ...(row.keyman_info ? row.keyman_info.split("\n") : []),
+  ].filter(Boolean);
   return [
     `작성자:${row.author || ""}`,
-    "구분: AS",
+    "구분:A/S",
     "레벨:1",
     `등급:${row.grade || ""}`,
     `업체명:${cleanVendorName(row.vendor)}`,
-    "부서명:",
+    `부서명:${deptFromAddress(row.address || "")}`,
     `지역:${teamFromRegion(row.region)}`,
-    `키맨/접수자:${(row.receiver_name || row.receiver_phone) ? ` 접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : ""}`,
-    ...(row.keyman_info ? row.keyman_info.split("\n") : []),
+    `키맨/접수자:${keymanLines[0] || ""}`,
+    ...keymanLines.slice(1),
     "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
     "1.",
-    `모델명: ${row.model}`,
-    `시리얼넘버: ${row.serial}`,
-    `자산기번: ${row.asset_no || ""}`.trimEnd(),
-    `내용: ${[row.title, row.symptom].filter(Boolean).join(" / ")}`,
+    `모델명:${row.model}`,
+    `시리얼넘버:${row.serial}`,
+    `자산기번: ${row.asset_no || ""}`,
+    `내용: ${row.symptom || row.title || ""}`,
     "처리내용:",
     "매수:흑- 컬- 큰컬- 합-",
     "토너잔량:K- C- M- Y-",
     "폐통:  %",
-    "여분: K- C- M- Y- 폐-",
+    "여분:  K- C- M- Y- 폐-",
     "한틴이카유무:",
     "주차비지원유무:",
     "특이사항:",
@@ -166,7 +182,9 @@ const TYPE_TONE: Record<string, string> = {
 };
 const STATUS_TONE: Record<string, string> = {
   접수: "bg-slate-100 text-slate-600",
-  전송완료: "bg-emerald-50 text-emerald-700",
+  전송완료: "bg-blue-50 text-blue-700",
+  완료: "bg-emerald-50 text-emerald-700",
+  익일: "bg-purple-50 text-purple-700",
   원격대기: "bg-amber-50 text-amber-700",
   원격완료: "bg-emerald-50 text-emerald-700",
 };
@@ -214,6 +232,11 @@ export default function ServiceReception({ author, onUseField }: { author: strin
     }
   }, []);
   useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
+  useEffect(() => {
+    const onFocus = () => { void loadList(listDate, listPeriod); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [listDate, listPeriod, loadList]);
 
   const runSearch = async () => {
     if (!query.trim()) return;
@@ -325,7 +348,7 @@ export default function ServiceReception({ author, onUseField }: { author: strin
       `접수자연락처${T}${manual.접수자연락처}`,
       `일반전화${T}${일반전화}`,
       `미수개월${T}${미수개월}`,
-      `★키맨성함/번호${T}${키맨}`,
+      `★키맨성함/번호${T}${키맨.includes("\n") ? `"${키맨}"` : 키맨}`,
       `방문담당자${T}${region}`,
       `한조/틴텍코드${T}${코드} / ${틴텍코드}`,
       `주소${T}${주소}${T}확장성${T}${확장성}`,
@@ -373,6 +396,8 @@ export default function ServiceReception({ author, onUseField }: { author: strin
         pick(lease, "일반전화") ? `일반전화 ${pick(lease, "일반전화")}` : "",
         pick(lease, "키맨") ? `★키맨성함/번호 ${pick(lease, "키맨")}` : "",
       ].filter(Boolean).join("\n"),
+      lease_no: pick(lease, "순"),
+      address: pick(lease, "주소(실납품주소,도로명주소)", "주소"),
       title: manual.제목,
       symptom: manual.증상,
       paid: manual.유상무상,
@@ -449,16 +474,27 @@ export default function ServiceReception({ author, onUseField }: { author: strin
       await upsertRow("as_tickets", {
         id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         team: teamFromRegion(row.region), date: today, time: kstNowHM(),
-        vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "", address: "", department: "",
+        vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
+        address: row.address || "", department: deptFromAddress(row.address || ""),
         model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
-        issue: [row.title, row.symptom].filter(Boolean).join(" / ").slice(0, 500) || "서비스접수 연동",
-        assignee: "", status: "접수", scheduleType: "AS",
+        issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
+        assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
       }, "id");
       window.alert("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.");
     } catch (e) {
       window.alert(`일정 등록 실패: ${(e as Error).message}`);
     } finally {
       setScheduleBusyId("");
+    }
+  };
+
+  const removeReception = async (row: ServiceReceptionRow) => {
+    if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)`)) return;
+    try {
+      await updateServiceReception(row.id, { deleted: true });
+      setListRows((current) => current.filter((r) => r.id !== row.id));
+    } catch (e) {
+      window.alert(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`);
     }
   };
 
@@ -667,6 +703,7 @@ export default function ServiceReception({ author, onUseField }: { author: strin
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
                     <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
+                    <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
@@ -675,6 +712,7 @@ export default function ServiceReception({ author, onUseField }: { author: strin
                     {row.report_text && <button type="button" onClick={() => void navigator.clipboard.writeText(row.report_text)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">양식 다시 복사</button>}
                     {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black text-blue-700 disabled:opacity-50">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
                     {row.type !== "원격이관" && onUseField && <button type="button" onClick={() => onUseField(receptionToFieldText(row))} className="rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white">FIELD 변환</button>}
+                    <button type="button" onClick={() => void removeReception(row)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
                   </div>
                 </div>}
               </div>
