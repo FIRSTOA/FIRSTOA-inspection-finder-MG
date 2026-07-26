@@ -47,3 +47,6 @@ grant select, insert, update, delete on public.as_tickets to anon;
 alter table public.as_tickets drop constraint if exists "as_tickets_scheduleType_check";
 alter table public.as_tickets add constraint "as_tickets_scheduleType_check"
   check ("scheduleType" in ('AS', '익일AS', '물류', '휴가', '포인트 점검'));
+
+-- 매월 반복 (2026-07-27)
+alter table public.as_tickets add column if not exists "repeatMonthly" boolean not null default false;

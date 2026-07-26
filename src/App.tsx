@@ -18,7 +18,7 @@ import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
 import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
-import { AsReception, CsCalendar } from "./CsAsWorkspace";
+import { AsReception, CsCalendar, buildMonthlyCloneRow } from "./CsAsWorkspace";
 import ItLearningHistory from "./ItLearningHistory";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
@@ -31,7 +31,7 @@ import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus } from "./api";
-import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
+import { uploadPhoto, createAlbum, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -5241,6 +5241,13 @@ export default function App() {
     try {
       await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, patch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
+      // 매월 반복 일정이면 완료 시 다음 달 일정 자동 생성 (일정리스트의 완료 처리와 동일 규칙)
+      if (receptionStatus === "완료") {
+        try {
+          const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`);
+          if (rows[0]?.["repeatMonthly"]) await upsertRow("as_tickets", buildMonthlyCloneRow(rows[0]), "id");
+        } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
+      }
       showToast(receptionStatus === "완료" ? "일정을 완료 처리했어요" : "일정을 미뤘어요", "success");
     } catch (e) {
       showToast(`일정 처리 실패: ${(e as Error).message}`, "error");
