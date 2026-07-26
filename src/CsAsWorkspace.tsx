@@ -172,6 +172,13 @@ function dayNumberColor(index: number, inMonth: boolean): string {
   return dow === 0 ? "text-rose-500" : dow === 6 ? "text-blue-600" : "text-slate-700";
 }
 
+// 일정 기본 조회 범위: 오늘 기준 6개월 전 1일부터 (그보다 과거 달은 캘린더에서 열람할 때 그 달만 로드)
+function ticketWindowStart(todayYmd: string): string {
+  const [y, m] = todayYmd.split("-").map(Number);
+  const total = y * 12 + (m - 1) - 6;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}-01`;
+}
+
 function kstNowHM() {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
 }
@@ -363,7 +370,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const refreshTickets = useCallback(async () => {
     if (pendingWritesRef.current > 0) return; // 저장/삭제 반영 중 — 다음 주기에 새로고침
     try {
-      const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&order=date.asc,time.asc`);
+      const windowStart = ticketWindowStart(getTodayYmd());
+      const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${windowStart}&order=date.asc,time.asc`);
       let normalized = rows.map((row) => normalizeTicketSchedule(row));
       // 매월 반복 그룹을 오늘+11개월까지 자동 연장 (부족분만 생성 — 반복이 무기한 이어짐)
       const extension = buildSeriesExtensionRows(normalized, getTodayYmd());
@@ -371,7 +379,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         normalized = [...normalized, ...extension.map((row) => normalizeTicketSchedule(row as unknown as AsTicket))];
         void upsertRows("as_tickets", extension, "id").catch(() => { /* 다음 새로고침에서 재시도 */ });
       }
-      setTicketsState(normalized);
+      // 과거 달 열람으로 이미 로드한 옛 일정은 유지한 채 최신 범위만 갱신
+      setTicketsState((current) => {
+        const fresh = new Set(normalized.map((row) => row.id));
+        const older = current.filter((row) => row.date < windowStart && !fresh.has(row.id));
+        return [...older, ...normalized];
+      });
       try { localStorage.setItem(storageKey, JSON.stringify(normalized)); } catch { /* 캐시 실패 무시 */ }
       setSyncError("");
     } catch {
@@ -608,6 +621,20 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
   });
+
+  // 기본 조회 범위(6개월) 이전 달을 캘린더에서 열면 그 달 일정만 추가 로드
+  const loadedOldMonthsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const ym = currentMonth.slice(0, 7);
+    if (`${ym}-01` >= ticketWindowStart(getTodayYmd()) || loadedOldMonthsRef.current.has(ym)) return;
+    loadedOldMonthsRef.current.add(ym);
+    void selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${ym}-01&date=lte.${ym}-31&order=date.asc,time.asc`)
+      .then((rows) => setTicketsState((current) => {
+        const ids = new Set(current.map((row) => row.id));
+        return [...rows.filter((row) => !ids.has(row.id)).map((row) => normalizeTicketSchedule(row)), ...current];
+      }))
+      .catch(() => { loadedOldMonthsRef.current.delete(ym); });
+  }, [currentMonth]);
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(

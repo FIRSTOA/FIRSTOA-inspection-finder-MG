@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Boxes,
@@ -88,24 +88,39 @@ export default function ItLearningHistory({ author }: { author: string }) {
     window.setTimeout(() => setNotice(null), 3200);
   };
 
+  // Apps Script 응답이 느려서(호출마다 2~8초) 마지막 결과를 기기에 저장해 두고
+  // 재방문 시 즉시 보여준 뒤 뒤에서 최신본으로 갈아끼운다.
+  const cacheKey = (target: string, q: string) => `it_tech_cache_v1:${target}|${q.trim()}`;
+  const readCache = (target: string, q: string): ItRow[] | null => {
+    try { const raw = localStorage.getItem(cacheKey(target, q)); return raw ? (JSON.parse(raw).rows as ItRow[]) : null; } catch { return null; }
+  };
+  const writeCache = (target: string, q: string, rows: ItRow[]) => {
+    try { const json = JSON.stringify({ t: Date.now(), rows }); if (json.length < 2_000_000) localStorage.setItem(cacheKey(target, q), json); } catch { /* 용량 초과 등은 무시 */ }
+  };
+  const runSeq = useRef(0);
   const run = async (target: View = view, searchQuery = query) => {
     if (!connected) { setConnectionOpen(true); return; }
-    setLoading(true);
+    const seq = ++runSeq.current;
+    const cached = target === "knowledge" || target === "history" || target === "inventory" ? readCache(target, searchQuery) : null;
+    if (cached) setRows(cached);
+    setLoading(!cached);
     try {
       const data = target === "knowledge" ? await itTechApi.knowledge(searchQuery)
         : target === "history" ? await itTechApi.history(searchQuery)
           : await itTechApi.inventory(searchQuery);
-      setRows(Array.isArray(data) ? data : []);
+      if (seq !== runSeq.current) return; // 그 사이 다른 탭/검색으로 넘어감
+      const list = Array.isArray(data) ? data : [];
+      setRows(list);
+      writeCache(target, searchQuery, list);
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
-    } finally { setLoading(false); }
+      if (seq === runSeq.current && !cached) notify("error", error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
+    } finally { if (seq === runSeq.current) setLoading(false); }
   };
 
   useEffect(() => {
     if (!endpoint) return;
-    let active = true;
-    itTechApi.knowledge("").then((data) => { if (active) setRows(Array.isArray(data) ? data : []); }).catch(() => undefined);
-    return () => { active = false; };
+    void run("knowledge", "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
 
   const switchView = (next: View) => {

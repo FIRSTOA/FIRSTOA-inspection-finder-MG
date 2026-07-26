@@ -2,7 +2,7 @@
  * 복합기 학습·처리이력 — 브랜드/기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스.
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { deleteRows, insertRow, selectRows } from "./supabase";
 
 type CopierNote = {
@@ -114,29 +114,38 @@ export default function CopierNotes({ author }: { author: string }) {
   const [draft, setDraft] = useState({ brand: "삼성", model: "", kind: "학습" as "학습" | "처리이력", title: "", content: "" });
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  // 기록이 1만 건 이상이라 전체 로드는 느리다 — 최근 200건씩 페이지 로드, 검색·필터는 서버(전체 대상)에서 수행
+  const PAGE_SIZE = 200;
+  const [hasMore, setHasMore] = useState(false);
+  const buildListQuery = useCallback((offset: number) => {
+    const parts = ["select=*", "order=created_at.desc", `limit=${PAGE_SIZE}`, `offset=${offset}`];
+    if (brand !== "전체") parts.push(`brand=eq.${encodeURIComponent(brand)}`);
+    if (model !== "전체") parts.push(`model=eq.${encodeURIComponent(model)}`);
+    if (kindFilter !== "전체") parts.push(`kind=eq.${encodeURIComponent(kindFilter)}`);
+    const keyword = query.trim().replace(/["\\%,()]/g, "");
+    if (keyword) {
+      const pattern = `"*${keyword}*"`;
+      parts.push(`or=${encodeURIComponent(`(title.ilike.${pattern},content.ilike.${pattern},model.ilike.${pattern},author.ilike.${pattern})`)}`);
+    }
+    return parts.join("&");
+  }, [brand, model, kindFilter, query]);
+  const load = useCallback(async (offset = 0) => {
     setLoading(true);
     setError("");
     try {
-      setNotes(await selectRows<CopierNote>("copier_notes", "select=*&order=created_at.desc&limit=1000"));
+      const rows = await selectRows<CopierNote>("copier_notes", buildListQuery(offset));
+      setNotes((current) => (offset === 0 ? rows : [...current, ...rows]));
+      setHasMore(rows.length === PAGE_SIZE);
     } catch (e) {
       setError((e as Error).message || "불러오기 실패 — supabase/dev-notes.sql 실행 여부를 확인하세요.");
     } finally {
       setLoading(false);
     }
-  }, []);
-  useEffect(() => { void load(); }, [load]);
+  }, [buildListQuery]);
+  // 검색어 타이핑은 250ms 디바운스 후 서버 조회
+  useEffect(() => { const timer = window.setTimeout(() => { void load(0); }, 250); return () => window.clearTimeout(timer); }, [load]);
 
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    return notes.filter((note) => {
-      if (brand !== "전체" && note.brand !== brand) return false;
-      if (model !== "전체" && note.model !== model) return false;
-      if (kindFilter !== "전체" && note.kind !== kindFilter) return false;
-      if (!keyword) return true;
-      return [note.title, note.content, note.model, note.author].join(" ").toLowerCase().includes(keyword);
-    });
-  }, [notes, brand, model, kindFilter, query]);
+  const filtered = notes; // 필터·검색은 서버에서 이미 적용됨
 
   const submit = async () => {
     if (busy || !draft.content.trim()) return;
@@ -146,7 +155,7 @@ export default function CopierNotes({ author }: { author: string }) {
       await insertRow("copier_notes", { author, brand: draft.brand, model: draft.model.trim(), kind: draft.kind, title: draft.title.trim(), content: draft.content.trim() });
       setDraft({ ...draft, title: "", content: "" });
       setWriteOpen(false);
-      await load();
+      await load(0);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -174,7 +183,6 @@ export default function CopierNotes({ author }: { author: string }) {
           <button key={key} type="button" onClick={() => setView(key)} className={`rounded px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
         ))}
       </div>
-
       {view === "quiz" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         {quizIndex < 0 && (() => {
           const bank = notes.filter((n) => n.title.trim() && n.content.trim());
@@ -295,7 +303,7 @@ export default function CopierNotes({ author }: { author: string }) {
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {loading && !notes.length && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{notes.length ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -315,6 +323,7 @@ export default function CopierNotes({ author }: { author: string }) {
           </article>
         ))}
       </div>
+      {hasMore && <button type="button" onClick={() => void load(notes.length)} disabled={loading} className="w-full rounded-lg border border-slate-200 bg-white py-3 text-sm font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:text-slate-300">{loading ? "불러오는 중…" : `더 보기 (현재 ${notes.length}건 표시)`}</button>}
 
       </>}
 
