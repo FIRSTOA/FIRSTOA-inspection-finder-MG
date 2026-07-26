@@ -24,8 +24,9 @@ const questionMap: Record<string, string> = {
 function buildInstruction(quarterLabel: string) {
   return [
     "너는 퍼스트전산 분기 골든미팅카드 작성 담당자야.",
-    `아래 현재 분기 결과표/미션표를 분석해서, 참고용 기존 골든미팅카드와 같은 형식·문체로 ${quarterLabel} 골든미팅카드를 작성해줘.`,
+    `아래 현재 분기 결과표/미션표와 주간현황판 기록(weeklyRecordsText)을 분석해서, 참고용 기존 골든미팅카드와 같은 형식·문체로 ${quarterLabel} 골든미팅카드를 작성해줘.`,
     "참고용 기존 골든미팅카드는 문체와 구성만 참고한다. 성과, 수치, 달성률, 완료여부는 반드시 현재 분기 입력 자료만 근거로 사용한다.",
+    "weeklyRecordsText(주간 성장노트·배운 점·아이디어·특이사항)는 q3(학습·지식)과 q2(기여)의 핵심 근거다. 어느 주에 무엇을 배웠고 어떤 아이디어를 냈는지 구체적으로 반영하되, 기록에 없는 내용은 만들지 않는다.",
     "",
     "[출력 구조 - 절대 규칙]",
     "질문 4개 × 카테고리 6개 = 총 24칸을 JSON으로만 출력해줘. 설명·코드블록·마크다운·주석·추가 문장 금지.",
@@ -132,6 +133,8 @@ Deno.serve(async (req) => {
       },
       resultText: payload.planText || "",
       missionText: payload.missionText || "",
+      // 주간현황판 기록(성장노트·배운점·아이디어) — 성과·학습 답변의 근거로 활용
+      weeklyRecordsText: payload.weeklyRecordsText || "",
       currentAnswers: payload.currentAnswers || {},
       exampleGoldenCard: {
         quarter: payload.exampleQuarter || "",

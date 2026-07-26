@@ -51,6 +51,12 @@ const EDIT_COLORS: Array<[string, string]> = [["#0f172a", "기본"], ["#dc2626",
 // 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
 function RichGoalEditor({ initialHtml, onChange, className }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  // 최초 1회만 내용 주입 — 매 렌더마다 innerHTML을 다시 쓰면 타이핑할 때 커서가 처음으로 튄다
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!seededRef.current && ref.current) { ref.current.innerHTML = initialHtml; seededRef.current = true; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const emit = () => { const el = ref.current; if (el) onChange(el.innerHTML, el.innerText); };
   const applyColor = (color: string) => {
     const el = ref.current;
@@ -63,7 +69,6 @@ function RichGoalEditor({ initialHtml, onChange, className }: { initialHtml: str
   return (
     <div>
       <div ref={ref} contentEditable suppressContentEditableWarning
-        dangerouslySetInnerHTML={{ __html: initialHtml }}
         onInput={emit} onBlur={emit}
         className={`min-h-[96px] whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900 outline-none focus:border-blue-400 ${className || ""}`} />
       <div className="mt-1 flex items-center gap-1">
@@ -361,49 +366,14 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
   const regularGoals = useMemo(() => plan.goals.filter((goal) => goal.category !== "미션"), [plan.goals]);
   const missionGoals = useMemo(() => plan.goals.filter((goal) => goal.category === "미션"), [plan.goals]);
 
-  // 기간·인원 필터된 주간 기록 전체를 AI로 요약 (핵심 배움·반복 주제·인원별 강점·다음 분기 제안)
-  const [aiSummaryBusy, setAiSummaryBusy] = useState(false);
-  const runAiSummary = async () => {
-    if (aiSummaryBusy) return;
-    if (!rows.length) { setMessage("요약할 기록이 없습니다. 기간·직원을 확인하세요."); return; }
-    setAiSummaryBusy(true);
-    setMessage("");
-    try {
-      const corpus = rows.map((row) => {
-        const parts = recordTypes
-          .map(([key, label]) => (String(row[key] || "").trim() ? `${label}: ${row[key]}` : ""))
-          .filter(Boolean);
-        return parts.length ? `[${weekDisplay(row.weekStart)} · ${row.author}]\n${parts.join("\n")}` : "";
-      }).filter(Boolean).join("\n\n").slice(0, 14000);
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/growth-note-transform`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
-        body: JSON.stringify({
-          text: corpus,
-          instruction: "아래는 CS팀의 주간 성장 기록 모음이다. 팀 학습 분석가로서 사실에 근거해 간결한 분기 학습 요약을 작성하라. 형식: [핵심 배움 TOP 5](번호 목록, 각 1줄) / [반복 등장 주제](2~4개) / [인원별 강점](이름: 한 줄) / [다음 분기 제안](3개, 실행 가능하게). 기록에 없는 내용은 지어내지 않는다.",
-          fields: ["핵심 배움 TOP 5", "반복 등장 주제", "인원별 강점", "다음 분기 제안"],
-        }),
-      });
-      if (!res.ok) throw new Error(`AI 요약 실패(${res.status})`);
-      const data = await res.json();
-      const result = String(data.result || data.text || data.output || "").trim();
-      if (!result) throw new Error("AI 응답이 비어 있습니다.");
-      setGatherResult({ title: `🤖 AI 학습 요약 (기록 ${rows.length}건 기준)`, text: result });
-    } catch (e) {
-      setMessage((e as Error).message || "AI 요약에 실패했습니다.");
-    } finally {
-      setAiSummaryBusy(false);
-    }
-  };
-
-  // 목표 부분 색칠 에디터 — 텍스트를 드래그로 선택한 뒤 색 버튼을 누르면 그 부분만 색이 바뀐다.
-  // 서식은 titleHtml에, 검색·요약용 순수 텍스트는 title에 함께 저장한다.
+  // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
+  // 목표 서식 초기값: titleHtml 우선, 없으면 구버전 color/순수 텍스트를 HTML로
   const goalHtmlOf = (goal: LevelGoal) => goal.titleHtml
     || (goal.color ? `<span style="color:${goal.color}">` : "")
       + String(goal.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
-      + (goal.color ? "</span>" : "");
+      + (goal.color ? "</span>" : "")
+    || "";
 
-  // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
   // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
   const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "1개월차", "2개월차", "3개월차"] as const;
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -502,7 +472,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     return body ? `## ${q}\n${body}` : "";
   }).filter(Boolean).join("\n\n");
 
-  const buildGoldenPayload = (exampleCard?: GoldenCard, exampleMeta?: { year: number; quarter: number }) => {
+  const buildGoldenPayload = (exampleCard?: GoldenCard, exampleMeta?: { year: number; quarter: number }, weeklyRecordsText = "") => {
     const planText = regularGoals.map((goal, i) => [
       `${i + 1}. [${goal.category}] ${goal.title || "(목표 미입력)"}`,
       `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress || 0}%`,
@@ -529,7 +499,27 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       exampleAnswers: exampleCard?.answers || {},
       planText: planText || "없음",
       missionText: missionText || "없음",
+      weeklyRecordsText: weeklyRecordsText || "없음",
     };
+  };
+
+  // 이번 분기 주간현황판 기록(성장노트·배운점·아이디어·특이사항)을 모아 골든카드 AI 입력에 넣는다
+  const collectQuarterWeeklyText = async () => {
+    try {
+      const startMonth = (quarter - 1) * 3 + 1;
+      const endMonth = startMonth + 2;
+      const start = `${year}-${String(startMonth).padStart(2, "0")}-01`;
+      const end = `${year}-${String(endMonth).padStart(2, "0")}-${new Date(year, endMonth, 0).getDate()}`;
+      const all = await getWeeklyNotes(start, end);
+      return all.filter((row) => row.author === person).map((row) => {
+        const parts = recordTypes
+          .map(([key, label]) => (String(row[key] || "").trim() ? `${label}: ${row[key]}` : ""))
+          .filter(Boolean);
+        return parts.length ? `[${weekDisplay(row.weekStart)}]\n${parts.join("\n")}` : "";
+      }).filter(Boolean).join("\n\n").slice(0, 12000);
+    } catch {
+      return ""; // 주간 기록 조회 실패해도 골든카드 변환 자체는 진행
+    }
   };
 
   const runGoldenAi = async () => {
@@ -541,11 +531,14 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     setMessage("");
     try {
       const prev = previousQuarter();
-      const exampleCard = await getGoldenCard(person, prev.year, prev.quarter);
+      const [exampleCard, weeklyRecordsText] = await Promise.all([
+        getGoldenCard(person, prev.year, prev.quarter),
+        collectQuarterWeeklyText(),
+      ]);
       const res = await fetch(`${SUPABASE_URL}/functions/v1/golden-card-transform`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
-        body: JSON.stringify(buildGoldenPayload(exampleCard, prev)),
+        body: JSON.stringify(buildGoldenPayload(exampleCard, prev, weeklyRecordsText)),
       });
       if (!res.ok) throw new Error(`골든미팅카드 AI 변환 실패(${res.status})`);
       const data = await res.json();
@@ -670,7 +663,6 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => void runAiSummary()} disabled={aiSummaryBusy} className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 disabled:opacity-50">{aiSummaryBusy ? "요약 중…" : "🤖 AI 학습 요약"}</button>
               <button onClick={() => openGatherResult("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 모음</button>
               <button onClick={() => openGatherResult("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운점 모음</button>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용 또는 직원 검색" className="min-w-64 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" />
