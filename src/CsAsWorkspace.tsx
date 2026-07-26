@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
@@ -304,6 +304,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   // 서버(as_tickets)가 원본 — 진입·포커스 복귀·60초 주기로 새로 읽어 팀원 변경분을 반영한다.
   const refreshTickets = useCallback(async () => {
+    if (pendingWritesRef.current > 0) return; // 저장/삭제 반영 중 — 다음 주기에 새로고침
     try {
       const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&order=date.asc,time.asc`);
       const normalized = rows.map((row) => normalizeTicketSchedule(row));
@@ -333,11 +334,24 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     return () => { active = false; };
   }, [tickets]);
 
+  // 저장·삭제가 서버에 닿기 전에 focus 새로고침이 옛 데이터를 다시 그려
+  // "지운 일정이 잠깐 되살아나는" 버벅임이 있었다 — 쓰기 진행 중엔 새로고침을 미룬다.
+  const pendingWritesRef = useRef(0);
+  const trackWrite = async (work: Promise<unknown>, failMessage: string) => {
+    pendingWritesRef.current += 1;
+    try {
+      await work;
+    } catch {
+      setSyncError(failMessage);
+    } finally {
+      pendingWritesRef.current -= 1;
+    }
+  };
   const persistRemote = (ticket: AsTicket) => {
-    void upsertRow("as_tickets", toDbRow(ticket), "id").catch(() => setSyncError("일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 수정해 주세요."));
+    void trackWrite(upsertRow("as_tickets", toDbRow(ticket), "id"), "일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 수정해 주세요.");
   };
   const removeRemote = (id: string) => {
-    void deleteRows("as_tickets", `id=eq.${encodeURIComponent(id)}`).catch(() => setSyncError("일정 서버 삭제에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요."));
+    void trackWrite(deleteRows("as_tickets", `id=eq.${encodeURIComponent(id)}`), "일정 서버 삭제에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요.");
   };
   const [team, setTeam] = useState<Team | "ALL">("ALL");
   const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(scheduleFilters);
@@ -896,7 +910,7 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             내용 <span className="font-semibold text-slate-400">— 처리 결과·점검/AS 양식 (완료 처리 시 자동으로 쌓임, 직접 붙여넣기도 가능)</span>
-            <textarea value={draft.note || ""} onChange={(event) => set("note", event.target.value)} rows={6} className="mt-1 w-full rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
+            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
@@ -942,6 +956,18 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
       </div>
     </div>
   );
+}
+
+// 내용에 맞춰 높이가 자동으로 늘어나는 입력칸
+function AutoGrowTextarea({ value, onChange, className = "", minRows = 3 }: { value: string; onChange: (value: string) => void; className?: string; minRows?: number }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return <textarea ref={ref} rows={minRows} value={value} onChange={(event) => onChange(event.target.value)} className={`resize-none overflow-hidden ${className}`} />;
 }
 
 function Field({ label, value, type = "text", onChange }: { label: string; value: string; type?: string; onChange: (value: string) => void }) {
