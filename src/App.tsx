@@ -5239,6 +5239,14 @@ export default function App() {
   // 일정 완료/미루기 팝업 처리 (일정리스트와 같은 규칙: 완료=상태만, 익일=날짜+익일AS)
   const addDaysYmd = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setDate(d.getDate() + days); return kstDate(d); };
   const nextBizYmd = (date: string) => { let next = addDaysYmd(date, 1); while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDaysYmd(next, 1); return next; };
+  // 반복 클론 생성 전 같은 업체·날짜·유형 일정이 이미 있으면 건너뛴다 (시리즈 미리 생성분과 중복 방지)
+  const spawnMonthlyCloneIfMissing = async (row: Record<string, unknown>) => {
+    const clone = buildMonthlyCloneRow(row);
+    const dup = await selectRows<{ id: string }>("as_tickets",
+      `select=id&vendor=eq.${encodeURIComponent(String(clone["vendor"] || ""))}&date=eq.${encodeURIComponent(String(clone["date"] || ""))}&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent(String(clone["scheduleType"] || ""))}&limit=1`).catch(() => []);
+    if (!dup.length) await upsertRow("as_tickets", clone, "id");
+  };
+
   const appendTicketNote = (existing: unknown, formText: string) =>
     `${String(existing || "").trim() ? `${String(existing).trim()}\n\n` : ""}[${kstDate()} 전송 양식]\n${formText}`;
 
@@ -5253,7 +5261,7 @@ export default function App() {
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
       // 매월 반복 일정이면 완료 시 다음 달 일정 자동 생성 (일정리스트의 완료 처리와 동일 규칙)
       if (receptionStatus === "완료" && rows[0]?.["repeatMonthly"]) {
-        try { await upsertRow("as_tickets", buildMonthlyCloneRow(rows[0]), "id"); } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
+        try { await spawnMonthlyCloneIfMissing(rows[0]); } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
       }
       showToast(receptionStatus === "완료" ? "일정을 완료 처리했어요" : "일정을 미뤘어요", "success");
     } catch (e) {
@@ -5282,7 +5290,7 @@ export default function App() {
           status: "완료",
           note: appendTicketNote(row["note"], formText),
         });
-        if (row["repeatMonthly"]) await upsertRow("as_tickets", buildMonthlyCloneRow(row), "id").catch(() => {});
+        if (row["repeatMonthly"]) await spawnMonthlyCloneIfMissing(row).catch(() => {});
       }
       if (matched.length) showToast(`캘린더 매월점검 ${matched.length}건 완료 처리 + 양식 기록`, "success");
     } catch {

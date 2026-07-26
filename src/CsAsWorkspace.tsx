@@ -106,11 +106,11 @@ export function nextMonthSameDay(date: string): string {
 }
 
 // 매월 반복 티켓 완료 시 다음 달 일정 행 생성 (일정리스트·FIELD 전송 팝업 공용)
-export function buildMonthlyCloneRow(ticket: Record<string, unknown>): Record<string, unknown> {
+export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate?: string): Record<string, unknown> {
   const base = ticket as unknown as AsTicket;
   return {
     id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    team: base.team, date: nextMonthSameDay(base.date), time: base.time,
+    team: base.team, date: targetDate || nextMonthSameDay(base.date), time: base.time,
     vendor: base.vendor, contact: base.contact, address: base.address, department: base.department,
     model: base.model, serial: base.serial, asset: base.asset || "", grade: base.grade || "",
     keyman: base.keyman || "", receptionId: "", repeatMonthly: true,
@@ -351,6 +351,28 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       pendingWritesRef.current -= 1;
     }
   };
+  // 매월 반복 일정: 저장 즉시 앞으로 11개월치를 미리 만들어 달마다 달력에 보이게 한다.
+  // (같은 업체·유형·날짜가 이미 있으면 건너뛰어 중복 생성 방지)
+  const seriesKey = (t: { vendor: string; date: string; scheduleType: string }) =>
+    `${t.vendor.trim()}|${t.date}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
+  const ensureMonthlySeries = (base: AsTicket) => {
+    const existing = new Set(tickets.map((t) => seriesKey(t)));
+    existing.add(seriesKey(base));
+    const rows: Record<string, unknown>[] = [];
+    let date = base.date;
+    for (let k = 0; k < 11; k++) {
+      date = nextMonthSameDay(date);
+      const row = buildMonthlyCloneRow(base as unknown as Record<string, unknown>, date);
+      const key = seriesKey(row as unknown as AsTicket);
+      if (existing.has(key)) continue;
+      existing.add(key);
+      rows.push(row);
+    }
+    if (!rows.length) return;
+    setTicketsState((current) => [...current, ...rows.map((row) => normalizeTicketSchedule(row as unknown as AsTicket))]);
+    void trackWrite(upsertRows("as_tickets", rows, "id"), "반복 일정 생성 실패 — 새로고침 후 다시 시도해 주세요.");
+  };
+
   const persistRemote = (ticket: AsTicket) => {
     void trackWrite(upsertRow("as_tickets", toDbRow(ticket), "id"), "일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 수정해 주세요.");
   };
@@ -423,6 +445,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     setTickets(next);
     const changed = next.find((ticket) => ticket.id === id);
     if (changed) persistRemote(changed);
+    if (changed?.repeatMonthly && before && (!before.repeatMonthly || before.date !== changed.date)) ensureMonthlySeries(changed);
     // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 현황에도 반영 (완료/익일/접수)
     if (changed && before && changed.receptionId && changed.status !== before.status) {
       const mapped = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : "접수";
@@ -440,11 +463,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const toggleDone = (ticket: AsTicket) => {
     const completing = ticket.status !== "완료";
     update(ticket.id, { status: completing ? "완료" : (ticket.assignee ? "배정" : "접수") });
-    // 매월 반복: 완료 처리 순간 다음 달 같은 날로 새 일정 생성
+    // 매월 반복: 다음 달 일정이 아직 없으면 만들어 시리즈 말단을 연장한다 (있으면 건너뜀)
     if (completing && ticket.repeatMonthly) {
       const clone = buildMonthlyCloneRow(ticket as unknown as Record<string, unknown>);
-      setTicketsState((current) => [...current, normalizeTicketSchedule(clone as unknown as AsTicket)]);
-      void upsertRow("as_tickets", clone, "id").catch(() => setSyncError("반복 일정 생성 실패 — 새로고침 후 확인해 주세요."));
+      const key = seriesKey(clone as unknown as AsTicket);
+      if (!tickets.some((t) => seriesKey(t) === key)) {
+        setTicketsState((current) => [...current, normalizeTicketSchedule(clone as unknown as AsTicket)]);
+        void trackWrite(upsertRow("as_tickets", clone, "id"), "반복 일정 생성 실패 — 새로고침 후 확인해 주세요.");
+      }
     }
   };
 
@@ -834,7 +860,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       })()}
 
       {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
-      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { const created = normalizeTicketSchedule({ ...newTicket, ...patch }); setTickets([...tickets, created]); persistRemote(created); setNewTicket(null); }} />}
+      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { const created = normalizeTicketSchedule({ ...newTicket, ...patch }); setTickets([...tickets, created]); persistRemote(created); if (created.repeatMonthly) ensureMonthlySeries(created); setNewTicket(null); }} />}
       {dupTicket && (
         <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDupTicketId("")}>
           <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
