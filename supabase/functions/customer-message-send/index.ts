@@ -30,7 +30,15 @@ Deno.serve(async (req) => {
         if (!claim.ok || !claimed.length) continue;
         try {
           const provider = await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(job.payload as object || {}), channel: job.channel, to: job.recipient, text: job.message, source: "FIRSTOA_CS_SYSTEM" }) });
-          if (!provider.ok) throw new Error(`발송 웹훅 실패(${provider.status}): ${(await provider.text()).slice(0, 200)}`);
+          const providerBody = await provider.text().catch(() => "");
+          if (!provider.ok) throw new Error(`발송 웹훅 실패(${provider.status}): ${providerBody.slice(0, 200)}`);
+          // GAS 웹훅은 항상 HTTP 200 — 본문 ok=false를 실패로 처리 (예약발송이 실패인데 sent로 남지 않게)
+          try {
+            const parsedBody = JSON.parse(providerBody);
+            if (parsedBody && parsedBody.ok === false) throw new Error(`발송 실패: ${String(parsedBody.error || "").slice(0, 200)}`);
+          } catch (parseError) {
+            if (parseError instanceof Error && parseError.message.startsWith("발송 실패")) throw parseError;
+          }
           await fetch(`${supabaseUrl}/rest/v1/message_jobs?id=eq.${id}`, { method: "PATCH", headers: restHeaders, body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString(), error: "" }) });
           const sourceId = String(job.source_id || "");
           if (job.source_type === "happycall" && sourceId) {
