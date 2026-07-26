@@ -125,11 +125,13 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate
 
 // 반복 시리즈 지평선: 각 매월 반복 그룹(업체+유형)의 마지막 일정에서 오늘+11개월까지 이어 붙일 행을 계산.
 // 새로고침 때마다 부족분만 만들어 반복이 무기한 이어진다. 중간에 지운 달은 되살리지 않는다(마지막 일정 이후만 연장).
-export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Record<string, unknown>[] {
+export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string, viewYm?: string): Record<string, unknown>[] {
   const existing = new Set(list.map((t) => `${seriesGroupOf(t)}|${t.date}`));
   const [ty, tm] = todayYmd.split("-").map(Number);
   const horizonTotal = ty * 12 + (tm - 1) + 11;
-  const horizonYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
+  const defaultYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
+  // 사용자가 달력에서 더 먼 달을 보고 있으면 그 달까지 생성 (기본은 오늘+11개월)
+  const horizonYm = viewYm && viewYm > defaultYm ? viewYm : defaultYm;
   const latest = new Map<string, AsTicket>();
   for (const t of list) {
     if (!t.repeatMonthly || !t.vendor.trim()) continue;
@@ -140,7 +142,7 @@ export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Re
   const rows: Record<string, unknown>[] = [];
   for (const tail of latest.values()) {
     let date = tail.date;
-    for (let guard = 0; guard < 24; guard++) {
+    for (let guard = 0; guard < 120; guard++) {
       date = nextMonthSameDay(date);
       if (date.slice(0, 7) > horizonYm) break;
       const key = `${seriesGroupOf(tail)}|${date}`;
@@ -532,6 +534,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     }
   };
 
+  // 담당자 배정 팝업: 배정 버튼 → 팀원 이름 선택
+  const [assignId, setAssignId] = useState("");
+  const assignTicket = tickets.find((t) => t.id === assignId) || null;
+  const applyAssign = (ticket: AsTicket, name: string) => {
+    update(ticket.id, { assignee: name, status: name && ticket.status === "접수" ? "배정" : !name && ticket.status === "배정" ? "접수" : ticket.status });
+    setAssignId("");
+  };
+
   // 매월 반복 일정 날짜 이동: 다른 반복 건이 있으면 "이 일정만/전체" 선택 팝업을 띄운다
   const [moveTarget, setMoveTarget] = useState<{ ticket: AsTicket; date: string } | null>(null);
   const seriesOthers = (base: AsTicket) =>
@@ -599,6 +609,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
   });
+
+  // 달력에서 미래 달을 열람하면 반복 일정을 그 달까지 즉석 생성 — 부족분이 없으면 아무 것도 안 한다
+  useEffect(() => {
+    const rows = buildSeriesExtensionRows(tickets, getTodayYmd(), currentMonth.slice(0, 7));
+    if (!rows.length) return;
+    setTicketsState((current) => [...current, ...rows.map((row) => normalizeTicketSchedule(row as unknown as AsTicket))]);
+    void trackWrite(upsertRows("as_tickets", rows, "id"), "반복 일정 생성 실패 — 새로고침 후 다시 시도해 주세요.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, tickets]);
 
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
@@ -826,6 +845,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 </select>
                 <div className="mt-3 flex gap-2" onClick={(event) => event.stopPropagation()}>
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-md bg-slate-900 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => toggleDone(ticket)} className={`flex-1 rounded-md border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
                 </div>
@@ -868,6 +888,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
                         {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
+                        <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
                         <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
                         <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
                       </div>
@@ -962,6 +983,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 </div>
                 <div className="flex gap-2">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-md border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
                 </div>
@@ -995,6 +1017,23 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="mt-3 flex gap-2">
               <input type="date" value={dupDate} onChange={(event) => setDupDate(event.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-bold" />
               <button type="button" onClick={() => { if (dupDate) duplicateTicket(dupTicket, dupDate); }} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white">이 날짜로 복제</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {assignTicket && (
+        <div className="fixed inset-0 z-[140] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setAssignId("")}>
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="text-lg font-black text-slate-950">담당자 배정</div>
+            <div className="mt-1 text-sm font-semibold text-slate-500">{assignTicket.vendor || "이 일정"} · {assignTicket.team}팀 · 현재 {assignTicket.assignee || "미배정"}</div>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              {teamAssignees[assignTicket.team].map((name) => (
+                <button key={name} type="button" onClick={() => applyAssign(assignTicket, name)} className={`rounded-md border px-3 py-3 text-sm font-black ${assignTicket.assignee === name ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{name}</button>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <button type="button" onClick={() => applyAssign(assignTicket, "")} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-50">미배정으로</button>
+              <button type="button" onClick={() => setAssignId("")} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-black text-slate-600">닫기</button>
             </div>
           </div>
         </div>
