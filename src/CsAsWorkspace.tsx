@@ -126,15 +126,14 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>, targetDate
 // 반복 시리즈 지평선: 각 매월 반복 그룹(업체+유형)의 마지막 일정에서 오늘+11개월까지 이어 붙일 행을 계산.
 // 새로고침 때마다 부족분만 만들어 반복이 무기한 이어진다. 중간에 지운 달은 되살리지 않는다(마지막 일정 이후만 연장).
 export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Record<string, unknown>[] {
-  const groupOf = (t: AsTicket) => `${t.vendor.trim()}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
-  const existing = new Set(list.map((t) => `${groupOf(t)}|${t.date}`));
+  const existing = new Set(list.map((t) => `${seriesGroupOf(t)}|${t.date}`));
   const [ty, tm] = todayYmd.split("-").map(Number);
   const horizonTotal = ty * 12 + (tm - 1) + 11;
   const horizonYm = `${Math.floor(horizonTotal / 12)}-${String((horizonTotal % 12) + 1).padStart(2, "0")}`;
   const latest = new Map<string, AsTicket>();
   for (const t of list) {
     if (!t.repeatMonthly || !t.vendor.trim()) continue;
-    const g = groupOf(t);
+    const g = seriesGroupOf(t);
     const prev = latest.get(g);
     if (!prev || t.date > prev.date) latest.set(g, t);
   }
@@ -144,7 +143,7 @@ export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Re
     for (let guard = 0; guard < 24; guard++) {
       date = nextMonthSameDay(date);
       if (date.slice(0, 7) > horizonYm) break;
-      const key = `${groupOf(tail)}|${date}`;
+      const key = `${seriesGroupOf(tail)}|${date}`;
       if (existing.has(key)) continue;
       existing.add(key);
       rows.push(buildMonthlyCloneRow(tail as unknown as Record<string, unknown>, date));
@@ -160,6 +159,11 @@ function loadStoredFilter<T extends string>(key: string, allowed: readonly T[], 
     if (Array.isArray(parsed)) return parsed.filter((item): item is T => allowed.includes(item as T));
   } catch { /* 저장값 손상 시 기본값 */ }
   return fallback;
+}
+
+// 매월 반복 시리즈 식별 키: 업체 + 업무종류
+function seriesGroupOf(t: { vendor: string; scheduleType: string }): string {
+  return `${t.vendor.trim()}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
 }
 
 function dayNumberColor(index: number, inMonth: boolean): string {
@@ -500,9 +504,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   // 매월 반복 중지: 이후(오늘 이후 날짜) 미완료 반복 일정을 지우고, 지난 일정들의 반복 플래그도 꺼서
   // 새로고침 자동 연장이 시리즈를 되살리지 않게 한다.
   const stopMonthlySeries = (base: AsTicket) => {
-    const groupOf = (t: AsTicket) => `${t.vendor.trim()}|${t.scheduleType === "익일AS" ? "AS" : t.scheduleType}`;
-    const g = groupOf(base);
-    const members = tickets.filter((t) => t.id !== base.id && groupOf(t) === g && t.repeatMonthly);
+    const g = seriesGroupOf(base);
+    const members = tickets.filter((t) => t.id !== base.id && seriesGroupOf(t) === g && t.repeatMonthly);
     if (!members.length) return;
     const future = members.filter((t) => t.date > base.date && t.status !== "완료");
     if (future.length && !window.confirm(`매월 반복을 중지할까요?\n예정된 반복 일정 ${future.length}건이 함께 삭제됩니다.`)) return;
@@ -520,13 +523,40 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     setTickets(next);
     const changed = next.find((ticket) => ticket.id === id);
     if (changed) persistRemote(changed);
-    if (changed?.repeatMonthly && before && (!before.repeatMonthly || before.date !== changed.date)) ensureMonthlySeries(changed);
+    if (changed?.repeatMonthly && before && !before.repeatMonthly) ensureMonthlySeries(changed);
     if (changed && before?.repeatMonthly && !changed.repeatMonthly) stopMonthlySeries(changed);
     // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 현황에도 반영 (완료/익일/접수)
     if (changed && before && changed.receptionId && changed.status !== before.status) {
       const mapped = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : "접수";
       void setServiceReceptionStatus(changed.receptionId, mapped).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
     }
+  };
+
+  // 매월 반복 일정 날짜 이동: 다른 반복 건이 있으면 "이 일정만/전체" 선택 팝업을 띄운다
+  const [moveTarget, setMoveTarget] = useState<{ ticket: AsTicket; date: string } | null>(null);
+  const seriesOthers = (base: AsTicket) =>
+    tickets.filter((t) => t.id !== base.id && seriesGroupOf(t) === seriesGroupOf(base) && t.repeatMonthly && t.status !== "완료");
+  const requestMoveDate = (id: string, date: string) => {
+    const ticket = tickets.find((t) => t.id === id);
+    if (!ticket || ticket.date === date) return;
+    if (ticket.repeatMonthly && seriesOthers(ticket).length) setMoveTarget({ ticket, date });
+    else update(id, { date });
+  };
+  // 전체 이동: 미완료 반복 건 전부를 각자 달의 새 일자(예: 매월 5일 → 매월 8일)로 옮긴다. 완료된 지난 기록은 그대로 둔다.
+  const applyMoveAll = (base: AsTicket, newDate: string) => {
+    const day = Number(newDate.slice(8, 10));
+    const g = seriesGroupOf(base);
+    const moved = tickets
+      .filter((t) => seriesGroupOf(t) === g && t.repeatMonthly && t.status !== "완료")
+      .map((t) => {
+        if (t.id === base.id) return { ...t, date: newDate };
+        const [y, m] = t.date.split("-").map(Number);
+        const d = Math.min(day, new Date(y, m, 0).getDate());
+        return { ...t, date: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` };
+      });
+    const movedIds = new Map(moved.map((t) => [t.id, t]));
+    setTicketsState((current) => current.map((t) => movedIds.get(t.id) ?? t));
+    void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
   const removeTicket = (ticket: AsTicket) => {
@@ -742,7 +772,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) requestMoveDate(id, date); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
                             <button type="button" className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : `${dayNumberColor(dayIndex, inMonth)}${inMonth ? " hover:bg-slate-100" : ""}`}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 4).map((ticket) => (
@@ -941,7 +971,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         );
       })()}
 
-      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => { update(editTicket.id, patch); setEditId(""); }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
+      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => {
+        const newDate = patch.date;
+        if (editTicket.repeatMonthly && patch.repeatMonthly !== false && newDate && newDate !== editTicket.date && seriesOthers(editTicket).length) {
+          update(editTicket.id, { ...patch, date: editTicket.date });
+          setMoveTarget({ ticket: { ...editTicket, ...patch, date: editTicket.date }, date: newDate });
+        } else update(editTicket.id, patch);
+        setEditId("");
+      }} onComplete={() => { toggleDone(editTicket); setEditId(""); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
       {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { const created = normalizeTicketSchedule({ ...newTicket, ...patch }); setTickets([...tickets, created]); persistRemote(created); if (created.repeatMonthly) ensureMonthlySeries(created); setNewTicket(null); }} />}
       {dupTicket && (
         <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDupTicketId("")}>
@@ -959,6 +996,23 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               <input type="date" value={dupDate} onChange={(event) => setDupDate(event.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-bold" />
               <button type="button" onClick={() => { if (dupDate) duplicateTicket(dupTicket, dupDate); }} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white">이 날짜로 복제</button>
             </div>
+          </div>
+        </div>
+      )}
+      {moveTarget && (
+        <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setMoveTarget(null)}>
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="text-lg font-black text-slate-950">🔁 매월 반복 일정 이동</div>
+            <div className="mt-1 text-sm font-semibold text-slate-500">{moveTarget.ticket.vendor || "이 일정"} · {moveTarget.ticket.date} → {moveTarget.date}</div>
+            <div className="mt-5 space-y-2">
+              <button type="button" onClick={() => { update(moveTarget.ticket.id, { date: moveTarget.date }); setMoveTarget(null); }} className="w-full rounded-md border border-slate-200 px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
+                이 일정만 이동<div className="mt-0.5 text-xs font-bold text-slate-400">이번 건만 {moveTarget.date}로 옮기고, 다른 달은 그대로 둡니다</div>
+              </button>
+              <button type="button" onClick={() => { applyMoveAll(moveTarget.ticket, moveTarget.date); setMoveTarget(null); }} className="w-full rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-black text-blue-700 hover:bg-blue-100">
+                전체 반복 일정 이동 ({seriesOthers(moveTarget.ticket).length + 1}건)<div className="mt-0.5 text-xs font-bold text-blue-500/80">앞으로 오는 미완료 반복 일정을 전부 매월 {Number(moveTarget.date.slice(8, 10))}일로 바꿉니다 (완료된 지난 기록은 유지)</div>
+              </button>
+            </div>
+            <div className="mt-3 text-right"><button type="button" onClick={() => setMoveTarget(null)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-black text-slate-600">취소</button></div>
           </div>
         </div>
       )}
