@@ -157,7 +157,7 @@ function kstNowHM() {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
 }
 
-function blankTicket(date: string): AsTicket {
+function blankTicket(date: string, overrides: Partial<AsTicket> = {}): AsTicket {
   return {
     id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     team: "A",
@@ -179,6 +179,7 @@ function blankTicket(date: string): AsTicket {
     assignee: "",
     status: "접수",
     scheduleType: "AS",
+    ...overrides,
   };
 }
 
@@ -560,6 +561,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   );
   const monthTickets = visibleTickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7));
 
+  // 일정 추가 기본값: 캘린더에서 체크된 팀·업무종류 중 첫 값 (예: B팀+매월점검만 켜두면 그대로 미리 채움)
+  const newTicketDefaults = (): Partial<AsTicket> => ({
+    team: teams.find((item) => visibleTeams.includes(item)) || "A",
+    scheduleType: scheduleFilters.find((item) => visibleScheduleTypes.includes(item)) || "AS",
+  });
+
   const toggleScheduleFilter = (filter: ScheduleFilter) => {
     setVisibleScheduleTypes((current) => current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]);
   };
@@ -606,7 +613,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           <div className="flex min-h-[720px] flex-col lg:flex-row">
             <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r lg:p-4">
               <div className="grid grid-cols-2 gap-2 lg:block">
-                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
+                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd, newTicketDefaults()))} className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
                   <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
                 </button>
                 <button type="button" onClick={() => setCalendarFiltersOpen((current) => !current)} className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm lg:hidden">필터 {calendarFiltersOpen ? "닫기" : "열기"}</button>
@@ -693,7 +700,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <div className="border-t border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm font-black text-slate-900">{Number(mobileSelectedDate.slice(5, 7))}월 {Number(mobileSelectedDate.slice(8, 10))}일 · {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).length}건</div>
-                      <button type="button" onClick={() => setNewTicket(blankTicket(mobileSelectedDate))} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-black text-white">+ 일정</button>
+                      <button type="button" onClick={() => setNewTicket(blankTicket(mobileSelectedDate, newTicketDefaults()))} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-black text-white">+ 일정</button>
                     </div>
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
@@ -717,7 +724,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onClick={() => setNewTicket(blankTicket(date))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) update(id, { date }); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
                             <button type="button" className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700 hover:bg-slate-100" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 4).map((ticket) => (
