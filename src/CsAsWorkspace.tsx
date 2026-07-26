@@ -202,9 +202,9 @@ function statusClass(status: AsStatus) {
 function scheduleColor(type: ScheduleType, completed = false) {
   if (completed) return "bg-slate-100 text-slate-400 line-through";
   if (type === "익일AS") return "bg-purple-100 text-purple-700";
-  if (type === "물류") return "bg-amber-100 text-amber-700";
+  if (type === "물류") return "bg-rose-100 text-rose-700";
   if (type === "휴가") return "bg-emerald-100 text-emerald-700";
-  if (type === "포인트 점검") return "bg-teal-100 text-teal-700";
+  if (type === "포인트 점검") return "bg-amber-100 text-amber-700";
   return "bg-blue-100 text-blue-700";
 }
 
@@ -464,7 +464,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       {scheduleFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-amber-500" : filter === "휴가" ? "bg-emerald-500" : filter === "포인트 점검" ? "bg-teal-500" : "bg-blue-600"}`} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : filter === "포인트 점검" ? "bg-amber-500" : "bg-blue-600"}`} />
                           {filter}
                         </label>
                       ))}
@@ -529,7 +529,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
-                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-amber-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "포인트 점검" ? "bg-teal-500" : "bg-blue-600"}`} />)}
+                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-rose-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "포인트 점검" ? "bg-amber-500" : "bg-blue-600"}`} />)}
                           </span>
                         </button>
                       );
