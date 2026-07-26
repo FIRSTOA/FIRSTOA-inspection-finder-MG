@@ -172,6 +172,7 @@ export type LevelGoal = {
   month3: string;
   progress: number;
   resultMerged?: boolean;
+  color?: string; // 글자색 (시트처럼 색으로 표시 구분)
 };
 export type QuarterlyPlan = { author: string; year: number; quarter: number; goals: LevelGoal[] };
 export async function getQuarterlyPlan(author: string, year: number, quarter: number): Promise<QuarterlyPlan> {

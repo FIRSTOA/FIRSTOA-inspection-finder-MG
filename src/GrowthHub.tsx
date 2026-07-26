@@ -339,63 +339,73 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     }
   };
 
-  // 분기계획표 시트 불러오기 (dashboard-MG result-sheet-sync 웹앱 호출 — action=tabs/goals)
-  const [planImport, setPlanImport] = useState<{ open: boolean; url: string; sheetId: string; tabs: Array<{ name: string; gid: string }>; gid: string; busy: string }>(() => {
-    let saved = { url: "", sheetId: "" };
-    try { saved = { ...saved, ...JSON.parse(localStorage.getItem("plan_sheet_api_v1") || "{}") }; } catch { /* 무시 */ }
-    return { open: false, url: saved.url, sheetId: saved.sheetId, tabs: [], gid: "", busy: "" };
-  });
-  const planApi = (params: string) => {
-    const base = planImport.url.trim().split("?")[0];
-    const sheetPart = planImport.sheetId.trim() ? `&sheetId=${encodeURIComponent(planImport.sheetId.trim())}` : "";
-    return fetch(`${base}?${params}${sheetPart}`).then((res) => res.json());
-  };
-  const loadPlanTabs = async () => {
-    if (!planImport.url.trim()) { setMessage("시트 연동 웹앱(/exec) 주소를 입력하세요."); return; }
-    setPlanImport((cur) => ({ ...cur, busy: "tabs" }));
-    try {
-      localStorage.setItem("plan_sheet_api_v1", JSON.stringify({ url: planImport.url.trim(), sheetId: planImport.sheetId.trim() }));
-      const data = await planApi("action=tabs");
-      if (!data.ok) throw new Error(data.error || "탭 조회 실패");
-      const tabs = (data.tabs || []) as Array<{ name: string; gid: string }>;
-      const planTab = tabs.find((tab) => /계획/.test(tab.name));
-      setPlanImport((cur) => ({ ...cur, tabs, gid: planTab?.gid || tabs[0]?.gid || "" }));
-    } catch (e) {
-      setMessage(`탭 조회 실패: ${(e as Error).message} — 주소와 시트 공유를 확인하세요.`);
-    } finally {
-      setPlanImport((cur) => ({ ...cur, busy: "" }));
+  // 목표 글자색 팔레트 (시트처럼 색으로 상태 표시)
+  const GOAL_COLORS: Array<[string, string]> = [["", "기본"], ["#2563eb", "파랑"], ["#dc2626", "빨강"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
+  const ColorDots = ({ goal }: { goal: LevelGoal }) => (
+    <span className="flex items-center gap-1">
+      {GOAL_COLORS.map(([value, label]) => (
+        <button key={label} type="button" title={label} onClick={() => setGoal(goal.id, { color: value })}
+          className={`h-4 w-4 rounded-full border ${goal.color === value || (!goal.color && !value) ? "ring-2 ring-offset-1 ring-slate-400" : ""} ${value ? "" : "bg-white"}`}
+          style={value ? { backgroundColor: value, borderColor: value } : { borderColor: "#cbd5e1" }} />
+      ))}
+    </span>
+  );
+
+  // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
+  const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "1개월차", "2개월차", "3개월차"] as const;
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteRoles, setPasteRoles] = useState<string[]>([]);
+  const pasteGrid = useMemo(() => pasteText
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.split("\t"))
+    .filter((cells) => cells.some((cell) => cell.trim())), [pasteText]);
+  useEffect(() => {
+    // 컬럼 역할 자동 추정: 구분 값이면 '구분', 등급이면 '등급', 가장 긴 텍스트 열은 '목표'
+    const cols = Math.max(0, ...pasteGrid.map((cells) => cells.length));
+    if (!cols) { setPasteRoles([]); return; }
+    const roles: string[] = Array(cols).fill("무시");
+    let goalCol = -1;
+    let goalLen = 0;
+    for (let c = 0; c < cols; c++) {
+      const values = pasteGrid.map((cells) => (cells[c] || "").trim()).filter(Boolean);
+      if (!values.length) continue;
+      if (values.every((v) => (PLAN_CATEGORIES as readonly string[]).includes(v) || v === "미션")) { roles[c] = "구분"; continue; }
+      if (values.every((v) => (GRADE_OPTIONS as readonly string[]).includes(v))) { roles[c] = "등급"; continue; }
+      const avg = values.reduce((sum, v) => sum + v.length, 0) / values.length;
+      if (avg > goalLen) { goalLen = avg; goalCol = c; }
     }
-  };
-  const importPlanFromSheet = async (replace: boolean) => {
-    if (!planImport.gid) { setMessage("불러올 탭을 선택하세요."); return; }
-    setPlanImport((cur) => ({ ...cur, busy: "import" }));
-    try {
-      // 계획표 규칙: C열(3)=기본업무, I열(9)=미션업무 — 현재 선택 분기 구역만
-      const [regular, mission] = await Promise.all([
-        planApi(`action=goals&gid=${planImport.gid}&goalCol=3&quarter=${encodeURIComponent(`${quarter}분기`)}`),
-        planApi(`action=goals&gid=${planImport.gid}&goalCol=9&quarter=${encodeURIComponent(`${quarter}분기`)}`),
-      ]);
-      const toGoals = (data: { ok: boolean; rows?: Array<{ gubun: string; goal: string; months: Array<{ text: string }>; merged: boolean }> }, isMission: boolean): LevelGoal[] =>
-        (data.ok && data.rows ? data.rows : []).map((row) => ({
-          id: crypto.randomUUID(),
-          category: isMission ? "미션" : ((PLAN_CATEGORIES as readonly string[]).includes(row.gubun) ? row.gubun : "자기개발"),
-          grade: "",
-          title: row.goal,
-          currentLevel: "", targetLevel: "", budget: "", reflectedBudget: "",
-          month1: row.months?.[0]?.text || "", month2: row.months?.[1]?.text || "", month3: row.months?.[2]?.text || "",
-          progress: 0,
-          resultMerged: !!row.merged,
-        }));
-      const imported = [...toGoals(regular, false), ...toGoals(mission, true)];
-      if (!imported.length) { setMessage(`시트의 ${quarter}분기 구역에서 목표를 찾지 못했습니다.`); return; }
-      setPlan({ ...plan, author: person, year, quarter, goals: replace ? imported : [...plan.goals, ...imported] });
-      setPlanImport((cur) => ({ ...cur, open: false }));
-      setMessage(`시트에서 ${imported.length}개 목표를 불러왔습니다. 확인 후 저장을 눌러주세요.`);
-    } catch (e) {
-      setMessage(`불러오기 실패: ${(e as Error).message}`);
-    } finally {
-      setPlanImport((cur) => ({ ...cur, busy: "" }));
+    if (goalCol >= 0) roles[goalCol] = "목표";
+    setPasteRoles(roles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pasteGrid.length, pasteText]);
+  const importPasted = (asMission: boolean) => {
+    const roleIndex = (role: string) => pasteRoles.indexOf(role);
+    const goalIdx = roleIndex("목표");
+    if (goalIdx < 0) { setMessage("어느 열이 '목표'인지 선택해 주세요."); return; }
+    const imported: LevelGoal[] = [];
+    let lastCategory = "";
+    for (const cells of pasteGrid) {
+      const at = (role: string) => { const i = roleIndex(role); return i >= 0 ? String(cells[i] || "").trim() : ""; };
+      const title = String(cells[goalIdx] || "").trim();
+      if (!title || title === "목표") continue;
+      const rawCategory = at("구분");
+      if (rawCategory) lastCategory = rawCategory;
+      const category = asMission || lastCategory === "미션" ? "미션"
+        : ((PLAN_CATEGORIES as readonly string[]).includes(lastCategory) ? lastCategory : "자기개발");
+      imported.push({
+        id: crypto.randomUUID(), category, grade: at("등급"), title,
+        currentLevel: at("현재레벨"), targetLevel: at("목표레벨"), budget: at("요청예산"), reflectedBudget: at("예산반영"),
+        month1: at("1개월차"), month2: at("2개월차"), month3: at("3개월차"),
+        progress: 0, resultMerged: false,
+      });
     }
+    if (!imported.length) { setMessage("가져올 목표를 찾지 못했습니다. 열 역할을 확인해 주세요."); return; }
+    setPlan({ ...plan, author: person, year, quarter, goals: [...plan.goals, ...imported] });
+    setPasteOpen(false);
+    setPasteText("");
+    setMessage(`${imported.length}개 목표를 추가했습니다. 확인 후 저장을 눌러주세요.`);
   };
 
   const openGatherResult = (key: "growth" | "learning") => {
@@ -698,31 +708,45 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         </>
       )}
 
-      {planImport.open && (
-        <div className="fixed inset-0 z-[240] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPlanImport((cur) => ({ ...cur, open: false }))}>
-          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+      {pasteOpen && (
+        <div className="fixed inset-0 z-[240] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPasteOpen(false)}>
+          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <b className="text-slate-950">분기계획표 시트에서 불러오기</b>
-              <button type="button" onClick={() => setPlanImport((cur) => ({ ...cur, open: false }))} className="text-xs font-bold text-slate-400">닫기</button>
+              <b className="text-slate-950">엑셀 붙여넣기 — 여러 셀 한 번에</b>
+              <button type="button" onClick={() => setPasteOpen(false)} className="text-xs font-bold text-slate-400">닫기</button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-              <p className="text-xs font-semibold leading-5 text-slate-500">분기계획표 시트에 연동된 Apps Script 웹앱(/exec) 주소를 넣고 탭을 고르면, 현재 선택된 <b className="text-slate-800">{year}년 {quarter}분기</b> 구역의 기본업무(C열)·미션업무(I열)를 가져옵니다.</p>
-              <label className="block text-xs font-bold text-slate-500">웹앱 /exec 주소
-                <input value={planImport.url} onChange={(e) => setPlanImport((cur) => ({ ...cur, url: e.target.value }))} placeholder="https://script.google.com/macros/s/…/exec" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-              </label>
-              <label className="block text-xs font-bold text-slate-500">시트 ID (선택 — 다른 직원 시트를 열 때)
-                <input value={planImport.sheetId} onChange={(e) => setPlanImport((cur) => ({ ...cur, sheetId: e.target.value }))} placeholder="스프레드시트 URL의 /d/ 뒤 ID" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-              </label>
-              <button type="button" disabled={planImport.busy === "tabs"} onClick={() => void loadPlanTabs()} className="rounded-md bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{planImport.busy === "tabs" ? "조회 중…" : "탭 조회"}</button>
-              {planImport.tabs.length > 0 && <label className="block text-xs font-bold text-slate-500">불러올 탭
-                <select value={planImport.gid} onChange={(e) => setPlanImport((cur) => ({ ...cur, gid: e.target.value }))} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
-                  {planImport.tabs.map((tab) => <option key={tab.gid} value={tab.gid}>{tab.name}</option>)}
-                </select>
-              </label>}
+              <p className="text-xs font-semibold leading-5 text-slate-500">엑셀/시트에서 목표 범위를 복사해 아래에 붙여넣으세요. 열 역할은 자동 추정되며 직접 바꿀 수 있습니다.</p>
+              <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder={"엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)"} className="w-full resize-y rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
+              {pasteGrid.length > 0 && (
+                <div className="overflow-x-auto rounded-md border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        {pasteRoles.map((role, index) => (
+                          <th key={index} className="border-b border-slate-200 px-2 py-1.5">
+                            <select value={role} onChange={(e) => setPasteRoles((cur) => cur.map((r, i) => i === index ? e.target.value : r))} className={`w-full rounded border px-1 py-1 text-[11px] font-black ${role === "무시" ? "border-slate-200 text-slate-400" : "border-blue-300 bg-blue-50 text-blue-700"}`}>
+                              {PASTE_ROLES.map((name) => <option key={name}>{name}</option>)}
+                            </select>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pasteGrid.slice(0, 5).map((cells, rowIndex) => (
+                        <tr key={rowIndex} className="border-b border-slate-100 last:border-0">
+                          {pasteRoles.map((_, colIndex) => <td key={colIndex} className="max-w-40 truncate px-2 py-1.5 font-semibold text-slate-600">{cells[colIndex] || ""}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {pasteGrid.length > 5 && <div className="px-2 py-1.5 text-[10px] font-bold text-slate-400">외 {pasteGrid.length - 5}행 — 총 {pasteGrid.length}행 가져옵니다</div>}
+                </div>
+              )}
             </div>
-            {planImport.tabs.length > 0 && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-              <button type="button" disabled={planImport.busy === "import"} onClick={() => void importPlanFromSheet(false)} className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 disabled:opacity-50">기존에 추가</button>
-              <button type="button" disabled={planImport.busy === "import"} onClick={() => { if (plan.goals.length === 0 || window.confirm(`현재 목표 ${plan.goals.length}개를 시트 내용으로 대체할까요?`)) void importPlanFromSheet(true); }} className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-black text-white disabled:opacity-50">{planImport.busy === "import" ? "가져오는 중…" : "대체하여 불러오기"}</button>
+            {pasteGrid.length > 0 && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button type="button" onClick={() => importPasted(false)} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-black text-white">기본업무로 추가</button>
+              <button type="button" onClick={() => importPasted(true)} className="rounded-md bg-orange-600 px-4 py-2 text-sm font-black text-white">미션업무로 추가</button>
             </div>}
           </div>
         </div>
@@ -736,7 +760,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <p className="text-xs font-semibold text-slate-500">시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다.</p>
             </div>
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-              <button disabled={!person} onClick={() => setPlanImport((cur) => ({ ...cur, open: true }))} className="col-span-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-40 sm:px-4 sm:text-sm">📄 시트에서 불러오기</button>
+              <button disabled={!person} onClick={() => setPasteOpen(true)} className="col-span-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-40 sm:px-4 sm:text-sm">📋 엑셀 붙여넣기</button>
               <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">기본업무 추가</button>
               <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">미션업무 추가</button>
             </div>
@@ -746,7 +770,8 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
               <div className="flex items-center justify-between"><b className="text-sm text-blue-800">기본업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-md bg-white text-rose-500">×</button></div>
               <div className="mt-3 grid grid-cols-2 gap-2"><select value={goal.category} onChange={(e) => setGoal(goal.id, { category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></div>
-              <textarea value={goal.title} onChange={(e) => setGoal(goal.id, { title: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-slate-300 bg-white p-3 text-sm font-bold leading-6" />
+              <textarea value={goal.title} onChange={(e) => setGoal(goal.id, { title: e.target.value })} rows={4} style={goal.color ? { color: goal.color } : undefined} className="mt-2 w-full rounded-md border border-slate-300 bg-white p-3 text-sm font-bold leading-6" />
+              <div className="mt-1.5"><ColorDots goal={goal} /></div>
               <div className="mt-2 grid grid-cols-2 gap-2">{[["현재레벨", "currentLevel"], ["목표레벨", "targetLevel"], ["요청예산", "budget"], ["예산반영", "reflectedBudget"]] .map(([label, key]) => <label key={key} className="text-[10px] font-bold text-slate-500">{label}<input value={String(goal[key as keyof LevelGoal] || "")} onChange={(e) => setGoal(goal.id, { [key]: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>)}</div>
               <label className="mt-2 block text-[10px] font-bold text-slate-500">진도율<input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>
             </article>)}
@@ -778,7 +803,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                       <>
                         <td className="border border-slate-300 p-2"><select value={g.category} onChange={(e) => setGoal(g.id, { category: e.target.value })} className="w-24 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold">{PLAN_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></td>
                         <td className="border border-slate-300 p-2"><select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="w-16 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold"><option value="">-</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></td>
-                        <td className="border border-slate-300 p-2"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} className="w-full min-w-[430px] resize-y rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900" /></td>
+                        <td className="border border-slate-300 p-2"><textarea value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} rows={4} style={g.color ? { color: g.color } : undefined} className="w-full min-w-[430px] resize-y rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900" /><div className="mt-1"><ColorDots goal={g} /></div></td>
                         <td className="border border-slate-300 p-2"><input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} className="w-12 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
                         <td className="border border-slate-300 p-2"><input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} className="w-12 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
                         <td className="border border-slate-300 p-2"><input value={g.budget} onChange={(e) => setGoal(g.id, { budget: e.target.value })} className="w-20 rounded border border-slate-200 px-2 py-1.5 text-sm" /></td>
