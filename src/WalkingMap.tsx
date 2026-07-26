@@ -2023,9 +2023,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         const { place, snapshots, loading: historyLoading, latestVisit, vendor: detailVendor, advice } = mobileDetail;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
-        // 연락처가 여러 개(키맨 여러 명)면 줄 단위로 나눠 각각 통화 버튼을 단다
-        const phoneLines = place.phone.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-          .flatMap((line) => (line.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/g) || []).map((num) => ({ line, num })));
+        // 연락처가 여러 개(키맨 여러 명)면 번호 앞에서 잘라 "번호+이름" 세그먼트로 나누고,
+        // 같은 번호는 한 번만 (한 줄에 번호가 여러 개거나 중복 기재돼도 라벨-버튼이 어긋나지 않게)
+        const phoneLines = (() => {
+          const seen = new Map<string, { line: string; num: string }>();
+          for (const rawLine of place.phone.split(/\r?\n/)) {
+            for (const segment of rawLine.split(/(?=0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})/)) {
+              const text = segment.trim();
+              const num = text.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/)?.[0];
+              if (!num) continue;
+              const key = num.replace(/[^0-9]/g, "");
+              if (!seen.has(key)) seen.set(key, { line: text, num });
+            }
+          }
+          return Array.from(seen.values());
+        })();
         return <div className="fixed inset-0 z-[2300] flex flex-col bg-slate-50 text-slate-900 lg:hidden">
           <header className="shrink-0 border-b-4 bg-[#087EA4] pt-[env(safe-area-inset-top)] text-white" style={{ borderBottomColor: meta.color }}>
             <div className="flex h-14 items-center gap-2 px-3">

@@ -64,6 +64,11 @@ Deno.serve(async (req) => {
     });
     const detail = await response.text().catch(() => "");
     if (!response.ok) return Response.json({ error: `발송 웹훅 실패(${response.status}): ${detail.slice(0, 200)}` }, { status: 502, headers: corsHeaders });
+    // GAS 웹훅은 항상 HTTP 200을 주므로 본문의 ok 플래그로 실패를 감지한다
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed && parsed.ok === false) return Response.json({ error: `발송 실패: ${String(parsed.error || "").slice(0, 200)}` }, { status: 502, headers: corsHeaders });
+    } catch { /* JSON이 아니면 성공으로 간주 */ }
     return Response.json({ ok: true }, { headers: corsHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: corsHeaders });

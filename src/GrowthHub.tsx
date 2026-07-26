@@ -304,6 +304,100 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
   const regularGoals = useMemo(() => plan.goals.filter((goal) => goal.category !== "미션"), [plan.goals]);
   const missionGoals = useMemo(() => plan.goals.filter((goal) => goal.category === "미션"), [plan.goals]);
 
+  // 기간·인원 필터된 주간 기록 전체를 AI로 요약 (핵심 배움·반복 주제·인원별 강점·다음 분기 제안)
+  const [aiSummaryBusy, setAiSummaryBusy] = useState(false);
+  const runAiSummary = async () => {
+    if (aiSummaryBusy) return;
+    if (!rows.length) { setMessage("요약할 기록이 없습니다. 기간·직원을 확인하세요."); return; }
+    setAiSummaryBusy(true);
+    setMessage("");
+    try {
+      const corpus = rows.map((row) => {
+        const parts = recordTypes
+          .map(([key, label]) => (String(row[key] || "").trim() ? `${label}: ${row[key]}` : ""))
+          .filter(Boolean);
+        return parts.length ? `[${weekDisplay(row.weekStart)} · ${row.author}]\n${parts.join("\n")}` : "";
+      }).filter(Boolean).join("\n\n").slice(0, 14000);
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/growth-note-transform`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+        body: JSON.stringify({
+          text: corpus,
+          instruction: "아래는 CS팀의 주간 성장 기록 모음이다. 팀 학습 분석가로서 사실에 근거해 간결한 분기 학습 요약을 작성하라. 형식: [핵심 배움 TOP 5](번호 목록, 각 1줄) / [반복 등장 주제](2~4개) / [인원별 강점](이름: 한 줄) / [다음 분기 제안](3개, 실행 가능하게). 기록에 없는 내용은 지어내지 않는다.",
+          fields: ["핵심 배움 TOP 5", "반복 등장 주제", "인원별 강점", "다음 분기 제안"],
+        }),
+      });
+      if (!res.ok) throw new Error(`AI 요약 실패(${res.status})`);
+      const data = await res.json();
+      const result = String(data.result || data.text || data.output || "").trim();
+      if (!result) throw new Error("AI 응답이 비어 있습니다.");
+      setGatherResult({ title: `🤖 AI 학습 요약 (기록 ${rows.length}건 기준)`, text: result });
+    } catch (e) {
+      setMessage((e as Error).message || "AI 요약에 실패했습니다.");
+    } finally {
+      setAiSummaryBusy(false);
+    }
+  };
+
+  // 분기계획표 시트 불러오기 (dashboard-MG result-sheet-sync 웹앱 호출 — action=tabs/goals)
+  const [planImport, setPlanImport] = useState<{ open: boolean; url: string; sheetId: string; tabs: Array<{ name: string; gid: string }>; gid: string; busy: string }>(() => {
+    let saved = { url: "", sheetId: "" };
+    try { saved = { ...saved, ...JSON.parse(localStorage.getItem("plan_sheet_api_v1") || "{}") }; } catch { /* 무시 */ }
+    return { open: false, url: saved.url, sheetId: saved.sheetId, tabs: [], gid: "", busy: "" };
+  });
+  const planApi = (params: string) => {
+    const base = planImport.url.trim().split("?")[0];
+    const sheetPart = planImport.sheetId.trim() ? `&sheetId=${encodeURIComponent(planImport.sheetId.trim())}` : "";
+    return fetch(`${base}?${params}${sheetPart}`).then((res) => res.json());
+  };
+  const loadPlanTabs = async () => {
+    if (!planImport.url.trim()) { setMessage("시트 연동 웹앱(/exec) 주소를 입력하세요."); return; }
+    setPlanImport((cur) => ({ ...cur, busy: "tabs" }));
+    try {
+      localStorage.setItem("plan_sheet_api_v1", JSON.stringify({ url: planImport.url.trim(), sheetId: planImport.sheetId.trim() }));
+      const data = await planApi("action=tabs");
+      if (!data.ok) throw new Error(data.error || "탭 조회 실패");
+      const tabs = (data.tabs || []) as Array<{ name: string; gid: string }>;
+      const planTab = tabs.find((tab) => /계획/.test(tab.name));
+      setPlanImport((cur) => ({ ...cur, tabs, gid: planTab?.gid || tabs[0]?.gid || "" }));
+    } catch (e) {
+      setMessage(`탭 조회 실패: ${(e as Error).message} — 주소와 시트 공유를 확인하세요.`);
+    } finally {
+      setPlanImport((cur) => ({ ...cur, busy: "" }));
+    }
+  };
+  const importPlanFromSheet = async (replace: boolean) => {
+    if (!planImport.gid) { setMessage("불러올 탭을 선택하세요."); return; }
+    setPlanImport((cur) => ({ ...cur, busy: "import" }));
+    try {
+      // 계획표 규칙: C열(3)=기본업무, I열(9)=미션업무 — 현재 선택 분기 구역만
+      const [regular, mission] = await Promise.all([
+        planApi(`action=goals&gid=${planImport.gid}&goalCol=3&quarter=${encodeURIComponent(`${quarter}분기`)}`),
+        planApi(`action=goals&gid=${planImport.gid}&goalCol=9&quarter=${encodeURIComponent(`${quarter}분기`)}`),
+      ]);
+      const toGoals = (data: { ok: boolean; rows?: Array<{ gubun: string; goal: string; months: Array<{ text: string }>; merged: boolean }> }, isMission: boolean): LevelGoal[] =>
+        (data.ok && data.rows ? data.rows : []).map((row) => ({
+          id: crypto.randomUUID(),
+          category: isMission ? "미션" : ((PLAN_CATEGORIES as readonly string[]).includes(row.gubun) ? row.gubun : "자기개발"),
+          grade: "",
+          title: row.goal,
+          currentLevel: "", targetLevel: "", budget: "", reflectedBudget: "",
+          month1: row.months?.[0]?.text || "", month2: row.months?.[1]?.text || "", month3: row.months?.[2]?.text || "",
+          progress: 0,
+          resultMerged: !!row.merged,
+        }));
+      const imported = [...toGoals(regular, false), ...toGoals(mission, true)];
+      if (!imported.length) { setMessage(`시트의 ${quarter}분기 구역에서 목표를 찾지 못했습니다.`); return; }
+      setPlan({ ...plan, author: person, year, quarter, goals: replace ? imported : [...plan.goals, ...imported] });
+      setPlanImport((cur) => ({ ...cur, open: false }));
+      setMessage(`시트에서 ${imported.length}개 목표를 불러왔습니다. 확인 후 저장을 눌러주세요.`);
+    } catch (e) {
+      setMessage(`불러오기 실패: ${(e as Error).message}`);
+    } finally {
+      setPlanImport((cur) => ({ ...cur, busy: "" }));
+    }
+  };
+
   const openGatherResult = (key: "growth" | "learning") => {
     const text = key === "growth" ? buildGrowthGatherText(rows) : buildLearningGatherText(rows);
     if (text.includes("모을") && text.includes("없습니다")) {
@@ -507,6 +601,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
+              <button onClick={() => void runAiSummary()} disabled={aiSummaryBusy} className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 disabled:opacity-50">{aiSummaryBusy ? "요약 중…" : "🤖 AI 학습 요약"}</button>
               <button onClick={() => openGatherResult("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 모음</button>
               <button onClick={() => openGatherResult("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운점 모음</button>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용 또는 직원 검색" className="min-w-64 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" />
@@ -603,6 +698,36 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         </>
       )}
 
+      {planImport.open && (
+        <div className="fixed inset-0 z-[240] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPlanImport((cur) => ({ ...cur, open: false }))}>
+          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <b className="text-slate-950">분기계획표 시트에서 불러오기</b>
+              <button type="button" onClick={() => setPlanImport((cur) => ({ ...cur, open: false }))} className="text-xs font-bold text-slate-400">닫기</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+              <p className="text-xs font-semibold leading-5 text-slate-500">분기계획표 시트에 연동된 Apps Script 웹앱(/exec) 주소를 넣고 탭을 고르면, 현재 선택된 <b className="text-slate-800">{year}년 {quarter}분기</b> 구역의 기본업무(C열)·미션업무(I열)를 가져옵니다.</p>
+              <label className="block text-xs font-bold text-slate-500">웹앱 /exec 주소
+                <input value={planImport.url} onChange={(e) => setPlanImport((cur) => ({ ...cur, url: e.target.value }))} placeholder="https://script.google.com/macros/s/…/exec" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              </label>
+              <label className="block text-xs font-bold text-slate-500">시트 ID (선택 — 다른 직원 시트를 열 때)
+                <input value={planImport.sheetId} onChange={(e) => setPlanImport((cur) => ({ ...cur, sheetId: e.target.value }))} placeholder="스프레드시트 URL의 /d/ 뒤 ID" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              </label>
+              <button type="button" disabled={planImport.busy === "tabs"} onClick={() => void loadPlanTabs()} className="rounded-md bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{planImport.busy === "tabs" ? "조회 중…" : "탭 조회"}</button>
+              {planImport.tabs.length > 0 && <label className="block text-xs font-bold text-slate-500">불러올 탭
+                <select value={planImport.gid} onChange={(e) => setPlanImport((cur) => ({ ...cur, gid: e.target.value }))} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  {planImport.tabs.map((tab) => <option key={tab.gid} value={tab.gid}>{tab.name}</option>)}
+                </select>
+              </label>}
+            </div>
+            {planImport.tabs.length > 0 && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button type="button" disabled={planImport.busy === "import"} onClick={() => void importPlanFromSheet(false)} className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 disabled:opacity-50">기존에 추가</button>
+              <button type="button" disabled={planImport.busy === "import"} onClick={() => { if (plan.goals.length === 0 || window.confirm(`현재 목표 ${plan.goals.length}개를 시트 내용으로 대체할까요?`)) void importPlanFromSheet(true); }} className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-black text-white disabled:opacity-50">{planImport.busy === "import" ? "가져오는 중…" : "대체하여 불러오기"}</button>
+            </div>}
+          </div>
+        </div>
+      )}
+
       {!loading && tab === "plan" && (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -611,6 +736,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <p className="text-xs font-semibold text-slate-500">시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다.</p>
             </div>
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <button disabled={!person} onClick={() => setPlanImport((cur) => ({ ...cur, open: true }))} className="col-span-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-40 sm:px-4 sm:text-sm">📄 시트에서 불러오기</button>
               <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">기본업무 추가</button>
               <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">미션업무 추가</button>
             </div>

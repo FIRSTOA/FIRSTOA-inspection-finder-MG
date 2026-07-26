@@ -21,94 +21,267 @@ const STATUS_TONE: Record<string, string> = {
   대기: "bg-rose-50 text-rose-600", 처리중: "bg-amber-50 text-amber-700", 완료: "bg-emerald-50 text-emerald-700",
 };
 
-type MisuRow = { vendor: string; months: string; balance: number; date: string; region: string };
+type SheetRecord = Record<string, unknown>;
+
+const TEAM_NAMES = ["A", "B", "C", "D", "E"];
+function teamOfSource(source: string) {
+  return String(source || "").match(/수도권([A-E])/)?.[1] || "";
+}
+function str(row: SheetRecord, key: string) { return String(row[key] ?? "").trim(); }
+function won(value: string | number) {
+  const digits = Number(String(value).replace(/[^\d]/g, "")) || 0;
+  return digits ? `₩${digits.toLocaleString()}` : "-";
+}
+
+// 행 클릭 상세 팝업 — 지정한 필드 순서대로, 값 있는 것만
+function SheetDetailModal({ title, row, fields, onClose }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void }) {
+  const extras = fields.filter((key) => str(row, key));
+  return (
+    <div className="fixed inset-0 z-[220] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+      <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="min-w-0 truncate text-base font-black text-slate-950">{title}</div>
+          <button type="button" onClick={onClose} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+          {extras.map((key) => (
+            <div key={key} className="grid grid-cols-[110px_minmax(0,1fr)] gap-2 border-b border-slate-100 py-2.5">
+              <div className="text-xs font-black text-slate-400">{key}</div>
+              <div className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-800">{str(row, key)}</div>
+            </div>
+          ))}
+          {!extras.length && <div className="py-8 text-center text-sm font-bold text-slate-400">표시할 상세 정보가 없습니다.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "입력일", "입력자", "_출처", "원문"];
 
 function MisuBoard() {
-  const [rows, setRows] = useState<MisuRow[]>([]);
+  const [rows, setRows] = useState<SheetRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [team, setTeam] = useState("전체");
   const [region, setRegion] = useState("전체");
+  const [monthsFilter, setMonthsFilter] = useState<"전체" | "1~2개월" | "3개월+">("전체");
+  const [sort, setSort] = useState<"잔액순" | "개월순" | "최신순">("잔액순");
   const [query, setQuery] = useState("");
+  const [detail, setDetail] = useState<SheetRecord | null>(null);
 
   useEffect(() => {
     let active = true;
-    const select = encodeURIComponent("_업체명,미수개월,미수잔액,입력일,지역");
-    const fallback = encodeURIComponent("_업체명,미수개월,미수잔액,입력일");
     const sourceCol = encodeURIComponent("_출처");
-    const fetchRows = (cols: string) => selectAllRows<Record<string, unknown>>("misu", `select=${cols}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`);
-    fetchRows(select).catch(() => fetchRows(fallback))
+    selectAllRows<SheetRecord>("misu", `select=*&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`)
       .then((data) => {
         if (!active) return;
         // 업체별 최신 1건, 잔액 있는 건만 (워킨맵 미수 배지와 같은 기준)
-        const map = new Map<string, MisuRow>();
+        const map = new Map<string, SheetRecord & { _team: string; _balance: number; _date: string }>();
         for (const row of data) {
-          const vendor = String(row["_업체명"] || "").trim();
+          const vendor = str(row, "_업체명");
           if (!vendor) continue;
-          const balance = Number(String(row["미수잔액"] || "").replace(/[^\d]/g, "")) || 0;
-          const match = String(row["입력일"] || "").match(/(\d{4})[.\-/]\s*(\d{1,2})(?:[.\-/]\s*(\d{1,2}))?/);
+          const balance = Number(str(row, "미수잔액").replace(/[^\d]/g, "")) || 0;
+          const match = str(row, "입력일").match(/(\d{4})[.\-/]\s*(\d{1,2})(?:[.\-/]\s*(\d{1,2}))?/);
           const date = match ? `${match[1]}-${match[2].padStart(2, "0")}-${(match[3] || "1").padStart(2, "0")}` : "";
           const prev = map.get(vendor);
-          if (!prev || date > prev.date) map.set(vendor, { vendor, months: String(row["미수개월"] || "").replace(/개월/g, "").trim(), balance, date, region: String(row["지역"] || "").trim() });
+          if (!prev || date > prev._date) map.set(vendor, { ...row, _team: teamOfSource(str(row, "_출처")), _balance: balance, _date: date });
         }
-        setRows(Array.from(map.values()).filter((r) => r.balance > 0).sort((a, b) => b.balance - a.balance));
+        setRows(Array.from(map.values()).filter((r) => (r as { _balance: number })._balance > 0));
       })
       .catch((e) => { if (active) setError((e as Error).message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
-  const regions = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => r.region).filter(Boolean))).sort()], [rows]);
+  const regions = useMemo(() => {
+    const pool = team === "전체" ? rows : rows.filter((r) => str(r, "_team") === team);
+    return ["전체", ...Array.from(new Set(pool.map((r) => str(r, "지역")).filter(Boolean))).sort()];
+  }, [rows, team]);
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return rows.filter((r) => (region === "전체" || r.region === region) && (!keyword || r.vendor.toLowerCase().includes(keyword)));
-  }, [rows, region, query]);
-  const totalBalance = filtered.reduce((sum, r) => sum + r.balance, 0);
+    const list = rows.filter((r) => {
+      if (team !== "전체" && str(r, "_team") !== team) return false;
+      if (region !== "전체" && str(r, "지역") !== region) return false;
+      const months = Number(str(r, "미수개월").replace(/[^\d]/g, "")) || 0;
+      if (monthsFilter === "1~2개월" && months >= 3) return false;
+      if (monthsFilter === "3개월+" && months < 3) return false;
+      if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+    const balanceOf = (r: SheetRecord) => Number(r["_balance"]) || 0;
+    const monthsOf = (r: SheetRecord) => Number(str(r, "미수개월").replace(/[^\d]/g, "")) || 0;
+    if (sort === "잔액순") return [...list].sort((a, b) => balanceOf(b) - balanceOf(a));
+    if (sort === "개월순") return [...list].sort((a, b) => monthsOf(b) - monthsOf(a) || balanceOf(b) - balanceOf(a));
+    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])));
+  }, [rows, team, region, monthsFilter, sort, query]);
+
+  const totalBalance = filtered.reduce((sum, r) => sum + (Number(r["_balance"]) || 0), 0);
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {([
           [`${filtered.length}곳`, "미수 업체"],
-          [`₩${totalBalance.toLocaleString()}`, "미수 잔액 합계"],
-          [`${filtered.filter((r) => Number(r.months) >= 3).length}곳`, "3개월 이상"],
+          [won(totalBalance), "잔액 합계"],
+          [`${filtered.filter((r) => (Number(str(r, "미수개월").replace(/[^\d]/g, "")) || 0) >= 3).length}곳`, "3개월 이상"],
         ] as [string, string][]).map(([value, label]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
-            <div className="truncate text-lg font-black text-slate-950">{value}</div>
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+            <div className="truncate text-base font-black text-slate-950 sm:text-lg">{value}</div>
             <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
           </div>
         ))}
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold" />
-        <div className="flex flex-wrap gap-1">
-          {regions.map((name) => <button key={name} type="button" onClick={() => setRegion(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${region === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 text-[10px] font-black text-slate-400">팀</span>
+          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => { setTeam(name); setRegion("전체"); }} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+        </div>
+        {regions.length > 2 && <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 text-[10px] font-black text-slate-400">지역</span>
+          {regions.map((name) => <button key={name} type="button" onClick={() => setRegion(name)} className={`rounded px-2 py-1 text-[11px] font-black ${region === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+        </div>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
+          {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+          <span className="ml-2 flex rounded-md bg-slate-100 p-0.5">
+            {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => setSort(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+          </span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
       </div>
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_60px_110px_80px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_80px_80px_130px_90px]">
-          <span>업체명</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
+        <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+          <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
         </div>
         <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.map((r) => (
-            <div key={r.vendor} className="grid grid-cols-[minmax(0,1fr)_60px_110px_80px] items-center gap-2 px-4 py-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_80px_80px_130px_90px]">
-              <span className="truncate font-black text-slate-800">{r.vendor}</span>
-              <span className="hidden font-bold text-slate-500 sm:block">{r.region || "-"}</span>
-              <span className={`text-right font-black ${Number(r.months) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{r.months || "-"}개월</span>
-              <span className="text-right font-black text-slate-800">₩{r.balance.toLocaleString()}</span>
-              <span className="text-right font-bold text-slate-400">{r.date.slice(2) || "-"}</span>
-            </div>
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-2.5 text-left text-xs hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+              <span className="truncate font-black text-slate-800">{str(r, "_업체명")}</span>
+              <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>
+              <span className="hidden truncate font-bold text-slate-500 sm:block">{str(r, "지역") || "-"}</span>
+              <span className={`text-right font-black ${(Number(str(r, "미수개월").replace(/[^\d]/g, "")) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{str(r, "미수개월") || "-"}</span>
+              <span className="text-right font-black text-slate-800">{won(Number(r["_balance"]) || 0)}</span>
+              <span className="text-right font-bold text-slate-400">{String(r["_date"] || "").slice(2) || "-"}</span>
+            </button>
           ))}
           {!filtered.length && <div className="p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 미수 업체가 없어요.</div>}
         </div>
       </section>}
+      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+const OVERAGE_DETAIL_FIELDS = ["_업체명", "날짜", "접수내용", "컬러초과료", "흑백초과료", "합계", "마감방식", "기본매수", "초과장당금액", "모델명", "자산번호", "등급", "임대여부", "기본금액", "연평균", "계약일", "종료일", "남은개월", "미수개월수", "미수금액", "특이사항", "_출처", "_원문"];
+
+function OverageBoard() {
+  const [rows, setRows] = useState<SheetRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [grade, setGrade] = useState("전체");
+  const [yearMonth, setYearMonth] = useState("전체");
+  const [sort, setSort] = useState<"최신순" | "금액순">("최신순");
+  const [query, setQuery] = useState("");
+  const [detail, setDetail] = useState<SheetRecord | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const sourceCol = encodeURIComponent("_출처");
+    selectAllRows<SheetRecord>("overage", `select=*&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.desc`)
+      .then((data) => {
+        if (!active) return;
+        setRows(data.map((row) => {
+          const match = str(row, "날짜").match(/(\d{4})[.\-/]\s*(\d{1,2})(?:[.\-/]\s*(\d{1,2}))?/);
+          const date = match ? `${match[1]}-${match[2].padStart(2, "0")}-${(match[3] || "1").padStart(2, "0")}` : "";
+          return { ...row, _date: date, _total: Number(str(row, "합계").replace(/[^\d]/g, "")) || 0 };
+        }));
+      })
+      .catch((e) => { if (active) setError((e as Error).message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const yearMonths = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => String(r["_date"] || "").slice(0, 7)).filter(Boolean))).sort().reverse().slice(0, 18)], [rows]);
+  const grades = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => str(r, "등급")).filter(Boolean))).sort()], [rows]);
+
+  const filtered = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    const list = rows.filter((r) => {
+      if (grade !== "전체" && str(r, "등급") !== grade) return false;
+      if (yearMonth !== "전체" && String(r["_date"] || "").slice(0, 7) !== yearMonth) return false;
+      if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword) && !str(r, "접수내용").toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+    if (sort === "금액순") return [...list].sort((a, b) => (Number(b["_total"]) || 0) - (Number(a["_total"]) || 0));
+    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])));
+  }, [rows, grade, yearMonth, sort, query]);
+
+  const totalSum = filtered.reduce((sum, r) => sum + (Number(r["_total"]) || 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        {([
+          [`${filtered.length}건`, "초과 내역"],
+          [won(totalSum), "합계 금액"],
+          [`${new Set(filtered.map((r) => str(r, "_업체명"))).size}곳`, "업체 수"],
+        ] as [string, string][]).map(([value, label]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+            <div className="truncate text-base font-black text-slate-950 sm:text-lg">{value}</div>
+            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 text-[10px] font-black text-slate-400">년월</span>
+          <select value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-600">
+            {yearMonths.map((name) => <option key={name}>{name}</option>)}
+          </select>
+          <span className="ml-2 w-8 text-[10px] font-black text-slate-400">등급</span>
+          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="flex rounded-md bg-slate-100 p-0.5">
+            {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => setSort(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+          </span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+        </div>
+      </div>
+      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {!loading && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+          <span>업체명 · 접수내용</span><span className="hidden sm:block">등급</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
+        </div>
+        <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
+          {filtered.slice(0, 300).map((r) => (
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-2.5 text-left text-xs hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+              <span className="min-w-0">
+                <span className="block truncate font-black text-slate-800">{str(r, "_업체명")}</span>
+                {str(r, "접수내용") && <span className="block truncate text-[11px] font-semibold text-slate-500">{str(r, "접수내용")}</span>}
+              </span>
+              <span className="hidden font-bold text-slate-500 sm:block">{str(r, "등급") || "-"}</span>
+              <span className="hidden truncate font-bold text-slate-500 sm:block">{str(r, "마감방식") || "-"}</span>
+              <span className="text-right font-black text-slate-800">{won(Number(r["_total"]) || 0)}</span>
+              <span className="text-right font-bold text-slate-400">{String(r["_date"] || "").slice(2) || "-"}</span>
+            </button>
+          ))}
+          {filtered.length > 300 && <div className="p-3 text-center text-[11px] font-bold text-slate-400">상위 300건만 표시 — 필터·검색으로 좁혀주세요</div>}
+          {!filtered.length && <div className="p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 초과 내역이 없어요.</div>}
+        </div>
+      </section>}
+      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 초과료 상세`} row={detail} fields={OVERAGE_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
     </div>
   );
 }
 
 export default function DeptRequests({ author }: { author: string }) {
-  const [tab, setTab] = useState<"requests" | "misu">("requests");
+  const [tab, setTab] = useState<"requests" | "misu" | "overage">("requests");
   const [rows, setRows] = useState<DeptRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -190,11 +363,13 @@ export default function DeptRequests({ author }: { author: string }) {
             📥 요청 목록 {waiting > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black text-white">{waiting}</span>}
           </button>
           <button type="button" onClick={() => setTab("misu")} className={`rounded px-4 py-2 text-sm font-black ${tab === "misu" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>💰 미수 현황</button>
+          <button type="button" onClick={() => setTab("overage")} className={`rounded px-4 py-2 text-sm font-black ${tab === "overage" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>📈 초과료 현황</button>
         </div>
         {tab === "requests" && <button type="button" onClick={() => setFormOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">+ 요청 등록</button>}
       </div>
 
       {tab === "misu" && <MisuBoard />}
+      {tab === "overage" && <OverageBoard />}
 
       {tab === "requests" && <>
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

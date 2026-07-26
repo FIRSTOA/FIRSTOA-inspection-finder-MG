@@ -5272,14 +5272,16 @@ export default function App() {
 
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
+  // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const navGroups = [
-    { title: "외근 업무", items: [["field", "FIELD"], ["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"]] },
-    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
-    { title: "지원 도구", items: [["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
+    { title: "자재·요청", items: [["stock", "기기/부품 재고"], ["deptRequests", "부서 요청·현황"]] },
+    { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
+    { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
+    { title: "고객·홍보", items: [["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["stock", "기기/부품 재고"] as [typeof screen, string], ["deptRequests", "부서 요청"] as [typeof screen, string]];
-  const lowerItems = [["selfdev", "자기개발/지식공유"]] as [typeof screen, string][];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
+  const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
