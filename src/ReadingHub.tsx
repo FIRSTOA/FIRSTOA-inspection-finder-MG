@@ -12,12 +12,12 @@ export type BoardLabels = {
   pickLabel: string; submitLabel: string; writeHint: string;
 };
 const READING_LABELS: BoardLabels = {
-  heading: "📚 독서", sub: "책에서 만난 좋은 글을 익명으로 나눕니다. 추천 1개 = 1포인트.",
+  heading: "📚 독서", sub: "책에서 만난 좋은 글을 익명으로 나눕니다. 추천 1개 = 0.2P.",
   titlePlaceholder: "책 제목·출처 (선택)", contentPlaceholder: "마음에 남은 구절이나 생각을 적어주세요.",
   pickLabel: "📖 오늘의 구절", submitLabel: "익명으로 올리기", writeHint: "좋은 글 남기기",
 };
 const TIP_LABELS: BoardLabels = {
-  heading: "💡 배움·팁 공유", sub: "업무 팁, 유용한 강의·아티클 링크를 익명으로 나눕니다. 추천 1개 = 1포인트.",
+  heading: "💡 배움·팁 공유", sub: "업무 팁, 유용한 강의·아티클 링크를 익명으로 나눕니다. 추천 1개 = 0.2P.",
   titlePlaceholder: "주제·출처 (선택)", contentPlaceholder: "배운 것, 꿀팁, 링크(자동으로 클릭 가능)를 공유해주세요.",
   pickLabel: "💡 오늘의 팁", submitLabel: "익명으로 공유", writeHint: "배움·팁 남기기",
 };
@@ -33,6 +33,7 @@ type ReadingVote = { post_id: string; voter: string; created_at?: string };
 type SortMode = "latest" | "top";
 
 const LONG_POST = 280; // 이보다 길면 접어서 보여준다
+const fmtP = (votes: number) => (Math.round(votes * 2) / 10).toFixed(1); // 추천 1개 = 0.2P
 
 export default function ReadingHub({ author, kind = "reading" }: { author: string; kind?: "reading" | "tip" }) {
   const labels = kind === "tip" ? TIP_LABELS : READING_LABELS;
@@ -208,7 +209,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           <div className="flex gap-4 text-center">
             <div><div className="text-lg font-black">{posts.length}</div><div className="text-[10px] font-bold text-slate-300">전체 글</div></div>
             <div><div className="text-lg font-black">{weeklyNew}</div><div className="text-[10px] font-bold text-slate-300">이번 주</div></div>
-            <div><div className="text-lg font-black text-amber-300">{myPoints}P</div><div className="text-[10px] font-bold text-slate-300">내 포인트</div></div>
+            <div><div className="text-lg font-black text-amber-300">{fmtP(myPoints)}P</div><div className="text-[10px] font-bold text-slate-300">내 포인트</div></div>
           </div>
         </div>
       </section>
@@ -257,13 +258,13 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
               ))}
             </div>
           </div>
-          <p className="mt-1 text-[10px] font-bold text-slate-400">받은 추천 1개 = 1포인트. 어떤 글인지는 공개되지 않아요.</p>
+          <p className="mt-1 text-[10px] font-bold text-slate-400">받은 추천 1개 = 0.2P. 어떤 글인지는 공개되지 않아요.</p>
           <div className="mt-3 space-y-1.5">
             {!points.length && <div className="py-6 text-center text-xs font-bold text-slate-400">{pointsMonthly ? "이번 달 추천 기록이 없어요." : "아직 추천 기록이 없어요."}</div>}
             {points.map(([name, score], index) => (
               <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
-                <span className="text-xs font-black text-amber-600">{score}P</span>
+                <span className="text-xs font-black text-amber-600">{fmtP(score)}P</span>
               </div>
             ))}
           </div>

@@ -11,6 +11,7 @@ import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
 import SelfDevHub from "./SelfDev";
+import CopierNotes from "./CopierNotes";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
@@ -4543,7 +4544,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes">("field"); // 좌측 메뉴 화면
   const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
@@ -5241,12 +5242,12 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
-    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"]] },
-    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"], ["selfdev", "자기개발"]] },
+    { title: "외근 업무", items: [["field", "FIELD"], ["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"]] },
+    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "지원 도구", items: [["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["selfdev", "자기개발/지식공유"] as [typeof screen, string]];
   const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
@@ -5273,7 +5274,7 @@ export default function App() {
                 </button>
               ))}
               {navGroups.map((group) => (
-                <div key={group.title}>
+                <div key={group.title} className="rounded-xl border border-slate-200 p-1">
                   <button type="button" onClick={() => toggleNavGroup(group.title)} className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
                     <span>{group.title}</span>
                     <span className="text-xs text-slate-400">{isGroupOpen(group) ? "접기" : "펼치기"}</span>
@@ -5315,17 +5316,17 @@ export default function App() {
             </button>
           </div>
           <nav className={`min-h-0 flex-1 space-y-4 overflow-y-auto py-4 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
-            <div className="space-y-1">
+            <div className="space-y-1 rounded-lg border border-white/10 p-1.5">
             {standaloneItems.map(([key, label]) => (
               <button key={key} type="button" title={label} onClick={() => setScreen(key)}
                 className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label) : label}</span>
+                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label) : label}</span>
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
             </div>
             {navGroups.map((group) => (
-              <div key={group.title}>
+              <div key={group.title} className="rounded-lg border border-white/10 p-1.5">
                 <button type="button" title={group.title} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : toggleNavGroup(group.title)} className={`mb-1 flex w-full items-center rounded-md py-2 text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "justify-center px-1" : "justify-between px-3 text-left"}`}>
                   <span>{sidebarCollapsed ? group.title.slice(0, 2) : group.title}</span>
                   {!sidebarCollapsed && <span className="text-[11px]">{isGroupOpen(group) ? "접기" : "펼치기"}</span>}
@@ -5410,6 +5411,7 @@ export default function App() {
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
         {screen === "selfdev" && <SelfDevHub author={author} />}
+        {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}

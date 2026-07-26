@@ -319,6 +319,7 @@ export type ServiceReceptionRow = {
   notes: string; report_text: string; status: string; sent_room: string;
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
   lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
+  address_resolved_at?: string | null; address_resolved_by?: string;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
@@ -340,7 +341,7 @@ export async function getServiceReceptionById(id: string): Promise<ServiceRecept
 export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
 }
-export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed">>): Promise<void> {
+export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed" | "address_resolved_at" | "address_resolved_by">>): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);
 }
 
