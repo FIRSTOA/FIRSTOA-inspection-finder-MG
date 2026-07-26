@@ -61,7 +61,7 @@ async function loadSources(): Promise<Sources> {
   const prevQuarter = quarter === 1 ? 4 : quarter - 1;
   const startMonth = (quarter - 1) * 3;
   const inspectionMonths = [startMonth + 1, startMonth + 2, startMonth + 3];
-  const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,입력일");
+  const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
   const [misuRows, renewalRows, quarterRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
@@ -74,11 +74,14 @@ async function loadSources(): Promise<Sources> {
   for (const row of misuRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
-    const digits = String(row["미수잔액"] || "").replace(/[^\d]/g, "");
+    // 팀마다 컬럼이 달라 미수잔액 → '실제 잔액' 순으로 읽는다 (B팀 시트는 실제 잔액만 있음)
+    const balanceText = String(row["미수잔액"] || "").trim() || String(row["실제 잔액"] || "").trim();
+    const monthsText = String(row["미수개월"] || "").trim() || String(row["실제 개월수"] || "").trim();
+    const digits = balanceText.replace(/[^\d]/g, "");
     const date = normMisuDate(String(row["입력일"] || ""));
     const prev = misu.get(key);
     // 완납(잔액 0) 기록도 최신이면 유지 — "언제 완납됐다"를 보여줘야 이중 체크가 없다.
-    if (!prev || date > prev.date) misu.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date, cleared: !digits || Number(digits) === 0 });
+    if (!prev || date > prev.date) misu.set(key, { months: monthsText, balance: balanceText, date, cleared: !digits || Number(digits) === 0 });
   }
 
   const inspection = new Map<string, { quarter: number; label: string }[]>();

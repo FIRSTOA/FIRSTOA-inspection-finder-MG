@@ -1041,7 +1041,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   // 현재 미수: 미수팀 시트(_출처가 "시트:...")만 사용(카톡은 과거 이력이라 제외). 거래처별 최신 1건.
   const loadMisu = useCallback(() => {
-    const select = encodeURIComponent("_업체명,미수개월,미수잔액,입력일,_출처");
+    const select = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일,_출처");
     const sourceCol = encodeURIComponent("_출처");
     void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`)
       .then((rows) => {
@@ -1049,11 +1049,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
           if (!key) continue;
-          const digits = String(row["미수잔액"] || "").replace(/[^\d]/g, "");
+          // 팀마다 컬럼이 달라 미수잔액 → '실제 잔액' 순으로 읽는다 (B팀 시트는 실제 잔액만 있음)
+          const balanceText = String(row["미수잔액"] || "").trim() || String(row["실제 잔액"] || "").trim();
+          const monthsText = String(row["미수개월"] || "").trim() || String(row["실제 개월수"] || "").trim();
+          const digits = balanceText.replace(/[^\d]/g, "");
           if (!digits || Number(digits) === 0) continue; // 잔액 0 = 해소된 건, 현재 미수 아님
           const date = normMisuDate(String(row["입력일"] || ""));
           const prev = map.get(key);
-          if (!prev || date > prev.date) map.set(key, { months: String(row["미수개월"] || "").trim(), balance: String(row["미수잔액"] || "").trim(), date });
+          if (!prev || date > prev.date) map.set(key, { months: monthsText, balance: balanceText, date });
         }
         setMisuByVendor(map);
         setMisuFailed(false);
