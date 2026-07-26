@@ -28,3 +28,6 @@ alter table public.as_tickets add column if not exists "receptionId" text not nu
 
 -- 증상 사진 (2026-07-26 추가): 서비스접수 사진 URL 배열
 alter table public.service_receptions add column if not exists photos jsonb not null default '[]'::jsonb;
+
+-- 주소 수정 접수 표시 (2026-07-26 추가): 임대리스트와 다른 주소로 접수된 건 플래그
+alter table public.service_receptions add column if not exists address_changed boolean not null default false;
