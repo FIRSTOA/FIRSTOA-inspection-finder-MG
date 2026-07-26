@@ -12,6 +12,7 @@ import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
+import StockBoard from "./StockBoard";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
@@ -4544,12 +4545,17 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes" | "stock">("field"); // 좌측 메뉴 화면
   const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
+  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("nav_groups_v1") || "") as Record<string, boolean>; } catch { return { "외근 업무": true }; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("nav_groups_v1", JSON.stringify(openNavGroups)); } catch { /* 무시 */ }
+  }, [openNavGroups]);
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
@@ -5247,9 +5253,10 @@ export default function App() {
     { title: "지원 도구", items: [["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["selfdev", "자기개발/지식공유"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["stock", "기기/부품 재고"] as [typeof screen, string]];
+  const lowerItems = [["selfdev", "자기개발/지식공유"]] as [typeof screen, string][];
   const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
-  const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...bottomItems];
+  const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -5290,6 +5297,13 @@ export default function App() {
                   </div>}
                 </div>
               ))}
+              {lowerItems.map(([key, label]) => (
+                <button key={key} type="button"
+                  onClick={() => { setScreen(key); setMenuOpen(false); }}
+                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
+                  {label}
+                </button>
+              ))}
               <div className="border-t border-slate-200 pt-2">
                 {bottomItems.map(([key, label]) => (
                   <button key={key} type="button"
@@ -5320,7 +5334,7 @@ export default function App() {
             {standaloneItems.map(([key, label]) => (
               <button key={key} type="button" title={label} onClick={() => setScreen(key)}
                 className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label) : label}</span>
+                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label === "기기/부품 재고" ? "재고" : label) : label}</span>
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
@@ -5342,6 +5356,15 @@ export default function App() {
                 </div>}
               </div>
             ))}
+            <div className="space-y-1 rounded-lg border border-white/10 p-1.5">
+              {lowerItems.map(([key, label]) => (
+                <button key={key} type="button" title={label} onClick={() => setScreen(key)}
+                  className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+                  <span>{sidebarCollapsed ? "자기" : label}</span>
+                  {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                </button>
+              ))}
+            </div>
           </nav>
           <div className={`shrink-0 border-t border-white/10 py-3 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
             {bottomItems.map(([key, label]) => (
@@ -5412,6 +5435,7 @@ export default function App() {
         {screen === "serviceReception" && <ServiceReception author={author} />}
         {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "copierNotes" && <CopierNotes author={author} />}
+        {screen === "stock" && <StockBoard author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}

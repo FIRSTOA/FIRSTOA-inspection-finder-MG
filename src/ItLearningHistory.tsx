@@ -12,7 +12,6 @@ import {
   Plus,
   Search,
   Settings2,
-  Wrench,
   X,
 } from "lucide-react";
 import { getItTechApiUrl, itTechApi, saveItTechApiUrl, type ItRow, type QuizQuestion, valueByPrefix } from "./itTechApi";
@@ -179,25 +178,16 @@ export default function ItLearningHistory({ author }: { author: string }) {
   return <div className="space-y-4">
     {notice && <div className={`fixed right-4 top-20 z-[5000] max-w-sm rounded-md px-4 py-3 text-sm font-bold text-white shadow-xl ${notice.kind === "success" ? "bg-emerald-600" : "bg-rose-600"}`}>{notice.text}</div>}
 
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><div className="flex items-center gap-2"><Wrench size={19} className="text-blue-600" /><h2 className="text-lg font-black text-slate-950">IT 학습·처리이력</h2></div><p className="mt-1 text-xs font-semibold text-slate-500">PC 처리 경험을 검색하고 기술 지식과 퀴즈로 다시 활용합니다.</p></div>
-        <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-black ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}><Settings2 size={15} />{connected ? "DB 연결됨" : "DB 연결 필요"}</button>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-fit gap-1 overflow-x-auto rounded-md bg-slate-100 p-1">
+        <button type="button" onClick={() => setDisplayMode("original")} className={`flex min-w-max items-center gap-1.5 rounded px-4 py-2 text-sm font-black ${displayMode === "original" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>🖥 원본 화면</button>
+        {VIEWS.map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" onClick={() => { setDisplayMode("integrated"); switchView(key); }} className={`flex min-w-max items-center gap-1.5 rounded px-3 py-2 text-sm font-black ${displayMode === "integrated" && view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}><Icon size={15} />{label}</button>
+        ))}
       </div>
-      {connectionOpen && <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row"><input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="Apps Script 웹 앱 /exec 주소" className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => void saveEndpoint()} className="h-10 rounded-md bg-slate-900 px-4 text-sm font-black text-white">연결 확인</button></div><p className="mx-auto mt-2 max-w-3xl text-[11px] font-semibold text-slate-400">기존 PC DB Apps Script에 API 어댑터를 적용한 뒤 배포 주소를 한 번만 입력합니다.</p></div>}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-        <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
-          {([["original", "원본 화면"], ["integrated", "통합 화면"]] as const).map(([mode, label]) => (
-            <button key={mode} type="button" onClick={() => setDisplayMode(mode)} className={`rounded px-4 py-2 text-sm font-black ${displayMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-          ))}
-        </div>
-        {displayMode === "integrated" && <div className="flex w-fit gap-1 overflow-x-auto rounded-md bg-slate-100 p-1">
-          {VIEWS.map(({ key, label, icon: Icon }) => (
-            <button key={key} type="button" onClick={() => switchView(key)} className={`flex min-w-max items-center gap-1.5 rounded px-3 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}><Icon size={15} />{label}</button>
-          ))}
-        </div>}
-      </div>
-    </section>
+      <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-black ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}><Settings2 size={15} />{connected ? "DB 연결됨" : "DB 연결 필요"}</button>
+    </div>
+    {connectionOpen && <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row"><input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="Apps Script 웹 앱 /exec 주소" className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => void saveEndpoint()} className="h-10 rounded-md bg-slate-900 px-4 text-sm font-black text-white">연결 확인</button></div><p className="mx-auto mt-2 max-w-3xl text-[11px] font-semibold text-slate-400">기존 PC DB Apps Script에 API 어댑터를 적용한 뒤 배포 주소를 한 번만 입력합니다.</p></section>}
 
     {displayMode === "original" && (connected ? <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <iframe title="퍼스트전산 PC DB 원본" src={endpoint} className="block h-[calc(100dvh-190px)] min-h-[680px] w-full border-0 bg-white" allow="clipboard-read; clipboard-write" />

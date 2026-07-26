@@ -28,6 +28,37 @@ const BRAND_TONE: Record<string, string> = {
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };
 
+// content("증상: …\n처리: …\n지역: …" 형식)를 구조화 — 형식이 아니면 raw로 표시
+function parseNoteContent(content: string) {
+  const fields: Record<string, string> = {};
+  let current = "";
+  for (const line of String(content || "").split("\n")) {
+    const match = line.match(/^(증상|처리|지역|레벨|업체)\s*:\s*(.*)$/);
+    if (match) { current = match[1]; fields[current] = match[2]; }
+    else if (current) fields[current] += `\n${line}`;
+  }
+  return fields["처리"] !== undefined ? fields : null;
+}
+
+function NoteBody({ note }: { note: CopierNote }) {
+  const parsed = parseNoteContent(note.content);
+  if (!parsed) return <p className="mt-1.5 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700">{note.content}</p>;
+  const meta = [parsed["업체"], parsed["지역"] && `지역 ${parsed["지역"]}`, parsed["레벨"] && `레벨 ${parsed["레벨"]}`].filter(Boolean).join(" · ");
+  return (
+    <div className="mt-2 space-y-1.5">
+      {meta && <div className="text-xs font-black text-slate-500">{meta}</div>}
+      {parsed["증상"] && <div className="rounded-md bg-rose-50/60 px-3 py-2">
+        <span className="text-[10px] font-black text-rose-500">증상</span>
+        <p className="mt-0.5 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{parsed["증상"]}</p>
+      </div>}
+      <div className="rounded-md bg-emerald-50/60 px-3 py-2">
+        <span className="text-[10px] font-black text-emerald-600">처리</span>
+        <p className="mt-0.5 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{parsed["처리"]}</p>
+      </div>
+    </div>
+  );
+}
+
 function buildQuiz(pool: CopierNote[], count: number): QuizItem[] {
   const usable = pool.filter((note) => note.title.trim() && note.content.trim());
   if (usable.length < 4) return [];
@@ -63,6 +94,16 @@ export default function CopierNotes({ author }: { author: string }) {
     if (!built.length) { window.alert("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요."); return; }
     setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
   };
+  // 오답만 다시: 틀린 문제의 원본 노트로 새 퀴즈 구성
+  const retryWrong = () => {
+    const pool = wrongNotes.map((item) => item.note);
+    const bank = notes.filter((note) => note.title.trim() && note.content.trim());
+    const built = pool.map((note) => {
+      const others = bank.filter((item) => item.id !== note.id).sort(() => Math.random() - 0.5).slice(0, 3);
+      return { note, options: [note, ...others].sort(() => Math.random() - 0.5) };
+    });
+    setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
+  };
   const answerQuiz = (id: string) => {
     if (quizPick || quizIndex < 0 || quizIndex >= quiz.length) return;
     setQuizPick(id);
@@ -96,9 +137,6 @@ export default function CopierNotes({ author }: { author: string }) {
       return [note.title, note.content, note.model, note.author].join(" ").toLowerCase().includes(keyword);
     });
   }, [notes, brand, model, kindFilter, query]);
-
-  const countOf = (targetBrand: string, targetModel?: string) => notes.filter((note) =>
-    note.brand === targetBrand && (targetModel === undefined || note.model === targetModel)).length;
 
   const submit = async () => {
     if (busy || !draft.content.trim()) return;
@@ -138,26 +176,38 @@ export default function CopierNotes({ author }: { author: string }) {
       </div>
 
       {view === "quiz" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        {quizIndex < 0 && <div className="mx-auto max-w-xl py-4 text-center">
-          <div className="text-3xl">🎓</div>
-          <h3 className="mt-2 text-xl font-black text-slate-950">복합기 기술 퀴즈</h3>
-          <p className="mt-1 text-sm font-semibold text-slate-500">팀이 쌓은 처리 사례로 만드는 문제 — 증상을 보고 올바른 처리를 고르세요.</p>
-          <div className="mt-5 flex flex-wrap justify-center gap-1">
-            {["전체", ...BRAND_NAMES].map((name) => (
-              <button key={name} type="button" onClick={() => setQuizBrand(name)} className={`rounded-md px-3 py-2 text-xs font-black ${quizBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-center gap-2">
-            {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-4 py-2 text-sm font-black ${quizCount === count ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
-          </div>
-          <button type="button" onClick={startQuiz} className="mt-5 h-11 rounded-md bg-blue-600 px-8 text-sm font-black text-white">퀴즈 시작</button>
-          <p className="mt-3 text-[11px] font-bold text-slate-400">문제 은행: 제목·내용이 채워진 기록 {notes.filter((n) => n.title.trim() && n.content.trim()).length}건</p>
-        </div>}
+        {quizIndex < 0 && (() => {
+          const bank = notes.filter((n) => n.title.trim() && n.content.trim());
+          const bankOf = (name: string) => name === "전체" ? bank.length : bank.filter((n) => n.brand === name).length;
+          return <div className="mx-auto max-w-xl py-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-3xl shadow-lg shadow-blue-200">🎓</div>
+            <h3 className="mt-3 text-xl font-black text-slate-950">복합기 기술 퀴즈</h3>
+            <p className="mt-1 text-sm font-semibold text-slate-500">팀이 쌓은 <b className="text-blue-600">{bank.length}건</b>의 실제 처리 사례가 문제가 됩니다.</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-1.5">
+              {["전체", ...BRAND_NAMES].map((name) => {
+                const count = bankOf(name);
+                return (
+                  <button key={name} type="button" disabled={count < 4} onClick={() => setQuizBrand(name)} className={`rounded-md px-3 py-2 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : count < 4 ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                    {name} <span className={quizBrand === name ? "text-slate-300" : "text-slate-400"}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex justify-center gap-2">
+              {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
+            </div>
+            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-lg bg-blue-600 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition hover:bg-blue-500">퀴즈 시작 →</button>
+            <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
+          </div>;
+        })()}
         {currentQuiz && <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between text-xs font-black text-slate-400">
-            <span>{quizIndex + 1} / {quiz.length}</span><span>점수 {quizScore}</span>
+            <span>문제 {quizIndex + 1} / {quiz.length}</span><span className="text-blue-600">✓ {quizScore}</span>
           </div>
-          <div className="mt-3 rounded-lg bg-slate-50 p-4">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${((quizIndex + (quizPick ? 1 : 0)) / quiz.length) * 100}%` }} />
+          </div>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap gap-1.5">
               <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[currentQuiz.note.brand] || "bg-slate-100 text-slate-600"}`}>{currentQuiz.note.brand}</span>
               {currentQuiz.note.model && <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">{currentQuiz.note.model}</span>}
@@ -166,35 +216,49 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="mt-1 text-xs font-bold text-slate-500">올바른 처리 내용을 고르세요</div>
           </div>
           <div className="mt-3 space-y-2">
-            {currentQuiz.options.map((option) => {
+            {currentQuiz.options.map((option, optionIndex) => {
               const picked = quizPick === option.id;
               const isAnswer = option.id === currentQuiz.note.id;
-              const tone = !quizPick ? "border-slate-200 bg-white hover:border-blue-300"
+              const summary = (parseNoteContent(option.content)?.["처리"] || option.content).replace(/\n/g, " ");
+              const tone = !quizPick ? "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm"
                 : isAnswer ? "border-emerald-400 bg-emerald-50"
-                : picked ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white opacity-60";
+                : picked ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white opacity-50";
               return (
-                <button key={option.id} type="button" onClick={() => answerQuiz(option.id)} className={`block w-full rounded-lg border p-3 text-left text-sm font-semibold leading-6 text-slate-700 transition ${tone}`}>
-                  {option.content.length > 160 ? `${option.content.slice(0, 160)}…` : option.content}
-                  {quizPick && isAnswer && <span className="ml-2 text-xs font-black text-emerald-600">✓ 정답</span>}
+                <button key={option.id} type="button" onClick={() => answerQuiz(option.id)} className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left text-sm font-semibold leading-6 text-slate-700 transition ${tone}`}>
+                  <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${quizPick && isAnswer ? "bg-emerald-500 text-white" : quizPick && picked ? "bg-rose-400 text-white" : "bg-slate-100 text-slate-500"}`}>{["①", "②", "③", "④"][optionIndex]}</span>
+                  <span className="min-w-0">{summary.length > 150 ? `${summary.slice(0, 150)}…` : summary}{quizPick && isAnswer && <b className="ml-2 text-xs text-emerald-600">✓ 정답</b>}</span>
                 </button>
               );
             })}
           </div>
+          {quizPick && <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+            <div className="text-[10px] font-black text-blue-500">정답 사례 자세히</div>
+            <NoteBody note={currentQuiz.note} />
+            <div className="mt-1 text-[10px] font-bold text-slate-400">{currentQuiz.note.author || "익명"} · {currentQuiz.note.created_at.slice(0, 10)}</div>
+          </div>}
           {quizPick && <div className="mt-4 flex justify-end">
-            <button type="button" onClick={nextQuiz} className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-black text-white">{quizIndex + 1 >= quiz.length ? "결과 보기" : "다음 문제"}</button>
+            <button type="button" onClick={nextQuiz} className="rounded-lg bg-blue-600 px-7 py-3 text-sm font-black text-white shadow-sm">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
           </div>}
         </div>}
         {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-2xl py-4 text-center">
-          <div className="text-3xl">{quizScore === quiz.length ? "🏆" : quizScore >= quiz.length / 2 ? "👏" : "💪"}</div>
-          <h3 className="mt-2 text-xl font-black text-slate-950">{quiz.length}문제 중 {quizScore}개 정답</h3>
-          {wrongNotes.length > 0 && <div className="mt-4 space-y-2 text-left">
-            <div className="text-xs font-black text-slate-400">오답 노트 — 다시 확인하세요</div>
-            {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
-              <div className="text-sm font-black text-slate-900">[{item.note.brand}{item.note.model ? ` ${item.note.model}` : ""}] {item.note.title}</div>
-              <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-600">{item.note.content}</p>
+          <div className="text-4xl">{quizScore === quiz.length ? "🏆" : quizScore >= quiz.length * 0.7 ? "👏" : quizScore >= quiz.length / 2 ? "🙂" : "💪"}</div>
+          <h3 className="mt-2 text-2xl font-black text-slate-950">{quizScore} / {quiz.length}</h3>
+          <p className="mt-1 text-sm font-bold text-slate-500">정답률 {Math.round((quizScore / quiz.length) * 100)}%{quizScore === quiz.length ? " — 완벽합니다!" : ""}</p>
+          {wrongNotes.length > 0 && <div className="mt-5 space-y-2 text-left">
+            <div className="text-xs font-black text-slate-400">오답 노트 {wrongNotes.length}건 — 실제 처리 사례로 복습하세요</div>
+            {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-white p-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[item.note.brand] || "bg-slate-100 text-slate-600"}`}>{item.note.brand}</span>
+                {item.note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{item.note.model}</span>}
+                <span className="text-sm font-black text-slate-900">{item.note.title}</span>
+              </div>
+              <NoteBody note={item.note} />
             </div>)}
           </div>}
-          <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="mt-5 rounded-md border border-slate-300 px-6 py-2.5 text-sm font-black text-slate-700">다시 풀기</button>
+          <div className="mt-6 flex justify-center gap-2">
+            {wrongNotes.length > 0 && <button type="button" onClick={retryWrong} className="rounded-lg border border-rose-300 bg-rose-50 px-6 py-3 text-sm font-black text-rose-700">오답만 다시 풀기</button>}
+            <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-black text-white">새 퀴즈</button>
+          </div>
         </div>}
       </section>}
 
@@ -207,7 +271,7 @@ export default function CopierNotes({ author }: { author: string }) {
         <div className="mt-3 flex flex-wrap gap-1">
           {["전체", ...BRAND_NAMES].map((name) => (
             <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-md px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : `${BRAND_TONE[name] || "bg-slate-100 text-slate-500"}`}`}>
-              {name}{name !== "전체" && countOf(name) > 0 ? ` ${countOf(name)}` : ""}
+              {name}
             </button>
           ))}
         </div>
@@ -215,7 +279,7 @@ export default function CopierNotes({ author }: { author: string }) {
           <div className="mt-2 flex flex-wrap gap-1">
             {["전체", ...(BRANDS[brand] || [])].map((name) => (
               <button key={name} type="button" onClick={() => setModel(name)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${model === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-                {name}{name !== "전체" && countOf(brand, name) > 0 ? ` ${countOf(brand, name)}` : ""}
+                {name}
               </button>
             ))}
           </div>
@@ -246,7 +310,7 @@ export default function CopierNotes({ author }: { author: string }) {
               {note.author === author && <button type="button" onClick={() => void removeNote(note)} className="shrink-0 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
             </div>
             {note.title && <div className="mt-2 text-sm font-black text-slate-900">{note.title}</div>}
-            <p className="mt-1.5 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700">{note.content}</p>
+            <NoteBody note={note} />
             <div className="mt-2 text-[11px] font-bold text-slate-400">{note.author || "익명"} · {note.created_at.slice(0, 10)}</div>
           </article>
         ))}
