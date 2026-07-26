@@ -50,3 +50,10 @@ alter table public.as_tickets add constraint "as_tickets_scheduleType_check"
 
 -- 매월 반복 (2026-07-27)
 alter table public.as_tickets add column if not exists "repeatMonthly" boolean not null default false;
+
+-- 매월점검 개명 + 내용(note) 컬럼 (2026-07-27)
+alter table public.as_tickets add column if not exists note text not null default '';
+alter table public.as_tickets drop constraint if exists "as_tickets_scheduleType_check";
+update public.as_tickets set "scheduleType" = '매월점검' where "scheduleType" = '포인트 점검';
+alter table public.as_tickets add constraint "as_tickets_scheduleType_check"
+  check ("scheduleType" in ('AS', '익일AS', '물류', '휴가', '매월점검'));

@@ -4560,7 +4560,7 @@ export default function App() {
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
-  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string } | null>(null);
   const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
   const [ticketDeferDate, setTicketDeferDate] = useState("");
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
@@ -5070,6 +5070,7 @@ export default function App() {
       }
     }
     if (res.ok && kind === "normal" && destination === "inspection" && reportTypes.includes("점검")) {
+      void completeMonthlyCalendarTicket(target);
       try {
         latestWorkinResult = await syncWorkinMapAfterInspection(target);
         res.message = `${res.message || "전송 완료"} · ${workinSyncSummary(latestWorkinResult)}`;
@@ -5080,7 +5081,7 @@ export default function App() {
     }
     setSending(false);
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
-      setTicketDonePrompt(pendingAsTicketRef.current);
+      setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       pendingAsTicketRef.current = null;
     }
     if (res.ok) {
@@ -5237,20 +5238,54 @@ export default function App() {
   // 일정 완료/미루기 팝업 처리 (일정리스트와 같은 규칙: 완료=상태만, 익일=날짜+익일AS)
   const addDaysYmd = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setDate(d.getDate() + days); return kstDate(d); };
   const nextBizYmd = (date: string) => { let next = addDaysYmd(date, 1); while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDaysYmd(next, 1); return next; };
-  const finishTicket = async (ticket: { id: string; receptionId: string }, patch: Record<string, unknown>, receptionStatus: string) => {
+  const appendTicketNote = (existing: unknown, formText: string) =>
+    `${String(existing || "").trim() ? `${String(existing).trim()}\n\n` : ""}[${kstDate()} 전송 양식]\n${formText}`;
+
+  const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string) => {
     try {
-      await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, patch);
+      const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch(() => []);
+      // 완료 시 전송한 양식 전문을 티켓 '내용'에 쌓는다 (처리 이력이 캘린더에 남게)
+      const finalPatch = receptionStatus === "완료" && ticket.sentText
+        ? { ...patch, note: appendTicketNote(rows[0]?.["note"], ticket.sentText) }
+        : patch;
+      await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, finalPatch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
       // 매월 반복 일정이면 완료 시 다음 달 일정 자동 생성 (일정리스트의 완료 처리와 동일 규칙)
-      if (receptionStatus === "완료") {
-        try {
-          const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`);
-          if (rows[0]?.["repeatMonthly"]) await upsertRow("as_tickets", buildMonthlyCloneRow(rows[0]), "id");
-        } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
+      if (receptionStatus === "완료" && rows[0]?.["repeatMonthly"]) {
+        try { await upsertRow("as_tickets", buildMonthlyCloneRow(rows[0]), "id"); } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
       }
       showToast(receptionStatus === "완료" ? "일정을 완료 처리했어요" : "일정을 미뤘어요", "success");
     } catch (e) {
       showToast(`일정 처리 실패: ${(e as Error).message}`, "error");
+    }
+  };
+
+  // ── FIELD 점검 전송 → 그 달 캘린더 '매월점검' 일정 자동 완료 + 양식 기록 ──
+  // 워킨맵 매월점검 색칠과 같은 타이밍에 캘린더도 정리되게 한다. 업체명 매칭 실패는 조용히 넘어간다.
+  const completeMonthlyCalendarTicket = async (formText: string) => {
+    try {
+      const vendor = currentVendor || extractVendorFromText(formText);
+      const vendorKey = matchVendor(vendor);
+      if (!vendorKey || vendorKey.length < 3) return;
+      const today = kstDate();
+      const monthStart = `${today.slice(0, 7)}-01`;
+      const monthEnd = `${today.slice(0, 7)}-31`;
+      const rows = await selectRows<Record<string, unknown>>("as_tickets",
+        `select=*&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&date=gte.${monthStart}&date=lte.${monthEnd}&status=neq.${encodeURIComponent("완료")}`);
+      const matched = rows.filter((row) => {
+        const rowKey = matchVendor(String(row["vendor"] || ""));
+        return rowKey.length >= 3 && (rowKey.includes(vendorKey) || vendorKey.includes(rowKey));
+      });
+      for (const row of matched) {
+        await updateRows("as_tickets", `id=eq.${encodeURIComponent(String(row["id"]))}`, {
+          status: "완료",
+          note: appendTicketNote(row["note"], formText),
+        });
+        if (row["repeatMonthly"]) await upsertRow("as_tickets", buildMonthlyCloneRow(row), "id").catch(() => {});
+      }
+      if (matched.length) showToast(`캘린더 매월점검 ${matched.length}건 완료 처리 + 양식 기록`, "success");
+    } catch {
+      // 캘린더 자동 완료 실패는 전송 결과에 영향 없음
     }
   };
 

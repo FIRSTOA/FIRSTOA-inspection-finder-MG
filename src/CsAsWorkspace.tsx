@@ -5,7 +5,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
-type ScheduleType = "AS" | "익일AS" | "물류" | "휴가" | "포인트 점검";
+type ScheduleType = "AS" | "익일AS" | "물류" | "휴가" | "매월점검";
 type ScheduleFilter = ScheduleType;
 type ViewMode = "list" | "calendar";
 type DayFilter = "today" | "tomorrow" | "scheduled";
@@ -27,13 +27,14 @@ export type AsTicket = {
   receptionId: string;
   repeatMonthly?: boolean; // 매월 반복 — 완료하면 다음 달 같은 날로 자동 생성
   issue: string;
+  note?: string; // 내용 — 처리 결과·점검/AS 양식이 쌓이는 칸
   assignee: string;
   status: AsStatus;
   scheduleType: ScheduleType;
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
-const scheduleFilters: ScheduleFilter[] = ["AS", "익일AS", "물류", "휴가", "포인트 점검"];
+const scheduleFilters: ScheduleFilter[] = ["AS", "익일AS", "물류", "휴가", "매월점검"];
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -82,7 +83,7 @@ function monthGrid(date: string) {
 }
 
 function normalizeTicketSchedule(ticket: AsTicket): AsTicket {
-  if (ticket.scheduleType === "물류" || ticket.scheduleType === "휴가" || ticket.scheduleType === "포인트 점검") return ticket;
+  if (ticket.scheduleType === "물류" || ticket.scheduleType === "휴가" || ticket.scheduleType === "매월점검") return ticket;
   const isFuture = ticket.date > getTodayYmd();
   const nextStatus = ticket.status === "완료"
     ? "완료"
@@ -113,7 +114,7 @@ export function buildMonthlyCloneRow(ticket: Record<string, unknown>): Record<st
     vendor: base.vendor, contact: base.contact, address: base.address, department: base.department,
     model: base.model, serial: base.serial, asset: base.asset || "", grade: base.grade || "",
     keyman: base.keyman || "", receptionId: "", repeatMonthly: true,
-    issue: base.issue, assignee: base.assignee,
+    issue: base.issue, note: "", assignee: base.assignee,
     status: base.assignee ? "배정" : "접수",
     scheduleType: base.scheduleType === "익일AS" ? "AS" : base.scheduleType,
   };
@@ -137,6 +138,7 @@ function blankTicket(date: string): AsTicket {
     receptionId: "",
     repeatMonthly: false,
     issue: "",
+    note: "",
     assignee: "",
     status: "접수",
     scheduleType: "AS",
@@ -161,10 +163,10 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,assignee,status,scheduleType";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -231,7 +233,7 @@ function scheduleColor(type: ScheduleType, completed = false) {
   if (type === "익일AS") return "bg-purple-100 text-purple-700";
   if (type === "물류") return "bg-rose-100 text-rose-700";
   if (type === "휴가") return "bg-emerald-100 text-emerald-700";
-  if (type === "포인트 점검") return "bg-amber-100 text-amber-700";
+  if (type === "매월점검") return "bg-amber-100 text-amber-700";
   return "bg-blue-100 text-blue-700";
 }
 
@@ -487,7 +489,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           <div>
             <div className="text-xs font-black text-blue-600">CS AS</div>
             <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">일정리스트</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS·물류·휴가·포인트 점검 일정을 확인하고 담당자 배정, 완료, 일정 변경을 처리합니다.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS·물류·휴가·매월점검 일정을 확인하고 담당자 배정, 완료, 일정 변경을 처리합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setTeam("ALL")} className={`rounded-md px-3 py-2 text-sm font-black ${team === "ALL" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체</button>
@@ -516,7 +518,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       {scheduleFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : filter === "포인트 점검" ? "bg-amber-500" : "bg-blue-600"}`} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : filter === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />
                           {filter}
                         </label>
                       ))}
@@ -581,7 +583,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
-                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-rose-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "포인트 점검" ? "bg-amber-500" : "bg-blue-600"}`} />)}
+                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-rose-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />)}
                           </span>
                         </button>
                       );
@@ -755,6 +757,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
                 {!!ticket.issue && <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3"><div className="text-[10px] font-black text-blue-500">접수 내용</div><div className="mt-1 whitespace-pre-wrap text-sm font-bold leading-6 text-slate-800">{ticket.issue}</div></div>}
+                {!!ticket.note && <details className="rounded-lg border border-emerald-100 bg-emerald-50/40" open={ticket.note.length < 300}>
+                  <summary className="cursor-pointer px-3 py-2.5 text-[10px] font-black text-emerald-600">내용 (처리 결과·양식)</summary>
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-emerald-100 px-3 py-2 font-mono text-xs leading-5 text-slate-700">{ticket.note}</pre>
+                </details>}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {infoCell("기종", ticket.model)}
                   {infoCell("시리얼(기번)", ticket.serial)}
@@ -856,7 +862,7 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           <label className="text-xs font-bold text-slate-500">
             캘린더
             <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
-              {(["AS", "물류", "휴가", "포인트 점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
+              {(["AS", "물류", "휴가", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
@@ -886,7 +892,11 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             접수내용
-            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={5} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
+            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
+          </label>
+          <label className="text-xs font-bold text-slate-500 md:col-span-2">
+            내용 <span className="font-semibold text-slate-400">— 처리 결과·점검/AS 양식 (완료 처리 시 자동으로 쌓임, 직접 붙여넣기도 가능)</span>
+            <textarea value={draft.note || ""} onChange={(event) => set("note", event.target.value)} rows={6} className="mt-1 w-full rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
