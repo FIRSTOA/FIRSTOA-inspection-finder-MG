@@ -2133,6 +2133,14 @@ function matchVendor(value: string) {
     .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
     .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, ""));
 }
+// 시트 자동 기입 4종의 대상 시트 링크 — 전송 후 직원이 바로 열어 확인하는 용도
+const FIELD_SHEET_LINKS: Record<string, string> = {
+  bulman: "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=419415178",
+  "contact-change": "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=1289086745",
+  "pc-it": "https://docs.google.com/spreadsheets/d/1Q0u_ok6s3o7_qnSFyDW632zkspV_MqttRnFQ4uurmpg/edit#gid=1571265600",
+  "pc-copier": "https://docs.google.com/spreadsheets/d/10850TfeSvd0Z1iiI1ycCyGskGRPXicRUd1_Xx996QKQ/edit#gid=746760933",
+};
+
 const FIXED_INSPECTION_LEVEL = "1";
 const FIXED_INSPECTION_REPORT_TYPES = ["점검"];
 
@@ -5271,6 +5279,10 @@ export default function App() {
   };
 
 
+  // 시트 기입 4종이면 대상 시트 링크 (전송 버튼 옆 '시트 열기')
+  const fieldSheetUrl = mode === "pc"
+    ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
+    : FIELD_SHEET_LINKS[mode] || "";
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const navGroups = [
@@ -5835,6 +5847,11 @@ export default function App() {
                 </>
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
+              ) : fieldSheetUrl ? (
+                <>
+                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
+                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
+                </>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
               )}
@@ -5935,7 +5952,10 @@ export default function App() {
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
             </> : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
-            ) : <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>}
+            ) : <>
+              <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>
+              {fieldSheetUrl && <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트</a>}
+            </>}
             {(mode === "inspection" || mode === "blank-report") && (
               <>
                 <button
