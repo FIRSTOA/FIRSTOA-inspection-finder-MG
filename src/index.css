@@ -14,3 +14,24 @@ body {
   margin: 0;
   background: #f4f7fb;
 }
+
+/* 버튼 공통 피드백 — 살아있는 버튼임을 마우스만 올려도 알 수 있게 */
+button:not(:disabled) {
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+button:not(:disabled):hover {
+  filter: brightness(0.93);
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+button:disabled {
+  cursor: not-allowed;
+}
+a {
+  transition: filter 0.15s ease;
+}
+a:hover {
+  filter: brightness(0.93);
+}
