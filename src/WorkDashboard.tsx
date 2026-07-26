@@ -232,7 +232,7 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
   );
 }
 
-export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekly"; author: string }) {
+export default function WorkDashboard({ kind, author, focusDate }: { kind: "daily" | "weekly"; author: string; focusDate?: string | null }) {
   const today = kstDate();
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
@@ -241,6 +241,10 @@ export default function WorkDashboard({ kind, author }: { kind: "daily" | "weekl
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
+  // 성장기록 모아보기에서 특정 주차로 진입할 때 해당 주로 이동
+  useEffect(() => {
+    if (focusDate) { setSelectedDay(focusDate); setYear(Number(focusDate.slice(0, 4))); setMonth(Number(focusDate.slice(5, 7))); }
+  }, [focusDate]);
   const editWeek = useMemo(() => workWeekRange(selectedDay), [selectedDay]);
   const range = useMemo(() => {
     if (kind === "weekly") return editWeek;

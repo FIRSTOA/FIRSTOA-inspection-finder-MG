@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { selectRows } from "./supabase";
+import { selectAllRows, selectRows, updateRows } from "./supabase";
+import { vendorMatchKey } from "./ids";
 
 type ContactChangeRow = {
   id: string;
@@ -32,6 +33,46 @@ export default function ContactChangeHistory() {
   const [region, setRegion] = useState("전체");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [applyBusyId, setApplyBusyId] = useState("");
+
+  // 변경 후 정보를 워킨맵(앱이 원본인 DB)에 반영한다.
+  // 임대리스트(vendor_info)는 구글시트가 원본이라 여기서 바꾸면 다음 동기화 때 덮이므로 반영하지 않는다.
+  const applyToWorkinMap = async (row: ContactChangeRow) => {
+    if (applyBusyId) return;
+    const after = String(row.after_text || "").trim();
+    if (!after) { window.alert("변경 후 내용이 비어 있어 반영할 수 없습니다."); return; }
+    const key = vendorMatchKey(row.company);
+    if (!key) { window.alert("업체명으로 워킨맵을 매칭할 수 없습니다."); return; }
+    setApplyBusyId(row.id);
+    try {
+      const places = await selectAllRows<{ id: number; name: string; memos: string[] | null }>("workin_map_places", "select=id,name,memos");
+      const matches = places.filter((place) => {
+        const placeKey = vendorMatchKey(place.name || "");
+        return placeKey && (placeKey === key || (placeKey.length >= 5 && key.length >= 5 && (placeKey.includes(key) || key.includes(placeKey))));
+      });
+      if (!matches.length) { window.alert("워킨맵에서 일치하는 거래처를 찾지 못했습니다."); return; }
+      const isAddress = /주소/.test(row.category);
+      const fieldLabel = isAddress ? "주소" : "연락처";
+      const names = matches.slice(0, 5).map((m) => m.name).join("\n");
+      if (!window.confirm(`워킨맵 ${matches.length}곳의 ${fieldLabel}를 아래 내용으로 바꿉니다.
+
+${names}${matches.length > 5 ? `
+외 ${matches.length - 5}곳` : ""}
+
+변경 후: ${after}
+계속할까요?`)) return;
+      for (const match of matches) {
+        const memos = Array.isArray(match.memos) ? match.memos.map(String) : [];
+        memos.push(`[변경반영] ${new Date().toISOString().slice(0, 10)} ${row.category || "변경"} → ${after}`.slice(0, 300));
+        await updateRows("workin_map_places", `id=eq.${match.id}`, isAddress ? { address: after, address_detail: "", memos } : { phone: after, memos });
+      }
+      window.alert(`워킨맵 ${matches.length}곳에 반영했습니다.`);
+    } catch (e) {
+      window.alert(`반영 실패: ${(e as Error).message}`);
+    } finally {
+      setApplyBusyId("");
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -84,7 +125,12 @@ export default function ContactChangeHistory() {
               <div><div className="text-[11px] font-black text-slate-400">변경 전</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-700">{row.before_text || "-"}</div></div>
               <div><div className="text-[11px] font-black text-slate-400">변경 후</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-900">{row.after_text || "-"}</div></div>
               {row.notes && <div className="md:col-span-2"><div className="text-[11px] font-black text-slate-400">특이사항</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-700">{row.notes}</div></div>}
-              <div className="flex flex-wrap items-center gap-2 md:col-span-2"><span className="rounded bg-white px-2 py-1 text-xs font-bold text-slate-600">등급 {row.grade || "-"}</span>{row.photo_link && <a href={row.photo_link} target="_blank" rel="noreferrer" className="rounded border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-700">첨부 사진 보기</a>}</div>
+              <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+                <span className="rounded bg-white px-2 py-1 text-xs font-bold text-slate-600">등급 {row.grade || "-"}</span>
+                {row.photo_link && <a href={row.photo_link} target="_blank" rel="noreferrer" className="rounded border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-700">첨부 사진 보기</a>}
+                <button type="button" disabled={applyBusyId === row.id} onClick={() => void applyToWorkinMap(row)} className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵 반영"}</button>
+                <span className="text-[10px] font-semibold text-slate-400">임대리스트는 시트가 원본이라 시트에서 수정해야 합니다</span>
+              </div>
             </div>
           </details>)}
         </div>}

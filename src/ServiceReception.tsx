@@ -114,56 +114,6 @@ function teamFromRegion(region: string) {
   const m = String(region || "").match(/수도권([A-D])/);
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
 }
-// 접수 행 → FIELD AS 원본 양식 — 접수 보고양식을 FIELD에 복붙했을 때와 완전히 같은 형식.
-// (내용=증상만, 부서명=주소의 층/호, 구분:A/S · 키맨은 접수자 줄 + 키맨 정보 줄들)
-function receptionToFieldText(row: ServiceReceptionRow) {
-  const keymanLines = [
-    (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
-    ...(row.keyman_info ? row.keyman_info.split("\n") : []),
-  ].filter(Boolean);
-  return [
-    `작성자:${row.author || ""}`,
-    "구분:A/S",
-    "레벨:1",
-    `등급:${row.grade || ""}`,
-    `업체명:${cleanVendorName(row.vendor)}`,
-    `부서명:${deptFromAddress(row.address || "")}`,
-    `지역:${teamFromRegion(row.region)}`,
-    `키맨/접수자:${keymanLines[0] || ""}`,
-    ...keymanLines.slice(1),
-    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
-    "1.",
-    `모델명:${row.model}`,
-    `시리얼넘버:${row.serial}`,
-    `자산기번: ${row.asset_no || ""}`,
-    `내용: ${row.symptom || row.title || ""}`,
-    "처리내용:",
-    "매수:흑- 컬- 큰컬- 합-",
-    "토너잔량:K- C- M- Y-",
-    "폐통:  %",
-    "여분:  K- C- M- Y- 폐-",
-    "한틴이카유무:",
-    "주차비지원유무:",
-    "특이사항:",
-    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
-    "※부품신청※",
-    "보증기간 내 여부 :",
-    "교체 전 카운터 누적 사용매수 :",
-    "사용 부품 예상 사용매수 :",
-    "▶ 신청 부품",
-    "물품명:",
-    "수량:",
-    "출고여부:",
-    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
-    "※자가신청※",
-    "물품:",
-    "수량:",
-    "출고여부:",
-    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
-    "도착 시간:",
-    "소요 시간:",
-  ].join("\n");
-}
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
@@ -192,7 +142,7 @@ const STATUS_TONE: Record<string, string> = {
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string };
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "" };
 
-export default function ServiceReception({ author, onUseField }: { author: string; onUseField?: (text: string) => void }) {
+export default function ServiceReception({ author }: { author: string }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
   const [type, setType] = useState<ReceiveType>("복합기 AS");
   const [query, setQuery] = useState("");
@@ -219,6 +169,8 @@ export default function ServiceReception({ author, onUseField }: { author: strin
   const [listLoading, setListLoading] = useState(false);
   const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관">("전체");
   const [openRowId, setOpenRowId] = useState("");
+  const [previewRow, setPreviewRow] = useState<ServiceReceptionRow | null>(null);
+  const [previewCopied, setPreviewCopied] = useState(false);
 
   const loadList = useCallback(async (date: string, period: ListPeriod = "day") => {
     setListLoading(true);
@@ -692,7 +644,8 @@ export default function ServiceReception({ author, onUseField }: { author: strin
                   <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT AS" ? "IT" : "원격"}</span>
                   <span className="min-w-0">
                     <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
-                    <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"} · {row.title || row.symptom.slice(0, 20) || "-"}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"}</span>
+                    {(row.title || row.symptom) && <span className="block truncate text-[11px] font-semibold text-slate-600">{row.title || "제목 없음"}{row.symptom ? ` — ${row.symptom}` : ""}</span>}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
@@ -709,15 +662,33 @@ export default function ServiceReception({ author, onUseField }: { author: strin
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {row.report_text && <button type="button" onClick={() => void navigator.clipboard.writeText(row.report_text)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">양식 다시 복사</button>}
+                    {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">원본 미리보기</button>}
                     {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black text-blue-700 disabled:opacity-50">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
-                    {row.type !== "원격이관" && onUseField && <button type="button" onClick={() => onUseField(receptionToFieldText(row))} className="rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white">FIELD 변환</button>}
                     <button type="button" onClick={() => void removeReception(row)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
                   </div>
                 </div>}
               </div>
             ))}
           </div>
+
+          {previewRow && (
+            <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPreviewRow(null)}>
+              <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                  <div className="min-w-0">
+                    <div className="text-xs font-black text-blue-600">원본 보고양식</div>
+                    <div className="truncate text-base font-black text-slate-950">{previewRow.vendor || "업체 미기재"}</div>
+                  </div>
+                  <button type="button" onClick={() => setPreviewRow(null)} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+                </div>
+                <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-slate-50 p-4 font-mono text-[11px] leading-5 text-slate-700">{previewRow.report_text}</pre>
+                <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                  <button type="button" onClick={() => setPreviewRow(null)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">닫기</button>
+                  <button type="button" onClick={() => { void navigator.clipboard.writeText(previewRow.report_text).then(() => setPreviewCopied(true)); }} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-black text-white">{previewCopied ? "복사됨 ✓" : "복사"}</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {byAuthor.length > 0 && <div className="border-t border-slate-200 p-4">
             <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]})</div>

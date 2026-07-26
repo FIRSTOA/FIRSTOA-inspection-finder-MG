@@ -4544,6 +4544,8 @@ export default function App() {
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges">("field"); // 좌측 메뉴 화면
+  const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
+  const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({ "외근 업무": true });
@@ -5239,8 +5241,8 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
+    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
     { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"], ["reading", "독서"]] },
-    { title: "외근 업무", items: [["field", "FIELD"], ["contactChanges", "담당자·주소 변경"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
@@ -5389,15 +5391,23 @@ export default function App() {
 
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
-        {screen === "operations" && <OperationsDashboard author={author} />}
-        {screen === "contactChanges" && <ContactChangeHistory />}
+        {screen === "operations" && (
+          <div className="space-y-4">
+            <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+              {([["status", "현황판"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded px-4 py-2 text-sm font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              ))}
+            </div>
+            {opsTab === "status" ? <OperationsDashboard author={author} /> : <ContactChangeHistory />}
+          </div>
+        )}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
-        {screen === "weekly" && <WorkDashboard kind="weekly" author={author} />}
-        {screen === "growth" && <GrowthHub author={author} />}
+        {screen === "weekly" && <WorkDashboard kind="weekly" author={author} focusDate={weeklyFocus} />}
+        {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
-        {screen === "serviceReception" && <ServiceReception author={author} onUseField={openAsTicketInField} />}
+        {screen === "serviceReception" && <ServiceReception author={author} />}
         {screen === "reading" && <ReadingHub author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}

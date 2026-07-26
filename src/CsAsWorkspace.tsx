@@ -594,8 +594,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">
                   <th className="px-3 py-3">팀</th>
                   <th className="px-3 py-3">일정</th>
-                  <th className="px-3 py-3">업체명</th>
-                  <th className="px-3 py-3">접수내용</th>
+                  <th className="w-[21%] px-3 py-3">업체명</th>
+                  <th className="w-[24%] px-3 py-3">접수내용</th>
                   <th className="px-3 py-3">기기</th>
                   <th className="px-3 py-3">담당자</th>
                   <th className="px-3 py-3 text-right">처리</th>
@@ -608,7 +608,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
                       <button type="button" onClick={() => setEditId(ticket.id)} className="text-left">
-                        <div className="flex items-center gap-2 text-sm font-black text-slate-900">{ticket.vendor}{ticket.status === "완료" && <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
+                        <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[220px] truncate">{ticket.vendor}</span>{ticket.status === "완료" && <span className="shrink-0 rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                         <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                       </button>
                     </td>
