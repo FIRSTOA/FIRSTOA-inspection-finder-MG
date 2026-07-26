@@ -30,6 +30,7 @@ function Linkified({ text }: { text: string }) {
     : <span key={index}>{part}</span>)}</>;
 }
 type ReadingVote = { post_id: string; voter: string; created_at?: string };
+type ReadingComment = { id: string; post_id: string; author: string; content: string; created_at: string };
 type SortMode = "latest" | "top";
 
 const LONG_POST = 280; // 이보다 길면 접어서 보여준다
@@ -49,21 +50,26 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
   const [pointsMonthly, setPointsMonthly] = useState(false);
+  const [comments, setComments] = useState<ReadingComment[]>([]);
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set());
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [postRows, voteRows] = await Promise.all([
+      const [postRows, voteRows, commentRows] = await Promise.all([
         selectRows<ReadingPost>("reading_posts", `select=*&kind=eq.${kind}&order=created_at.desc&limit=200`)
           .catch(async (e) => {
             if (kind === "reading") return selectRows<ReadingPost>("reading_posts", "select=*&order=created_at.desc&limit=200"); // kind 컬럼 SQL 전 호환
             throw e;
           }),
         selectRows<ReadingVote>("reading_votes", "select=post_id,voter,created_at&limit=5000"),
+        selectRows<ReadingComment>("reading_comments", "select=*&order=created_at.asc&limit=3000").catch(() => [] as ReadingComment[]),
       ]);
       setPosts(postRows);
       setVotes(voteRows);
+      setComments(commentRows);
     } catch (e) {
       setError((e as Error).message || "불러오기 실패 — supabase/reading.sql 실행 여부를 확인하세요.");
     } finally {
@@ -161,6 +167,40 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
     }
   };
 
+  const commentsByPost = useMemo(() => {
+    const map = new Map<string, ReadingComment[]>();
+    for (const comment of comments) {
+      const list = map.get(comment.post_id) || [];
+      list.push(comment);
+      map.set(comment.post_id, list);
+    }
+    return map;
+  }, [comments]);
+
+  const submitComment = async (postId: string) => {
+    const draft = (commentDrafts[postId] || "").trim();
+    if (!draft) return;
+    if (!author) { setError("작성자를 먼저 선택하세요."); return; }
+    try {
+      await insertRow("reading_comments", { post_id: postId, author, content: draft });
+      setCommentDrafts((current) => ({ ...current, [postId]: "" }));
+      const rows = await selectRows<ReadingComment>("reading_comments", "select=*&order=created_at.asc&limit=3000");
+      setComments(rows);
+    } catch (e) {
+      setError((e as Error).message || "댓글 저장 실패 — supabase/selfdev-social.sql 실행 여부를 확인하세요.");
+    }
+  };
+
+  const removeComment = async (comment: ReadingComment) => {
+    if (comment.author !== author) return;
+    try {
+      await deleteRows("reading_comments", `id=eq.${comment.id}`);
+      setComments((current) => current.filter((c) => c.id !== comment.id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const toggleExpanded = (id: string) => {
     setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
@@ -191,8 +231,26 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           <button type="button" disabled={pendingVotes.has(post.id)} onClick={() => void toggleVote(post)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition disabled:opacity-50 ${voted ? "bg-amber-400 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-600"}`}>
             👍 추천{count > 0 ? ` ${count}` : ""}
           </button>
+          <button type="button" onClick={() => setOpenComments((current) => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${openComments.has(post.id) ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+            💬 댓글{(commentsByPost.get(post.id)?.length || 0) > 0 ? ` ${commentsByPost.get(post.id)?.length}` : ""}
+          </button>
           {isLong && <button type="button" onClick={() => toggleExpanded(post.id)} className="text-xs font-black text-blue-500">{isOpen ? "접기" : "더보기"}</button>}
         </div>
+        {openComments.has(post.id) && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 sm:pl-8">
+          {(commentsByPost.get(post.id) || []).map((comment) => (
+            <div key={comment.id} className="flex items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2">
+              <div className="min-w-0">
+                <span className="text-[10px] font-black text-slate-400">익명{comment.author === author ? " (나)" : ""} · {comment.created_at.slice(5, 10)}</span>
+                <p className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-700"><Linkified text={comment.content} /></p>
+              </div>
+              {comment.author === author && <button type="button" onClick={() => void removeComment(comment)} className="shrink-0 text-[10px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
+            </div>
+          ))}
+          <div className="flex gap-1.5">
+            <input value={commentDrafts[post.id] || ""} onChange={(e) => setCommentDrafts((current) => ({ ...current, [post.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void submitComment(post.id); }} placeholder="익명 댓글 남기기" className="min-w-0 flex-1 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold" />
+            <button type="button" onClick={() => void submitComment(post.id)} className="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">등록</button>
+          </div>
+        </div>}
       </article>
     );
   };

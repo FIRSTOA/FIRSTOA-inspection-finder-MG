@@ -6,8 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import ReadingHub from "./ReadingHub";
 import { kstDate } from "./visits";
+import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 
-type Tab = "home" | "reading" | "tips" | "goals";
+type Tab = "home" | "reading" | "tips" | "goals" | "praise";
 const GOAL_CATEGORIES = ["자격증", "학습", "독서", "건강", "습관", "기타"] as const;
 const fmtP = (votes: number) => (Math.round(votes * 2) / 10).toFixed(1); // 추천 1개 = 0.2P
 
@@ -17,6 +18,7 @@ type SelfGoal = {
 };
 
 type AnyPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string };
+type PraisePost = { id: string; created_at: string; from_author: string; to_name: string; content: string };
 type AnyVote = { post_id: string; voter: string; created_at?: string };
 
 // ── 대시보드: 포인트·활동·명예의 전당을 한눈에 ──
@@ -24,6 +26,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
   const [posts, setPosts] = useState<AnyPost[]>([]);
   const [votes, setVotes] = useState<AnyVote[]>([]);
   const [goals, setGoals] = useState<SelfGoal[]>([]);
+  const [praises, setPraises] = useState<PraisePost[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,9 +35,10 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
       selectRows<AnyPost>("reading_posts", "select=*&order=created_at.desc&limit=300").catch(() => [] as AnyPost[]),
       selectRows<AnyVote>("reading_votes", "select=post_id,voter,created_at&limit=5000").catch(() => [] as AnyVote[]),
       selectRows<SelfGoal>("self_goals", "select=*&limit=500").catch(() => [] as SelfGoal[]),
-    ]).then(([postRows, voteRows, goalRows]) => {
+      selectRows<PraisePost>("praise_posts", "select=*&order=created_at.desc&limit=100").catch(() => [] as PraisePost[]),
+    ]).then(([postRows, voteRows, goalRows, praiseRows]) => {
       if (!active) return;
-      setPosts(postRows); setVotes(voteRows); setGoals(goalRows);
+      setPosts(postRows); setVotes(voteRows); setGoals(goalRows); setPraises(praiseRows);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
@@ -97,9 +101,9 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
 
   return (
     <div className="space-y-4 pb-16">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-r from-indigo-700 via-violet-700 to-purple-700 p-5 text-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm">
         <h2 className="text-xl font-black">🌱 자기개발 / 지식공유</h2>
-        <p className="mt-1 text-xs font-semibold text-indigo-100">읽고, 나누고, 목표를 이루는 공간. 추천 1개 = 0.2P</p>
+        <p className="mt-1 text-xs font-semibold text-slate-300">읽고, 나누고, 목표를 이루는 공간. 추천 1개 = 0.2P</p>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {([
             [`${fmtP(myVotesReceived)}P`, "내 포인트"],
@@ -109,18 +113,18 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           ] as [string, string][]).map(([value, label]) => (
             <div key={label} className="rounded-lg bg-white/10 px-3 py-2.5 text-center">
               <div className="text-lg font-black">{value}</div>
-              <div className="text-[10px] font-bold text-indigo-100">{label}</div>
+              <div className="text-[10px] font-bold text-slate-300">{label}</div>
             </div>
           ))}
         </div>
       </section>
 
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        {readingPick && <button type="button" onClick={() => onGo("reading")} className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white p-4 text-left shadow-sm">
+        {readingPick && <button type="button" onClick={() => onGo("reading")} className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-left shadow-sm">
           <div className="text-[10px] font-black text-amber-600">📖 오늘의 구절 {readingPick.title ? `· 《${readingPick.title}》` : ""}</div>
           <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-800">{readingPick.content}</p>
         </button>}
-        {tipPick && <button type="button" onClick={() => onGo("tips")} className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-white p-4 text-left shadow-sm">
+        {tipPick && <button type="button" onClick={() => onGo("tips")} className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-left shadow-sm">
           <div className="text-[10px] font-black text-blue-600">💡 오늘의 팁 {tipPick.title ? `· ${tipPick.title}` : ""}</div>
           <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-800">{tipPick.content}</p>
         </button>}
@@ -154,6 +158,20 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
         </section>
       </div>
 
+      {praises.length > 0 && <section className="rounded-xl border border-rose-100 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-black text-slate-900">💖 최근 칭찬</h3>
+          <button type="button" onClick={() => onGo("praise")} className="text-[11px] font-black text-rose-500">칭찬하러 가기 →</button>
+        </div>
+        <div className="mt-2 space-y-1.5">
+          {praises.slice(0, 3).map((praise) => (
+            <div key={praise.id} className="rounded-md bg-rose-50/50 px-3 py-2 text-xs font-semibold text-slate-700">
+              <b className="font-black text-rose-600">{praise.to_name}</b> — {praise.content.length > 60 ? `${praise.content.slice(0, 60)}…` : praise.content}
+            </div>
+          ))}
+        </div>
+      </section>}
+
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-black text-slate-900">🕘 최근 올라온 글</h3>
@@ -184,6 +202,118 @@ function dday(target: string | null) {
   return diff > 0 ? `D-${diff}` : `D+${-diff}`;
 }
 
+
+// 칭찬 릴레이 — 익명으로 동료를 칭찬. 받은 칭찬은 월간 칭찬왕으로 집계.
+function PraiseBoard({ author }: { author: string }) {
+  const { book } = useAuthorBook();
+  const [rows, setRows] = useState<PraisePost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [toName, setToName] = useState("");
+  const [content, setContent] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await selectRows<PraisePost>("praise_posts", "select=*&order=created_at.desc&limit=300"));
+    } catch (e) {
+      setError((e as Error).message || "불러오기 실패 — supabase/selfdev-social.sql 실행 여부를 확인하세요.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthlyKing = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      if (row.created_at.slice(0, 7) !== monthKey) continue;
+      map.set(row.to_name, (map.get(row.to_name) || 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [rows, monthKey]);
+  const myReceived = rows.filter((row) => row.to_name === author).length;
+
+  const submit = async () => {
+    if (busy || !toName || !content.trim()) return;
+    if (!author) { setError("작성자를 먼저 선택하세요."); return; }
+    if (toName === author) { setError("자기 자신 칭찬은 셀프라 무효입니다 🙂 동료를 칭찬해 주세요."); return; }
+    setBusy(true);
+    setError("");
+    try {
+      await insertRow("praise_posts", { from_author: author, to_name: toName, content: content.trim() });
+      setContent("");
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 pb-16">
+      <section className="rounded-xl border border-slate-200 bg-rose-700 p-5 text-white shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black">💖 칭찬 릴레이</h2>
+            <p className="mt-1 text-xs font-semibold text-rose-100">잘한 일을 그냥 지나치지 마세요. 익명으로 전해집니다.</p>
+          </div>
+          <div className="text-center"><div className="text-lg font-black">{myReceived}</div><div className="text-[10px] font-bold text-rose-100">내가 받은 칭찬</div></div>
+        </div>
+      </section>
+
+      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람은 익명</span></div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
+              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                <option value="">받는 사람</option>
+                {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
+              </select>
+              <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="rounded-md bg-rose-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "보내는 중…" : "💌 칭찬 보내기"}</button>
+            </div>
+          </section>
+
+          {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+          {!loading && !rows.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요.</div>}
+          {rows.map((row) => (
+            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.to_name === author ? "border-rose-200 bg-rose-50/40" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
+                <span><b className="text-sm font-black text-rose-600">{row.to_name}</b> 님에게 도착한 칭찬</span>
+                <span>{row.created_at.slice(0, 10)}</span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{row.content}</p>
+            </article>
+          ))}
+        </div>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
+          <h3 className="text-sm font-black text-slate-900">👑 이번 달 칭찬왕</h3>
+          <div className="mt-3 space-y-1.5">
+            {!monthlyKing.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 칭찬이 아직 없어요.</div>}
+            {monthlyKing.map(([name, count], index) => (
+              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-rose-50 ring-1 ring-rose-200" : "bg-slate-50"}`}>
+                <span className="text-xs font-black text-slate-700">{index === 0 ? "👑" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
+                <span className="text-xs font-black text-rose-600">{count}회</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function GoalsBoard({ author }: { author: string }) {
   const [goals, setGoals] = useState<SelfGoal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,6 +325,23 @@ function GoalsBoard({ author }: { author: string }) {
   const [category, setCategory] = useState<string>("기타");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
   const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState("");
+  const [editDraft, setEditDraft] = useState({ title: "", memo: "", target_date: "", category: "기타" });
+
+  const startEdit = (goal: SelfGoal) => {
+    setEditId(goal.id);
+    setEditDraft({ title: goal.title, memo: goal.memo, target_date: goal.target_date || "", category: goal.category || "기타" });
+  };
+  const saveEdit = async () => {
+    if (!editDraft.title.trim()) return;
+    try {
+      await updateRows("self_goals", `id=eq.${editId}`, { title: editDraft.title.trim(), memo: editDraft.memo.trim(), target_date: editDraft.target_date || null, category: editDraft.category });
+      setGoals((current) => current.map((g) => g.id === editId ? { ...g, title: editDraft.title.trim(), memo: editDraft.memo.trim(), target_date: editDraft.target_date || null, category: editDraft.category } : g));
+      setEditId("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -213,6 +360,8 @@ function GoalsBoard({ author }: { author: string }) {
     const base = showAll ? goals : goals.filter((g) => g.author === author);
     return categoryFilter === "전체" ? base : base.filter((g) => (g.category || "기타") === categoryFilter);
   }, [goals, showAll, author, categoryFilter]);
+  const activeGoals = useMemo(() => visible.filter((g) => !g.done), [visible]);
+  const doneGoals = useMemo(() => visible.filter((g) => g.done), [visible]);
   const mine = useMemo(() => goals.filter((g) => g.author === author), [goals, author]);
   const myDone = mine.filter((g) => g.done).length;
   const teamStats = useMemo(() => {
@@ -263,9 +412,53 @@ function GoalsBoard({ author }: { author: string }) {
     }
   };
 
+  const renderGoal = (goal: SelfGoal) => {
+    const mineGoal = goal.author === author;
+    const ddayLabel = dday(goal.target_date);
+    const overdue = !goal.done && ddayLabel.startsWith("D+");
+    if (editId === goal.id) {
+      return (
+        <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4 shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)_140px]">
+            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
+              {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
+            </select>
+            <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+          </div>
+          <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setEditId("")} className="rounded-md border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500">취소</button>
+            <button type="button" onClick={() => void saveEdit()} className="rounded-md bg-blue-600 px-5 py-2 text-xs font-black text-white">저장</button>
+          </div>
+        </article>
+      );
+    }
+    return (
+      <article key={goal.id} className={`flex items-start gap-3 rounded-xl border p-4 shadow-sm ${goal.done ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
+        <button type="button" disabled={!mineGoal} onClick={() => void toggleDone(goal)} className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition ${goal.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent hover:border-emerald-400"} ${mineGoal ? "" : "cursor-default opacity-60"}`}>✓</button>
+        <div className="min-w-0 flex-1">
+          <div className={`text-sm font-black ${goal.done ? "text-emerald-700 line-through" : "text-slate-900"}`}>{goal.title}</div>
+          {goal.memo && <div className="mt-0.5 text-xs font-semibold text-slate-500">{goal.memo}</div>}
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
+            {showAll && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-600">{goal.author}</span>}
+            <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-black text-emerald-600">{goal.category || "기타"}</span>
+            {goal.target_date && <span>목표일 {goal.target_date}</span>}
+            {ddayLabel && !goal.done && <span className={`rounded px-1.5 py-0.5 font-black ${overdue ? "bg-rose-100 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{ddayLabel}</span>}
+            {goal.done && goal.done_at && <span className="text-emerald-600">완료 {goal.done_at.slice(0, 10)}</span>}
+          </div>
+        </div>
+        {mineGoal && <span className="flex shrink-0 gap-2">
+          <button type="button" onClick={() => startEdit(goal)} className="text-[11px] font-black text-slate-300 hover:text-blue-500">수정</button>
+          <button type="button" onClick={() => void removeGoal(goal)} className="text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
+        </span>}
+      </article>
+    );
+  };
+
   return (
     <div className="space-y-4 pb-16">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 p-5 text-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-emerald-800 p-5 text-white shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">🎯 나의 목표</h2>
@@ -313,28 +506,11 @@ function GoalsBoard({ author }: { author: string }) {
 
           {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
           {!loading && !visible.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">{showAll ? "등록된 목표가 없어요." : "아직 목표가 없어요. 첫 목표를 걸어보세요."}</div>}
-          {visible.map((goal) => {
-            const mineGoal = goal.author === author;
-            const ddayLabel = dday(goal.target_date);
-            const overdue = !goal.done && ddayLabel.startsWith("D+");
-            return (
-              <article key={goal.id} className={`flex items-start gap-3 rounded-xl border p-4 shadow-sm ${goal.done ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
-                <button type="button" disabled={!mineGoal} onClick={() => void toggleDone(goal)} className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition ${goal.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent hover:border-emerald-400"} ${mineGoal ? "" : "cursor-default opacity-60"}`}>✓</button>
-                <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-black ${goal.done ? "text-emerald-700 line-through" : "text-slate-900"}`}>{goal.title}</div>
-                  {goal.memo && <div className="mt-0.5 text-xs font-semibold text-slate-500">{goal.memo}</div>}
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
-                    {showAll && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-600">{goal.author}</span>}
-                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-black text-emerald-600">{goal.category || "기타"}</span>
-                    {goal.target_date && <span>목표일 {goal.target_date}</span>}
-                    {ddayLabel && !goal.done && <span className={`rounded px-1.5 py-0.5 font-black ${overdue ? "bg-rose-100 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{ddayLabel}</span>}
-                    {goal.done && goal.done_at && <span className="text-emerald-600">완료 {goal.done_at.slice(0, 10)}</span>}
-                  </div>
-                </div>
-                {mineGoal && <button type="button" onClick={() => void removeGoal(goal)} className="shrink-0 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
-              </article>
-            );
-          })}
+          {activeGoals.map(renderGoal)}
+          {doneGoals.length > 0 && <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <summary className="cursor-pointer px-4 py-3 text-xs font-black text-slate-500">✅ 완료한 목표 {doneGoals.length}개 펼치기</summary>
+            <div className="space-y-3 border-t border-slate-100 p-3">{doneGoals.map(renderGoal)}</div>
+          </details>}
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
@@ -360,7 +536,7 @@ export default function SelfDevHub({ author }: { author: string }) {
   return (
     <div className="space-y-4">
       <div className="flex w-fit flex-wrap gap-1 rounded-md bg-slate-100 p-1">
-        {([["home", "🏠 홈"], ["reading", "📚 독서"], ["tips", "💡 배움·팁"], ["goals", "🎯 목표"]] as [Tab, string][]).map(([key, label]) => (
+        {([["home", "🏠 홈"], ["reading", "📚 독서"], ["tips", "💡 배움·팁"], ["goals", "🎯 목표"], ["praise", "💖 칭찬"]] as [Tab, string][]).map(([key, label]) => (
           <button key={key} type="button" onClick={() => setTab(key)} className={`rounded px-3.5 py-2 text-sm font-black ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
         ))}
       </div>
@@ -368,6 +544,7 @@ export default function SelfDevHub({ author }: { author: string }) {
       {tab === "reading" && <ReadingHub author={author} kind="reading" />}
       {tab === "tips" && <ReadingHub author={author} kind="tip" />}
       {tab === "goals" && <GoalsBoard author={author} />}
+      {tab === "praise" && <PraiseBoard author={author} />}
     </div>
   );
 }

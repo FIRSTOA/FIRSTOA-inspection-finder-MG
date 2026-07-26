@@ -18,7 +18,6 @@ import {
   PhoneCall,
   Plus,
   Route,
-  Send,
   Sparkles,
   Target,
   UsersRound,
@@ -38,7 +37,10 @@ type Screen =
   | "weekly"
   | "growth"
   | "itHistory"
-  | "counterSms";
+  | "counterSms"
+  | "selfdev"
+  | "copierNotes"
+  | "operations";
 
 type MenuItem = {
   key: Screen;
@@ -50,29 +52,29 @@ type MenuItem = {
 };
 
 const primaryLinks: MenuItem[] = [
-  { key: "serviceReception", title: "서비스접수", desc: "AS 접수·양식·전송", icon: ClipboardList, tone: "bg-rose-600 text-white" },
+  { key: "serviceReception", title: "서비스접수", desc: "접수·확인 팝업·일정 자동등록", icon: ClipboardList, tone: "bg-rose-600 text-white" },
+  { key: "asReception", title: "일정리스트", desc: "상세 팝업·통화·네비·FIELD 변환", icon: ClipboardList, tone: "bg-violet-600 text-white" },
+  { key: "walkingMap", title: "워킨맵", desc: "점검·재계약·미수·여분 분석", icon: MapPinned, tone: "bg-emerald-600 text-white" },
   { key: "field", title: "FIELD 작성", desc: "양식·사진·업무방 전송", icon: FilePenLine, tone: "bg-slate-950 text-white" },
-  { key: "walkingMap", title: "워킨맵", desc: "점검·재계약 대상", icon: MapPinned, tone: "bg-emerald-600 text-white" },
-  { key: "asReception", title: "일정리스트", desc: "금일·익일·예정 업무", icon: ClipboardList, tone: "bg-violet-600 text-white" },
 ];
 
 const workGroups: Array<{ title: string; items: MenuItem[] }> = [
   {
     title: "현장 운영",
     items: [
+      { key: "serviceReception", title: "서비스접수", desc: "임대리스트 검색·접수·일정 연동", icon: ClipboardList, tone: "bg-rose-50 text-rose-700" },
+      { key: "asReception", title: "일정리스트", desc: "상세 팝업·상태 동기화·배지", icon: ClipboardList, tone: "bg-violet-50 text-violet-700" },
       { key: "calendar", title: "CS 캘린더", desc: "팀별 일정 등록·수정·완료", icon: CalendarDays, tone: "bg-blue-50 text-blue-700" },
-      { key: "asReception", title: "일정리스트", desc: "금일·익일·예정 일정 처리", icon: ClipboardList, tone: "bg-violet-50 text-violet-700" },
+      { key: "walkingMap", title: "워킨맵", desc: "점검·재계약·미수·자가신청", icon: MapPinned, tone: "bg-emerald-50 text-emerald-700" },
       { key: "field", title: "FIELD", desc: "현장 양식 작성·사진·전송", icon: FilePenLine, tone: "bg-slate-100 text-slate-800" },
-      { key: "walkingMap", title: "워킨맵", desc: "점검·재계약·방문 이력", icon: MapPinned, tone: "bg-emerald-50 text-emerald-700" },
     ],
   },
   {
-    title: "고객 관리",
+    title: "학습·지식",
     items: [
-      { key: "happycall", title: "해피콜", desc: "방문 후 문자·예약 발송", icon: PhoneCall, tone: "bg-rose-50 text-rose-700" },
-      { key: "promoSend", title: "홍보물 발송·인쇄", desc: "홍보자료 문자·메일·인쇄", icon: Megaphone, tone: "bg-amber-50 text-amber-700" },
-      { key: "counterSms", title: "카운터 문자전송", desc: "복합기 사용량 요청 자동화", icon: MessageSquareText, tone: "bg-slate-100 text-slate-400", pending: true },
-      { key: "itHistory", title: "IT 학습·처리이력", desc: "처리이력·퀴즈·기술 레벨", icon: GraduationCap, tone: "bg-slate-100 text-slate-400", pending: true },
+      { key: "copierNotes", title: "복합기 학습·처리이력", desc: "브랜드·기종별 사례 + 기술 퀴즈", icon: GraduationCap, tone: "bg-blue-50 text-blue-700" },
+      { key: "itHistory", title: "IT 학습·처리이력", desc: "PC 처리이력·기술 퀴즈", icon: GraduationCap, tone: "bg-cyan-50 text-cyan-700" },
+      { key: "selfdev", title: "자기개발/지식공유", desc: "독서·배움 공유·목표·칭찬 릴레이", icon: BookOpen, tone: "bg-amber-50 text-amber-700" },
     ],
   },
   {
@@ -81,6 +83,10 @@ const workGroups: Array<{ title: string; items: MenuItem[] }> = [
       { key: "daily", title: "일일방문일지", desc: "기간별 방문·업무시간 집계", icon: BarChart3, tone: "bg-cyan-50 text-cyan-700" },
       { key: "weekly", title: "주간현황판", desc: "목표·병목·실적·성장 기록", icon: Target, tone: "bg-indigo-50 text-indigo-700" },
       { key: "growth", title: "성장기록", desc: "분기 결과·미션·골든미팅카드", icon: Sparkles, tone: "bg-fuchsia-50 text-fuchsia-700" },
+      { key: "operations", title: "업무관리", desc: "팀 운영 현황·담당자/주소 변경이력", icon: UsersRound, tone: "bg-slate-100 text-slate-700" },
+      { key: "happycall", title: "해피콜", desc: "방문 후 문자·예약 발송", icon: PhoneCall, tone: "bg-rose-50 text-rose-700" },
+      { key: "promoSend", title: "홍보물 발송·인쇄", desc: "홍보자료 문자·메일·인쇄", icon: Megaphone, tone: "bg-amber-50 text-amber-700" },
+      { key: "counterSms", title: "카운터 문자전송", desc: "복합기 사용량 요청 자동화", icon: MessageSquareText, tone: "bg-slate-100 text-slate-400", pending: true },
     ],
   },
 ];
@@ -92,15 +98,16 @@ const comparisons = [
 ];
 
 const flow = [
-  { title: "일정·대상", desc: "캘린더·워킨맵", icon: CalendarDays, screen: "calendar" as Screen },
-  { title: "현장 입력", desc: "FIELD 한 번 작성", icon: FilePenLine, screen: "field" as Screen },
-  { title: "업무방 전송", desc: "내용·사진 함께", icon: Send, screen: "field" as Screen },
-  { title: "자동 집계", desc: "일일·주간 현황", icon: BarChart3, screen: "daily" as Screen },
-  { title: "후속 관리", desc: "해피콜·성장기록", icon: PhoneCall, screen: "happycall" as Screen },
+  { title: "접수", desc: "서비스접수·확인 팝업", icon: ClipboardList, screen: "serviceReception" as Screen },
+  { title: "일정 배정", desc: "일정리스트 자동 등록", icon: CalendarDays, screen: "asReception" as Screen },
+  { title: "현장 처리", desc: "FIELD·워킨맵", icon: FilePenLine, screen: "field" as Screen },
+  { title: "자동 집계", desc: "일일·주간·업무관리", icon: BarChart3, screen: "daily" as Screen },
+  { title: "지식 축적", desc: "복합기 이력·자기개발", icon: GraduationCap, screen: "copierNotes" as Screen },
 ];
 
 const manuals = [
-  { id: "start", title: "처음 사용할 때", summary: "일정 확인부터 현장 완료까지", icon: Route, steps: ["캘린더 또는 일정리스트에서 오늘 업무를 확인합니다.", "워킨맵에서 점검·재계약 대상과 최근 방문 이력을 확인합니다.", "FIELD에서 양식을 작성하고 사진을 첨부한 뒤 해당 업무방으로 전송합니다.", "저장된 방문은 일일방문일지와 주간현황판에서 자동으로 확인합니다."] },
+  { id: "start", title: "처음 사용할 때", summary: "접수부터 현장 완료까지", icon: Route, steps: ["서비스접수에서 임대리스트를 검색해 접수하고, 확인 팝업에서 주소·접수자를 점검합니다.", "저장하면 일정리스트에 자동 등록됩니다 — 담당자를 배정하고 상세 팝업에서 통화·네비를 씁니다.", "워킨맵·FIELD에서 현장 처리 후 해당 업무방으로 전송합니다.", "처리 결과는 일일방문일지·주간현황판·업무관리에 자동 집계됩니다."] },
+  { id: "reception", title: "접수 → 일정 → FIELD 연동", summary: "접수 한 번으로 일정·양식까지", icon: ClipboardList, steps: ["접수 저장 시 '일정리스트에도 등록'을 켜두면 오늘 날짜로 일정이 생깁니다.", "일정리스트에서 완료·익일 처리하면 접수 현황 상태도 함께 바뀝니다.", "일정 상세 팝업의 FIELD AS 버튼으로 접수 내용이 채워진 양식을 바로 만듭니다.", "주소가 임대리스트와 다르면 접수 현황 📍 필터에서 모아 워킨맵·임대리스트에 반영합니다."] },
   { id: "field", title: "FIELD 작성·전송", summary: "원본 변환, 기기 수정, 사진, 전송", icon: FilePenLine, steps: ["원본 붙여넣기, 사진 변환 또는 거래처 검색으로 양식을 불러옵니다.", "기기선택에서 위치·모델·시리얼·자산기번·내용을 확인합니다.", "작성 칸과 결과 미리보기가 같은 내용인지 최종 확인합니다.", "사진을 첨부하고 점검·AS·물류 등 해당 업무방으로 전송합니다."] },
   { id: "manage", title: "방문 이후 관리", summary: "이력, 해피콜, 홍보물, 성과 기록", icon: ClipboardCheck, steps: ["통합이력에서 거래처의 점검·AS·불만·미수 등 전체 기록을 찾습니다.", "최근 방문 업체에는 해피콜을 즉시 또는 예약 발송할 수 있습니다.", "필요한 홍보물을 문자·메일로 보내거나 현장에서 인쇄해 활용합니다.", "주간현황과 성장기록을 분기 결과 및 골든미팅카드 자료로 이어갑니다."] },
 ];

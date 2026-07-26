@@ -24,6 +24,18 @@ const BRAND_TONE: Record<string, string> = {
   교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
 };
 
+type QuizItem = { note: CopierNote; options: CopierNote[] };
+
+function buildQuiz(pool: CopierNote[], count: number): QuizItem[] {
+  const usable = pool.filter((note) => note.title.trim() && note.content.trim());
+  if (usable.length < 4) return [];
+  const shuffled = [...usable].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length)).map((note) => {
+    const others = usable.filter((item) => item.id !== note.id).sort(() => Math.random() - 0.5).slice(0, 3);
+    return { note, options: [note, ...others].sort(() => Math.random() - 0.5) };
+  });
+}
+
 export default function CopierNotes({ author }: { author: string }) {
   const [notes, setNotes] = useState<CopierNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +45,29 @@ export default function CopierNotes({ author }: { author: string }) {
   const [kindFilter, setKindFilter] = useState<"전체" | "학습" | "처리이력">("전체");
   const [query, setQuery] = useState("");
   const [writeOpen, setWriteOpen] = useState(false);
+  const [view, setView] = useState<"notes" | "quiz">("notes");
+  // 퀴즈: 처리이력·학습 기록을 문제 은행으로 쓰는 4지선다 (IT 기술퀴즈와 같은 흐름)
+  const [quizBrand, setQuizBrand] = useState("전체");
+  const [quizCount, setQuizCount] = useState(5);
+  const [quiz, setQuiz] = useState<QuizItem[]>([]);
+  const [quizIndex, setQuizIndex] = useState(-1);
+  const [quizPick, setQuizPick] = useState("");
+  const [quizScore, setQuizScore] = useState(0);
+  const [wrongNotes, setWrongNotes] = useState<QuizItem[]>([]);
+
+  const startQuiz = () => {
+    const pool = quizBrand === "전체" ? notes : notes.filter((note) => note.brand === quizBrand);
+    const built = buildQuiz(pool, quizCount);
+    if (!built.length) { window.alert("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요."); return; }
+    setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
+  };
+  const answerQuiz = (id: string) => {
+    if (quizPick || quizIndex < 0 || quizIndex >= quiz.length) return;
+    setQuizPick(id);
+    if (id === quiz[quizIndex].note.id) setQuizScore((score) => score + 1);
+    else setWrongNotes((wrong) => [...wrong, quiz[quizIndex]]);
+  };
+  const nextQuiz = () => { setQuizPick(""); setQuizIndex((index) => index + 1); };
   const [draft, setDraft] = useState({ brand: "삼성", model: "", kind: "학습" as "학습" | "처리이력", title: "", content: "" });
   const [busy, setBusy] = useState(false);
 
@@ -90,8 +125,78 @@ export default function CopierNotes({ author }: { author: string }) {
     }
   };
 
+  const currentQuiz = quizIndex >= 0 && quizIndex < quiz.length ? quiz[quizIndex] : null;
+
   return (
     <div className="space-y-4 pb-16">
+      <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+        {([["notes", "📒 기록"], ["quiz", "🎓 복합기 퀴즈"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setView(key)} className={`rounded px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+        ))}
+      </div>
+
+      {view === "quiz" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        {quizIndex < 0 && <div className="mx-auto max-w-xl py-4 text-center">
+          <div className="text-3xl">🎓</div>
+          <h3 className="mt-2 text-xl font-black text-slate-950">복합기 기술 퀴즈</h3>
+          <p className="mt-1 text-sm font-semibold text-slate-500">팀이 쌓은 처리 사례로 만드는 문제 — 증상을 보고 올바른 처리를 고르세요.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-1">
+            {["전체", ...BRAND_NAMES].map((name) => (
+              <button key={name} type="button" onClick={() => setQuizBrand(name)} className={`rounded-md px-3 py-2 text-xs font-black ${quizBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-center gap-2">
+            {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-4 py-2 text-sm font-black ${quizCount === count ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
+          </div>
+          <button type="button" onClick={startQuiz} className="mt-5 h-11 rounded-md bg-blue-600 px-8 text-sm font-black text-white">퀴즈 시작</button>
+          <p className="mt-3 text-[11px] font-bold text-slate-400">문제 은행: 제목·내용이 채워진 기록 {notes.filter((n) => n.title.trim() && n.content.trim()).length}건</p>
+        </div>}
+        {currentQuiz && <div className="mx-auto max-w-2xl">
+          <div className="flex items-center justify-between text-xs font-black text-slate-400">
+            <span>{quizIndex + 1} / {quiz.length}</span><span>점수 {quizScore}</span>
+          </div>
+          <div className="mt-3 rounded-lg bg-slate-50 p-4">
+            <div className="flex flex-wrap gap-1.5">
+              <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[currentQuiz.note.brand] || "bg-slate-100 text-slate-600"}`}>{currentQuiz.note.brand}</span>
+              {currentQuiz.note.model && <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">{currentQuiz.note.model}</span>}
+            </div>
+            <div className="mt-2 text-base font-black text-slate-950">증상: {currentQuiz.note.title}</div>
+            <div className="mt-1 text-xs font-bold text-slate-500">올바른 처리 내용을 고르세요</div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {currentQuiz.options.map((option) => {
+              const picked = quizPick === option.id;
+              const isAnswer = option.id === currentQuiz.note.id;
+              const tone = !quizPick ? "border-slate-200 bg-white hover:border-blue-300"
+                : isAnswer ? "border-emerald-400 bg-emerald-50"
+                : picked ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white opacity-60";
+              return (
+                <button key={option.id} type="button" onClick={() => answerQuiz(option.id)} className={`block w-full rounded-lg border p-3 text-left text-sm font-semibold leading-6 text-slate-700 transition ${tone}`}>
+                  {option.content.length > 160 ? `${option.content.slice(0, 160)}…` : option.content}
+                  {quizPick && isAnswer && <span className="ml-2 text-xs font-black text-emerald-600">✓ 정답</span>}
+                </button>
+              );
+            })}
+          </div>
+          {quizPick && <div className="mt-4 flex justify-end">
+            <button type="button" onClick={nextQuiz} className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-black text-white">{quizIndex + 1 >= quiz.length ? "결과 보기" : "다음 문제"}</button>
+          </div>}
+        </div>}
+        {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-2xl py-4 text-center">
+          <div className="text-3xl">{quizScore === quiz.length ? "🏆" : quizScore >= quiz.length / 2 ? "👏" : "💪"}</div>
+          <h3 className="mt-2 text-xl font-black text-slate-950">{quiz.length}문제 중 {quizScore}개 정답</h3>
+          {wrongNotes.length > 0 && <div className="mt-4 space-y-2 text-left">
+            <div className="text-xs font-black text-slate-400">오답 노트 — 다시 확인하세요</div>
+            {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+              <div className="text-sm font-black text-slate-900">[{item.note.brand}{item.note.model ? ` ${item.note.model}` : ""}] {item.note.title}</div>
+              <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-600">{item.note.content}</p>
+            </div>)}
+          </div>}
+          <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="mt-5 rounded-md border border-slate-300 px-6 py-2.5 text-sm font-black text-slate-700">다시 풀기</button>
+        </div>}
+      </section>}
+
+      {view === "notes" && <>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold text-slate-500">브랜드·기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스입니다.</p>
@@ -144,6 +249,8 @@ export default function CopierNotes({ author }: { author: string }) {
           </article>
         ))}
       </div>
+
+      </>}
 
       {writeOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setWriteOpen(false)}>
