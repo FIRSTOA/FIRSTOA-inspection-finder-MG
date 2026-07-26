@@ -65,7 +65,8 @@ function buildLeaseRecords_() {
   const lastCol = sh.getLastColumn();
   if (lastRow <= cfg.headerRow) throw new Error('임대리스트 시트에 데이터가 없습니다.');
   const values = sh.getRange(cfg.headerRow, 1, lastRow - cfg.headerRow + 1, lastCol).getValues();
-  const headers = values[0].map(function (h) { return String(h == null ? '' : h).trim(); });
+  // 헤더의 줄바꿈·연속 공백은 공백 하나로 — 최초 적재(7/20)와 같은 키 규칙 (예: '거래처 코드')
+  const headers = values[0].map(function (h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim(); });
   const nowIso = Utilities.formatDate(new Date(), 'Asia/Seoul', "yyyy-MM-dd HH:mm:ss");
 
   const bySeq = {}; // 시트 내 순번 중복 시 마지막 행이 이긴다 (같은 배치에서 두 번 업서트하면 오류)
