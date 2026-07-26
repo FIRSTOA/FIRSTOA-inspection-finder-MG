@@ -18,6 +18,37 @@ type Props = {
   onError: (msg: string) => void;
 };
 
+// 선택 버튼 그룹 — label 밖·모듈 스코프에 둔다.
+// (label 안에 있으면 라벨 영역 탭이 '첫 번째 버튼'을 활성화해 모바일에서 항상 첫 항목이 눌리고,
+//  컴포넌트 안에 정의하면 렌더마다 타입이 바뀌어 리마운트된다)
+function ChoiceInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  const [direct, setDirect] = useState(Boolean(value && !options.includes(value)));
+  const choose = (v: string) => {
+    setDirect(false);
+    onChange(value === v ? "" : v);
+  };
+  return (
+    <div className="mt-1">
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button key={o} type="button" onClick={() => choose(o)}
+            className={`rounded-lg px-3 py-2 text-xs font-bold ${value === o && !direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+            {o}
+          </button>
+        ))}
+        <button type="button" onClick={() => { setDirect(true); if (options.includes(value)) onChange(""); }}
+          className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+          직접입력
+        </button>
+      </div>
+      {direct && (
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
+          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+      )}
+    </div>
+  );
+}
+
 export default function CategoryForm({ schemaKey, form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
   const { authors } = useAuthorBook();
@@ -56,12 +87,18 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
         </label>
       );
     }
+    if (f.type === "select") {
+      return (
+        <div key={f.key} className="block">
+          <span className="text-xs font-medium text-slate-500">{f.label}</span>
+          <ChoiceInput value={form[f.key] || ""} onChange={(v) => set(f.key, v)} options={f.options || []} />
+        </div>
+      );
+    }
     return (
       <label key={f.key} className="block">
         <span className="text-xs font-medium text-slate-500">{f.label}</span>
-        {f.type === "select" ? (
-          <ChoiceInput value={form[f.key] || ""} onChange={(v) => set(f.key, v)} options={f.options || []} />
-        ) : f.type === "textarea" ? (
+        {f.type === "textarea" ? (
           <textarea value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)} rows={2}
             className="mt-0.5 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         ) : (
@@ -71,34 +108,6 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
       </label>
   );
 };
-
-function ChoiceInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
-  const [direct, setDirect] = useState(Boolean(value && !options.includes(value)));
-  const choose = (v: string) => {
-    setDirect(false);
-    onChange(value === v ? "" : v);
-  };
-  return (
-    <div className="mt-1">
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((o) => (
-          <button key={o} type="button" onClick={() => choose(o)}
-            className={`rounded-lg px-3 py-2 text-xs font-bold ${value === o && !direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
-            {o}
-          </button>
-        ))}
-        <button type="button" onClick={() => { setDirect(true); if (options.includes(value)) onChange(""); }}
-          className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
-          직접입력
-        </button>
-      </div>
-      {direct && (
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
-          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
-      )}
-    </div>
-  );
-}
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">

@@ -13,6 +13,7 @@ import ContactChangeHistory from "./ContactChangeHistory";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
+import DeptRequests from "./DeptRequests";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
@@ -29,6 +30,7 @@ import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { setServiceReceptionStatus } from "./api";
 import { uploadPhoto, createAlbum, selectAllRows, updateRows } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
@@ -4545,9 +4547,14 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes" | "stock">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
   const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
+  // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
+  const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const [ticketDeferDate, setTicketDeferDate] = useState("");
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>(() => {
@@ -5064,6 +5071,10 @@ export default function App() {
       }
     }
     setSending(false);
+    if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
+      setTicketDonePrompt(pendingAsTicketRef.current);
+      pendingAsTicketRef.current = null;
+    }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
       showToast(
@@ -5190,7 +5201,8 @@ export default function App() {
     showToast("기기를 삭제했어요");
   };
 
-  const openAsTicketInField = (fieldText: string) => {
+  const openAsTicketInField = (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
+    pendingAsTicketRef.current = ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null;
     if (mode !== "blank-report") {
       modeStateRef.current[mode] = {
         inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
@@ -5212,6 +5224,19 @@ export default function App() {
     setReportTypes(["AS"]);
     setReportTypeOther("");
     showToast("AS접수 내용을 FIELD AS양식으로 불러왔어요", "success");
+  };
+
+  // 일정 완료/미루기 팝업 처리 (일정리스트와 같은 규칙: 완료=상태만, 익일=날짜+익일AS)
+  const addDaysYmd = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setDate(d.getDate() + days); return kstDate(d); };
+  const nextBizYmd = (date: string) => { let next = addDaysYmd(date, 1); while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDaysYmd(next, 1); return next; };
+  const finishTicket = async (ticket: { id: string; receptionId: string }, patch: Record<string, unknown>, receptionStatus: string) => {
+    try {
+      await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, patch);
+      if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
+      showToast(receptionStatus === "완료" ? "일정을 완료 처리했어요" : "일정을 미뤘어요", "success");
+    } catch (e) {
+      showToast(`일정 처리 실패: ${(e as Error).message}`, "error");
+    }
   };
 
   // 워킨맵 여분 분석 → 자가신청 핸드오프.
@@ -5253,7 +5278,7 @@ export default function App() {
     { title: "지원 도구", items: [["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["stock", "기기/부품 재고"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["stock", "기기/부품 재고"] as [typeof screen, string], ["deptRequests", "부서 요청"] as [typeof screen, string]];
   const lowerItems = [["selfdev", "자기개발/지식공유"]] as [typeof screen, string][];
   const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
@@ -5334,7 +5359,7 @@ export default function App() {
             {standaloneItems.map(([key, label]) => (
               <button key={key} type="button" title={label} onClick={() => setScreen(key)}
                 className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label === "기기/부품 재고" ? "재고" : label) : label}</span>
+                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label === "기기/부품 재고" ? "재고" : label === "부서 요청" ? "요청" : label) : label}</span>
                 {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
               </button>
             ))}
@@ -5433,9 +5458,43 @@ export default function App() {
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
+
+        {ticketDonePrompt && (
+          <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDonePrompt(null)}>
+            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
+              <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-lg bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
+                <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>
+              </div>
+              <button type="button" onClick={() => setTicketDonePrompt(null)} className="mt-2 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-500">그대로 두기</button>
+            </div>
+          </div>
+        )}
+        {ticketDeferPrompt && (
+          <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDeferPrompt(null)}>
+            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="text-lg font-black text-slate-950">언제로 미룰까요?</div>
+              <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDeferPrompt.vendor || "이 일정"}</div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                {([["익일", nextBizYmd(kstDate())], ["1주 뒤", addDaysYmd(kstDate(), 7)]] as [string, string][]).map(([label, date]) => (
+                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+                    {label}<div className="mt-0.5 text-xs font-bold text-slate-400">{date}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold" />
+                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+              </div>
+            </div>
+          </div>
+        )}
         {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "stock" && <StockBoard author={author} />}
+        {screen === "deptRequests" && <DeptRequests author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
@@ -5475,9 +5534,9 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`rounded-xl py-2.5 text-sm font-bold transition ${moreActive ? "bg-white text-slate-900 shadow-sm" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
+                  className={`truncate whitespace-nowrap rounded-xl px-1 py-2.5 text-sm font-bold transition ${moreActive ? "bg-white text-slate-900 shadow-sm" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
                 >
-                  {moreActive ? config.label : "더보기"} ▾
+                  {moreActive ? (config.label === "담당자/주소 변경" ? "담당자/주소" : config.label) : "더보기"} ▾
                 </button>
               );
             })()}

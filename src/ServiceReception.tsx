@@ -645,11 +645,15 @@ export default function ServiceReception({ author }: { author: string }) {
         {/* ==== 좌: 접수 작성 ==== */}
         <div className="space-y-4">
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-black text-slate-400">접수경로</span>
-              {(["카카오", "전화"] as ReceiveRoute[]).map((r) => <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-md px-3.5 py-2 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{r}</button>)}
-              <span className="ml-3 text-xs font-black text-slate-400">접수유형</span>
-              {(["복합기 AS", "IT AS", "원격이관"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded-md px-3.5 py-2 text-xs font-black ${type === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-14 text-xs font-black text-slate-400">접수경로</span>
+                {(["카카오", "전화"] as ReceiveRoute[]).map((r) => <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-md px-3.5 py-2 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{r}</button>)}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-14 text-xs font-black text-slate-400">접수유형</span>
+                {(["복합기 AS", "IT AS", "원격이관"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded-md px-3.5 py-2 text-xs font-black ${type === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
+              </div>
             </div>
             <div className="mt-3 flex gap-2">
               <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />

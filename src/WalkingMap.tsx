@@ -2023,7 +2023,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         const { place, snapshots, loading: historyLoading, latestVisit, vendor: detailVendor, advice } = mobileDetail;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
-        const phone = place.phone.match(/0\d{1,2}-?\d{3,4}-?\d{4}/)?.[0] || "";
+        // 연락처가 여러 개(키맨 여러 명)면 줄 단위로 나눠 각각 통화 버튼을 단다
+        const phoneLines = place.phone.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+          .flatMap((line) => (line.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/g) || []).map((num) => ({ line, num })));
         return <div className="fixed inset-0 z-[2300] flex flex-col bg-slate-50 text-slate-900 lg:hidden">
           <header className="shrink-0 border-b-4 bg-[#087EA4] pt-[env(safe-area-inset-top)] text-white" style={{ borderBottomColor: meta.color }}>
             <div className="flex h-14 items-center gap-2 px-3">
@@ -2055,10 +2057,18 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <div className="whitespace-pre-wrap text-sm font-bold leading-6">{address || "주소 정보 없음"}</div>
               <NavLinks place={place} large />
             </section>
-            <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b-8 border-slate-100 px-4 py-4">
+            <section className="grid grid-cols-[32px_minmax(0,1fr)] items-start gap-3 border-b-8 border-slate-100 px-4 py-4">
               <span className="text-xl text-slate-400">☎</span>
-              <div className="whitespace-pre-wrap text-sm font-bold leading-6">{place.phone || "연락처 정보 없음"}</div>
-              {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="rounded-full border border-slate-300 px-3 py-2 text-xs font-black text-slate-600">전화</a>}
+              {phoneLines.length ? (
+                <div className="space-y-2">
+                  {phoneLines.map(({ line, num }, index) => (
+                    <div key={`${num}-${index}`} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold leading-6">{line}</span>
+                      <a href={`tel:${num.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-xs font-black text-white">📞 {num}</a>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="whitespace-pre-wrap text-sm font-bold leading-6">{place.phone || "연락처 정보 없음"}</div>}
             </section>
             <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">업무 정보</div>

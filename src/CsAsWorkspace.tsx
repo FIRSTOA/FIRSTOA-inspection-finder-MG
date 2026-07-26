@@ -257,11 +257,11 @@ export function CsCalendar() {
   return <CsAsWorkspace view="calendar" />;
 }
 
-export function AsReception({ author, onUseField }: { author: string; onUseField: (fieldText: string) => void }) {
+export function AsReception({ author, onUseField }: { author: string; onUseField: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
   return <CsAsWorkspace view="as" author={author} onUseField={onUseField} />;
 }
 
-function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string) => void }) {
+function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
   const todayYmd = getTodayYmd();
   const tomorrowYmd = getTomorrowYmd();
   const [, setDateTick] = useState(0);
@@ -614,7 +614,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                 </select>
                 <div className="mt-3 flex gap-2" onClick={(event) => event.stopPropagation()}>
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author))} className="flex-1 rounded-md bg-slate-900 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
+                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-md bg-slate-900 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
                   <button type="button" onClick={() => toggleDone(ticket)} className={`flex-1 rounded-md border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
                 </div>
@@ -656,7 +656,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     </td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
-                        {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author))} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
+                        {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
                         <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
                         <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
                       </div>
@@ -743,7 +743,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-3">
                 <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">수정</button>
                 <div className="flex gap-2">
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author)); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
+                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
                   <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-md border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
                 </div>

@@ -513,6 +513,22 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             </div>
           </section>
 
+          {(() => {
+            const typeCounts = recordTypes.map(([key, label]) => [label, rows.filter((row) => String(row[key] || "").trim()).length] as [string, number]);
+            const total = typeCounts.reduce((sum, [, count]) => sum + count, 0);
+            const people = new Set(rows.map((row) => row.author)).size;
+            return (
+              <section className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                {([["총 기록", `${total}개`], ["참여 인원", `${people}명`], ["기록 주차", `${rows.length}건`], ...typeCounts.map(([label, count]) => [label, `${count}개`] as [string, string])]).map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-slate-200 bg-white px-2 py-2.5 text-center shadow-sm">
+                    <div className="truncate text-sm font-black text-slate-950">{value}</div>
+                    <div className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{label}</div>
+                  </div>
+                ))}
+              </section>
+            );
+          })()}
+
           {type === "all" ? (
             <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               {rows.map((row) => {
