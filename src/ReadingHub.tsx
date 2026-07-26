@@ -5,13 +5,37 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows } from "./supabase";
 
-type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string };
+type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string };
+
+export type BoardLabels = {
+  heading: string; sub: string; titlePlaceholder: string; contentPlaceholder: string;
+  pickLabel: string; submitLabel: string; writeHint: string;
+};
+const READING_LABELS: BoardLabels = {
+  heading: "📚 독서", sub: "책에서 만난 좋은 글을 익명으로 나눕니다. 추천 1개 = 1포인트.",
+  titlePlaceholder: "책 제목·출처 (선택)", contentPlaceholder: "마음에 남은 구절이나 생각을 적어주세요.",
+  pickLabel: "📖 오늘의 구절", submitLabel: "익명으로 올리기", writeHint: "좋은 글 남기기",
+};
+const TIP_LABELS: BoardLabels = {
+  heading: "💡 배움·팁 공유", sub: "업무 팁, 유용한 강의·아티클 링크를 익명으로 나눕니다. 추천 1개 = 1포인트.",
+  titlePlaceholder: "주제·출처 (선택)", contentPlaceholder: "배운 것, 꿀팁, 링크(자동으로 클릭 가능)를 공유해주세요.",
+  pickLabel: "💡 오늘의 팁", submitLabel: "익명으로 공유", writeHint: "배움·팁 남기기",
+};
+
+// 본문 속 URL을 클릭 가능한 링크로
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return <>{parts.map((part, index) => /^https?:\/\//.test(part)
+    ? <a key={index} href={part} target="_blank" rel="noreferrer" className="break-all font-bold text-blue-600 underline">{part}</a>
+    : <span key={index}>{part}</span>)}</>;
+}
 type ReadingVote = { post_id: string; voter: string; created_at?: string };
 type SortMode = "latest" | "top";
 
 const LONG_POST = 280; // 이보다 길면 접어서 보여준다
 
-export default function ReadingHub({ author }: { author: string }) {
+export default function ReadingHub({ author, kind = "reading" }: { author: string; kind?: "reading" | "tip" }) {
+  const labels = kind === "tip" ? TIP_LABELS : READING_LABELS;
   const [posts, setPosts] = useState<ReadingPost[]>([]);
   const [votes, setVotes] = useState<ReadingVote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +54,11 @@ export default function ReadingHub({ author }: { author: string }) {
     setError("");
     try {
       const [postRows, voteRows] = await Promise.all([
-        selectRows<ReadingPost>("reading_posts", "select=*&order=created_at.desc&limit=200"),
+        selectRows<ReadingPost>("reading_posts", `select=*&kind=eq.${kind}&order=created_at.desc&limit=200`)
+          .catch(async (e) => {
+            if (kind === "reading") return selectRows<ReadingPost>("reading_posts", "select=*&order=created_at.desc&limit=200"); // kind 컬럼 SQL 전 호환
+            throw e;
+          }),
         selectRows<ReadingVote>("reading_votes", "select=post_id,voter,created_at&limit=5000"),
       ]);
       setPosts(postRows);
@@ -40,7 +68,7 @@ export default function ReadingHub({ author }: { author: string }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [kind]);
   useEffect(() => { void load(); }, [load]);
 
   const voteCount = useMemo(() => {
@@ -91,7 +119,7 @@ export default function ReadingHub({ author }: { author: string }) {
     setBusy(true);
     setError("");
     try {
-      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim() });
+      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim(), ...(kind !== "reading" ? { kind } : {}) });
       setTitle("");
       setContent("");
       await load();
@@ -145,7 +173,7 @@ export default function ReadingHub({ author }: { author: string }) {
     const body = isLong && !isOpen ? `${post.content.slice(0, LONG_POST).trimEnd()}…` : post.content;
     return (
       <article key={`${highlight ? "pick-" : ""}${post.id}`} className={`relative overflow-hidden rounded-xl border p-5 shadow-sm ${highlight ? "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white" : "border-slate-200 bg-white"}`}>
-        {highlight && <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-400/90 px-2.5 py-1 text-[10px] font-black text-white">📖 오늘의 구절</div>}
+        {highlight && <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-400/90 px-2.5 py-1 text-[10px] font-black text-white">{labels.pickLabel}</div>}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-slate-400">
             <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 font-black text-slate-500">익명{mine ? " (내 글)" : ""}</span>
@@ -156,7 +184,7 @@ export default function ReadingHub({ author }: { author: string }) {
         </div>
         <div className="mt-3 flex gap-3">
           <span className="select-none font-serif text-3xl leading-none text-amber-300">“</span>
-          <p className="min-w-0 flex-1 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{body}</p>
+          <p className="min-w-0 flex-1 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800"><Linkified text={body} /></p>
         </div>
         <div className="mt-3 flex items-center gap-2 pl-8">
           <button type="button" disabled={pendingVotes.has(post.id)} onClick={() => void toggleVote(post)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition disabled:opacity-50 ${voted ? "bg-amber-400 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-600"}`}>
@@ -174,8 +202,8 @@ export default function ReadingHub({ author }: { author: string }) {
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-5 text-white shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black">📚 독서</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-300">책에서 만난 좋은 글을 익명으로 나눕니다. 추천 1개 = 1포인트.</p>
+            <h2 className="text-xl font-black">{labels.heading}</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-300">{labels.sub}</p>
           </div>
           <div className="flex gap-4 text-center">
             <div><div className="text-lg font-black">{posts.length}</div><div className="text-[10px] font-bold text-slate-300">전체 글</div></div>
@@ -194,12 +222,12 @@ export default function ReadingHub({ author }: { author: string }) {
 
           {/* 글쓰기 */}
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-black text-slate-400">좋은 글 남기기 <span className="font-bold text-slate-300">— 익명으로 공유됩니다</span></div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="책 제목·출처 (선택)" className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder="마음에 남은 구절이나 생각을 적어주세요." className="mt-2 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+            <div className="text-xs font-black text-slate-400">{labels.writeHint} <span className="font-bold text-slate-300">— 익명으로 공유됩니다</span></div>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={labels.titlePlaceholder} className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>
-              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "올리는 중…" : "익명으로 올리기"}</button>
+              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "올리는 중…" : labels.submitLabel}</button>
             </div>
           </section>
 

@@ -204,7 +204,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [listPeriod, setListPeriod] = useState<ListPeriod>("day");
   const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
-  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관">("전체");
+  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관" | "주소확인">("전체");
   const [openRowId, setOpenRowId] = useState("");
   const [previewRow, setPreviewRow] = useState<ServiceReceptionRow | null>(null);
   const [previewCopied, setPreviewCopied] = useState(false);
@@ -511,6 +511,17 @@ export default function ServiceReception({ author }: { author: string }) {
     address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
   });
 
+  // 시트 원본 주소를 고친 뒤 누르면 '주소확인' 목록에서 내려간다
+  const resolveAddress = async (row: ServiceReceptionRow) => {
+    if (!window.confirm("임대리스트 시트의 주소를 수정하셨나요? 확인 목록에서 제외합니다.")) return;
+    try {
+      await updateServiceReception(row.id, { address_changed: false });
+      setListRows((current) => current.map((r) => r.id === row.id ? { ...r, address_changed: false } : r));
+    } catch (e) {
+      window.alert(`처리 실패: ${(e as Error).message}`);
+    }
+  };
+
   const removeReception = async (row: ServiceReceptionRow) => {
     if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)`)) return;
     try {
@@ -538,6 +549,7 @@ export default function ServiceReception({ author }: { author: string }) {
     it: listRows.filter((r) => r.type === "IT AS").length,
     remote: listRows.filter((r) => r.type === "원격이관").length,
     remoteWaiting: listRows.filter((r) => r.status === "원격대기").length,
+    addr: listRows.filter((r) => r.address_changed).length,
   }), [listRows]);
   const byAuthor = useMemo(() => {
     const map = new Map<string, { total: number; copier: number; it: number; remote: number }>();
@@ -552,7 +564,7 @@ export default function ServiceReception({ author }: { author: string }) {
     }
     return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
   }, [listRows]);
-  const filteredRows = useMemo(() => listFilter === "전체" ? listRows : listRows.filter((r) => r.type === listFilter), [listRows, listFilter]);
+  const filteredRows = useMemo(() => listFilter === "전체" ? listRows : listFilter === "주소확인" ? listRows.filter((r) => r.address_changed) : listRows.filter((r) => r.type === listFilter), [listRows, listFilter]);
   const isToday = listDate === kstDate();
 
   return (
@@ -766,9 +778,9 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
             {listPeriod !== "day" && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
             <div className="mt-2.5 flex gap-1">
-              {(["전체", "복합기 AS", "IT AS", "원격이관"] as const).map((f) => (
-                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
-                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT AS" ? `IT ${counts.it}` : `원격 ${counts.remote}`}
+              {(["전체", "복합기 AS", "IT AS", "원격이관", "주소확인"] as const).map((f) => (
+                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
+                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT AS" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
             </div>
@@ -800,7 +812,10 @@ export default function ServiceReception({ author }: { author: string }) {
                     <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                   </div>
-                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}{row.address_changed ? <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름 — 시트 주소 확인 필요</span> : null}</div>}
+                  {row.address && <div className="mt-1.5"><b className="text-slate-500">주소</b> {row.address}{row.address_changed ? <>
+                    <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름 — 시트 주소 확인 필요</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="ml-1.5 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
+                  </> : null}</div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}

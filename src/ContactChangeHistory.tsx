@@ -97,10 +97,7 @@ ${names}${matches.length > 5 ? `
     <div className="space-y-3 pb-12">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">담당자·주소 변경</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">FIELD에서 전송한 변경 요청을 업체·지역별로 확인합니다.</p>
-          </div>
+          <p className="text-xs font-semibold text-slate-500">FIELD에서 전송한 변경 요청을 업체·지역별로 확인하고, 워킨맵에 반영합니다.</p>
           <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
         </div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">

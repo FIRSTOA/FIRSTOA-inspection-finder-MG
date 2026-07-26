@@ -286,10 +286,7 @@ export default function OperationsDashboard({ author }: Props) {
     <div className="space-y-3 pb-16">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">업무현황</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
-          </div>
+          <p className="text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
           <div className="grid grid-cols-4 rounded-md bg-slate-100 p-1">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded px-3 py-2 text-xs font-black ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>

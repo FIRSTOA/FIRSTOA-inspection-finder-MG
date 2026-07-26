@@ -340,7 +340,7 @@ export async function getServiceReceptionById(id: string): Promise<ServiceRecept
 export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
 }
-export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted">>): Promise<void> {
+export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed">>): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);
 }
 

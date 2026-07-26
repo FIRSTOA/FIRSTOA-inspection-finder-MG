@@ -10,10 +10,10 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
+import SelfDevHub from "./SelfDev";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
-import ReadingHub from "./ReadingHub";
 import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
 import { AsReception, CsCalendar } from "./CsAsWorkspace";
 import ItLearningHistory from "./ItLearningHistory";
@@ -4543,7 +4543,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev">("field"); // 좌측 메뉴 화면
   const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
@@ -5241,12 +5241,13 @@ export default function App() {
 
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   const navGroups = [
-    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"], ["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
-    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"], ["reading", "독서"]] },
+    { title: "외근 업무", items: [["field", "FIELD"], ["itHistory", "IT 학습·처리이력"]] },
+    { title: "내근 업무", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"], ["selfdev", "자기개발"]] },
+    { title: "지원 도구", items: [["counterSms", "카운터 문자전송"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string]];
-  const bottomItems = [["operations", "업무현황"]] as [typeof screen, string][];
+  const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
@@ -5392,10 +5393,10 @@ export default function App() {
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && (
-          <div className="space-y-4">
-            <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+          <div className="space-y-2">
+            <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-0.5">
               {([["status", "현황판"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded px-4 py-2 text-sm font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded px-3 py-1.5 text-xs font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
             {opsTab === "status" ? <OperationsDashboard author={author} /> : <ContactChangeHistory />}
@@ -5408,7 +5409,7 @@ export default function App() {
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
-        {screen === "reading" && <ReadingHub author={author} />}
+        {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
