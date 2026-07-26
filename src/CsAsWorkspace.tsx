@@ -153,6 +153,15 @@ export function buildSeriesExtensionRows(list: AsTicket[], todayYmd: string): Re
   return rows;
 }
 
+// 캘린더 필터를 이 기기에 저장 — 앱 재진입·탭 이동에도 체크 상태 유지
+function loadStoredFilter<T extends string>(key: string, allowed: readonly T[], fallback: T[]): T[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null");
+    if (Array.isArray(parsed)) return parsed.filter((item): item is T => allowed.includes(item as T));
+  } catch { /* 저장값 손상 시 기본값 */ }
+  return fallback;
+}
+
 function dayNumberColor(index: number, inMonth: boolean): string {
   const dow = index % 7; // 달력 그리드는 일요일 시작
   if (!inMonth) return dow === 0 ? "text-rose-300" : dow === 6 ? "text-blue-300" : "text-slate-300";
@@ -425,9 +434,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const removeRemote = (id: string) => {
     void trackWrite(deleteRows("as_tickets", `id=eq.${encodeURIComponent(id)}`), "일정 서버 삭제에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요.");
   };
-  const [team, setTeam] = useState<Team | "ALL">("ALL");
-  const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(scheduleFilters);
-  const [visibleTeams, setVisibleTeams] = useState<Team[]>(teams);
+  const [team, setTeam] = useState<Team | "ALL">(() => loadStoredFilter<Team | "ALL">("cs_as_team_filter_v1", [...teams, "ALL"], ["ALL"])[0] || "ALL");
+  const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(() => loadStoredFilter("cs_calendar_types_v1", scheduleFilters, scheduleFilters));
+  const [visibleTeams, setVisibleTeams] = useState<Team[]>(() => loadStoredFilter("cs_calendar_teams_v1", teams, teams));
+  useEffect(() => { try { localStorage.setItem("cs_as_team_filter_v1", JSON.stringify([team])); } catch { /* 저장 실패 무시 */ } }, [team]);
+  useEffect(() => { try { localStorage.setItem("cs_calendar_types_v1", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
+  useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
