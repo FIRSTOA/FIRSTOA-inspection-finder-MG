@@ -249,9 +249,9 @@ function previewMisuCsSync() {
 
 function syncMisuCsToSupabase() {
   var key = leaseSyncKey_();
+  var runStart = new Date().toISOString();   // 반드시 레코드 생성 전에 기록 — 뒤에 찍으면 방금 넣은 행까지 정리 대상이 된다
   var records = buildMisuCsRecords_();
   if (!records.length) throw new Error('미수 시트에서 읽은 행이 없습니다 — 시트명/헤더를 확인하세요.');
-  var runStart = new Date().toISOString();
   var headers = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
   var url = SUPABASE_SYNC_URL + '/rest/v1/misu_cs_checks?on_conflict=key';
   for (var i = 0; i < records.length; i += 400) {
