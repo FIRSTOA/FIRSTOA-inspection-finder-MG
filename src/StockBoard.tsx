@@ -14,12 +14,6 @@ type StockItem = {
 
 // 기종 카탈로그(modelCatalog.ts)와 같은 제조사 체계를 쓴다
 const BRAND_NAMES = [...CATALOG_BRANDS, "기타"];
-const BRAND_TONE: Record<string, string> = {
-  삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
-  교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
-  HP: "bg-sky-50 text-sky-700", 리코: "bg-indigo-50 text-indigo-700", 캐논: "bg-orange-50 text-orange-700",
-  코니카미놀타: "bg-teal-50 text-teal-700", 렉스마크: "bg-lime-50 text-lime-700", 기타: "bg-slate-100 text-slate-600",
-};
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -197,7 +191,7 @@ export default function StockBoard({ author }: { author: string }) {
         </div>
         {kind === "기기" && <div className="mt-2 flex flex-wrap gap-1">
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : BRAND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>
+            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
           ))}
         </div>}
       </section>
@@ -209,9 +203,9 @@ export default function StockBoard({ author }: { author: string }) {
       {kind === "기기" ? (
         Array.from(byBrand.entries()).map(([brandName, rows]) => (
           <section key={brandName} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className={`flex items-center justify-between px-4 py-2.5 text-xs font-black ${BRAND_TONE[brandName] || "bg-slate-100 text-slate-600"}`}>
-              <span>{brandName}</span>
-              <span>{rows.reduce((sum, r) => sum + r.qty, 0)}대</span>
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700">
+              <span>{brandName} <span className="ml-1 font-bold text-slate-400">{rows.length}종</span></span>
+              <span className="text-slate-500">{rows.reduce((sum, r) => sum + r.qty, 0)}대</span>
             </div>
             {rows.map(renderRow)}
           </section>

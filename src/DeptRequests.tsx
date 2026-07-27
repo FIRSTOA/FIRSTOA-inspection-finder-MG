@@ -257,7 +257,10 @@ function OverageBoard() {
   useEffect(() => {
     let active = true;
     const sourceCol = encodeURIComponent("_출처");
-    selectAllRows<SheetRecord>("overage", `select=*&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.desc`)
+    // 최근 12개월치만 — 오래된 초과 기록까지 다 내려받으면 payload만 커진다 (예: 26년 7월이면 25-07-01부터)
+    const now = new Date();
+    const fromDate = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    selectAllRows<SheetRecord>("overage", `select=*&${sourceCol}=like.${encodeURIComponent("시트")}*&${encodeURIComponent("날짜")}=gte.${fromDate}&order=id.desc`)
       .then((data) => {
         if (!active) return;
         setRows(data.map((row) => {
