@@ -30,6 +30,27 @@ const BRAND_NAMES = Object.keys(BRANDS);
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };
 
+type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; author: string; created_at: string };
+
+// 노션 md 최소 렌더러: 제목(#), 이미지, 일반 문단만 처리
+function MdView({ text }: { text: string }) {
+  const lines = String(text || "").split("\n");
+  return (
+    <div className="space-y-2">
+      {lines.map((line, index) => {
+        const image = line.trim().match(/^!\[[^\]]*\]\(([^)]+)\)$/);
+        if (image) return <a key={index} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-md border border-slate-200" /></a>;
+        const file = line.trim().match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
+        if (file) return <a key={index} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
+        if (/^###\s/.test(line)) return <h4 key={index} className="pt-1 text-sm font-black text-slate-900">{line.replace(/^###\s*/, "")}</h4>;
+        if (/^##\s/.test(line)) return <h3 key={index} className="pt-1.5 text-base font-black text-slate-950">{line.replace(/^##\s*/, "")}</h3>;
+        if (!line.trim()) return null;
+        return <p key={index} className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{line}</p>;
+      })}
+    </div>
+  );
+}
+
 // content("증상: …\n처리: …\n지역: …" 형식)를 구조화 — 형식이 아니면 raw로 표시
 function parseNoteContent(content: string) {
   const fields: Record<string, string> = {};
@@ -92,7 +113,19 @@ export default function CopierNotes({ author }: { author: string }) {
     ]).then(([total, learn, cases, month]) => setStats({ total, learn, cases, month })).catch(() => setStats(null));
   }, []);
   const [writeOpen, setWriteOpen] = useState(false);
-  const [view, setView] = useState<"notes" | "quiz">("notes");
+  const [view, setView] = useState<"notes" | "guide" | "quiz">("notes");
+  // 노션에서 이관한 지식 가이드 (탈거·조립·에러 처리 등 실무 문서)
+  const [guides, setGuides] = useState<KnowledgeDoc[] | null>(null);
+  const [guideBrand, setGuideBrand] = useState("전체");
+  const [guideCategory, setGuideCategory] = useState("전체");
+  const [guideQuery, setGuideQuery] = useState("");
+  const [openGuide, setOpenGuide] = useState<KnowledgeDoc | null>(null);
+  useEffect(() => {
+    if (view !== "guide" || guides !== null) return;
+    selectRows<KnowledgeDoc>("knowledge_docs", "select=*&order=brand.asc,title.asc&limit=1000")
+      .then(setGuides)
+      .catch(() => setGuides([]));
+  }, [view, guides]);
   // 퀴즈: 처리이력·학습 기록을 문제 은행으로 쓰는 4지선다 (IT 기술퀴즈와 같은 흐름)
   const [quizBrand, setQuizBrand] = useState("전체");
   const [quizCount, setQuizCount] = useState(5);
@@ -193,10 +226,72 @@ export default function CopierNotes({ author }: { author: string }) {
   return (
     <div className="space-y-4 pb-16">
       <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
-        {([["notes", "📒 기록"], ["quiz", "🎓 복합기 퀴즈"]] as const).map(([key, label]) => (
+        {([["notes", "📒 기록"], ["guide", "📖 가이드"], ["quiz", "🎓 복합기 퀴즈"]] as const).map(([key, label]) => (
           <button key={key} type="button" onClick={() => setView(key)} className={`rounded px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
         ))}
       </div>
+      {view === "guide" && (() => {
+        const list = guides || [];
+        const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
+        const categories = ["전체", ...Array.from(new Set(list.map((d) => d.category).filter(Boolean)))];
+        const keyword = guideQuery.trim().toLowerCase();
+        const filtered = list.filter((d) =>
+          (guideBrand === "전체" || d.brand === guideBrand) &&
+          (guideCategory === "전체" || d.category === guideCategory) &&
+          (!keyword || `${d.title} ${d.content}`.toLowerCase().includes(keyword)));
+        return (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex flex-wrap items-center gap-1">
+                {brands.map((name) => (
+                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                {categories.map((name) => (
+                  <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
+                ))}
+                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·내용 검색 (예: 전사벨트, 리저브)" className="h-8 min-w-40 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+                <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
+              </div>
+            </div>
+            {guides === null && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((doc) => (
+                <button key={doc.id} type="button" onClick={() => setOpenGuide(doc)} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {doc.brand && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
+                    {doc.category && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
+                    {doc.content.includes("storage/v1") && <span className="text-[10px]">📷</span>}
+                  </div>
+                  <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{doc.title}</div>
+                </button>
+              ))}
+            </div>
+            {guides !== null && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
+            {openGuide && (
+              <div className="fixed inset-0 z-[210] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setOpenGuide(null)}>
+                <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap gap-1">
+                        {openGuide.brand && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{openGuide.brand}</span>}
+                        {openGuide.category && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{openGuide.category}</span>}
+                      </div>
+                      <div className="mt-1 text-base font-black leading-6 text-slate-950">{openGuide.title}</div>
+                    </div>
+                    <button type="button" onClick={() => setOpenGuide(null)} className="h-8 w-8 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                    <MdView text={openGuide.content} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {view === "quiz" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         {quizIndex < 0 && (() => {
           const bank = notes.filter((n) => n.title.trim() && n.content.trim());
