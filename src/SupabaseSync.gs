@@ -191,3 +191,88 @@ function removeLeaseSupabaseTrigger() {
   });
   return { ok: true };
 }
+
+/* ============================================================
+ * 미수현황 CS체크 → Supabase misu_cs_checks 동기화
+ * ------------------------------------------------------------
+ * 관리부가 미수 시트 CS체크 열(체크박스)을 켜면 CS팀이 방문/전화할 대상.
+ * 웹앱 미수현황 탭의 "CS체크 목록"이 이 테이블을 읽는다.
+ *  1) previewMisuCsSync() 로 값 확인
+ *  2) syncMisuCsToSupabase() 1회 실행
+ *  3) installMisuCsTrigger() 로 1시간마다 자동 동기화
+ * ============================================================ */
+var MISU_CS_SS_ID = '1gc5bcv6GuJ0PV1iXpu0CLBwiAoLJYdBaPqRQCqn4yHU';
+var MISU_CS_SHEETS = ['수도권A_김슬기', '수도권B_박수민', '수도권C_이윤아', '수도권D_박지은', '수도권E_박지은'];
+var MISU_CS_HEADER_ROW = 3;
+
+function buildMisuCsRecords_() {
+  var ss = SpreadsheetApp.openById(MISU_CS_SS_ID);
+  var now = new Date().toISOString();
+  var byKey = {};
+  MISU_CS_SHEETS.forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var values = sheet.getDataRange().getDisplayValues();
+    if (values.length <= MISU_CS_HEADER_ROW) return;
+    var headers = values[MISU_CS_HEADER_ROW - 1].map(function (h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim(); });
+    var col = function (h) { return headers.indexOf(h); };
+    var vendorCol = col('거래처명'), checkCol = col('CS체크');
+    if (vendorCol < 0 || checkCol < 0) return;
+    var managerCol = col('CS담당'), c1 = col('CS-1회'), c2 = col('CS-2회');
+    var team = (name.match(/^수도권([A-E])/) || [null, ''])[1];
+    for (var r = MISU_CS_HEADER_ROW; r < values.length; r++) {
+      var vendor = String(values[r][vendorCol] || '').trim();
+      if (!vendor) continue;
+      var raw = String(values[r][checkCol] || '').trim().toUpperCase();
+      var checked = raw === 'TRUE' || raw === '✓' || raw === 'V' || raw === 'O';
+      var key = name + '|' + vendor;
+      // 같은 업체가 두 행이면 하나라도 체크돼 있으면 체크로 본다
+      if (byKey[key] && byKey[key].checked) checked = true;
+      byKey[key] = {
+        key: key, team: team, vendor: vendor, checked: checked,
+        cs_manager: managerCol >= 0 ? String(values[r][managerCol] || '').trim() : '',
+        cs1: c1 >= 0 ? String(values[r][c1] || '').trim() : '',
+        cs2: c2 >= 0 ? String(values[r][c2] || '').trim() : '',
+        synced_at: now,
+      };
+    }
+  });
+  return Object.keys(byKey).map(function (k) { return byKey[k]; });
+}
+
+function previewMisuCsSync() {
+  var records = buildMisuCsRecords_();
+  var checked = records.filter(function (r) { return r.checked; });
+  Logger.log('전체 %s행 / CS체크 %s행', records.length, checked.length);
+  Logger.log(JSON.stringify(checked.slice(0, 10), null, 2));
+}
+
+function syncMisuCsToSupabase() {
+  var key = leaseSyncKey_();
+  var records = buildMisuCsRecords_();
+  if (!records.length) throw new Error('미수 시트에서 읽은 행이 없습니다 — 시트명/헤더를 확인하세요.');
+  var runStart = new Date().toISOString();
+  var headers = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
+  var url = SUPABASE_SYNC_URL + '/rest/v1/misu_cs_checks?on_conflict=key';
+  for (var i = 0; i < records.length; i += 400) {
+    var res = UrlFetchApp.fetch(url, { method: 'post', headers: headers, payload: JSON.stringify(records.slice(i, i + 400)), muteHttpExceptions: true });
+    if (res.getResponseCode() >= 300) throw new Error('업서트 실패(' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 300));
+  }
+  // 시트에서 사라진 행 정리 (이번 실행에 갱신되지 않은 행)
+  var delRes = UrlFetchApp.fetch(SUPABASE_SYNC_URL + '/rest/v1/misu_cs_checks?synced_at=lt.' + encodeURIComponent(runStart), {
+    method: 'delete', headers: { apikey: key, Authorization: 'Bearer ' + key, Prefer: 'return=minimal' }, muteHttpExceptions: true,
+  });
+  Logger.log('동기화 완료: %s행 (체크 %s행), 정리 응답 %s', records.length, records.filter(function (r) { return r.checked; }).length, delRes.getResponseCode());
+}
+
+function installMisuCsTrigger() {
+  removeMisuCsTrigger();
+  ScriptApp.newTrigger('syncMisuCsToSupabase').timeBased().everyHours(1).create();
+  Logger.log('트리거 생성: 1시간마다 미수 CS체크 동기화');
+}
+
+function removeMisuCsTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'syncMisuCsToSupabase') ScriptApp.deleteTrigger(t);
+  });
+}
