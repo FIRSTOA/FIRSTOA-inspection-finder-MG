@@ -237,6 +237,8 @@ function buildMisuCsRecords_() {
       if (!vendor) continue;
       var raw = String(values[r][checkCol] == null ? '' : values[r][checkCol]).trim().toUpperCase();
       var checked = raw === 'TRUE' || raw === '\u2713' || raw === 'V' || raw === 'O';
+      // 숨김·필터로 가려진 행은 처리됐거나 보류한 것 — 체크로 치지 않는다
+      if (checked && (sheet.isRowHiddenByUser(r + 1) || sheet.isRowHiddenByFilter(r + 1))) checked = false;
       if (checked) checkedCount++;
       var key = sheet.getName() + '|' + vendor;
       if (byKey[key] && byKey[key].checked) checked = true;
@@ -248,7 +250,7 @@ function buildMisuCsRecords_() {
         synced_at: now,
       };
     }
-    Logger.log('%s: %s열 기준 체크 %s개', sheet.getName(), MISU_CS_COL[team], checkedCount);
+    Logger.log('%s: %s열 기준 체크 %s개 (숨긴 행 제외)', sheet.getName(), MISU_CS_COL[team], checkedCount);
   });
   return Object.keys(byKey).map(function (k) { return byKey[k]; });
 }
