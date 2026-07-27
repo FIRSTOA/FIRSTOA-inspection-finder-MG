@@ -202,31 +202,33 @@ function removeLeaseSupabaseTrigger() {
  *  3) installMisuCsTrigger() 로 1시간마다 자동 동기화
  * ============================================================ */
 var MISU_CS_SS_ID = '1gc5bcv6GuJ0PV1iXpu0CLBwiAoLJYdBaPqRQCqn4yHU';
-var MISU_CS_SHEETS = ['수도권A_김슬기', '수도권B_박수민', '수도권C_이윤아', '수도권D_박지은', '수도권E_박지은'];
-var MISU_CS_HEADER_ROW = 3;
 
 function buildMisuCsRecords_() {
   var ss = SpreadsheetApp.openById(MISU_CS_SS_ID);
   var now = new Date().toISOString();
   var byKey = {};
-  MISU_CS_SHEETS.forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet) return;
+  // 시트명을 고정하지 않고 "수도권A~E"로 시작하는 탭을 전부 훑는다 (담당자 변경으로 이름이 바뀌어도 안전)
+  ss.getSheets().forEach(function (sheet) {
+    var teamMatch = sheet.getName().match(/^수도권([A-E])/);
+    if (!teamMatch) return;
+    var team = teamMatch[1];
     var values = sheet.getDataRange().getDisplayValues();
-    if (values.length <= MISU_CS_HEADER_ROW) return;
-    var headers = values[MISU_CS_HEADER_ROW - 1].map(function (h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim(); });
-    var col = function (h) { return headers.indexOf(h); };
+    // 헤더 행도 1~6행에서 자동 탐색: '거래처명'과 'CS체크'가 함께 있는 행
+    var headerRowIdx = -1, headers = [];
+    for (var h = 0; h < Math.min(6, values.length); h++) {
+      var row = values[h].map(function (x) { return String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); });
+      if (row.indexOf('거래처명') >= 0 && row.indexOf('CS체크') >= 0) { headerRowIdx = h; headers = row; break; }
+    }
+    if (headerRowIdx < 0) { Logger.log('%s: 거래처명/CS체크 헤더를 못 찾아 건너뜀', sheet.getName()); return; }
+    var col = function (hd) { return headers.indexOf(hd); };
     var vendorCol = col('거래처명'), checkCol = col('CS체크');
-    if (vendorCol < 0 || checkCol < 0) return;
     var managerCol = col('CS담당'), c1 = col('CS-1회'), c2 = col('CS-2회');
-    var team = (name.match(/^수도권([A-E])/) || [null, ''])[1];
-    for (var r = MISU_CS_HEADER_ROW; r < values.length; r++) {
+    for (var r = headerRowIdx + 1; r < values.length; r++) {
       var vendor = String(values[r][vendorCol] || '').trim();
       if (!vendor) continue;
       var raw = String(values[r][checkCol] || '').trim().toUpperCase();
       var checked = raw === 'TRUE' || raw === '✓' || raw === 'V' || raw === 'O';
-      var key = name + '|' + vendor;
-      // 같은 업체가 두 행이면 하나라도 체크돼 있으면 체크로 본다
+      var key = sheet.getName() + '|' + vendor;
       if (byKey[key] && byKey[key].checked) checked = true;
       byKey[key] = {
         key: key, team: team, vendor: vendor, checked: checked,
