@@ -36,9 +36,8 @@ function won(value: string | number) {
 // 행 클릭 상세 팝업 — 지정한 필드 순서대로, 값 있는 것만
 // 상세 모달 섹션 구성: 핵심 수치는 크게, 연락처는 바로 걸 수 있게, 체크 이력은 묶어서
 type DetailLayout = {
-  metrics: [string, "won" | "months" | "text"][]; // 큰 숫자 카드
-  contact: string[];                              // 연락처·주소
-  checks: string[];                               // 체크/처리 이력
+  metrics: [string, "won" | "months" | "text"][];      // 큰 숫자 카드
+  sections: { label: string; fields: string[] }[];     // 이름 붙은 정보 묶음들
 };
 
 function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
@@ -47,8 +46,10 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
   const used = new Set<string>(["_업체명"]);
   const badges = ["등급", "지역", "임대여부", "관리담당자", "관리 담당자"].map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
   const metrics = (layout?.metrics || []).map(([key, kind]) => { used.add(key); return { key, kind, value: valueOf(key) }; }).filter((m) => m.value);
-  const contact = (layout?.contact || []).map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
-  const checks = (layout?.checks || []).map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
+  const sections = (layout?.sections || []).map(({ label, fields: sectionFields }) => ({
+    label,
+    rows: sectionFields.map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v),
+  })).filter((sec) => sec.rows.length);
   const restKeys = [...fields.filter((key) => !used.has(key)), ...Object.keys(raw).filter((key) => !fields.includes(key) && !used.has(key) && !key.startsWith("_"))];
   const rest = restKeys.map((key) => [key, valueOf(key)] as [string, string]).filter(([key, v]) => v && key !== "원문");
   const rawText = valueOf("원문");
@@ -96,8 +97,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
               </div>
             ))}
           </div>}
-          {contact.length > 0 && section("연락처 · 주소", <div className="divide-y divide-slate-100">{contact.map(rowLine)}</div>)}
-          {checks.length > 0 && section("확인 · 체크 이력", <div className="divide-y divide-slate-100">{checks.map(rowLine)}</div>)}
+          {sections.map((sec) => <div key={sec.label}>{section(sec.label, <div className="divide-y divide-slate-100">{sec.rows.map(rowLine)}</div>)}</div>)}
           {rest.length > 0 && section("기타 정보", <div className="divide-y divide-slate-100">{rest.map(rowLine)}</div>)}
           {!!rawText && <details className="rounded-lg border border-slate-200">
             <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-500">원문 펼치기</summary>
@@ -111,14 +111,21 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
 
 const MISU_DETAIL_LAYOUT: DetailLayout = {
   metrics: [["미수개월", "months"], ["미수잔액", "won"], ["실제 개월수", "months"], ["실제 잔액", "won"]],
-  contact: ["업체담당자", "휴대폰번호", "메일주소", "주소"],
-  checks: ["입금약속일", "체크여부", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "메일발송여부", "문자발송여부"],
+  sections: [
+    { label: "연락처 · 주소", fields: ["업체담당자", "휴대폰번호", "메일주소", "주소"] },
+    { label: "확인 · 체크 이력", fields: ["입금약속일", "체크여부", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "메일발송여부", "문자발송여부"] },
+  ],
 };
 
 const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
   metrics: [["합계", "won"], ["컬러초과료", "won"], ["흑백초과료", "won"], ["기본금액", "won"]],
-  contact: ["업체담당자", "전화번호", "주소"],
-  checks: ["날짜", "마감방식", "기본매수", "초과장당금액", "AS건수", "초과보고", "계약일", "종료일", "남은개월", "미수개월수", "미수금액"],
+  sections: [
+    { label: "접수 내용", fields: ["날짜", "접수내용", "초과보고", "AS건수", "AS접수내용"] },
+    { label: "계약 · 기기", fields: ["마감방식", "기본매수", "초과장당금액", "연평균", "계약일", "종료일", "남은개월", "모델명", "자산번호"] },
+    { label: "연락처", fields: ["업체담당자", "전화번호", "주소"] },
+    { label: "미수 연계", fields: ["미수개월수", "미수금액"] },
+    { label: "특이사항", fields: ["특이사항", "소모품정보"] },
+  ],
 };
 
 const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "체크여부", "월임대료", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "메일발송여부", "문자발송여부", "입력일", "입력자", "_출처", "원문"];
@@ -204,9 +211,15 @@ function MisuBoard() {
       {boardView === "CS체크" && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+            {["전체", ...TEAM_NAMES].map((name) => {
+              const count = name === "전체" ? (csChecks || []).length : (csChecks || []).filter((c) => c.team === name).length;
+              return (
+                <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
+                  {name === "전체" ? "전체" : `${name}팀`} <span className={team === name ? "text-blue-300" : "text-blue-600"}>{count}</span>
+                </button>
+              );
+            })}
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
-            <span className="text-xs font-black text-slate-500">{csList.length}곳</span>
           </div>
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
           {csChecks !== null && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

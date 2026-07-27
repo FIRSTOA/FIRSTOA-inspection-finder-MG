@@ -27,12 +27,6 @@ const BRANDS: Record<string, string[]> = {
   기타: [],
 };
 const BRAND_NAMES = Object.keys(BRANDS);
-const BRAND_TONE: Record<string, string> = {
-  삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
-  교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
-  HP: "bg-sky-50 text-sky-700", 리코: "bg-indigo-50 text-indigo-700", 캐논: "bg-orange-50 text-orange-700",
-  코니카미놀타: "bg-teal-50 text-teal-700", 렉스마크: "bg-lime-50 text-lime-700", 기타: "bg-slate-100 text-slate-600",
-};
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };
 
@@ -237,7 +231,7 @@ export default function CopierNotes({ author }: { author: string }) {
           </div>
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap gap-1.5">
-              <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[currentQuiz.note.brand] || "bg-slate-100 text-slate-600"}`}>{currentQuiz.note.brand}</span>
+              <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{currentQuiz.note.brand}</span>
               {currentQuiz.note.model && <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">{currentQuiz.note.model}</span>}
             </div>
             <div className="mt-2 text-base font-black text-slate-950">증상: {currentQuiz.note.title}</div>
@@ -276,7 +270,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="text-xs font-black text-slate-400">오답 노트 {wrongNotes.length}건 — 실제 처리 사례로 복습하세요</div>
             {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-white p-3">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[item.note.brand] || "bg-slate-100 text-slate-600"}`}>{item.note.brand}</span>
+                <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{item.note.brand}</span>
                 {item.note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{item.note.model}</span>}
                 <span className="text-sm font-black text-slate-900">{item.note.title}</span>
               </div>
@@ -313,7 +307,7 @@ export default function CopierNotes({ author }: { author: string }) {
         </div>
         <div className="mt-3 flex flex-wrap gap-1">
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-md px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : `${BRAND_TONE[name] || "bg-slate-100 text-slate-500"}`}`}>
+            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-md px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
               {name}
             </button>
           ))}
@@ -351,7 +345,7 @@ export default function CopierNotes({ author }: { author: string }) {
           <article key={note.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${BRAND_TONE[note.brand] || "bg-slate-100 text-slate-600"}`}>{note.brand}</span>
+                <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{note.brand}</span>
                 {note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{note.model}</span>}
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black ${note.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{note.kind}</span>
               </div>
