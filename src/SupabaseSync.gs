@@ -206,28 +206,29 @@ var MISU_CS_SS_ID = '1gc5bcv6GuJ0PV1iXpu0CLBwiAoLJYdBaPqRQCqn4yHU';
 function buildMisuCsRecords_() {
   var ss = SpreadsheetApp.openById(MISU_CS_SS_ID);
   var now = new Date().toISOString();
+  var CHECK_COL = 27; // AB열 고정 — 모든 팀 탭의 CS체크는 AB열 (헤더 글자로 추측하지 않는다)
   var byKey = {};
-  // 시트명을 고정하지 않고 "수도권A~E"로 시작하는 탭을 전부 훑는다 (담당자 변경으로 이름이 바뀌어도 안전)
   ss.getSheets().forEach(function (sheet) {
     var teamMatch = sheet.getName().match(/^수도권([A-E])/);
     if (!teamMatch) return;
     var team = teamMatch[1];
     var values = sheet.getDataRange().getDisplayValues();
-    // 헤더 행도 1~6행에서 자동 탐색: '거래처명'과 'CS체크'가 함께 있는 행
     var headerRowIdx = -1, headers = [];
-    for (var h = 0; h < Math.min(6, values.length); h++) {
+    for (var h = 0; h < Math.min(10, values.length); h++) {
       var row = values[h].map(function (x) { return String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); });
-      if (row.indexOf('거래처명') >= 0 && row.indexOf('CS체크') >= 0) { headerRowIdx = h; headers = row; break; }
+      if (row.indexOf('거래처명') >= 0) { headerRowIdx = h; headers = row; break; }
     }
-    if (headerRowIdx < 0) { Logger.log('%s: 거래처명/CS체크 헤더를 못 찾아 건너뜀', sheet.getName()); return; }
+    if (headerRowIdx < 0) { Logger.log('%s: 거래처명 헤더를 못 찾아 건너뜀', sheet.getName()); return; }
     var col = function (hd) { return headers.indexOf(hd); };
-    var vendorCol = col('거래처명'), checkCol = col('CS체크');
+    var vendorCol = col('거래처명');
     var managerCol = col('CS담당'), c1 = col('CS-1회'), c2 = col('CS-2회');
+    var checkedCount = 0;
     for (var r = headerRowIdx + 1; r < values.length; r++) {
       var vendor = String(values[r][vendorCol] || '').trim();
       if (!vendor) continue;
-      var raw = String(values[r][checkCol] || '').trim().toUpperCase();
-      var checked = raw === 'TRUE' || raw === '✓' || raw === 'V' || raw === 'O';
+      var raw = String(values[r][CHECK_COL] == null ? '' : values[r][CHECK_COL]).trim().toUpperCase();
+      var checked = raw === 'TRUE' || raw === '\u2713' || raw === 'V' || raw === 'O';
+      if (checked) checkedCount++;
       var key = sheet.getName() + '|' + vendor;
       if (byKey[key] && byKey[key].checked) checked = true;
       byKey[key] = {
@@ -238,6 +239,7 @@ function buildMisuCsRecords_() {
         synced_at: now,
       };
     }
+    Logger.log('%s: %s개 업체 중 AB열 체크 %s개', sheet.getName(), values.length - headerRowIdx - 1, checkedCount);
   });
   return Object.keys(byKey).map(function (k) { return byKey[k]; });
 }
