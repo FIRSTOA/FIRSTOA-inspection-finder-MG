@@ -34,33 +34,92 @@ function won(value: string | number) {
 }
 
 // 행 클릭 상세 팝업 — 지정한 필드 순서대로, 값 있는 것만
-function SheetDetailModal({ title, row, fields, onClose }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void }) {
+// 상세 모달 섹션 구성: 핵심 수치는 크게, 연락처는 바로 걸 수 있게, 체크 이력은 묶어서
+type DetailLayout = {
+  metrics: [string, "won" | "months" | "text"][]; // 큰 숫자 카드
+  contact: string[];                              // 연락처·주소
+  checks: string[];                               // 체크/처리 이력
+};
+
+function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
   const raw = (row["_raw"] && typeof row["_raw"] === "object" ? row["_raw"] : {}) as Record<string, unknown>;
   const valueOf = (key: string) => str(row, key) || String(raw[key] ?? "").trim();
-  const listed = fields.filter((key) => valueOf(key));
-  // 경영·CS 체크 등 지정 목록에 없는 _raw 항목도 전부 표시
-  const rawExtras = Object.keys(raw).filter((key) => !fields.includes(key) && !key.startsWith("_") && String(raw[key] ?? "").trim());
-  const extras = [...listed, ...rawExtras];
+  const used = new Set<string>(["_업체명"]);
+  const badges = ["등급", "지역", "임대여부", "관리담당자", "관리 담당자"].map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
+  const metrics = (layout?.metrics || []).map(([key, kind]) => { used.add(key); return { key, kind, value: valueOf(key) }; }).filter((m) => m.value);
+  const contact = (layout?.contact || []).map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
+  const checks = (layout?.checks || []).map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
+  const restKeys = [...fields.filter((key) => !used.has(key)), ...Object.keys(raw).filter((key) => !fields.includes(key) && !used.has(key) && !key.startsWith("_"))];
+  const rest = restKeys.map((key) => [key, valueOf(key)] as [string, string]).filter(([key, v]) => v && key !== "원문");
+  const rawText = valueOf("원문");
+
+  const metricView = (m: { key: string; kind: string; value: string }) => {
+    if (m.kind === "won") { const n = Number(m.value.replace(/[^\d]/g, "")) || 0; return <span>{n.toLocaleString()}<small className="ml-0.5 text-xs font-bold text-slate-400">원</small></span>; }
+    if (m.kind === "months") { const n = Number(m.value.replace(/[^\d]/g, "")) || 0; return <span className={n >= 3 ? "text-rose-600" : ""}>{n}<small className="ml-0.5 text-xs font-bold text-slate-400">개월</small></span>; }
+    return <span className="break-all text-base">{m.value}</span>;
+  };
+  const rowLine = ([key, value]: [string, string]) => {
+    const phone = value.match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+    return (
+      <div key={key} className="flex items-start justify-between gap-3 py-1.5">
+        <span className="w-20 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</span>
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>
+        {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">📞</a>}
+      </div>
+    );
+  };
+  const section = (label: string, body: React.ReactNode) => (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <div className="mb-1 text-[10px] font-black tracking-wide text-slate-400">{label}</div>
+      {body}
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-[220] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-          <div className="min-w-0 truncate text-base font-black text-slate-950">{title}</div>
-          <button type="button" onClick={onClose} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+      <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 text-lg font-black leading-6 text-slate-950">{valueOf("_업체명") || title}</div>
+            <button type="button" onClick={onClose} className="h-8 w-8 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+          </div>
+          {badges.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">
+            {badges.map(([key, value]) => <span key={key} className={`rounded px-1.5 py-0.5 text-[11px] font-black ${key === "등급" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"}`}>{key === "등급" ? `${value}등급` : value}</span>)}
+          </div>}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
-          {extras.map((key) => (
-            <div key={key} className="grid grid-cols-[110px_minmax(0,1fr)] gap-2 border-b border-slate-100 py-2.5">
-              <div className="text-xs font-black text-slate-400">{key}</div>
-              <div className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-800">{valueOf(key)}</div>
-            </div>
-          ))}
-          {!extras.length && <div className="py-8 text-center text-sm font-bold text-slate-400">표시할 상세 정보가 없습니다.</div>}
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
+          {metrics.length > 0 && <div className={`grid gap-1.5 ${metrics.length <= 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4"}`}>
+            {metrics.map((m) => (
+              <div key={m.key} className="rounded-lg bg-slate-50 px-2 py-2.5 text-center">
+                <div className="text-lg font-black text-slate-900">{metricView(m)}</div>
+                <div className="mt-0.5 text-[10px] font-bold text-slate-400">{m.key}</div>
+              </div>
+            ))}
+          </div>}
+          {contact.length > 0 && section("연락처 · 주소", <div className="divide-y divide-slate-100">{contact.map(rowLine)}</div>)}
+          {checks.length > 0 && section("확인 · 체크 이력", <div className="divide-y divide-slate-100">{checks.map(rowLine)}</div>)}
+          {rest.length > 0 && section("기타 정보", <div className="divide-y divide-slate-100">{rest.map(rowLine)}</div>)}
+          {!!rawText && <details className="rounded-lg border border-slate-200">
+            <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-500">원문 펼치기</summary>
+            <pre className="whitespace-pre-wrap border-t border-slate-100 bg-slate-50 p-3 text-xs leading-5 text-slate-700">{rawText}</pre>
+          </details>}
         </div>
       </div>
     </div>
   );
 }
+
+const MISU_DETAIL_LAYOUT: DetailLayout = {
+  metrics: [["미수개월", "months"], ["미수잔액", "won"], ["실제 개월수", "months"], ["실제 잔액", "won"]],
+  contact: ["업체담당자", "휴대폰번호", "메일주소", "주소"],
+  checks: ["입금약속일", "체크여부", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "메일발송여부", "문자발송여부"],
+};
+
+const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
+  metrics: [["합계", "won"], ["컬러초과료", "won"], ["흑백초과료", "won"], ["기본금액", "won"]],
+  contact: ["업체담당자", "전화번호", "주소"],
+  checks: ["날짜", "마감방식", "기본매수", "초과장당금액", "AS건수", "초과보고", "계약일", "종료일", "남은개월", "미수개월수", "미수금액"],
+};
 
 const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "체크여부", "월임대료", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "메일발송여부", "문자발송여부", "입력일", "입력자", "_출처", "원문"];
 
@@ -138,18 +197,16 @@ function MisuBoard() {
       <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
         {(["전체", "CS체크"] as const).map((name) => (
           <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded px-4 py-2 text-sm font-black ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
-            {name === "전체" ? "전체 현황" : `✅ CS체크 목록${csChecks ? ` ${(csChecks || []).length}` : ""}`}
+            {name === "전체" ? "전체 현황" : `CS체크 목록${csChecks ? ` ${(csChecks || []).length}` : ""}`}
           </button>
         ))}
       </div>
       {boardView === "CS체크" && (
         <div className="space-y-3">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-xs font-bold text-emerald-800">
-            관리부가 미수 시트에서 CS체크한 업체만 모았어요 — 이 목록만 방문·전화 확인하면 됩니다. (시트 변경은 1시간 안에 반영)
-          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+            <span className="text-xs font-black text-slate-500">{csList.length}곳</span>
           </div>
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
           {csChecks !== null && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -176,7 +233,7 @@ function MisuBoard() {
               {!csList.length && <div className="p-10 text-center text-sm font-bold text-slate-400">CS체크된 업체가 없어요.</div>}
             </div>
           </section>}
-          {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+          {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} layout={MISU_DETAIL_LAYOUT} onClose={() => setDetail(null)} />}
         </div>
       )}
       {boardView === "전체" && <>
@@ -226,7 +283,7 @@ function MisuBoard() {
           {!filtered.length && <div className="p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 미수 업체가 없어요.</div>}
         </div>
       </section>}
-      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} layout={MISU_DETAIL_LAYOUT} onClose={() => setDetail(null)} />}
       </>}
     </div>
   );
@@ -352,7 +409,7 @@ function OverageBoard() {
           {!filtered.length && <div className="p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 초과 내역이 없어요.</div>}
         </div>
       </section>}
-      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 초과료 상세`} row={detail} fields={OVERAGE_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+      {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 초과료 상세`} row={detail} fields={OVERAGE_DETAIL_FIELDS} layout={OVERAGE_DETAIL_LAYOUT} onClose={() => setDetail(null)} />}
     </div>
   );
 }
