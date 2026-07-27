@@ -8,7 +8,7 @@ import { sendPraiseForm, type PraiseFormState } from "./api";
 import { kstDate } from "./visits";
 
 const REASON_PRESETS = ["AS 서비스 만족", "점검 서비스 만족", "친절한 응대", "빠른 문제 해결", "상담 만족"];
-const GRADES = ["", "S", "A", "B", "C", "D", "N"];
+const GRADES = ["", "N", "NN", "S", "SS", "V"];
 
 const emptyForm = (): PraiseFormState => ({ date: kstDate(), grade: "", company: "", manager: "", contact: "", phone: "", reason: "", short: "" });
 
