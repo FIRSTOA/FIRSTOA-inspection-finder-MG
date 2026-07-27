@@ -62,9 +62,17 @@ function rangeFor(period: Period, year: number, month: number, quarter: number, 
   return { start: `${year}-01-01`, end: `${year}-12-31` };
 }
 
+// 점검은 전송 건수가 아니라 기기 수로 집계한다 (한 양식에 여러 대 포함 — 기기 수 미기록 옛 데이터는 1대 취급)
+function inspectionMachineSum(events: ActivityEvent[]) {
+  return events.reduce((sum, event) => sum + Math.max(1, Number(event.machineCount) || 0), 0);
+}
+
 function countByCategory(events: ActivityEvent[]) {
   return Object.fromEntries(
-    ACTIVITY_KINDS.map((kind) => [kind, events.filter((event) => event.category === kind).length]),
+    ACTIVITY_KINDS.map((kind) => {
+      const matched = events.filter((event) => event.category === kind);
+      return [kind, kind === "inspection" ? inspectionMachineSum(matched) : matched.length];
+    }),
   ) as Record<ActivityKind, number>;
 }
 
@@ -81,7 +89,8 @@ function matchesFilter(event: ActivityEvent, filter: FilterKey) {
 }
 
 function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">) {
-  return events.filter((event) => matchesFilter(event, filter)).length;
+  const matched = events.filter((event) => matchesFilter(event, filter));
+  return filter === "inspection" ? inspectionMachineSum(matched) : matched.length;
 }
 
 function eventDisplayLabel(event: ActivityEvent) {

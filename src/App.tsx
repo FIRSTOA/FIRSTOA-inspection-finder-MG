@@ -25,6 +25,7 @@ import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ContactChangeForm from "./ContactChangeForm";
+import PraiseForm from "./PraiseForm";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
@@ -59,7 +60,7 @@ import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
-  | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract";
+  | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract" | "praise";
 
 type CopyResult = {
   ok: boolean;
@@ -112,6 +113,7 @@ const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: str
   misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록하고 지역별 미수방으로 전송합니다." },
   "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
   recontract: { icon: "🤝", title: "재계약", description: "계약 종료 예정 거래처의 상담과 재계약 진행내용을 기록합니다." },
+  praise: { icon: "🌟", title: "칭찬 접수", description: "고객이 칭찬한 내용을 기록하면 DB통합시트 칭찬 탭에 자동 기입됩니다." },
 };
 
 const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
@@ -163,6 +165,7 @@ const MODE_CONFIG: Record<Mode, ModeConfig> = {
   misu: { label: "미수", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   "overage-adjust": { label: "초과조정", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
   recontract: { label: "재계약", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
+  praise: { label: "칭찬", accent: BW_ACCENT, bgSoft: BW_SOFT, textDark: BW_TEXT, placeholder: "" },
 };
 
 const ITEM_DIVIDER = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
@@ -4324,7 +4327,9 @@ export default function App() {
   };
 
   // 점검탭 검색에서 고른 양식(_원문)을 변환기에 주입 — 붙여넣기 확인과 같은 경로(자동 변환).
-  const handleLoadForm = (text: string) => {
+  const handleLoadForm = (rawText: string) => {
+    // 과거 전송분에 붙었던 "📷 현장사진 모아보기" 링크는 이번 방문 사진이 아니므로 떼고 불러온다
+    const text = rawText.replace(/\n*📷 현장사진[^\n]*(?:\n\S*\?album=[\w-]+\S*)?/g, "").trimEnd();
     clearPreviousVendorWork(false);
     if (mode !== "air-purifier") {
       const detected = detectUnifiedInputMode(text);
@@ -5358,12 +5363,12 @@ export default function App() {
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
-          <div className="h-full w-64 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex h-full w-64 flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="shrink-0 border-b border-slate-100 px-5 py-4">
               <div className="text-lg font-bold text-slate-900">FIRSTOA CS SYSTEM</div>
               <div className="text-[11px] text-slate-400">CS 업무 통합</div>
             </div>
-            <nav className="space-y-3 p-2">
+            <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-8">
               {standaloneItems.map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setScreen(key); setMenuOpen(false); }}
@@ -5595,7 +5600,7 @@ export default function App() {
               );
             })}
             {(() => {
-              const moreActive = mode === "replacement" || mode === "contact-change" || mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract";
+              const moreActive = mode === "replacement" || mode === "contact-change" || mode === "bulman" || mode === "misu" || mode === "overage-adjust" || mode === "recontract" || mode === "praise";
               return (
                 <button
                   type="button"
@@ -5611,7 +5616,7 @@ export default function App() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
               <div className="absolute right-1 top-full z-20 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                {([["담당자/주소 변경", "contact-change"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"]] as [string, Mode][]).map(([label, target]) => (
+                {([["담당자/주소 변경", "contact-change"], ["불만", "bulman"], ["미수", "misu"], ["초과조정", "overage-adjust"], ["재계약", "recontract"], ["교체양식", "replacement"], ["칭찬", "praise"]] as [string, Mode][]).map(([label, target]) => (
                   <button
                     key={label}
                     type="button"
@@ -5824,6 +5829,7 @@ export default function App() {
 
         {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
         {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} onLoad={loadSharedFromInspect} onError={(message) => showToast(message, "error")} />}
+        {mode === "praise" && <PraiseForm author={author} onToast={showToast} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (

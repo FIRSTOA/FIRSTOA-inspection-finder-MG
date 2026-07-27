@@ -168,7 +168,9 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   const encoded = encodeURIComponent(query);
   const serial = encodeURIComponent("시리얼넘버");
   const asset = encodeURIComponent("자산기번");
-  const filter = `select=*&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
+  // _원문까지 다 내려받으면 행당 수 KB — 표시에 쓰는 컬럼만 골라 응답을 가볍게 한다
+  const cols = encodeURIComponent("_업체명,업체명,작성일,created_at,지역,모델명,작성자,시리얼넘버,자산기번");
+  const filter = `select=${cols}&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=30`;
   const sources = await Promise.all([
     selectRows<Record<string, unknown>>("jeomgeom", filter).then((rows) => ({ category: "점검", rows })).catch(() => ({ category: "점검", rows: [] })),
     selectRows<Record<string, unknown>>("as_records", filter).then((rows) => ({ category: "AS", rows })).catch(() => ({ category: "AS", rows: [] })),
@@ -460,9 +462,13 @@ export async function getRecentInspections(vendor: string, serial = "", assetNo 
   }
 }
 
+const vendorSearchCache = new Map<string, { t: number; resp: SearchResp }>();
+
 export async function searchVendors(q: string): Promise<SearchResp> {
   const query = String(q || "").trim();
   if (query.length < 1) return { results: [], total: 0 };
+  const cached = vendorSearchCache.get(query);
+  if (cached && Date.now() - cached.t < 60_000) return cached.resp;
   try {
     const [rows, machineHits] = await Promise.all([
       rpc<RpcHit[]>("search_vendors", { q: query }).catch(() => []),
@@ -474,7 +480,9 @@ export async function searchVendors(q: string): Promise<SearchResp> {
       meta: r.meta || {},
     }));
     const results = mergeHistoryHits([...indexed, ...machineHits]);
-    return { results, total: results.length };
+    const resp = { results, total: results.length };
+    vendorSearchCache.set(query, { t: Date.now(), resp });
+    return resp;
   } catch (e) {
     return { results: [], total: 0, error: (e as Error).message };
   }
@@ -921,6 +929,41 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
     return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
+  }
+}
+
+// 칭찬 접수 → DB통합시트 '칭찬' 탭 자동 기입 (field_sheet_sync_jobs 경유, 카톡 전송 없음)
+export type PraiseFormState = { date: string; grade: string; company: string; manager: string; contact: string; phone: string; reason: string; short: string };
+
+export async function sendPraiseForm(form: PraiseFormState, author: string): Promise<SaveResp> {
+  try {
+    const vendor = String(form.company || "").trim();
+    if (!author.trim()) return { ok: false, error: "작성자를 먼저 선택하세요." };
+    if (!vendor) return { ok: false, error: "거래처명을 입력하세요." };
+    const reason = String(form.reason || "").trim();
+    if (!reason) return { ok: false, error: "칭찬이유를 선택하거나 입력하세요." };
+    const data = {
+      date: form.date, grade: form.grade, company: vendor, manager: form.manager.trim(),
+      contact: form.contact.trim(), phone: form.phone.trim(), reason, short: String(form.short || reason).trim(),
+    };
+    const sourceText = [`[칭찬] ${vendor}`, `날짜: ${form.date}`, `직원: ${author}`, data.manager && `담당자: ${data.manager}`, `칭찬이유: ${reason}`].filter(Boolean).join("\n");
+    const id = crypto.randomUUID();
+    const inserted = await enqueueFieldSheetSyncJob({
+      id, category: "praise", author: author.trim(), vendor, sourceText,
+      payload: { data },
+      dupKey: md5(["praise", form.date, author, vendor, reason].join("|")),
+    });
+    if (inserted === "dup") return { ok: true, message: "같은 내용의 칭찬이 이미 접수돼 있어요." };
+    const cfg = await getConfig().catch(() => ({} as Record<string, string>));
+    if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return { ok: true, message: "접수 완료 · 시트 동기화 설정이 꺼져 있어 대기 중입니다." };
+    try {
+      const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
+      return { ok: true, message: result.status === "synced" ? `칭찬 시트 ${result.row ? `${result.row}행 ` : ""}기록 완료` : "접수 완료 · 시트 반영 대기" };
+    } catch {
+      return { ok: true, message: "접수 완료 · 시트 반영은 잠시 후 다시 시도해 주세요." };
+    }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
   }
 }
 

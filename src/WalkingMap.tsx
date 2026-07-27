@@ -3,6 +3,7 @@ import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
+import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -446,16 +447,16 @@ function NavLinks({ place, large }: { place: MapPlace; large?: boolean }) {
   const hasCoord = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && place.latitude !== 0 && place.longitude !== 0;
   if (!address && !hasCoord) return null;
   const name = encodeURIComponent((place.name || address).slice(0, 30));
-  const naver = `https://map.naver.com/p/search/${encodeURIComponent(address || place.name)}`;
+  const naver = naverMapLink(address || place.name);
   const kakao = hasCoord
-    ? `https://map.kakao.com/link/to/${name},${place.latitude},${place.longitude}`
-    : `https://map.kakao.com/link/search/${encodeURIComponent(address)}`;
+    ? kakaoMapRouteLink((place.name || address).slice(0, 30), place.latitude, place.longitude)
+    : kakaoMapSearchLink(address);
   const tmap = hasCoord ? `tmap://route?goalname=${name}&goalx=${place.longitude}&goaly=${place.latitude}` : "";
   const cls = large ? "rounded-md px-2.5 py-1.5 text-xs font-black" : "rounded px-1.5 py-0.5 text-[10px] font-black";
   return (
     <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>
-      <a href={naver} target="_blank" rel="noreferrer" title="네이버지도" className={`${cls} bg-[#03C75A] text-white`}>N</a>
-      <a href={kakao} target="_blank" rel="noreferrer" title="카카오맵" className={`${cls} bg-[#FEE500] text-slate-900`}>K</a>
+      <a href={naver} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} title="네이버지도" className={`${cls} bg-[#03C75A] text-white`}>N</a>
+      <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} title="카카오맵" className={`${cls} bg-[#FEE500] text-slate-900`}>K</a>
       {tmap && <a href={tmap} title="T맵 (앱)" className={`${cls} bg-rose-500 text-white`}>T</a>}
     </span>
   );
@@ -1227,6 +1228,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return result;
   }, [places, teamFilter, quarterFilter]);
 
+  // 색상 메뉴에 표시할 G1~G12별 개수 — 라벨 필터 자신은 빼고 현재 팀·분기·업무 범위 기준
+  const labelCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of places) {
+      if (place.team !== teamFilter || place.quarter !== quarterFilter) continue;
+      if (kindFilter !== "ALL" && place.kind !== kindFilter) continue;
+      counts.set(place.label, (counts.get(place.label) || 0) + 1);
+    }
+    return counts;
+  }, [places, teamFilter, quarterFilter, kindFilter]);
+
   const scopedPlaces = useMemo(() => {
     const rows = places.filter((place) => {
       if (labelFilters.length && !labelFilters.includes(place.label)) return false;
@@ -1655,7 +1667,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   };
 
   const placeList = (
-    <div className="flex min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="border-b border-slate-200 p-3">
         <div className="mb-2 truncate text-xs font-black text-blue-700">{conditionTitle}</div>
         <div className="flex items-center justify-between gap-2">
@@ -1899,6 +1911,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 {mapLabels.map((item) => (
                   <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} title={item.name} className={`flex items-center gap-2 rounded border px-2 py-2 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
                     <span className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />{item.code}
+                    <span className="ml-auto text-[11px] font-black text-slate-400">{labelCounts.get(item.code) || 0}</span>
                   </button>
                 ))}
               </div>

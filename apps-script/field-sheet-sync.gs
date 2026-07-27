@@ -9,6 +9,7 @@ const FIELD_SHEETS = {
   expansion_copier: { spreadsheetId: "10850TfeSvd0Z1iiI1ycCyGskGRPXicRUd1_Xx996QKQ", sheetId: 746760933 },
   contact_change: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 1289086745 },
   complaint: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 419415178 },
+  praise: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 0 },
 };
 
 function doPost(e) {
@@ -83,6 +84,7 @@ function findHeaderRow_(sheet, category) {
     expansion_copier: ["상호", "등록자"],
     contact_change: ["업체명", "변경전"],
     complaint: ["업체명", "불만내용"],
+    praise: ["거래처명", "칭찬이유"],
   };
   const required = signatures[category] || [];
   const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
@@ -118,6 +120,19 @@ function fieldValue_(category, header, column, data, request, labels) {
   const complaintPeriod = category === "complaint" ? {
     "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "yyyy-MM-dd"),
   } : {};
+  // 칭찬: 폼의 날짜(data.date)를 기준으로 분기/월/날짜를 채운다 (예: 2026-3분기 / 2026.07 / 2026.07.27)
+  const praisePeriod = category === "praise" ? (function () {
+    var d = data["date"] ? new Date(String(data["date"]) + "T09:00:00+09:00") : submittedAt;
+    if (isNaN(d.getTime())) d = submittedAt;
+    var m = Number(Utilities.formatDate(d, "Asia/Seoul", "M"));
+    return {
+      "분기": Utilities.formatDate(d, "Asia/Seoul", "yyyy") + "-" + Math.ceil(m / 3) + "분기",
+      "월": Utilities.formatDate(d, "Asia/Seoul", "yyyy.MM"),
+      "날짜": Utilities.formatDate(d, "Asia/Seoul", "yyyy.MM.dd"),
+      "직원": request.author,
+      "분류": "칭찬",
+    };
+  })() : {};
   const base = {
     "웹앱 전송ID": request.jobId,
     "날짜": request.submittedAt,
@@ -126,6 +141,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     ...copierPeriod,
     ...contactPeriod,
     ...complaintPeriod,
+    ...praisePeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -154,6 +170,10 @@ function fieldValue_(category, header, column, data, request, labels) {
     complaint: {
       "접수/처리": "_complaintReceipt", "등급": "등급", "업체명": "업체명", "거래처담당자": "_contactName",
       "거래처연락처": "_contactPhone", "불만내용": "불편내용", "불만유형": "불만유형", "불만항목": "불만정도",
+    },
+    praise: {
+      "등급": "grade", "거래처명": "company", "담당자": "manager", "연락처": "contact",
+      "전화번호": "phone", "칭찬이유": "reason", "간단": "short",
     },
   };
   const key = maps[category] && maps[category][header];

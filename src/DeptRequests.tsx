@@ -247,7 +247,9 @@ function OverageBoard() {
           <select value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-600">
             {yearMonths.map((name) => <option key={name}>{name}</option>)}
           </select>
-          <span className="ml-2 w-8 text-[10px] font-black text-slate-400">등급</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 text-[10px] font-black text-slate-400">등급</span>
           {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">

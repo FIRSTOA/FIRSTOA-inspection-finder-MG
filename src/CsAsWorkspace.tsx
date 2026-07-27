@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
+import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
@@ -274,12 +275,13 @@ function shortAddress(address: string) {
 }
 function AddrNav({ address }: { address: string }) {
   if (!address.trim()) return null;
-  const q = encodeURIComponent(address.trim());
+  const target = address.trim();
+  const q = encodeURIComponent(target);
   const linkClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-black";
   return (
     <span className="flex shrink-0 gap-1">
-      <a href={`https://map.naver.com/v5/search/${q}`} target="_blank" rel="noreferrer" className={`${linkClass} text-emerald-600`}>N</a>
-      <a href={`https://map.kakao.com/link/search/${q}`} target="_blank" rel="noreferrer" className={`${linkClass} text-amber-600`}>K</a>
+      <a href={naverMapLink(target)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className={`${linkClass} text-emerald-600`}>N</a>
+      <a href={kakaoMapSearchLink(target)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className={`${linkClass} text-amber-600`}>K</a>
       <a href={`tmap://search?name=${q}`} className={`${linkClass} text-blue-600`}>T</a>
     </span>
   );
@@ -751,8 +753,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   {monthTickets.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((ticket) => (
                     <div key={ticket.id} className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
                       <div className="w-14 flex-none text-xs font-black text-slate-500">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</div>
-                      <div className="min-w-0 flex-1">{renderTicketCard(ticket)}</div>
-                      <div className="grid flex-none grid-cols-2 gap-1.5">
+                      <div className="min-w-0 flex-1 basis-[calc(100%-4rem)] sm:basis-auto">{renderTicketCard(ticket)}</div>
+                      <div className="grid w-full flex-none grid-cols-2 gap-1.5 sm:w-auto">
                         <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
                         <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
                         <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>

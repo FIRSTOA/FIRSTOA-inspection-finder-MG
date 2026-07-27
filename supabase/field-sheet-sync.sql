@@ -43,3 +43,8 @@ insert into public.app_config(key, value) values
   ('FIELD_KAKAO_SEND_ENABLED', 'false'),
   ('FIELD_SHEET_TEST_MODE', 'false')
 on conflict (key) do nothing;
+
+-- 칭찬 카테고리 추가 (2026-07-27) — FIELD 더보기 '칭찬' → DB통합시트 칭찬 탭 기입
+alter table public.field_sheet_sync_jobs drop constraint if exists field_sheet_sync_jobs_category_check;
+alter table public.field_sheet_sync_jobs add constraint field_sheet_sync_jobs_category_check
+  check (category in ('expansion_it', 'expansion_copier', 'contact_change', 'complaint', 'praise'));
