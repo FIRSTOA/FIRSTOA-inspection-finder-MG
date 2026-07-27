@@ -30,7 +30,7 @@ const BRAND_NAMES = Object.keys(BRANDS);
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };
 
-type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; author: string; created_at: string };
+type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
 
 // 노션 md 최소 렌더러: 제목(#), 이미지, 일반 문단만 처리
 function MdView({ text }: { text: string }) {
@@ -118,6 +118,8 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guides, setGuides] = useState<KnowledgeDoc[] | null>(null);
   const [guideBrand, setGuideBrand] = useState("전체");
   const [guideCategory, setGuideCategory] = useState("전체");
+  const [guidePart, setGuidePart] = useState("전체");
+  const [showOriginal, setShowOriginal] = useState(false);
   const [guideQuery, setGuideQuery] = useState("");
   const [openGuide, setOpenGuide] = useState<KnowledgeDoc | null>(null);
   useEffect(() => {
@@ -235,10 +237,14 @@ export default function CopierNotes({ author }: { author: string }) {
         const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
         const categories = ["전체", ...Array.from(new Set(list.map((d) => d.category).filter(Boolean)))];
         const keyword = guideQuery.trim().toLowerCase();
+        const partCounts = new Map<string, number>();
+        list.forEach((d) => (d.parts || []).forEach((part) => partCounts.set(part, (partCounts.get(part) || 0) + 1)));
+        const topParts = ["전체", ...Array.from(partCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([name]) => name)];
         const filtered = list.filter((d) =>
           (guideBrand === "전체" || d.brand === guideBrand) &&
           (guideCategory === "전체" || d.category === guideCategory) &&
-          (!keyword || `${d.title} ${d.content}`.toLowerCase().includes(keyword)));
+          (guidePart === "전체" || (d.parts || []).includes(guidePart)) &&
+          (!keyword || `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.content}`.toLowerCase().includes(keyword)));
         return (
           <div className="space-y-3">
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -251,20 +257,31 @@ export default function CopierNotes({ author }: { author: string }) {
                 {categories.map((name) => (
                   <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
                 ))}
-                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·내용 검색 (예: 전사벨트, 리저브)" className="h-8 min-w-40 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
                 <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
               </div>
+              {topParts.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1">
+                <span className="text-[10px] font-black text-slate-400">부품</span>
+                {topParts.map((name) => (
+                  <button key={name} type="button" onClick={() => setGuidePart(name)} className={`rounded px-2 py-1 text-[11px] font-black ${guidePart === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
+                ))}
+              </div>}
             </div>
             {guides === null && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((doc) => (
-                <button key={doc.id} type="button" onClick={() => setOpenGuide(doc)} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
+                <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
                   <div className="flex flex-wrap items-center gap-1">
                     {doc.brand && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
                     {doc.category && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
                     {doc.content.includes("storage/v1") && <span className="text-[10px]">📷</span>}
                   </div>
                   <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{doc.title}</div>
+                  {doc.summary && <div className="mt-1 truncate text-xs font-semibold text-slate-500">{doc.summary}</div>}
+                  {((doc.models || []).length > 0 || doc.difficulty) && <div className="mt-1.5 flex flex-wrap gap-1">
+                    {(doc.models || []).slice(0, 3).map((model) => <span key={model} className="rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{model}</span>)}
+                    {doc.difficulty && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${doc.difficulty === "어려움" ? "bg-rose-50 text-rose-600" : doc.difficulty === "보통" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>{doc.difficulty}</span>}
+                  </div>}
                 </button>
               ))}
             </div>
@@ -283,7 +300,9 @@ export default function CopierNotes({ author }: { author: string }) {
                     <button type="button" onClick={() => setOpenGuide(null)} className="h-8 w-8 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                    <MdView text={openGuide.content} />
+                    {openGuide.summary && <div className="mb-3 rounded-md bg-blue-50/60 px-3 py-2 text-sm font-bold text-blue-800">{openGuide.summary}</div>}
+                    <MdView text={!showOriginal && openGuide.content_clean ? openGuide.content_clean : openGuide.content} />
+                    {!!openGuide.content_clean && <button type="button" onClick={() => setShowOriginal((v) => !v)} className="mt-4 rounded-md border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">{showOriginal ? "정리본 보기" : "원본(노션 그대로) 보기"}</button>}
                   </div>
                 </div>
               </div>
