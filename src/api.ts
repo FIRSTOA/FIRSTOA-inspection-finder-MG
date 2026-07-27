@@ -168,9 +168,7 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   const encoded = encodeURIComponent(query);
   const serial = encodeURIComponent("시리얼넘버");
   const asset = encodeURIComponent("자산기번");
-  // _원문까지 다 내려받으면 행당 수 KB — 표시에 쓰는 컬럼만 골라 응답을 가볍게 한다
-  const cols = encodeURIComponent("_업체명,업체명,작성일,created_at,지역,모델명,작성자,시리얼넘버,자산기번");
-  const filter = `select=${cols}&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=30`;
+  const filter = `select=*&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
   const sources = await Promise.all([
     selectRows<Record<string, unknown>>("jeomgeom", filter).then((rows) => ({ category: "점검", rows })).catch(() => ({ category: "점검", rows: [] })),
     selectRows<Record<string, unknown>>("as_records", filter).then((rows) => ({ category: "AS", rows })).catch(() => ({ category: "AS", rows: [] })),
@@ -462,16 +460,14 @@ export async function getRecentInspections(vendor: string, serial = "", assetNo 
   }
 }
 
-const vendorSearchCache = new Map<string, { t: number; resp: SearchResp }>();
-
 export async function searchVendors(q: string): Promise<SearchResp> {
   const query = String(q || "").trim();
   if (query.length < 1) return { results: [], total: 0 };
-  const cached = vendorSearchCache.get(query);
-  if (cached && Date.now() - cached.t < 60_000) return cached.resp;
   try {
+    // RPC가 일시적으로 실패한 것을 "기록 없음"으로 착각하지 않도록 오류를 따로 전달한다
+    let rpcError = "";
     const [rows, machineHits] = await Promise.all([
-      rpc<RpcHit[]>("search_vendors", { q: query }).catch(() => []),
+      rpc<RpcHit[]>("search_vendors", { q: query }).catch((e) => { rpcError = (e as Error).message || "검색 연결 실패"; return [] as RpcHit[]; }),
       searchMachineIdentity(query),
     ]);
     const indexed: VendorHit[] = rows.map((r) => ({
@@ -480,9 +476,7 @@ export async function searchVendors(q: string): Promise<SearchResp> {
       meta: r.meta || {},
     }));
     const results = mergeHistoryHits([...indexed, ...machineHits]);
-    const resp = { results, total: results.length };
-    vendorSearchCache.set(query, { t: Date.now(), resp });
-    return resp;
+    return { results, total: results.length, error: rpcError || undefined };
   } catch (e) {
     return { results: [], total: 0, error: (e as Error).message };
   }

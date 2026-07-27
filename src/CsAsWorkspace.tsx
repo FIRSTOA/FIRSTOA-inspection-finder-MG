@@ -665,7 +665,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className="block w-full rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-sm font-black text-slate-900">{ticket.time} {ticket.vendor}</div>
+          <div className="text-sm font-black text-slate-900">{ticket.vendor}</div>
           <div className="mt-1 text-xs font-semibold text-slate-500">{ticket.issue}</div>
         </div>
         <span className={`rounded border px-2 py-0.5 text-[11px] font-black ${statusClass(ticket.status)}`}>{ticket.status}</span>
@@ -766,17 +766,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <span className="text-[11px] font-bold text-slate-400">{list.length}건</span>
                       </div>
                       <div className="mt-1.5 space-y-2">
-                        {list.map((ticket) => (
-                          <div key={ticket.id} className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-3">
-                            <div className="w-full min-w-0 flex-1 sm:w-auto">{renderTicketCard(ticket)}</div>
-                            <div className="grid w-full flex-none grid-cols-4 gap-1 sm:w-auto sm:grid-cols-2 sm:gap-1.5">
-                              <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-1 py-1.5 text-[11px] font-black sm:px-3 sm:py-2 sm:text-xs ${ticket.status === "완료" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
-                              <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-1 py-1.5 text-[11px] font-black text-purple-700 sm:px-3 sm:py-2 sm:text-xs">익일</button>
-                              <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-[11px] font-black text-emerald-700 sm:px-3 sm:py-2 sm:text-xs">배정</button>
-                              <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-1 py-1.5 text-[11px] font-black text-rose-600 sm:px-3 sm:py-2 sm:text-xs">삭제</button>
-                            </div>
-                          </div>
-                        ))}
+                        {list.map((ticket) => renderTicketCard(ticket))}
                       </div>
                     </div>
                   ))}

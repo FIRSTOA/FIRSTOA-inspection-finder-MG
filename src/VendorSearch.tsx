@@ -41,6 +41,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
   const [hits, setHits] = useState<VendorHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showHits, setShowHits] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
 
   const [vendor, setVendor] = useState("");
   const [forms, setForms] = useState<InspForm[]>([]);
@@ -63,16 +64,25 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     setShowHits(true); // 검색 시작과 동시에 드롭다운(검색 중…) 표시
     const myReq = ++reqSeq.current;
     const handle = window.setTimeout(() => {
-      searchVendors(q)
-        .then((resp) => {
+      void (async () => {
+        try {
+          let resp = await searchVendors(q);
+          // 앱을 막 켠 직후 첫 요청이 일시 실패하면 "기록 없음"처럼 보였다 — 한 번 자동 재시도
+          if (myReq === reqSeq.current && resp.error && !(resp.results || []).length) {
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            if (myReq !== reqSeq.current) return;
+            resp = await searchVendors(q);
+          }
           if (myReq !== reqSeq.current) return;
           setHits(resp.results || []);
+          setSearchFailed(Boolean(resp.error) && !(resp.results || []).length);
           setShowHits(true);
-        })
-        .catch((e) => onError(e.message || "검색 실패"))
-        .finally(() => {
+        } catch (e) {
+          if (myReq === reqSeq.current) { setSearchFailed(true); onError((e as Error).message || "검색 실패"); }
+        } finally {
           if (myReq === reqSeq.current) setSearching(false);
-        });
+        }
+      })();
     }, 300);
     return () => window.clearTimeout(handle);
   }, [query, vendor, onError]);
@@ -179,7 +189,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
           <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {searching && <div className="px-3.5 py-2.5 text-sm text-slate-400">검색 중…</div>}
             {!searching && base.length === 0 && (
-              <div className="px-3.5 py-2.5 text-sm text-slate-400">점검/AS 기록이 있는 거래처가 없어요</div>
+              <div className="px-3.5 py-2.5 text-sm text-slate-400">{searchFailed ? "서버 연결이 잠시 원활하지 않아요 — 한 글자 지웠다 다시 입력해 보세요" : "점검/AS 기록이 있는 거래처가 없어요"}</div>
             )}
 
             {/* 지역 탭 (전체 / A 강북 / B 강서 / C 강남 / D 경기 / E 지방 / 기타) */}
