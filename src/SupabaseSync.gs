@@ -203,6 +203,16 @@ function removeLeaseSupabaseTrigger() {
  * ============================================================ */
 var MISU_CS_SS_ID = '1gc5bcv6GuJ0PV1iXpu0CLBwiAoLJYdBaPqRQCqn4yHU';
 
+// 팀별 CS체크 열 지정 — 시트 레이아웃이 팀별로 다르면 열 글자만 바꾸면 된다 (2026-07 전 팀 AB열 확인)
+var MISU_CS_COL = { A: 'AB', B: 'AB', C: 'AB', D: 'AB', E: 'AB' };
+
+function misuColIndex_(letter) {
+  var idx = 0;
+  letter = String(letter || '').toUpperCase().replace(/[^A-Z]/g, '');
+  for (var i = 0; i < letter.length; i++) idx = idx * 26 + (letter.charCodeAt(i) - 64);
+  return idx - 1;
+}
+
 function buildMisuCsRecords_() {
   var ss = SpreadsheetApp.openById(MISU_CS_SS_ID);
   var now = new Date().toISOString();
@@ -211,8 +221,8 @@ function buildMisuCsRecords_() {
     var teamMatch = sheet.getName().match(/^수도권([A-E])/);
     if (!teamMatch) return;
     var team = teamMatch[1];
+    var checkCol = misuColIndex_(MISU_CS_COL[team]);
     var values = sheet.getDataRange().getDisplayValues();
-    // 헤더: 공백/줄바꿈 전부 제거한 뒤 비교 ("CS\n체크" 같은 표기도 잡는다)
     var headerRowIdx = -1, headers = [];
     for (var h = 0; h < Math.min(10, values.length); h++) {
       var row = values[h].map(function (x) { return String(x == null ? '' : x).replace(/\s+/g, ''); });
@@ -220,12 +230,6 @@ function buildMisuCsRecords_() {
     }
     if (headerRowIdx < 0) { Logger.log('%s: 거래처명 헤더 없음 — 건너뜀', sheet.getName()); return; }
     var vendorCol = headers.indexOf('거래처명');
-    // CS체크 열: 헤더에 'CS체크'가 들어간 열 (경영/전략 체크 제외). 없으면 AB열(28번째) 폴백.
-    var checkCol = -1;
-    for (var i = 0; i < headers.length; i++) {
-      if (headers[i].indexOf('CS체크') >= 0 && headers[i].indexOf('경영') < 0 && headers[i].indexOf('전략') < 0) { checkCol = i; break; }
-    }
-    if (checkCol < 0) checkCol = 27;
     var managerCol = headers.indexOf('CS담당'), c1 = headers.indexOf('CS-1회'), c2 = headers.indexOf('CS-2회');
     var checkedCount = 0;
     for (var r = headerRowIdx + 1; r < values.length; r++) {
@@ -244,8 +248,7 @@ function buildMisuCsRecords_() {
         synced_at: now,
       };
     }
-    var colLetter = ''; var n = checkCol + 1; while (n > 0) { colLetter = String.fromCharCode(65 + ((n - 1) % 26)) + colLetter; n = Math.floor((n - 1) / 26); }
-    Logger.log('%s: CS체크=%s열, 체크 %s개', sheet.getName(), colLetter, checkedCount);
+    Logger.log('%s: %s열 기준 체크 %s개', sheet.getName(), MISU_CS_COL[team], checkedCount);
   });
   return Object.keys(byKey).map(function (k) { return byKey[k]; });
 }
