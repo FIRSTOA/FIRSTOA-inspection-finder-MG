@@ -120,14 +120,12 @@ function fieldValue_(category, header, column, data, request, labels) {
   const complaintPeriod = category === "complaint" ? {
     "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "yyyy-MM-dd"),
   } : {};
-  // 칭찬: 폼의 날짜(data.date)를 기준으로 분기/월/날짜를 채운다 (예: 2026-3분기 / 2026.07 / 2026.07.27)
+  // 칭찬: 분기·월 열은 시트의 ARRAYFORMULA가 날짜(C열)로 자동 계산하므로 건드리지 않는다.
+  // 날짜(yyyy.MM.dd)·직원·분류만 기입.
   const praisePeriod = category === "praise" ? (function () {
     var d = data["date"] ? new Date(String(data["date"]) + "T09:00:00+09:00") : submittedAt;
     if (isNaN(d.getTime())) d = submittedAt;
-    var m = Number(Utilities.formatDate(d, "Asia/Seoul", "M"));
     return {
-      "분기": Utilities.formatDate(d, "Asia/Seoul", "yyyy") + "-" + Math.ceil(m / 3) + "분기",
-      "월": Utilities.formatDate(d, "Asia/Seoul", "yyyy.MM"),
       "날짜": Utilities.formatDate(d, "Asia/Seoul", "yyyy.MM.dd"),
       "직원": request.author,
       "분류": "칭찬",
