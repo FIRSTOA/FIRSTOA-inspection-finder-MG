@@ -50,8 +50,9 @@ export const MODEL_CATALOG: Record<string, string[]> = {
   리코: ["IM-C2000", "IM-C2010", "MP-2554", "MP-C2003", "MP-C2004"],
   캐논: ["IR-ADV C3525"],
   코니카미놀타: ["BIZHUB-025DNI", "BIZHUB-028DN", "BIZHUB-128DN", "BIZHUB-136DN"],
+  렉스마크: ["MX410"],
   // 제조사 확인 필요 — 확인되면 위 항목으로 옮기기
-  미확인: ["DGWOX-4100", "MB2390", "MX410", "ACM3CA", "KS7305", "KS1270C"],
+  미확인: ["DGWOX-4100", "MB2390", "ACM3CA", "KS7305", "KS1270C"],
 };
 
 export const CATALOG_BRANDS = Object.keys(MODEL_CATALOG).filter((brand) => brand !== "미확인");

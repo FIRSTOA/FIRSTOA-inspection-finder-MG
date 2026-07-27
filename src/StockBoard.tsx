@@ -18,7 +18,7 @@ const BRAND_TONE: Record<string, string> = {
   삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
   교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
   HP: "bg-sky-50 text-sky-700", 리코: "bg-indigo-50 text-indigo-700", 캐논: "bg-orange-50 text-orange-700",
-  코니카미놀타: "bg-teal-50 text-teal-700", 기타: "bg-slate-100 text-slate-600",
+  코니카미놀타: "bg-teal-50 text-teal-700", 렉스마크: "bg-lime-50 text-lime-700", 기타: "bg-slate-100 text-slate-600",
 };
 
 function timeAgo(iso: string) {
