@@ -64,6 +64,8 @@ function SheetDetailModal({ title, row, fields, onClose }: { title: string; row:
 
 const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "체크여부", "월임대료", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "메일발송여부", "문자발송여부", "입력일", "입력자", "_출처", "원문"];
 
+type CsCheckRow = { key: string; team: string; vendor: string; checked: boolean; cs_manager: string; cs1: string; cs2: string; synced_at: string };
+
 function MisuBoard() {
   const [rows, setRows] = useState<SheetRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,8 +73,17 @@ function MisuBoard() {
   const [team, setTeam] = useState("전체");
   const [monthsFilter, setMonthsFilter] = useState<"전체" | "1~2개월" | "3개월+">("전체");
   const [sort, setSort] = useState<"잔액순" | "개월순" | "최신순">("잔액순");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<SheetRecord | null>(null);
+  // 관리부가 시트에서 CS체크한 업체만 모아 보는 목록 (misu_cs_checks — GAS 1시간 동기화)
+  const [boardView, setBoardView] = useState<"전체" | "CS체크">("전체");
+  const [csChecks, setCsChecks] = useState<CsCheckRow[] | null>(null);
+  useEffect(() => {
+    selectRows<CsCheckRow>("misu_cs_checks", "select=*&checked=eq.true&order=team.asc,vendor.asc")
+      .then(setCsChecks)
+      .catch(() => setCsChecks(null)); // 테이블 미설치면 안내만
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -107,15 +118,68 @@ function MisuBoard() {
     });
     const balanceOf = (r: SheetRecord) => Number(r["_balance"]) || 0;
     const monthsOf = (r: SheetRecord) => Number(r["_months"]) || 0;
-    if (sort === "잔액순") return [...list].sort((a, b) => balanceOf(b) - balanceOf(a));
-    if (sort === "개월순") return [...list].sort((a, b) => monthsOf(b) - monthsOf(a) || balanceOf(b) - balanceOf(a));
-    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])));
-  }, [rows, team, monthsFilter, sort, query]);
+    const flip = sortDir === "asc" ? -1 : 1;
+    if (sort === "잔액순") return [...list].sort((a, b) => (balanceOf(b) - balanceOf(a)) * flip);
+    if (sort === "개월순") return [...list].sort((a, b) => (monthsOf(b) - monthsOf(a) || balanceOf(b) - balanceOf(a)) * flip);
+    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
+  }, [rows, team, monthsFilter, sort, sortDir, query]);
 
   const totalBalance = filtered.reduce((sum, r) => sum + (Number(r["_balance"]) || 0), 0);
 
+  const csList = (csChecks || []).filter((c) => (team === "전체" || c.team === team) && (!query.trim() || c.vendor.toLowerCase().includes(query.trim().toLowerCase())));
+  const misuByVendor = useMemo(() => {
+    const map = new Map<string, SheetRecord>();
+    rows.forEach((r) => map.set(`${str(r, "_team")}|${str(r, "_업체명").trim()}`, r));
+    return map;
+  }, [rows]);
+
   return (
     <div className="space-y-3">
+      <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+        {(["전체", "CS체크"] as const).map((name) => (
+          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded px-4 py-2 text-sm font-black ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
+            {name === "전체" ? "전체 현황" : `✅ CS체크 목록${csChecks ? ` ${(csChecks || []).length}` : ""}`}
+          </button>
+        ))}
+      </div>
+      {boardView === "CS체크" && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-xs font-bold text-emerald-800">
+            관리부가 미수 시트에서 CS체크한 업체만 모았어요 — 이 목록만 방문·전화 확인하면 됩니다. (시트 변경은 1시간 안에 반영)
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+          </div>
+          {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
+          {csChecks !== null && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[minmax(0,1fr)_50px_70px_110px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px]">
+              <span>업체명</span><span>팀</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="hidden sm:block">CS-1회</span><span className="hidden sm:block">CS-2회</span>
+            </div>
+            <div className="max-h-[62vh] divide-y divide-slate-100 overflow-y-auto">
+              {csList.map((c) => {
+                const misu = misuByVendor.get(`${c.team}|${c.vendor.trim()}`);
+                return (
+                  <button key={c.key} type="button" onClick={() => misu && setDetail(misu)} className={`grid w-full grid-cols-[minmax(0,1fr)_50px_70px_110px] items-center gap-2 px-4 py-2.5 text-left text-xs sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] ${misu ? "hover:bg-blue-50/40" : "cursor-default"}`}>
+                    <span className="min-w-0">
+                      <span className="block truncate font-black text-slate-800">{c.vendor}</span>
+                      {c.cs_manager && <span className="block truncate text-[10px] font-bold text-slate-400">CS담당 {c.cs_manager}</span>}
+                    </span>
+                    <span className="font-bold text-slate-500">{c.team ? `${c.team}팀` : "-"}</span>
+                    <span className={`text-right font-black ${misu && (Number(misu["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{misu && Number(misu["_months"]) ? `${misu["_months"]}개월` : "-"}</span>
+                    <span className="text-right font-black text-slate-800">{misu ? won(Number(misu["_balance"]) || 0) : "-"}</span>
+                    <span className="hidden truncate font-semibold text-slate-500 sm:block">{c.cs1 || "-"}</span>
+                    <span className="hidden truncate font-semibold text-slate-500 sm:block">{c.cs2 || "-"}</span>
+                  </button>
+                );
+              })}
+              {!csList.length && <div className="p-10 text-center text-sm font-bold text-slate-400">CS체크된 업체가 없어요.</div>}
+            </div>
+          </section>}
+          {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+        </div>
+      )}
+      {boardView === "전체" && <>
       <div className="grid grid-cols-3 gap-2">
         {([
           [`${filtered.length}곳`, "미수 업체"],
@@ -137,7 +201,7 @@ function MisuBoard() {
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
           {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
           <span className="ml-2 flex rounded-md bg-slate-100 p-0.5">
-            {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => setSort(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+            {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
@@ -163,6 +227,7 @@ function MisuBoard() {
         </div>
       </section>}
       {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} onClose={() => setDetail(null)} />}
+      </>}
     </div>
   );
 }
@@ -185,6 +250,7 @@ function OverageBoard() {
   const [grade, setGrade] = useState("전체");
   const [yearMonth, setYearMonth] = useState("전체");
   const [sort, setSort] = useState<"최신순" | "금액순">("최신순");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<SheetRecord | null>(null);
 
@@ -217,9 +283,10 @@ function OverageBoard() {
       if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword) && !str(r, "접수내용").toLowerCase().includes(keyword)) return false;
       return true;
     });
-    if (sort === "금액순") return [...list].sort((a, b) => (Number(b["_total"]) || 0) - (Number(a["_total"]) || 0));
-    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])));
-  }, [rows, team, grade, yearMonth, sort, query]);
+    const flip = sortDir === "asc" ? -1 : 1;
+    if (sort === "금액순") return [...list].sort((a, b) => ((Number(b["_total"]) || 0) - (Number(a["_total"]) || 0)) * flip);
+    return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
+  }, [rows, team, grade, yearMonth, sort, sortDir, query]);
 
   const totalSum = filtered.reduce((sum, r) => sum + (Number(r["_total"]) || 0), 0);
 
@@ -254,7 +321,7 @@ function OverageBoard() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="flex rounded-md bg-slate-100 p-0.5">
-            {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => setSort(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+            {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>

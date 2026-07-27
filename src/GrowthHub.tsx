@@ -49,7 +49,7 @@ function parseClipboardGrid(text: string): string[][] {
 const EDIT_COLORS: Array<[string, string]> = [["#0f172a", "기본"], ["#dc2626", "빨강"], ["#2563eb", "파랑"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
 
 // 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
-function RichGoalEditor({ initialHtml, onChange, className }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string }) {
+function RichGoalEditor({ initialHtml, onChange, className, minHeight = 96 }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string; minHeight?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   // 최초 1회만 내용 주입 — 매 렌더마다 innerHTML을 다시 쓰면 타이핑할 때 커서가 처음으로 튄다
   const seededRef = useRef(false);
@@ -69,8 +69,8 @@ function RichGoalEditor({ initialHtml, onChange, className }: { initialHtml: str
   return (
     <div>
       <div ref={ref} contentEditable suppressContentEditableWarning
-        onInput={emit} onBlur={emit}
-        className={`min-h-[96px] whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900 outline-none focus:border-blue-400 ${className || ""}`} />
+        onInput={emit} onBlur={emit} style={{ minHeight }}
+        className={`whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 text-sm font-bold leading-5 text-slate-900 outline-none focus:border-blue-400 ${className || ""}`} />
       <div className="mt-1 flex items-center gap-1">
         <span className="mr-0.5 text-[9px] font-bold text-slate-400">드래그 후 색</span>
         {EDIT_COLORS.map(([value, label]) => (
@@ -373,6 +373,16 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       + String(goal.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
       + (goal.color ? "</span>" : "")
     || "";
+
+  // 월별 결과 서식 초기값: monthNHtml 우선, 없으면 순수 텍스트를 이스케이프
+  const monthHtmlOf = (goal: LevelGoal, m: 1 | 2 | 3) => goal[`month${m}Html`]
+    || String(goal[`month${m}`] || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const setGoalMonth = (id: string, m: 1 | 2 | 3, html: string, text: string) =>
+    setGoal(id, { [`month${m}Html`]: html, [`month${m}`]: text });
+  // 목표 표시(읽기 전용): 서식 HTML이 있으면 색 그대로 보여준다
+  const goalTitleView = (goal: LevelGoal, fallback = "-") => goal.titleHtml
+    ? <span dangerouslySetInnerHTML={{ __html: goal.titleHtml }} />
+    : <>{goal.title || fallback}</>;
 
   // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
   const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "1개월차", "2개월차", "3개월차"] as const;
@@ -897,10 +907,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           </div>
           <div className="mt-5 space-y-4 md:hidden">
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black text-blue-600">{goal.category} · {goal.grade || "-"}</div><div className="mt-1 whitespace-pre-wrap text-sm font-black leading-6 text-slate-900">{goal.title || `목표 ${index + 1}`}</div></div><span className="shrink-0 rounded-md bg-blue-600 px-2 py-1 text-xs font-black text-white">{goal.progress || 0}%</span></div>
+              <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black text-blue-600">{goal.category} · {goal.grade || "-"}</div><div className="mt-1 whitespace-pre-wrap text-sm font-black leading-6 text-slate-900">{goalTitleView(goal, `목표 ${index + 1}`)}</div></div><span className="shrink-0 rounded-md bg-blue-600 px-2 py-1 text-xs font-black text-white">{goal.progress || 0}%</span></div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-md bg-white p-2 text-slate-500">현재 <b className="float-right text-slate-800">{goal.currentLevel || "-"}</b></div><div className="rounded-md bg-white p-2 text-slate-500">목표 <b className="float-right text-slate-800">{goal.targetLevel || "-"}</b></div></div>
               <div className="mt-3 flex justify-end"><button type="button" onClick={() => setGoal(goal.id, { resultMerged: !goal.resultMerged })} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-500">{goal.resultMerged ? "월별 나누기" : "분기 통합"}</button></div>
-              {goal.resultMerged ? <textarea value={goal.month1} onChange={(e) => setGoal(goal.id, { month1: e.target.value })} rows={7} className="mt-2 w-full rounded-md border border-slate-300 bg-white p-3 text-sm leading-6" /> : <div className="mt-2 space-y-2">{[1, 2, 3].map((m) => <label key={m} className="block text-[10px] font-bold text-slate-500">{(quarter - 1) * 3 + m}월<textarea value={goal[`month${m}` as "month1"]} onChange={(e) => setGoal(goal.id, { [`month${m}`]: e.target.value })} rows={5} className="mt-1 w-full rounded-md border border-slate-300 bg-white p-3 text-sm leading-6" /></label>)}</div>}
+              {goal.resultMerged ? <div className="mt-2"><RichGoalEditor key={`${goal.id}-merged-m`} minHeight={165} initialHtml={monthHtmlOf(goal, 1)} onChange={(html, text) => setGoalMonth(goal.id, 1, html, text)} /></div> : <div className="mt-2 space-y-2">{([1, 2, 3] as const).map((m) => <div key={m} className="text-[10px] font-bold text-slate-500">{(quarter - 1) * 3 + m}월<div className="mt-1"><RichGoalEditor key={`${goal.id}-m${m}-m`} minHeight={120} initialHtml={monthHtmlOf(goal, m)} onChange={(html, text) => setGoalMonth(goal.id, m, html, text)} /></div></div>)}</div>}
             </article>)}
             {!regularGoals.length && <div className="p-10 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</div>}
           </div>
@@ -922,7 +932,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 {regularGoals.map((g) => (
                   <tr key={g.id} className="border-b border-slate-100 align-top">
                     <td className="px-3 py-3 text-sm font-bold text-slate-700">{g.category}</td>
-                    <td className="whitespace-pre-wrap px-3 py-3 text-sm leading-6 text-slate-700">{g.title || "-"}</td>
+                    <td className="whitespace-pre-wrap px-3 py-3 text-sm leading-6 text-slate-700">{goalTitleView(g)}</td>
                     <td className="px-3 py-3 text-sm text-slate-600">{g.grade || "-"}</td>
                     <td className="px-3 py-3 text-sm text-slate-600">{g.currentLevel || "-"}</td>
                     <td className="px-3 py-3 text-sm text-slate-600">{g.targetLevel || "-"}</td>
@@ -930,10 +940,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                     <td className="px-3 py-3"><button type="button" onClick={() => setGoal(g.id, { resultMerged: !g.resultMerged })} className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-500 hover:bg-slate-50">{g.resultMerged ? "나누기" : "합치기"}</button></td>
                     {g.resultMerged ? (
                       <td colSpan={3} className="px-3 py-3">
-                        <textarea value={g.month1} onChange={(e) => setGoal(g.id, { month1: e.target.value })} rows={8} className="w-full min-w-[820px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" />
+                        <div className="min-w-[820px]"><RichGoalEditor key={`${g.id}-merged`} minHeight={190} initialHtml={monthHtmlOf(g, 1)} onChange={(html, text) => setGoalMonth(g.id, 1, html, text)} /></div>
                       </td>
                     ) : (
-                      [1, 2, 3].map((m) => <td key={m} className="px-3 py-3"><textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="w-full min-w-[260px] resize-y rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-300" /></td>)
+                      ([1, 2, 3] as const).map((m) => <td key={m} className="px-3 py-3"><div className="min-w-[260px]"><RichGoalEditor key={`${g.id}-m${m}`} minHeight={165} initialHtml={monthHtmlOf(g, m)} onChange={(html, text) => setGoalMonth(g.id, m, html, text)} /></div></td>)
                     )}
                   </tr>
                 ))}
@@ -958,7 +968,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <div key={g.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <div className="grid gap-2 lg:grid-cols-[48px_1fr_80px_80px_80px_100px_36px]">
                   <span className="py-2 text-center text-sm font-black text-slate-300">{i + 1}</span>
-                  <input value={g.title} onChange={(e) => setGoal(g.id, { title: e.target.value })} placeholder="미션 목표" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  <div className="min-w-0"><RichGoalEditor key={`${g.id}-title`} minHeight={40} initialHtml={goalHtmlOf(g)} onChange={(html, text) => setGoal(g.id, { titleHtml: html, title: text })} /></div>
                   <select value={g.grade || ""} onChange={(e) => setGoal(g.id, { grade: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select>
                   <input value={g.currentLevel} onChange={(e) => setGoal(g.id, { currentLevel: e.target.value })} placeholder="현재" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
                   <input value={g.targetLevel} onChange={(e) => setGoal(g.id, { targetLevel: e.target.value })} placeholder="목표" className="rounded-md border border-slate-300 bg-white px-2 text-sm" />
@@ -971,13 +981,13 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                   </button>
                 </div>
                 {g.resultMerged ? (
-                  <label className="mt-3 block text-xs font-bold text-slate-500">
+                  <div className="mt-3 text-xs font-bold text-slate-500">
                     {(quarter - 1) * 3 + 1}~{(quarter - 1) * 3 + 3}월 미션 결과
-                    <textarea value={g.month1} onChange={(e) => setGoal(g.id, { month1: e.target.value })} rows={9} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-6 outline-none focus:border-blue-300" />
-                  </label>
+                    <div className="mt-1"><RichGoalEditor key={`${g.id}-merged`} minHeight={210} initialHtml={monthHtmlOf(g, 1)} onChange={(html, text) => setGoalMonth(g.id, 1, html, text)} /></div>
+                  </div>
                 ) : (
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    {[1, 2, 3].map((m) => <label key={m} className="text-xs font-bold text-slate-500">{(quarter - 1) * 3 + m}월 미션 결과<textarea value={g[`month${m}` as "month1"]} onChange={(e) => setGoal(g.id, { [`month${m}`]: e.target.value })} rows={7} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-6 outline-none focus:border-blue-300" /></label>)}
+                    {([1, 2, 3] as const).map((m) => <div key={m} className="text-xs font-bold text-slate-500">{(quarter - 1) * 3 + m}월 미션 결과<div className="mt-1"><RichGoalEditor key={`${g.id}-m${m}`} minHeight={165} initialHtml={monthHtmlOf(g, m)} onChange={(html, text) => setGoalMonth(g.id, m, html, text)} /></div></div>)}
                   </div>
                 )}
               </div>
