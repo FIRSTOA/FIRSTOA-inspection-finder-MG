@@ -22,9 +22,9 @@
  */
 
 var SOLAPI_API = 'https://api.solapi.com/messages/v4/send';
-var EDGE_FN_URL = 'https://jwhwicplfwrorrgtqrlw.supabase.co/functions/v1/customer-message-send';
+var EDGE_FN_URL = 'https://kkdiihazgzesbqxjytqv.supabase.co/functions/v1/customer-message-send';
 // Supabase anon 키 (공개키 — 웹앱 번들에도 노출되는 값이라 여기 둬도 안전)
-var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3aHdpY3BsZndyb3JyZ3Rxcmx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODg0MTQsImV4cCI6MjA5NzM2NDQxNH0.Dx227ZN2b8w6116mrjimoRiYkElddB3pqk9ys4DL72U';
+var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrZGlpaGF6Z3plc2JxeGp5dHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjE0NjcsImV4cCI6MjEwMDczNzQ2N30.fjKIbDpj0QhNgc7Qr2z79xBkrYD9LqCxc88hHzpJ0kw';
 
 function doPost(e) {
   try {
