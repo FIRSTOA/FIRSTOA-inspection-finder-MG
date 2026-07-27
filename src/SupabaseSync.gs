@@ -22,7 +22,7 @@
  *       돌아간다. 시트 원본을 반드시 함께 수정하는 운영 전제.
  */
 
-const SUPABASE_SYNC_URL = 'https://jwhwicplfwrorrgtqrlw.supabase.co';
+const SUPABASE_SYNC_URL = 'https://kkdiihazgzesbqxjytqv.supabase.co';
 const LEASE_SYNC_BATCH = 400;
 const LEASE_SYNC_LAST_PROP = 'LEASE_SUPABASE_SYNC_LAST';
 
