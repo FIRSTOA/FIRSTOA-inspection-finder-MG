@@ -98,6 +98,19 @@ export default function ItLearningHistory({ author }: { author: string }) {
     try { const json = JSON.stringify({ t: Date.now(), rows }); if (json.length < 2_000_000) localStorage.setItem(cacheKey(target, q), json); } catch { /* 용량 초과 등은 무시 */ }
   };
   const runSeq = useRef(0);
+  // 최근 검색어 (기기에 저장, 최대 8개) — 자주 찾는 부품·업체를 한 번에 재검색
+  const [recentQueries, setRecentQueries] = useState<string[]>(() => {
+    try { const parsed = JSON.parse(localStorage.getItem("it_recent_queries_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 8) : []; } catch { return []; }
+  });
+  const rememberQuery = (value: string) => {
+    const q = value.trim();
+    if (!q) return;
+    setRecentQueries((current) => {
+      const next = [q, ...current.filter((item) => item !== q)].slice(0, 8);
+      try { localStorage.setItem("it_recent_queries_v1", JSON.stringify(next)); } catch { /* 저장 실패 무시 */ }
+      return next;
+    });
+  };
   const run = async (target: View = view, searchQuery = query) => {
     if (!connected) { setConnectionOpen(true); return; }
     const seq = ++runSeq.current;
@@ -112,6 +125,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
       const list = Array.isArray(data) ? data : [];
       setRows(list);
       writeCache(target, searchQuery, list);
+      if (searchQuery.trim() && list.length) rememberQuery(searchQuery);
     } catch (error) {
       if (seq === runSeq.current && !cached) notify("error", error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
     } finally { if (seq === runSeq.current) setLoading(false); }
@@ -213,7 +227,14 @@ export default function ItLearningHistory({ author }: { author: string }) {
     </section>)}
 
     {displayMode === "integrated" && (view === "knowledge" || view === "history" || view === "inventory") && <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 p-4"><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={view === "knowledge" ? "부품·증상·카테고리 검색" : view === "history" ? "업체명 또는 자산기번 검색" : "자산기번·CPU·메모리·사양 검색"} /><div className="mt-2 flex items-center justify-between text-xs font-bold text-slate-400"><span>{loading ? "불러오는 중" : `검색 결과 ${rows.length}건`}</span>{query && <button type="button" onClick={() => { setQuery(""); void run(view, ""); }} className="text-blue-600">전체 보기</button>}</div></div>
+      <div className="border-b border-slate-200 p-4"><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={view === "knowledge" ? "부품·증상·카테고리 검색" : view === "history" ? "업체명 또는 자산기번 검색" : "자산기번·CPU·메모리·사양 검색"} />
+        {recentQueries.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className="text-[10px] font-black text-slate-400">최근</span>
+          {recentQueries.map((item) => (
+            <button key={item} type="button" onClick={() => { setQuery(item); void run(view, item); }} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200">{item}</button>
+          ))}
+          <button type="button" onClick={() => { setRecentQueries([]); try { localStorage.removeItem("it_recent_queries_v1"); } catch { /* 무시 */ } }} className="text-[10px] font-bold text-slate-300 hover:text-slate-500">지우기</button>
+        </div>}<div className="mt-2 flex items-center justify-between text-xs font-bold text-slate-400"><span>{loading ? "불러오는 중" : `검색 결과 ${rows.length}건`}</span>{query && <button type="button" onClick={() => { setQuery(""); void run(view, ""); }} className="text-blue-600">전체 보기</button>}</div></div>
       {loading ? <div className="flex items-center justify-center py-20"><LoaderCircle className="animate-spin text-blue-600" /></div> : rows.length === 0 ? <Empty text={connected ? "검색 결과가 없습니다." : "DB를 연결하면 기존 자료를 확인할 수 있습니다."} /> : <div className="divide-y divide-slate-100">{rows.map((row, index) => {
         const part = valueByPrefix(row, "부품명", "부품");
         const title = view === "knowledge" ? part || "IT 지식" : view === "history" ? String(row.제목 || row.업체명 || "처리이력") : String(row.자산번호 || row.자산기번 || "재고 항목");

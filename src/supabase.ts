@@ -179,6 +179,15 @@ export async function upsertRows(table: string, rows: Record<string, unknown>[],
   }
 }
 
+// 행 수만 필요할 때 (통계 카드용) — 본문 없이 count 헤더만 읽는다
+export async function countRows(table: string, query = ""): Promise<number> {
+  const res = await fetch(`${REST}/${table}?select=id&limit=1${query ? `&${query}` : ""}`, {
+    headers: { ...BASE_HEADERS, Prefer: "count=exact" },
+  });
+  if (!res.ok) throw new Error(`행 수 조회 실패 ${table}(${res.status})`);
+  return Number((res.headers.get("content-range") || "").split("/")[1] || 0);
+}
+
 export async function deleteRows(table: string, query: string): Promise<void> {
   const res = await fetch(`${REST}/${table}?${query}`, {
     method: "DELETE",

@@ -1,5 +1,10 @@
-// 모델명 → 브랜드 추정 (copier-backfill.sql의 CASE와 같은 규칙 — 바꿀 때 함께 수정)
+// 모델명 → 브랜드 추정: 기종 카탈로그(modelCatalog) 우선, 없으면 휴리스틱.
+// (copier-backfill.sql의 CASE와 같은 규칙 — 휴리스틱을 바꿀 때 함께 수정)
+import { brandOfModel } from "./modelCatalog";
+
 export function inferBrand(model: string): string {
+  const catalog = brandOfModel(model);
+  if (catalog) return catalog;
   const m = String(model || "");
   if (/BROTHER|브라더|MFC|HL-|5700|8900/i.test(m)) return "브라더";
   if (/OKI|오키|5473/i.test(m)) return "오키";

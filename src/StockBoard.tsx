@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { ALL_MODEL_NAMES, CATALOG_BRANDS, brandOfModel } from "./modelCatalog";
 
 type StockItem = {
   id: string; created_at: string; updated_at: string; updated_by: string;
@@ -11,11 +12,13 @@ type StockItem = {
   condition: "" | "새기기" | "리퍼"; qty: number; note: string;
 };
 
-const BRAND_NAMES = ["삼성", "신도", "제록스", "교세라", "브라더", "오키", "기타"];
+// 기종 카탈로그(modelCatalog.ts)와 같은 제조사 체계를 쓴다
+const BRAND_NAMES = [...CATALOG_BRANDS, "기타"];
 const BRAND_TONE: Record<string, string> = {
   삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
   교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
-  기타: "bg-slate-100 text-slate-600",
+  HP: "bg-sky-50 text-sky-700", 리코: "bg-indigo-50 text-indigo-700", 캐논: "bg-orange-50 text-orange-700",
+  코니카미놀타: "bg-teal-50 text-teal-700", 기타: "bg-slate-100 text-slate-600",
 };
 
 function timeAgo(iso: string) {
@@ -34,6 +37,8 @@ export default function StockBoard({ author }: { author: string }) {
   const [kind, setKind] = useState<"기기" | "부품">("기기");
   const [brand, setBrand] = useState("전체");
   const [query, setQuery] = useState("");
+  const [lowOnly, setLowOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<"name" | "qty">("name");
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState({ brand: "삼성", name: "", condition: "새기기" as "새기기" | "리퍼" | "", qty: 0, note: "" });
   const [busy, setBusy] = useState(false);
@@ -59,13 +64,15 @@ export default function StockBoard({ author }: { author: string }) {
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return items.filter((item) => {
+    const list = items.filter((item) => {
       if (item.kind !== kind) return false;
       if (kind === "기기" && brand !== "전체" && item.brand !== brand) return false;
+      if (lowOnly && item.qty > 2) return false;
       if (!keyword) return true;
       return [item.name, item.brand, item.note].join(" ").toLowerCase().includes(keyword);
     });
-  }, [items, kind, brand, query]);
+    return sortMode === "qty" ? [...list].sort((a, b) => a.qty - b.qty || a.name.localeCompare(b.name)) : list;
+  }, [items, kind, brand, query, lowOnly, sortMode]);
 
   const byBrand = useMemo(() => {
     const map = new Map<string, StockItem[]>();
@@ -79,6 +86,13 @@ export default function StockBoard({ author }: { author: string }) {
   }, [filtered]);
 
   const totalOf = (targetKind: "기기" | "부품") => items.filter((i) => i.kind === targetKind).reduce((sum, i) => sum + i.qty, 0);
+  const kindItems = items.filter((i) => i.kind === kind);
+  const summary = {
+    qty: kindItems.reduce((sum, i) => sum + i.qty, 0),
+    types: kindItems.length,
+    soldOut: kindItems.filter((i) => i.qty === 0).length,
+    low: kindItems.filter((i) => i.qty > 0 && i.qty <= 2).length,
+  };
 
   const changeQty = async (item: StockItem, delta: number) => {
     const qty = Math.max(0, item.qty + delta);
@@ -154,16 +168,38 @@ export default function StockBoard({ author }: { author: string }) {
         <button type="button" onClick={() => setAddOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">+ 항목 추가</button>
       </div>
 
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {([
+          [`${summary.qty}${kind === "기기" ? "대" : "개"}`, `${kind} 총수량`, "text-slate-950"],
+          [`${summary.types}종`, "품목 수", "text-slate-950"],
+          [`${summary.soldOut}종`, "품절 (0)", summary.soldOut ? "text-rose-600" : "text-slate-950"],
+          [`${summary.low}종`, "부족 (1~2)", summary.low ? "text-amber-600" : "text-slate-950"],
+        ] as [string, string, string][]).map(([value, label, tone]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+            <div className={`text-lg font-black ${tone}`}>{value}</div>
+            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+          </div>
+        ))}
+      </div>
+
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-semibold text-slate-500">교체 약속 전 기기 재고, 재방문 전 부품 재고를 여기서 바로 확인하세요. 수량은 관리부가 관리하며 마지막 수정자·시각이 함께 남습니다.</p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />
-          {kind === "기기" && <div className="flex flex-wrap gap-1">
-            {["전체", ...BRAND_NAMES].map((name) => (
-              <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : BRAND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>
-            ))}
-          </div>}
+          <div className="flex flex-wrap items-center gap-1">
+            <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700"}`}>⚠ 부족만</button>
+            <span className="flex rounded-md bg-slate-100 p-0.5">
+              {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded px-2 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              ))}
+            </span>
+          </div>
         </div>
+        {kind === "기기" && <div className="mt-2 flex flex-wrap gap-1">
+          {["전체", ...BRAND_NAMES].map((name) => (
+            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : BRAND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>
+          ))}
+        </div>}
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
@@ -201,8 +237,15 @@ export default function StockBoard({ author }: { author: string }) {
                   </select>
                 </label>
               </div>}
-              <label className="block text-xs font-bold text-slate-500">{kind === "기기" ? "기종명" : "부품명"}
-                <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={kind === "기기" ? "예: SL-X3220NR" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              <label className="block text-xs font-bold text-slate-500">{kind === "기기" ? "기종명 (입력하면 브랜드 자동 선택)" : "부품명"}
+                <input value={draft.name} list={kind === "기기" ? "stock-model-catalog" : undefined}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const detected = kind === "기기" ? brandOfModel(name) : "";
+                    setDraft({ ...draft, name, ...(detected ? { brand: detected } : {}) });
+                  }}
+                  placeholder={kind === "기기" ? "예: SL-X3220NR" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                {kind === "기기" && <datalist id="stock-model-catalog">{ALL_MODEL_NAMES.map((name) => <option key={name} value={name} />)}</datalist>}
               </label>
               <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-2">
                 <label className="text-xs font-bold text-slate-500">수량

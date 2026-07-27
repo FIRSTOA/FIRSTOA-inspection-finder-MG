@@ -3,13 +3,15 @@
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
 import { useCallback, useEffect, useState } from "react";
-import { deleteRows, insertRow, selectRows } from "./supabase";
+import { countRows, deleteRows, insertRow, selectRows } from "./supabase";
+import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
 
 type CopierNote = {
   id: string; created_at: string; author: string; brand: string; model: string;
   kind: "학습" | "처리이력"; title: string; content: string;
 };
 
+// 기종 필터 칩: 팀 관용 시리즈명 (기록의 model 값과 일치하는 것들)
 const BRANDS: Record<string, string[]> = {
   삼성: ["MX3", "MX4", "MX7", "흑백기"],
   신도: ["320", "410", "420", "450", "N501"],
@@ -17,13 +19,18 @@ const BRANDS: Record<string, string[]> = {
   교세라: ["2100", "2101", "5521", "5526"],
   브라더: ["5700", "8900"],
   오키: ["5473"],
+  HP: [],
+  리코: [],
+  캐논: [],
+  코니카미놀타: [],
   기타: [],
 };
 const BRAND_NAMES = Object.keys(BRANDS);
 const BRAND_TONE: Record<string, string> = {
   삼성: "bg-blue-50 text-blue-700", 신도: "bg-emerald-50 text-emerald-700", 제록스: "bg-rose-50 text-rose-700",
   교세라: "bg-amber-50 text-amber-700", 브라더: "bg-violet-50 text-violet-700", 오키: "bg-cyan-50 text-cyan-700",
-  기타: "bg-slate-100 text-slate-600",
+  HP: "bg-sky-50 text-sky-700", 리코: "bg-indigo-50 text-indigo-700", 캐논: "bg-orange-50 text-orange-700",
+  코니카미놀타: "bg-teal-50 text-teal-700", 기타: "bg-slate-100 text-slate-600",
 };
 
 type QuizItem = { note: CopierNote; options: CopierNote[] };
@@ -77,6 +84,18 @@ export default function CopierNotes({ author }: { author: string }) {
   const [model, setModel] = useState<string>("전체");
   const [kindFilter, setKindFilter] = useState<"전체" | "학습" | "처리이력">("전체");
   const [query, setQuery] = useState("");
+  const [order, setOrder] = useState<"desc" | "asc">("desc");
+  // 상단 통계 (전체 기준 — 필터와 무관)
+  const [stats, setStats] = useState<{ total: number; learn: number; cases: number; month: number } | null>(null);
+  useEffect(() => {
+    const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+    void Promise.all([
+      countRows("copier_notes"),
+      countRows("copier_notes", `kind=eq.${encodeURIComponent("학습")}`),
+      countRows("copier_notes", `kind=eq.${encodeURIComponent("처리이력")}`),
+      countRows("copier_notes", `created_at=gte.${monthStart}`),
+    ]).then(([total, learn, cases, month]) => setStats({ total, learn, cases, month })).catch(() => setStats(null));
+  }, []);
   const [writeOpen, setWriteOpen] = useState(false);
   const [view, setView] = useState<"notes" | "quiz">("notes");
   // 퀴즈: 처리이력·학습 기록을 문제 은행으로 쓰는 4지선다 (IT 기술퀴즈와 같은 흐름)
@@ -118,7 +137,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const PAGE_SIZE = 200;
   const [hasMore, setHasMore] = useState(false);
   const buildListQuery = useCallback((offset: number) => {
-    const parts = ["select=*", "order=created_at.desc", `limit=${PAGE_SIZE}`, `offset=${offset}`];
+    const parts = ["select=*", `order=created_at.${order}`, `limit=${PAGE_SIZE}`, `offset=${offset}`];
     if (brand !== "전체") parts.push(`brand=eq.${encodeURIComponent(brand)}`);
     if (model !== "전체") parts.push(`model=eq.${encodeURIComponent(model)}`);
     if (kindFilter !== "전체") parts.push(`kind=eq.${encodeURIComponent(kindFilter)}`);
@@ -128,7 +147,7 @@ export default function CopierNotes({ author }: { author: string }) {
       parts.push(`or=${encodeURIComponent(`(title.ilike.${pattern},content.ilike.${pattern},model.ilike.${pattern},author.ilike.${pattern})`)}`);
     }
     return parts.join("&");
-  }, [brand, model, kindFilter, query]);
+  }, [brand, model, kindFilter, query, order]);
   const load = useCallback(async (offset = 0) => {
     setLoading(true);
     setError("");
@@ -271,6 +290,21 @@ export default function CopierNotes({ author }: { author: string }) {
       </section>}
 
       {view === "notes" && <>
+      {stats && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {([
+            [`${stats.total.toLocaleString()}건`, "전체 기록"],
+            [`${stats.learn.toLocaleString()}건`, "학습"],
+            [`${stats.cases.toLocaleString()}건`, "처리이력"],
+            [`+${stats.month.toLocaleString()}건`, "이번 달 신규"],
+          ] as [string, string][]).map(([value, label]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+              <div className="text-lg font-black text-slate-950">{value}</div>
+              <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold text-slate-500">브랜드·기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스입니다.</p>
@@ -299,6 +333,11 @@ export default function CopierNotes({ author }: { author: string }) {
               <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded px-3 py-1.5 text-xs font-black ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
             ))}
           </div>
+          <div className="flex rounded-md bg-slate-100 p-1">
+            {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded px-3 py-1.5 text-xs font-black ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -315,7 +354,10 @@ export default function CopierNotes({ author }: { author: string }) {
                 {note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{note.model}</span>}
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black ${note.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{note.kind}</span>
               </div>
-              {note.author === author && <button type="button" onClick={() => void removeNote(note)} className="shrink-0 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
+              <span className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => { void navigator.clipboard.writeText(`[${note.brand}${note.model ? ` ${note.model}` : ""}] ${note.title}\n${note.content}`); }} title="내용 복사" className="text-[11px] font-black text-slate-300 hover:text-blue-600">복사</button>
+                {note.author === author && <button type="button" onClick={() => void removeNote(note)} className="text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
+              </span>
             </div>
             {note.title && <div className="mt-2 text-sm font-black text-slate-900">{note.title}</div>}
             <NoteBody note={note} />
@@ -353,7 +395,12 @@ export default function CopierNotes({ author }: { author: string }) {
                     <button key={name} type="button" onClick={() => setDraft({ ...draft, model: name })} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${draft.model === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
                   ))}
                 </div>
-                <input value={draft.model} onChange={(e) => setDraft({ ...draft, model: e.target.value })} placeholder="직접 입력 가능" className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <input value={draft.model} list="copier-model-catalog" onChange={(e) => {
+                  const value = e.target.value;
+                  const detected = brandOfModel(value);
+                  setDraft({ ...draft, model: value, ...(detected && BRAND_NAMES.includes(detected) ? { brand: detected } : {}) });
+                }} placeholder="직접 입력 가능 — 정식 기종명 입력 시 브랜드 자동 선택" className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <datalist id="copier-model-catalog">{ALL_MODEL_NAMES.map((name) => <option key={name} value={name} />)}</datalist>
               </div>
               <label className="block text-xs font-bold text-slate-500">제목 (증상 요약)
                 <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="예: 출력물 세로줄 발생" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
