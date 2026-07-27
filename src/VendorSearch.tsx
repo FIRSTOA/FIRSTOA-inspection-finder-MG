@@ -74,8 +74,14 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
             resp = await searchVendors(q);
           }
           if (myReq !== reqSeq.current) return;
-          setHits(resp.results || []);
-          setSearchFailed(Boolean(resp.error) && !(resp.results || []).length);
+          const list = resp.results || [];
+          // 기번/자산기번도 함께 조회해서 결과와 동시에 표시한다 (따로 로드하면 1초 뒤에 나타나 부자연스러움)
+          const identVendors = list.filter((h) => (h.counts?.["점검"] || 0) > 0 || (h.counts?.["AS"] || 0) > 0).map((h) => h.vendor);
+          const identMap = identVendors.length ? await getVendorIdentifiers(identVendors).catch(() => ({})) : {};
+          if (myReq !== reqSeq.current) return;
+          setIdents(identMap);
+          setHits(list);
+          setSearchFailed(Boolean(resp.error) && !list.length);
           setShowHits(true);
         } catch (e) {
           if (myReq === reqSeq.current) { setSearchFailed(true); onError((e as Error).message || "검색 실패"); }
@@ -114,15 +120,6 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
     () => hits.filter((h) => (h.counts?.["점검"] || 0) > 0 || (h.counts?.["AS"] || 0) > 0),
     [hits]
   );
-
-  // 후보 업체들의 최신 기번/자산기번을 일괄 조회해 드롭다운에 표시한다.
-  useEffect(() => {
-    const vendors = base.map((h) => h.vendor);
-    if (!vendors.length) { setIdents({}); return; }
-    let alive = true;
-    void getVendorIdentifiers(vendors).then((map) => { if (alive) setIdents(map); }).catch(() => {});
-    return () => { alive = false; };
-  }, [base]);
 
   const typeBase = activeType === "전체" ? base : base.filter((hit) => Number(hit.counts?.[activeType] || 0) > 0);
   const hitRegion = (hit: VendorHit) => {
@@ -302,7 +299,9 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
               if (f.asset) chips.push(`자산 ${f.asset}`);
               if (f.count) chips.push(`${f.count}대`);
               if (f.region) chips.push(f.region);
-              if (f.author) chips.push(f.author);
+              // 옛 데이터는 작성자 칸에 "구분: 점검" 같은 라벨 줄이 들어있기도 하다 — 사람 이름만 칩으로
+              const authorName = f.author && !f.author.includes(":") && !f.author.includes("：") && f.author.trim().length <= 10 ? f.author.trim() : "";
+              if (authorName) chips.push(authorName);
               return (
                 <div key={i} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
                   <div className="flex items-center justify-between gap-2">
@@ -342,9 +341,9 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
 
                   {/* 기종·댓수·지역·작성자 칩 */}
                   {chips.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex flex-wrap gap-1">
                       {chips.map((c, j) => (
-                        <span key={j} className="rounded-lg bg-slate-50 px-2 py-0.5 text-xs text-slate-500">
+                        <span key={j} className="max-w-full truncate rounded bg-slate-50 px-1.5 py-0.5 text-[11px] leading-4 text-slate-500">
                           {c}
                         </span>
                       ))}
