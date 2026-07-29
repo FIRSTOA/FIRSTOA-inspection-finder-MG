@@ -12,6 +12,7 @@ const FIELD_SHEETS = {
   praise: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 0 },
   reception_copier: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
   reception_copier_new: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
+  reception_remote: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 916322987 },
 };
 
 function doPost(e) {
@@ -109,6 +110,7 @@ function findHeaderRow_(sheet, category) {
     praise: ["거래처명", "칭찬이유"],
     reception_copier: ["퍼스트순", "접수유형"],
     reception_copier_new: ["퍼스트순", "접수유형"],
+    reception_remote: ["접수일", "한조처리"],
   };
   const required = signatures[category] || [];
   const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
@@ -169,6 +171,12 @@ function fieldValue_(category, header, column, data, request, labels) {
     "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
   } : {};
+  // 원격·IT 접수: 접수일(B)·접수시각(D)·접수자(J)는 서버 기준으로 채운다
+  const remotePeriod = category === "reception_remote" ? {
+    "접수일": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
+    "접수": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
+    "접수자": request.author,
+  } : {};
   const base = {
     "웹앱 전송ID": request.jobId,
     "날짜": request.submittedAt,
@@ -179,6 +187,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     ...complaintPeriod,
     ...praisePeriod,
     ...receptionPeriod,
+    ...remotePeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -215,6 +224,11 @@ function fieldValue_(category, header, column, data, request, labels) {
     reception_copier: {
       "퍼스트순": "firstNo", "접수유형": "route", "접수분야": "field", "유상/무상": "paid",
       "업체담당자": "receiverName", "전화번호": "receiverPhone", "제목(짧게)": "title", "내용": "symptom",
+    },
+    reception_remote: {
+      "시작": "start", "종료": "end", "처리여부": "result", "유입경로": "route", "처리자": "handler",
+      "한조처리": "hanjo", "순": "leaseNo", "연락처": "contact", "증상": "symptom",
+      "추가대수": "extraCount", "처리내용": "handled", "연동완료": "linked",
     },
     reception_copier_new: {
       "퍼스트순": "firstNo", "임대여부": "leaseStatus", "업체명": "company", "접수유형": "route", "접수분야": "field",

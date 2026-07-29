@@ -321,7 +321,7 @@ export type ServiceReceptionRow = {
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
   lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
   address_resolved_at?: string | null; address_resolved_by?: string;
-  field?: string; first_no?: string; cust_kind?: string;
+  field?: string; first_no?: string; cust_kind?: string; remote_meta?: Record<string, string>;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
@@ -982,6 +982,29 @@ export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, ex
     return result.status === "synced" ? `접수시트 ${result.row ? `${result.row}행 ` : ""}기입` : "접수시트 반영 대기";
   } catch {
     return "접수시트 반영 재시도 대기";
+  }
+}
+
+// 서비스접수(원격·IT) → 접수 시트 '원격' 탭 기입. 순(M)만 정확하면 N~T 등은 시트 함수가 채운다.
+export type RemoteReceptionSheetInput = {
+  author: string; vendor: string; leaseNo: string; route: string; start: string; end: string;
+  result: string; handler: string; hanjo: string; contact: string; symptom: string;
+  extraCount: string; handled: string; linked: string;
+};
+
+export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInput): Promise<string> {
+  const id = crypto.randomUUID();
+  await enqueueFieldSheetSyncJob({
+    id, category: "reception_remote", author: input.author.trim(), vendor: input.vendor.trim(),
+    sourceText: "", payload: { data: { ...input } }, dupKey: id,
+  });
+  const cfg = await getConfig().catch(() => ({} as Record<string, string>));
+  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return "시트 동기화 설정 꺼짐";
+  try {
+    const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
+    return result.status === "synced" ? `원격시트 ${result.row ? `${result.row}행 ` : ""}기입` : "원격시트 반영 대기";
+  } catch {
+    return "원격시트 반영 재시도 대기";
   }
 }
 

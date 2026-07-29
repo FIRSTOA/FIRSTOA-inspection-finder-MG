@@ -7,7 +7,7 @@ import {
 } from "./api";
 import { kstDate } from "./visits";
 import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
-import { sendReceptionCopierSheetJob } from "./api";
+import { sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 
@@ -211,6 +211,12 @@ export default function ServiceReception({ author }: { author: string }) {
   const [fieldCustom, setFieldCustom] = useState("");
   const [paidCustom, setPaidCustom] = useState("");
   const [newLease, setNewLease] = useState<Record<string, string>>({ ...EMPTY_NEW_LEASE });
+  // 원격·IT 접수 시트('원격' 탭) 전용 입력 — IT/원격이관은 같은 탭을 쓰고 L열(한조처리)로만 갈린다
+  const [remote, setRemote] = useState({ start: "", end: "", result: "", resultCustom: "", handler: "", hanjoCustom: "", extraCount: "", handled: "", linked: false });
+  const isRemoteType = type === "IT" || type === "원격이관";
+  const remoteResultFinal = remote.result === "직접입력" ? remote.resultCustom.trim() : remote.result;
+  // 한조처리(L): IT면 반드시 "IT"가 들어가고, 원격이관은 공백 — 직접입력이 있으면 그 값
+  const hanjoFinal = remote.hanjoCustom.trim() || (type === "IT" ? "IT" : "");
   const fieldFinal = fieldChoice === "직접기재" ? fieldCustom.trim() || "A/S" : fieldChoice;
   const paidFinal = manual.유상무상 === "직접기재" ? paidCustom.trim() || "무상" : manual.유상무상;
   const [manualVendor, setManualVendor] = useState("");
@@ -317,7 +323,7 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || manualVendor.trim();
+  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (type === "복합기 AS" ? manualVendor.trim() : "");
   const region = regionLabel(pick(lease, "담당지역"));
   // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
   const resultVendorCounts = useMemo(() => {
@@ -447,6 +453,7 @@ export default function ServiceReception({ author }: { author: string }) {
       paid: paidFinal,
       field: fieldFinal,
       first_no: firstNo.trim(),
+      ...(isRemoteType ? { remote_meta: { start: remote.start, end: remote.end, result: remoteResultFinal, handler: remote.handler.trim(), hanjo: hanjoFinal, extraCount: remote.extraCount.trim(), handled: remote.handled.trim(), linked: remote.linked ? "연동완료" : "" } } : {}),
       cust_kind: type === "복합기 AS" ? custKind : "",
       notes: manual.참고사항,
       report_text: type === "원격이관" ? "" : report,
@@ -458,11 +465,28 @@ export default function ServiceReception({ author }: { author: string }) {
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
-    setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE });
+    setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setRemote({ start: "", end: "", result: "", resultCustom: "", handler: "", hanjoCustom: "", extraCount: "", handled: "", linked: false });
   };
 
   // 복합기 AS 접수를 접수 시트에 자동 기입 (기존: 퍼스트순 기준 자동 채움 / 신규: 직접 기재) — 실패해도 접수 저장은 유효
   const writeReceptionSheet = async (): Promise<string> => {
+    if (isRemoteType) {
+      if (!firstNo.trim()) return " · 순번 미입력 — 시트 기입 생략";
+      try {
+        const message = await sendReceptionRemoteSheetJob({
+          author, vendor: vendorName, leaseNo: firstNo.trim(), route,
+          start: remote.start, end: remote.end, result: remoteResultFinal, handler: remote.handler.trim(),
+          hanjo: hanjoFinal,
+          // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
+          contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
+          symptom: manual.증상.trim(), extraCount: remote.extraCount.trim(),
+          handled: remote.handled.trim(), linked: remote.linked ? "연동완료" : "",
+        });
+        return ` · ${message}`;
+      } catch (e) {
+        return ` · 시트 기입 실패(${(e as Error).message})`;
+      }
+    }
     if (type !== "복합기 AS") return "";
     if (custKind === "기존" && !firstNo.trim()) return " · 퍼스트순 미입력 — 시트 기입 생략";
     try {
@@ -503,9 +527,9 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && type !== "원격이관") {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
       }
-      const sheetPending = type === "복합기 AS" && (custKind === "신규" || !!firstNo.trim());
+      const sheetPending = isRemoteType ? !!firstNo.trim() : (custKind === "신규" || !!firstNo.trim());
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
-      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
+      setActionResult(`${type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       resetForm();
       await loadList(listDate, listPeriod);
     } catch (e) {
@@ -538,7 +562,7 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && rowId) {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 전송은 유효 */ }
       }
-      const sheetPending = type === "복합기 AS" && (custKind === "신규" || !!firstNo.trim());
+      const sheetPending = type === "복합기 AS" && (custKind === "신규" || !!firstNo.trim());  // 전송 경로는 복합기 AS 전용
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
       setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       setSavedRowId(null);
@@ -707,16 +731,20 @@ export default function ServiceReception({ author }: { author: string }) {
   }, [listRows]);
   const filteredRows = useMemo(() => listFilter === "전체" ? listRows : listFilter === "주소확인" ? listRows.filter((r) => r.address_changed && !r.address_resolved_at) : listRows.filter((r) => r.type === listFilter), [listRows, listFilter]);
   const isToday = listDate === kstDate();
-  const requiredChecks = [
-    Boolean(vendorName),
-    Boolean(manual.접수자성함.trim()),
-    Boolean(manual.접수자연락처.trim()),
-    Boolean(manual.제목.trim()),
-    Boolean(manual.증상.trim()),
-    Boolean(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소")),
+  // 필수값은 한 배열로만 정의한다 — 카운터와 아래 체크 칩이 서로 어긋나지 않게.
+  // 구분별로 실제 필요한 것만: 원격이관은 방문·제목 개념이 없고, 시트 기입엔 순번이 필요하다.
+  const requiredItems: [string, boolean][] = [
+    ["업체", Boolean(vendorName)],
+    ["접수자", Boolean(manual.접수자성함.trim())],
+    ["연락처", Boolean(manual.접수자연락처.trim())],
+    ...(type === "복합기 AS" ? [["제목", Boolean(manual.제목.trim())] as [string, boolean]] : []),
+    ["내용", Boolean(manual.증상.trim())],
+    ...(type === "원격이관" ? [] : [["주소", Boolean(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"))] as [string, boolean]]),
+    // 순번은 시트 기입 기준값 — 원격·IT는 항상, 복합기는 기존 거래처일 때 (신규는 상세 섹션에서 받는다)
+    ...(isRemoteType || custKind === "기존" ? [["순번", Boolean(firstNo.trim())] as [string, boolean]] : []),
   ];
-  const readyCount = requiredChecks.filter(Boolean).length;
-  const isReady = readyCount === requiredChecks.length;
+  const readyCount = requiredItems.filter(([, ok]) => ok).length;
+  const isReady = readyCount === requiredItems.length;
 
   return (
     <div className="space-y-4 pb-16">
@@ -748,13 +776,25 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
             <div className="p-4">
             <div className="-mx-4 -mt-4 mb-3 flex border-b border-slate-200 bg-slate-50/80">
-              {(["복합기 AS", "IT", "원격이관"] as ReceiveType[]).map((t) => (
-                <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }}
-                  className={`flex-1 border-b-2 px-4 py-3 text-sm font-black transition ${type === t ? "border-blue-600 bg-white text-blue-700" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
-                  {t}
-                </button>
-              ))}
+              {([["복합기 AS", "복합기 AS"], ["원격이관", "원격 · IT"]] as [ReceiveType, string][]).map(([value, label]) => {
+                const active = value === "복합기 AS" ? type === "복합기 AS" : isRemoteType;
+                return (
+                  <button key={value} type="button" onClick={() => { setType(value); setActionResult(""); }}
+                    className={`flex-1 border-b-2 px-4 py-3 text-sm font-black transition ${active ? "border-blue-600 bg-white text-blue-700" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+                    {label}
+                  </button>
+                );
+              })}
             </div>
+            {isRemoteType && <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black text-slate-500">처리 구분</span>
+              <span className="flex rounded-md bg-slate-100 p-0.5">
+                {(["원격이관", "IT"] as ReceiveType[]).map((t) => (
+                  <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded px-4 py-2 text-xs font-black ${type === t ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{t}</button>
+                ))}
+              </span>
+              <span className={`rounded px-2 py-1 text-[10px] font-black ${type === "IT" ? "bg-cyan-50 text-cyan-700" : "bg-slate-100 text-slate-500"}`}>한조처리 L열: {hanjoFinal || "공백"}</span>
+            </div>}
             {type === "복합기 AS" && <div className="flex items-center gap-2">
               <span className="flex rounded-md bg-slate-100 p-0.5">
                 {(["기존", "신규"] as const).map((k) => (
@@ -809,16 +849,13 @@ export default function ServiceReception({ author }: { author: string }) {
                 <span className="text-rose-600">{asHistory.length ? `AS이력 기기 ${asHistory.filter((h) => h.serialMatch).length}회 · 업체 ${asHistory.length}회` : "AS이력 없음"}</span>
               </div>
             </div>}
-            {!lease && type === "원격이관" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명 직접 입력 (임대리스트 미매칭 시)
-              <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="업체명" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-            </label>}
             </div>
           </section>
 
           <section className="overflow-hidden rounded-lg border-2 border-[#0F172A] bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">2</span><div><div className="text-sm font-black text-slate-950">접수 내용 입력</div><div className="text-[11px] font-semibold text-slate-500">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div></div></div>
-              <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>{readyCount}/{requiredChecks.length} 필수 입력</div>
+              <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>{readyCount}/{requiredItems.length} 필수 입력</div>
             </div>
             <div className="p-4">
               <div className="text-xs font-black text-slate-700">접수 내용</div>
@@ -845,6 +882,40 @@ export default function ServiceReception({ author }: { author: string }) {
                   </select>
                 </div>}
               </div>
+              {isRemoteType && <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-cyan-200 bg-cyan-50/40 p-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                <label className="text-[10px] font-bold text-slate-500">순 (임대리스트 순번)
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-900" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">시작
+                  <input type="time" value={remote.start} onChange={(e) => setRemote({ ...remote, start: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">종료
+                  <input type="time" value={remote.end} onChange={(e) => setRemote({ ...remote, end: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">처리여부
+                  {remote.result === "직접입력"
+                    ? <span className="mt-0.5 flex gap-1">
+                        <input autoFocus value={remote.resultCustom} onChange={(e) => setRemote({ ...remote, resultCustom: e.target.value })} placeholder="처리여부 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                        <button type="button" title="선택으로 되돌리기" onClick={() => setRemote({ ...remote, result: "", resultCustom: "" })} className="shrink-0 rounded-md border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700">↺</button>
+                      </span>
+                    : <select value={remote.result} onChange={(e) => setRemote({ ...remote, result: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{["처리완료", "접수취소", "재접수", "자체해결", "AS이관", "중복접수", "방문이관", "직접입력"].map((v) => <option key={v}>{v}</option>)}</select>}
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">처리자
+                  <input value={remote.handler} onChange={(e) => setRemote({ ...remote, handler: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">추가대수
+                  <input value={remote.extraCount} onChange={(e) => setRemote({ ...remote, extraCount: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-500">한조처리 직접입력 (비우면 {type === "IT" ? "IT" : "공백"})
+                  <input value={remote.hanjoCustom} onChange={(e) => setRemote({ ...remote, hanjoCustom: e.target.value })} placeholder={type === "IT" ? "IT" : "공백"} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+                <label className="flex items-center gap-1.5 pt-4 text-[10px] font-bold text-slate-500">
+                  <input type="checkbox" checked={remote.linked} onChange={(e) => setRemote({ ...remote, linked: e.target.checked })} className="h-4 w-4 accent-blue-600" />연동완료
+                </label>
+                <label className="col-span-full text-[10px] font-bold text-slate-500">처리내용
+                  <textarea value={remote.handled} onChange={(e) => setRemote({ ...remote, handled: e.target.value })} rows={2} className="mt-0.5 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                </label>
+              </div>}
               {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
                 {NEW_LEASE_SECTIONS.map((sec) => {
@@ -933,15 +1004,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
               <div className="sticky bottom-2 z-10 -mx-4 mt-3 border-t border-slate-200 bg-white/95 px-4 pb-2 pt-3 backdrop-blur">
               <div className="flex flex-wrap items-center gap-1.5">
-                {([
-                  ["업체", !!vendorName],
-                  ["접수자", !!manual.접수자성함.trim()],
-                  ["연락처", !!manual.접수자연락처.trim()],
-                  ["제목", !!manual.제목.trim()],
-                  ["내용", !!manual.증상.trim()],
-                  ["주소", !!(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"))],
-                  ...(type === "복합기 AS" && custKind === "기존" ? [["임대리스트 순번", !!firstNo.trim()] as [string, boolean]] : []),
-                ] as [string, boolean][]).map(([label, ok]) => (
+                {requiredItems.map(([label, ok]) => (
                   <span key={label} className={`rounded px-2 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
                 ))}
                 <span className="ml-auto flex flex-wrap items-center gap-2">
