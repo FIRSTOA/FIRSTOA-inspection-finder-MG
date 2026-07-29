@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, ChevronLeft, ChevronRight, ClipboardList, Copy, ImagePlus, Search, Send, ShieldCheck } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, ClipboardList, Copy, ExternalLink, ImagePlus, Search, Send, ShieldCheck } from "lucide-react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
   saveServiceReception, getServiceReceptions, setServiceReceptionStatus, updateServiceReception, getLeaseDeviceSummary,
@@ -168,6 +168,7 @@ const NEW_LEASE_SECTIONS: { label: string; fields: [string, string][] }[] = [
 ];
 const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SECTIONS.flatMap((sec) => sec.fields.map(([key]) => [key, ""])));
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "", 참고사항: "", 교체이력: "", 주소: "" };
+const AS_RECEPTION_SHEET_URL = "https://docs.google.com/spreadsheets/d/1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g/edit#gid=1181394897";
 
 export default function ServiceReception({ author }: { author: string }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
@@ -447,7 +448,12 @@ export default function ServiceReception({ author }: { author: string }) {
       };
       const message = custKind === "기존"
         ? await sendReceptionCopierSheetJob(base)
-        : await sendReceptionCopierSheetJob(base, { ...newLease, company: vendorName, address: manual.주소.trim() || newLease.address || "" });
+        : await sendReceptionCopierSheetJob(base, {
+          ...newLease,
+          leaseStatus: newLease.leaseStatus === "직접기재" ? (newLease.leaseStatusCustom || "").trim() : newLease.leaseStatus,
+          company: vendorName,
+          address: manual.주소.trim() || newLease.address || "",
+        });
       return ` · ${message}`;
     } catch (e) {
       return ` · 시트 기입 실패(${(e as Error).message})`;
@@ -724,6 +730,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 ))}
               </span>
               <span className="text-[11px] font-bold text-slate-400">{custKind === "기존" ? "임대리스트에서 검색해 선택" : "임대리스트에 없는 업체 — 직접 기재"}</span>
+              <button type="button" onClick={() => window.open(AS_RECEPTION_SHEET_URL, "_blank", "noopener,noreferrer")} className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:border-slate-500 hover:text-slate-900"><ExternalLink size={13} />AS접수 시트</button>
             </div>}
             {!(type === "복합기 AS" && custKind === "신규") && <div className="mt-3 flex gap-2">
               <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
@@ -824,7 +831,9 @@ export default function ServiceReception({ author }: { author: string }) {
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
                           return <label key={key} className={`text-[10px] font-bold text-slate-500 ${key === "address" ? "col-span-full" : ""}`}>{label}
                             {options
-                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              ? <><select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                                {key === "leaseStatus" && newLease.leaseStatus === "직접기재" && <input value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
+                              </>
                               : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
                           </label>;
                         })}
