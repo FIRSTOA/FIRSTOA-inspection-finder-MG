@@ -775,12 +775,12 @@ export default function ServiceReception({ author }: { author: string }) {
               <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><Building2 size={14} className="text-slate-700" /> {lease ? "거래처 선택 완료" : "거래처 선택 필요"}</div>
             </div>
             <div className="p-4">
-            <div className="-mx-4 -mt-4 mb-3 flex border-b border-slate-200 bg-slate-50/80">
+            <div className="-mx-4 -mt-4 mb-3 flex divide-x divide-slate-200 border-b border-slate-200 bg-slate-100">
               {([["복합기 AS", "복합기 AS"], ["원격이관", "원격 · IT"]] as [ReceiveType, string][]).map(([value, label]) => {
                 const active = value === "복합기 AS" ? type === "복합기 AS" : isRemoteType;
                 return (
                   <button key={value} type="button" onClick={() => { setType(value); setActionResult(""); }}
-                    className={`flex-1 border-b-2 px-4 py-3 text-sm font-black transition ${active ? "border-blue-600 bg-white text-blue-700" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+                    className={`flex-1 border-b-[3px] px-4 py-3.5 text-[15px] font-black transition ${active ? "border-blue-600 bg-white text-blue-700 shadow-[inset_0_-1px_0_0_#fff]" : "border-transparent bg-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
                     {label}
                   </button>
                 );
@@ -839,6 +839,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 <button type="button" onClick={resetForm} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">다시 검색</button>
               </div>
               <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 sm:grid-cols-3 lg:grid-cols-4">
+                <span className="font-black text-slate-900">순 {pick(lease, "순") || "-"}</span>
                 <span>모델 {pick(lease, "모델명") || "-"}</span>
                 <span>자산 {pick(lease, "자산번호") || "-"}</span>
                 <span>기번 {pick(lease, "시리얼번호(기번)") || "-"}</span>
