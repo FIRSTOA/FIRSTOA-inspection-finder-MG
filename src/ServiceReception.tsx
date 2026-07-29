@@ -163,7 +163,6 @@ const NEW_LEASE_SECTIONS: { label: string; fields: [string, string][] }[] = [
   { label: "업체", fields: [["grade", "등급"], ["tel", "일반전화"], ["vendorManager", "현장 업체담당자(AK열)"], ["keyman", "키맨"]] },
   { label: "기기", fields: [["model", "모델명"], ["item", "품목"], ["maker", "제조사"], ["series", "기종"], ["assetNo", "자산번호"], ["serialNo", "기번"], ["assetSerial", "자산기번"], ["deviceState", "기기상태"], ["hanjoCode", "한조/틴텍코드"]] },
   { label: "계약·임대", fields: [["baseRent", "기본임대료"], ["avgRent", "평균임대료"], ["contractStart", "계약일"], ["contractEnd", "종료일"], ["monthsLeft", "남은개월수"], ["owner", "장비소유주"], ["installer", "설치업체"], ["visitCycle", "방문주기"], ["extraTerms", "추가조건"]] },
-  { label: "주소", fields: [["address", "전체 주소"]] },
   { label: "기타", fields: [["notes", "특이사항"]] },
 ];
 const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SECTIONS.flatMap((sec) => sec.fields.map(([key]) => [key, ""])));
@@ -473,7 +472,7 @@ export default function ServiceReception({ author }: { author: string }) {
       const message = custKind === "기존"
         ? await sendReceptionCopierSheetJob(base)
         : await (async () => {
-          const address = manual.주소.trim() || newLease.address || "";
+          const address = manual.주소.trim();
           const { city, district } = splitCityDistrict(address);
           return sendReceptionCopierSheetJob(base, {
             ...newLease,
@@ -859,7 +858,7 @@ export default function ServiceReception({ author }: { author: string }) {
                           const options = key === "leaseStatus" ? ["임대중", "임대종료", "직접기재"]
                             : key === "warranty" ? ["보증O", "보증X"]
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
-                          return <label key={key} className={`text-[10px] font-bold text-slate-500 ${key === "address" ? "col-span-full" : ""}`}>{label}
+                          return <label key={key} className="text-[10px] font-bold text-slate-500">{label}
                             {options && !(key === "leaseStatus" && newLease.leaseStatus === "직접기재")
                               ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
                               : key === "leaseStatus"
@@ -956,15 +955,18 @@ export default function ServiceReception({ author }: { author: string }) {
             </section>
 
             {confirmAction && (() => {
+              // 신규 거래처는 임대리스트 정보가 없다 — 직접 기재값을 보고, 필수로 강제하지 않는다.
+              const isNewVendor = type === "복합기 AS" && custKind === "신규";
               const checkItems: Array<[string, string, boolean]> = [
-                ["접수경로", route, true],
-                ["접수유형", type, true],
+                ["접수유형", route, true],
+                ["구분", type + (isNewVendor ? " · 신규" : ""), true],
                 ["업체명", vendorName, true],
-                ["기종", pick(lease, "모델명", "기종"), true],
-                ["시리얼(기번)", pick(lease, "시리얼번호(기번)", "기번"), true],
-                ["자산기번", pick(lease, "자산번호"), false],
+                ["기종", isNewVendor ? (newLease.model || "") : pick(lease, "모델명", "기종"), !isNewVendor],
+                ["시리얼(기번)", isNewVendor ? (newLease.serialNo || "") : pick(lease, "시리얼번호(기번)", "기번"), !isNewVendor],
+                ["자산기번", isNewVendor ? (newLease.assetNo || "") : pick(lease, "자산번호"), false],
                 ["접수자 성함", manual.접수자성함.trim(), true],
                 ["접수자 연락처", manual.접수자연락처.trim(), true],
+                ["제목", manual.제목.trim(), true],
               ];
               const missing = checkItems.filter(([, value, required]) => required && !value).length + (manual.주소.trim() ? 0 : 1);
               return (
