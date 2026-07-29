@@ -170,6 +170,19 @@ const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SEC
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "", 참고사항: "", 교체이력: "", 주소: "" };
 const AS_RECEPTION_SHEET_URL = "https://docs.google.com/spreadsheets/d/1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g/edit#gid=1181394897";
 
+// 전체 주소 → 시(AL)·구(AM) 분리. 입력은 주소 한 칸만 받고 시트의 두 열은 여기서 채운다.
+// 예: "서울 강남구 역삼동" → 서울/강남구, "경기도 화성시 향남읍" → 화성시/"", "서울특별시 송파구" → 서울/송파구
+function splitCityDistrict(address: string): { city: string; district: string } {
+  const tokens = String(address || "").trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return { city: "", district: "" };
+  const district = tokens.find((token) => token.length >= 2 && /(구|군)$/.test(token)) || "";
+  const cityToken = tokens.find((token) => /시$/.test(token) && !/(특별시|광역시|특별자치시)$/.test(token))
+    || tokens.find((token) => /(특별시|광역시|특별자치시|도|특별자치도)$/.test(token))
+    || tokens[0];
+  const city = cityToken.replace(/(특별자치시|특별시|광역시|특별자치도)$/, "");
+  return { city, district };
+}
+
 export default function ServiceReception({ author }: { author: string }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
   const [type, setType] = useState<ReceiveType>("복합기 AS");
@@ -448,12 +461,18 @@ export default function ServiceReception({ author }: { author: string }) {
       };
       const message = custKind === "기존"
         ? await sendReceptionCopierSheetJob(base)
-        : await sendReceptionCopierSheetJob(base, {
-          ...newLease,
-          leaseStatus: newLease.leaseStatus === "직접기재" ? (newLease.leaseStatusCustom || "").trim() : newLease.leaseStatus,
-          company: vendorName,
-          address: manual.주소.trim() || newLease.address || "",
-        });
+        : await (async () => {
+          const address = manual.주소.trim() || newLease.address || "";
+          const { city, district } = splitCityDistrict(address);
+          return sendReceptionCopierSheetJob(base, {
+            ...newLease,
+            leaseStatus: newLease.leaseStatus === "직접기재" ? (newLease.leaseStatusCustom || "").trim() : newLease.leaseStatus,
+            company: vendorName,
+            address,
+            city,
+            district,
+          });
+        })();
       return ` · ${message}`;
     } catch (e) {
       return ` · 시트 기입 실패(${(e as Error).message})`;
@@ -681,7 +700,7 @@ export default function ServiceReception({ author }: { author: string }) {
     Boolean(manual.접수자성함.trim()),
     Boolean(manual.접수자연락처.trim()),
     Boolean(manual.증상.trim()),
-    Boolean(manual.주소.trim() || pick(lease, "주소(실제방문주소/도로명주소)", "주소")),
+    Boolean(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소")),
   ];
   const readyCount = requiredChecks.filter(Boolean).length;
   const isReady = readyCount === requiredChecks.length;
