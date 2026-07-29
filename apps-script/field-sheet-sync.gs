@@ -44,7 +44,8 @@ function appendFieldSheetRow_(request) {
   const sheet = request.testMode ? getOrCreateTestSheet_(spreadsheet, sourceSheet, request.category) : sourceSheet;
 
   const headerRow = findHeaderRow_(sheet, request.category);
-  const headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const lastColumn = sheet.getLastColumn();
+  const headers = sheet.getRange(headerRow, 1, 1, lastColumn).getDisplayValues()[0];
 
   // 멱등성: 같은 jobId가 이미 기록돼 있으면 그 행을 돌려준다(재시도 시 중복 append 방지).
   const jobIdCol = headers.indexOf("웹앱 전송ID") + 1;
@@ -63,18 +64,28 @@ function appendFieldSheetRow_(request) {
   sheet.insertRowAfter(previousRow);
   const row = previousRow + 1;
 
-  // 기존 행의 수식은 새 행에도 복사하고, 사람이 입력하는 열만 덮어씁니다.
-  headers.forEach((header, index) => {
-    const column = index + 1;
-    const previous = sheet.getRange(previousRow, column);
-    const formula = previous.getFormula();
-    if (formula) previous.copyTo(sheet.getRange(row, column), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
-    if (request.category === "contact_change" && column === 13 && !formula) {
-      sheet.getRange(row, column).setFormula('=LET(v, INDEX($G:$G, ROW()), IF(v="","", COUNTIF($G$3:INDEX($G:$G, ROW()), v) & "차"))');
-    }
-    const value = fieldValue_(request.category, header, column, data, request, labelValues);
-    if (value !== undefined) sheet.getRange(row, column).setValue(value);
+  // 셀 하나씩 넣으면 A열부터 천천히 채워지는 게 보인다 — 수식 복사 1회 + 값 구간별 일괄 기입으로 즉시 반영.
+  // 이전 행 수식을 R1C1로 통째로 복사(상대참조 자동 유지)한 뒤, 매핑된 값만 덮어쓴다.
+  const prevFormulas = sheet.getRange(previousRow, 1, 1, lastColumn).getFormulasR1C1()[0];
+  sheet.getRange(row, 1, 1, lastColumn).setFormulasR1C1([prevFormulas.map(function (f) { return f || ""; })]);
+
+  const values = headers.map(function (header, index) {
+    return fieldValue_(request.category, header, index + 1, data, request, labelValues);
   });
+  let start = -1;
+  for (let i = 0; i <= values.length; i++) {
+    const has = i < values.length && values[i] !== undefined;
+    if (has && start < 0) start = i;
+    if (!has && start >= 0) {
+      sheet.getRange(row, start + 1, 1, i - start).setValues([values.slice(start, i)]);
+      start = -1;
+    }
+  }
+  if (request.category === "contact_change") {
+    const orderCell = sheet.getRange(row, 13);
+    if (!orderCell.getFormula()) orderCell.setFormula('=LET(v, INDEX($G:$G, ROW()), IF(v="","", COUNTIF($G$3:INDEX($G:$G, ROW()), v) & "차"))');
+  }
+  SpreadsheetApp.flush();
 
   return { row, sheet: sheet.getName() };
 }
