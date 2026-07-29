@@ -321,6 +321,7 @@ export type ServiceReceptionRow = {
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
   lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
   address_resolved_at?: string | null; address_resolved_by?: string;
+  field?: string; first_no?: string; cust_kind?: string;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
@@ -958,6 +959,29 @@ export async function sendPraiseForm(form: PraiseFormState, author: string): Pro
     }
   } catch (e) {
     return { ok: false, error: (e as Error).message };
+  }
+}
+
+// 서비스접수(복합기·기존 거래처) → 접수 시트 자동 기입.
+// 퍼스트순(F열)만 정확하면 시트 함수가 업체명·임대정보 등을 자동으로 채운다.
+export type ReceptionSheetInput = {
+  author: string; vendor: string; firstNo: string; route: string; field: string;
+  paid: string; receiverName: string; receiverPhone: string; title: string; symptom: string;
+};
+
+export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput): Promise<string> {
+  const id = crypto.randomUUID();
+  await enqueueFieldSheetSyncJob({
+    id, category: "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(),
+    sourceText: "", payload: { data: { ...input } }, dupKey: id,
+  });
+  const cfg = await getConfig().catch(() => ({} as Record<string, string>));
+  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return "시트 동기화 설정 꺼짐";
+  try {
+    const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
+    return result.status === "synced" ? `접수시트 ${result.row ? `${result.row}행 ` : ""}기입` : "접수시트 반영 대기";
+  } catch {
+    return "접수시트 반영 재시도 대기";
   }
 }
 

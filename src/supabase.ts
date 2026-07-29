@@ -311,7 +311,7 @@ export async function enqueueOutbox(room: string, text: string): Promise<void> {
   }
 }
 
-export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint" | "praise";
+export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint" | "praise" | "reception_copier";
 
 export async function enqueueFieldSheetSyncJob(job: {
   id: string;

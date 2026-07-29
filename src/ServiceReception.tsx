@@ -6,11 +6,12 @@ import {
 } from "./api";
 import { kstDate } from "./visits";
 import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { sendReceptionCopierSheetJob } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 
 type ReceiveRoute = "카카오" | "전화";
-type ReceiveType = "원격이관" | "복합기 AS" | "IT AS";
+type ReceiveType = "원격이관" | "복합기 AS" | "IT";
 
 function pick(lease: LeaseHit | null, ...keys: string[]) {
   if (!lease) return "";
@@ -141,7 +142,7 @@ function shiftDate(date: string, days: number) {
 
 const TYPE_TONE: Record<string, string> = {
   "복합기 AS": "bg-blue-50 text-blue-700",
-  "IT AS": "bg-cyan-50 text-cyan-700",
+  IT: "bg-cyan-50 text-cyan-700",
   "원격이관": "bg-violet-50 text-violet-700",
 };
 const STATUS_TONE: Record<string, string> = {
@@ -165,8 +166,17 @@ export default function ServiceReception({ author }: { author: string }) {
   const [searched, setSearched] = useState(false);
   const [lease, setLease] = useState<LeaseHit | null>(null);
   const [manual, setManual] = useState<Manual>(EMPTY_MANUAL);
+  // 접수 시트 기입용: 기존(임대리스트 순번으로 시트 함수 자동 채움) / 신규(직접 기재 — 준비 중)
+  const [custKind, setCustKind] = useState<"기존" | "신규">("기존");
+  const [firstNo, setFirstNo] = useState("");
+  const [fieldChoice, setFieldChoice] = useState("A/S");
+  const [fieldCustom, setFieldCustom] = useState("");
+  const [paidCustom, setPaidCustom] = useState("");
+  const fieldFinal = fieldChoice === "직접기재" ? fieldCustom.trim() || "A/S" : fieldChoice;
+  const paidFinal = manual.유상무상 === "직접기재" ? paidCustom.trim() || "무상" : manual.유상무상;
   const [manualVendor, setManualVendor] = useState("");
   const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
+  useEffect(() => { if (lease) setFirstNo(String(lease["순"] ?? "").trim()); }, [lease]);
   const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
   const [snapshotDeviceMatch, setSnapshotDeviceMatch] = useState(true);
   const [deviceSummary, setDeviceSummary] = useState<LeaseDeviceSummary>({ active: 0, items: [] });
@@ -205,7 +215,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [listPeriod, setListPeriod] = useState<ListPeriod>("day");
   const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
-  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT AS" | "원격이관" | "주소확인">("전체");
+  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인">("전체");
   const [openRowId, setOpenRowId] = useState("");
   const [previewRow, setPreviewRow] = useState<ServiceReceptionRow | null>(null);
   const [previewCopied, setPreviewCopied] = useState(false);
@@ -308,7 +318,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const 기기상태 = pick(lease, "기기상태");
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
     const 교체일로부터 = /\d{4}[.\-/]/.test(교체일) ? `${monthsBetween(교체일, kstDate())}사용중` : "";
-    const 구분 = type === "IT AS" ? "IT A/S" : "A/S";
+    const 구분 = type === "IT" ? "IT A/S" : fieldFinal;
     // AS이력: 이 기기(시리얼/자산기번 일치)만 우선. 기기교체 등으로 일치가 없으면 업체기준으로 폴백해 표기.
     const serialEntries = asHistory.filter((h) => h.serialMatch);
     const basisEntries = serialEntries.length ? serialEntries : asHistory;
@@ -395,7 +405,10 @@ export default function ServiceReception({ author }: { author: string }) {
       ...(photos.length ? { photos: photos.map((photo) => photo.url) } : {}),
       title: manual.제목,
       symptom: manual.증상,
-      paid: manual.유상무상,
+      paid: paidFinal,
+      field: fieldFinal,
+      first_no: firstNo.trim(),
+      cust_kind: type === "복합기 AS" ? custKind : "",
       notes: manual.참고사항,
       report_text: type === "원격이관" ? "" : report,
       status,
@@ -406,6 +419,23 @@ export default function ServiceReception({ author }: { author: string }) {
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
+    setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존");
+  };
+
+  // 복합기 AS(기존 거래처) 접수를 접수 시트에 자동 기입 — 실패해도 접수 저장은 유효
+  const writeReceptionSheet = async (): Promise<string> => {
+    if (type !== "복합기 AS" || custKind !== "기존") return "";
+    if (!firstNo.trim()) return " · 퍼스트순 미입력 — 시트 기입 생략";
+    try {
+      const message = await sendReceptionCopierSheetJob({
+        author, vendor: vendorName, firstNo: firstNo.trim(), route, field: fieldFinal,
+        paid: paidFinal, receiverName: manual.접수자성함.trim(), receiverPhone: manual.접수자연락처.trim(),
+        title: manual.제목.trim(), symptom: manual.증상.trim(),
+      });
+      return ` · ${message}`;
+    } catch (e) {
+      return ` · 시트 기입 실패(${(e as Error).message})`;
+    }
   };
 
   // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
@@ -420,7 +450,8 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && type !== "원격이관") {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
       }
-      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`);
+      const sheetNote = await writeReceptionSheet();
+      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}${sheetNote}`);
       resetForm();
       await loadList(listDate, listPeriod);
     } catch (e) {
@@ -453,7 +484,8 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && rowId) {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 전송은 유효 */ }
       }
-      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}`);
+      const sheetNote = await writeReceptionSheet();
+      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetNote}`);
       setSavedRowId(null);
       resetForm();
       await loadList(listDate, listPeriod);
@@ -600,7 +632,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const counts = useMemo(() => ({
     total: listRows.length,
     copier: listRows.filter((r) => r.type === "복합기 AS").length,
-    it: listRows.filter((r) => r.type === "IT AS").length,
+    it: listRows.filter((r) => r.type === "IT").length,
     remote: listRows.filter((r) => r.type === "원격이관").length,
     remoteWaiting: listRows.filter((r) => r.status === "원격대기").length,
     addr: listRows.filter((r) => r.address_changed && !r.address_resolved_at).length,
@@ -612,7 +644,7 @@ export default function ServiceReception({ author }: { author: string }) {
       const entry = map.get(key) || { total: 0, copier: 0, it: 0, remote: 0 };
       entry.total += 1;
       if (r.type === "복합기 AS") entry.copier += 1;
-      else if (r.type === "IT AS") entry.it += 1;
+      else if (r.type === "IT") entry.it += 1;
       else entry.remote += 1;
       map.set(key, entry);
     }
@@ -647,12 +679,12 @@ export default function ServiceReception({ author }: { author: string }) {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-14 text-xs font-black text-slate-400">접수경로</span>
+                <span className="w-14 text-xs font-black text-slate-400">접수유형</span>
                 {(["카카오", "전화"] as ReceiveRoute[]).map((r) => <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-md px-3.5 py-2 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{r}</button>)}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-14 text-xs font-black text-slate-400">접수유형</span>
-                {(["복합기 AS", "IT AS", "원격이관"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded-md px-3.5 py-2 text-xs font-black ${type === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
+                <span className="w-14 text-xs font-black text-slate-400">구분</span>
+                {(["복합기 AS", "IT", "원격이관"] as ReceiveType[]).map((t) => <button key={t} type="button" onClick={() => { setType(t); setActionResult(""); }} className={`rounded-md px-3.5 py-2 text-xs font-black ${type === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{t}</button>)}
               </div>
             </div>
             <div className="mt-3 flex gap-2">
@@ -707,6 +739,28 @@ export default function ServiceReception({ author }: { author: string }) {
           {(lease || (type === "원격이관" && manualVendor.trim())) && <>
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-xs font-black text-slate-400">접수 내용</div>
+              {type === "복합기 AS" && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border border-blue-100 bg-blue-50/40 p-2.5">
+                <div>
+                  <div className="text-[11px] font-black text-slate-500">거래처 구분</div>
+                  <div className="mt-1 flex rounded-md bg-white p-0.5 shadow-sm">
+                    {(["기존", "신규"] as const).map((k) => (
+                      <button key={k} type="button" onClick={() => setCustKind(k)} className={`rounded px-3 py-1.5 text-xs font-black ${custKind === k ? "bg-blue-600 text-white" : "text-slate-500"}`}>{k}</button>
+                    ))}
+                  </div>
+                </div>
+                {custKind === "기존" && <label className="text-[11px] font-black text-slate-500">퍼스트순 (임대리스트 순번 — 시트 자동 채움 기준)
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-1 w-28 rounded-md border border-slate-300 px-2.5 py-2 text-sm font-black text-slate-900" />
+                </label>}
+                <label className="text-[11px] font-black text-slate-500">접수분야
+                  <select value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="mt-1 rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">
+                    {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
+                  </select>
+                </label>
+                {fieldChoice === "직접기재" && <label className="text-[11px] font-black text-slate-500">분야 직접 입력
+                  <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} className="mt-1 w-32 rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                </label>}
+                {custKind === "신규" && <span className="pb-1 text-[11px] font-bold text-amber-600">신규 거래처 시트 기입은 준비 중 — 접수 저장은 정상 동작</span>}
+              </div>}
               <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
                   <label key={key} className="text-[11px] font-black text-slate-500">{label}
@@ -735,7 +789,8 @@ export default function ServiceReception({ author }: { author: string }) {
                 </div>
                 {type !== "원격이관" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
-                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">{["무상", "유상", "보증"].map((v) => <option key={v}>{v}</option>)}</select>
+                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>
+                    {manual.유상무상 === "직접기재" && <input value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />}
                   </label>
                   <label className="text-[11px] font-black text-slate-500">교체이력 (예: 1회)
                     <input value={manual.교체이력} onChange={(e) => setManual({ ...manual, 교체이력: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
@@ -750,7 +805,7 @@ export default function ServiceReception({ author }: { author: string }) {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "접수 저장 + AS방 전송"}</button>}
-                {type === "IT AS" && <span className="rounded-md bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-500">IT방 전송은 미정 — 저장 후 복사해 사용</span>}
+                {type === "IT" && <span className="rounded-md bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-500">IT방 전송은 미정 — 저장 후 복사해 사용</span>}
                 <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`rounded-md px-5 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장 (대기)" : "접수 저장"}</button>
                 {actionResult && <span className={`rounded-md px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</span>}
               </div>
@@ -836,9 +891,9 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
             {listPeriod !== "day" && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
             <div className="mt-2.5 flex gap-1">
-              {(["전체", "복합기 AS", "IT AS", "원격이관", "주소확인"] as const).map((f) => (
+              {(["전체", "복합기 AS", "IT", "원격이관", "주소확인"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
-                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT AS" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
+                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
             </div>
@@ -850,7 +905,7 @@ export default function ServiceReception({ author }: { author: string }) {
             {!listLoading && filteredRows.map((row) => (
               <div key={row.id}>
                 <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
-                  <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT AS" ? "IT" : "원격"}</span>
+                  <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
                   <span className="min-w-0">
                     <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
                     <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"}</span>

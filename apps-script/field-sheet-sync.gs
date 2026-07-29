@@ -10,6 +10,7 @@ const FIELD_SHEETS = {
   contact_change: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 1289086745 },
   complaint: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 419415178 },
   praise: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 0 },
+  reception_copier: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
 };
 
 function doPost(e) {
@@ -85,6 +86,7 @@ function findHeaderRow_(sheet, category) {
     contact_change: ["업체명", "변경전"],
     complaint: ["업체명", "불만내용"],
     praise: ["거래처명", "칭찬이유"],
+    reception_copier: ["퍼스트순", "접수유형"],
   };
   const required = signatures[category] || [];
   const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
@@ -106,6 +108,8 @@ function getOrCreateTestSheet_(spreadsheet, sourceSheet, category) {
 function fieldValue_(category, header, column, data, request, labels) {
   // 담당자·주소 변경 표는 A:M까지만 사용합니다. 오른쪽 보조 영역의 같은 헤더는 건드리지 않습니다.
   if (category === "contact_change" && column > 13) return undefined;
+  // 접수(복합기 기존): A~T까지만 기입 — 퍼스트순(F) 기준 함수가 채우는 오른쪽 열들을 건드리지 않는다 (AK열 업체담당자 중복 보호)
+  if (category === "reception_copier" && column > 20) return undefined;
 
   const submittedAt = new Date(request.submittedAt || new Date());
   const copierPeriod = category === "expansion_copier" ? {
@@ -131,6 +135,12 @@ function fieldValue_(category, header, column, data, request, labels) {
       "분류": "칭찬",
     };
   })() : {};
+  // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준
+  const receptionPeriod = category === "reception_copier" ? {
+    "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
+    "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
+    "접수자": request.author,
+  } : {};
   const base = {
     "웹앱 전송ID": request.jobId,
     "날짜": request.submittedAt,
@@ -140,6 +150,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     ...contactPeriod,
     ...complaintPeriod,
     ...praisePeriod,
+    ...receptionPeriod,
   };
   if (Object.prototype.hasOwnProperty.call(base, header)) return base[header];
 
@@ -172,6 +183,10 @@ function fieldValue_(category, header, column, data, request, labels) {
     praise: {
       "등급": "grade", "거래처명": "company", "담당자": "manager", "연락처": "contact",
       "전화번호": "phone", "칭찬이유": "reason", "간단": "short",
+    },
+    reception_copier: {
+      "퍼스트순": "firstNo", "접수유형": "route", "접수분야": "field", "유상/무상": "paid",
+      "업체담당자": "receiverName", "전화번호": "receiverPhone", "제목(짧게)": "title", "내용": "symptom",
     },
   };
   const key = maps[category] && maps[category][header];
