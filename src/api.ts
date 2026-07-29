@@ -321,7 +321,7 @@ export type ServiceReceptionRow = {
   grade: string; receiver_name: string; receiver_phone: string; keyman_info: string;
   lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
   address_resolved_at?: string | null; address_resolved_by?: string;
-  field?: string; first_no?: string; cust_kind?: string; remote_meta?: Record<string, string>;
+  field?: string; first_no?: string; cust_kind?: string; remote_meta?: Record<string, string>; sheet_row?: number | null;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
@@ -343,7 +343,7 @@ export async function getServiceReceptionById(id: string): Promise<ServiceRecept
 export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
 }
-export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed" | "address_resolved_at" | "address_resolved_by">>): Promise<void> {
+export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed" | "address_resolved_at" | "address_resolved_by" | "type" | "remote_meta" | "sheet_row">>): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);
 }
 
@@ -992,19 +992,27 @@ export type RemoteReceptionSheetInput = {
   extraCount: string; handled: string; linked: string;
 };
 
-export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInput): Promise<string> {
+// updateRow를 주면 접수 때 만든 그 행을 갱신한다 (처리 결과 보완). 없으면 새 행 추가.
+export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInput, updateRow?: number | null): Promise<{ message: string; row: number | null }> {
   const id = crypto.randomUUID();
+  const data: Record<string, string> = { ...input };
+  if (updateRow) {
+    data["_updateRow"] = String(updateRow);
+    data["_updateKeyHeader"] = "순";           // 행이 밀렸는지 검증할 키 열
+    data["_updateKeyValue"] = input.leaseNo;
+  }
   await enqueueFieldSheetSyncJob({
     id, category: "reception_remote", author: input.author.trim(), vendor: input.vendor.trim(),
-    sourceText: "", payload: { data: { ...input } }, dupKey: id,
+    sourceText: "", payload: { data }, dupKey: id,
   });
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
-  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return "시트 동기화 설정 꺼짐";
+  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return { message: "시트 동기화 설정 꺼짐", row: null };
   try {
     const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
-    return result.status === "synced" ? `원격시트 ${result.row ? `${result.row}행 ` : ""}기입` : "원격시트 반영 대기";
+    if (result.status !== "synced") return { message: "원격시트 반영 대기", row: null };
+    return { message: `원격시트 ${result.row ? `${result.row}행 ` : ""}${updateRow ? "갱신" : "기입"}`, row: result.row ?? null };
   } catch {
-    return "원격시트 반영 재시도 대기";
+    return { message: "원격시트 반영 재시도 대기", row: null };
   }
 }
 

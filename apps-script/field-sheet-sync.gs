@@ -62,6 +62,25 @@ function appendFieldSheetRow_(request) {
 
   const data = request.payload && request.payload.data || {};
   const labelValues = parseLabeledText_(request.sourceText || "");
+
+  // 갱신 모드: 접수 때 만든 행에 처리 결과(시작·종료·처리여부 등)를 나중에 채운다.
+  // 행 번호가 밀렸을 수 있으니 키 열(순)이 일치할 때만 갱신하고, 다르면 새 행으로 추가한다.
+  var updateRow = Number(data["_updateRow"] || 0);
+  if (updateRow > headerRow && updateRow <= sheet.getLastRow()) {
+    var keyHeader = String(data["_updateKeyHeader"] || "");
+    var keyValue = String(data["_updateKeyValue"] || "");
+    var keyCol = keyHeader ? headers.indexOf(keyHeader) + 1 : 0;
+    var keyOk = !keyHeader || (keyCol > 0 && String(sheet.getRange(updateRow, keyCol).getDisplayValue()).trim() === keyValue.trim());
+    if (keyOk) {
+      headers.forEach(function (header, index) {
+        var value = fieldValue_(request.category, header, index + 1, data, request, labelValues);
+        if (value !== undefined && value !== "") sheet.getRange(updateRow, index + 1).setValue(value);
+      });
+      SpreadsheetApp.flush();
+      return { row: updateRow, sheet: sheet.getName(), updated: true };
+    }
+  }
+
   const previousRow = Math.max(headerRow + 1, sheet.getLastRow());
   sheet.insertRowAfter(previousRow);
   const row = previousRow + 1;
@@ -172,7 +191,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     "접수자": request.author,
   } : {};
   // 원격·IT 접수: 접수일(B)·접수시각(D)·접수자(J)는 서버 기준으로 채운다
-  const remotePeriod = category === "reception_remote" ? {
+  const remotePeriod = category === "reception_remote" && !data["_updateRow"] ? {
     "접수일": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
     "접수": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
