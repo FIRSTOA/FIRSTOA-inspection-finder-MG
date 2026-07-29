@@ -180,6 +180,24 @@ const PROVINCE_SHORT: Record<string, string> = {
   전라북도: "전북", 전북특별자치도: "전북", 전라남도: "전남", 경상북도: "경북", 경상남도: "경남",
   제주도: "제주", 제주특별자치도: "제주",
 };
+// 시각 입력: 숫자만 쳐도 콜론이 자동으로 들어간다 ("1531" → "15:31").
+// type="time"은 브라우저 로케일에 따라 오전/오후로 표시돼 24시간 표기를 강제할 수 없어 직접 처리한다.
+function typeTime(raw: string): string {
+  const digits = String(raw || "").replace(/[^0-9]/g, "").slice(0, 4);
+  return digits.length <= 2 ? digits : `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+// 입력을 마치면 HH:mm으로 보정 — "9" → 09:00, "931" → 09:31, "1531" → 15:31 (범위 초과는 잘라 맞춤)
+function normalizeTime(raw: string): string {
+  const digits = String(raw || "").replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  const [hh, mm] = digits.length <= 2 ? [digits, "0"]
+    : digits.length === 3 ? [digits.slice(0, 1), digits.slice(1)]
+    : [digits.slice(0, 2), digits.slice(2)];
+  const hour = Math.min(23, Number(hh) || 0);
+  const minute = Math.min(59, Number(mm) || 0);
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 export function splitCityDistrict(address: string): { city: string; district: string } {
   const tokens = String(address || "").trim().split(/\s+/).filter(Boolean);
   if (!tokens.length) return { city: "", district: "" };
@@ -888,10 +906,16 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-900" />
                 </label>
                 <label className="text-[10px] font-bold text-slate-500">시작
-                  <input type="time" value={remote.start} onChange={(e) => setRemote({ ...remote, start: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                  <input value={remote.start} inputMode="numeric" maxLength={5} placeholder="15:31"
+                    onChange={(e) => setRemote({ ...remote, start: typeTime(e.target.value) })}
+                    onBlur={(e) => setRemote({ ...remote, start: normalizeTime(e.target.value) })}
+                    className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black tabular-nums text-slate-900" />
                 </label>
                 <label className="text-[10px] font-bold text-slate-500">종료
-                  <input type="time" value={remote.end} onChange={(e) => setRemote({ ...remote, end: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                  <input value={remote.end} inputMode="numeric" maxLength={5} placeholder="15:31"
+                    onChange={(e) => setRemote({ ...remote, end: typeTime(e.target.value) })}
+                    onBlur={(e) => setRemote({ ...remote, end: normalizeTime(e.target.value) })}
+                    className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black tabular-nums text-slate-900" />
                 </label>
                 <label className="text-[10px] font-bold text-slate-500">처리여부
                   {remote.result === "직접입력"
