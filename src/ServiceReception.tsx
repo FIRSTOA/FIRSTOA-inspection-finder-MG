@@ -767,7 +767,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
           {(lease || (type === "원격이관" && manualVendor.trim()) || (type === "복합기 AS" && custKind === "신규" && manualVendor.trim())) && <>
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-black text-slate-400">접수 내용</div>
+              <div className="text-[11px] font-black text-slate-400">③ 접수 내용</div>
               <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border border-blue-100 bg-blue-50/40 p-2.5">
                 <div>
                   <div className="text-[11px] font-black text-slate-500">접수유형</div>
@@ -789,20 +789,25 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} className="mt-1 w-32 rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
                 </label>}
               </div>
-              {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-2 rounded-md border border-amber-200 bg-amber-50/40 p-2.5">
-                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 (접수 시트에 그대로 기재 — 아는 것만 채워도 됩니다)</div>
-                {NEW_LEASE_SECTIONS.map((sec) => (
-                  <div key={sec.label}>
-                    <div className="text-[10px] font-black text-slate-400">{sec.label}</div>
-                    <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
-                      {sec.fields.map(([key, label]) => (
-                        <label key={key} className="text-[10px] font-bold text-slate-500">{label}
-                          <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-2.5">
+                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
+                {NEW_LEASE_SECTIONS.map((sec) => {
+                  const filled = sec.fields.filter(([key]) => (newLease[key] || "").trim()).length;
+                  return (
+                    <details key={sec.label} open={sec.label === "기본"} className="rounded-md border border-amber-100 bg-white/70">
+                      <summary className="cursor-pointer px-2.5 py-2 text-xs font-black text-slate-600">
+                        {sec.label} <span className={`ml-1 text-[10px] ${filled ? "text-blue-600" : "text-slate-300"}`}>{filled}/{sec.fields.length}</span>
+                      </summary>
+                      <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                        {sec.fields.map(([key, label]) => (
+                          <label key={key} className="text-[10px] font-bold text-slate-500">{label}
+                            <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
               </div>}
               <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
@@ -846,13 +851,30 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} placeholder="원격 안내 내용, 후속 필요사항 등" className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
                 </label>}
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report} className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "접수 저장 + AS방 전송"}</button>}
-                {type === "IT" && <span className="rounded-md bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-500">IT방 전송은 미정 — 저장 후 복사해 사용</span>}
-                <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`rounded-md px-5 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장 (대기)" : "접수 저장"}</button>
-                {actionResult && <span className={`rounded-md px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</span>}
-              </div>
             </section>
+
+            {/* ④ 하단 고정 액션바 — 필수값 상태가 항상 보이고, 스크롤 없이 저장/전송 */}
+            <div className="sticky bottom-2 z-20 rounded-lg border border-slate-300 bg-white/95 p-3 shadow-lg backdrop-blur">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  ["업체", !!vendorName],
+                  ["접수자", !!manual.접수자성함.trim()],
+                  ["연락처", !!manual.접수자연락처.trim()],
+                  ["제목", !!manual.제목.trim()],
+                  ["내용", !!manual.증상.trim()],
+                  ["주소", !!(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"))],
+                  ...(type === "복합기 AS" && custKind === "기존" ? [["퍼스트순", !!firstNo.trim()] as [string, boolean]] : []),
+                ] as [string, boolean][]).map(([label, ok]) => (
+                  <span key={label} className={`rounded px-2 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
+                ))}
+                <span className="ml-auto flex flex-wrap items-center gap-2">
+                  {type === "IT" && <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-500">IT방 전송 미정 — 저장 후 복사</span>}
+                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`rounded-md px-4 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}>{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장" : "접수 저장"}</button>
+                  {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report} className="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "처리중…" : "저장 + AS방 전송"}</button>}
+                </span>
+              </div>
+              {actionResult && <div className={`mt-2 rounded-md px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}
+            </div>
 
             {confirmAction && (() => {
               const checkItems: Array<[string, string, boolean]> = [
