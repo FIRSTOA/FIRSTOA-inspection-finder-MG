@@ -167,7 +167,9 @@ const NEW_LEASE_SECTIONS: { label: string; fields: [string, string][] }[] = [
 ];
 const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SECTIONS.flatMap((sec) => sec.fields.map(([key]) => [key, ""])));
 const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "", 참고사항: "", 교체이력: "", 주소: "" };
-const AS_RECEPTION_SHEET_URL = "https://docs.google.com/spreadsheets/d/1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g/edit#gid=1181394897";
+// 접수 시트 — 파일은 하나, 구분에 따라 탭(gid)만 다르다
+const RECEPTION_SHEET_BASE = "https://docs.google.com/spreadsheets/d/1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g/edit#gid=";
+const RECEPTION_SHEET_GID: Record<ReceiveType, string> = { "복합기 AS": "1181394897", IT: "916322987", 원격이관: "916322987" };
 
 // 전체 주소 → 시(AL)·구(AM) 분리. 입력은 주소 한 칸만 받고 시트의 두 열은 여기서 채운다.
 //  · 광역시/특별시:  "서울 강남구 역삼동"      → 시 서울,      구 강남구
@@ -739,7 +741,7 @@ export default function ServiceReception({ author }: { author: string }) {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* ==== 좌: 접수 작성 ==== */}
         <div className="space-y-4">
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-lg border-2 border-[#0F172A] bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">1</span><div><div className="text-sm font-black text-slate-950">업무와 거래처 선택</div><div className="text-[11px] font-semibold text-slate-400">접수 유형을 고르고, 해당 기기를 정확히 선택합니다.</div></div></div>
               <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><Building2 size={14} className="text-slate-700" /> {lease ? "거래처 선택 완료" : "거래처 선택 필요"}</div>
@@ -759,7 +761,6 @@ export default function ServiceReception({ author }: { author: string }) {
                   <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded px-4 py-2 text-xs font-black ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{k}</button>
                 ))}
               </span>
-              <button type="button" onClick={() => window.open(AS_RECEPTION_SHEET_URL, "_blank", "noopener,noreferrer")} className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:border-slate-500 hover:text-slate-900"><ExternalLink size={13} />AS접수 시트</button>
             </div>}
             {!(type === "복합기 AS" && custKind === "신규") && <div className="mt-3 flex gap-2">
               <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
@@ -814,7 +815,7 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-lg border-2 border-[#0F172A] bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">2</span><div><div className="text-sm font-black text-slate-950">접수 내용 입력</div><div className="text-[11px] font-semibold text-slate-500">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div></div></div>
               <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>{readyCount}/{requiredChecks.length} 필수 입력</div>
@@ -944,7 +945,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <span key={label} className={`rounded px-2 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
                 ))}
                 <span className="ml-auto flex flex-wrap items-center gap-2">
-                  {type === "IT" && <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-500">IT방 전송 미정 — 저장 후 복사</span>}
+                  <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-black text-slate-600 hover:border-slate-500 hover:text-slate-900"><ExternalLink size={14} />{type === "복합기 AS" ? "AS접수 시트" : "원격 시트"}</button>
                   <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`inline-flex items-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-black disabled:opacity-50 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700" : "bg-blue-600 text-white"}`}><ShieldCheck size={15} />{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장" : "접수 저장"}</button>
                   {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"><Send size={15} />{busy ? "처리중…" : "저장 + AS방 전송"}</button>}
                 </span>
