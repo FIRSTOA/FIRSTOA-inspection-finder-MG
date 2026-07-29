@@ -785,7 +785,7 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
             <div className="p-4">
               <div className="text-xs font-black text-blue-700">접수 내용</div>
-              <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border border-blue-100 bg-blue-50/40 p-2.5">
+              <div className="mt-2 grid gap-3 rounded-md border border-blue-100 bg-blue-50/40 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)]">
                 <div>
                   <div className="text-[11px] font-black text-slate-500">접수유형</div>
                   <div className="mt-1 flex rounded-md bg-white p-0.5 shadow-sm">
@@ -798,7 +798,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-1 w-28 rounded-md border border-slate-300 px-2.5 py-2 text-sm font-black text-slate-900" />
                 </label>}
                 {type === "복합기 AS" && <label className="text-[11px] font-black text-slate-500">접수분야
-                  <select value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="mt-1 rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">
+                  <select value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="mt-1 h-9 min-w-40 rounded-md border border-slate-300 bg-white px-3 text-sm font-black text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
                   </select>
                 </label>}
