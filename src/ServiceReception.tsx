@@ -167,7 +167,7 @@ const NEW_LEASE_SECTIONS: { label: string; fields: [string, string][] }[] = [
   { label: "기타", fields: [["notes", "특이사항"]] },
 ];
 const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SECTIONS.flatMap((sec) => sec.fields.map(([key]) => [key, ""])));
-const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "무상", 참고사항: "", 교체이력: "", 주소: "" };
+const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제목: "", 증상: "", 유상무상: "", 참고사항: "", 교체이력: "", 주소: "" };
 
 export default function ServiceReception({ author }: { author: string }) {
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
@@ -862,7 +862,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 </div>
                 {type !== "원격이관" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
-                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900">{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>
+                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>
                     {manual.유상무상 === "직접기재" && <input value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />}
                   </label>
                   <label className="text-[11px] font-black text-slate-500">교체이력 (예: 1회)
