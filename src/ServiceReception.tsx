@@ -171,16 +171,27 @@ const EMPTY_MANUAL: Manual = { 접수자성함: "", 접수자연락처: "", 제�
 const AS_RECEPTION_SHEET_URL = "https://docs.google.com/spreadsheets/d/1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g/edit#gid=1181394897";
 
 // 전체 주소 → 시(AL)·구(AM) 분리. 입력은 주소 한 칸만 받고 시트의 두 열은 여기서 채운다.
-// 예: "서울 강남구 역삼동" → 서울/강남구, "경기도 화성시 향남읍" → 화성시/"", "서울특별시 송파구" → 서울/송파구
-function splitCityDistrict(address: string): { city: string; district: string } {
+//  · 광역시/특별시:  "서울 강남구 역삼동"      → 시 서울,      구 강남구
+//  · 도 단위:        "경기 성남시 분당구"      → 시 경기 성남시, 구 분당구
+const WIDE_CITIES = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종"];
+const PROVINCE_SHORT: Record<string, string> = {
+  경기도: "경기", 강원도: "강원", 강원특별자치도: "강원", 충청북도: "충북", 충청남도: "충남",
+  전라북도: "전북", 전북특별자치도: "전북", 전라남도: "전남", 경상북도: "경북", 경상남도: "경남",
+  제주도: "제주", 제주특별자치도: "제주",
+};
+export function splitCityDistrict(address: string): { city: string; district: string } {
   const tokens = String(address || "").trim().split(/\s+/).filter(Boolean);
   if (!tokens.length) return { city: "", district: "" };
   const district = tokens.find((token) => token.length >= 2 && /(구|군)$/.test(token)) || "";
-  const cityToken = tokens.find((token) => /시$/.test(token) && !/(특별시|광역시|특별자치시)$/.test(token))
-    || tokens.find((token) => /(특별시|광역시|특별자치시|도|특별자치도)$/.test(token))
-    || tokens[0];
-  const city = cityToken.replace(/(특별자치시|특별시|광역시|특별자치도)$/, "");
-  return { city, district };
+  const head = tokens[0].replace(/(특별자치시|특별시|광역시)$/, "");
+  // 광역시·특별시는 시 열에 그 이름만 (구는 구 열로)
+  if (WIDE_CITIES.includes(head)) return { city: head, district };
+  // 도 단위는 "도 + 시"를 시 열에 함께 넣는다
+  const province = PROVINCE_SHORT[tokens[0]] || tokens[0].replace(/(특별자치도|도)$/, "");
+  const cityToken = tokens.slice(1).find((token) => /시$/.test(token)) || "";
+  const city = [province, cityToken].filter(Boolean).join(" ");
+  // 시 열에 이미 시 이름이 들어갔으면 구 열은 구/군만 남긴다
+  return { city, district: district === cityToken ? "" : district };
 }
 
 export default function ServiceReception({ author }: { author: string }) {
@@ -699,6 +710,7 @@ export default function ServiceReception({ author }: { author: string }) {
     Boolean(vendorName),
     Boolean(manual.접수자성함.trim()),
     Boolean(manual.접수자연락처.trim()),
+    Boolean(manual.제목.trim()),
     Boolean(manual.증상.trim()),
     Boolean(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소")),
   ];
@@ -748,14 +760,13 @@ export default function ServiceReception({ author }: { author: string }) {
                   <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded px-4 py-2 text-xs font-black ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{k}</button>
                 ))}
               </span>
-              <span className="text-[11px] font-bold text-slate-400">{custKind === "기존" ? "임대리스트에서 검색해 선택" : "임대리스트에 없는 업체 — 직접 기재"}</span>
               <button type="button" onClick={() => window.open(AS_RECEPTION_SHEET_URL, "_blank", "noopener,noreferrer")} className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:border-slate-500 hover:text-slate-900"><ExternalLink size={13} />AS접수 시트</button>
             </div>}
             {!(type === "복합기 AS" && custKind === "신규") && <div className="mt-3 flex gap-2">
               <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
               <button type="button" onClick={() => void runSearch()} disabled={searching} className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"><Search size={15} />{searching ? "검색중" : "검색"}</button>
             </div>}
-            {type === "복합기 AS" && custKind === "신규" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명 (H열)
+            {type === "복합기 AS" && custKind === "신규" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명
               <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="신규 거래처 업체명" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
             </label>}
             {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
@@ -823,7 +834,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 {type === "복합기 AS" && custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
                 </label>}
-                {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2">
+                {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
                   <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
                   <div className="flex flex-wrap gap-1.5">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-900"}`}>{v}</button>)}
@@ -849,10 +860,14 @@ export default function ServiceReception({ author }: { author: string }) {
                             : key === "warranty" ? ["보증O", "보증X"]
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
                           return <label key={key} className={`text-[10px] font-bold text-slate-500 ${key === "address" ? "col-span-full" : ""}`}>{label}
-                            {options
-                              ? <><select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
-                                {key === "leaseStatus" && newLease.leaseStatus === "직접기재" && <input value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
-                              </>
+                            {options && !(key === "leaseStatus" && newLease.leaseStatus === "직접기재")
+                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              : key === "leaseStatus"
+                              // 직접기재를 고르면 같은 자리에서 입력 — 줄이 늘어나지 않게 select를 input으로 교체
+                              ? <span className="mt-0.5 flex gap-1">
+                                  <input autoFocus value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                                  <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-md border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700">↺</button>
+                                </span>
                               : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
                           </label>;
                         })}
@@ -890,8 +905,12 @@ export default function ServiceReception({ author }: { author: string }) {
                 </div>
                 {type !== "원격이관" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
-                    <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>
-                    {manual.유상무상 === "직접기재" && <input value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />}
+                    {manual.유상무상 === "직접기재"
+                      ? <span className="mt-1 flex gap-1">
+                          <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-md border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700">↺</button>
+                        </span>
+                      : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
                   </label>
                   <label className="text-[11px] font-black text-slate-500">교체이력 (예: 1회)
                     <input value={manual.교체이력} onChange={(e) => setManual({ ...manual, 교체이력: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
