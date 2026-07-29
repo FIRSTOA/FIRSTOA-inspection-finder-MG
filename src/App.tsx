@@ -26,6 +26,7 @@ import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ContactChangeForm from "./ContactChangeForm";
 import PraiseForm from "./PraiseForm";
+import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut } from "./photoStore";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
@@ -3950,12 +3951,13 @@ export default function App() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
+  const modeRef = useRef<Mode>("inspection");
   const modeStateRef = useRef<Record<string, {
     inputText: string; textOutput: string; listOutput: ResultItem[];
     itemForms: PerItemForm[]; sharedForm: SharedForm; selectedItem: number;
     editedBlocks: Record<number, string>; airForm: AirPurifierForm;
     reportTypes: string[]; reportTypeOther: string;
-    photos?: { file: File; url: string }[]; photoUploadUrls?: string[] | null; photoAlbumLinks?: Record<string, string>;
+    photos?: { file: File; url: string; id?: string }[]; photoUploadUrls?: string[] | null; photoAlbumLinks?: Record<string, string>;
   }>>({});
 
 
@@ -4192,8 +4194,9 @@ export default function App() {
     };
     const s = modeStateRef.current[next];
     setMode(next);
+    modeRef.current = next;
     // 첨부 사진은 모드별로 격리 — 작성하던 모드로 돌아오면 복원되고, 다른 모드 전송에는 딸려가지 않는다
-    setPhotos(s?.photos || []);
+    setPhotos(s?.photos ?? hydratedPhotosRef.current[next] ?? []);
     photoUploadUrlsRef.current = s?.photoUploadUrls ?? null;
     photoAlbumLinksRef.current = s?.photoAlbumLinks ?? {};
     skipAutoRef.current = true; // 복원된 입력으로 자동 변환이 다시 돌지 않게(작업 보존)
@@ -4287,7 +4290,23 @@ export default function App() {
     setInputModalOpen(true);
   };
   // 거래처 전환 시 함께 비워야 하는 현장 사진 상태.
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [photos, setPhotos] = useState<{ file: File; url: string; id?: string }[]>([]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  // 새로고침·모바일 브라우저 재시작 대비: 기기(IndexedDB)에 보관된 사진을 앱 시작 시 복원
+  const hydratedPhotosRef = useRef<Record<string, { file: File; url: string; id: string }[]>>({});
+  const photosHydratedRef = useRef(false);
+  useEffect(() => {
+    if (photosHydratedRef.current) return;
+    photosHydratedRef.current = true;
+    void photoStoreLoadAll().then((byMode) => {
+      const map: Record<string, { file: File; url: string; id: string }[]> = {};
+      for (const [m, items] of Object.entries(byMode)) map[m] = items.map(({ id, file }) => ({ id, file, url: URL.createObjectURL(file) }));
+      hydratedPhotosRef.current = map;
+      const current = map[modeRef.current];
+      if (current?.length) setPhotos((prev) => (prev.length ? prev : current));
+    }).catch(() => { /* 복원 실패는 무시 */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // 실제 파일은 한 번만 올리고, 업무별 앨범 링크는 각각 만든다.
   const photoUploadUrlsRef = useRef<string[] | null>(null);
   const photoAlbumLinksRef = useRef<Record<string, string>>({});
@@ -4311,6 +4330,8 @@ export default function App() {
     setReportTypeOther("");
     setVisitMeta({ visited: true, vendor: "", author: "", workDate: kstDate(), arrivalTime: "", machineCount: 0, grade: "", contractEnded: false, workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "" });
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
+    delete hydratedPhotosRef.current[mode];
+    void photoStoreClearMode(mode);
     clearPhotoCache();
   };
   const confirmInputModal = () => {
@@ -4588,7 +4609,9 @@ export default function App() {
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
-      setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
+      const items = files.map((file) => ({ file, url: URL.createObjectURL(file), id: crypto.randomUUID() }));
+      setPhotos((prev) => [...prev, ...items]);
+      items.forEach((item) => void photoStorePut(mode, item.id, item.file)); // 기기 보관 (새로고침 대비)
       clearPhotoCache();
       setPhotoPrompt(null);
     }
@@ -4597,6 +4620,7 @@ export default function App() {
   const removePhoto = (idx: number) => {
     setPhotos((prev) => {
       const p = prev[idx];
+      if (p?.id) void photoStoreDelete(p.id);
       if (p) URL.revokeObjectURL(p.url);
       return prev.filter((_, i) => i !== idx);
     });
@@ -5120,6 +5144,8 @@ export default function App() {
     setSelectedItem(0);
     setAirForm(EMPTY_AIR_FORM);
     setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
+    delete hydratedPhotosRef.current[mode];
+    void photoStoreClearMode(mode);
     clearPhotoCache();
     setPcForm({ ...EMPTY_PC_FORM });
     setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM });
