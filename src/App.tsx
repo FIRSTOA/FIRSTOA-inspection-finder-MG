@@ -3955,6 +3955,7 @@ export default function App() {
     itemForms: PerItemForm[]; sharedForm: SharedForm; selectedItem: number;
     editedBlocks: Record<number, string>; airForm: AirPurifierForm;
     reportTypes: string[]; reportTypeOther: string;
+    photos?: { file: File; url: string }[]; photoUploadUrls?: string[] | null; photoAlbumLinks?: Record<string, string>;
   }>>({});
 
 
@@ -4187,12 +4188,14 @@ export default function App() {
     modeStateRef.current[mode] = {
       inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
       reportTypes, reportTypeOther,
+      photos, photoUploadUrls: photoUploadUrlsRef.current, photoAlbumLinks: photoAlbumLinksRef.current,
     };
     const s = modeStateRef.current[next];
     setMode(next);
-    // 첨부 사진은 모드 간에 넘어가면 안 된다 (점검에서 붙인 사진이 물류·PC 전송에 딸려가는 사고 방지)
-    setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
-    clearPhotoCache();
+    // 첨부 사진은 모드별로 격리 — 작성하던 모드로 돌아오면 복원되고, 다른 모드 전송에는 딸려가지 않는다
+    setPhotos(s?.photos || []);
+    photoUploadUrlsRef.current = s?.photoUploadUrls ?? null;
+    photoAlbumLinksRef.current = s?.photoAlbumLinks ?? {};
     skipAutoRef.current = true; // 복원된 입력으로 자동 변환이 다시 돌지 않게(작업 보존)
     if (s) {
       setInputText(s.inputText);
