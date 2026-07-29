@@ -794,20 +794,19 @@ export default function ServiceReception({ author }: { author: string }) {
                     ))}
                   </div>
                 </div>
-                {type === "복합기 AS" && custKind === "기존" && <label className="text-[11px] font-black text-slate-500">퍼스트순 (시트 자동 채움 기준)
+                {type === "복합기 AS" && custKind === "기존" && <label className="text-[11px] font-black text-slate-500">임대리스트 순번
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-1 h-9 w-full min-w-32 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-blue-500" />
                 </label>}
-                {type === "복합기 AS" && <label className="text-[11px] font-black text-slate-500">접수분야
-                  <div className="mt-1 flex flex-wrap gap-1.5">
+                {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2">
+                  <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
+                  <div className="flex flex-wrap gap-1.5">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{v}</button>)}
+                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-28 rounded-md border border-blue-300 bg-blue-50 px-2 text-[11px] font-bold text-slate-900 outline-none focus:bg-white" />}
                   </div>
                   <select aria-label="접수분야" value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="sr-only">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
                   </select>
-                </label>}
-                {type === "복합기 AS" && fieldChoice === "직접기재" && <label className="text-[11px] font-black text-slate-500">분야 직접 입력
-                  <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} className="mt-1 w-32 rounded-md border border-slate-300 px-2.5 py-2 text-sm font-semibold text-slate-900" />
-                </label>}
+                </div>}
               </div>
               {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
