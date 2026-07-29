@@ -159,11 +159,11 @@ type Manual = { 접수자성함: string; 접수자연락처: string; 제목: str
 
 // 신규 거래처(복합기 AS) 접수 시트 직접 기재 필드 — 섹션별 구성 (열: F~AT)
 const NEW_LEASE_SECTIONS: { label: string; fields: [string, string][] }[] = [
-  { label: "기본", fields: [["firstNo", "퍼스트순"], ["leaseStatus", "임대여부"], ["warranty", "보증여부"], ["misuMonths", "미수개월"]] },
+  { label: "기본", fields: [["firstNo", "임대리스트 순번"], ["leaseStatus", "임대여부"], ["warranty", "보증여부"], ["misuMonths", "미수개월"]] },
   { label: "업체", fields: [["grade", "등급"], ["tel", "일반전화"], ["vendorManager", "현장 업체담당자(AK열)"], ["keyman", "키맨"]] },
   { label: "기기", fields: [["model", "모델명"], ["item", "품목"], ["maker", "제조사"], ["series", "기종"], ["assetNo", "자산번호"], ["serialNo", "기번"], ["assetSerial", "자산기번"], ["deviceState", "기기상태"], ["hanjoCode", "한조/틴텍코드"]] },
   { label: "계약·임대", fields: [["baseRent", "기본임대료"], ["avgRent", "평균임대료"], ["contractStart", "계약일"], ["contractEnd", "종료일"], ["monthsLeft", "남은개월수"], ["owner", "장비소유주"], ["installer", "설치업체"], ["visitCycle", "방문주기"], ["extraTerms", "추가조건"]] },
-  { label: "주소", fields: [["city", "시"], ["district", "구"]] },
+  { label: "주소", fields: [["address", "전체 주소"]] },
   { label: "기타", fields: [["notes", "특이사항"]] },
 ];
 const EMPTY_NEW_LEASE: Record<string, string> = Object.fromEntries(NEW_LEASE_SECTIONS.flatMap((sec) => sec.fields.map(([key]) => [key, ""])));
@@ -203,7 +203,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const [scheduleToo, setScheduleToo] = useState(true); // 저장하면서 일정리스트에도 등록
   const [photoBusy, setPhotoBusy] = useState(false);
 
-  const handlePhotoPick = async (files: FileList | null) => {
+  const handlePhotoPick = async (files: FileList | File[] | null) => {
     if (!files || !files.length || photoBusy) return;
     setPhotoBusy(true);
     try {
@@ -447,7 +447,7 @@ export default function ServiceReception({ author }: { author: string }) {
       };
       const message = custKind === "기존"
         ? await sendReceptionCopierSheetJob(base)
-        : await sendReceptionCopierSheetJob(base, { ...newLease, company: vendorName, address: manual.주소.trim() });
+        : await sendReceptionCopierSheetJob(base, { ...newLease, company: vendorName, address: manual.주소.trim() || newLease.address || "" });
       return ` · ${message}`;
     } catch (e) {
       return ` · 시트 기입 실패(${(e as Error).message})`;
@@ -720,7 +720,7 @@ export default function ServiceReception({ author }: { author: string }) {
             {type === "복합기 AS" && <div className="flex items-center gap-2">
               <span className="flex rounded-md bg-slate-100 p-0.5">
                 {(["기존", "신규"] as const).map((k) => (
-                  <button key={k} type="button" onClick={() => setCustKind(k)} className={`rounded px-4 py-2 text-xs font-black ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{k}</button>
+                  <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded px-4 py-2 text-xs font-black ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{k}</button>
                 ))}
               </span>
               <span className="text-[11px] font-bold text-slate-400">{custKind === "기존" ? "임대리스트에서 검색해 선택" : "임대리스트에 없는 업체 — 직접 기재"}</span>
@@ -786,9 +786,9 @@ export default function ServiceReception({ author }: { author: string }) {
             <div className="p-4">
               <div className="text-xs font-black text-blue-700">접수 내용</div>
               <div className="mt-2 grid gap-3 rounded-md border border-blue-100 bg-slate-50 p-3 md:grid-cols-[auto_132px_minmax(280px,1fr)] md:items-end">
-                <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
-                  <div className="text-[11px] font-black text-slate-500">접수유형</div>
-                  <div className="mt-1 flex rounded-md bg-slate-100 p-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="sr-only">접수유형</div>
+                  <div className="flex rounded-md bg-slate-100 p-0.5">
                     {(["카카오", "전화"] as ReceiveRoute[]).map((r) => (
                       <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded px-3 py-1.5 text-xs font-black ${route === r ? "bg-slate-900 text-white" : "text-slate-500"}`}>{r}</button>
                     ))}
@@ -801,7 +801,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
                   <div className="flex flex-wrap gap-1.5">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{v}</button>)}
-                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-28 rounded-md border border-blue-300 bg-blue-50 px-2 text-[11px] font-bold text-slate-900 outline-none focus:bg-white" />}
+                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-44 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:bg-white" />}
                   </div>
                   <select aria-label="접수분야" value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="sr-only">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
@@ -818,11 +818,16 @@ export default function ServiceReception({ author }: { author: string }) {
                         {sec.label} <span className={`ml-1 text-[10px] ${filled ? "text-blue-600" : "text-slate-300"}`}>{filled}/{sec.fields.length}</span>
                       </summary>
                       <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2.5 sm:grid-cols-3 lg:grid-cols-4">
-                        {sec.fields.map(([key, label]) => (
-                          <label key={key} className="text-[10px] font-bold text-slate-500">{label}
-                            <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
-                          </label>
-                        ))}
+                        {sec.fields.map(([key, label]) => {
+                          const options = key === "leaseStatus" ? ["임대중", "임대종료", "직접기재"]
+                            : key === "warranty" ? ["보증O", "보증X"]
+                            : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
+                          return <label key={key} className={`text-[10px] font-bold text-slate-500 ${key === "address" ? "col-span-full" : ""}`}>{label}
+                            {options
+                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
+                          </label>;
+                        })}
                       </div>
                     </details>
                   );
@@ -841,7 +846,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소 미기재" className="mt-1 w-full rounded-md border border-amber-300 bg-amber-50/40 px-2.5 py-2 text-sm font-semibold text-slate-900" />
                 </label>
                 <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-md outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => (
                       <span key={photo.url} className="relative">
                         <a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name} className="h-16 w-16 rounded-md border border-slate-200 object-cover" /></a>
@@ -852,6 +857,7 @@ export default function ServiceReception({ author }: { author: string }) {
                       {photoBusy ? "…" : <ImagePlus size={21} />}
                       <input type="file" accept="image/*" multiple disabled={photoBusy} onChange={(e) => { void handlePhotoPick(e.target.files); e.target.value = ""; }} className="hidden" />
                     </label>}
+                    {!photos.length && <span className="text-[10px] font-bold text-slate-400">클릭 후 Ctrl+V로 붙여넣기 가능</span>}
                   </div>
                 </div>
                 {type !== "원격이관" && <>
@@ -887,7 +893,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   ["제목", !!manual.제목.trim()],
                   ["내용", !!manual.증상.trim()],
                   ["주소", !!(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"))],
-                  ...(type === "복합기 AS" && custKind === "기존" ? [["퍼스트순", !!firstNo.trim()] as [string, boolean]] : []),
+                  ...(type === "복합기 AS" && custKind === "기존" ? [["임대리스트 순번", !!firstNo.trim()] as [string, boolean]] : []),
                 ] as [string, boolean][]).map(([label, ok]) => (
                   <span key={label} className={`rounded px-2 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
                 ))}
