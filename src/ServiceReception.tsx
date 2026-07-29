@@ -450,8 +450,9 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && type !== "원격이관") {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
       }
-      const sheetNote = await writeReceptionSheet();
-      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}${sheetNote}`);
+      const sheetPending = type === "복합기 AS" && custKind === "기존" && !!firstNo.trim();
+      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
+      setActionResult(type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       resetForm();
       await loadList(listDate, listPeriod);
     } catch (e) {
@@ -484,8 +485,9 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && rowId) {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 전송은 유효 */ }
       }
-      const sheetNote = await writeReceptionSheet();
-      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetNote}`);
+      const sheetPending = type === "복합기 AS" && custKind === "기존" && !!firstNo.trim();
+      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
+      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       setSavedRowId(null);
       resetForm();
       await loadList(listDate, listPeriod);

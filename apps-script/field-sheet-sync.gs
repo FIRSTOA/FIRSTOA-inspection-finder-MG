@@ -64,10 +64,19 @@ function appendFieldSheetRow_(request) {
   sheet.insertRowAfter(previousRow);
   const row = previousRow + 1;
 
-  // 셀 하나씩 넣으면 A열부터 천천히 채워지는 게 보인다 — 수식 복사 1회 + 값 구간별 일괄 기입으로 즉시 반영.
-  // 이전 행 수식을 R1C1로 통째로 복사(상대참조 자동 유지)한 뒤, 매핑된 값만 덮어쓴다.
-  const prevFormulas = sheet.getRange(previousRow, 1, 1, lastColumn).getFormulasR1C1()[0];
-  sheet.getRange(row, 1, 1, lastColumn).setFormulasR1C1([prevFormulas.map(function (f) { return f || ""; })]);
+  // 수식은 구글의 복사(copyTo)로만 옮긴다 — 텍스트 재기입은 일부 수식을 깨뜨린다.
+  // 대신 셀 단위가 아니라 "연속 수식 구간"별로 묶어 복사하고, 값도 구간별 일괄 기입해 속도를 챙긴다.
+  const prevFormulas = sheet.getRange(previousRow, 1, 1, lastColumn).getFormulas()[0];
+  let fStart = -1;
+  for (let i = 0; i <= lastColumn; i++) {
+    const isFormula = i < lastColumn && prevFormulas[i];
+    if (isFormula && fStart < 0) fStart = i;
+    if (!isFormula && fStart >= 0) {
+      sheet.getRange(previousRow, fStart + 1, 1, i - fStart)
+        .copyTo(sheet.getRange(row, fStart + 1, 1, i - fStart), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+      fStart = -1;
+    }
+  }
 
   const values = headers.map(function (header, index) {
     return fieldValue_(request.category, header, index + 1, data, request, labelValues);
