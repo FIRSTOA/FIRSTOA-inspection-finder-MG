@@ -683,7 +683,7 @@ export default function ServiceReception({ author }: { author: string }) {
   return (
     <div className="space-y-4 pb-16">
       {/* 헤더 + 요약 */}
-      <section className="rounded-lg border border-slate-200 border-t-4 border-t-blue-600 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-slate-200 border-t-4 border-t-slate-900 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2"><ClipboardList size={20} className="text-blue-600" /><h2 className="text-xl font-black text-slate-950">서비스 접수</h2></div>
@@ -705,8 +705,8 @@ export default function ServiceReception({ author }: { author: string }) {
         <div className="space-y-4">
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-xs font-black text-white">1</span><div><div className="text-sm font-black text-slate-950">업무와 거래처 선택</div><div className="text-[11px] font-semibold text-slate-400">접수 유형을 고르고, 해당 기기를 정확히 선택합니다.</div></div></div>
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><Building2 size={14} className="text-blue-600" /> {lease ? "거래처 선택 완료" : "거래처 선택 필요"}</div>
+              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">1</span><div><div className="text-sm font-black text-slate-950">업무와 거래처 선택</div><div className="text-[11px] font-semibold text-slate-400">접수 유형을 고르고, 해당 기기를 정확히 선택합니다.</div></div></div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><Building2 size={14} className="text-slate-700" /> {lease ? "거래처 선택 완료" : "거래처 선택 필요"}</div>
             </div>
             <div className="p-4">
             <div className="-mx-4 -mt-4 mb-3 flex border-b border-slate-200 bg-slate-50/80">
@@ -778,14 +778,14 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/60 px-4 py-3">
-              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-xs font-black text-white">2</span><div><div className="text-sm font-black text-slate-950">접수 내용 입력</div><div className="text-[11px] font-semibold text-slate-500">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div></div></div>
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">2</span><div><div className="text-sm font-black text-slate-950">접수 내용 입력</div><div className="text-[11px] font-semibold text-slate-500">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div></div></div>
               <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>{readyCount}/{requiredChecks.length} 필수 입력</div>
             </div>
             <div className="p-4">
-              <div className="text-xs font-black text-blue-700">접수 내용</div>
-              <div className="mt-2 grid gap-3 rounded-md border border-blue-100 bg-slate-50 p-3 md:grid-cols-[auto_132px_minmax(280px,1fr)] md:items-end">
+              <div className="text-xs font-black text-slate-700">접수 내용</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center gap-2">
                   <div className="sr-only">접수유형</div>
                   <div className="flex rounded-md bg-slate-100 p-0.5">
@@ -794,14 +794,14 @@ export default function ServiceReception({ author }: { author: string }) {
                     ))}
                   </div>
                 </div>
-                {type === "복합기 AS" && custKind === "기존" && <label className="text-[11px] font-black text-slate-500">임대리스트 순번
-                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-1 h-9 w-full min-w-32 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-blue-500" />
+                {type === "복합기 AS" && custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
                 </label>}
                 {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2">
                   <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{v}</button>)}
-                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-44 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:bg-white" />}
+                    {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-900"}`}>{v}</button>)}
+                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-44 rounded-md border border-slate-400 bg-white px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:border-slate-900" />}
                   </div>
                   <select aria-label="접수분야" value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="sr-only">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
