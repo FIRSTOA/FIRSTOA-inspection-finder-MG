@@ -289,25 +289,33 @@ export default function ServiceReception({ author }: { author: string }) {
     setHandling((current) => ({ ...current, [row.id]: { ...handlingOf(row), ...patch } }));
 
   // 처리값을 DB에 저장하고, 접수 때 만든 시트 행을 같은 자리에 갱신한다 (행이 없으면 새로 추가)
+  // 시트 반영은 웹훅을 거쳐 몇 초 걸리므로 항상 백그라운드로 — 버튼은 기다리지 않는다.
+  const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
+    if (!row.lease_no) return;
+    void sendReceptionRemoteSheetJob({
+      author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
+      hanjo: meta.hanjo || (row.type === "IT" ? "IT" : ""),
+      start: meta.start || "", end: meta.end || "", result: meta.result || "", handler: meta.handler || "",
+      contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
+      symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
+      linked: meta.linked || "",
+    }, row.sheet_row ?? null).then(({ row: sheetRow }) => {
+      if (sheetRow && sheetRow !== row.sheet_row) void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+    }).catch(() => { /* 시트 반영 실패는 다음 저장에서 재시도 */ });
+  };
+
   const saveHandling = async (row: ServiceReceptionRow, extra: Record<string, string> = {}, silent = false) => {
     const meta = { ...handlingOf(row), ...extra };
+    if (Object.keys(extra).length) patchHandling(row, extra);   // 시각 기록은 즉시 화면에 반영
     if (!silent) setHandlingBusyId(row.id);
     try {
-      const nextStatus = meta.result ? (meta.result === "처리완료" ? "원격완료" : row.status) : row.status;
+      const nextStatus = meta.result === "처리완료" ? "원격완료" : row.status;
       await updateServiceReception(row.id, { remote_meta: meta, ...(nextStatus !== row.status ? { status: nextStatus } : {}) });
-      if (row.lease_no) {
-        const { row: sheetRow } = await sendReceptionRemoteSheetJob({
-          author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
-          hanjo: meta.hanjo || (row.type === "IT" ? "IT" : ""),
-          start: meta.start || "", end: meta.end || "", result: meta.result || "", handler: meta.handler || "",
-          contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
-          symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
-          linked: meta.linked || "",
-        }, row.sheet_row ?? null);
-        if (sheetRow && sheetRow !== row.sheet_row) await updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+      syncRemoteSheet(row, meta);
+      if (!silent) {
+        setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
+        await loadList(listDate, listPeriod);
       }
-      setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
-      await loadList(listDate, listPeriod);
     } catch (e) {
       window.alert(`처리 저장 실패: ${(e as Error).message}`);
     } finally {
@@ -931,7 +939,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     ))}
                   </div>
                 </div>
-                {type === "복합기 AS" && custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
+                {custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
                 </label>}
                 {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
@@ -944,23 +952,16 @@ export default function ServiceReception({ author }: { author: string }) {
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
                   </select>
                 </div>}
-              </div>
-              {isRemoteType && <div className="mt-2 flex flex-wrap items-end gap-3 rounded-md border border-cyan-200 bg-cyan-50/40 p-2.5">
-                {custKind === "기존" && <label className="text-[10px] font-bold text-slate-500">순 (임대리스트 순번)
-                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-0.5 w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-900" />
-                </label>}
-                <div>
-                  <div className="text-[10px] font-bold text-slate-500">한조처리 (L열) — 원격·IT 구분</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <button type="button" onClick={() => { setType("원격이관"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black ${!remote.hanjoDirect && type === "원격이관" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500"}`}>원격이관 (공백)</button>
-                    <button type="button" onClick={() => { setType("IT"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black ${!remote.hanjoDirect && type === "IT" ? "border-cyan-600 bg-cyan-600 text-white" : "border-slate-200 bg-white text-slate-500"}`}>IT</button>
-                    <button type="button" onClick={() => setRemote({ ...remote, hanjoDirect: true })} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black ${remote.hanjoDirect ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500"}`}>직접입력</button>
-                    {remote.hanjoDirect && <input autoFocus value={remote.hanjoCustom} onChange={(e) => setRemote({ ...remote, hanjoCustom: e.target.value })} placeholder="한조처리 입력" className="w-32 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-900" />}
-                    <span className="rounded bg-white px-2 py-1 text-[10px] font-black text-slate-500">기입값: {hanjoFinal || "공백"}</span>
+                {isRemoteType && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
+                  <span className="shrink-0 text-[11px] font-black text-slate-500">한조처리</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => { setType("원격이관"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${!remote.hanjoDirect && type === "원격이관" ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-900"}`}>원격이관</button>
+                    <button type="button" onClick={() => { setType("IT"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${!remote.hanjoDirect && type === "IT" ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-900"}`}>IT</button>
+                    <button type="button" onClick={() => setRemote({ ...remote, hanjoDirect: true })} className={`rounded-md border px-2.5 py-1.5 text-[11px] font-black transition ${remote.hanjoDirect ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-900"}`}>직접기재</button>
+                    {remote.hanjoDirect && <input autoFocus value={remote.hanjoCustom} onChange={(e) => setRemote({ ...remote, hanjoCustom: e.target.value })} placeholder="한조처리 입력" className="h-8 w-32 rounded-md border border-slate-400 bg-white px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:border-slate-900" />}
                   </div>
-                </div>
-                <span className="pb-1 text-[10px] font-bold text-slate-400">시작·종료·처리여부는 처리할 때 접수 대기열에서 입력합니다</span>
-              </div>}
+                </div>}
+              </div>
               {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
                 {NEW_LEASE_SECTIONS.map((sec) => {
@@ -1019,7 +1020,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     {!photos.length && <span className="text-[10px] font-bold text-slate-400">클릭 후 Ctrl+V로 붙여넣기 가능</span>}
                   </div>
                 </div>
-                {type !== "원격이관" && <>
+                {type === "복합기 AS" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
                     {manual.유상무상 === "직접기재"
                       ? <span className="mt-1 flex gap-1">

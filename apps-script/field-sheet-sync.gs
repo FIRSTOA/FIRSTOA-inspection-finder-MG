@@ -86,16 +86,29 @@ function appendFieldSheetRow_(request) {
   const row = previousRow + 1;
 
   // 수식은 구글의 복사(copyTo)로만 옮긴다 — 텍스트 재기입은 일부 수식을 깨뜨린다.
-  // 대신 셀 단위가 아니라 "연속 수식 구간"별로 묶어 복사하고, 값도 구간별 일괄 기입해 속도를 챙긴다.
-  const prevFormulas = sheet.getRange(previousRow, 1, 1, lastColumn).getFormulas()[0];
-  let fStart = -1;
+  // 바로 위 행이 비어 있는 경우가 있어(빈 행·수동 입력 행) 위로 최대 30행을 훑어
+  // 열마다 "수식이 있는 가장 가까운 행"을 찾아 그 행에서 복사한다.
+  const scanFrom = Math.max(headerRow + 1, previousRow - 29);
+  const scanCount = previousRow - scanFrom + 1;
+  const scan = scanCount > 0 ? sheet.getRange(scanFrom, 1, scanCount, lastColumn).getFormulas() : [];
+  const sourceRowOf = [];
+  for (let col = 0; col < lastColumn; col++) {
+    let found = 0;
+    for (let r = scan.length - 1; r >= 0; r--) {
+      if (scan[r][col]) { found = scanFrom + r; break; }
+    }
+    sourceRowOf.push(found);
+  }
+  // 같은 원본 행에서 오는 연속 구간끼리 묶어 한 번에 복사 (호출 수 최소화)
+  let gStart = -1;
   for (let i = 0; i <= lastColumn; i++) {
-    const isFormula = i < lastColumn && prevFormulas[i];
-    if (isFormula && fStart < 0) fStart = i;
-    if (!isFormula && fStart >= 0) {
-      sheet.getRange(previousRow, fStart + 1, 1, i - fStart)
-        .copyTo(sheet.getRange(row, fStart + 1, 1, i - fStart), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
-      fStart = -1;
+    const same = i < lastColumn && sourceRowOf[i] && (gStart < 0 || sourceRowOf[i] === sourceRowOf[gStart]);
+    if (same && gStart < 0) gStart = i;
+    else if (!same && gStart >= 0) {
+      const src = sourceRowOf[gStart];
+      sheet.getRange(src, gStart + 1, 1, i - gStart)
+        .copyTo(sheet.getRange(row, gStart + 1, 1, i - gStart), SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+      gStart = i < lastColumn && sourceRowOf[i] ? i : -1;
     }
   }
 
@@ -153,6 +166,12 @@ function fieldValue_(category, header, column, data, request, labels) {
   if (category === "contact_change" && column > 13) return undefined;
   // 접수(복합기 기존): A~T까지만 기입 — 퍼스트순(F) 기준 함수가 채우는 오른쪽 열들을 건드리지 않는다 (AK열 업체담당자 중복 보호)
   if (category === "reception_copier" && column > 20) return undefined;
+  // 접수(원격·IT): A열(행 순번)·C열(년월)은 자동 계산 — 덮어쓰면 수식이 깨진다.
+  // "순" 헤더가 A열과 M열에 중복되므로 임대리스트 순번은 M열(13)에만 기입한다.
+  if (category === "reception_remote") {
+    if (column === 1 || column === 3) return undefined;
+    if (String(header).replace(/\s+/g, "") === "순") return column === 13 ? (data["leaseNo"] || undefined) : undefined;
+  }
   // 접수(복합기 신규): A~AT까지 직접 기재 (AU 위탁/유지보수 이후는 보호)
   if (category === "reception_copier_new" && column > 46) return undefined;
   // 업체담당자 헤더가 P열·AK열에 중복 — 신규는 열 위치로 구분해 기입
