@@ -36,8 +36,8 @@ function won(value: string | number) {
 // 행 클릭 상세 팝업 — 지정한 필드 순서대로, 값 있는 것만
 // 상세 모달 섹션 구성: 핵심 수치는 크게, 연락처는 바로 걸 수 있게, 체크 이력은 묶어서
 type DetailLayout = {
-  metrics: [string, "won" | "months" | "text"][];      // 큰 숫자 카드
-  sections: { label: string; fields: string[] }[];     // 이름 붙은 정보 묶음들
+  metrics: [string, "won" | "months" | "text", string?][]; // [컬럼키, 형식, 표시라벨]
+  sections: { label: string; fields: string[] }[];          // 이름 붙은 정보 묶음들
 };
 
 function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
@@ -45,7 +45,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
   const valueOf = (key: string) => str(row, key) || String(raw[key] ?? "").trim();
   const used = new Set<string>(["_업체명"]);
   const badges = ["등급", "지역", "임대여부", "관리담당자", "관리 담당자"].map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
-  const metrics = (layout?.metrics || []).map(([key, kind]) => { used.add(key); return { key, kind, value: valueOf(key) }; }).filter((m) => m.value);
+  const metrics = (layout?.metrics || []).map(([key, kind, label]) => { used.add(key); return { key, kind, label: label || key, value: valueOf(key) }; }).filter((m) => m.value);
   const sections = (layout?.sections || []).map(({ label, fields: sectionFields }) => ({
     label,
     rows: sectionFields.map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v),
@@ -93,7 +93,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
             {metrics.map((m) => (
               <div key={m.key} className="rounded-lg bg-slate-50 px-2 py-2.5 text-center">
                 <div className="text-lg font-black text-slate-900">{metricView(m)}</div>
-                <div className="mt-0.5 text-[10px] font-bold text-slate-400">{m.key}</div>
+                <div className="mt-0.5 text-[10px] font-bold text-slate-400">{m.label}</div>
               </div>
             ))}
           </div>}
@@ -118,7 +118,7 @@ const MISU_DETAIL_LAYOUT: DetailLayout = {
 };
 
 const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
-  metrics: [["합계", "won"], ["컬러초과료", "won"], ["흑백초과료", "won"], ["기본금액", "won"]],
+  metrics: [["합계", "won", "초과료 합계"], ["컬러초과료", "won", "컬러 초과료"], ["흑백초과료", "won", "흑백 초과료"], ["기본금액", "won", "기본금액"]],
   sections: [
     { label: "접수 내용", fields: ["날짜", "접수내용", "초과보고", "AS건수", "AS접수내용"] },
     { label: "계약 · 기기", fields: ["마감방식", "기본매수", "초과장당금액", "연평균", "계약일", "종료일", "남은개월", "모델명", "자산번호"] },
@@ -210,33 +210,33 @@ function MisuBoard() {
       </div>
       {boardView === "CS체크" && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
             {["전체", ...TEAM_NAMES].map((name) => {
               const count = name === "전체" ? (csChecks || []).length : (csChecks || []).filter((c) => c.team === name).length;
               return (
-                <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
+                <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
                   {name === "전체" ? "전체" : `${name}팀`} <span className={team === name ? "text-blue-300" : "text-blue-600"}>{count}</span>
                 </button>
               );
             })}
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
           </div>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 w-full rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
           {csChecks !== null && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[minmax(0,1fr)_50px_70px_110px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_26px_40px_84px] gap-1.5 border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4">
               <span>업체명</span><span>팀</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="hidden sm:block">CS-1회</span><span className="hidden sm:block">CS-2회</span>
             </div>
             <div className="max-h-[62vh] divide-y divide-slate-100 overflow-y-auto">
               {csList.map((c) => {
                 const misu = misuByVendor.get(`${c.team}|${c.vendor.trim()}`);
                 return (
-                  <button key={c.key} type="button" onClick={() => misu && setDetail(misu)} className={`grid w-full grid-cols-[minmax(0,1fr)_50px_70px_110px] items-center gap-2 px-4 py-2.5 text-left text-xs sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] ${misu ? "hover:bg-blue-50/40" : "cursor-default"}`}>
+                  <button key={c.key} type="button" onClick={() => misu && setDetail(misu)} className={`grid w-full grid-cols-[minmax(0,1fr)_26px_40px_84px] items-center gap-1.5 px-3 py-2.5 text-left text-xs sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4 ${misu ? "hover:bg-blue-50/40" : "cursor-default"}`}>
                     <span className="min-w-0">
                       <span className="block truncate font-black text-slate-800">{c.vendor}</span>
                       {c.cs_manager && <span className="block truncate text-[10px] font-bold text-slate-400">CS담당 {c.cs_manager}</span>}
                     </span>
-                    <span className="font-bold text-slate-500">{c.team ? `${c.team}팀` : "-"}</span>
-                    <span className={`text-right font-black ${misu && (Number(misu["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{misu && Number(misu["_months"]) ? `${misu["_months"]}개월` : "-"}</span>
+                    <span className="font-bold text-slate-500">{c.team ? <><span className="sm:hidden">{c.team}</span><span className="hidden sm:inline">{c.team}팀</span></> : "-"}</span>
+                    <span className={`text-right font-black ${misu && (Number(misu["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{misu && Number(misu["_months"]) ? <><span className="sm:hidden">{String(misu["_months"])}</span><span className="hidden sm:inline">{String(misu["_months"])}개월</span></> : "-"}</span>
                     <span className="text-right font-black text-slate-800">{misu ? won(Number(misu["_balance"]) || 0) : "-"}</span>
                     <span className="hidden truncate font-semibold text-slate-500 sm:block">{c.cs1 || "-"}</span>
                     <span className="hidden truncate font-semibold text-slate-500 sm:block">{c.cs2 || "-"}</span>
@@ -263,9 +263,9 @@ function MisuBoard() {
         ))}
       </div>
       <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-8 text-[10px] font-black text-slate-400">팀</span>
-          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
+          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
@@ -378,9 +378,9 @@ function OverageBoard() {
         ))}
       </div>
       <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-8 text-[10px] font-black text-slate-400">팀</span>
-          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
+          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">년월</span>

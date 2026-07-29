@@ -32,6 +32,7 @@ export default function StockBoard({ author }: { author: string }) {
   const [brand, setBrand] = useState("전체");
   const [query, setQuery] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
+  const [condition, setCondition] = useState<"전체" | "새기기" | "리퍼">("전체");
   const [sortMode, setSortMode] = useState<"name" | "qty">("name");
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState({ brand: "삼성", name: "", condition: "새기기" as "새기기" | "리퍼" | "", qty: 0, note: "" });
@@ -61,12 +62,13 @@ export default function StockBoard({ author }: { author: string }) {
     const list = items.filter((item) => {
       if (item.kind !== kind) return false;
       if (kind === "기기" && brand !== "전체" && item.brand !== brand) return false;
+      if (kind === "기기" && condition !== "전체" && item.condition !== condition) return false;
       if (lowOnly && item.qty > 2) return false;
       if (!keyword) return true;
       return [item.name, item.brand, item.note].join(" ").toLowerCase().includes(keyword);
     });
     return sortMode === "qty" ? [...list].sort((a, b) => a.qty - b.qty || a.name.localeCompare(b.name)) : list;
-  }, [items, kind, brand, query, lowOnly, sortMode]);
+  }, [items, kind, brand, query, lowOnly, sortMode, condition]);
 
   const byBrand = useMemo(() => {
     const map = new Map<string, StockItem[]>();
@@ -181,6 +183,11 @@ export default function StockBoard({ author }: { author: string }) {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />
           <div className="flex flex-wrap items-center gap-1">
+            {kind === "기기" && <span className="flex rounded-md bg-slate-100 p-0.5">
+              {(["전체", "새기기", "리퍼"] as const).map((value) => (
+                <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded px-2 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
+              ))}
+            </span>}
             <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700"}`}>⚠ 부족만</button>
             <span className="flex rounded-md bg-slate-100 p-0.5">
               {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
