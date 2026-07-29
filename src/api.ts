@@ -969,11 +969,11 @@ export type ReceptionSheetInput = {
   paid: string; receiverName: string; receiverPhone: string; title: string; symptom: string;
 };
 
-export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput): Promise<string> {
+export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, extra?: Record<string, string>): Promise<string> {
   const id = crypto.randomUUID();
   await enqueueFieldSheetSyncJob({
-    id, category: "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(),
-    sourceText: "", payload: { data: { ...input } }, dupKey: id,
+    id, category: extra ? "reception_copier_new" : "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(),
+    sourceText: "", payload: { data: { ...input, ...(extra || {}) } }, dupKey: id,
   });
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
   if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return "시트 동기화 설정 꺼짐";

@@ -11,6 +11,7 @@ const FIELD_SHEETS = {
   complaint: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 419415178 },
   praise: { spreadsheetId: "1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ", sheetId: 0 },
   reception_copier: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
+  reception_copier_new: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
 };
 
 function doPost(e) {
@@ -107,6 +108,7 @@ function findHeaderRow_(sheet, category) {
     complaint: ["업체명", "불만내용"],
     praise: ["거래처명", "칭찬이유"],
     reception_copier: ["퍼스트순", "접수유형"],
+    reception_copier_new: ["퍼스트순", "접수유형"],
   };
   const required = signatures[category] || [];
   const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
@@ -130,6 +132,12 @@ function fieldValue_(category, header, column, data, request, labels) {
   if (category === "contact_change" && column > 13) return undefined;
   // 접수(복합기 기존): A~T까지만 기입 — 퍼스트순(F) 기준 함수가 채우는 오른쪽 열들을 건드리지 않는다 (AK열 업체담당자 중복 보호)
   if (category === "reception_copier" && column > 20) return undefined;
+  // 접수(복합기 신규): A~AT까지 직접 기재 (AU 위탁/유지보수 이후는 보호)
+  if (category === "reception_copier_new" && column > 46) return undefined;
+  // 업체담당자 헤더가 P열·AK열에 중복 — 신규는 열 위치로 구분해 기입
+  if (category === "reception_copier_new" && String(header).replace(/\s+/g, "") === "업체담당자") {
+    return column <= 20 ? (data["receiverName"] || undefined) : (data["vendorManager"] || undefined);
+  }
 
   const submittedAt = new Date(request.submittedAt || new Date());
   const copierPeriod = category === "expansion_copier" ? {
@@ -156,7 +164,7 @@ function fieldValue_(category, header, column, data, request, labels) {
     };
   })() : {};
   // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준
-  const receptionPeriod = category === "reception_copier" ? {
+  const receptionPeriod = category === "reception_copier" || category === "reception_copier_new" ? {
     "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
     "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
@@ -208,8 +216,19 @@ function fieldValue_(category, header, column, data, request, labels) {
       "퍼스트순": "firstNo", "접수유형": "route", "접수분야": "field", "유상/무상": "paid",
       "업체담당자": "receiverName", "전화번호": "receiverPhone", "제목(짧게)": "title", "내용": "symptom",
     },
+    reception_copier_new: {
+      "퍼스트순": "firstNo", "임대여부": "leaseStatus", "업체명": "company", "접수유형": "route", "접수분야": "field",
+      "유상/무상": "paid", "보증여부": "warranty", "자산번호": "assetNo", "미수개월": "misuMonths",
+      "일반전화": "tel", "전화번호": "receiverPhone", "제목(짧게)": "title", "내용": "symptom",
+      "등급": "grade", "특이사항": "notes", "한조/틴텍코드": "hanjoCode", "모델명": "model", "품목": "item",
+      "제조사": "maker", "기종": "series", "기본임대료": "baseRent", "평균임대료": "avgRent",
+      "계약일": "contractStart", "종료일": "contractEnd", "남은개월수": "monthsLeft", "주소": "address",
+      "기기상태": "deviceState", "시": "city", "구": "district", "방문주기": "visitCycle", "설치업체": "installer",
+      "키맨": "keyman", "추가조건": "extraTerms", "장비소유주": "owner", "기번": "serialNo", "자산기번": "assetSerial",
+    },
   };
-  const key = maps[category] && maps[category][header];
+  let key = maps[category] && maps[category][header];
+  if (!key && maps[category]) key = maps[category][String(header).trim()];
   if (!key) return undefined;
   if (key === "_author") return request.author;
   if (key === "_webInput") return "웹앱 직접입력";
