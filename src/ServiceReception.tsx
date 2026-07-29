@@ -341,7 +341,7 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (type === "복합기 AS" ? manualVendor.trim() : "");
+  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (custKind === "신규" ? manualVendor.trim() : "");
   const region = regionLabel(pick(lease, "담당지역"));
   // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
   const resultVendorCounts = useMemo(() => {
@@ -489,6 +489,7 @@ export default function ServiceReception({ author }: { author: string }) {
   // 복합기 AS 접수를 접수 시트에 자동 기입 (기존: 퍼스트순 기준 자동 채움 / 신규: 직접 기재) — 실패해도 접수 저장은 유효
   const writeReceptionSheet = async (): Promise<string> => {
     if (isRemoteType) {
+      if (custKind === "신규") return " · 원격 신규는 시트 기입 준비 중 (접수는 저장됨)";
       if (!firstNo.trim()) return " · 순번 미입력 — 시트 기입 생략";
       try {
         const message = await sendReceptionRemoteSheetJob({
@@ -545,7 +546,7 @@ export default function ServiceReception({ author }: { author: string }) {
       if (scheduleToo && type !== "원격이관") {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
       }
-      const sheetPending = isRemoteType ? !!firstNo.trim() : (custKind === "신규" || !!firstNo.trim());
+      const sheetPending = isRemoteType ? (custKind === "기존" && !!firstNo.trim()) : (custKind === "신규" || !!firstNo.trim());
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
       setActionResult(`${type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       resetForm();
@@ -758,8 +759,8 @@ export default function ServiceReception({ author }: { author: string }) {
     ...(type === "복합기 AS" ? [["제목", Boolean(manual.제목.trim())] as [string, boolean]] : []),
     ["내용", Boolean(manual.증상.trim())],
     ...(type === "원격이관" ? [] : [["주소", Boolean(manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"))] as [string, boolean]]),
-    // 순번은 시트 기입 기준값 — 원격·IT는 항상, 복합기는 기존 거래처일 때 (신규는 상세 섹션에서 받는다)
-    ...(isRemoteType || custKind === "기존" ? [["순번", Boolean(firstNo.trim())] as [string, boolean]] : []),
+    // 순번은 시트 기입 기준값 — 기존 거래처일 때만 필수 (신규는 순번이 없다)
+    ...(custKind === "기존" ? [["순번", Boolean(firstNo.trim())] as [string, boolean]] : []),
   ];
   const readyCount = requiredItems.filter(([, ok]) => ok).length;
   const isReady = readyCount === requiredItems.length;
@@ -813,18 +814,18 @@ export default function ServiceReception({ author }: { author: string }) {
               </span>
               <span className={`rounded px-2 py-1 text-[10px] font-black ${type === "IT" ? "bg-cyan-50 text-cyan-700" : "bg-slate-100 text-slate-500"}`}>한조처리 L열: {hanjoFinal || "공백"}</span>
             </div>}
-            {type === "복합기 AS" && <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <span className="flex rounded-md bg-slate-100 p-0.5">
                 {(["기존", "신규"] as const).map((k) => (
                   <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded px-4 py-2 text-xs font-black ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{k}</button>
                 ))}
               </span>
-            </div>}
-            {!(type === "복합기 AS" && custKind === "신규") && <div className="mt-3 flex gap-2">
+            </div>
+            {custKind === "기존" && <div className="mt-3 flex gap-2">
               <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
               <button type="button" onClick={() => void runSearch()} disabled={searching} className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"><Search size={15} />{searching ? "검색중" : "검색"}</button>
             </div>}
-            {type === "복합기 AS" && custKind === "신규" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명
+            {custKind === "신규" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명
               <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="신규 거래처 업체명" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
             </label>}
             {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
@@ -902,9 +903,9 @@ export default function ServiceReception({ author }: { author: string }) {
                 </div>}
               </div>
               {isRemoteType && <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-cyan-200 bg-cyan-50/40 p-2.5 sm:grid-cols-3 lg:grid-cols-4">
-                <label className="text-[10px] font-bold text-slate-500">순 (임대리스트 순번)
+                {custKind === "기존" && <label className="text-[10px] font-bold text-slate-500">순 (임대리스트 순번)
                   <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-900" />
-                </label>
+                </label>}
                 <label className="text-[10px] font-bold text-slate-500">시작
                   <input value={remote.start} inputMode="numeric" maxLength={5} placeholder="15:31"
                     onChange={(e) => setRemote({ ...remote, start: typeTime(e.target.value) })}
