@@ -32,6 +32,7 @@ export type AsTicket = {
   assignee: string;
   status: AsStatus;
   scheduleType: ScheduleType;
+  naverPushedAt?: string | null;   // 네이버 캘린더로 보낸 시각 (중복 등록 방지용)
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
@@ -228,7 +229,7 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverPushedAt";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
   return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
@@ -580,6 +581,47 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     const movedIds = new Map(moved.map((t) => [t.id, t]));
     setTicketsState((current) => current.map((t) => movedIds.get(t.id) ?? t));
     void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
+  };
+
+  // 네이버 캘린더로 보내기 — 네이버 API는 '등록'만 지원해 단방향이다.
+  // 반복 일정이 수백 건이라 자동 전량 전송은 하지 않고, 이 버튼으로 고른 건만 보낸다.
+  const [naverBusyId, setNaverBusyId] = useState("");
+  const sendToNaver = async (ticket: AsTicket) => {
+    if (naverBusyId) return;
+    if (ticket.naverPushedAt && !window.confirm("이미 네이버 캘린더에 등록한 일정입니다. 한 번 더 등록할까요?")) return;
+    setNaverBusyId(ticket.id);
+    try {
+      const [hour, minute] = (ticket.time || "09:00").split(":").map(Number);
+      const endHour = Math.min(23, (Number.isFinite(hour) ? hour : 9) + 1);
+      const response = await fetch("/api/naver-add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `[${ticket.scheduleType}] ${ticket.vendor || "일정"}`,
+          date: ticket.date,
+          location: ticket.address || "",
+          description: [
+            ticket.issue && `내용: ${ticket.issue}`,
+            ticket.model && `기기: ${ticket.model}${ticket.serial ? ` / ${ticket.serial}` : ""}`,
+            `팀/담당: ${ticket.team}팀 ${ticket.assignee || "미배정"}`,
+            ticket.contact && `연락처: ${ticket.contact}`,
+            ticket.note,
+          ].filter(Boolean).join("\n"),
+          startTime: ticket.time || "",
+          endTime: ticket.time ? `${String(endHour).padStart(2, "0")}:${String(Number.isFinite(minute) ? minute : 0).padStart(2, "0")}` : "",
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) { window.alert(`네이버 캘린더 등록 실패: ${result.error || response.status}${result.detail ? `\n${result.detail}` : ""}`); return; }
+      const pushedAt = new Date().toISOString();
+      setTicketsState((current) => current.map((item) => (item.id === ticket.id ? { ...item, naverPushedAt: pushedAt } : item)));
+      void upsertRow("as_tickets", { id: ticket.id, naverPushedAt: pushedAt }, "id").catch(() => {});
+      window.alert("네이버 캘린더에 등록했습니다.");
+    } catch (e) {
+      window.alert(`네이버 캘린더 등록 실패: ${(e as Error).message}`);
+    } finally {
+      setNaverBusyId("");
+    }
   };
 
   const removeTicket = (ticket: AsTicket) => {
@@ -1012,6 +1054,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="flex gap-2">
                   <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">수정</button>
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">복제</button>
+                  <button type="button" disabled={naverBusyId === ticket.id} onClick={() => void sendToNaver(ticket)} title="네이버 캘린더에 이 일정을 등록합니다" className={`rounded-md border px-4 py-2 text-sm font-black disabled:opacity-50 ${ticket.naverPushedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-700"}`}>{naverBusyId === ticket.id ? "등록 중…" : ticket.naverPushedAt ? "네이버 ✓" : "네이버 캘린더"}</button>
                 </div>
                 <div className="flex gap-2">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
