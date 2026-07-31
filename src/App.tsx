@@ -15,10 +15,8 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
-import MemberAdmin from "./MemberAdmin";
+import AdminHub from "./AdminHub";
 import { ToastHost } from "./toast";
-import SystemAdmin from "./SystemAdmin";
-import ContentAdmin from "./ContentAdmin";
 import DataLookup from "./DataLookup";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
@@ -4590,7 +4588,6 @@ export default function App() {
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
-  const [opsTab, setOpsTab] = useState<"members" | "stock" | "content" | "system">("members"); // 관리 화면 하위 탭
   const [lookupTab, setLookupTab] = useState<"records" | "status" | "changes">("records"); // 조회 화면 하위 탭
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
@@ -5621,21 +5618,7 @@ export default function App() {
 
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
-        {screen === "operations" && (
-          <div className="space-y-4">
-            {/* 관리 = 값을 바꾸는 곳. 보기만 하는 것은 조회 화면으로 뺐다. */}
-            <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              {([["members", "인원"], ["stock", "재고"], ["content", "문구·홍보물"], ["system", "전송·카톡방"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setOpsTab(key)}
-                  className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${opsTab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
-              ))}
-            </div>
-            {opsTab === "members" ? <MemberAdmin />
-              : opsTab === "stock" ? <StockBoard author={author} />
-              : opsTab === "content" ? <ContentAdmin author={author} />
-              : <SystemAdmin />}
-          </div>
-        )}
+        {screen === "operations" && <AdminHub author={author} />}
         {screen === "lookup" && (
           <div className="space-y-4">
             {/* 조회 = 보기 전용. 기록 표를 그대로 훑고, 집계는 현황판 탭에서 본다. */}

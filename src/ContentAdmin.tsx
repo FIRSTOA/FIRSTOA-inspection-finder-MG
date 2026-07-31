@@ -14,8 +14,8 @@ type Promo = { id: string; title: string; category?: string; description?: strin
 
 const CONTEXTS = [["happycall", "해피콜"], ["promotion", "홍보"]] as const;
 
-export default function ContentAdmin({ author }: { author: string }) {
-  const [tab, setTab] = useState<"template" | "promo">("template");
+export default function ContentAdmin({ author, view }: { author: string; view: "template" | "promo" }) {
+  const tab = view;
   const [templates, setTemplates] = useState<Template[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,13 +105,6 @@ export default function ContentAdmin({ author }: { author: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {([["template", `문자 문구 ${templates.length}`], ["promo", `홍보물 ${promos.length}`]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)}
-            className={`relative px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
-        ))}
-      </div>
-
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
 
       {tab === "template" && (
