@@ -821,7 +821,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       const isToday = date === todayYmd;
                       const isSelected = date === mobileSelectedDate;
                       return (
-                        <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
+                        <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? (dayIndex === 0 ? "bg-rose-50/30" : dayIndex === 6 ? "bg-blue-50/25" : "bg-white") : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : dayNumberColor(dayIndex, inMonth)}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
                             {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-rose-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />)}
@@ -849,7 +849,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="hidden overflow-x-auto md:block">
                   <div className="min-w-[760px]">
                     <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-                      {["일", "월", "화", "수", "목", "금", "토"].map((day, index) => <div key={day} className={`px-2 py-2 text-center text-[11px] font-black ${index === 0 ? "text-rose-500" : index === 6 ? "text-blue-500" : "text-slate-500"}`}>{day}</div>)}
+                      {["일", "월", "화", "수", "목", "금", "토"].map((day, index) => <div key={day} className={`px-2 py-2.5 text-center text-[11px] font-black ${index === 0 ? "bg-rose-50/60 text-rose-500" : index === 6 ? "bg-blue-50/50 text-blue-500" : "text-slate-500"}`}>{day}</div>)}
                     </div>
                     <div className="grid grid-cols-7">
                       {calendarDays.map((date, dayIndex) => {
@@ -857,15 +857,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) requestMoveDate(id, date); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
-                            <button type="button" className={`mb-1 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${isToday ? "bg-blue-600 text-white" : `${dayNumberColor(dayIndex, inMonth)}${inMonth ? " hover:bg-slate-100" : ""}`}`}>{Number(date.slice(8, 10))}</button>
+                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) requestMoveDate(id, date); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 transition sm:min-h-32 2xl:min-h-40 2xl:p-2 ${inMonth ? (dayIndex === 0 ? "bg-rose-50/25" : dayIndex === 6 ? "bg-blue-50/20" : "bg-white") : "bg-slate-50/70"} hover:bg-blue-50/30`}>
+                            <button type="button" className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black tabular-nums transition ${isToday ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]" : `${dayNumberColor(dayIndex, inMonth)}${inMonth ? " hover:bg-slate-100" : ""}`}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
-                              {rows.slice(0, 4).map((ticket) => (
-                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={(event) => { event.stopPropagation(); setDetailId(ticket.id); }} className={`block w-full cursor-grab truncate rounded px-1.5 py-1 text-left text-[11px] font-bold active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                              {rows.slice(0, 5).map((ticket) => (
+                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={(event) => { event.stopPropagation(); setDetailId(ticket.id); }} className={`block w-full cursor-grab truncate rounded-md px-2 py-1 text-left text-[11px] font-bold shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:brightness-95 active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
                                   {ticket.vendor || "새 일정"}
                                 </button>
                               ))}
-                              {rows.length > 4 && <div onClick={(event) => event.stopPropagation()} className="px-1 text-[10px] font-bold text-slate-400">+{rows.length - 4}개 더보기</div>}
+                              {rows.length > 5 && <div onClick={(event) => event.stopPropagation()} className="px-1 pt-0.5 text-[10px] font-black text-slate-400">+{rows.length - 5}개 더</div>}
                             </div>
                           </div>
                         );
@@ -879,11 +879,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           </div>
         </section>
       ) : (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="grid w-full grid-cols-3 rounded-lg bg-slate-100 p-1 sm:w-auto">
+            <div className="grid w-full grid-cols-3 rounded-full bg-slate-100 p-1 sm:w-auto">
               {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded-full px-4 py-2 text-sm font-black ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
               ))}
             </div>
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>

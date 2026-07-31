@@ -13,13 +13,15 @@ type DeptRequest = {
 };
 
 const KINDS = ["카운터확인", "미수체크", "방문요청", "기타"] as const;
+// 유형은 분류일 뿐이라 색을 주지 않는다 — 색은 "지금 급한가"(상태)에만 쓴다.
 const KIND_TONE: Record<string, string> = {
-  카운터확인: "bg-blue-50 text-blue-700", 미수체크: "bg-amber-50 text-amber-700",
-  방문요청: "bg-emerald-50 text-emerald-700", 기타: "bg-slate-100 text-slate-600",
+  카운터확인: "bg-slate-100 text-slate-600", 미수체크: "bg-slate-100 text-slate-600",
+  방문요청: "bg-slate-100 text-slate-600", 기타: "bg-slate-100 text-slate-600",
 };
 const STATUS_TONE: Record<string, string> = {
-  대기: "bg-rose-50 text-rose-600", 처리중: "bg-amber-50 text-amber-700", 완료: "bg-emerald-50 text-emerald-700",
+  대기: "bg-rose-100 text-rose-700", 처리중: "bg-amber-100 text-amber-800", 완료: "bg-slate-100 text-slate-500",
 };
+const STATUS_BAR: Record<string, string> = { 대기: "bg-rose-500", 처리중: "bg-amber-400", 완료: "bg-slate-200" };
 
 type SheetRecord = Record<string, unknown>;
 
@@ -526,7 +528,7 @@ export default function DeptRequests({ author }: { author: string }) {
           <p className="text-xs font-semibold text-slate-500">타부서의 카운터확인·미수체크·방문 요청을 받아 처리합니다. 처리하면 담당자와 시각이 남습니다.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1">
-              {["전체", ...KINDS].map((name) => <button key={name} type="button" onClick={() => setKindFilter(name)} className={`rounded-full px-2.5 py-1.5 text-xs font-black ${kindFilter === name ? "bg-slate-900 text-white" : KIND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+              {["전체", ...KINDS].map((name) => <button key={name} type="button" onClick={() => setKindFilter(name)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${kindFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
             </div>
             <div className="ml-auto flex rounded-full bg-slate-100 p-1">
               {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
@@ -540,21 +542,22 @@ export default function DeptRequests({ author }: { author: string }) {
 
         <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
           {filtered.map((row) => (
-            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.status === "대기" ? "border-rose-200 bg-white" : row.status === "처리중" ? "border-amber-200 bg-amber-50/30" : "border-slate-200 bg-slate-50/50"}`}>
+            <article key={row.id} className={`relative overflow-hidden rounded-xl border border-slate-200 p-4 pl-5 shadow-sm ${row.status === "완료" ? "bg-slate-50/60" : "bg-white"}`}>
+              <span className={`absolute inset-y-0 left-0 w-1 ${STATUS_BAR[row.status] || "bg-slate-200"}`} />
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${KIND_TONE[row.kind] || "bg-slate-100 text-slate-600"}`}>{row.kind}</span>
-                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
-                {row.vendor && <span className="text-sm font-black text-slate-900">{row.vendor}</span>}
-                {row.due_date && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">희망 {row.due_date}</span>}
-                <span className="ml-auto text-[11px] font-bold text-slate-400">{row.requester} · {row.created_at.slice(5, 10)}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${KIND_TONE[row.kind] || "bg-slate-100 text-slate-600"}`}>{row.kind}</span>
+                {row.vendor && <span className="truncate text-sm font-black text-slate-900">{row.vendor}</span>}
+                {row.due_date && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${row.status !== "완료" && row.due_date < new Date().toISOString().slice(0, 10) ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"}`}>희망 {row.due_date.slice(5)}</span>}
+                <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">{row.requester} · {row.created_at.slice(5, 10)}</span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{row.content}</p>
-              {row.status === "완료" && row.handled_by && <div className="mt-1.5 text-[11px] font-bold text-emerald-600">✓ {row.handled_by} 처리 · {String(row.handled_at || "").slice(0, 10)}</div>}
-              <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-                {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">처리 시작</button>}
-                {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">완료</button>}
-                {row.status === "완료" && <button type="button" onClick={() => void setStatus(row, "대기")} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button>}
-                <button type="button" onClick={() => void remove(row)} className="ml-auto text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
+              {row.status === "완료" && row.handled_by && <div className="mt-1.5 text-[11px] font-bold text-slate-500">✓ {row.handled_by} 처리 · {String(row.handled_at || "").slice(0, 10)}</div>}
+              <div className="mt-3 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-600 transition hover:bg-slate-50">처리 시작</button>}
+                {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">완료 처리</button>}
+                {row.status === "완료" && <button type="button" onClick={() => void setStatus(row, "대기")} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50">완료 취소</button>}
+                <button type="button" onClick={() => void remove(row)} className="ml-auto text-[11px] font-black text-slate-300 transition hover:text-rose-500">삭제</button>
               </div>
             </article>
           ))}

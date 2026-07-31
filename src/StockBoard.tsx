@@ -130,13 +130,14 @@ export default function StockBoard({ author }: { author: string }) {
     }
   };
 
-  const qtyTone = (qty: number) => qty === 0 ? "bg-rose-50 text-rose-600" : qty <= 2 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700";
+  // 수량이 이 화면의 유일한 신호 — 색은 여기에만 쓰고 나머지는 무채색으로 둔다
+  const qtyTone = (qty: number) => qty === 0 ? "border-rose-200 bg-rose-50 text-rose-600" : qty <= 2 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-700";
 
   const renderRow = (item: StockItem) => (
-    <div key={item.id} className="flex items-center gap-3 border-t border-slate-100 px-4 py-3 first:border-t-0 2xl:border-t 2xl:first:border-t 2xl:[&:nth-child(-n+2)]:border-t-0 2xl:[&:nth-child(odd)]:border-r">
+    <div key={item.id} className="flex items-center gap-3 border-t border-slate-100 px-4 py-3.5 transition hover:bg-slate-50/70 first:border-t-0 2xl:border-t 2xl:first:border-t 2xl:[&:nth-child(-n+2)]:border-t-0 2xl:[&:nth-child(odd)]:border-r">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-black text-slate-900">{item.name}</span>
+          <span className="text-[14px] font-black text-slate-900">{item.name}</span>
           {item.condition && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${item.condition === "새기기" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-700"}`}>{item.condition}</span>}
         </div>
         {item.note && <div className="mt-0.5 text-xs font-semibold text-slate-500">{item.note}</div>}
@@ -144,7 +145,7 @@ export default function StockBoard({ author }: { author: string }) {
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <button type="button" onClick={() => void changeQty(item, -1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">−</button>
-        <span className={`min-w-12 rounded-lg px-2 py-1.5 text-center text-base font-black ${qtyTone(item.qty)}`}>{item.qty}</span>
+        <span className={`min-w-14 rounded-full border px-3 py-1.5 text-center text-base font-black tabular-nums ${qtyTone(item.qty)}`}>{item.qty}</span>
         <button type="button" onClick={() => void changeQty(item, 1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">＋</button>
         <button type="button" onClick={() => void removeItem(item)} className="ml-1 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
       </div>

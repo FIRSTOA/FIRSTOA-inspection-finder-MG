@@ -1080,37 +1080,49 @@ export default function ServiceReception({ author }: { author: string }) {
                 const leaseState = pick(hit, "임대여부");
                 const ended = leaseState && leaseState !== "임대중";
                 return (
-                  <button key={index} type="button" onClick={() => void selectLease(hit)} className={`block w-full px-3 py-2.5 text-left hover:bg-blue-50/50 ${ended ? "opacity-60" : ""}`}>
-                    <div className="flex items-center gap-1.5 text-sm font-black text-slate-800">
-                      <span className="truncate">{pick(hit, "거래처명", "_업체명")}</span>
-                      <span className="shrink-0 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span>
-                      {ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
-                      {sameVendor > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
-                    </div>
-                    <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "품목", "모델명", "기종")} · {pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
+                  <button key={index} type="button" onClick={() => void selectLease(hit)} className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-blue-50/50 ${ended ? "opacity-60" : ""}`}>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <b className="truncate text-[14px] font-black text-slate-900">{pick(hit, "거래처명", "_업체명")}</b>
+                        {ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
+                        {sameVendor > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
+                      </span>
+                      <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-bold text-slate-500">
+                        <span className="text-slate-400">순 <span className="tabular-nums text-slate-600">{pick(hit, "순")}</span></span>
+                        <span>{pick(hit, "모델명", "기종") || "-"}</span>
+                        <span className="text-slate-400">자산 <span className="font-mono text-slate-600">{pick(hit, "자산번호") || "-"}</span></span>
+                        <span className="text-slate-400">기번 <span className="font-mono text-slate-600">{pick(hit, "시리얼번호(기번)") || "-"}</span></span>
+                        <span>{pick(hit, "담당지역")}</span>
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-slate-300" />
                   </button>
                 );
               })}
             </div>}
-            {lease && <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-base font-black text-slate-950 lg:text-lg">
-                  <span className="truncate">{pick(lease, "거래처명", "_업체명")}</span>
+            {lease && <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate text-base font-black text-slate-950 lg:text-lg">{pick(lease, "거래처명", "_업체명")}</span>
                   {workinName && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
                   {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
-                  {deviceSummary.active > 1 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 자산·기번 확인</span>}
                 </div>
-                <button type="button" onClick={resetForm} className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:border-slate-400 hover:text-slate-700">다시 검색</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {asHistory.length > 0 && <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-600">AS 기기 {asHistory.filter((h) => h.serialMatch).length}회 · 업체 {asHistory.length}회</span>}
+                  <button type="button" onClick={resetForm} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:border-slate-400 hover:text-slate-700">다시 검색</button>
+                </div>
               </div>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {([["순", pick(lease, "순") || "-"], ["모델", pick(lease, "모델명") || "-"], ["자산", pick(lease, "자산번호") || "-"], ["기번", pick(lease, "시리얼번호(기번)") || "-"], ["등급", pick(lease, "등급") || "-"], ["지역", region || "-"], ["종료", pick(lease, "종료일") || "-"], ["미수", `${pick(lease, "미수개월수") || "0"}개월`]] as [string, string][]).map(([label, value]) => (
-                  <span key={label} className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50/70 px-2 py-1 text-[11px] font-bold text-blue-900">
-                    <span className="text-blue-400">{label}</span>{value}
-                  </span>
+              {deviceSummary.active > 1 && <div className="border-b border-slate-100 bg-amber-50/70 px-4 py-2 text-[11px] font-bold text-amber-800">
+                임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 접수할 기기의 자산·기번이 맞는지 확인하세요
+              </div>}
+              {/* 값을 칩으로 흘려놓으면 기번·자산을 눈으로 대조하기 어렵다 — 라벨/값 표로 세운다 */}
+              <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 2xl:grid-cols-8">
+                {([["순", pick(lease, "순") || "-", "num"], ["모델", pick(lease, "모델명") || "-", ""], ["자산번호", pick(lease, "자산번호") || "-", "mono"], ["기번", pick(lease, "시리얼번호(기번)") || "-", "mono"], ["등급", pick(lease, "등급") || "-", ""], ["지역", region || "-", ""], ["종료일", pick(lease, "종료일") || "-", "num"], ["미수", `${pick(lease, "미수개월수") || "0"}개월`, "num"]] as [string, string, string][]).map(([label, value, kind]) => (
+                  <div key={label} className="min-w-0 px-3 py-2.5">
+                    <div className="text-[10px] font-bold text-slate-400">{label}</div>
+                    <div className={`mt-0.5 truncate text-[13px] font-black text-slate-900 ${kind === "mono" ? "font-mono" : kind === "num" ? "tabular-nums" : ""}`} title={value}>{value}</div>
+                  </div>
                 ))}
-                <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold ${asHistory.length ? "border-rose-100 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                  {asHistory.length ? `AS이력 기기 ${asHistory.filter((h) => h.serialMatch).length}회 · 업체 ${asHistory.length}회` : "AS이력 없음"}
-                </span>
               </div>
             </div>}
             </div>
