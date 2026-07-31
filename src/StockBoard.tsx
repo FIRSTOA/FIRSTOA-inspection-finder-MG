@@ -143,9 +143,9 @@ export default function StockBoard({ author }: { author: string }) {
         <div className="mt-0.5 text-[10px] font-bold text-slate-300">{item.updated_by || "-"} · {timeAgo(item.updated_at)}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <button type="button" onClick={() => void changeQty(item, -1)} className="h-8 w-8 rounded-md border border-slate-200 text-base font-black text-slate-500 hover:bg-slate-50">−</button>
+        <button type="button" onClick={() => void changeQty(item, -1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">−</button>
         <span className={`min-w-12 rounded-md px-2 py-1.5 text-center text-base font-black ${qtyTone(item.qty)}`}>{item.qty}</span>
-        <button type="button" onClick={() => void changeQty(item, 1)} className="h-8 w-8 rounded-md border border-slate-200 text-base font-black text-slate-500 hover:bg-slate-50">＋</button>
+        <button type="button" onClick={() => void changeQty(item, 1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">＋</button>
         <button type="button" onClick={() => void removeItem(item)} className="ml-1 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
       </div>
     </div>
@@ -153,15 +153,16 @@ export default function StockBoard({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
+      <div className="flex items-stretch justify-between gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex">
           {(["기기", "부품"] as const).map((value) => (
-            <button key={value} type="button" onClick={() => setKind(value)} className={`rounded-full px-5 py-2 text-sm font-black ${kind === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
-              {value === "기기" ? "🖨 기기" : "🔩 부품"} <span className="text-xs text-slate-400">{totalOf(value)}</span>
+            <button key={value} type="button" onClick={() => setKind(value)}
+              className={`relative px-6 py-3.5 text-sm font-black transition ${kind === value ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
+              {value} <span className={`ml-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${kind === value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"}`}>{totalOf(value)}</span>
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => setAddOpen(true)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 항목 추가</button>
+        <button type="button" onClick={() => setAddOpen(true)} className="my-2 mr-3 shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">+ 항목 추가</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -171,14 +172,14 @@ export default function StockBoard({ author }: { author: string }) {
           [`${summary.soldOut}종`, "품절 (0)", summary.soldOut ? "text-rose-600" : "text-slate-950"],
           [`${summary.low}종`, "부족 (1~2)", summary.low ? "text-amber-600" : "text-slate-950"],
         ] as [string, string, string][]).map(([value, label, tone]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
-            <div className={`text-lg font-black ${tone}`}>{value}</div>
-            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+          <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
+            <div className={`text-xl font-black tabular-nums lg:text-2xl ${tone}`}>{value}</div>
+            <div className="mt-1 text-[11px] font-bold text-slate-400">{label}</div>
           </div>
         ))}
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-semibold text-slate-500">교체 약속 전 기기 재고, 재방문 전 부품 재고를 여기서 바로 확인하세요. 수량은 관리부가 관리하며 마지막 수정자·시각이 함께 남습니다.</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -188,7 +189,7 @@ export default function StockBoard({ author }: { author: string }) {
                 <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
               ))}
             </span>}
-            <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700"}`}>⚠ 부족만</button>
+            <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}>⚠ 부족만</button>
             <span className="flex rounded-full bg-slate-100 p-1">
               {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
                 <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>

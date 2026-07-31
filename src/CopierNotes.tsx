@@ -227,9 +227,10 @@ export default function CopierNotes({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
-        {([["notes", "📒 기록"], ["guide", "📖 가이드"], ["quiz", "🎓 복합기 퀴즈"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setView(key)} className={`rounded-full px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+      <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        {([["notes", "기록"], ["guide", "가이드"], ["quiz", "복합기 퀴즈"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setView(key)}
+            className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
         ))}
       </div>
       {view === "guide" && (() => {

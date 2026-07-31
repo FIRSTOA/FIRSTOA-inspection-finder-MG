@@ -613,41 +613,38 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
 
   return (
     <div className="space-y-5 pb-16">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-bold uppercase tracking-wide text-blue-600">분기 회고를 빠르게 준비하는 기록함</div>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 lg:text-3xl">성장기록 허브</h2>
-        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
-          주간현황판 기록을 모아보고, 공식 분기목표 양식의 계획표·결과표·미션결과표·골든미팅카드를 관리합니다.
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1 md:grid-cols-5">
-          {([["records", "성장기록 모아보기"], ["plan", "계획표"], ["result", "분기결과표"], ["mission", "미션결과표"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`rounded-full px-2 py-2 text-xs font-bold transition sm:px-5 sm:text-sm ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>
-          ))}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {/* 다크 헤더 — 설명 + 조회 조건(연도/분기/직원)을 한 줄에 모은다 */}
+        <div className="flex flex-col gap-3 bg-[#171C26] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+          <p className="text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
+          <div className="flex flex-wrap gap-2">
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400">
+              {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => <option key={y} className="text-slate-900">{y}</option>)}
+            </select>
+            {tab !== "records" && (
+              <div className="flex gap-1 rounded-full bg-white/10 p-1">
+                {[1, 2, 3, 4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-3 py-1 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{q}Q</button>)}
+              </div>
+            )}
+            <select value={person} onChange={(e) => setPerson(e.target.value)} className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400">
+              <option value="" className="text-slate-900">전체 직원</option>
+              {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name} className="text-slate-900">{name}</option>)}</optgroup>)}
+            </select>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">
-            {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => <option key={y}>{y}</option>)}
-          </select>
-          {tab !== "records" && (
-            <div className="flex gap-1 rounded-full bg-slate-100 p-1">
-              {[1, 2, 3, 4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{q}Q</button>)}
-            </div>
-          )}
-          <select value={person} onChange={(e) => setPerson(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700">
-            <option value="">전체 직원</option>
-            {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
-          </select>
+        <div className="flex overflow-x-auto border-b border-slate-200">
+          {([["records", "성장기록 모아보기"], ["plan", "계획표"], ["result", "분기결과표"], ["mission", "미션결과표"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`relative shrink-0 whitespace-nowrap px-4 py-3 text-[13px] font-black transition sm:px-5 sm:text-sm ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
+          ))}
         </div>
       </section>
 
       {tab === "records" && (
-        <section className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <section className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <span className="mr-2 text-xs font-bold text-slate-500">조회 범위</span>
           {([["month", "월별"], ["quarter", "분기"]] as [RecordPeriod, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => setRecordPeriod(key)} className={`rounded px-3 py-2 text-xs font-bold transition ${recordPeriod === key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{label}</button>
+            <button key={key} onClick={() => setRecordPeriod(key)} className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${recordPeriod === key ? "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)]" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{label}</button>
           ))}
           {recordPeriod === "month" ? (
             <select value={recordMonth} onChange={(e) => setRecordMonth(Number(e.target.value))} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
@@ -897,7 +894,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       )}
 
       {!loading && tab === "result" && (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 결과표</h3>
@@ -955,7 +952,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       )}
 
       {!loading && tab === "mission" && (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 미션결과표</h3>
@@ -1003,7 +1000,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       )}
 
       {!loading && tab === "golden" && (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>

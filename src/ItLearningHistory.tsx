@@ -207,14 +207,16 @@ export default function ItLearningHistory({ author }: { author: string }) {
   return <div className="space-y-4">
     {notice && <div className={`fixed right-4 top-20 z-[5000] max-w-sm rounded-md px-4 py-3 text-sm font-bold text-white shadow-xl ${notice.kind === "success" ? "bg-emerald-600" : "bg-rose-600"}`}>{notice.text}</div>}
 
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex w-fit gap-1 overflow-x-auto rounded-full bg-slate-100 p-1">
-        <button type="button" onClick={() => setDisplayMode("original")} className={`flex min-w-max items-center gap-1.5 rounded px-4 py-2 text-sm font-black ${displayMode === "original" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>🖥 원본 화면</button>
+    <div className="flex items-stretch gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex min-w-0 flex-1 overflow-x-auto">
+        <button type="button" onClick={() => setDisplayMode("original")}
+          className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${displayMode === "original" ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>원본 화면</button>
         {VIEWS.map(({ key, label, icon: Icon }) => (
-          <button key={key} type="button" onClick={() => { setDisplayMode("integrated"); switchView(key); }} className={`flex min-w-max items-center gap-1.5 rounded px-3 py-2 text-sm font-black ${displayMode === "integrated" && view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}><Icon size={15} />{label}</button>
+          <button key={key} type="button" onClick={() => { setDisplayMode("integrated"); switchView(key); }}
+            className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3.5 text-sm font-black transition ${displayMode === "integrated" && view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}><Icon size={15} />{label}</button>
         ))}
       </div>
-      <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-black ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}><Settings2 size={15} />{connected ? "DB 연결됨" : "DB 연결 필요"}</button>
+      <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`my-2 mr-3 flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black transition ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}><Settings2 size={15} />{connected ? "DB 연결됨" : "DB 연결 필요"}</button>
     </div>
     {connectionOpen && <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row"><input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="Apps Script 웹 앱 /exec 주소" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => void saveEndpoint()} className="h-10 rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 text-sm font-black text-white">연결 확인</button></div><p className="mx-auto mt-2 max-w-3xl text-[11px] font-semibold text-slate-400">기존 PC DB Apps Script에 API 어댑터를 적용한 뒤 배포 주소를 한 번만 입력합니다.</p></section>}
 

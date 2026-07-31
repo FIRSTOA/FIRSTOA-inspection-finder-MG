@@ -622,9 +622,10 @@ export default function SelfDevHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>("home");
   return (
     <div className="space-y-4">
-      <div className="flex w-fit flex-wrap gap-1 rounded-full bg-slate-100 p-1">
-        {([["home", "🏠 홈"], ["reading", "📚 독서"], ["tips", "💡 배움·팁"], ["goals", "🎯 목표"], ["praise", "💖 칭찬"]] as [Tab, string][]).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={`rounded-full px-3.5 py-2 text-sm font-black ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+      <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        {([["home", "홈"], ["reading", "독서"], ["tips", "배움·팁"], ["goals", "목표"], ["praise", "칭찬"]] as [Tab, string][]).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setTab(key)}
+            className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
         ))}
       </div>
       {tab === "home" && <DevDashboard author={author} onGo={setTab} />}

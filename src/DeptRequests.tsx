@@ -276,8 +276,8 @@ function MisuBoard() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
       </div>
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
           <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
@@ -399,8 +399,8 @@ function OverageBoard() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
       </div>
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
           <span>업체명 · 접수내용</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
@@ -504,22 +504,24 @@ export default function DeptRequests({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
-          <button type="button" onClick={() => setTab("requests")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "requests" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
-            📥 요청 목록 {waiting > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black text-white">{waiting}</span>}
-          </button>
-          <button type="button" onClick={() => setTab("misu")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "misu" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>💰 미수 현황</button>
-          <button type="button" onClick={() => setTab("overage")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "overage" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>📈 초과료 현황</button>
+      <div className="flex items-stretch justify-between gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex overflow-x-auto">
+          {([["requests", "요청 목록"], ["misu", "미수 현황"], ["overage", "초과료 현황"]] as const).map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setTab(key)}
+              className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
+              {label}
+              {key === "requests" && waiting > 0 && <span className="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] tabular-nums text-white">{waiting}</span>}
+            </button>
+          ))}
         </div>
-        {tab === "requests" && <button type="button" onClick={() => setFormOpen(true)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 요청 등록</button>}
+        {tab === "requests" && <button type="button" onClick={() => setFormOpen(true)} className="my-2 mr-3 shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">+ 요청 등록</button>}
       </div>
 
       {tab === "misu" && <MisuBoard />}
       {tab === "overage" && <OverageBoard />}
 
       {tab === "requests" && <>
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-slate-500">타부서의 카운터확인·미수체크·방문 요청을 받아 처리합니다. 처리하면 담당자와 시각이 남습니다.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1">
@@ -531,8 +533,8 @@ export default function DeptRequests({ author }: { author: string }) {
           </div>
         </section>
 
-        {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-        {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+        {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+        {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
         {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 요청이 없어요." : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
 
         <div className="space-y-2">
