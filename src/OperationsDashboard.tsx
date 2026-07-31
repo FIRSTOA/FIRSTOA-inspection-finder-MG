@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import PortalSelect from "./PortalSelect";
 import {
   ACTIVITY_LABELS,
   OPERATIONS_TEAMS,
@@ -316,14 +317,10 @@ export default function OperationsDashboard({ author }: Props) {
               <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded-full px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
             ))}
           </div>
-          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
-            <option value="전체">전체 팀원</option>
-            {memberOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
-            <option value="all">전체 업무</option>
-            {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-          </select>
+          <PortalSelect width={160} value={member} onChange={setMember}
+            options={[{ value: "전체", label: "전체 팀원" }, ...memberOptions.map((name) => ({ value: name, label: name }))]} />
+          <PortalSelect width={180} value={category} onChange={(next) => setCategory(next as FilterKey)}
+            options={[{ value: "all", label: "전체 업무" }, ...FILTER_OPTIONS.map((option) => ({ value: option.key, label: option.label }))]} />
         </div>
       </section>
 

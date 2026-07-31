@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import PortalSelect from "./PortalSelect";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import {
   GOLDEN_CATEGORIES,
@@ -51,86 +50,6 @@ function parseClipboardGrid(text: string): string[][] {
 const EDIT_COLORS: Array<[string, string]> = [["#0f172a", "기본"], ["#dc2626", "빨강"], ["#2563eb", "파랑"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
 
 // 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
-// 직원 선택 — 네이티브 select는 OS 기본 목록이라 팀 구분이 안 보이고 투박하다.
-// 목록은 body에 fixed로 띄운다: 카드에 overflow-hidden이 걸려 있으면 카드 경계에서 잘린다.
-function PersonPicker({ value, onChange, book }: { value: string; onChange: (next: string) => void; book: Record<string, string[]> }) {
-  const [spot, setSpot] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const WIDTH = 240;
-
-  const place = () => {
-    const box = triggerRef.current?.getBoundingClientRect();
-    if (!box) return;
-    const below = window.innerHeight - box.bottom - 16;
-    const above = box.top - 16;
-    const openUp = below < 260 && above > below;   // 아래 공간이 부족하면 위로 펼친다
-    const maxHeight = Math.min(420, Math.max(180, openUp ? above : below));
-    setSpot({
-      top: openUp ? box.top - 8 - maxHeight : box.bottom + 8,
-      left: Math.min(Math.max(8, box.right - WIDTH), window.innerWidth - WIDTH - 8),
-      maxHeight,
-    });
-  };
-
-  useEffect(() => {
-    if (!spot) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setSpot(null);
-    };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSpot(null); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [spot]);
-
-  const teamOf = AUTHOR_TEAMS.find((team) => book[team]?.includes(value));
-  const pick = (next: string) => { onChange(next); setSpot(null); };
-
-  return (
-    <>
-      <button ref={triggerRef} type="button" onClick={() => (spot ? setSpot(null) : place())} aria-expanded={!!spot}
-        className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 py-1.5 pl-2 pr-2.5 text-sm font-bold text-white transition hover:bg-white/20">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-[10px] font-black">{value ? value.slice(0, 1) : "전"}</span>
-        <span>{value || "전체 직원"}</span>
-        {teamOf && <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">{teamOf}팀</span>}
-        <ChevronDown size={14} className={`text-slate-400 transition ${spot ? "rotate-180" : ""}`} />
-      </button>
-      {spot && createPortal(
-        <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, width: WIDTH, maxHeight: spot.maxHeight }}
-          className="z-[4000] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
-          <button type="button" onClick={() => pick("")}
-            className={`flex shrink-0 items-center justify-between px-4 py-2.5 text-left text-sm ${value ? "font-bold text-slate-700 hover:bg-slate-50" : "bg-blue-50 font-black text-blue-700"}`}>
-            전체 직원 {!value && <Check size={15} />}
-          </button>
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-slate-100">
-            {AUTHOR_TEAMS.map((team) => (
-              <div key={team}>
-                <div className="sticky top-0 z-10 bg-slate-50/95 px-4 py-1.5 text-[10px] font-black tracking-wide text-slate-400 backdrop-blur">{team}팀</div>
-                {(book[team] || []).map((name) => (
-                  <button key={name} type="button" onClick={() => pick(name)}
-                    className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${value === name ? "bg-blue-50 font-black text-blue-700" : "font-bold text-slate-700 hover:bg-slate-50"}`}>
-                    {name} {value === name && <Check size={15} />}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>,
-        document.body,
-      )}
-    </>
-  );
-}
-
 function RichGoalEditor({ initialHtml, onChange, className, minHeight = 96 }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string; minHeight?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   // 최초 1회만 내용 주입 — 매 렌더마다 innerHTML을 다시 쓰면 타이핑할 때 커서가 처음으로 튄다
@@ -700,15 +619,16 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
           <div className="flex flex-wrap gap-2">
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400">
-              {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => <option key={y} className="text-slate-900">{y}</option>)}
-            </select>
+            <PortalSelect tone="dark" width={140} value={String(year)} onChange={(next) => setYear(Number(next))}
+              options={Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />
             {tab !== "records" && (
               <div className="flex gap-1 rounded-full bg-white/10 p-1">
                 {[1, 2, 3, 4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-3 py-1 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{q}Q</button>)}
               </div>
             )}
-            <PersonPicker value={person} onChange={setPerson} book={book} />
+            <PortalSelect tone="dark" width={200} value={person} onChange={setPerson} placeholder="전체 직원"
+              hint={AUTHOR_TEAMS.find((team) => book[team]?.includes(person)) ? `${AUTHOR_TEAMS.find((team) => book[team]?.includes(person))}팀` : undefined}
+              options={[{ value: "", label: "전체 직원" }, ...AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })))]} />
           </div>
         </div>
         <div className="flex overflow-x-auto border-b border-slate-200">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { selectAllRows, selectRows, updateRows } from "./supabase";
+import { deleteRows, selectAllRows, selectRows, updateRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 
 type ContactChangeRow = {
@@ -34,6 +34,20 @@ export default function ContactChangeHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [applyBusyId, setApplyBusyId] = useState("");
+  const [deleteBusyId, setDeleteBusyId] = useState("");
+
+  const removeRow = async (row: ContactChangeRow) => {
+    if (!window.confirm(`이 변경이력을 삭제할까요?\n\n${row.company || "업체명 미기재"} · ${dateLabel(row.change_date || row.created_at)}`)) return;
+    setDeleteBusyId(row.id);
+    try {
+      await deleteRows("contact_changes", `id=eq.${row.id}`);
+      setRows((current) => current.filter((item) => item.id !== row.id));
+    } catch (e) {
+      setError((e as Error).message || "삭제하지 못했습니다.");
+    } finally {
+      setDeleteBusyId("");
+    }
+  };
 
   // 변경 후 정보를 워킨맵(앱이 원본인 DB)에 반영한다.
   // 임대리스트(vendor_info)는 구글시트가 원본이라 여기서 바꾸면 다음 동기화 때 덮이므로 반영하지 않는다.
@@ -124,9 +138,10 @@ ${names}${matches.length > 5 ? `
               {row.notes && <div className="md:col-span-2"><div className="text-[11px] font-black text-slate-400">특이사항</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-700">{row.notes}</div></div>}
               <div className="flex flex-wrap items-center gap-2 md:col-span-2">
                 <span className="rounded bg-white px-2 py-1 text-xs font-bold text-slate-600">등급 {row.grade || "-"}</span>
-                {row.photo_link && <a href={row.photo_link} target="_blank" rel="noreferrer" className="rounded border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-700">첨부 사진 보기</a>}
-                <button type="button" disabled={applyBusyId === row.id} onClick={() => void applyToWorkinMap(row)} className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵 반영"}</button>
+                {row.photo_link && <a href={row.photo_link} target="_blank" rel="noreferrer" className="rounded-full border border-blue-200 bg-white px-3.5 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-50">첨부 사진 보기</a>}
+                <button type="button" disabled={applyBusyId === row.id} onClick={() => void applyToWorkinMap(row)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵 반영"}</button>
                 <span className="text-[10px] font-semibold text-slate-400">임대리스트는 시트가 원본이라 시트에서 수정해야 합니다</span>
+                <button type="button" disabled={deleteBusyId === row.id} onClick={() => void removeRow(row)} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40">{deleteBusyId === row.id ? "삭제 중…" : "이력 삭제"}</button>
               </div>
             </div>
           </details>)}

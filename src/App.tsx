@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEve
 import {
   Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText,
   Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
-  TrendingUp, PhoneCall, Megaphone, MessageSquare, LayoutDashboard, PanelLeftClose, PanelLeftOpen,
+  TrendingUp, PhoneCall, Megaphone, MessageSquare, LayoutDashboard, PanelLeftClose, PanelLeftOpen, UserRound,
 } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
@@ -15,6 +15,7 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
+import MemberAdmin from "./MemberAdmin";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
@@ -4585,7 +4586,7 @@ export default function App() {
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
-  const [opsTab, setOpsTab] = useState<"status" | "changes">("status"); // 업무현황 탭(현황판/변경이력)
+  const [opsTab, setOpsTab] = useState<"status" | "members" | "changes">("status"); // 관리 화면 하위 탭
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5386,13 +5387,18 @@ export default function App() {
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
-  const bottomItems = [["operations", "업무관리"]] as [typeof screen, string][];
+  const bottomItems = [["operations", "관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   const detectedDraftMode = draftInput.trim() ? detectUnifiedInputMode(draftInput) : null;
+  const { book: authorBook } = useAuthorBook();
   const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
+  const authorTeamLabel = (() => {
+    const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
+    return team ? (team === "팀장" ? "팀장" : `${team}팀`) : "CS팀";
+  })();
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -5451,8 +5457,9 @@ export default function App() {
               </div>
             </nav>
             <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-700 text-[11px] font-black text-white">{author?.slice(0, 1) || "?"}</span>
+              <UserRound size={16} className="text-slate-400" />
               <span className="text-[12px] font-bold text-slate-200">{author || "작성자 미선택"}</span>
+              <span className="text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
             </div>
           </div>
           <div className="flex-1 bg-black/30" />
@@ -5544,11 +5551,11 @@ export default function App() {
               </button>
             );
           })}
-          <div className={`flex items-center gap-2.5 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={author || "작성자 미선택"}>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 text-[11px] font-black text-white">{author?.slice(0, 1) || "?"}</span>
+          <div className={`flex items-center gap-2 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={author || "작성자 미선택"}>
+            <UserRound size={16} className="shrink-0 text-slate-400" />
             {!sidebarCollapsed && <span className="min-w-0">
               <span className="block truncate text-[12px] font-bold leading-tight text-slate-200">{author || "작성자 미선택"}</span>
-              <span className="block text-[10px] font-semibold text-slate-500">CS팀</span>
+              <span className="block text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
             </span>}
           </div>
         </div>
@@ -5602,13 +5609,15 @@ export default function App() {
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && (
-          <div className="space-y-2">
-            <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
-              {([["status", "현황판"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded-full px-3 py-1.5 text-xs font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+          <div className="space-y-4">
+            {/* 웹앱 운영에 필요한 것들을 한 화면에 모은다 — 업무 집계 / 인원 / 변경이력 */}
+            <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              {([["status", "업무 현황판"], ["members", "인원 관리"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setOpsTab(key)}
+                  className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${opsTab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
               ))}
             </div>
-            {opsTab === "status" ? <OperationsDashboard author={author} /> : <ContactChangeHistory />}
+            {opsTab === "status" ? <OperationsDashboard author={author} /> : opsTab === "members" ? <MemberAdmin /> : <ContactChangeHistory />}
           </div>
         )}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
