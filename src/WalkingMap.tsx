@@ -7,6 +7,7 @@ import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } f
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
+import { notify } from "./toast";
 
 type MapLabel = {
   code: string;
@@ -913,7 +914,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       return;
     }
     if (!navigator.geolocation) {
-      window.alert("이 기기에서는 현재 위치를 사용할 수 없습니다.");
+      notify("이 기기에서는 현재 위치를 사용할 수 없습니다.", "error");
       return;
     }
     setLocationTracking(true);
@@ -933,7 +934,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         const message = error.code === error.PERMISSION_DENIED
           ? "현재 위치 권한을 허용해 주세요."
           : "현재 위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-        window.alert(message);
+        notify(message, "info");
       },
       { enableHighAccuracy: false, maximumAge: 15_000, timeout: 12_000 },
     );
@@ -1509,7 +1510,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const handleExcelImport = async (file: File) => {
     try {
       if (!file.name.toLowerCase().endsWith(".xlsx")) {
-        window.alert(".xlsx 형식만 불러올 수 있습니다.");
+        notify(".xlsx 형식만 불러올 수 있습니다.", "info");
         return;
       }
       const ExcelJS = (await import("exceljs/dist/exceljs.min.js")).default;
@@ -1517,7 +1518,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       await workbook.xlsx.load(await file.arrayBuffer());
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
-        window.alert("엑셀 시트를 찾을 수 없습니다.");
+        notify("엑셀 시트를 찾을 수 없습니다.", "error");
         return;
       }
       const headers = worksheet.getRow(1).values as Array<unknown>;
@@ -1530,7 +1531,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       const importedHeaders = [...excelBaseHeaders, ...memoHeaders(importedMemoCount)];
       const required = ["번호", "라벨", "지도에서", "이름", "위도", "경도"];
       if (required.some((header) => !headerIndexes.has(header))) {
-        window.alert("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.");
+        notify("워킨맵 엑셀 형식이 아닙니다. 번호·라벨·지도에서·이름·위도·경도 헤더를 확인해 주세요.", "error");
         return;
       }
       const rows: Record<string, string | number>[] = [];
@@ -1570,7 +1571,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     } catch (error) {
       console.error(error);
       const detail = error instanceof Error ? error.message : String(error);
-      window.alert(`엑셀 파일을 읽지 못했습니다.\n${detail}`);
+      notify(`엑셀 파일을 읽지 못했습니다.\n${detail}`, "error");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -1604,7 +1605,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       setPlaces((current) => importMode === "replace"
         ? [...current.filter((place) => !(place.team === importTeam && place.quarter === importQuarter && place.kind === importKind)), ...imported]
         : [...current, ...imported]);
-      window.alert("공용 DB에 연결되지 않아 이 기기에만 저장됐습니다. Supabase의 workin_map_places SQL과 네트워크 연결을 확인해 주세요.");
+      notify("공용 DB에 연결되지 않아 이 기기에만 저장됐습니다. Supabase의 workin_map_places SQL과 네트워크 연결을 확인해 주세요.", "info");
     }
     setTeamFilter(importTeam);
     setQuarterFilter(importQuarter);
@@ -2121,9 +2122,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <button type="button" onClick={() => setPendingImport([])} className="h-9 w-9 rounded-lg text-xl font-black text-slate-400">×</button>
             </div>
             <div className="mt-5 grid grid-cols-3 gap-2">
-              <label className="text-xs font-black text-slate-500">팀<select value={importTeam} onChange={(event) => setImportTeam(event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
-              <label className="text-xs font-black text-slate-500">분기<select value={importQuarter} onChange={(event) => setImportQuarter(Number(event.target.value) as Quarter)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
-              <label className="text-xs font-black text-slate-500">업무<select value={importKind} onChange={(event) => setImportKind(event.target.value as WorkKind)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">팀<select value={importTeam} onChange={(event) => setImportTeam(event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">분기<select value={importQuarter} onChange={(event) => setImportQuarter(Number(event.target.value) as Quarter)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">업무<select value={importKind} onChange={(event) => setImportKind(event.target.value as WorkKind)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
               <button type="button" onClick={() => setImportMode("replace")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${importMode === "replace" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>같은 목록 교체</button>
@@ -2168,9 +2169,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   })}
                 </div>
               </div>
-              <label className="text-xs font-black text-slate-500">담당 팀<select value={draft.team || "C"} onChange={(event) => setDraft({ ...draft, team: event.target.value as Team })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
-              <label className="text-xs font-black text-slate-500">분기<select value={draft.quarter || 3} onChange={(event) => setDraft({ ...draft, quarter: Number(event.target.value) as Quarter })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
-              <label className="text-xs font-black text-slate-500 lg:col-span-2">업무<select value={draft.kind || "quarter"} onChange={(event) => setDraft({ ...draft, kind: event.target.value as WorkKind })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">담당 팀<select value={draft.team || "C"} onChange={(event) => setDraft({ ...draft, team: event.target.value as Team })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500">분기<select value={draft.quarter || 3} onChange={(event) => setDraft({ ...draft, quarter: Number(event.target.value) as Quarter })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{quarters.map((item) => <option key={item} value={item}>{item}분기</option>)}</select></label>
+              <label className="text-xs font-black text-slate-500 lg:col-span-2">업무<select value={draft.kind || "quarter"} onChange={(event) => setDraft({ ...draft, kind: event.target.value as WorkKind })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label className="flex items-center gap-2 text-sm font-black text-slate-600 lg:col-span-2"><input type="checkbox" checked={draft.visible} onChange={(event) => setDraft({ ...draft, visible: event.target.checked })} className="h-4 w-4 accent-blue-600" />지도에서 표시</label>
               <label className="text-xs font-black text-slate-500 lg:col-span-2">이름<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label>
               <label className="text-xs font-black text-slate-500 lg:col-span-2">코멘트<input value={draft.comment} onChange={(event) => setDraft({ ...draft, comment: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label>

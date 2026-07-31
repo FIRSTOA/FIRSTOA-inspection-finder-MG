@@ -16,6 +16,7 @@ import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
 import MemberAdmin from "./MemberAdmin";
+import { ToastHost } from "./toast";
 import SystemAdmin from "./SystemAdmin";
 import ContentAdmin from "./ContentAdmin";
 import DataLookup from "./DataLookup";
@@ -5406,6 +5407,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
+      <ToastHost />
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
@@ -5680,7 +5682,7 @@ export default function App() {
                 ))}
               </div>
               <div className="mt-2 flex gap-2">
-                <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold" />
+                <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
               </div>
             </div>

@@ -122,7 +122,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
         <label className="block">
           <span className="text-xs font-medium text-slate-500">키맨 선택 (여러 명)</span>
           <select onChange={(e) => { if (e.target.value !== "manual" && e.target.value !== "") set(keymanKey, e.target.value); }}
-            className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none">
+            className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
             <option value="">선택…</option>
             {keymen.map((k, i) => <option key={i} value={k.phone ? `${k.name} ${k.phone}`.trim() : (k.name || k.label)}>{k.label}</option>)}
             <option value="manual">직접입력 (담당자 칸에 직접)</option>

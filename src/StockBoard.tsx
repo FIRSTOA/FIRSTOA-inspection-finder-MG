@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { ALL_MODEL_NAMES, CATALOG_BRANDS, brandOfModel } from "./modelCatalog";
+import { notify } from "./toast";
 
 type StockItem = {
   id: string; created_at: string; updated_at: string; updated_by: string;
@@ -96,7 +97,7 @@ export default function StockBoard({ author }: { author: string }) {
     try {
       await updateRows("stock_items", `id=eq.${item.id}`, { qty, updated_by: author || "미지정" });
     } catch (e) {
-      window.alert(`수량 변경 실패: ${(e as Error).message}`);
+      notify(`수량 변경 실패: ${(e as Error).message}`, "error");
       void load();
     }
   };
@@ -107,7 +108,7 @@ export default function StockBoard({ author }: { author: string }) {
       await deleteRows("stock_items", `id=eq.${item.id}`);
       setItems((current) => current.filter((i) => i.id !== item.id));
     } catch (e) {
-      window.alert(`삭제 실패: ${(e as Error).message}`);
+      notify(`삭제 실패: ${(e as Error).message}`, "error");
     }
   };
 
@@ -124,7 +125,7 @@ export default function StockBoard({ author }: { author: string }) {
       setAddOpen(false);
       await load();
     } catch (e) {
-      window.alert(`추가 실패: ${(e as Error).message}`);
+      notify(`추가 실패: ${(e as Error).message}`, "error");
     } finally {
       setBusy(false);
     }
@@ -230,12 +231,12 @@ export default function StockBoard({ author }: { author: string }) {
             <div className="mt-4 space-y-3">
               {kind === "기기" && <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                     <option>새기기</option><option>리퍼</option>
                   </select>
                 </label>

@@ -306,7 +306,7 @@ function PraiseBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람 이름이 함께 표시됩니다</span></div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
-              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                 <option value="">받는 사람</option>
                 {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
               </select>
@@ -318,11 +318,11 @@ function PraiseBoard({ author }: { author: string }) {
           </section>
 
           <div className="flex flex-wrap items-center gap-2">
-            <select value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+            <select value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               <option value="전체">받은 사람: 전체</option>
               {people.map((name) => <option key={name} value={name}>받은 사람: {name}</option>)}
             </select>
-            <select value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+            <select value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               <option value="전체">보낸 사람: 전체</option>
               {people.map((name) => <option key={name} value={name}>보낸 사람: {name}</option>)}
             </select>
@@ -486,7 +486,7 @@ function GoalsBoard({ author }: { author: string }) {
       return (
         <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
           <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
+            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
             </select>
             <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -559,7 +559,7 @@ function GoalsBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">새 목표 추가</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                 {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
               </select>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="목표 (예: 정보처리기사 필기 합격, 매주 책 1권)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />

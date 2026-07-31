@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { countRows, deleteRows, insertRow, selectRows } from "./supabase";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
+import { notify } from "./toast";
 
 type CopierNote = {
   id: string; created_at: string; author: string; brand: string; model: string;
@@ -140,7 +141,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const startQuiz = () => {
     const pool = quizBrand === "전체" ? notes : notes.filter((note) => note.brand === quizBrand);
     const built = buildQuiz(pool, quizCount);
-    if (!built.length) { window.alert("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요."); return; }
+    if (!built.length) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
     setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
   };
   // 오답만 다시: 틀린 문제의 원본 노트로 새 퀴즈 구성
@@ -258,7 +259,7 @@ export default function CopierNotes({ author }: { author: string }) {
                 {categories.map((name) => (
                   <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
                 ))}
-                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold" />
+                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
               </div>
               {topParts.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -489,12 +490,12 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                     <option>학습</option><option>처리이력</option>
                   </select>
                 </label>

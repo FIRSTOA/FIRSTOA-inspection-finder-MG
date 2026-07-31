@@ -3,6 +3,7 @@ import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { notify } from "./toast";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -612,13 +613,13 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) { window.alert(`네이버 캘린더 등록 실패: ${result.error || response.status}${result.detail ? `\n${result.detail}` : ""}`); return; }
+      if (!response.ok) { notify(`네이버 캘린더 등록 실패: ${result.error || response.status}${result.detail ? `\n${result.detail}` : ""}`, "error"); return; }
       const pushedAt = new Date().toISOString();
       setTicketsState((current) => current.map((item) => (item.id === ticket.id ? { ...item, naverPushedAt: pushedAt } : item)));
       void upsertRow("as_tickets", { id: ticket.id, naverPushedAt: pushedAt }, "id").catch(() => {});
-      window.alert("네이버 캘린더에 등록했습니다.");
+      notify("네이버 캘린더에 등록했습니다.", "success");
     } catch (e) {
-      window.alert(`네이버 캘린더 등록 실패: ${(e as Error).message}`);
+      notify(`네이버 캘린더 등록 실패: ${(e as Error).message}`, "error");
     } finally {
       setNaverBusyId("");
     }
@@ -905,7 +906,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                   {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
                 </div>
-                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold">
+                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                   <option value="">미배정</option>
                   {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                 </select>
@@ -947,7 +948,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
                     <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
-                      <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold">
+                      <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
                         <option value="">미배정</option>
                         {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                       </select>
@@ -1144,19 +1145,19 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
         <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
           <label className="text-xs font-bold text-slate-500">
             팀
-            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               {teams.map((item) => <option key={item} value={item}>{item}팀</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             캘린더
-            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               {(["AS", "물류", "휴가", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             담당자
-            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
               <option value="">미배정</option>
               {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
             </select>
@@ -1177,15 +1178,15 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             키맨 정보 <span className="font-semibold text-slate-400">(FIELD 양식의 키맨/접수자 아랫줄에 그대로 들어감)</span>
-            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal" />
+            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             접수내용
-            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal" />
+            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             내용 <span className="font-semibold text-slate-400">— 처리 결과·점검/AS 양식 (완료 처리 시 자동으로 쌓임, 직접 붙여넣기도 가능)</span>
-            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5" />
+            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">

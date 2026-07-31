@@ -191,7 +191,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
         <label className="block">
           <span className="text-xs font-medium text-slate-500">키맨 선택 → 담당자/연락처 채움</span>
           <select onChange={(e) => pickKeyman(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none">
+            className="mt-0.5 w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
             <option value="">선택…</option>
             {keymen.map((k, i) => <option key={i} value={i}>{k.label}</option>)}
             <option value="manual">직접입력 (아래 칸에 직접)</option>

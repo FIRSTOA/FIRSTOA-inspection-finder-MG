@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectAllRows, selectRows, updateRows } from "./supabase";
+import { notify } from "./toast";
 
 type DeptRequest = {
   id: string; created_at: string; requester: string; kind: string; vendor: string;
@@ -476,7 +477,7 @@ export default function DeptRequests({ author }: { author: string }) {
       setFormOpen(false);
       await load();
     } catch (e) {
-      window.alert(`등록 실패: ${(e as Error).message}`);
+      notify(`등록 실패: ${(e as Error).message}`, "error");
     } finally {
       setBusy(false);
     }
@@ -490,7 +491,7 @@ export default function DeptRequests({ author }: { author: string }) {
     try {
       await updateRows("dept_requests", `id=eq.${row.id}`, patch);
     } catch (e) {
-      window.alert(`상태 변경 실패: ${(e as Error).message}`);
+      notify(`상태 변경 실패: ${(e as Error).message}`, "error");
       void load();
     }
   };
@@ -501,7 +502,7 @@ export default function DeptRequests({ author }: { author: string }) {
       await deleteRows("dept_requests", `id=eq.${row.id}`);
       setRows((current) => current.filter((r) => r.id !== row.id));
     } catch (e) {
-      window.alert(`삭제 실패: ${(e as Error).message}`);
+      notify(`삭제 실패: ${(e as Error).message}`, "error");
     }
   };
 

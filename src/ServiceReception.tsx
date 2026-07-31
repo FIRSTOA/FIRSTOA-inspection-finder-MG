@@ -12,6 +12,7 @@ import { prepareImageForUpload } from "./imageUpload";
 import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
+import { notify } from "./toast";
 
 type ReceiveRoute = "카카오" | "전화";
 type ReceiveType = "원격이관" | "복합기 AS" | "IT";
@@ -272,7 +273,7 @@ export default function ServiceReception({ author }: { author: string }) {
       }
       setPhotos((prev) => [...prev, ...uploaded]);
     } catch (e) {
-      window.alert(`사진 업로드 실패: ${(e as Error).message}`);
+      notify(`사진 업로드 실패: ${(e as Error).message}`, "error");
     } finally {
       setPhotoBusy(false);
     }
@@ -358,7 +359,7 @@ export default function ServiceReception({ author }: { author: string }) {
         void loadRemoteQueue();
       }
     } catch (e) {
-      window.alert(`처리 저장 실패: ${(e as Error).message}`);
+      notify(`처리 저장 실패: ${(e as Error).message}`, "error");
     } finally {
       if (!silent) setHandlingBusyId("");
     }
@@ -376,7 +377,7 @@ export default function ServiceReception({ author }: { author: string }) {
       await loadList(listDate, listPeriod);
       void loadRemoteQueue();
     } catch (e) {
-      window.alert(`구분 변경 실패: ${(e as Error).message}`);
+      notify(`구분 변경 실패: ${(e as Error).message}`, "error");
     } finally {
       setTypeBusyId("");
     }
@@ -555,7 +556,7 @@ export default function ServiceReception({ author }: { author: string }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      window.alert("복사 실패 — 양식을 직접 선택해 복사하세요.");
+      notify("복사 실패 — 양식을 직접 선택해 복사하세요.", "error");
     }
   };
 
@@ -747,9 +748,9 @@ export default function ServiceReception({ author }: { author: string }) {
     setScheduleBusyId(row.id);
     try {
       const created = await createTicketFromReception(row, true);
-      if (created) window.alert("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.");
+      if (created) notify("일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요.", "success");
     } catch (e) {
-      window.alert(`일정 등록 실패: ${(e as Error).message}`);
+      notify(`일정 등록 실패: ${(e as Error).message}`, "error");
     } finally {
       setScheduleBusyId("");
     }
@@ -775,7 +776,7 @@ export default function ServiceReception({ author }: { author: string }) {
   const applyAddressToApp = async (row: ServiceReceptionRow) => {
     if (applyBusyId) return;
     const after = (row.address || "").trim();
-    if (!after) { window.alert("반영할 주소가 비어 있습니다."); return; }
+    if (!after) { notify("반영할 주소가 비어 있습니다.", "info"); return; }
     if (!window.confirm(`워킨맵과 임대리스트(Supabase)의 주소를 아래로 바꿉니다.\n\n${after}\n\n구글시트 원본은 자동으로 바뀌지 않으니 별도 수정 후 '시트 반영 완료'를 눌러주세요. 계속할까요?`)) return;
     setApplyBusyId(row.id);
     try {
@@ -812,9 +813,9 @@ export default function ServiceReception({ author }: { author: string }) {
           leaseUpdated = true;
         }
       }
-      window.alert(`반영 완료 — 워킨맵 ${mapCount}곳 · 임대리스트 ${leaseUpdated ? "1건" : "매칭 실패(순번·자산·기번 없음)"}\n구글시트 원본을 수정한 뒤 '시트 반영 완료'를 눌러주세요.`);
+      notify(`반영 완료 — 워킨맵 ${mapCount}곳 · 임대리스트 ${leaseUpdated ? "1건" : "매칭 실패(순번·자산·기번 없음)"}\n구글시트 원본을 수정한 뒤 '시트 반영 완료'를 눌러주세요.`, "error");
     } catch (e) {
-      window.alert(`반영 실패: ${(e as Error).message}`);
+      notify(`반영 실패: ${(e as Error).message}`, "error");
     } finally {
       setApplyBusyId("");
     }
@@ -829,7 +830,7 @@ export default function ServiceReception({ author }: { author: string }) {
       await updateServiceReception(row.id, patch);
       setListRows((current) => current.map((r) => r.id === row.id ? { ...r, ...patch } : r));
     } catch (e) {
-      window.alert(`처리 실패: ${(e as Error).message}\n(dev-notes.sql 실행 여부를 확인하세요)`);
+      notify(`처리 실패: ${(e as Error).message}\n(dev-notes.sql 실행 여부를 확인하세요)`, "error");
     }
   };
 
@@ -839,7 +840,7 @@ export default function ServiceReception({ author }: { author: string }) {
       await updateServiceReception(row.id, { deleted: true });
       setListRows((current) => current.filter((r) => r.id !== row.id));
     } catch (e) {
-      window.alert(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`);
+      notify(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`, "error");
     }
   };
 
@@ -849,7 +850,7 @@ export default function ServiceReception({ author }: { author: string }) {
       await setServiceReceptionStatus(row.id, next);
       setListRows((current) => current.map((r) => r.id === row.id ? { ...r, status: next } : r));
     } catch (e) {
-      window.alert(`상태 변경 실패: ${(e as Error).message}`);
+      notify(`상태 변경 실패: ${(e as Error).message}`, "error");
     }
   };
 
@@ -945,7 +946,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);
-                    const field = "rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-900";
+                    const field = "rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
                     return (
                       <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
                         <div className="flex items-center justify-between">
@@ -1188,14 +1189,14 @@ export default function ServiceReception({ author }: { author: string }) {
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
                           return <label key={key} className="text-[10px] font-bold text-slate-500">{label}
                             {options && !(key === "leaseStatus" && newLease.leaseStatus === "직접기재")
-                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
                               : key === "leaseStatus"
                               // 직접기재를 고르면 같은 자리에서 입력 — 줄이 늘어나지 않게 select를 input으로 교체
                               ? <span className="mt-0.5 flex gap-1">
-                                  <input autoFocus value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="min-w-0 flex-1 rounded-lg border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
+                                  <input autoFocus value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="min-w-0 flex-1 rounded-lg border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                                   <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-full border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700 transition hover:bg-slate-50">↺</button>
                                 </span>
-                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
+                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
                           </label>;
                         })}
                       </div>
@@ -1235,7 +1236,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <label className="text-[11px] font-black text-slate-500">유상/무상
                     {manual.유상무상 === "직접기재"
                       ? <span className="mt-1 flex gap-1">
-                          <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900" />
+                          <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                           <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-full border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700 transition hover:bg-slate-50">↺</button>
                         </span>
                       : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
@@ -1256,7 +1257,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <div className="text-xs font-black text-slate-400">카톡 보고용 양식</div>
                   <button type="button" onClick={() => void copyReport()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700"><Copy size={13} />{copied ? "복사됨 ✓" : "복사"}</button>
                 </div>
-                <textarea value={report} readOnly rows={12} className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-5 text-slate-700" />
+                <textarea value={report} readOnly rows={12} className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-5 text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </div>}
 
               <div className="sticky bottom-2 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-2 pt-3 backdrop-blur lg:mx-0 lg:rounded-2xl lg:border lg:border-slate-200 lg:px-5 lg:py-4 lg:shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
@@ -1345,7 +1346,7 @@ export default function ServiceReception({ author }: { author: string }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1">
                 <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"><ChevronLeft size={16} /></button>
-                <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-700" />
+                <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 <button type="button" aria-label="다음 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, 1) : listPeriod === "week" ? shiftDate(listDate, 7) : shiftMonths(listDate, listPeriod === "month" ? 1 : 3))} className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"><ChevronRight size={16} /></button>
                 {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="rounded-full bg-slate-900 px-3.5 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">오늘</button>}
               </div>

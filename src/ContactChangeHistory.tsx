@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deleteRows, selectAllRows, selectRows, updateRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
+import { notify } from "./toast";
 
 type ContactChangeRow = {
   id: string;
@@ -54,9 +55,9 @@ export default function ContactChangeHistory() {
   const applyToWorkinMap = async (row: ContactChangeRow) => {
     if (applyBusyId) return;
     const after = String(row.after_text || "").trim();
-    if (!after) { window.alert("변경 후 내용이 비어 있어 반영할 수 없습니다."); return; }
+    if (!after) { notify("변경 후 내용이 비어 있어 반영할 수 없습니다.", "error"); return; }
     const key = vendorMatchKey(row.company);
-    if (!key) { window.alert("업체명으로 워킨맵을 매칭할 수 없습니다."); return; }
+    if (!key) { notify("업체명으로 워킨맵을 매칭할 수 없습니다.", "error"); return; }
     setApplyBusyId(row.id);
     try {
       const places = await selectAllRows<{ id: number; name: string; memos: string[] | null }>("workin_map_places", "select=id,name,memos");
@@ -64,7 +65,7 @@ export default function ContactChangeHistory() {
         const placeKey = vendorMatchKey(place.name || "");
         return placeKey && (placeKey === key || (placeKey.length >= 5 && key.length >= 5 && (placeKey.includes(key) || key.includes(placeKey))));
       });
-      if (!matches.length) { window.alert("워킨맵에서 일치하는 거래처를 찾지 못했습니다."); return; }
+      if (!matches.length) { notify("워킨맵에서 일치하는 거래처를 찾지 못했습니다.", "error"); return; }
       const isAddress = /주소/.test(row.category);
       const fieldLabel = isAddress ? "주소" : "연락처";
       const names = matches.slice(0, 5).map((m) => m.name).join("\n");
@@ -80,9 +81,9 @@ ${names}${matches.length > 5 ? `
         memos.push(`[변경반영] ${new Date().toISOString().slice(0, 10)} ${row.category || "변경"} → ${after}`.slice(0, 300));
         await updateRows("workin_map_places", `id=eq.${match.id}`, isAddress ? { address: after, address_detail: "", memos } : { phone: after, memos });
       }
-      window.alert(`워킨맵 ${matches.length}곳에 반영했습니다.`);
+      notify(`워킨맵 ${matches.length}곳에 반영했습니다.`, "success");
     } catch (e) {
-      window.alert(`반영 실패: ${(e as Error).message}`);
+      notify(`반영 실패: ${(e as Error).message}`, "error");
     } finally {
       setApplyBusyId("");
     }
