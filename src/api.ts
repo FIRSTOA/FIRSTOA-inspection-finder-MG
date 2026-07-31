@@ -998,7 +998,8 @@ export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInp
   const data: Record<string, string> = { ...input };
   if (updateRow) {
     data["_updateRow"] = String(updateRow);
-    data["_updateKeyHeader"] = "순";           // 행이 밀렸는지 검증할 키 열
+    data["_updateKeyHeader"] = "순";            // 행이 밀렸는지 검증할 키 열
+    data["_updateKeyColumn"] = "13";           // 원격 탭은 "순" 헤더가 A·M열에 중복 — M열로 고정
     data["_updateKeyValue"] = input.leaseNo;
   }
   await enqueueFieldSheetSyncJob({

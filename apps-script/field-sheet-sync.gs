@@ -69,7 +69,8 @@ function appendFieldSheetRow_(request) {
   if (updateRow > headerRow && updateRow <= sheet.getLastRow()) {
     var keyHeader = String(data["_updateKeyHeader"] || "");
     var keyValue = String(data["_updateKeyValue"] || "");
-    var keyCol = keyHeader ? headers.indexOf(keyHeader) + 1 : 0;
+    // "순"처럼 헤더가 중복된 시트가 있어 열 번호를 직접 받는 쪽을 우선한다 (원격 탭은 M열=13)
+    var keyCol = Number(data["_updateKeyColumn"] || 0) || (keyHeader ? headers.indexOf(keyHeader) + 1 : 0);
     var keyOk = !keyHeader || (keyCol > 0 && String(sheet.getRange(updateRow, keyCol).getDisplayValue()).trim() === keyValue.trim());
     if (keyOk) {
       headers.forEach(function (header, index) {
