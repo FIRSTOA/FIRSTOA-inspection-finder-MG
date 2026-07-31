@@ -201,10 +201,11 @@ function MisuBoard() {
 
   return (
     <div className="space-y-3">
-      <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
+      <div className="flex w-fit rounded-full bg-slate-100 p-1">
         {(["전체", "CS체크"] as const).map((name) => (
-          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded-full px-4 py-2 text-sm font-black ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
-            {name === "전체" ? "전체 현황" : `CS체크 목록${csChecks ? ` ${(csChecks || []).length}` : ""}`}
+          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            {name === "전체" ? "전체 현황" : "CS체크 목록"}
+            {name === "CS체크" && csChecks && <span className={`ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${boardView === name ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>{(csChecks || []).length}</span>}
           </button>
         ))}
       </div>
@@ -214,16 +215,16 @@ function MisuBoard() {
             {["전체", ...TEAM_NAMES].map((name) => {
               const count = name === "전체" ? (csChecks || []).length : (csChecks || []).filter((c) => c.team === name).length;
               return (
-                <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>
+                <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition sm:px-3.5 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                   {name === "전체" ? "전체" : `${name}팀`} <span className={team === name ? "text-blue-300" : "text-blue-600"}>{count}</span>
                 </button>
               );
             })}
           </div>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 w-full rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
           {csChecks !== null && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[minmax(0,1fr)_26px_40px_84px] gap-1.5 border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_26px_40px_84px] gap-1.5 border-b border-slate-200 bg-slate-100/70 px-3 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4">
               <span>업체명</span><span>팀</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="hidden sm:block">CS-1회</span><span className="hidden sm:block">CS-2회</span>
             </div>
             <div className="max-h-[62vh] divide-y divide-slate-100 overflow-y-auto">
@@ -256,36 +257,36 @@ function MisuBoard() {
           [won(totalBalance), "잔액 합계"],
           [`${filtered.filter((r) => (Number(r["_months"]) || 0) >= 3).length}곳`, "3개월 이상"],
         ] as [string, string][]).map(([value, label]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
-            <div className="truncate text-base font-black text-slate-950 sm:text-lg">{value}</div>
-            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+          <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
+            <div className="truncate text-lg font-black tabular-nums text-slate-950 sm:text-xl">{value}</div>
+            <div className="mt-1 text-[11px] font-bold text-slate-400">{label}</div>
           </div>
         ))}
       </div>
-      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
-          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition sm:px-3.5 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
-          {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+          {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
           <span className="ml-2 flex rounded-full bg-slate-100 p-1">
             {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-9 min-w-32 flex-1 rounded-lg border border-slate-300 px-3 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
         </div>
       </div>
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
           <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
         </div>
         <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.map((r) => (
-            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-2.5 text-left text-xs hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
-              <span className="truncate font-black text-slate-800">{str(r, "_업체명")}</span>
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+              <span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>
               <span className="hidden truncate font-bold text-slate-500 sm:block">{str(r, "지역") || "-"}</span>
               <span className={`text-right font-black ${(Number(r["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{Number(r["_months"]) ? `${r["_months"]}개월` : "-"}</span>
@@ -371,20 +372,20 @@ function OverageBoard() {
           [won(totalSum), "합계 금액"],
           [`${new Set(filtered.map((r) => str(r, "_업체명"))).size}곳`, "업체 수"],
         ] as [string, string][]).map(([value, label]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
-            <div className="truncate text-base font-black text-slate-950 sm:text-lg">{value}</div>
-            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
+          <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
+            <div className="truncate text-lg font-black tabular-nums text-slate-950 sm:text-xl">{value}</div>
+            <div className="mt-1 text-[11px] font-bold text-slate-400">{label}</div>
           </div>
         ))}
       </div>
-      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
-          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-black sm:px-3 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition sm:px-3.5 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">년월</span>
-          <select value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-600">
+          <select value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-black text-slate-600 outline-none transition focus:border-blue-500">
             {yearMonths.map((name) => <option key={name}>{name}</option>)}
           </select>
         </div>
@@ -396,20 +397,20 @@ function OverageBoard() {
           <span className="flex rounded-full bg-slate-100 p-1">
             {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-9 min-w-32 flex-1 rounded-lg border border-slate-300 px-3 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
         </div>
       </div>
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
           <span>업체명 · 접수내용</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
         </div>
         <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.slice(0, 300).map((r) => (
-            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-2.5 text-left text-xs hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
               <span className="min-w-0">
-                <span className="block truncate font-black text-slate-800">{str(r, "_업체명")}</span>
+                <span className="block truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span>
                 {str(r, "접수내용") && <span className="block truncate text-[11px] font-semibold text-slate-500">{str(r, "접수내용")}</span>}
               </span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>

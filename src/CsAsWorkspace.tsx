@@ -719,20 +719,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   return (
     <div className="space-y-5">
-      {!!syncError && <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
-      {view === "as" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="text-xs font-black text-blue-600">CS AS</div>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">일정리스트</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">팀별 AS·물류·휴가·매월점검 일정을 확인하고 담당자 배정, 완료, 일정 변경을 처리합니다.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3 py-2 text-sm font-black ${team === "ALL" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체</button>
-            {teams.map((item) => (
-              <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3 py-2 text-sm font-black ${team === item ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{item}팀</button>
-            ))}
-          </div>
+      {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
+      {view === "as" && <section className="flex flex-col gap-3 rounded-xl bg-[#171C26] px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <p className="text-[11px] font-semibold text-slate-400">팀별 AS·물류·휴가·매월점검 일정을 확인하고 담당자 배정·완료·일정 변경을 처리합니다.</p>
+        <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
+          <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
+          {teams.map((item) => (
+            <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
+          ))}
         </div>
       </section>}
 
@@ -741,18 +735,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           <div className="flex min-h-[720px] flex-col lg:flex-row">
             <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r lg:p-4">
               <div className="grid grid-cols-2 gap-2 lg:block">
-                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd, newTicketDefaults()))} className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-4 py-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-50">
-                  <span className="text-xl leading-none text-blue-600">+</span> 일정 추가
+                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd, newTicketDefaults()))} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
+                  <span className="text-lg leading-none">+</span> 일정 추가
                 </button>
                 <button type="button" onClick={() => setCalendarFiltersOpen((current) => !current)} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-4 py-3 text-sm font-black text-slate-600 shadow-sm lg:hidden">필터 {calendarFiltersOpen ? "닫기" : "열기"}</button>
               </div>
               <div className={`${calendarFiltersOpen ? "block" : "hidden"} mt-3 lg:mt-5 lg:block`}>
                 <div className="grid grid-cols-2 gap-3 lg:block lg:space-y-5">
                   <div>
-                    <div className="mb-2 text-xs font-black text-slate-500">업무 종류</div>
-                    <div className="space-y-1 rounded-md border border-slate-200 bg-white p-1">
+                    <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 종류</div>
+                    <div className="space-y-0.5 rounded-lg border border-slate-200 bg-white p-1.5">
                       {scheduleFilters.map((filter) => (
-                        <label key={filter} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                        <label key={filter} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
                           <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : filter === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />
                           {filter}
@@ -761,10 +755,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     </div>
                   </div>
                   <div>
-                    <div className="mb-2 text-xs font-black text-slate-500">담당 팀</div>
-                    <div className="grid grid-cols-2 gap-1 rounded-md border border-slate-200 bg-white p-1 lg:grid-cols-1">
+                    <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">담당 팀</div>
+                    <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-slate-200 bg-white p-1.5 lg:grid-cols-1">
                       {teams.map((calendarTeam) => (
-                        <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                        <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleTeams.includes(calendarTeam)} onChange={() => toggleVisibleTeam(calendarTeam)} className="h-4 w-4 accent-blue-600" />
                           {calendarTeam}팀
                         </label>
@@ -778,9 +772,9 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setCurrentMonth(monthStart(todayYmd))} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">오늘</button>
-                  <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="h-9 w-9 rounded-md text-xl font-bold text-slate-500 hover:bg-slate-100">‹</button>
-                  <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="h-9 w-9 rounded-md text-xl font-bold text-slate-500 hover:bg-slate-100">›</button>
+                  <button type="button" onClick={() => setCurrentMonth(monthStart(todayYmd))} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
+                  <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">‹</button>
+                  <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">›</button>
                   <h2 className="ml-1 text-lg font-black text-slate-950 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
                 </div>
                 <div className="rounded-full bg-slate-100 p-1">
