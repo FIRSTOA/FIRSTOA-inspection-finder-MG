@@ -227,9 +227,9 @@ export default function CopierNotes({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+      <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
         {([["notes", "📒 기록"], ["guide", "📖 가이드"], ["quiz", "🎓 복합기 퀴즈"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setView(key)} className={`rounded px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+          <button key={key} type="button" onClick={() => setView(key)} className={`rounded-full px-4 py-2 text-sm font-black ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
         ))}
       </div>
       {view === "guide" && (() => {
@@ -250,7 +250,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex flex-wrap items-center gap-1">
                 {brands.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-md px-3 py-1.5 text-xs font-black ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
                 ))}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -272,14 +272,14 @@ export default function CopierNotes({ author }: { author: string }) {
               {filtered.map((doc) => (
                 <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
                   <div className="flex flex-wrap items-center gap-1">
-                    {doc.brand && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
-                    {doc.category && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
+                    {doc.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
+                    {doc.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
                     {doc.content.includes("storage/v1") && <span className="text-[10px]">📷</span>}
                   </div>
                   <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{doc.title}</div>
                   {doc.summary && <div className="mt-1 truncate text-xs font-semibold text-slate-500">{doc.summary}</div>}
                   {((doc.models || []).length > 0 || doc.difficulty) && <div className="mt-1.5 flex flex-wrap gap-1">
-                    {(doc.models || []).slice(0, 3).map((model) => <span key={model} className="rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{model}</span>)}
+                    {(doc.models || []).slice(0, 3).map((model) => <span key={model} className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{model}</span>)}
                     {doc.difficulty && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${doc.difficulty === "어려움" ? "bg-rose-50 text-rose-600" : doc.difficulty === "보통" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>{doc.difficulty}</span>}
                   </div>}
                 </button>
@@ -292,8 +292,8 @@ export default function CopierNotes({ author }: { author: string }) {
                   <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap gap-1">
-                        {openGuide.brand && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{openGuide.brand}</span>}
-                        {openGuide.category && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{openGuide.category}</span>}
+                        {openGuide.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{openGuide.brand}</span>}
+                        {openGuide.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{openGuide.category}</span>}
                       </div>
                       <div className="mt-1 text-base font-black leading-6 text-slate-950">{openGuide.title}</div>
                     </div>
@@ -323,7 +323,7 @@ export default function CopierNotes({ author }: { author: string }) {
               {["전체", ...BRAND_NAMES].map((name) => {
                 const count = bankOf(name);
                 return (
-                  <button key={name} type="button" disabled={count < 4} onClick={() => setQuizBrand(name)} className={`rounded-md px-3 py-2 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : count < 4 ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                  <button key={name} type="button" disabled={count < 4} onClick={() => setQuizBrand(name)} className={`rounded-full px-3 py-2 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : count < 4 ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
                     {name} <span className={quizBrand === name ? "text-slate-300" : "text-slate-400"}>{count}</span>
                   </button>
                 );
@@ -332,7 +332,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="mt-3 flex justify-center gap-2">
               {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
             </div>
-            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-lg bg-blue-600 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition hover:bg-blue-500">퀴즈 시작 →</button>
+            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition hover:bg-blue-500">퀴즈 시작 →</button>
             <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
           </div>;
         })()}
@@ -373,7 +373,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="mt-1 text-[10px] font-bold text-slate-400">{currentQuiz.note.author || "익명"} · {currentQuiz.note.created_at.slice(0, 10)}</div>
           </div>}
           {quizPick && <div className="mt-4 flex justify-end">
-            <button type="button" onClick={nextQuiz} className="rounded-lg bg-blue-600 px-7 py-3 text-sm font-black text-white shadow-sm">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
+            <button type="button" onClick={nextQuiz} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-7 py-3 text-sm font-black text-white shadow-sm">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
           </div>}
         </div>}
         {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-2xl py-4 text-center">
@@ -385,7 +385,7 @@ export default function CopierNotes({ author }: { author: string }) {
             {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-white p-3">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{item.note.brand}</span>
-                {item.note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{item.note.model}</span>}
+                {item.note.model && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-black text-slate-600">{item.note.model}</span>}
                 <span className="text-sm font-black text-slate-900">{item.note.title}</span>
               </div>
               <NoteBody note={item.note} />
@@ -393,7 +393,7 @@ export default function CopierNotes({ author }: { author: string }) {
           </div>}
           <div className="mt-6 flex justify-center gap-2">
             {wrongNotes.length > 0 && <button type="button" onClick={retryWrong} className="rounded-lg border border-rose-300 bg-rose-50 px-6 py-3 text-sm font-black text-rose-700">오답만 다시 풀기</button>}
-            <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-black text-white">새 퀴즈</button>
+            <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-6 py-3 text-sm font-black text-white">새 퀴즈</button>
           </div>
         </div>}
       </section>}
@@ -417,11 +417,11 @@ export default function CopierNotes({ author }: { author: string }) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold text-slate-500">브랜드·기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스입니다.</p>
-          <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">+ 기록 추가</button>
+          <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 기록 추가</button>
         </div>
         <div className="mt-3 flex flex-wrap gap-1">
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-md px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-full px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
               {name}
             </button>
           ))}
@@ -436,15 +436,15 @@ export default function CopierNotes({ author }: { author: string }) {
           </div>
         )}
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 해결 방법 · 작성자 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />
-          <div className="flex rounded-md bg-slate-100 p-1">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 해결 방법 · 작성자 검색" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <div className="flex rounded-full bg-slate-100 p-1">
             {(["전체", "학습", "처리이력"] as const).map((value) => (
-              <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded px-3 py-1.5 text-xs font-black ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
+              <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
             ))}
           </div>
-          <div className="flex rounded-md bg-slate-100 p-1">
+          <div className="flex rounded-full bg-slate-100 p-1">
             {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded px-3 py-1.5 text-xs font-black ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
             ))}
           </div>
         </div>
@@ -460,7 +460,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{note.brand}</span>
-                {note.model && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{note.model}</span>}
+                {note.model && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-black text-slate-600">{note.model}</span>}
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black ${note.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{note.kind}</span>
               </div>
               <span className="flex shrink-0 items-center gap-2">
@@ -488,12 +488,12 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
                     <option>학습</option><option>처리이력</option>
                   </select>
                 </label>
@@ -508,19 +508,19 @@ export default function CopierNotes({ author }: { author: string }) {
                   const value = e.target.value;
                   const detected = brandOfModel(value);
                   setDraft({ ...draft, model: value, ...(detected && BRAND_NAMES.includes(detected) ? { brand: detected } : {}) });
-                }} placeholder="직접 입력 가능 — 정식 기종명 입력 시 브랜드 자동 선택" className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                }} placeholder="직접 입력 가능 — 정식 기종명 입력 시 브랜드 자동 선택" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 <datalist id="copier-model-catalog">{ALL_MODEL_NAMES.map((name) => <option key={name} value={name} />)}</datalist>
               </div>
               <label className="block text-xs font-bold text-slate-500">제목 (증상 요약)
-                <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="예: 출력물 세로줄 발생" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="예: 출력물 세로줄 발생" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
               <label className="block text-xs font-bold text-slate-500">내용 (증상 · 원인 · 해결 방법)
-                <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={6} placeholder={"증상:\n원인:\n해결:"} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+                <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={6} placeholder={"증상:\n원인:\n해결:"} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
               <button type="button" onClick={() => setWriteOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.content.trim()} onClick={() => void submit()} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>
+              <button type="button" disabled={busy || !draft.content.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>
             </div>
           </div>
         </div>

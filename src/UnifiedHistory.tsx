@@ -107,7 +107,7 @@ function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: st
     <div className="flex items-center gap-2">
       {region && <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-black text-white">{region}</span>}
       <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-800">{hit.vendor}</span>
-      {hit.matchedBy && <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">{hit.matchedBy}</span>}
+      {hit.matchedBy && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">{hit.matchedBy}</span>}
     </div>
     {recentDate && <div className="mt-1 text-[11px] font-semibold text-slate-500">최근 {recentDate}{recentRegion ? ` · ${recentRegion}` : ""}</div>}
     {categories.length > 0 && <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{categories.join(" · ")}</div>}
@@ -295,7 +295,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       <main className="flex-1 overflow-y-auto p-3 sm:p-5">
         {loading && <div className="py-16 text-center text-sm font-semibold text-slate-400">전체 이력을 모으는 중...</div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
-        {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-4 py-3"><h3 className="text-sm font-black text-slate-950">업무별 현황</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">선택한 지역과 거래처 이름에 해당하는 최근 기록입니다.</p></div>
           <div className="divide-y divide-slate-100">{CAT_ORDER.map((cat) => {
             const rows = rowsForCategory(cat);
@@ -319,7 +319,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             const vendorName = recordVendor(record) || queryVendor;
             const { date, fields, album } = recordSummary(activeCat, record, [who.key, directRegion.key]);
             const preview = fields.slice(0, 2).map((field) => `${field.key}: ${field.value.replace(/\s+/g, " ")}`).join(" · ");
-            return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden sm:px-4">
                 <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-slate-100 text-slate-700"><CalendarDays size={15} /><span className="mt-0.5 text-[9px] font-black">{date ? date.slice(5).replace("-", "/") : "-"}</span></span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-950">{vendorName}</span><span className="mt-0.5 flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="flex items-center gap-0.5"><MapPin size={11} />{region}</span>{who.val && <span className="flex min-w-0 items-center gap-0.5 truncate"><UserRound size={11} />{who.val}</span>}</span>{preview && <span className="mt-1 block truncate text-[11px] font-semibold text-slate-400">{preview}</span>}</span>
@@ -327,7 +327,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               </summary>
               <div className="border-t border-slate-200 bg-slate-50">
                 <div className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map((field, fieldIndex) => <div key={`${field.key}-${fieldIndex}`} className={`bg-white px-3 py-2.5 ${field.value.length > 48 || field.value.includes("\n") ? "sm:col-span-2" : ""}`}><div className="text-[10px] font-black text-slate-400">{field.key}</div><div className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">{field.value}</div></div>)}{!fields.length && <div className="bg-white px-3 py-5 text-center text-xs font-semibold text-slate-400 sm:col-span-2">표시할 상세 내용이 없습니다.</div>}</div>
-                <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-[10px] font-bold text-slate-500"><Clock3 size={13} />{date || "날짜 없음"}<span>·</span><Building2 size={13} />{vendorName}{album && <a href={album} target="_blank" rel="noreferrer" className="ml-auto rounded-md bg-slate-900 px-3 py-1.5 text-white">사진·영상 보기</a>}</div>
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-[10px] font-bold text-slate-500"><Clock3 size={13} />{date || "날짜 없음"}<span>·</span><Building2 size={13} />{vendorName}{album && <a href={album} target="_blank" rel="noreferrer" className="ml-auto rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-white">사진·영상 보기</a>}</div>
               </div>
             </details>;
           })}

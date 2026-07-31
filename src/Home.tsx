@@ -117,7 +117,7 @@ function MenuRow({ item, onOpen }: { item: MenuItem; onOpen: (screen: Screen) =>
   return (
     <button type="button" onClick={() => onOpen(item.key)} className="group flex min-h-[64px] w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left transition first:border-t-0 hover:bg-slate-50 active:bg-slate-100">
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${item.tone}`}><Icon size={18} strokeWidth={2.2} /></span>
-      <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-black text-slate-950">{item.title}</span>{item.pending && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">준비 중</span>}</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">{item.desc}</span></span>
+      <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-black text-slate-950">{item.title}</span>{item.pending && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-500">준비 중</span>}</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">{item.desc}</span></span>
       <ArrowRight size={15} className="shrink-0 text-slate-300 transition group-hover:text-blue-600" />
     </button>
   );
@@ -140,13 +140,13 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           <h2 className="mt-3 max-w-2xl text-3xl font-black leading-tight sm:text-4xl">현장 기록 한 번으로<br />전송부터 보고까지</h2>
           <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-200 sm:text-base">카톡 원본을 다시 고치고, 여러 방에 보내고, 일지에 또 적던 반복 업무를 하나의 흐름으로 연결합니다.</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <button type="button" onClick={() => go("field")} className="flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-black shadow-sm hover:bg-blue-500"><Plus size={17} />FIELD 바로 작성</button>
+            <button type="button" onClick={() => go("field")} className="flex min-h-11 items-center gap-2 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2.5 text-sm font-black shadow-sm hover:bg-blue-500"><Plus size={17} />FIELD 바로 작성</button>
             <button type="button" onClick={() => go("calendar")} className="min-h-11 rounded-md border border-white/25 bg-slate-950/45 px-4 py-2.5 text-sm font-black hover:bg-white/10">오늘 일정 확인</button>
           </div>
         </div>
       </section>
 
-      <section aria-label="핵심 효율" className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section aria-label="핵심 효율" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-2 lg:grid-cols-4">
           {[
             ["한 번 입력", "양식·전송·집계 연결"],
@@ -167,7 +167,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
           <div><div className="text-xs font-black text-blue-600">BEFORE → NOW</div><h3 className="mt-1 text-lg font-black text-slate-950">반복 업무가 어떻게 줄었는지</h3><p className="mt-1 text-xs font-semibold text-slate-500">기존 현장 흐름을 기준으로 한 예상 시간이며 실제 운영 데이터로 조정할 수 있습니다.</p></div>
           <div className="shrink-0 rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800">건당 약 11~19분 절감 여지</div>
@@ -178,7 +178,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-4 sm:px-5"><h3 className="text-base font-black text-slate-950">한 번의 현장 기록이 이어지는 곳</h3><p className="mt-1 text-xs font-semibold text-slate-500">단순 양식 작성 앱이 아니라 일정, 현장, 고객, 보고를 연결하는 CS 운영 시스템입니다.</p></div>
         <div className="grid grid-cols-2 sm:grid-cols-5">
           {flow.map((item, index) => {
@@ -196,12 +196,12 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         ].map((item) => <div key={item.title} className="border-l-4 border-blue-600 bg-white px-4 py-4 shadow-sm"><item.icon size={20} className="text-blue-600" /><h3 className="mt-3 text-sm font-black text-slate-950">{item.title}</h3><p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{item.desc}</p></div>)}
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <button type="button" aria-expanded={showAllMenus} onClick={() => setShowAllMenus(!showAllMenus)} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50 sm:px-5"><span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-950 text-white"><ClipboardList size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-950">전체 업무 메뉴</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">현장 운영·고객 관리·기록 성과 기능 보기</span></span><ChevronDown size={18} className={`text-slate-400 transition ${showAllMenus ? "rotate-180" : ""}`} /></button>
         {showAllMenus && <div className="grid border-t border-slate-200 lg:grid-cols-3">{workGroups.map((group, index) => <div key={group.title} className={index ? "border-t border-slate-200 lg:border-l lg:border-t-0" : ""}><div className="bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700">{group.title}</div>{group.items.map((item) => <MenuRow key={item.key} item={item} onOpen={go} />)}</div>)}</div>}
       </section>
 
-      <section id="home-manual" className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section id="home-manual" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-950 px-4 py-4 text-white sm:px-5"><span className="flex h-9 w-9 items-center justify-center rounded-md bg-white/10"><BookOpen size={19} /></span><div><h3 className="text-sm font-black">빠른 사용 안내</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-400">필요한 업무만 펼쳐 확인하세요.</p></div></div>
         <div className="divide-y divide-slate-100">
           {manuals.map((manual) => {

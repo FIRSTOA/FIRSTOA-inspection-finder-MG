@@ -932,9 +932,9 @@ export default function ServiceReception({ author }: { author: string }) {
                     <div><b className="text-slate-500">주소</b> {row.address}</div>
                     {row.address_changed && <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {row.address_resolved_at
-                        ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
+                        ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
                         : <>
-                          <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름</span>
+                          <span className="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름</span>
                           <button type="button" disabled={applyBusyId === row.id} onClick={(e) => { e.stopPropagation(); void applyAddressToApp(row); }} className="whitespace-nowrap rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵·임대리스트 반영"}</button>
                           <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="whitespace-nowrap rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
                         </>}
@@ -945,7 +945,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);
-                    const field = "rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900";
+                    const field = "rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-900";
                     return (
                       <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <div className="flex items-center justify-between">
@@ -1018,7 +1018,7 @@ export default function ServiceReception({ author }: { author: string }) {
   return (
     <div className="mx-auto w-full max-w-[1240px] space-y-4 pb-16">
       {/* 헤더 + 탭 — 한 번에 한 가지 일만 보이게 나눈다 */}
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
         {/* 다크 상태바 — 오늘 상황과 현재 시각을 한 줄로 (제목은 상단 헤더에 이미 있다) */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#171C26] px-4 py-2.5">
           <span className="flex items-center gap-1.5 text-[13px] font-black text-white">
@@ -1045,7 +1045,7 @@ export default function ServiceReception({ author }: { author: string }) {
       <div className="space-y-4">
         {/* ==== 접수 작성 (리스트 탭에서는 감춘다) ==== */}
         <div className={page === "list" ? "hidden" : "space-y-4"}>
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-xs font-black text-white">1</span>
@@ -1084,8 +1084,8 @@ export default function ServiceReception({ author }: { author: string }) {
                     <div className="flex items-center gap-1.5 text-sm font-black text-slate-800">
                       <span className="truncate">{pick(hit, "거래처명", "_업체명")}</span>
                       <span className="shrink-0 text-[10px] font-bold text-slate-400">순{pick(hit, "순")}</span>
-                      {ended && <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
-                      {sameVendor > 1 && <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
+                      {ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
+                      {sameVendor > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
                     </div>
                     <div className="text-[11px] font-semibold text-slate-500">{pick(hit, "품목", "모델명", "기종")} · {pick(hit, "모델명", "기종")} · 자산 {pick(hit, "자산번호") || "-"} · 기번 {pick(hit, "시리얼번호(기번)") || "-"} · {pick(hit, "담당지역")}</div>
                   </button>
@@ -1096,9 +1096,9 @@ export default function ServiceReception({ author }: { author: string }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-base font-black text-slate-950 lg:text-lg">
                   <span className="truncate">{pick(lease, "거래처명", "_업체명")}</span>
-                  {workinName && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
-                  {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
-                  {deviceSummary.active > 1 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 자산·기번 확인</span>}
+                  {workinName && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
+                  {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
+                  {deviceSummary.active > 1 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 자산·기번 확인</span>}
                 </div>
                 <button type="button" onClick={resetForm} className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:border-slate-400 hover:text-slate-700">다시 검색</button>
               </div>
@@ -1116,7 +1116,7 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-xs font-black text-white">2</span>
@@ -1138,7 +1138,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 </div>
                 {custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
-                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
                 </label>}
                 {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
                   <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
@@ -1176,14 +1176,14 @@ export default function ServiceReception({ author }: { author: string }) {
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
                           return <label key={key} className="text-[10px] font-bold text-slate-500">{label}
                             {options && !(key === "leaseStatus" && newLease.leaseStatus === "직접기재")
-                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
                               : key === "leaseStatus"
                               // 직접기재를 고르면 같은 자리에서 입력 — 줄이 늘어나지 않게 select를 input으로 교체
                               ? <span className="mt-0.5 flex gap-1">
                                   <input autoFocus value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
-                                  <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-md border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700">↺</button>
+                                  <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-lg border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">↺</button>
                                 </span>
-                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
+                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-900" />}
                           </label>;
                         })}
                       </div>
@@ -1224,7 +1224,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     {manual.유상무상 === "직접기재"
                       ? <span className="mt-1 flex gap-1">
                           <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900" />
-                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-md border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700">↺</button>
+                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-lg border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">↺</button>
                         </span>
                       : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
                   </label>
@@ -1242,7 +1242,7 @@ export default function ServiceReception({ author }: { author: string }) {
               {type !== "원격이관" && !!report && <div className="mt-3 border-t border-slate-100 pt-3">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-black text-slate-400">카톡 보고용 양식</div>
-                  <button type="button" onClick={() => void copyReport()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-black text-slate-700"><Copy size={13} />{copied ? "복사됨 ✓" : "복사"}</button>
+                  <button type="button" onClick={() => void copyReport()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700"><Copy size={13} />{copied ? "복사됨 ✓" : "복사"}</button>
                 </div>
                 <textarea value={report} readOnly rows={12} className="mt-2 w-full resize-y rounded-md border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-5 text-slate-700" />
               </div>}
@@ -1321,7 +1321,7 @@ export default function ServiceReception({ author }: { author: string }) {
         </div>
 
         {/* ==== 목록: 원격 탭은 작업 보드, 리스트 탭은 기간별 접수 기록 ==== */}
-        {page !== "copier" && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+        {page !== "copier" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1F2937] px-4 py-3">
             <div>
               <h3 className="text-sm font-black text-white lg:text-[15px]">{page === "remote" ? "원격 · IT 작업" : "접수 리스트"}</h3>
@@ -1373,7 +1373,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-slate-50 p-4 font-mono text-[11px] leading-5 text-slate-700">{previewRow.report_text}</pre>
                 <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
                   <button type="button" onClick={() => setPreviewRow(null)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">닫기</button>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(previewRow.report_text).then(() => setPreviewCopied(true)); }} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-black text-white">{previewCopied ? "복사됨 ✓" : "복사"}</button>
+                  <button type="button" onClick={() => { void navigator.clipboard.writeText(previewRow.report_text).then(() => setPreviewCopied(true)); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white">{previewCopied ? "복사됨 ✓" : "복사"}</button>
                 </div>
               </div>
             </div>

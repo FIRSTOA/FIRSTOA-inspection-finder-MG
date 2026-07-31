@@ -217,7 +217,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
         {highlight && <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-400/90 px-2.5 py-1 text-[10px] font-black text-white">{labels.pickLabel}</div>}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-slate-400">
-            <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 font-black text-slate-500">익명{mine ? " (내 글)" : ""}</span>
+            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 font-black text-slate-500">익명{mine ? " (내 글)" : ""}</span>
             <span className="shrink-0">{post.created_at.slice(0, 10)}</span>
             {post.title && <span className="truncate font-black text-slate-500">《{post.title}》</span>}
           </div>
@@ -248,7 +248,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           ))}
           <div className="flex gap-1.5">
             <input value={commentDrafts[post.id] || ""} onChange={(e) => setCommentDrafts((current) => ({ ...current, [post.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void submitComment(post.id); }} placeholder="익명 댓글 남기기" className="min-w-0 flex-1 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold" />
-            <button type="button" onClick={() => void submitComment(post.id)} className="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">등록</button>
+            <button type="button" onClick={() => void submitComment(post.id)} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">등록</button>
           </div>
         </div>}
       </article>
@@ -282,19 +282,19 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           {/* 글쓰기 */}
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">{labels.writeHint} <span className="font-bold text-slate-300">— 익명으로 공유됩니다</span></div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={labels.titlePlaceholder} className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={labels.titlePlaceholder} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>
-              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "올리는 중…" : labels.submitLabel}</button>
+              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "올리는 중…" : labels.submitLabel}</button>
             </div>
           </section>
 
           {/* 정렬·검색 */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="rounded-md bg-slate-100 p-1">
+            <div className="rounded-full bg-slate-100 p-1">
               {([["latest", "최신순"], ["top", "추천순"]] as [SortMode, string][]).map(([mode, label]) => (
-                <button key={mode} type="button" onClick={() => setSortMode(mode)} className={`rounded px-3 py-1.5 text-xs font-black ${sortMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={mode} type="button" onClick={() => setSortMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${sortMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="제목·내용 검색" className="w-44 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold" />
@@ -310,9 +310,9 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-black text-slate-900">🏆 포인트 현황</h3>
-            <div className="rounded-md bg-slate-100 p-0.5">
+            <div className="rounded-full bg-slate-100 p-1">
               {([[false, "전체"], [true, "이번 달"]] as [boolean, string][]).map(([monthly, label]) => (
-                <button key={label} type="button" onClick={() => setPointsMonthly(monthly)} className={`rounded px-2 py-1 text-[10px] font-black ${pointsMonthly === monthly ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={label} type="button" onClick={() => setPointsMonthly(monthly)} className={`rounded-full px-2 py-1 text-[10px] font-black ${pointsMonthly === monthly ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
           </div>

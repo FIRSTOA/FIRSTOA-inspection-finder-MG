@@ -154,14 +154,14 @@ export default function StockBoard({ author }: { author: string }) {
   return (
     <div className="space-y-4 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+        <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
           {(["기기", "부품"] as const).map((value) => (
-            <button key={value} type="button" onClick={() => setKind(value)} className={`rounded px-5 py-2 text-sm font-black ${kind === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
+            <button key={value} type="button" onClick={() => setKind(value)} className={`rounded-full px-5 py-2 text-sm font-black ${kind === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
               {value === "기기" ? "🖨 기기" : "🔩 부품"} <span className="text-xs text-slate-400">{totalOf(value)}</span>
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => setAddOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">+ 항목 추가</button>
+        <button type="button" onClick={() => setAddOpen(true)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 항목 추가</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -181,24 +181,24 @@ export default function StockBoard({ author }: { author: string }) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-semibold text-slate-500">교체 약속 전 기기 재고, 재방문 전 부품 재고를 여기서 바로 확인하세요. 수량은 관리부가 관리하며 마지막 수정자·시각이 함께 남습니다.</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <div className="flex flex-wrap items-center gap-1">
-            {kind === "기기" && <span className="flex rounded-md bg-slate-100 p-0.5">
+            {kind === "기기" && <span className="flex rounded-full bg-slate-100 p-1">
               {(["전체", "새기기", "리퍼"] as const).map((value) => (
-                <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded px-2 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
+                <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
               ))}
             </span>}
             <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700"}`}>⚠ 부족만</button>
-            <span className="flex rounded-md bg-slate-100 p-0.5">
+            <span className="flex rounded-full bg-slate-100 p-1">
               {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded px-2 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </span>
           </div>
         </div>
         {kind === "기기" && <div className="mt-2 flex flex-wrap gap-1">
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-full px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
           ))}
         </div>}
       </section>
@@ -209,7 +209,7 @@ export default function StockBoard({ author }: { author: string }) {
 
       {kind === "기기" ? (
         Array.from(byBrand.entries()).map(([brandName, rows]) => (
-          <section key={brandName} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section key={brandName} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700">
               <span>{brandName} <span className="ml-1 font-bold text-slate-400">{rows.length}종</span></span>
               <span className="text-slate-500">{rows.reduce((sum, r) => sum + r.qty, 0)}대</span>
@@ -218,7 +218,7 @@ export default function StockBoard({ author }: { author: string }) {
           </section>
         ))
       ) : (
-        !loading && filtered.length > 0 && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">{filtered.map(renderRow)}</section>
+        !loading && filtered.length > 0 && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{filtered.map(renderRow)}</section>
       )}
 
       {addOpen && (
@@ -228,12 +228,12 @@ export default function StockBoard({ author }: { author: string }) {
             <div className="mt-4 space-y-3">
               {kind === "기기" && <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
                     <option>새기기</option><option>리퍼</option>
                   </select>
                 </label>
@@ -245,21 +245,21 @@ export default function StockBoard({ author }: { author: string }) {
                     const detected = kind === "기기" ? brandOfModel(name) : "";
                     setDraft({ ...draft, name, ...(detected ? { brand: detected } : {}) });
                   }}
-                  placeholder={kind === "기기" ? "예: SL-X3220NR" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  placeholder={kind === "기기" ? "예: SL-X3220NR" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 {kind === "기기" && <datalist id="stock-model-catalog">{ALL_MODEL_NAMES.map((name) => <option key={name} value={name} />)}</datalist>}
               </label>
               <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-2">
                 <label className="text-xs font-bold text-slate-500">수량
-                  <input type="number" min={0} value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: Number(e.target.value) })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <input type="number" min={0} value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
                 <label className="text-xs font-bold text-slate-500">메모 (선택)
-                  <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder={kind === "부품" ? "적용 기종 등" : "위치·상태 등"} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder={kind === "부품" ? "적용 기종 등" : "위치·상태 등"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setAddOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.name.trim()} onClick={() => void submit()} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "추가"}</button>
+              <button type="button" disabled={busy || !draft.name.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "추가"}</button>
             </div>
           </div>
         </div>

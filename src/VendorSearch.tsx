@@ -248,7 +248,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                           <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>
                         )}
                         <span className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</span>
-                        {h.matchedBy && <span className="ml-auto shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{h.matchedBy}</span>}
+                        {h.matchedBy && <span className="ml-auto shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{h.matchedBy}</span>}
                       </div>
                       <div className="mt-1 space-y-0.5">
                         {jShow && <MetaLine gubun="점검" e={jShow} />}
@@ -343,7 +343,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                   {chips.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {chips.map((c, j) => (
-                        <span key={j} className="max-w-full truncate rounded bg-slate-50 px-1.5 py-0.5 text-[11px] leading-4 text-slate-500">
+                        <span key={j} className="max-w-full truncate rounded-full bg-slate-50 px-2 py-0.5 text-[11px] leading-4 text-slate-500">
                           {c}
                         </span>
                       ))}

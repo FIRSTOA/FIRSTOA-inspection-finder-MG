@@ -296,30 +296,30 @@ export default function OperationsDashboard({ author }: Props) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
-          <div className="grid grid-cols-4 rounded-md bg-slate-100 p-1">
+          <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded px-3 py-2 text-xs font-black ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-2 text-xs font-black ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
             ))}
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold" />}
-          {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
-          {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
-          {period === "quarter" && <select value={quarter} onChange={(event) => setQuarter(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-bold">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}분기</option>)}</select>}
+          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
+          {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
+          {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
+          {period === "quarter" && <select value={quarter} onChange={(event) => setQuarter(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}분기</option>)}</select>}
           <span className="mr-auto rounded-md bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">{range.start} ~ {range.end}</span>
 
-          <div className="flex rounded-md bg-slate-100 p-1">
+          <div className="flex rounded-full bg-slate-100 p-1">
             {["전체", ...OPERATIONS_TEAMS].map((value) => (
-              <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
+              <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded-full px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
             ))}
           </div>
-          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
+          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 text-xs font-black text-slate-700">
             <option value="전체">전체 팀원</option>
             {memberOptions.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
-          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
+          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 text-xs font-black text-slate-700">
             <option value="all">전체 업무</option>
             {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
@@ -328,7 +328,7 @@ export default function OperationsDashboard({ author }: Props) {
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요.</span></div>}
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
-      {notice && <div className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white">{notice}</div>}
+      {notice && <div className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-bold text-white">{notice}</div>}
 
       {!loading && !error && (
         <>
@@ -341,7 +341,7 @@ export default function OperationsDashboard({ author }: Props) {
             ))}
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-3">
               <h3 className="font-black text-slate-950">업무 구성</h3>
             </div>
@@ -356,7 +356,7 @@ export default function OperationsDashboard({ author }: Props) {
           </section>
 
           <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">팀별 현황</h3></div>
               <div className="divide-y divide-slate-100">
                 {teamRows.map((row) => (
@@ -368,7 +368,7 @@ export default function OperationsDashboard({ author }: Props) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">인원별 현황</h3></div>
               {peopleRows.length === 0 ? (
                 <div className="p-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다.</div>
@@ -404,7 +404,7 @@ export default function OperationsDashboard({ author }: Props) {
             </div>
           </section>
 
-          <details className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <details className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
               <div><h3 className="font-black text-slate-950">업무 기록 확인</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">오전송은 원문을 남긴 채 집계에서 제외할 수 있습니다.</p></div>
               <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
@@ -419,8 +419,8 @@ export default function OperationsDashboard({ author }: Props) {
                     전체선택{selected.size > 0 ? ` · ${selected.size}건` : ""}
                   </label>
                   <div className="flex gap-2">
-                    {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">해제</button>}
-                    <button type="button" onClick={() => void batchCancel()} disabled={batching || selected.size === 0} className="rounded-md bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-40">{batching ? "처리중…" : "선택 오발송"}</button>
+                    {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">해제</button>}
+                    <button type="button" onClick={() => void batchCancel()} disabled={batching || selected.size === 0} className="rounded-full bg-rose-600 transition hover:bg-rose-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-40">{batching ? "처리중…" : "선택 오발송"}</button>
                   </div>
                 </div>
               );
@@ -445,7 +445,7 @@ export default function OperationsDashboard({ author }: Props) {
           </details>
 
           {cancelledFiltered.length > 0 && (
-            <details className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <details className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-600"><span>집계 제외 기록</span><span>{cancelledFiltered.length}건</span></summary>
               <div className="divide-y divide-slate-100 border-t border-slate-200">
                 {cancelledFiltered.slice(0, 50).map((event) => (

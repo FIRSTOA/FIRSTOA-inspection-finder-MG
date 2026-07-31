@@ -306,14 +306,14 @@ function PraiseBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람 이름이 함께 표시됩니다</span></div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
-              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
+              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
                 <option value="">받는 사람</option>
                 {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
               </select>
-              <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             </div>
             <div className="mt-2 flex justify-end">
-              <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "보내는 중…" : "💌 칭찬 보내기"}</button>
+              <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "보내는 중…" : "💌 칭찬 보내기"}</button>
             </div>
           </section>
 
@@ -344,9 +344,9 @@ function PraiseBoard({ author }: { author: string }) {
               </div>
               {editId === row.id ? (
                 <div className="mt-2 flex gap-1.5">
-                  <input value={editContent} onChange={(e) => setEditContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveEditPraise(); }} className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <input value={editContent} onChange={(e) => setEditContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveEditPraise(); }} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   <button type="button" onClick={() => setEditId("")} className="shrink-0 rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500">취소</button>
-                  <button type="button" onClick={() => void saveEditPraise()} className="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-black text-white">저장</button>
+                  <button type="button" onClick={() => void saveEditPraise()} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">저장</button>
                 </div>
               ) : <p className="mt-2 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{row.content}</p>}
             </article>
@@ -486,19 +486,19 @@ function GoalsBoard({ author }: { author: string }) {
       return (
         <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4 shadow-sm">
           <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
+            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
               {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
             </select>
-            <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={editDraft.start_date} onChange={(e) => setEditDraft({ ...editDraft, start_date: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
-            <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            <input type="date" value={editDraft.start_date} onChange={(e) => setEditDraft({ ...editDraft, start_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
-          <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+          <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setEditId("")} className="rounded-md border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500">취소</button>
-            <button type="button" onClick={() => void saveEdit()} className="rounded-md bg-blue-600 px-5 py-2 text-xs font-black text-white">저장</button>
+            <button type="button" onClick={() => void saveEdit()} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-5 py-2 text-xs font-black text-white">저장</button>
           </div>
         </article>
       );
@@ -510,8 +510,8 @@ function GoalsBoard({ author }: { author: string }) {
           <div className={`text-sm font-black ${goal.done ? "text-emerald-700 line-through" : "text-slate-900"}`}>{goal.title}</div>
           {goal.memo && <div className="mt-0.5 text-xs font-semibold text-slate-500">{goal.memo}</div>}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
-            {showAll && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-600">{goal.author}</span>}
-            <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-black text-emerald-600">{goal.category || "기타"}</span>
+            {showAll && <span className="rounded-full bg-slate-100 px-2 py-0.5 font-black text-slate-600">{goal.author}</span>}
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-black text-emerald-600">{goal.category || "기타"}</span>
             {(goal.start_date || goal.target_date) && <span>{goal.start_date || "?"} ~ {goal.target_date || "미정"}</span>}
             {ddayLabel && !goal.done && <span className={`rounded px-1.5 py-0.5 font-black ${overdue ? "bg-rose-100 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{ddayLabel}</span>}
             {goal.done && goal.done_at && <span className="text-emerald-600">완료 {goal.done_at.slice(0, 10)}</span>}
@@ -559,29 +559,29 @@ function GoalsBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">새 목표 추가</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
                 {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
               </select>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="목표 (예: 정보처리기사 필기 합격, 매주 책 1권)" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="목표 (예: 정보처리기사 필기 합격, 매주 책 1권)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <label className="text-[10px] font-black text-slate-400">시작일 (비우면 오늘)
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-0.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
               <label className="text-[10px] font-black text-slate-400">완료 목표일
-                <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="mt-0.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
             </div>
-            <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+            <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <div className="mt-2 flex justify-end">
-              <button type="button" onClick={() => void addGoal()} disabled={busy || !title.trim()} className="rounded-md bg-emerald-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "추가 중…" : "목표 추가"}</button>
+              <button type="button" onClick={() => void addGoal()} disabled={busy || !title.trim()} className="rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "추가 중…" : "목표 추가"}</button>
             </div>
           </section>
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="rounded-md bg-slate-100 p-1">
+            <div className="rounded-full bg-slate-100 p-1">
               {([[false, "내 목표"], [true, "전체 보기"]] as [boolean, string][]).map(([all, label]) => (
-                <button key={label} type="button" onClick={() => setShowAll(all)} className={`rounded px-3 py-1.5 text-xs font-black ${showAll === all ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={label} type="button" onClick={() => setShowAll(all)} className={`rounded-full px-3 py-1.5 text-xs font-black ${showAll === all ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
             <div className="flex flex-wrap gap-1">
@@ -622,9 +622,9 @@ export default function SelfDevHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>("home");
   return (
     <div className="space-y-4">
-      <div className="flex w-fit flex-wrap gap-1 rounded-md bg-slate-100 p-1">
+      <div className="flex w-fit flex-wrap gap-1 rounded-full bg-slate-100 p-1">
         {([["home", "🏠 홈"], ["reading", "📚 독서"], ["tips", "💡 배움·팁"], ["goals", "🎯 목표"], ["praise", "💖 칭찬"]] as [Tab, string][]).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={`rounded px-3.5 py-2 text-sm font-black ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+          <button key={key} type="button" onClick={() => setTab(key)} className={`rounded-full px-3.5 py-2 text-sm font-black ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
         ))}
       </div>
       {tab === "home" && <DevDashboard author={author} onGo={setTab} />}

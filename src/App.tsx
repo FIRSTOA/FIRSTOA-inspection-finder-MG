@@ -5603,9 +5603,9 @@ export default function App() {
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && (
           <div className="space-y-2">
-            <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-0.5">
+            <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
               {([["status", "현황판"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded px-3 py-1.5 text-xs font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                <button key={key} type="button" onClick={() => setOpsTab(key)} className={`rounded-full px-3 py-1.5 text-xs font-black ${opsTab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
             {opsTab === "status" ? <OperationsDashboard author={author} /> : <ContactChangeHistory />}
@@ -6359,7 +6359,7 @@ export default function App() {
           <div className="text-lg font-black text-slate-950">현장사진이 없습니다</div>
           <div className="mt-2 text-sm font-semibold leading-6 text-slate-500">사진을 추가하거나, 사진이 필요 없는 업무라면 그대로 전송할 수 있습니다.</div>
           <div className="mt-5 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => sendPhotoInputRef.current?.click()} className="rounded-lg bg-blue-600 px-3 py-3 text-sm font-black text-white">사진 업로드</button>
+            <button type="button" onClick={() => sendPhotoInputRef.current?.click()} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-3 text-sm font-black text-white">사진 업로드</button>
             <button type="button" onClick={() => { const pending = photoPrompt; setPhotoPrompt(null); void handleSendAll(pending.kind, pending.destination, true); }} className="rounded-lg border border-slate-300 px-3 py-3 text-sm font-black text-slate-700">사진 불필요</button>
           </div>
           <button type="button" onClick={() => setPhotoPrompt(null)} className="mt-2 w-full rounded-lg py-2.5 text-sm font-bold text-slate-400">취소</button>

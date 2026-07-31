@@ -33,7 +33,7 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
     }
   };
 
-  const field = "h-10 w-full rounded-md border border-slate-300 px-2.5 text-sm outline-none focus:border-blue-500";
+  const field = "h-10 w-full rounded-lg border border-slate-300 px-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
@@ -77,7 +77,7 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
           <input value={form.short} onChange={(e) => set("short", e.target.value)} className={field} />
         </label>
       </div>
-      <button type="button" onClick={() => void submit()} disabled={busy} className="mt-5 h-12 w-full rounded-md bg-blue-600 text-sm font-black text-white disabled:bg-slate-300">
+      <button type="button" onClick={() => void submit()} disabled={busy} className="mt-5 h-12 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">
         {busy ? "접수 중…" : "칭찬 접수 · 시트 기입"}
       </button>
     </section>

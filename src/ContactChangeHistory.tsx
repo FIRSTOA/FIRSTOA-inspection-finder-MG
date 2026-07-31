@@ -101,16 +101,16 @@ ${names}${matches.length > 5 ? `
           <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
         </div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="업체명 · 담당자 · 변경 내용 검색" className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />
-          <div className="flex rounded-md bg-slate-100 p-1">
-            {REGIONS.map((value) => <button key={value} type="button" onClick={() => setRegion(value)} className={`rounded px-3 py-1.5 text-xs font-black ${region === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>)}
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="업체명 · 담당자 · 변경 내용 검색" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <div className="flex rounded-full bg-slate-100 p-1">
+            {REGIONS.map((value) => <button key={value} type="button" onClick={() => setRegion(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${region === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>)}
           </div>
         </div>
       </section>
 
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-400">변경 기록을 불러오는 중입니다.</div>}
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">기록을 불러오지 못했습니다. Supabase SQL Editor에서 `contact-changes.sql`을 실행해 주세요.<br /><span className="text-xs">{error}</span></div>}
-      {!loading && !error && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {!loading && !error && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {!filtered.length ? <div className="p-12 text-center text-sm font-semibold text-slate-400">아직 저장된 변경 기록이 없습니다.</div> : <div className="divide-y divide-slate-100">
           {filtered.map((row) => <details key={row.id} className="group">
             <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">

@@ -65,7 +65,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
       <div key={key} className="flex items-start justify-between gap-3 py-1.5">
         <span className="w-20 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</span>
         <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>
-        {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">📞</a>}
+        {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-black text-white">📞</a>}
       </div>
     );
   };
@@ -201,9 +201,9 @@ function MisuBoard() {
 
   return (
     <div className="space-y-3">
-      <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
+      <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
         {(["전체", "CS체크"] as const).map((name) => (
-          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded px-4 py-2 text-sm font-black ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
+          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded-full px-4 py-2 text-sm font-black ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
             {name === "전체" ? "전체 현황" : `CS체크 목록${csChecks ? ` ${(csChecks || []).length}` : ""}`}
           </button>
         ))}
@@ -222,7 +222,7 @@ function MisuBoard() {
           </div>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 w-full rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
-          {csChecks !== null && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          {csChecks !== null && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="grid grid-cols-[minmax(0,1fr)_26px_40px_84px] gap-1.5 border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4">
               <span>업체명</span><span>팀</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="hidden sm:block">CS-1회</span><span className="hidden sm:block">CS-2회</span>
             </div>
@@ -270,15 +270,15 @@ function MisuBoard() {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
           {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
-          <span className="ml-2 flex rounded-md bg-slate-100 p-0.5">
-            {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
+          <span className="ml-2 flex rounded-full bg-slate-100 p-1">
+            {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
       </div>
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
           <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
         </div>
@@ -390,18 +390,18 @@ function OverageBoard() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">등급</span>
-          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="flex rounded-md bg-slate-100 p-0.5">
-            {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
+          <span className="flex rounded-full bg-slate-100 p-1">
+            {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명·접수내용 검색" className="h-8 min-w-32 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
         </div>
       </div>
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
           <span>업체명 · 접수내용</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
         </div>
@@ -505,14 +505,14 @@ export default function DeptRequests({ author }: { author: string }) {
   return (
     <div className="space-y-4 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-md bg-slate-100 p-1">
-          <button type="button" onClick={() => setTab("requests")} className={`rounded px-4 py-2 text-sm font-black ${tab === "requests" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
+        <div className="flex w-fit gap-1 rounded-full bg-slate-100 p-1">
+          <button type="button" onClick={() => setTab("requests")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "requests" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>
             📥 요청 목록 {waiting > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black text-white">{waiting}</span>}
           </button>
-          <button type="button" onClick={() => setTab("misu")} className={`rounded px-4 py-2 text-sm font-black ${tab === "misu" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>💰 미수 현황</button>
-          <button type="button" onClick={() => setTab("overage")} className={`rounded px-4 py-2 text-sm font-black ${tab === "overage" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>📈 초과료 현황</button>
+          <button type="button" onClick={() => setTab("misu")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "misu" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>💰 미수 현황</button>
+          <button type="button" onClick={() => setTab("overage")} className={`rounded-full px-4 py-2 text-sm font-black ${tab === "overage" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>📈 초과료 현황</button>
         </div>
-        {tab === "requests" && <button type="button" onClick={() => setFormOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-black text-white">+ 요청 등록</button>}
+        {tab === "requests" && <button type="button" onClick={() => setFormOpen(true)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 요청 등록</button>}
       </div>
 
       {tab === "misu" && <MisuBoard />}
@@ -523,10 +523,10 @@ export default function DeptRequests({ author }: { author: string }) {
           <p className="text-xs font-semibold text-slate-500">타부서의 카운터확인·미수체크·방문 요청을 받아 처리합니다. 처리하면 담당자와 시각이 남습니다.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1">
-              {["전체", ...KINDS].map((name) => <button key={name} type="button" onClick={() => setKindFilter(name)} className={`rounded-md px-2.5 py-1.5 text-xs font-black ${kindFilter === name ? "bg-slate-900 text-white" : KIND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+              {["전체", ...KINDS].map((name) => <button key={name} type="button" onClick={() => setKindFilter(name)} className={`rounded-full px-2.5 py-1.5 text-xs font-black ${kindFilter === name ? "bg-slate-900 text-white" : KIND_TONE[name] || "bg-slate-100 text-slate-500"}`}>{name}</button>)}
             </div>
-            <div className="ml-auto flex rounded-md bg-slate-100 p-1">
-              {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+            <div className="ml-auto flex rounded-full bg-slate-100 p-1">
+              {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
             </div>
           </div>
         </section>
@@ -542,14 +542,14 @@ export default function DeptRequests({ author }: { author: string }) {
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black ${KIND_TONE[row.kind] || "bg-slate-100 text-slate-600"}`}>{row.kind}</span>
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
                 {row.vendor && <span className="text-sm font-black text-slate-900">{row.vendor}</span>}
-                {row.due_date && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">희망 {row.due_date}</span>}
+                {row.due_date && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">희망 {row.due_date}</span>}
                 <span className="ml-auto text-[11px] font-bold text-slate-400">{row.requester} · {row.created_at.slice(5, 10)}</span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{row.content}</p>
               {row.status === "완료" && row.handled_by && <div className="mt-1.5 text-[11px] font-bold text-emerald-600">✓ {row.handled_by} 처리 · {String(row.handled_at || "").slice(0, 10)}</div>}
               <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
                 {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">처리 시작</button>}
-                {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-black text-white">완료</button>}
+                {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">완료</button>}
                 {row.status === "완료" && <button type="button" onClick={() => void setStatus(row, "대기")} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button>}
                 <button type="button" onClick={() => void remove(row)} className="ml-auto text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
               </div>
@@ -564,28 +564,28 @@ export default function DeptRequests({ author }: { author: string }) {
             <b className="text-slate-950">요청 등록</b>
             <div className="mt-4 space-y-3">
               <label className="block text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>
-                <input value={draft.requester} onChange={(e) => setDraft({ ...draft, requester: e.target.value })} placeholder="예: 관리부 김OO" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                <input value={draft.requester} onChange={(e) => setDraft({ ...draft, requester: e.target.value })} placeholder="예: 관리부 김OO" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
               <div className="text-xs font-bold text-slate-500">유형
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {KINDS.map((name) => <button key={name} type="button" onClick={() => setDraft({ ...draft, kind: name })} className={`rounded-md px-3 py-2 text-xs font-black ${draft.kind === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+                  {KINDS.map((name) => <button key={name} type="button" onClick={() => setDraft({ ...draft, kind: name })} className={`rounded-full px-3 py-2 text-xs font-black ${draft.kind === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
                 </div>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
                 <label className="text-xs font-bold text-slate-500">업체명 (선택)
-                  <input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
                 <label className="text-xs font-bold text-slate-500">희망일 (선택)
-                  <input type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" />
+                  <input type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
               </div>
               <label className="block text-xs font-bold text-slate-500">요청 내용 <b className="text-rose-500">*</b>
-                <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={3} placeholder="예: OO업체 카운터 확인 부탁드립니다 / OO업체 미수 3개월 체크 요청" className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+                <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={3} placeholder="예: OO업체 카운터 확인 부탁드립니다 / OO업체 미수 3개월 체크 요청" className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.content.trim() || !draft.requester.trim()} onClick={() => void submit()} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
+              <button type="button" disabled={busy || !draft.content.trim() || !draft.requester.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
             </div>
           </div>
         </div>

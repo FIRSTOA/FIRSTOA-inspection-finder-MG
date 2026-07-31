@@ -15,7 +15,7 @@ function TextField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300"
+        className="mt-1 w-full rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300"
       />
     </label>
   );
@@ -37,7 +37,7 @@ function TextAreaField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={2}
-        className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300"
+        className="mt-1 w-full resize-y rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300"
       />
     </label>
   );
