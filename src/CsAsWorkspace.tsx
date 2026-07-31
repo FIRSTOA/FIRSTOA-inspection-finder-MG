@@ -681,6 +681,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       .catch(() => { loadedOldMonthsRef.current.delete(ym); });
   }, [currentMonth]);
 
+  // 금일 AS 현황판 대상: AS·익일AS만
+  const asBoardRows = useMemo(
+    () => scheduleRows.filter((ticket) => ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS"),
+    [scheduleRows],
+  );
+
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => {
@@ -896,10 +902,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
 
-          {/* 금일·익일은 지도·구별 집계·담당자 추천을 먼저 보여준다 (예정일정은 날짜가 흩어져 의미가 적다) */}
-          {dayFilter !== "scheduled" && scheduleRows.length > 0 && <div className="mb-4">
+          {/* AS 접수건만 지도·구별 집계·담당자 추천 대상 (매월점검·물류·휴가는 동선 판단 대상이 아니다) */}
+          {dayFilter !== "scheduled" && asBoardRows.length > 0 && <div className="mb-4">
             <TodayBoard
-              tickets={scheduleRows}
+              tickets={asBoardRows}
               onOpenTicket={setDetailId}
               onAssign={(ticket, name) => update(ticket.id, { assignee: name, status: ticket.status === "접수" ? "배정" : (ticket.status as AsStatus) })}
               assigneesOf={(team) => teamAssignees[team as Team] || []}

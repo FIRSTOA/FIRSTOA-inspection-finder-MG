@@ -1,52 +1,59 @@
 /**
- * 금일 현황판 — 오늘 일정을 지도·구별 집계·담당자 추천으로 한눈에 본다.
+ * 금일 AS 현황판 — 오늘 들어온 AS 접수건을 지도·구별 집계·담당자 추천으로 한눈에 본다.
  *
- * 위치는 접수 때 입력한 주소를 우선한다 — 주소를 좌표로 바꿔(지오코딩) 쓰고, 결과는
- * geocode_cache에 남긴다. 접수 유래가 아닌 일정(반복 매월점검 등)은 주소가 없어
- * 업체명으로 워킨맵(workin_map_places, 좌표 99%·주소 82% 보유)의 업체 위치를 쓴다.
+ * 대상은 AS·익일AS 접수건뿐이다 (매월점검·물류·휴가는 동선 판단 대상이 아니라 제외).
+ * 위치는 접수 때 입력한 주소를 좌표로 바꿔(지오코딩) 쓰고, 결과는 geocode_cache에
+ * 남겨 같은 주소를 다시 조회하지 않는다. 워킨맵은 별개 기능이라 손대지 않는다.
  * 추천은 "그 구에 오늘 이미 가는 담당자"를 뽑는 것 — 동선이 겹치는 사람에게 붙인다.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { selectAllRows, selectRows, upsertRow } from "./supabase";
+import { selectRows, upsertRow } from "./supabase";
 
 type BoardTicket = {
   id: string; vendor: string; team: string; time: string; status: string;
   scheduleType: string; assignee: string; issue: string; address: string;
 };
-type Place = { name: string; latitude: number | null; longitude: number | null; address: string | null };
-
-const norm = (value: string) => String(value || "").toUpperCase().replace(/[^가-힣A-Z0-9]/g, "");
-
 // 지오코딩용 주소 정리 — 건물명·호수는 검색을 방해하므로 떼고 앞 네 토막만 쓴다
 const cleanAddress = (address: string) => String(address || "")
   .replace(/<[^>]*>/g, " ").replace(/\([^)]*\)/g, " ")
   .replace(/\s+/g, " ").trim()
   .split(" ").slice(0, 4).join(" ");
 
-type Coords = { lat: number; lng: number };
+type Coords = { lat: number; lng: number; approx?: boolean };
 // 접수 때 입력한 주소를 좌표로 바꾼다. 결과는 geocode_cache에 남겨 같은 주소를 다시 조회하지 않는다.
 // 별도 유료 API 없이 OpenStreetMap(Nominatim)을 쓰므로 예의상 한 번에 조금씩, 간격을 두고 호출한다.
+// 지번 주소("역삼동 642-1")는 OSM이 못 찾는 경우가 많아, 뒤 토막을 하나씩 떼며 다시 찾는다.
+// 번지까지 맞으면 정확, 동·구 단위로 잡히면 근사(approx)로 표시해 지도에서 구분한다.
+function geocodeQueries(address: string) {
+  const parts = cleanAddress(address).split(" ").filter(Boolean);
+  const list: string[] = [];
+  for (let count = parts.length; count >= 2; count--) list.push(parts.slice(0, count).join(" "));
+  return Array.from(new Set(list));
+}
+
 async function geocodeMissing(addresses: string[], cache: Record<string, Coords | null>, onFound: (address: string, coords: Coords) => void) {
   const targets = addresses.filter((address) => cache[address] === undefined).slice(0, 8);
   for (const address of targets) {
-    const query = cleanAddress(address);
-    if (!query) continue;
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(query)}`, {
-        headers: { Accept: "application/json" },
-      });
-      const rows = response.ok ? await response.json() : [];
-      const hit = Array.isArray(rows) && rows[0] ? { lat: Number(rows[0].lat), lng: Number(rows[0].lon) } : null;
-      if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lng)) {
-        onFound(address, hit);
-        void upsertRow("geocode_cache", { address, lat: hit.lat, lng: hit.lng }, "address").catch(() => {});
-      } else {
-        void upsertRow("geocode_cache", { address, lat: null, lng: null }, "address").catch(() => {});
-      }
-    } catch { /* 실패한 주소는 다음 기회에 다시 시도 */ }
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const queries = geocodeQueries(address);
+    let found: Coords | null = null;
+    for (let index = 0; index < queries.length && !found; index++) {
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(queries[index])}`, {
+          headers: { Accept: "application/json" },
+        });
+        const rows = response.ok ? await response.json() : [];
+        const hit = Array.isArray(rows) && rows[0] ? { lat: Number(rows[0].lat), lng: Number(rows[0].lon) } : null;
+        if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lng)) found = { ...hit, approx: index > 0 };
+      } catch { /* 다음 질의로 넘어간다 */ }
+      await new Promise((resolve) => setTimeout(resolve, 1200));   // OSM 이용 예절: 초당 1건 이하
+    }
+    if (found) onFound(address, found);
+    void upsertRow("geocode_cache", {
+      address, lat: found?.lat ?? null, lng: found?.lng ?? null,
+      source: found ? (found.approx ? "osm-approx" : "osm") : "osm-none",
+    }, "address").catch(() => {});
   }
 }
 const districtOf = (address: string) => (String(address || "").match(/([가-힣]+[구군])/) || [])[1] || "";
@@ -68,13 +75,6 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
   useEffect(() => { try { localStorage.setItem("today_board_open_v1", open ? "1" : "0"); } catch { /* 무시 */ } }, [open]);
 
   const [geo, setGeo] = useState<Record<string, Coords | null>>({});
-  const [places, setPlaces] = useState<Place[] | null>(null);
-  useEffect(() => {
-    if (!open || places) return;
-    void selectAllRows<Place>("workin_map_places", "select=name,latitude,longitude,address")
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
-  }, [open, places]);
 
   // 접수 주소가 있는 일정은 그 주소를 좌표로 바꿔 쓴다 (워킨맵 업체 위치보다 정확)
   const ticketAddresses = useMemo(
@@ -85,10 +85,10 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     if (!open || !ticketAddresses.length) return;
     let alive = true;
     void (async () => {
-      const rows = await selectRows<{ address: string; lat: number | null; lng: number | null }>("geocode_cache", "select=address,lat,lng&limit=2000").catch(() => []);
+      const rows = await selectRows<{ address: string; lat: number | null; lng: number | null; source: string }>("geocode_cache", "select=address,lat,lng,source&limit=2000").catch(() => []);
       if (!alive) return;
       const cache: Record<string, Coords | null> = {};
-      rows.forEach((row) => { cache[row.address] = row.lat && row.lng ? { lat: row.lat, lng: row.lng } : null; });
+      rows.forEach((row) => { cache[row.address] = row.lat && row.lng ? { lat: row.lat, lng: row.lng, approx: row.source === "osm-approx" } : null; });
       setGeo(cache);
       await geocodeMissing(ticketAddresses, cache, (address, coords) => {
         if (alive) setGeo((current) => ({ ...current, [address]: coords }));
@@ -97,32 +97,11 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     return () => { alive = false; };
   }, [open, ticketAddresses]);
 
-  // 업체명 → 워킨맵 장소 (정확 일치 우선, 없으면 포함 관계에서 가장 긴 이름)
-  const placeIndex = useMemo(() => {
-    const exact = new Map<string, Place>();
-    const list: Array<{ key: string; place: Place }> = [];
-    for (const place of places || []) {
-      if (!place.latitude || !place.longitude) continue;
-      const key = norm(place.name);
-      if (!key) continue;
-      if (!exact.has(key)) exact.set(key, place);
-      list.push({ key, place });
-    }
-    list.sort((a, b) => b.key.length - a.key.length);
-    return { exact, list };
-  }, [places]);
-
   const located = useMemo(() => tickets.map((ticket) => {
-    const key = norm(ticket.vendor);
-    let place = key ? placeIndex.exact.get(key) : undefined;
-    if (!place && key.length >= 3) place = placeIndex.list.find((item) => item.key.includes(key) || key.includes(item.key))?.place;
-    // 좌표: 접수 주소 → (없으면) 워킨맵 업체 위치. 구: 접수 주소 → 워킨맵 주소
+    // 좌표·구 모두 접수 주소 기준 (주소가 없으면 지도에는 안 찍히고 목록에만 남는다)
     const address = (ticket.address || "").trim();
-    const fromAddress = address ? geo[address] : null;
-    const coords: Coords | null = fromAddress
-      ?? (place?.latitude && place?.longitude ? { lat: place.latitude, lng: place.longitude } : null);
-    return { ticket, coords, source: fromAddress ? "접수주소" : coords ? "워킨맵" : "", district: districtOf(address || place?.address || "") };
-  }), [tickets, placeIndex, geo]);
+    return { ticket, coords: address ? geo[address] ?? null : null, address, district: districtOf(address) };
+  }), [tickets, geo]);
 
   const [district, setDistrict] = useState("전체");
   const districts = useMemo(() => {
@@ -137,7 +116,8 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     return {
       total: located.length, 미배정: count("미배정"), 배정: count("배정"), 완료: count("완료"),
       지도: located.filter((item) => item.coords).length,
-      주소기준: located.filter((item) => item.source === "접수주소").length,
+      주소없음: located.filter((item) => !item.address).length,
+      근사: located.filter((item) => item.coords?.approx).length,
     };
   }, [located]);
 
@@ -205,12 +185,13 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
       points.push(position);
       const worst = group.some((item) => stateOf(item.ticket) === "미배정") ? "미배정"
         : group.some((item) => stateOf(item.ticket) === "배정") ? "배정" : stateOf(first.ticket);
+      const approx = group.every((item) => item.coords?.approx);
       const icon = L.divIcon({
         className: "today-board-marker",
-        html: `<span style="position:relative;display:block;width:20px;height:20px;background:${MARKER_COLOR[worst]};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style="position:absolute;right:-11px;top:-11px;display:flex;width:17px;height:17px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:#fff;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`,
+        html: `<span style="position:relative;display:block;width:20px;height:20px;background:${MARKER_COLOR[worst]};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35);opacity:${approx ? 0.55 : 1}">${group.length > 1 ? `<b style="position:absolute;right:-11px;top:-11px;display:flex;width:17px;height:17px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:#fff;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`,
         iconSize: [26, 26], iconAnchor: [13, 25],
       });
-      L.marker(position, { icon, title: group.map((item) => `${item.ticket.time} ${item.ticket.vendor}`).join("\n") })
+      L.marker(position, { icon, title: `${group.map((item) => `${item.ticket.time} ${item.ticket.vendor}`).join("\n")}${approx ? "\n(동·구 단위 추정 위치)" : ""}` })
         .addTo(layer)
         .on("click", () => onOpenTicket(first.ticket.id));
     });
@@ -222,7 +203,7 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <button type="button" onClick={() => setOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-black text-slate-950">금일 현황판</span>
+          <span className="text-sm font-black text-slate-950">금일 AS 현황</span>
           <span className={`${chip} bg-slate-100 text-slate-600`}>총 {summary.total}</span>
           {summary.미배정 > 0 && <span className={`${chip} bg-rose-50 text-rose-600`}>미배정 {summary.미배정}</span>}
           <span className={`${chip} bg-blue-50 text-blue-700`}>배정 {summary.배정}</span>
@@ -249,7 +230,7 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
                   <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: MARKER_COLOR[state] }} />{state}
                 </span>
               ))}
-              <span className="ml-auto">지도 표시 {summary.지도}/{summary.total} · 접수주소 {summary.주소기준}건 · 나머지는 워킨맵 위치</span>
+              <span className="ml-auto">지도 표시 {summary.지도}/{summary.total}{summary.근사 > 0 ? ` · 흐린 핀 ${summary.근사}건은 동·구 단위 추정` : ""}{summary.주소없음 > 0 ? ` · 주소 미기재 ${summary.주소없음}건` : ""}</span>
             </div>
           </div>
 
@@ -278,7 +259,7 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
                   </div>
                 </div>
               ))}
-              {!suggestions.length && <div className="rounded-md border border-dashed border-slate-200 p-6 text-center text-[11px] font-bold text-slate-400">{district === "전체" ? "미배정 일정이 없습니다." : `${district}에 미배정 일정이 없습니다.`}</div>}
+              {!suggestions.length && <div className="rounded-md border border-dashed border-slate-200 p-6 text-center text-[11px] font-bold text-slate-400">{district === "전체" ? "미배정 AS가 없습니다." : `${district}에 미배정 AS가 없습니다.`}</div>}
             </div>
           </div>
         </div>
