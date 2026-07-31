@@ -5468,7 +5468,9 @@ export default function App() {
 
       {/* PC 사이드바 — 펼침: 아이콘+글자 / 접힘: 아이콘 레일 (잘린 한글 대신 아이콘) */}
       <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#0B0F17] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
-        <div className={`flex shrink-0 items-center border-b border-white/[0.07] py-4 ${sidebarCollapsed ? "flex-col gap-2 px-2" : "justify-between px-4"}`}>
+        {/* 높이를 상단 헤더(h-16)와 똑같이 고정한다 — 안 맞으면 구분선이 몇 px 엇갈려 보인다.
+            접었을 때는 폭이 좁아 로고와 접기 버튼이 한 줄에 못 들어가므로, 접기 버튼을 메뉴 첫 칸으로 내린다. */}
+        <div className={`flex h-16 shrink-0 items-center border-b border-white/[0.07] ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950">F</span>
             {!sidebarCollapsed && <span className="min-w-0">
@@ -5476,14 +5478,19 @@ export default function App() {
               <span className="block truncate text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
             </span>}
           </div>
-          <button type="button" onClick={() => setSidebarCollapsed((current) => !current)}
-            title={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} aria-label={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+          {!sidebarCollapsed && <button type="button" onClick={() => setSidebarCollapsed(true)}
+            title="사이드바 접기" aria-label="사이드바 접기"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white">
-            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          </button>
+            <PanelLeftClose size={17} />
+          </button>}
         </div>
 
         <nav className={`min-h-0 flex-1 overflow-y-auto py-3 ${sidebarCollapsed ? "space-y-1 px-2" : "space-y-4 px-3"}`}>
+          {sidebarCollapsed && <button type="button" onClick={() => setSidebarCollapsed(false)}
+            title="사이드바 펼치기" aria-label="사이드바 펼치기"
+            className="mb-1 flex h-11 w-full items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/[0.07] hover:text-white">
+            <PanelLeftOpen size={19} />
+          </button>}
           {sidebarCollapsed
             // 접힘 = 전체 메뉴를 아이콘 하나씩. 그룹 계층은 접힌 상태에서 의미가 없다.
             ? navItems.map(([key, label]) => {
@@ -5565,7 +5572,7 @@ export default function App() {
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0B0F17] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
-        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
+        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:h-16 lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
