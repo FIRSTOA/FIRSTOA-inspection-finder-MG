@@ -1673,7 +1673,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
-            <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-500"}`}>
+            <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>
               {syncState === "loading" ? "공용 저장 중" : syncState === "error" ? "공용 DB 연결 필요" : "공용 저장됨"}
             </span>
           </div>

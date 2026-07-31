@@ -5404,7 +5404,7 @@ export default function App() {
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white">F</span>
               <span>
                 <span className="block text-[13px] font-black leading-tight">FIRSTOA CS</span>
-                <span className="block text-[11px] font-semibold text-slate-500">CS 업무 통합</span>
+                <span className="block text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
               </span>
             </div>
             <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3 pb-8">
@@ -5466,7 +5466,7 @@ export default function App() {
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]">F</span>
             {!sidebarCollapsed && <span className="min-w-0">
               <span className="block truncate text-[13px] font-black leading-tight">FIRSTOA CS</span>
-              <span className="block truncate text-[11px] font-semibold text-slate-500">CS 업무 통합</span>
+              <span className="block truncate text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
             </span>}
           </div>
           <button type="button" onClick={() => setSidebarCollapsed((current) => !current)}
