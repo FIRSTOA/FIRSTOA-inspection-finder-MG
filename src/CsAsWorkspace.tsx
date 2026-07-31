@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
+import TodayBoard from "./TodayBoard";
 import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
@@ -894,6 +895,16 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             </div>
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
+
+          {/* 금일·익일은 지도·구별 집계·담당자 추천을 먼저 보여준다 (예정일정은 날짜가 흩어져 의미가 적다) */}
+          {dayFilter !== "scheduled" && scheduleRows.length > 0 && <div className="mb-4">
+            <TodayBoard
+              tickets={scheduleRows}
+              onOpenTicket={setDetailId}
+              onAssign={(ticket, name) => update(ticket.id, { assignee: name, status: ticket.status === "접수" ? "배정" : (ticket.status as AsStatus) })}
+              assigneesOf={(team) => teamAssignees[team as Team] || []}
+            />
+          </div>}
 
           <div className="space-y-3 md:hidden">
             {scheduleRows.map((ticket) => (
