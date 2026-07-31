@@ -66,9 +66,11 @@ export default function DataLookup() {
       parts.push(`${encodeURIComponent(category.dateField)}=gte.${shiftMonths(kstDate(), months)}`);
     }
     if (query.trim()) {
-      // PostgREST or 조건 — 정의된 검색 필드를 한 번에 훑는다
-      const needle = query.trim().replace(/[(),*]/g, " ").trim();
-      parts.push(`or=(${category.searchFields.map((field) => `${field}.ilike.*${needle}*`).join(",")})`);
+      // PostgREST or 조건 — 정의된 검색 필드를 한 번에 훑는다.
+      // 컬럼 이름을 반드시 따옴표로 감싼다: "관심품목(세분화)"처럼 괄호가 든 이름이 있어
+      // 그냥 넣으면 or 구문이 깨진다(400).
+      const needle = query.trim().replace(/[(),*"]/g, " ").trim();
+      parts.push(`or=(${category.searchFields.map((field) => `"${field}".ilike.*${needle}*`).join(",")})`);
     }
     parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
