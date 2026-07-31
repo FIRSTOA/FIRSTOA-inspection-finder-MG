@@ -1,14 +1,15 @@
 /**
  * 금일 현황판 — 오늘 일정을 지도·구별 집계·담당자 추천으로 한눈에 본다.
  *
- * 일정(as_tickets)에는 좌표가 없고 주소도 대부분 비어 있어, 업체명으로 워킨맵
- * (workin_map_places, 좌표 99%·주소 82% 보유)을 매칭해 위치와 구를 얻는다.
+ * 위치는 접수 때 입력한 주소를 우선한다 — 주소를 좌표로 바꿔(지오코딩) 쓰고, 결과는
+ * geocode_cache에 남긴다. 접수 유래가 아닌 일정(반복 매월점검 등)은 주소가 없어
+ * 업체명으로 워킨맵(workin_map_places, 좌표 99%·주소 82% 보유)의 업체 위치를 쓴다.
  * 추천은 "그 구에 오늘 이미 가는 담당자"를 뽑는 것 — 동선이 겹치는 사람에게 붙인다.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { selectAllRows } from "./supabase";
+import { selectAllRows, selectRows, upsertRow } from "./supabase";
 
 type BoardTicket = {
   id: string; vendor: string; team: string; time: string; status: string;
@@ -17,6 +18,37 @@ type BoardTicket = {
 type Place = { name: string; latitude: number | null; longitude: number | null; address: string | null };
 
 const norm = (value: string) => String(value || "").toUpperCase().replace(/[^가-힣A-Z0-9]/g, "");
+
+// 지오코딩용 주소 정리 — 건물명·호수는 검색을 방해하므로 떼고 앞 네 토막만 쓴다
+const cleanAddress = (address: string) => String(address || "")
+  .replace(/<[^>]*>/g, " ").replace(/\([^)]*\)/g, " ")
+  .replace(/\s+/g, " ").trim()
+  .split(" ").slice(0, 4).join(" ");
+
+type Coords = { lat: number; lng: number };
+// 접수 때 입력한 주소를 좌표로 바꾼다. 결과는 geocode_cache에 남겨 같은 주소를 다시 조회하지 않는다.
+// 별도 유료 API 없이 OpenStreetMap(Nominatim)을 쓰므로 예의상 한 번에 조금씩, 간격을 두고 호출한다.
+async function geocodeMissing(addresses: string[], cache: Record<string, Coords | null>, onFound: (address: string, coords: Coords) => void) {
+  const targets = addresses.filter((address) => cache[address] === undefined).slice(0, 8);
+  for (const address of targets) {
+    const query = cleanAddress(address);
+    if (!query) continue;
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(query)}`, {
+        headers: { Accept: "application/json" },
+      });
+      const rows = response.ok ? await response.json() : [];
+      const hit = Array.isArray(rows) && rows[0] ? { lat: Number(rows[0].lat), lng: Number(rows[0].lon) } : null;
+      if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lng)) {
+        onFound(address, hit);
+        void upsertRow("geocode_cache", { address, lat: hit.lat, lng: hit.lng }, "address").catch(() => {});
+      } else {
+        void upsertRow("geocode_cache", { address, lat: null, lng: null }, "address").catch(() => {});
+      }
+    } catch { /* 실패한 주소는 다음 기회에 다시 시도 */ }
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+}
 const districtOf = (address: string) => (String(address || "").match(/([가-힣]+[구군])/) || [])[1] || "";
 
 // 상태별 마커 색 — 미배정을 가장 눈에 띄게 (지금 사람을 붙여야 하는 건)
@@ -35,6 +67,7 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
   });
   useEffect(() => { try { localStorage.setItem("today_board_open_v1", open ? "1" : "0"); } catch { /* 무시 */ } }, [open]);
 
+  const [geo, setGeo] = useState<Record<string, Coords | null>>({});
   const [places, setPlaces] = useState<Place[] | null>(null);
   useEffect(() => {
     if (!open || places) return;
@@ -42,6 +75,27 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
       .then(setPlaces)
       .catch(() => setPlaces([]));
   }, [open, places]);
+
+  // 접수 주소가 있는 일정은 그 주소를 좌표로 바꿔 쓴다 (워킨맵 업체 위치보다 정확)
+  const ticketAddresses = useMemo(
+    () => Array.from(new Set(tickets.map((ticket) => (ticket.address || "").trim()).filter(Boolean))),
+    [tickets],
+  );
+  useEffect(() => {
+    if (!open || !ticketAddresses.length) return;
+    let alive = true;
+    void (async () => {
+      const rows = await selectRows<{ address: string; lat: number | null; lng: number | null }>("geocode_cache", "select=address,lat,lng&limit=2000").catch(() => []);
+      if (!alive) return;
+      const cache: Record<string, Coords | null> = {};
+      rows.forEach((row) => { cache[row.address] = row.lat && row.lng ? { lat: row.lat, lng: row.lng } : null; });
+      setGeo(cache);
+      await geocodeMissing(ticketAddresses, cache, (address, coords) => {
+        if (alive) setGeo((current) => ({ ...current, [address]: coords }));
+      });
+    })();
+    return () => { alive = false; };
+  }, [open, ticketAddresses]);
 
   // 업체명 → 워킨맵 장소 (정확 일치 우선, 없으면 포함 관계에서 가장 긴 이름)
   const placeIndex = useMemo(() => {
@@ -62,8 +116,13 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     const key = norm(ticket.vendor);
     let place = key ? placeIndex.exact.get(key) : undefined;
     if (!place && key.length >= 3) place = placeIndex.list.find((item) => item.key.includes(key) || key.includes(item.key))?.place;
-    return { ticket, place, district: districtOf(ticket.address || place?.address || "") };
-  }), [tickets, placeIndex]);
+    // 좌표: 접수 주소 → (없으면) 워킨맵 업체 위치. 구: 접수 주소 → 워킨맵 주소
+    const address = (ticket.address || "").trim();
+    const fromAddress = address ? geo[address] : null;
+    const coords: Coords | null = fromAddress
+      ?? (place?.latitude && place?.longitude ? { lat: place.latitude, lng: place.longitude } : null);
+    return { ticket, coords, source: fromAddress ? "접수주소" : coords ? "워킨맵" : "", district: districtOf(address || place?.address || "") };
+  }), [tickets, placeIndex, geo]);
 
   const [district, setDistrict] = useState("전체");
   const districts = useMemo(() => {
@@ -75,7 +134,11 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
 
   const summary = useMemo(() => {
     const count = (state: string) => located.filter((item) => stateOf(item.ticket) === state).length;
-    return { total: located.length, 미배정: count("미배정"), 배정: count("배정"), 완료: count("완료"), 지도: located.filter((item) => item.place).length };
+    return {
+      total: located.length, 미배정: count("미배정"), 배정: count("배정"), 완료: count("완료"),
+      지도: located.filter((item) => item.coords).length,
+      주소기준: located.filter((item) => item.source === "접수주소").length,
+    };
   }, [located]);
 
   // 미배정 건 추천: 같은 구에 오늘 일정이 있는 담당자를 건수 순으로
@@ -106,9 +169,21 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, updateWhenIdle: true, attribution: "" }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    // 접기/펼치기로 컨테이너 크기가 바뀌면 타일이 깨져 보이므로 한 번 갱신
-    window.setTimeout(() => map.invalidateSize(), 60);
-    return () => { map.remove(); mapRef.current = null; layerRef.current = null; };
+    // 펼칠 때·탭 전환·창 크기 변화로 컨테이너가 0 높이였다가 커지면 타일이 안 그려진다.
+    // 타이머 한 번으로는 놓치는 경우가 있어 크기 변화를 계속 감시한다.
+    const invalidate = () => mapRef.current?.invalidateSize();
+    window.setTimeout(invalidate, 60);
+    window.setTimeout(invalidate, 400);
+    const observer = new ResizeObserver(invalidate);
+    observer.observe(elementRef.current);
+    window.addEventListener("resize", invalidate);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", invalidate);
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -119,14 +194,14 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
     // 같은 좌표(같은 업체)에 여러 건이면 하나로 묶어 개수를 표시
     const groups = new Map<string, typeof visible>();
     visible.forEach((item) => {
-      if (!item.place?.latitude || !item.place?.longitude) return;
-      const key = `${item.place.latitude.toFixed(5)},${item.place.longitude.toFixed(5)}`;
+      if (!item.coords) return;
+      const key = `${item.coords.lat.toFixed(5)},${item.coords.lng.toFixed(5)}`;
       groups.set(key, [...(groups.get(key) || []), item]);
     });
     const points: L.LatLngExpression[] = [];
     groups.forEach((group) => {
       const first = group[0];
-      const position: L.LatLngExpression = [first.place!.latitude!, first.place!.longitude!];
+      const position: L.LatLngExpression = [first.coords!.lat, first.coords!.lng];
       points.push(position);
       const worst = group.some((item) => stateOf(item.ticket) === "미배정") ? "미배정"
         : group.some((item) => stateOf(item.ticket) === "배정") ? "배정" : stateOf(first.ticket);
@@ -174,7 +249,7 @@ export default function TodayBoard({ tickets, onOpenTicket, onAssign, assigneesO
                   <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: MARKER_COLOR[state] }} />{state}
                 </span>
               ))}
-              <span className="ml-auto">지도 표시 {summary.지도}/{summary.total} · 좌표는 워킨맵 기준</span>
+              <span className="ml-auto">지도 표시 {summary.지도}/{summary.total} · 접수주소 {summary.주소기준}건 · 나머지는 워킨맵 위치</span>
             </div>
           </div>
 
