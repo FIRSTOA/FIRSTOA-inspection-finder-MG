@@ -9,6 +9,7 @@ import { kstDate } from "./visits";
 import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
+import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 
@@ -281,6 +282,16 @@ export default function ServiceReception({ author }: { author: string }) {
   // 시트 반영은 웹훅을 거쳐 몇 초 걸리므로 항상 백그라운드로 — 버튼은 기다리지 않는다.
   const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
     if (!row.lease_no) return;
+    void (async () => {
+      // 접수 직후엔 시트 행번호가 아직 저장 중일 수 있다. 모르는 상태로 보내면 새 행이 추가돼
+      // 접수·시작·처리저장이 각각 다른 행으로 흩어지므로, 보내기 전에 한 번 더 확인한다.
+      let target = row.sheet_row ?? null;
+      if (!target) target = (await getServiceReceptionById(row.id).catch(() => null))?.sheet_row ?? null;
+      await sendReceptionRemoteSheetJobWrapped(row, meta, target);
+    })();
+  };
+
+  const sendReceptionRemoteSheetJobWrapped = async (row: ServiceReceptionRow, meta: Record<string, string>, target: number | null) => {
     void sendReceptionRemoteSheetJob({
       author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
       hanjo: meta.hanjo || (row.type === "IT" ? "IT" : ""),
@@ -288,8 +299,11 @@ export default function ServiceReception({ author }: { author: string }) {
       contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
       symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
       linked: meta.linked || "",
-    }, row.sheet_row ?? null).then(({ row: sheetRow }) => {
-      if (sheetRow && sheetRow !== row.sheet_row) void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+    }, target).then(({ row: sheetRow }) => {
+      if (!sheetRow || sheetRow === target) return;
+      void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+      // 화면 목록에도 즉시 반영 — 다음 동작(종료·처리 저장)이 같은 행을 갱신하도록
+      setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, sheet_row: sheetRow } : item)));
     }).catch(() => { /* 시트 반영 실패는 다음 저장에서 재시도 */ });
   };
 
@@ -548,7 +562,11 @@ export default function ServiceReception({ author }: { author: string }) {
           contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
           symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
         });
-        if (row && sheetRowTargetRef.current) await updateServiceReception(sheetRowTargetRef.current, { sheet_row: row }).catch(() => {});
+        if (row && sheetRowTargetRef.current) {
+          const targetId = sheetRowTargetRef.current;
+          await updateServiceReception(targetId, { sheet_row: row }).catch(() => {});
+          setListRows((current) => current.map((item) => (item.id === targetId ? { ...item, sheet_row: row } : item)));
+        }
         return ` · ${message}`;
       } catch (e) {
         return ` · 시트 기입 실패(${(e as Error).message})`;
