@@ -37,26 +37,7 @@ import { uploadPhoto, createAlbum, selectAllRows, selectRows, updateRows, upsert
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
-function fileToDownscaledDataUrl(file: File, maxDim: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { reject(new Error("canvas 미지원")); return; }
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 로드 실패")); };
-    img.src = url;
-  });
-}
+import { prepareImageForUpload } from "./imageUpload";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import type { AuthorTeam } from "./authors";
 
@@ -117,7 +98,6 @@ const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: str
   praise: { icon: "🌟", title: "칭찬 접수", description: "고객이 칭찬한 내용을 기록하면 DB통합시트 칭찬 탭에 자동 기입됩니다." },
 };
 
-const MODE_ORDER: Mode[] = ["inspection", "blank-report", "air-purifier"];
 
 // 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
 const BW_ACCENT = "#334155";
@@ -3907,7 +3887,8 @@ export default function App() {
 
   const [mode, setMode] = useState<Mode>(() => {
     const m = ss.mode as Mode;
-    return MODE_ORDER.includes(m) ? m : "inspection";
+    // 상단 3탭(MODE_ORDER)만 검사하면 물류·불만 등에서 새로고침 시 점검으로 튕긴다 — 전체 모드로 검사
+    return m && Object.prototype.hasOwnProperty.call(MODE_CONFIG, m) ? m : "inspection";
   });
   // Original input is entered via a popup and not persisted (blank next time);
   // the converted result/forms are persisted so work isn't lost.
@@ -4107,19 +4088,19 @@ export default function App() {
   // selecting a device scrolls its block into view.
   // IT통합(PC) 폼 상태 (탭 전환에도 유지, 초기화 시 리셋)
   const [pcSubTab, setPcSubTab] = useState<"it" | "copier">("it");
-  const [pcForm, setPcForm] = useState<PcFormState>({ ...EMPTY_PC_FORM });
+  const [pcForm, setPcForm] = useState<PcFormState>(() => ({ ...EMPTY_PC_FORM, ...(ss.pcForm as object || {}) }));
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
-  const [copierExpansionForm, setCopierExpansionForm] = useState<CopierExpansionFormState>({ ...EMPTY_COPIER_EXPANSION_FORM });
+  const [copierExpansionForm, setCopierExpansionForm] = useState<CopierExpansionFormState>(() => ({ ...EMPTY_COPIER_EXPANSION_FORM, ...(ss.copierExpansionForm as object || {}) }));
   const copierExpansionFilled = useMemo(() => Object.values(copierExpansionForm).some((v) => String(v).trim() !== ""), [copierExpansionForm]);
   const copierExpansionText = useMemo(() => buildCopierExpansionText(copierExpansionForm, author), [copierExpansionForm, author]);
-  const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>({ ...EMPTY_LOGISTICS_FORM });
+  const [logisticsForm, setLogisticsForm] = useState<LogisticsFormState>(() => ({ ...EMPTY_LOGISTICS_FORM, ...(ss.logisticsForm as object || {}) }));
   const logisticsFilled = Boolean(logisticsForm.vendor.trim() || logisticsForm.item.trim() || logisticsForm.notes.trim());
   const logisticsText = useMemo(() => buildLogisticsText(logisticsForm, author), [logisticsForm, author]);
-  const [replacementForm, setReplacementForm] = useState<ReplacementFormState>({ ...EMPTY_REPLACEMENT_FORM });
+  const [replacementForm, setReplacementForm] = useState<ReplacementFormState>(() => ({ ...EMPTY_REPLACEMENT_FORM, ...(ss.replacementForm as object || {}) }));
   const replacementFilled = Object.entries(replacementForm).some(([key, value]) => key !== "owner" && String(value).trim() !== "");
   const replacementText = useMemo(() => buildReplacementText(replacementForm), [replacementForm]);
-  const [contactChangeForm, setContactChangeForm] = useState<ContactChangeFormState>({ ...EMPTY_CONTACT_CHANGE_FORM });
+  const [contactChangeForm, setContactChangeForm] = useState<ContactChangeFormState>(() => ({ ...EMPTY_CONTACT_CHANGE_FORM, ...(ss.contactChangeForm as object || {}) }));
   const contactChangeFilled = Object.values(contactChangeForm).some((value) => value.trim() !== "");
   const contactChangeText = useMemo(() => buildContactChangeText(contactChangeForm, author), [contactChangeForm, author]);
   const [reportTypes, setReportTypes] = useState<string[]>(
@@ -4129,7 +4110,7 @@ export default function App() {
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
   const isCat = mode === "bulman" || mode === "misu" || mode === "recontract" || mode === "overage-adjust";
-  const [catForms, setCatForms] = useState<Record<string, Record<string, string>>>({});
+  const [catForms, setCatForms] = useState<Record<string, Record<string, string>>>(() => (ss.catForms as Record<string, Record<string, string>>) || {});
   const curCatForm = catForms[mode] || (isCat ? emptyCatForm(mode) : {});
   const catFilled = isCat && Object.values(curCatForm).some((v) => String(v).trim() !== "");
   const catText = useMemo(() => (isCat ? buildCatText(mode, curCatForm, author) : ""), [isCat, mode, curCatForm, author]);
@@ -4277,13 +4258,17 @@ export default function App() {
         localStorage.setItem("session_v1", JSON.stringify({
           mode, textOutput, listOutput, itemForms, sharedForm,
           selectedItem, airForm, editedBlocks, reportTypes, reportTypeOther,
+          // 점검·미양식 외 탭(PC·복합기확장성·물류·교체·담당자변경·불만·미수·초과·재계약)도
+          // 새로고침에 작성분이 남도록 함께 보관한다
+          pcForm, copierExpansionForm, logisticsForm, replacementForm, contactChangeForm, catForms,
         }));
       } catch {
         // ignore quota / private mode errors
       }
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [mode, textOutput, listOutput, itemForms, sharedForm, selectedItem, airForm, editedBlocks, reportTypes, reportTypeOther]);
+  }, [mode, textOutput, listOutput, itemForms, sharedForm, selectedItem, airForm, editedBlocks, reportTypes, reportTypeOther,
+      pcForm, copierExpansionForm, logisticsForm, replacementForm, contactChangeForm, catForms]);
 
   const openInputModal = () => {
     setDraftInput(inputText);
@@ -4401,7 +4386,13 @@ export default function App() {
     setPhotoBusy(true);
     showToast("사진 읽는 중…");
     try {
-      const dataUrl = await fileToDownscaledDataUrl(file, 1400);
+      const prepared = await prepareImageForUpload(file, 1400);
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("사진을 읽지 못했습니다"));
+        reader.readAsDataURL(prepared.blob);
+      });
       const isAir = mode === "air-purifier";
       const resp = await visionForm(dataUrl, isAir ? "air" : "inspection");
       if (resp.ok && resp.text) {
@@ -4670,9 +4661,9 @@ export default function App() {
           const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
           urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4");
         } else {
-          const dataUrl = await fileToDownscaledDataUrl(f, 1600);
-          const blob = await (await fetch(dataUrl)).blob();
-          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.jpg`, blob, "image/jpeg");
+          // 모바일(HEIC·고화소)에서도 실패하지 않게: 축소 실패 시 원본을 실제 형식으로 올린다
+          const prepared = await prepareImageForUpload(f, 1600);
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType);
         }
         done++;
         showToast(`첨부 ${done}/${photos.length} 올리는 중…`);

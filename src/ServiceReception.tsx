@@ -8,6 +8,7 @@ import {
 import { kstDate } from "./visits";
 import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
+import { prepareImageForUpload } from "./imageUpload";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 
@@ -118,18 +119,6 @@ function teamFromRegion(region: string) {
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
 }
 // 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
-async function downscaleImage(file: File, maxSize = 1600): Promise<Blob> {
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) return file;
-  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
-  if (scale >= 1) return file;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.85));
-}
-
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
@@ -259,9 +248,9 @@ export default function ServiceReception({ author }: { author: string }) {
     try {
       const uploaded: Array<{ url: string; name: string }> = [];
       for (const file of Array.from(files).slice(0, 6 - photos.length)) {
-        const blob = await downscaleImage(file);
-        const path = `reception/${crypto.randomUUID()}.jpg`;
-        const url = await uploadPhoto(path, blob);
+        // 모바일(HEIC·고화소)에서도 실패하지 않게 — 축소 불가 시 원본을 실제 형식으로 올린다
+        const prepared = await prepareImageForUpload(file, 1600);
+        const url = await uploadPhoto(`reception/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType);
         uploaded.push({ url, name: file.name });
       }
       setPhotos((prev) => [...prev, ...uploaded]);
