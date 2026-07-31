@@ -280,31 +280,37 @@ export default function ServiceReception({ author }: { author: string }) {
 
   // 처리값을 DB에 저장하고, 접수 때 만든 시트 행을 같은 자리에 갱신한다 (행이 없으면 새로 추가)
   // 시트 반영은 웹훅을 거쳐 몇 초 걸리므로 항상 백그라운드로 — 버튼은 기다리지 않는다.
-  const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
-    if (!row.lease_no) return;
-    void (async () => {
-      // 접수 직후엔 시트 행번호가 아직 저장 중일 수 있다. 모르는 상태로 보내면 새 행이 추가돼
-      // 접수·시작·처리저장이 각각 다른 행으로 흩어지므로, 보내기 전에 한 번 더 확인한다.
-      let target = row.sheet_row ?? null;
-      if (!target) target = (await getServiceReceptionById(row.id).catch(() => null))?.sheet_row ?? null;
-      await sendReceptionRemoteSheetJobWrapped(row, meta, target);
-    })();
+  // 같은 접수의 시트 작업은 반드시 한 줄로 세워서 순서대로 보낸다.
+  // 접수 기입(5~15초 소요)이 끝나기 전에 시작·종료·처리저장이 겹치면 서로 상대가 만든 행을
+  // 모른 채 각각 새 행을 만들어(관측: 3~4행 생성) 흩어진다. 앞 작업이 알려준 행번호를 이어받는다.
+  const sheetChainRef = useRef<Record<string, Promise<number | null>>>({});
+  const runSheetWrite = (id: string, task: (target: number | null) => Promise<number | null>) => {
+    const previous = sheetChainRef.current[id] ?? Promise.resolve<number | null>(null);
+    const next = previous.then((target) => task(target)).catch(() => null);
+    sheetChainRef.current[id] = next;
+    return next;
   };
 
-  const sendReceptionRemoteSheetJobWrapped = async (row: ServiceReceptionRow, meta: Record<string, string>, target: number | null) => {
-    void sendReceptionRemoteSheetJob({
-      author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
-      hanjo: meta.hanjo || (row.type === "IT" ? "IT" : ""),
-      start: meta.start || "", end: meta.end || "", result: meta.result || "", handler: meta.handler || "",
-      contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
-      symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
-      linked: meta.linked || "",
-    }, target).then(({ row: sheetRow }) => {
-      if (!sheetRow || sheetRow === target) return;
-      void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
-      // 화면 목록에도 즉시 반영 — 다음 동작(종료·처리 저장)이 같은 행을 갱신하도록
-      setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, sheet_row: sheetRow } : item)));
-    }).catch(() => { /* 시트 반영 실패는 다음 저장에서 재시도 */ });
+  const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
+    if (!row.lease_no) return;
+    void runSheetWrite(row.id, async (chained) => {
+      // 앞 작업이 알려준 행 → 화면에 있는 행 → DB에 저장된 행 순으로 대상을 찾는다
+      let target = chained ?? row.sheet_row ?? null;
+      if (!target) target = (await getServiceReceptionById(row.id).catch(() => null))?.sheet_row ?? null;
+      const { row: sheetRow } = await sendReceptionRemoteSheetJob({
+        author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
+        hanjo: meta.hanjo || (row.type === "IT" ? "IT" : ""),
+        start: meta.start || "", end: meta.end || "", result: meta.result || "", handler: meta.handler || "",
+        contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
+        symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
+        linked: meta.linked || "",
+      }, target);
+      if (sheetRow && sheetRow !== target) {
+        void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+        setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, sheet_row: sheetRow } : item)));
+      }
+      return sheetRow ?? target;
+    });
   };
 
   const saveHandling = async (row: ServiceReceptionRow, extra: Record<string, string> = {}, silent = false) => {
@@ -553,20 +559,28 @@ export default function ServiceReception({ author }: { author: string }) {
     if (isRemoteType) {
       if (custKind === "신규") return " · 원격 신규는 시트 기입 준비 중 (접수는 저장됨)";
       if (!firstNo.trim()) return " · 순번 미입력 — 시트 기입 생략";
+      // 폼이 곧 초기화되므로 보낼 값을 먼저 복사해 둔다 (비동기 중에 빈 값이 되는 것 방지)
+      const payload = {
+        author, vendor: vendorName, leaseNo: firstNo.trim(), route, hanjo: hanjoFinal,
+        start: "", end: "", result: "", handler: "",
+        // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
+        contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
+        symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
+      };
+      const receptionId = sheetRowTargetRef.current;
       try {
-        // 접수 시점엔 접수분만 기입 — 시작·종료·처리여부는 대기열에서 처리할 때 같은 행에 채운다
-        const { message, row } = await sendReceptionRemoteSheetJob({
-          author, vendor: vendorName, leaseNo: firstNo.trim(), route, hanjo: hanjoFinal,
-          start: "", end: "", result: "", handler: "",
-          // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
-          contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
-          symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
+        // 접수 시점엔 접수분만 기입 — 시작·종료·처리여부는 대기열에서 처리할 때 같은 행에 채운다.
+        // 같은 줄(runSheetWrite)에 세워 이후 처리 작업이 이 행번호를 이어받게 한다.
+        let message = "";
+        await runSheetWrite(receptionId, async () => {
+          const result = await sendReceptionRemoteSheetJob(payload);
+          message = result.message;
+          if (result.row && receptionId) {
+            await updateServiceReception(receptionId, { sheet_row: result.row }).catch(() => {});
+            setListRows((current) => current.map((item) => (item.id === receptionId ? { ...item, sheet_row: result.row } : item)));
+          }
+          return result.row ?? null;
         });
-        if (row && sheetRowTargetRef.current) {
-          const targetId = sheetRowTargetRef.current;
-          await updateServiceReception(targetId, { sheet_row: row }).catch(() => {});
-          setListRows((current) => current.map((item) => (item.id === targetId ? { ...item, sheet_row: row } : item)));
-        }
         return ` · ${message}`;
       } catch (e) {
         return ` · 시트 기입 실패(${(e as Error).message})`;
