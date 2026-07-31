@@ -309,7 +309,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
         {/* 포인트 현황 */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-black text-slate-900">🏆 포인트 현황</h3>
+            <h3 className="text-sm font-black text-slate-950">🏆 포인트 현황</h3>
             <div className="rounded-full bg-slate-100 p-1">
               {([[false, "전체"], [true, "이번 달"]] as [boolean, string][]).map(([monthly, label]) => (
                 <button key={label} type="button" onClick={() => setPointsMonthly(monthly)} className={`rounded-full px-2 py-1 text-[10px] font-black ${pointsMonthly === monthly ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>

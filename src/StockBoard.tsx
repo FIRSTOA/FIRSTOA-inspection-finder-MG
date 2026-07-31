@@ -207,8 +207,8 @@ export default function StockBoard({ author }: { author: string }) {
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{items.some((i) => i.kind === kind) ? "조건에 맞는 항목이 없어요." : `${kind} 재고 항목을 추가해 주세요. (관리부와 함께 채워가는 표입니다)`}</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{items.some((i) => i.kind === kind) ? "조건에 맞는 항목이 없어요." : `${kind} 재고 항목을 추가해 주세요. (관리부와 함께 채워가는 표입니다)`}</div>}
 
       {kind === "기기" ? (
         Array.from(byBrand.entries()).map(([brandName, rows]) => (

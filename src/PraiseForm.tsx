@@ -35,7 +35,7 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
 
   const field = "h-10 w-full rounded-lg border border-slate-300 px-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
         <h3 className="text-base font-black text-slate-950">칭찬 접수</h3>
         <p className="mt-1 text-xs font-semibold text-slate-500">고객이 칭찬한 내용을 기록하면 DB통합시트 칭찬 탭에 바로 기입됩니다. 분기·월·분류는 자동으로 채워져요.</p>

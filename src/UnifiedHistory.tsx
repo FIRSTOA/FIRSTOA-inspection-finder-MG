@@ -331,7 +331,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               </div>
             </details>;
           })}
-          {!records.length && <div className="rounded-lg border border-slate-200 bg-white py-12 text-center text-sm font-semibold text-slate-400">선택한 범위에 이력이 없습니다.</div>}
+          {!records.length && <div className="rounded-xl border border-slate-200 bg-white py-12 text-center text-sm font-semibold text-slate-400">선택한 범위에 이력이 없습니다.</div>}
         </section>}
       </main>
     </div>

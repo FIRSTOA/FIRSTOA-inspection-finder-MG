@@ -539,7 +539,7 @@ export default function DeptRequests({ author }: { author: string }) {
 
         {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
         {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-        {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 요청이 없어요." : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
+        {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 요청이 없어요." : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
 
         <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
           {filtered.map((row) => (

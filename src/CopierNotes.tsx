@@ -249,7 +249,7 @@ export default function CopierNotes({ author }: { author: string }) {
           (!keyword || `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.content}`.toLowerCase().includes(keyword)));
         return (
           <div className="space-y-3">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex flex-wrap items-center gap-1">
                 {brands.map((name) => (
                   <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
@@ -269,10 +269,10 @@ export default function CopierNotes({ author }: { author: string }) {
                 ))}
               </div>}
             </div>
-            {guides === null && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+            {guides === null && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {filtered.map((doc) => (
-                <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
+                <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
                   <div className="flex flex-wrap items-center gap-1">
                     {doc.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
                     {doc.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
@@ -287,7 +287,7 @@ export default function CopierNotes({ author }: { author: string }) {
                 </button>
               ))}
             </div>
-            {guides !== null && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
+            {guides !== null && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
             {openGuide && (
               <div className="fixed inset-0 z-[210] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setOpenGuide(null)}>
                 <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -313,7 +313,7 @@ export default function CopierNotes({ author }: { author: string }) {
         );
       })()}
 
-      {view === "quiz" && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      {view === "quiz" && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {quizIndex < 0 && (() => {
           const bank = notes.filter((n) => n.title.trim() && n.content.trim());
           const bankOf = (name: string) => name === "전체" ? bank.length : bank.filter((n) => n.brand === name).length;
@@ -348,7 +348,7 @@ export default function CopierNotes({ author }: { author: string }) {
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap gap-1.5">
               <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{currentQuiz.note.brand}</span>
-              {currentQuiz.note.model && <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">{currentQuiz.note.model}</span>}
+              {currentQuiz.note.model && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">{currentQuiz.note.model}</span>}
             </div>
             <div className="mt-2 text-base font-black text-slate-950">증상: {currentQuiz.note.title}</div>
             <div className="mt-1 text-xs font-bold text-slate-500">올바른 처리 내용을 고르세요</div>
@@ -409,14 +409,14 @@ export default function CopierNotes({ author }: { author: string }) {
             [`${stats.cases.toLocaleString()}건`, "처리이력"],
             [`+${stats.month.toLocaleString()}건`, "이번 달 신규"],
           ] as [string, string][]).map(([value, label]) => (
-            <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
               <div className="text-lg font-black text-slate-950">{value}</div>
               <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
             </div>
           ))}
         </div>
       )}
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold text-slate-500">브랜드·기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스입니다.</p>
           <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 기록 추가</button>
@@ -453,12 +453,12 @@ export default function CopierNotes({ author }: { author: string }) {
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && !notes.length && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{notes.length ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}
+      {loading && !notes.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{notes.length ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}
 
       <div className="grid gap-3 lg:grid-cols-2">
         {filtered.map((note) => (
-          <article key={note.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <article key={note.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{note.brand}</span>
@@ -476,7 +476,7 @@ export default function CopierNotes({ author }: { author: string }) {
           </article>
         ))}
       </div>
-      {hasMore && <button type="button" onClick={() => void load(notes.length)} disabled={loading} className="w-full rounded-lg border border-slate-200 bg-white py-3 text-sm font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:text-slate-300">{loading ? "불러오는 중…" : `더 보기 (현재 ${notes.length}건 표시)`}</button>}
+      {hasMore && <button type="button" onClick={() => void load(notes.length)} disabled={loading} className="w-full rounded-xl border border-slate-200 bg-white py-3 text-sm font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:text-slate-300">{loading ? "불러오는 중…" : `더 보기 (현재 ${notes.length}건 표시)`}</button>}
 
       </>}
 

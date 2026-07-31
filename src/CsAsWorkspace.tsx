@@ -705,7 +705,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const renderTicketCard = (ticket: AsTicket) => (
-    <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
+    <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className="block w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-sm font-black text-slate-900">{ticket.vendor}</div>
@@ -745,7 +745,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="grid grid-cols-2 gap-3 lg:block lg:space-y-5">
                   <div>
                     <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 종류</div>
-                    <div className="space-y-0.5 rounded-lg border border-slate-200 bg-white p-1.5">
+                    <div className="space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5">
                       {scheduleFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
@@ -757,7 +757,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                   <div>
                     <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">담당 팀</div>
-                    <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-slate-200 bg-white p-1.5 lg:grid-cols-1">
+                    <div className="grid grid-cols-2 gap-0.5 rounded-xl border border-slate-200 bg-white p-1.5 lg:grid-cols-1">
                       {teams.map((calendarTeam) => (
                         <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleTeams.includes(calendarTeam)} onChange={() => toggleVisibleTeam(calendarTeam)} className="h-4 w-4 accent-blue-600" />
@@ -941,7 +941,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[220px] truncate">{ticket.vendor}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
+                      <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[220px] truncate">{ticket.vendor}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                       {shortAddress(ticket.address) && <div className="mt-0.5 text-[10px] font-bold text-slate-400">📍 {shortAddress(ticket.address)}</div>}
                       <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                     </td>
@@ -993,7 +993,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{ticket.team}팀</span>
+                    <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{ticket.team}팀</span>
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-black ${statusClass(ticket.status)}`}>{ticket.status}</span>
                     <span className="text-[11px] font-black text-slate-400">{ticket.date} {ticket.time}</span>
                   </div>

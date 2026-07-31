@@ -201,7 +201,7 @@ export function HappyCallWorkspace({ author }: { author: string }) {
       </div>
       <div className="max-h-[calc(100dvh-290px)] divide-y overflow-y-auto xl:max-h-[700px]">{rows.map((visit) => { const status = recordMap.get(visit.id)?.status || "pending"; return <button key={visit.id} onClick={() => choose(visit)} className={`block w-full p-4 text-left hover:bg-slate-50 ${selectedId === visit.id ? "bg-blue-50" : ""}`}><div className="flex justify-between gap-3"><div><div className="text-sm font-black">{visit.vendor}</div><div className="mt-1 text-xs font-semibold text-slate-500">{visit.workDate} · {visitType(visit)} · {visit.author}</div></div><span className="shrink-0 text-[10px] font-black text-blue-600">{statusLabel(status)}</span></div></button>; })}{!loading && !rows.length && <div className="p-12 text-center text-sm text-slate-400">방문기록이 없습니다.</div>}</div>
     </section>
-    <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:block">{detail}</section>
+    <section className="hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:block">{detail}</section>
     {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 pt-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><button type="button" onClick={() => setSelectedId("")} className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/80 text-xl text-white shadow-lg" aria-label="닫기">×</button>{detail}</section></div>}
   </div>;
 }
@@ -236,7 +236,7 @@ export function PromoWorkspace({ author }: { author: string }) {
         <span className="min-w-0 truncate">{sourceVisit ? `${sourceVisit.workDate} · ${sourceVisit.vendor} · ${visitType(sourceVisit)}` : "직접 입력"}</span>
         <span className="shrink-0 text-slate-400">{visitPickerOpen ? "▲" : "▼"}</span>
       </button>
-      {visitPickerOpen && <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+      {visitPickerOpen && <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
         <button type="button" onClick={() => chooseVisit("")} className={`block w-full rounded px-3 py-2.5 text-left text-sm font-bold ${!sourceVisitId ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>직접 입력</button>
         {visits.map((visit) => <button type="button" key={visit.id} onClick={() => chooseVisit(visit.id)} className={`block w-full rounded px-3 py-2.5 text-left ${sourceVisitId === visit.id ? "bg-blue-50" : "hover:bg-slate-50"}`}><span className="block truncate text-sm font-black text-slate-900">{visit.vendor}</span><span className="mt-0.5 block text-[11px] font-bold text-slate-500">{visit.workDate} · {visitType(visit)}</span></button>)}
       </div>}

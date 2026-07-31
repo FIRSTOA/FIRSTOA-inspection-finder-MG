@@ -15,7 +15,7 @@ function TextField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300"
+        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300"
       />
     </label>
   );
@@ -37,7 +37,7 @@ function TextAreaField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={2}
-        className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300"
+        className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300"
       />
     </label>
   );
@@ -53,7 +53,7 @@ export default function ReplacementForm({
   const set = (key: keyof ReplacementFormState, value: string) => setForm({ ...form, [key]: value });
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div>
         <div className="text-sm font-black text-slate-950">교체양식</div>
         <div className="mt-1 text-xs font-semibold leading-5 text-slate-400">

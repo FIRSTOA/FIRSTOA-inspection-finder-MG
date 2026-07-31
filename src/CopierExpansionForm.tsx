@@ -86,7 +86,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
+        className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
     </label>
   );
 }
@@ -107,7 +107,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
           className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>직접입력</button>
       </div>
       {direct && <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
-        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />}
+        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />}
     </div>
   );
 }
@@ -117,7 +117,7 @@ function TextArea({ label, value, onChange, placeholder }: { label: string; valu
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={5} placeholder={placeholder}
-        className="mt-0.5 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
+        className="mt-0.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
     </label>
   );
 }
@@ -154,7 +154,7 @@ export default function CopierExpansionForm({ form, setForm, author, setAuthor, 
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
         <select value={author} onChange={(e) => setAuthor(e.target.value)}
-          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
+          className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
           <option value="">선택</option>
           {authors.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>

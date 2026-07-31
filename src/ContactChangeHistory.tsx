@@ -110,7 +110,7 @@ ${names}${matches.length > 5 ? `
 
   return (
     <div className="space-y-3 pb-12">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-xs font-semibold text-slate-500">FIELD에서 전송한 변경 요청을 업체·지역별로 확인하고, 워킨맵에 반영합니다.</p>
           <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
@@ -123,7 +123,7 @@ ${names}${matches.length > 5 ? `
         </div>
       </section>
 
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-400">변경 기록을 불러오는 중입니다.</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-400">변경 기록을 불러오는 중입니다.</div>}
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">기록을 불러오지 못했습니다. Supabase SQL Editor에서 `contact-changes.sql`을 실행해 주세요.<br /><span className="text-xs">{error}</span></div>}
       {!loading && !error && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {!filtered.length ? <div className="p-12 text-center text-sm font-semibold text-slate-400">아직 저장된 변경 기록이 없습니다.</div> : <div className="divide-y divide-slate-100">

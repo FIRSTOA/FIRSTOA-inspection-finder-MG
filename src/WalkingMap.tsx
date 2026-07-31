@@ -1846,11 +1846,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             onFocus={() => setMapSearchFocused(true)}
             onBlur={() => window.setTimeout(() => setMapSearchFocused(false), 120)}
             placeholder="거래처 검색"
-            className="w-full rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
+            className="w-full rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
           />
           {mapQuery && <button type="button" onClick={() => setMapQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
           {mapSearchFocused && mapQuery.trim() && (
-            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl">
               {mapSearchResults.map((place) => (
                 <button
                   key={place.id}
@@ -1888,7 +1888,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
 
           {conditionMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-lg border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
                 {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
@@ -1906,7 +1906,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
 
           {colorMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-lg border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
               <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
               <div className="grid grid-cols-3 gap-2">
                 {mapLabels.map((item) => (
@@ -1920,7 +1920,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
 
           {progressMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
@@ -1953,7 +1953,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-emerald-50"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${renewalRate}%` }} /></div>
                         <div className="mt-1 space-y-1">
                           {item.urgentRenewals.map(({ grade, renewal }) => renewal
-                            ? <div key={grade} className="flex items-start gap-1.5 text-[11px] font-black leading-4 text-slate-800"><span className="shrink-0 rounded bg-emerald-100 px-1.5 text-emerald-700">{grade}</span><span className="min-w-0">{renewal.place.name}<span className="ml-1 text-rose-600">{renewal.end.date}</span></span></div>
+                            ? <div key={grade} className="flex items-start gap-1.5 text-[11px] font-black leading-4 text-slate-800"><span className="shrink-0 rounded-full bg-emerald-100 px-1.5 text-emerald-700">{grade}</span><span className="min-w-0">{renewal.place.name}<span className="ml-1 text-rose-600">{renewal.end.date}</span></span></div>
                             : <div key={grade} className="text-[10px] font-bold text-slate-400">{grade}급 재계약 건이 없습니다.</div>)}
                         </div>
                         {item.renewalMonths.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{item.renewalMonths.map(([month, count]) => <span key={month} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{month} {count}건</span>)}</div>}
@@ -2027,7 +2027,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     {onSelfRequest && <button type="button" onClick={() => {
                       void requestSelfForm(place, latestVisit, snapshots[0], advice.needsList, popupVendor);
                       setComparePopupId(null);
-                    }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}
+                    }} className="shrink-0 rounded-full bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}
                   </div>
                 </div>}
               </> : <div className="py-6 text-center text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
@@ -2078,7 +2078,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 {advice && <div className="space-y-2">{advice.warning && <div className="rounded bg-rose-50 px-2 py-1 text-xs font-black text-rose-700">주의 {advice.warning}</div>}{advice.usageLine && <div className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">사용량 {advice.usageLine}</div>}<div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-xs font-black text-amber-700">여분 {advice.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                   void requestSelfForm(place, latestVisit, snapshots[0], advice.needsList, detailVendor);
                   setMobileDetailId(null);
-                }} className="shrink-0 rounded bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
+                }} className="shrink-0 rounded-full bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white">자가신청</button>}</div></div>}
               </div> : <div className="mt-2 text-sm font-semibold text-slate-400">연결된 점검 기록이 없습니다.</div>}
             </section>}
             <section className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 border-b border-slate-100 px-4 py-4">
@@ -2272,7 +2272,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                               const isEarly = weeklyAnalysis.earlyEndDate >= week.start && weeklyAnalysis.earlyEndDate <= week.end;
                               return (
                                 <tr key={week.label} className={`border-b border-slate-50 ${isNow ? "bg-blue-50 font-black" : isEnd ? "bg-rose-50" : isEarly ? "bg-amber-50" : isFuture ? "text-slate-300" : ""}`}>
-                                  <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span>{isEarly && <span className="ml-1 rounded bg-amber-200 px-1 text-[9px] font-black text-amber-800">말일-10일</span>}{isEnd && <span className="ml-1 rounded bg-rose-200 px-1 text-[9px] font-black text-rose-800">말일</span>}</td>
+                                  <td className="py-1 text-left text-slate-600">{week.label} <span className="text-slate-300">{week.start.slice(5)}~{week.end.slice(5)}</span>{isEarly && <span className="ml-1 rounded-full bg-amber-200 px-1 text-[9px] font-black text-amber-800">말일-10일</span>}{isEnd && <span className="ml-1 rounded-full bg-rose-200 px-1 text-[9px] font-black text-rose-800">말일</span>}</td>
                                   <td className="py-1 text-center text-blue-700">{inspN ? `+${inspN}` : "·"}</td>
                                   <td className="py-1 text-center text-emerald-700">{renewN ? `+${renewN}` : "·"}</td>
                                   <td className="py-1 text-center font-black text-blue-700">{inspN ? `${inspWeekPct.toFixed(1)}%` : "·"}</td>

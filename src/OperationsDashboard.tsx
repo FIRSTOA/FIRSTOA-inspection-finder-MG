@@ -325,7 +325,7 @@ export default function OperationsDashboard({ author }: Props) {
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요.</span></div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
       {notice && <div className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-bold text-white">{notice}</div>}
 
       {!loading && !error && (

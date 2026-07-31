@@ -158,7 +158,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
       </section>
 
       <section>
-        <div className="mb-3 px-1"><h3 className="text-lg font-black text-slate-950">바로 시작</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">현장과 이동 중 가장 자주 쓰는 메뉴입니다.</p></div>
+        <div className="mb-3 px-1"><h3 className="text-base font-black text-slate-950 lg:text-lg">바로 시작</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">현장과 이동 중 가장 자주 쓰는 메뉴입니다.</p></div>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 2xl:grid-cols-8">
           {primaryLinks.map((item) => {
             const Icon = item.icon;

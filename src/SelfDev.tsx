@@ -133,7 +133,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
 
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900">🔥 이번 달 포인트 랭킹</h3>
+          <h3 className="text-sm font-black text-slate-950">🔥 이번 달 포인트 랭킹</h3>
           <div className="mt-3 space-y-1.5">
             {!monthlyRank.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 추천 기록이 아직 없어요.</div>}
             {monthlyRank.map(([name, count], index) => (
@@ -145,7 +145,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           </div>
         </section>
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900">🏛 명예의 전당 <span className="font-bold text-slate-400">— 월간 1위</span></h3>
+          <h3 className="text-sm font-black text-slate-950">🏛 명예의 전당 <span className="font-bold text-slate-400">— 월간 1위</span></h3>
           <div className="mt-3 space-y-1.5">
             {!hallOfFame.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 마감된 달의 기록이 없어요.</div>}
             {hallOfFame.map((entry) => (
@@ -161,7 +161,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
 
       {praises.length > 0 && <section className="rounded-xl border border-rose-100 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-900">💖 최근 칭찬</h3>
+          <h3 className="text-sm font-black text-slate-950">💖 최근 칭찬</h3>
           <button type="button" onClick={() => onGo("praise")} className="text-[11px] font-black text-rose-500">칭찬하러 가기 →</button>
         </div>
         <div className="mt-2 space-y-1.5">
@@ -175,7 +175,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-900">🕘 최근 올라온 글</h3>
+          <h3 className="text-sm font-black text-slate-950">🕘 최근 올라온 글</h3>
           <div className="flex gap-2">
             <button type="button" onClick={() => onGo("reading")} className="text-[11px] font-black text-blue-600">독서 →</button>
             <button type="button" onClick={() => onGo("tips")} className="text-[11px] font-black text-blue-600">배움·팁 →</button>
@@ -354,7 +354,7 @@ function PraiseBoard({ author }: { author: string }) {
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
-          <h3 className="text-sm font-black text-slate-900">👑 이번 달 칭찬왕</h3>
+          <h3 className="text-sm font-black text-slate-950">👑 이번 달 칭찬왕</h3>
           <div className="mt-3 space-y-1.5">
             {!monthlyKing.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 칭찬이 아직 없어요.</div>}
             {monthlyKing.map(([name, count], index) => (
@@ -601,7 +601,7 @@ function GoalsBoard({ author }: { author: string }) {
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
-          <h3 className="text-sm font-black text-slate-900">🏁 달성 현황</h3>
+          <h3 className="text-sm font-black text-slate-950">🏁 달성 현황</h3>
           <p className="mt-0.5 text-[10px] font-bold text-slate-400">완료한 목표 수 기준. 서로 자극이 되어주세요.</p>
           <div className="mt-3 space-y-1.5">
             {!teamStats.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 목표 기록이 없어요.</div>}

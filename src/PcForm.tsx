@@ -47,7 +47,7 @@ function Field({ label, value, onChange, star }: { label: string; value: string;
     <label className="block">
       <span className="text-xs font-medium text-slate-500">{star && <span className="text-rose-400">* </span>}{label}</span>
       <input value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
+        className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />
     </label>
   );
 }
@@ -68,7 +68,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
           className={`rounded-lg px-3 py-2 text-xs font-bold ${direct ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>직접입력</button>
       </div>
       {direct && <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
-        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />}
+        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]" />}
     </div>
   );
 }
@@ -97,7 +97,7 @@ function ChipMulti({ label, options, value, onChange }: { label: string; options
       </div>
       <div className="mt-1.5 flex gap-1.5">
         <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#334155]" />
+          placeholder="직접입력 후 추가" className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#334155]" />
         <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
       </div>
     </div>
@@ -135,7 +135,7 @@ function ChipGroups({ label, groups, value, onChange }: { label: string; groups:
       )}
       <div className="mt-1.5 flex gap-1.5">
         <input value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-          placeholder="직접입력 후 추가" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#334155]" />
+          placeholder="직접입력 후 추가" className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-[#334155]" />
         <button type="button" onClick={addCustom} className="shrink-0 rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
       </div>
     </div>
@@ -180,7 +180,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
         <select value={author} onChange={(e) => setAuthor(e.target.value)}
-          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
+          className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
           <option value="">선택</option>
           {authors.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>

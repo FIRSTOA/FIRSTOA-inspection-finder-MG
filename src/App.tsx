@@ -2334,9 +2334,9 @@ function changeSpareStorageLocation(raw: string, location: string) {
 
 function SpareQuickEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return <div>
-    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">{SPARE_TOKENS.map((token) => { const count = spareTokenCount(value, token); return <div key={token} className="rounded-lg border border-slate-200 bg-white p-1.5"><div className="text-center text-[10px] font-bold text-slate-500">{token}</div><div className="mt-1 grid grid-cols-3 items-center"><button type="button" onClick={()=>onChange(changeSpareToken(value,token,-1))} className="rounded bg-slate-100 py-1 text-xs text-slate-500">−</button><span className="text-center text-sm font-bold text-slate-700">{count ?? "-"}</span><button type="button" onClick={()=>onChange(changeSpareToken(value,token,1))} className="rounded bg-slate-700 py-1 text-xs text-white">＋</button></div></div>; })}</div>
-    <input value={spareStorageLocation(value)} onChange={(e)=>onChange(changeSpareStorageLocation(value,e.target.value))} placeholder="여분 보관 위치 (예: 3층 창고 안쪽)" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-slate-400" />
-    <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1" className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">{SPARE_TOKENS.map((token) => { const count = spareTokenCount(value, token); return <div key={token} className="rounded-xl border border-slate-200 bg-white p-1.5"><div className="text-center text-[10px] font-bold text-slate-500">{token}</div><div className="mt-1 grid grid-cols-3 items-center"><button type="button" onClick={()=>onChange(changeSpareToken(value,token,-1))} className="rounded bg-slate-100 py-1 text-xs text-slate-500">−</button><span className="text-center text-sm font-bold text-slate-700">{count ?? "-"}</span><button type="button" onClick={()=>onChange(changeSpareToken(value,token,1))} className="rounded bg-slate-700 py-1 text-xs text-white">＋</button></div></div>; })}</div>
+    <input value={spareStorageLocation(value)} onChange={(e)=>onChange(changeSpareStorageLocation(value,e.target.value))} placeholder="여분 보관 위치 (예: 3층 창고 안쪽)" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-slate-400" />
+    <textarea value={value} onChange={(e)=>onChange(e.target.value)} rows={3} placeholder="예: K1 C1 M1 Y1 폐1" className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white p-2 font-mono text-xs leading-5 outline-none focus:border-slate-400" />
     <div className="mt-1 text-[10px] text-slate-400">K-2·토너1세트·CMY1개씩도 인식하며, 보관 위치는 점검기록과 워킨맵에 함께 남습니다.</div>
   </div>;
 }
@@ -5601,17 +5601,17 @@ export default function App() {
             <div className="flex items-center gap-1">
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => !photoBusy && photoInputRef.current?.click()} disabled={photoBusy} aria-label="사진양식"
-                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"><span className="text-sm">{photoBusy ? "⏳" : "📷"}</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">사진</span></button>
+                  className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"><span className="text-sm">{photoBusy ? "⏳" : "📷"}</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">사진</span></button>
               )}
               <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
-                className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
+                className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
-                  className="flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🔍</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">검색</span></button>
+                  className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🔍</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">검색</span></button>
               )}
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
                 <button type="button" onClick={openInputModal} aria-label="원본입력"
-                  className="relative flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95">
+                  className="relative flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95">
                   <span className="text-sm">📝</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">원본</span>{!!inputText.trim() && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />}
                 </button>
               )}
@@ -5662,7 +5662,7 @@ export default function App() {
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-lg bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
+                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
                 <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>
               </div>
               <button type="button" onClick={() => setTicketDonePrompt(null)} className="mt-2 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-500">그대로 두기</button>
@@ -5696,7 +5696,7 @@ export default function App() {
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
         {screen === "counterSms" && (
-          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <div className="text-3xl">🚧</div>
             <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
             <div className="mt-1 text-sm text-slate-400">
@@ -6014,9 +6014,9 @@ export default function App() {
           )}
           <div className="space-y-2 border-t border-slate-200 bg-slate-50 p-3">
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={handleReset} className="rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500">초기화</button>
-              <button onClick={handleCopyAll} disabled={!hasOutput} className="rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40">복사</button>
-              <label className="cursor-pointer rounded-lg border border-slate-200 bg-white py-2.5 text-center text-sm font-bold text-slate-600">
+              <button onClick={handleReset} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500">초기화</button>
+              <button onClick={handleCopyAll} disabled={!hasOutput} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40">복사</button>
+              <label className="cursor-pointer rounded-xl border border-slate-200 bg-white py-2.5 text-center text-sm font-bold text-slate-600">
                 사진{photos.length > 0 ? ` ${photos.length}` : ""}
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
               </label>
@@ -6114,18 +6114,18 @@ export default function App() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleReset}
-              className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 active:scale-[0.98]"
+              className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 active:scale-[0.98]"
             >
               초기화
             </button>
             <button
               onClick={handleCopyAll}
               disabled={!hasOutput}
-              className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
+              className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40"
             >
               복사
             </button>
-            <label className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
+            <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]">
               📷 사진/영상{photos.length > 0 ? ` ${photos.length}` : ""}
               <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>

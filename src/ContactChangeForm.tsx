@@ -13,8 +13,8 @@ function Field({ label, value, onChange, multiline = false }: {
   return <label className="block">
     <span className="text-xs font-black text-slate-500">{label}</span>
     {multiline
-      ? <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300" />
-      : <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300" />}
+      ? <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300" />
+      : <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300" />}
   </label>;
 }
 
@@ -44,7 +44,7 @@ export default function ContactChangeForm({ form, setForm, author, setAuthor, on
     });
   };
 
-  return <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+  return <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <div>
       <div className="text-sm font-black text-slate-950">담당자/주소 변경</div>
       <div className="mt-1 text-xs font-semibold leading-5 text-slate-400">변경 전·후 정보를 작성하고 명함 사진이 있으면 하단 사진 버튼으로 첨부합니다.</div>
@@ -59,7 +59,7 @@ export default function ContactChangeForm({ form, setForm, author, setAuthor, on
       <Field label="업체명(본사/지점 등)" value={form.company} onChange={(value) => set("company", value)} />
       <label className="block">
         <span className="text-xs font-black text-slate-500">퍼스트전산직원</span>
-        <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
+        <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
           <option value="">선택</option>
           {authors.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>

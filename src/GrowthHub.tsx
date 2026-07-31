@@ -658,7 +658,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       )}
 
       {message && <div className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</div>}
-      {loading && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-400">불러오는 중입니다.</div>}
+      {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-400">불러오는 중입니다.</div>}
 
       {!loading && tab === "records" && (
         <>
@@ -712,7 +712,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                     {open && (
                       <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-2">
                         {recordTypes.map(([key, label]) => row[key].trim() && (
-                          <div key={key} className="rounded-lg border border-slate-200 bg-white p-4">
+                          <div key={key} className="rounded-xl border border-slate-200 bg-white p-4">
                             <div className="text-xs font-black text-slate-500">{label}</div>
                             <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{row[key]}</div>
                           </div>

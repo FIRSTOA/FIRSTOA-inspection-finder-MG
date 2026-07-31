@@ -43,7 +43,7 @@ function ChoiceInput({ value, onChange, options }: { value: string; onChange: (v
       </div>
       {direct && (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="직접입력"
-          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
       )}
     </div>
   );
@@ -80,7 +80,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
         <label key={f.key} className="block">
           <span className="text-xs font-medium text-slate-500">{f.label}</span>
           <select value={author} onChange={(e) => setAuthor(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
+            className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
             <option value="">선택</option>
             {authors.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
@@ -100,10 +100,10 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
         <span className="text-xs font-medium text-slate-500">{f.label}</span>
         {f.type === "textarea" ? (
           <textarea value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)} rows={2}
-            className="mt-0.5 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+            className="mt-0.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         ) : (
           <input value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+            className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         )}
       </label>
   );

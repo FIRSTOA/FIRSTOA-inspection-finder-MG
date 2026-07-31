@@ -948,7 +948,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     const meta = handlingOf(row);
                     const field = "rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
                     return (
-                      <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-black text-blue-700">원격 처리</span>
                           <span className="text-[10px] font-bold text-slate-400">한조처리 {meta.hanjo || (row.type === "IT" ? "IT" : "공백")}</span>
