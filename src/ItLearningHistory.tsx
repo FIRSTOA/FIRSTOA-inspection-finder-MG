@@ -52,7 +52,7 @@ function Empty({ text }: { text: string }) {
 function DetailModal({ row, title, onClose }: { row: ItRow; title: string; onClose: () => void }) {
   const ordered = [...DETAIL_KEYS.filter((key) => String(row[key] ?? "").trim()), ...Object.keys(row).filter((key) => !DETAIL_KEYS.includes(key) && String(row[key] ?? "").trim())];
   return <div className="fixed inset-0 z-[4200] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-5" onMouseDown={onClose}>
-    <section className="flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+    <section className="flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
       <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div className="min-w-0"><div className="text-[11px] font-black text-blue-600">IT 학습·처리이력</div><h3 className="truncate text-lg font-black text-slate-950">{title}</h3></div><button type="button" onClick={onClose} aria-label="닫기" className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200"><X size={18} /></button></header>
       <div className="overflow-y-auto px-5 py-2">{ordered.map((key) => <div key={key} className="grid gap-1 border-b border-slate-100 py-3 sm:grid-cols-[120px_1fr]"><div className="text-xs font-black text-slate-500">{key}</div><div className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-800">{String(row[key] ?? "")}</div></div>)}</div>
     </section>

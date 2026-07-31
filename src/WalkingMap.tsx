@@ -2003,7 +2003,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       {comparePopup && (() => {
         const { place, snapshots, loading, latestVisit, vendor: popupVendor, advice } = comparePopup;
         return <div className="fixed inset-0 z-[2400] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setComparePopupId(null)}>
-          <div className="flex max-h-[85vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-lg sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="flex max-h-[85vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-lg sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div className="min-w-0">
                 <div className="text-xs font-black text-blue-600">최근 점검 비교</div>
@@ -2112,7 +2112,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
       {pendingImport.length > 0 && (
         <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPendingImport([])}>
-          <div className="w-full rounded-t-xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-lg" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="w-full rounded-t-xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-black text-blue-600">엑셀 불러오기</div>

@@ -169,7 +169,7 @@ export default function AlbumView({ id }: { id: string }) {
           )}
 
           {/* 카운터 + 닫기 */}
-          <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold">
+          <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/45 px-3 py-1 text-xs font-semibold">
             {idx + 1} / {urls.length}
           </div>
           <button type="button" className="absolute right-3 top-3 rounded-full bg-white/20 px-3 py-1.5 text-sm font-bold"

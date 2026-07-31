@@ -80,7 +80,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
 
   return (
     <div className="fixed inset-0 z-[220] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 text-lg font-black leading-6 text-slate-950">{valueOf("_업체명") || title}</div>
@@ -566,7 +566,7 @@ export default function DeptRequests({ author }: { author: string }) {
 
       {formOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFormOpen(false)}>
-          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <b className="text-slate-950">요청 등록</b>
             <div className="mt-4 space-y-3">
               <label className="block text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>

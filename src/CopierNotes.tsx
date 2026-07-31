@@ -289,7 +289,7 @@ export default function CopierNotes({ author }: { author: string }) {
             {guides !== null && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
             {openGuide && (
               <div className="fixed inset-0 z-[210] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setOpenGuide(null)}>
-                <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
                   <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap gap-1">
@@ -481,10 +481,10 @@ export default function CopierNotes({ author }: { author: string }) {
 
       {writeOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setWriteOpen(false)}>
-          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <b>복합기 기록 추가</b>
-              <button type="button" onClick={() => setWriteOpen(false)} className="text-xs font-bold text-slate-400">닫기</button>
+              <button type="button" onClick={() => setWriteOpen(false)} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <div className="grid grid-cols-2 gap-2">

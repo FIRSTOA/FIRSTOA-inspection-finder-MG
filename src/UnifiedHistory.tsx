@@ -246,7 +246,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   if (!open) return null;
 
   return <div className="fixed inset-0 z-[70] flex items-end bg-slate-950/45 sm:items-center sm:justify-center" onClick={onClose}>
-    <div className="flex h-[94vh] w-full flex-col overflow-hidden rounded-t-lg bg-slate-100 shadow-2xl sm:h-[88vh] sm:max-w-4xl sm:rounded-lg" onClick={(event) => event.stopPropagation()}>
+    <div className="flex h-[94vh] w-full flex-col overflow-hidden rounded-t-lg bg-slate-100 shadow-2xl sm:h-[88vh] sm:max-w-4xl sm:rounded-xl" onClick={(event) => event.stopPropagation()}>
       <header className="flex items-center gap-3 bg-slate-950 px-4 py-3 text-white sm:px-5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10"><Layers3 size={19} /></span>
         <div className="min-w-0 flex-1">

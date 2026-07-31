@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEve
 import {
   Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText,
   Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
-  TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database,
+  TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown,
 } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
@@ -2976,7 +2976,7 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
         }}
       >
         <span className="truncate">{filled ? labelFor(value) : label}</span>
-        <span className="ml-1 text-[10px] text-slate-400">▾</span>
+        <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />
       </button>
 
       {open && (
@@ -2986,7 +2986,7 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
           role="dialog"
         >
           <div
-            className="flex w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+            className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-xl"
             style={{ maxHeight: "75vh" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3125,12 +3125,12 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
     </div>
 
     {open && <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setOpen(false)} role="dialog">
-      <div className="flex max-h-[82vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[82vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div className="text-sm font-bold text-slate-800">{editing === "new" ? "새 기기 추가" : typeof editing === "number" ? `${editing + 1}번 기기 정보 수정` : "기기 선택·순서변경"}</div>
           <div className="flex items-center gap-1.5">
             {editing === null && <button type="button" onClick={() => beginEdit(selected)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">수정</button>}
-            <button type="button" onClick={closeModal} className="rounded-lg px-2 py-1 text-xs text-slate-500">닫기</button>
+            <button type="button" onClick={closeModal} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
           </div>
         </div>
         {editing !== null ? <div className="space-y-2 overflow-y-auto p-4">
@@ -3188,7 +3188,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
         }}
       >
         <span className="truncate">{filled ? value : "작성자 선택"}</span>
-        <span className="ml-1 text-[10px] text-slate-400">▾</span>
+        <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />
       </button>
 
       {open && (
@@ -3198,7 +3198,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
           role="dialog"
         >
           <div
-            className="flex w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+            className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-xl"
             style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3320,7 +3320,7 @@ function ProcessingFormPanel({
   return (
     <section className="mb-3 rounded-2xl bg-white px-1 py-2 sm:px-1.5">
       {/* ▣ 기본 입력 */}
-      <div className="mb-3 rounded-xl border-2 border-slate-800 p-3">
+      <div className="mb-3 rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
       {/* 작성자 / 구분 / 레벨 */}
       <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]" : "grid-cols-2"}`} style={{ background: bgSoft }}>
         <div>
@@ -3431,7 +3431,7 @@ function ProcessingFormPanel({
       </div>{/* /기본 입력 */}
 
       {/* ▣ 추가 정보 */}
-      <div className="mb-3 rounded-xl border-2 border-slate-800 p-3">
+      <div className="mb-3 rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
       {showHantinParking && (
         <>
           {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
@@ -3511,7 +3511,7 @@ function ProcessingFormPanel({
       </div>{/* /추가 정보 */}
 
       {/* ▣ 부품·자가·시간 */}
-      <div className="mb-3 space-y-3 rounded-xl border-2 border-slate-800 p-3">
+      <div className="mb-3 space-y-3 rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
       {/* 부품신청 */}
       <div className="rounded-lg bg-slate-50 p-2">
         <button
@@ -5656,7 +5656,7 @@ export default function App() {
 
         {ticketDonePrompt && (
           <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDonePrompt(null)}>
-            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
@@ -5669,7 +5669,7 @@ export default function App() {
         )}
         {ticketDeferPrompt && (
           <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDeferPrompt(null)}>
-            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">언제로 미룰까요?</div>
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDeferPrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
@@ -5731,7 +5731,7 @@ export default function App() {
                   onClick={() => setMoreOpen((v) => !v)}
                   className={`truncate whitespace-nowrap rounded-xl px-1 py-2.5 text-sm font-bold transition ${moreActive ? "bg-white text-slate-900 shadow-sm" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
                 >
-                  {moreActive ? (config.label === "담당자/주소 변경" ? "담당자/주소" : config.label) : "더보기"} ▾
+                  {moreActive ? (config.label === "담당자/주소 변경" ? "담당자/주소" : config.label) : "더보기"} <ChevronDown size={13} className="ml-0.5 inline" />
                 </button>
               );
             })()}
@@ -6166,7 +6166,7 @@ export default function App() {
       {/* 원본 입력 팝업 */}
       {inputModalOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[60] flex items-end bg-black/45 sm:items-center sm:justify-center"
           onClick={() => setInputModalOpen(false)}
         >
           <div
@@ -6225,7 +6225,7 @@ export default function App() {
       {/* 사용 설명서 */}
       {helpOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[60] flex items-end bg-black/45 sm:items-center sm:justify-center"
           onClick={() => setHelpOpen(false)}
         >
           <div

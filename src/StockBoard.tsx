@@ -225,7 +225,7 @@ export default function StockBoard({ author }: { author: string }) {
 
       {addOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setAddOpen(false)}>
-          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <b className="text-slate-950">{kind} 항목 추가</b>
             <div className="mt-4 space-y-3">
               {kind === "기기" && <div className="grid grid-cols-2 gap-2">

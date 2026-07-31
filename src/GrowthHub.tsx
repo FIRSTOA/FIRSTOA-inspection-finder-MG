@@ -767,10 +767,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
 
       {pasteOpen && (
         <div className="fixed inset-0 z-[240] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPasteOpen(false)}>
-          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-lg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <b className="text-slate-950">엑셀 붙여넣기 — 여러 셀 한 번에</b>
-              <button type="button" onClick={() => setPasteOpen(false)} className="text-xs font-bold text-slate-400">닫기</button>
+              <button type="button" onClick={() => setPasteOpen(false)} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <p className="text-xs font-semibold leading-5 text-slate-500">엑셀/시트에서 목표 범위를 복사해 아래에 붙여넣으세요. 열 역할은 자동 추정되며 직접 바꿀 수 있습니다.</p>
@@ -1061,7 +1061,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 <div className="text-base font-black text-slate-950">{gatherResult.title}</div>
                 <div className="mt-0.5 text-xs font-semibold text-slate-400">확인 후 복사하거나 txt로 받을 수 있습니다.</div>
               </div>
-              <button type="button" onClick={() => setGatherResult(null)} className="rounded-full px-3 py-2 text-sm font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700">닫기</button>
+              <button type="button" onClick={() => setGatherResult(null)} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
             </div>
             <textarea
               value={gatherResult.text}
