@@ -278,6 +278,18 @@ export default function ServiceReception({ author }: { author: string }) {
   const [listLoading, setListLoading] = useState(false);
   const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인">("전체");
   const [openRowId, setOpenRowId] = useState("");
+  // 화면을 한 번에 하나만 보여준다: 복합기 접수 / 원격·IT 접수+처리 / 전체 접수 리스트
+  const [page, setPage] = useState<"copier" | "remote" | "list">(() => {
+    try { const saved = localStorage.getItem("reception_page_v1"); return saved === "remote" || saved === "list" ? saved : "copier"; } catch { return "copier"; }
+  });
+  useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
+  // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
+  const [remoteQueue, setRemoteQueue] = useState<ServiceReceptionRow[]>([]);
+  const loadRemoteQueue = useCallback(async () => {
+    const end = kstDate();
+    const rows = await getServiceReceptions(shiftDate(end, -30), end).catch(() => [] as ServiceReceptionRow[]);
+    setRemoteQueue(rows.filter((row) => row.type === "IT" || row.type === "원격이관"));
+  }, []);
   // 처리(원격·IT) 입력 초안 — 접수 후 나중에 채우는 값들. 행별로 보관하고 저장 시 DB+시트에 반영.
   const [handling, setHandling] = useState<Record<string, Record<string, string>>>({});
   const [handlingBusyId, setHandlingBusyId] = useState("");
@@ -335,6 +347,7 @@ export default function ServiceReception({ author }: { author: string }) {
       if (!silent) {
         setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
         await loadList(listDate, listPeriod);
+        void loadRemoteQueue();
       }
     } catch (e) {
       window.alert(`처리 저장 실패: ${(e as Error).message}`);
@@ -353,6 +366,7 @@ export default function ServiceReception({ author }: { author: string }) {
     try {
       await updateServiceReception(row.id, { type: next, ...(crossTab ? { sheet_row: null } : {}) });
       await loadList(listDate, listPeriod);
+      void loadRemoteQueue();
     } catch (e) {
       window.alert(`구분 변경 실패: ${(e as Error).message}`);
     } finally {
@@ -374,6 +388,13 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   }, []);
   useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
+  useEffect(() => { if (page === "remote") void loadRemoteQueue(); }, [page, loadRemoteQueue]);
+  const goPage = (next: "copier" | "remote" | "list") => {
+    setPage(next);
+    setActionResult("");
+    if (next === "copier" && type !== "복합기 AS") setType("복합기 AS");
+    if (next === "remote" && type === "복합기 AS") setType("원격이관");
+  };
   useEffect(() => {
     const onFocus = () => { void loadList(listDate, listPeriod); };
     window.addEventListener("focus", onFocus);
@@ -857,46 +878,152 @@ export default function ServiceReception({ author }: { author: string }) {
   const readyCount = requiredItems.filter(([, ok]) => ok).length;
   const isReady = readyCount === requiredItems.length;
 
+  // 원격 작업 상태: 시작 전 = 대기 / 시작했고 처리여부 없음 = 진행중 / 처리여부 있음 = 완료
+  const remoteStateOf = (row: ServiceReceptionRow) => {
+    const meta = handlingOf(row);
+    return meta.result ? "완료" : meta.start ? "진행중" : "대기";
+  };
+  const REMOTE_STATE_TONE: Record<string, string> = {
+    대기: "bg-amber-100 text-amber-800", 진행중: "bg-cyan-100 text-cyan-800", 완료: "bg-emerald-100 text-emerald-800",
+  };
+
+  const renderQueueRow = (row: ServiceReceptionRow) => (
+              <div key={row.id}>
+                <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
+                  <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
+                  <span className="min-w-0">
+                    <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
+                    <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"}</span>
+                    {(row.title || row.symptom) && <span className="block truncate text-[11px] font-semibold text-slate-600">{row.title || "제목 없음"}{row.symptom ? ` — ${row.symptom}` : ""}</span>}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    {row.address_changed && !row.address_resolved_at && <span className="rounded bg-amber-100 px-1.5 py-1 text-[10px] font-black text-amber-800" title="임대리스트와 다른 주소로 접수됨">📍</span>}
+                    <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
+                    {row.type === "원격이관" && <span onClick={(e) => { e.stopPropagation(); void toggleRemoteDone(row); }} className={`cursor-pointer rounded px-2 py-1 text-[10px] font-black ${row.status === "원격대기" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-400"}`}>{row.status === "원격대기" ? "완료" : "대기로"}</span>}
+                  </span>
+                </button>
+                {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
+                    <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
+                    <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
+                    <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
+                    <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
+                    <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
+                  </div>
+                  {row.address && <div className="mt-1.5">
+                    <div><b className="text-slate-500">주소</b> {row.address}</div>
+                    {row.address_changed && <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {row.address_resolved_at
+                        ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
+                        : <>
+                          <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름</span>
+                          <button type="button" disabled={applyBusyId === row.id} onClick={(e) => { e.stopPropagation(); void applyAddressToApp(row); }} className="whitespace-nowrap rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵·임대리스트 반영"}</button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="whitespace-nowrap rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
+                        </>}
+                    </div>}
+                  </div>}
+                  {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
+                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
+                  {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
+                  {(row.type === "IT" || row.type === "원격이관") && (() => {
+                    const meta = handlingOf(row);
+                    const field = "rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900";
+                    return (
+                      <div className="mt-2 rounded-md border border-cyan-200 bg-cyan-50/60 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-cyan-700">원격 처리</span>
+                          <span className="text-[10px] font-bold text-slate-400">한조처리 {meta.hanjo || (row.type === "IT" ? "IT" : "공백")}</span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {meta.start
+                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">시작 {meta.start}</span>
+                            : <button type="button" onClick={() => void saveHandling(row, { start: kstNowHM() }, true)} className="rounded-md bg-cyan-600 px-2.5 py-1 text-[11px] font-black text-white">원격 시작</button>}
+                          {meta.start && (meta.end
+                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">종료 {meta.end}</span>
+                            : <button type="button" onClick={() => void saveHandling(row, { end: kstNowHM() }, true)} className="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">종료</button>)}
+                          {meta.start && <input value={meta.start} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { start: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { start: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="시작 수정" />}
+                          {meta.end && <input value={meta.end} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { end: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { end: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="종료 수정" />}
+                        </div>
+                        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                          <select value={meta.result || ""} onChange={(e) => patchHandling(row, { result: e.target.value })} className={field}>
+                            <option value="">처리여부</option>
+                            {["처리완료", "접수취소", "재접수", "자체해결", "AS이관", "중복접수", "방문이관"].map((v) => <option key={v}>{v}</option>)}
+                          </select>
+                          <input value={meta.handler || ""} onChange={(e) => patchHandling(row, { handler: e.target.value })} placeholder="처리자" className={field} />
+                          <input value={meta.extraCount || ""} onChange={(e) => patchHandling(row, { extraCount: e.target.value })} placeholder="추가대수" className={field} />
+                        </div>
+                        <textarea value={meta.handled || ""} onChange={(e) => patchHandling(row, { handled: e.target.value })} rows={2} placeholder="처리내용" className={`mt-1.5 w-full resize-y ${field}`} />
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                            <input type="checkbox" checked={meta.linked === "연동완료"} onChange={(e) => patchHandling(row, { linked: e.target.checked ? "연동완료" : "" })} className="h-4 w-4 accent-blue-600" />연동완료
+                          </label>
+                          <button type="button" disabled={handlingBusyId === row.id} onClick={() => void saveHandling(row)} className="rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{handlingBusyId === row.id ? "저장 중…" : "처리 저장 · 시트 반영"}</button>
+                        </div>
+                        {!row.lease_no && <div className="mt-1 text-[10px] font-bold text-amber-600">순번이 없어 시트 반영은 생략됩니다 (DB에는 저장)</div>}
+                      </div>
+                    );
+                  })()}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-black text-slate-400">구분 변경</span>
+                    {(["복합기 AS", "원격이관", "IT"] as const).map((t) => (
+                      <button key={t} type="button" disabled={typeBusyId === row.id || row.type === t} onClick={() => void changeType(row, t)}
+                        className={`rounded-md border px-2 py-1 text-[10px] font-black ${row.type === t ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-slate-500"}`}>{t}</button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">원본 미리보기</button>}
+                    {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black text-blue-700 disabled:opacity-50">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
+                    <button type="button" onClick={() => void removeReception(row)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
+                  </div>
+                </div>}
+              </div>
+  );
+
+  // 리스트 탭은 기간·필터 결과를, 원격 탭은 최근 30일 원격·IT를 대기/진행중/완료로 묶어 보여준다
+  const queueBody = page === "remote"
+    ? (["대기", "진행중", "완료"] as const).map((state) => {
+        const groupRows = remoteQueue.filter((row) => remoteStateOf(row) === state);
+        if (!groupRows.length) return null;
+        return (
+          <div key={state}>
+            <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-1.5 backdrop-blur">
+              <span className={`rounded px-2 py-0.5 text-[10px] font-black ${REMOTE_STATE_TONE[state]}`}>{state}</span>
+              <span className="text-[11px] font-bold text-slate-400">{groupRows.length}건</span>
+            </div>
+            {groupRows.map(renderQueueRow)}
+          </div>
+        );
+      })
+    : filteredRows.map(renderQueueRow);
+
+
   return (
     <div className="space-y-4 pb-16">
-      {/* 헤더 + 요약 */}
-      <section className="rounded-lg border border-slate-200 border-t-4 border-t-slate-900 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2"><ClipboardList size={20} className="text-blue-600" /><h2 className="text-xl font-black text-slate-950">서비스 접수</h2></div>
-            <p className="mt-1 text-xs font-semibold text-slate-500">고객 연락(카카오·전화)을 접수하고, 임대리스트 매칭 → 보고 양식 → 팀방 전송까지 처리합니다.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[["오늘 접수", counts.total], ["복합기", counts.copier], ["IT", counts.it], ["원격", counts.remote], ["원격대기", counts.remoteWaiting]].map(([label, value]) => (
-              <div key={String(label)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                <div className="text-[10px] font-bold text-slate-400">{label}{!isToday && label === "오늘 접수" ? ` (${listDate.slice(5)})` : ""}</div>
-                <div className="text-lg font-black text-slate-900">{value}</div>
-              </div>
-            ))}
-          </div>
+      {/* 헤더 + 탭 — 한 번에 한 가지 일만 보이게 나눈다 */}
+      <section className="overflow-hidden rounded-lg border border-slate-200 border-t-4 border-t-slate-900 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <div className="flex items-center gap-2"><ClipboardList size={20} className="text-blue-600" /><h2 className="text-lg font-black text-slate-950">서비스 접수</h2></div>
+          <div className="text-[11px] font-bold text-slate-400">{isToday ? "오늘" : listDate.slice(5)} 접수 {counts.total}건{counts.addr > 0 ? ` · 📍주소확인 ${counts.addr}` : ""}</div>
+        </div>
+        <div className="flex divide-x divide-slate-200 border-t border-slate-200 bg-slate-100">
+          {([["copier", "복합기 AS", counts.copier], ["remote", "원격 · IT", remoteQueue.filter((row) => remoteStateOf(row) !== "완료").length], ["list", "접수 리스트", counts.total]] as ["copier" | "remote" | "list", string, number][]).map(([key, label, count]) => (
+            <button key={key} type="button" onClick={() => goPage(key)}
+              className={`flex-1 border-b-[3px] px-3 py-3 text-[13px] font-black transition sm:text-[15px] ${page === key ? "border-blue-600 bg-white text-blue-700" : "border-transparent bg-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
+              {label}{count > 0 && <span className={`ml-1.5 ${page === key ? "text-blue-500" : "text-slate-400"}`}>{count}</span>}
+            </button>
+          ))}
         </div>
       </section>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        {/* ==== 좌: 접수 작성 ==== */}
-        <div className="space-y-4">
+      <div className="space-y-4">
+        {/* ==== 접수 작성 (리스트 탭에서는 감춘다) ==== */}
+        <div className={page === "list" ? "hidden" : "space-y-4"}>
           <section className="overflow-hidden rounded-lg border-2 border-[#0F172A] bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">1</span><div><div className="text-sm font-black text-slate-950">업무와 거래처 선택</div><div className="text-[11px] font-semibold text-slate-400">접수 유형을 고르고, 해당 기기를 정확히 선택합니다.</div></div></div>
+              <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-black text-white">1</span><div><div className="text-sm font-black text-slate-950">거래처 선택</div><div className="text-[11px] font-semibold text-slate-400">{page === "remote" ? "원격 처리할 거래처를 고릅니다." : "AS 대상 기기를 정확히 고릅니다."}</div></div></div>
               <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><Building2 size={14} className="text-slate-700" /> {lease ? "거래처 선택 완료" : "거래처 선택 필요"}</div>
             </div>
             <div className="p-4">
-            <div className="-mx-4 -mt-4 mb-3 flex divide-x divide-slate-200 border-b border-slate-200 bg-slate-100">
-              {([["복합기 AS", "복합기 AS"], ["원격이관", "원격 · IT"]] as [ReceiveType, string][]).map(([value, label]) => {
-                const active = value === "복합기 AS" ? type === "복합기 AS" : isRemoteType;
-                return (
-                  <button key={value} type="button" onClick={() => { setType(value); setActionResult(""); }}
-                    className={`flex-1 border-b-[3px] px-4 py-3.5 text-[15px] font-black transition ${active ? "border-blue-600 bg-white text-blue-700 shadow-[inset_0_-1px_0_0_#fff]" : "border-transparent bg-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
             <div className="flex items-center gap-2">
               <span className="flex rounded-md bg-slate-100 p-0.5">
                 {(["기존", "신규"] as const).map((k) => (
@@ -1153,127 +1280,42 @@ export default function ServiceReception({ author }: { author: string }) {
 
         </div>
 
-        {/* ==== 우: 접수 현황 ==== */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6">
+        {/* ==== 목록: 원격 탭은 작업 보드, 리스트 탭은 기간별 접수 기록 ==== */}
+        {page !== "copier" && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
-            <div className="flex items-center justify-between">
-              <div><h3 className="text-base font-black text-slate-950">접수 대기열</h3><p className="mt-0.5 text-[10px] font-bold text-slate-400">저장된 접수를 열어 일정 등록과 주소 확인을 처리합니다.</p></div>
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-black text-slate-950">{page === "remote" ? "원격 · IT 작업" : "접수 리스트"}</h3>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-400">{page === "remote" ? "최근 30일 · 카드를 열어 시작·종료와 처리 결과를 남깁니다" : "행을 열어 상세·일정 등록·주소 확인을 처리합니다"}</p>
+              </div>
+              {page === "remote" && <button type="button" onClick={() => void loadRemoteQueue()} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">새로고침</button>}
+              {page === "list" && <div className="flex items-center gap-1">
                 <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500"><ChevronLeft size={16} /></button>
                 <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700" />
                 <button type="button" aria-label="다음 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, 1) : listPeriod === "week" ? shiftDate(listDate, 7) : shiftMonths(listDate, listPeriod === "month" ? 1 : 3))} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500"><ChevronRight size={16} /></button>
                 {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white">오늘</button>}
-              </div>
+              </div>}
             </div>
-            <div className="mt-2.5 grid grid-cols-4 rounded-md bg-slate-100 p-1">
+            {page === "list" && <div className="mt-2.5 grid grid-cols-4 rounded-md bg-slate-100 p-1">
               {(Object.keys(PERIOD_LABEL) as ListPeriod[]).map((p) => (
                 <button key={p} type="button" onClick={() => setListPeriod(p)} className={`rounded px-2 py-1.5 text-[11px] font-black ${listPeriod === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{PERIOD_LABEL[p]}</button>
               ))}
-            </div>
-            {listPeriod !== "day" && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
-            <div className="mt-2.5 flex gap-1">
+            </div>}
+            {page === "list" && listPeriod !== "day" && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
+            {page === "list" && <div className="mt-2.5 flex flex-wrap gap-1">
               {(["전체", "복합기 AS", "IT", "원격이관", "주소확인"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
                   {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
-            </div>
+            </div>}
           </div>
 
-          <div className="max-h-[52vh] divide-y divide-slate-100 overflow-y-auto">
-            {listLoading && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-            {!listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listPeriod === "day" ? `${listDate.slice(5)} 접수 기록이 없습니다.` : `${PERIOD_LABEL[listPeriod]} 접수 기록이 없습니다.`}</div>}
-            {!listLoading && filteredRows.map((row) => (
-              <div key={row.id}>
-                <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
-                  <span className={`rounded px-1.5 py-1 text-[10px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
-                  <span className="min-w-0">
-                    <b className="block truncate text-sm text-slate-800">{row.vendor || "업체 미기재"}</b>
-                    <span className="text-[10px] font-semibold text-slate-400">{listPeriod === "day" ? kstTime(row.created_at) : `${row.receipt_date.slice(5).replace("-", "/")} ${kstTime(row.created_at)}`} · {row.author || "접수자 미지정"}</span>
-                    {(row.title || row.symptom) && <span className="block truncate text-[11px] font-semibold text-slate-600">{row.title || "제목 없음"}{row.symptom ? ` — ${row.symptom}` : ""}</span>}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    {row.address_changed && !row.address_resolved_at && <span className="rounded bg-amber-100 px-1.5 py-1 text-[10px] font-black text-amber-800" title="임대리스트와 다른 주소로 접수됨">📍</span>}
-                    <span className={`rounded px-1.5 py-1 text-[10px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
-                    {row.type === "원격이관" && <span onClick={(e) => { e.stopPropagation(); void toggleRemoteDone(row); }} className={`cursor-pointer rounded px-2 py-1 text-[10px] font-black ${row.status === "원격대기" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-400"}`}>{row.status === "원격대기" ? "완료" : "대기로"}</span>}
-                  </span>
-                </button>
-                {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
-                    <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
-                    <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
-                    <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
-                    <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
-                    <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
-                  </div>
-                  {row.address && <div className="mt-1.5">
-                    <div><b className="text-slate-500">주소</b> {row.address}</div>
-                    {row.address_changed && <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      {row.address_resolved_at
-                        ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영됨 · {String(row.address_resolved_at).slice(0, 10)} {row.address_resolved_by || ""}</span>
-                        : <>
-                          <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">임대리스트와 다름</span>
-                          <button type="button" disabled={applyBusyId === row.id} onClick={(e) => { e.stopPropagation(); void applyAddressToApp(row); }} className="whitespace-nowrap rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵·임대리스트 반영"}</button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); void resolveAddress(row); }} className="whitespace-nowrap rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">시트 반영 완료</button>
-                        </>}
-                    </div>}
-                  </div>}
-                  {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
-                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-md border border-slate-200 object-cover" /></a>)}</div>}
-                  {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
-                  {(row.type === "IT" || row.type === "원격이관") && (() => {
-                    const meta = handlingOf(row);
-                    const field = "rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900";
-                    return (
-                      <div className="mt-2 rounded-md border border-cyan-200 bg-cyan-50/60 p-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-cyan-700">원격 처리</span>
-                          <span className="text-[10px] font-bold text-slate-400">한조처리 {meta.hanjo || (row.type === "IT" ? "IT" : "공백")}</span>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {meta.start
-                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">시작 {meta.start}</span>
-                            : <button type="button" onClick={() => void saveHandling(row, { start: kstNowHM() }, true)} className="rounded-md bg-cyan-600 px-2.5 py-1 text-[11px] font-black text-white">원격 시작</button>}
-                          {meta.start && (meta.end
-                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">종료 {meta.end}</span>
-                            : <button type="button" onClick={() => void saveHandling(row, { end: kstNowHM() }, true)} className="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">종료</button>)}
-                          {meta.start && <input value={meta.start} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { start: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { start: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="시작 수정" />}
-                          {meta.end && <input value={meta.end} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { end: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { end: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="종료 수정" />}
-                        </div>
-                        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                          <select value={meta.result || ""} onChange={(e) => patchHandling(row, { result: e.target.value })} className={field}>
-                            <option value="">처리여부</option>
-                            {["처리완료", "접수취소", "재접수", "자체해결", "AS이관", "중복접수", "방문이관"].map((v) => <option key={v}>{v}</option>)}
-                          </select>
-                          <input value={meta.handler || ""} onChange={(e) => patchHandling(row, { handler: e.target.value })} placeholder="처리자" className={field} />
-                          <input value={meta.extraCount || ""} onChange={(e) => patchHandling(row, { extraCount: e.target.value })} placeholder="추가대수" className={field} />
-                        </div>
-                        <textarea value={meta.handled || ""} onChange={(e) => patchHandling(row, { handled: e.target.value })} rows={2} placeholder="처리내용" className={`mt-1.5 w-full resize-y ${field}`} />
-                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-                            <input type="checkbox" checked={meta.linked === "연동완료"} onChange={(e) => patchHandling(row, { linked: e.target.checked ? "연동완료" : "" })} className="h-4 w-4 accent-blue-600" />연동완료
-                          </label>
-                          <button type="button" disabled={handlingBusyId === row.id} onClick={() => void saveHandling(row)} className="rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{handlingBusyId === row.id ? "저장 중…" : "처리 저장 · 시트 반영"}</button>
-                        </div>
-                        {!row.lease_no && <div className="mt-1 text-[10px] font-bold text-amber-600">순번이 없어 시트 반영은 생략됩니다 (DB에는 저장)</div>}
-                      </div>
-                    );
-                  })()}
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-black text-slate-400">구분 변경</span>
-                    {(["복합기 AS", "원격이관", "IT"] as const).map((t) => (
-                      <button key={t} type="button" disabled={typeBusyId === row.id || row.type === t} onClick={() => void changeType(row, t)}
-                        className={`rounded-md border px-2 py-1 text-[10px] font-black ${row.type === t ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-slate-500"}`}>{t}</button>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600">원본 미리보기</button>}
-                    {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black text-blue-700 disabled:opacity-50">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
-                    <button type="button" onClick={() => void removeReception(row)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
-                  </div>
-                </div>}
-              </div>
-            ))}
+          <div className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
+            {listLoading && page === "list" && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
+            {page === "remote" && !remoteQueue.length && <div className="p-8 text-center text-xs font-bold text-slate-400">최근 30일 원격·IT 접수가 없습니다.</div>}
+            {page === "list" && !listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listPeriod === "day" ? `${listDate.slice(5)} 접수 기록이 없습니다.` : `${PERIOD_LABEL[listPeriod]} 접수 기록이 없습니다.`}</div>}
+            {queueBody}
           </div>
 
           {previewRow && (
@@ -1295,7 +1337,7 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
           )}
 
-          {byAuthor.length > 0 && <div className="border-t border-slate-200 p-4">
+          {page === "list" && byAuthor.length > 0 && <div className="border-t border-slate-200 p-4">
             <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]})</div>
             <div className="mt-2 space-y-1">
               {byAuthor.map(([name, stat]) => (
@@ -1306,7 +1348,7 @@ export default function ServiceReception({ author }: { author: string }) {
               ))}
             </div>
           </div>}
-        </section>
+        </section>}
       </div>
     </div>
   );
