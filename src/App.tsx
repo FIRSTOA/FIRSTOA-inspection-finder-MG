@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEve
 import {
   Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText,
   Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
-  TrendingUp, PhoneCall, Megaphone, MessageSquare, LayoutDashboard, PanelLeftClose, PanelLeftOpen, UserRound,
+  TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database,
 } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
@@ -16,6 +16,9 @@ import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import ContactChangeHistory from "./ContactChangeHistory";
 import MemberAdmin from "./MemberAdmin";
+import SystemAdmin from "./SystemAdmin";
+import ContentAdmin from "./ContentAdmin";
+import DataLookup from "./DataLookup";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
@@ -4585,8 +4588,9 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
-  const [opsTab, setOpsTab] = useState<"status" | "members" | "changes">("status"); // 관리 화면 하위 탭
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
+  const [opsTab, setOpsTab] = useState<"members" | "stock" | "content" | "system">("members"); // 관리 화면 하위 탭
+  const [lookupTab, setLookupTab] = useState<"records" | "status" | "changes">("records"); // 조회 화면 하위 탭
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5376,7 +5380,7 @@ export default function App() {
     walkingMap: MapIcon, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
     itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
     growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
-    operations: LayoutDashboard,
+    operations: Settings2, lookup: Database,
   };
   const navGroups = [
     { title: "자재·요청", items: [["stock", "기기/부품 재고"], ["deptRequests", "부서 요청·현황"]] },
@@ -5387,7 +5391,7 @@ export default function App() {
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
-  const bottomItems = [["operations", "관리"]] as [typeof screen, string][];
+  const bottomItems = [["lookup", "조회"], ["operations", "관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
@@ -5617,14 +5621,29 @@ export default function App() {
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && (
           <div className="space-y-4">
-            {/* 웹앱 운영에 필요한 것들을 한 화면에 모은다 — 업무 집계 / 인원 / 변경이력 */}
+            {/* 관리 = 값을 바꾸는 곳. 보기만 하는 것은 조회 화면으로 뺐다. */}
             <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              {([["status", "업무 현황판"], ["members", "인원 관리"], ["changes", "담당자·주소 변경이력"]] as const).map(([key, label]) => (
+              {([["members", "인원"], ["stock", "재고"], ["content", "문구·홍보물"], ["system", "전송·카톡방"]] as const).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setOpsTab(key)}
                   className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${opsTab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
               ))}
             </div>
-            {opsTab === "status" ? <OperationsDashboard author={author} /> : opsTab === "members" ? <MemberAdmin /> : <ContactChangeHistory />}
+            {opsTab === "members" ? <MemberAdmin />
+              : opsTab === "stock" ? <StockBoard author={author} />
+              : opsTab === "content" ? <ContentAdmin author={author} />
+              : <SystemAdmin />}
+          </div>
+        )}
+        {screen === "lookup" && (
+          <div className="space-y-4">
+            {/* 조회 = 보기 전용. 기록 표를 그대로 훑고, 집계는 현황판 탭에서 본다. */}
+            <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              {([["records", "기록 조회"], ["status", "업무 현황판"], ["changes", "담당자·주소 변경"]] as const).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setLookupTab(key)}
+                  className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${lookupTab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
+              ))}
+            </div>
+            {lookupTab === "records" ? <DataLookup /> : lookupTab === "status" ? <OperationsDashboard author={author} /> : <ContactChangeHistory />}
           </div>
         )}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
