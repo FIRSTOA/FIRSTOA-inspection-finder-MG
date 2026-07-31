@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import {
+  Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText,
+  Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
+  TrendingUp, PhoneCall, Megaphone, MessageSquare, LayoutDashboard, PanelLeftClose, PanelLeftOpen,
+} from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
@@ -5365,6 +5370,13 @@ export default function App() {
     : FIELD_SHEET_LINKS[mode] || "";
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
+  const SCREEN_ICON: Record<string, typeof HomeIcon> = {
+    home: HomeIcon, serviceReception: ClipboardList, asReception: ListChecks, calendar: CalendarDays,
+    walkingMap: MapIcon, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
+    itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
+    growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
+    operations: LayoutDashboard,
+  };
   const navGroups = [
     { title: "자재·요청", items: [["stock", "기기/부품 재고"], ["deptRequests", "부서 요청·현황"]] },
     { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
@@ -5380,137 +5392,191 @@ export default function App() {
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   const detectedDraftMode = draftInput.trim() ? detectUnifiedInputMode(draftInput) : null;
+  const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
-          <div className="flex h-full w-64 flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="shrink-0 border-b border-slate-100 px-5 py-4">
-              <div className="text-lg font-bold text-slate-900">FIRSTOA CS SYSTEM</div>
-              <div className="text-[11px] text-slate-400">CS 업무 통합</div>
+          <div className="flex h-full w-72 flex-col bg-[#0F172A] text-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.07] px-4 py-4">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white">F</span>
+              <span>
+                <span className="block text-[13px] font-black leading-tight">FIRSTOA CS</span>
+                <span className="block text-[11px] font-semibold text-slate-500">CS 업무 통합</span>
+              </span>
             </div>
-            <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-8">
-              {standaloneItems.map(([key, label]) => (
-                <button key={key} type="button"
-                  onClick={() => { setScreen(key); setMenuOpen(false); }}
-                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                  {label}
-                </button>
-              ))}
+            <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3 pb-8">
+              <div className="space-y-0.5">
+                {standaloneItems.map(([key, label]) => {
+                  const Icon = SCREEN_ICON[key] || FileText;
+                  return (
+                    <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                      <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
               {navGroups.map((group) => (
-                <div key={group.title} className="rounded-xl border border-slate-200 p-1">
-                  <button type="button" onClick={() => toggleNavGroup(group.title)} className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
-                    <span>{group.title}</span>
-                    <span className="text-xs text-slate-400">{isGroupOpen(group) ? "접기" : "펼치기"}</span>
+                <div key={group.title}>
+                  <button type="button" onClick={() => toggleNavGroup(group.title)}
+                    className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
+                    <span>{group.title}</span><span className="text-[13px] leading-none">{isGroupOpen(group) ? "−" : "+"}</span>
                   </button>
-                  {isGroupOpen(group) && <div className="ml-3 border-l border-slate-200 pl-2">
-                    {group.items.map(([key, label]) => (
-                      <button key={key} type="button"
-                        onClick={() => { setScreen(key); setMenuOpen(false); }}
-                        className={`block w-full rounded-xl px-4 py-2.5 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                        {label}
-                      </button>
-                    ))}
+                  {isGroupOpen(group) && <div className="space-y-0.5">
+                    {group.items.map(([key, label]) => {
+                      const Icon = SCREEN_ICON[key] || FileText;
+                      return (
+                        <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
+                          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                          <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
+                        </button>
+                      );
+                    })}
                   </div>}
                 </div>
               ))}
-              {lowerItems.map(([key, label]) => (
-                <button key={key} type="button"
-                  onClick={() => { setScreen(key); setMenuOpen(false); }}
-                  className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                  {label}
-                </button>
-              ))}
-              <div className="border-t border-slate-200 pt-2">
-                {bottomItems.map(([key, label]) => (
-                  <button key={key} type="button"
-                    onClick={() => { setScreen(key); setMenuOpen(false); }}
-                    className={`block w-full rounded-xl px-4 py-3 text-left text-sm transition ${screen === key ? "bg-[#F1F5F9] font-bold text-[#334155]" : "font-medium text-slate-600 hover:bg-slate-50"}`}>
-                    {label}
-                  </button>
-                ))}
+              <div className="space-y-0.5 border-t border-white/[0.07] pt-3">
+                {[...lowerItems, ...bottomItems].map(([key, label]) => {
+                  const Icon = SCREEN_ICON[key] || FileText;
+                  return (
+                    <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                      <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </nav>
+            <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-700 text-[11px] font-black text-white">{author?.slice(0, 1) || "?"}</span>
+              <span className="text-[12px] font-bold text-slate-200">{author || "작성자 미선택"}</span>
+            </div>
           </div>
           <div className="flex-1 bg-black/30" />
         </div>
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/10 bg-[#0F172A] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
-          <div className={`flex items-start border-b border-white/10 py-5 ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-5"}`}>
-            <div className={sidebarCollapsed ? "text-center" : ""}>
-              <div className="text-base font-black">{sidebarCollapsed ? "CS" : "FIRSTOA CS SYSTEM"}</div>
-              {!sidebarCollapsed && <div className="mt-1 text-xs font-semibold text-slate-400">CS 업무 통합</div>}
-            </div>
-            <button type="button" onClick={() => setSidebarCollapsed((current) => !current)} title={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} aria-label={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} className={`flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "absolute left-[66px] top-5 bg-[#0F172A]" : ""}`}>
-              {sidebarCollapsed ? "›" : "‹"}
-            </button>
+      {/* PC 사이드바 — 펼침: 아이콘+글자 / 접힘: 아이콘 레일 (잘린 한글 대신 아이콘) */}
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#0F172A] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
+        <div className={`flex shrink-0 items-center border-b border-white/[0.07] py-4 ${sidebarCollapsed ? "flex-col gap-2 px-2" : "justify-between px-4"}`}>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]">F</span>
+            {!sidebarCollapsed && <span className="min-w-0">
+              <span className="block truncate text-[13px] font-black leading-tight">FIRSTOA CS</span>
+              <span className="block truncate text-[11px] font-semibold text-slate-500">CS 업무 통합</span>
+            </span>}
           </div>
-          <nav className={`min-h-0 flex-1 space-y-4 overflow-y-auto py-4 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
-            <div className="space-y-1 rounded-lg border border-white/10 p-1.5">
-            {standaloneItems.map(([key, label]) => (
-              <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? (label === "캘린더" ? "캘" : label === "워킨맵" ? "맵" : label === "일정리스트" ? "일정" : label === "자기개발/지식공유" ? "자기" : label === "기기/부품 재고" ? "재고" : label === "부서 요청" ? "요청" : label) : label}</span>
-                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-              </button>
-            ))}
-            </div>
-            {navGroups.map((group) => (
-              <div key={group.title} className="rounded-lg border border-white/10 p-1.5">
-                <button type="button" title={group.title} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : toggleNavGroup(group.title)} className={`mb-1 flex w-full items-center rounded-md py-2 text-sm font-black text-slate-400 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "justify-center px-1" : "justify-between px-3 text-left"}`}>
-                  <span>{sidebarCollapsed ? group.title.slice(0, 2) : group.title}</span>
-                  {!sidebarCollapsed && <span className="text-[11px]">{isGroupOpen(group) ? "접기" : "펼치기"}</span>}
-                </button>
-                {!sidebarCollapsed && isGroupOpen(group) && <div className="ml-3 space-y-1 border-l border-white/10 pl-2">
-                  {group.items.map(([key, label]) => (
-                    <button key={key} type="button" onClick={() => setScreen(key)}
-                      className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                      <span>{label}</span>
-                      {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+          <button type="button" onClick={() => setSidebarCollapsed((current) => !current)}
+            title={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"} aria-label={sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white">
+            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        </div>
+
+        <nav className={`min-h-0 flex-1 overflow-y-auto py-3 ${sidebarCollapsed ? "space-y-1 px-2" : "space-y-4 px-3"}`}>
+          {sidebarCollapsed
+            // 접힘 = 전체 메뉴를 아이콘 하나씩. 그룹 계층은 접힌 상태에서 의미가 없다.
+            ? navItems.map(([key, label]) => {
+                const Icon = SCREEN_ICON[key] || FileText;
+                return (
+                  <button key={key} type="button" title={label} onClick={() => setScreen(key)}
+                    className={`flex h-11 w-full items-center justify-center rounded-xl transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                    <Icon size={19} />
+                  </button>
+                );
+              })
+            : <>
+                <div className="space-y-0.5">
+                  {standaloneItems.map(([key, label]) => {
+                    const Icon = SCREEN_ICON[key] || FileText;
+                    return (
+                      <button key={key} type="button" onClick={() => setScreen(key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                        <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {navGroups.map((group) => (
+                  <div key={group.title}>
+                    <button type="button" onClick={() => toggleNavGroup(group.title)}
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-500 transition hover:text-slate-300">
+                      <span>{group.title}</span>
+                      <span className="text-[13px] leading-none">{isGroupOpen(group) ? "−" : "+"}</span>
                     </button>
-                  ))}
+                    {isGroupOpen(group) && <div className="space-y-0.5">
+                      {group.items.map(([key, label]) => {
+                        const Icon = SCREEN_ICON[key] || FileText;
+                        return (
+                          <button key={key} type="button" onClick={() => setScreen(key)}
+                            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                            <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>}
+                  </div>
+                ))}
+                {lowerItems.length > 0 && <div className="space-y-0.5">
+                  {lowerItems.map(([key, label]) => {
+                    const Icon = SCREEN_ICON[key] || FileText;
+                    return (
+                      <button key={key} type="button" onClick={() => setScreen(key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                        <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
+                      </button>
+                    );
+                  })}
                 </div>}
-              </div>
-            ))}
-            <div className="space-y-1 rounded-lg border border-white/10 p-1.5">
-              {lowerItems.map(([key, label]) => (
-                <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                  className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                  <span>{sidebarCollapsed ? "자기" : label}</span>
-                  {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                </button>
-              ))}
-            </div>
-          </nav>
-          <div className={`shrink-0 border-t border-white/10 py-3 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
-            {bottomItems.map(([key, label]) => (
-              <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                className={`flex w-full items-center rounded-md py-2.5 text-sm font-bold transition ${sidebarCollapsed ? "justify-center px-1 text-center" : "justify-between px-3 text-left"} ${screen === key ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-                <span>{sidebarCollapsed ? "현황" : label}</span>
-                {screen === key && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+              </>}
+        </nav>
+
+        <div className={`shrink-0 border-t border-white/[0.07] py-3 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
+          {!sidebarCollapsed && bottomItems.map(([key, label]) => {
+            const Icon = SCREEN_ICON[key] || FileText;
+            return (
+              <button key={key} type="button" onClick={() => setScreen(key)}
+                className={`mb-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
               </button>
-            ))}
+            );
+          })}
+          <div className={`flex items-center gap-2.5 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={author || "작성자 미선택"}>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 text-[11px] font-black text-white">{author?.slice(0, 1) || "?"}</span>
+            {!sidebarCollapsed && <span className="min-w-0">
+              <span className="block truncate text-[12px] font-bold leading-tight text-slate-200">{author || "작성자 미선택"}</span>
+              <span className="block text-[10px] font-semibold text-slate-500">CS팀</span>
+            </span>}
           </div>
-          <div className={`border-t border-white/10 py-4 text-xs text-slate-400 ${sidebarCollapsed ? "px-2 text-center" : "px-5"}`}>{sidebarCollapsed ? (author?.slice(0, 1) || "-") : (author || "작성자 미선택")}</div>
+        </div>
       </aside>
 
-      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1500px] ${screen === "walkingMap" ? "pb-0 lg:px-0" : "pb-16 lg:px-8"} lg:max-w-none ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1500px] ${screen === "walkingMap" ? "pb-0 lg:max-w-none lg:px-0" : "pb-16 lg:px-8"} ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0F172A] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
-        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-12 bg-[#0F172A] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-12 bg-[#0F172A] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : "mb-2.5"}`}>
-          <div className="flex items-center gap-2">
+        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0F172A] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0F172A] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
+          <div className="flex min-w-0 items-center gap-2.5">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className={`flex h-8 w-8 items-center justify-center rounded-md border transition active:scale-95 lg:hidden ${screen === "field" ? "border-white/20 bg-white/10 hover:bg-white/20" : "border-white/15 bg-white/10 hover:bg-white/20"}`}>
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
             </button>
-            <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+            {screen !== "field" && (() => {
+              const Icon = SCREEN_ICON[screen] || FileText;
+              return <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] text-slate-300 lg:flex"><Icon size={18} /></span>;
+            })()}
+            <h1 className="truncate text-xl font-black tracking-tight text-white sm:text-2xl">
               {screenTitle}
             </h1>
           </div>
+          {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[12px] font-bold text-slate-400 lg:flex">
+            <span className="tabular-nums">{todayLabel}</span>
+            <span className="h-3 w-px bg-white/15" />
+            <span className="text-slate-300">{author || "작성자 미선택"}</span>
+          </div>}
           {screen === "field" && (
             <div className="flex items-center gap-1">
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
