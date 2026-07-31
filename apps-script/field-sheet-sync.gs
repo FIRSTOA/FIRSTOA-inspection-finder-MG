@@ -210,11 +210,13 @@ function fieldValue_(category, header, column, data, request, labels) {
     "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
   } : {};
-  // 원격·IT 접수: 접수일(B)·접수시각(D)·접수자(J)는 서버 기준으로 채운다
-  const remotePeriod = category === "reception_remote" && !data["_updateRow"] ? {
-    "접수일": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
-    "접수": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
-    "접수자": request.author,
+  // 원격·IT 접수: 접수일(B)·접수시각(D)·접수자(J).
+  // 웹앱이 접수 당시 값을 보내주면 그것을 쓴다 — 처리 단계에서 갱신하거나 새 행으로 빠져도
+  // 접수 시각이 처리 시각으로 덮이지 않는다.
+  const remotePeriod = category === "reception_remote" ? {
+    "접수일": data["receiptDate"] || Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
+    "접수": data["receiptTime"] || Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
+    "접수자": data["receiptAuthor"] || request.author,
   } : {};
   const base = {
     "웹앱 전송ID": request.jobId,

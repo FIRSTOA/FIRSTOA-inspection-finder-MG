@@ -990,6 +990,7 @@ export type RemoteReceptionSheetInput = {
   author: string; vendor: string; leaseNo: string; route: string; start: string; end: string;
   result: string; handler: string; hanjo: string; contact: string; symptom: string;
   extraCount: string; handled: string; linked: string;
+  receiptDate?: string; receiptTime?: string; receiptAuthor?: string;  // 접수 당시 값 (처리 단계 갱신 때도 유지)
 };
 
 // updateRow를 주면 접수 때 만든 그 행을 갱신한다 (처리 결과 보완). 없으면 새 행 추가.

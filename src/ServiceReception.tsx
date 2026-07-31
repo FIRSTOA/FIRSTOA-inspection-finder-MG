@@ -120,6 +120,14 @@ function teamFromRegion(region: string) {
   return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
 }
 // 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
+// 접수 당시의 시트 표기값 (접수일 "7월 31일" / 접수시각 "20:22") — 처리 단계 갱신에도 그대로 보낸다
+function receiptParts(iso: string) {
+  const d = new Date(iso);
+  const base = Number.isNaN(d.getTime()) ? new Date() : d;
+  const parts = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric" }).format(base);
+  return { date: parts.replace(/\.$/, "").replace(/(\d+)\.\s*(\d+)/, "$1월 $2일"), time: kstTime(iso) };
+}
+
 function kstTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso).slice(11, 16);
@@ -304,6 +312,7 @@ export default function ServiceReception({ author }: { author: string }) {
         contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
         symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
         linked: meta.linked || "",
+        ...(() => { const parts = receiptParts(row.created_at); return { receiptDate: parts.date, receiptTime: parts.time, receiptAuthor: row.author }; })(),
       }, target);
       if (sheetRow && sheetRow !== target) {
         void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
@@ -320,7 +329,9 @@ export default function ServiceReception({ author }: { author: string }) {
     try {
       const nextStatus = meta.result === "처리완료" ? "원격완료" : row.status;
       await updateServiceReception(row.id, { remote_meta: meta, ...(nextStatus !== row.status ? { status: nextStatus } : {}) });
-      syncRemoteSheet(row, meta);
+      // 시트는 "처리 저장"에서 한 번만 반영한다. 시작·종료 스탬프까지 매번 보내면
+      // 웹훅 지연(5~15초)이 겹쳐 서로 다른 행이 만들어지고 체감도 느려진다.
+      if (!silent) syncRemoteSheet(row, meta);
       if (!silent) {
         setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
         await loadList(listDate, listPeriod);
