@@ -776,7 +776,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             </aside>
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => setCurrentMonth(monthStart(todayYmd))} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">오늘</button>
                   <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="h-9 w-9 rounded-md text-xl font-bold text-slate-500 hover:bg-slate-100">‹</button>
@@ -909,9 +909,9 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.model} · {ticket.serial || "시리얼 미입력"}{shortAddress(ticket.address) ? ` · 📍 ${shortAddress(ticket.address)}` : ""}</div>
                     <div className="mt-2"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                   </div>
-                  {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
+                  {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
                 </div>
-                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-bold">
+                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2.5 text-sm font-bold">
                   <option value="">미배정</option>
                   {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                 </select>
@@ -953,7 +953,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
                     <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
-                      <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-bold">
+                      <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold">
                         <option value="">미배정</option>
                         {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                       </select>
@@ -1052,8 +1052,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-3">
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">수정</button>
-                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">복제</button>
+                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">수정</button>
+                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                   <button type="button" disabled={naverBusyId === ticket.id} onClick={() => void sendToNaver(ticket)} title="네이버 캘린더에 이 일정을 등록합니다" className={`rounded-md border px-4 py-2 text-sm font-black disabled:opacity-50 ${ticket.naverPushedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-700"}`}>{naverBusyId === ticket.id ? "등록 중…" : ticket.naverPushedAt ? "네이버 ✓" : "네이버 캘린더"}</button>
                 </div>
                 <div className="flex gap-2">
@@ -1091,7 +1091,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               ))}
             </div>
             <div className="mt-3 flex gap-2">
-              <input type="date" value={dupDate} onChange={(event) => setDupDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              <input type="date" value={dupDate} onChange={(event) => setDupDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               <button type="button" onClick={() => { if (dupDate) duplicateTicket(dupTicket, dupDate); }} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">이 날짜로 복제</button>
             </div>
           </div>
@@ -1109,7 +1109,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             </div>
             <div className="mt-3 flex items-center justify-between">
               <button type="button" onClick={() => applyAssign(assignTicket, "")} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-50">미배정으로</button>
-              <button type="button" onClick={() => setAssignId("")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">닫기</button>
+              <button type="button" onClick={() => setAssignId("")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">닫기</button>
             </div>
           </div>
         </div>
@@ -1127,7 +1127,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 전체 반복 일정 이동 ({seriesOthers(moveTarget.ticket).length + 1}건)<div className="mt-0.5 text-xs font-bold text-blue-500/80">앞으로 오는 미완료 반복 일정을 전부 매월 {Number(moveTarget.date.slice(8, 10))}일로 바꿉니다 (완료된 지난 기록은 유지)</div>
               </button>
             </div>
-            <div className="mt-3 text-right"><button type="button" onClick={() => setMoveTarget(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">취소</button></div>
+            <div className="mt-3 text-right"><button type="button" onClick={() => setMoveTarget(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">취소</button></div>
           </div>
         </div>
       )}
@@ -1150,19 +1150,19 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
         <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
           <label className="text-xs font-bold text-slate-500">
             팀
-            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
               {teams.map((item) => <option key={item} value={item}>{item}팀</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             캘린더
-            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
               {(["AS", "물류", "휴가", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             담당자
-            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
               <option value="">미배정</option>
               {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
             </select>
@@ -1200,7 +1200,7 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
             <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
             {onDefer && <button type="button" onClick={onDefer} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}
             {onComplete && <button type="button" onClick={onComplete} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">{ticket.status === "완료" ? "완료 취소" : "완료"}</button>}
-            <button type="button" onClick={() => onSave(draft)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">저장</button>
+            <button type="button" onClick={() => onSave(draft)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">저장</button>
           </div>
         </div>
       </div>

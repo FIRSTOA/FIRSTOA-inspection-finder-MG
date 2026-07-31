@@ -293,33 +293,34 @@ export default function OperationsDashboard({ author }: Props) {
 
   return (
     <div className="space-y-3 pb-16">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-xs font-semibold text-slate-500">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
-          <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {/* 다크 툴바 — 화면의 기준(기간)을 가장 위에서 정한다 */}
+        <div className="flex flex-col gap-3 bg-[#171C26] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
+          <div className="grid grid-cols-4 rounded-full bg-white/10 p-1 lg:w-72">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-2 text-xs font-black ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
             ))}
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center gap-2 p-4">
           {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
           {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
           {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
           {period === "quarter" && <select value={quarter} onChange={(event) => setQuarter(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}분기</option>)}</select>}
-          <span className="mr-auto rounded-md bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">{range.start} ~ {range.end}</span>
+          <span className="mr-auto rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 tabular-nums">{range.start} ~ {range.end}</span>
 
           <div className="flex rounded-full bg-slate-100 p-1">
             {["전체", ...OPERATIONS_TEAMS].map((value) => (
               <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded-full px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
             ))}
           </div>
-          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 text-xs font-black text-slate-700">
+          <select value={member} onChange={(event) => setMember(event.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
             <option value="전체">전체 팀원</option>
             {memberOptions.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
-          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 text-xs font-black text-slate-700">
+          <select value={category} onChange={(event) => setCategory(event.target.value as FilterKey)} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700">
             <option value="all">전체 업무</option>
             {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
@@ -334,30 +335,30 @@ export default function OperationsDashboard({ author }: Props) {
         <>
           <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {[["업무", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-                <div className="text-xs font-bold text-slate-400">{label}</div>
-                <div className="mt-1 text-2xl font-black text-slate-950">{value}</div>
+              <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <div className="text-[11px] font-bold text-slate-400">{label}</div>
+                <div className="mt-1 text-2xl font-black tabular-nums text-slate-950 lg:text-[28px]">{value}</div>
               </div>
             ))}
           </section>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <h3 className="font-black text-slate-950">업무 구성</h3>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+              <h3 className="text-sm font-black text-slate-950 lg:text-[15px]">업무 구성</h3>
             </div>
             <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 xl:grid-cols-6">
               {FILTER_OPTIONS.map((option) => (
                 <button key={option.key} type="button" onClick={() => setCategory(category === option.key ? "all" : option.key)} className={`flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 ${category === option.key ? "bg-blue-50" : ""}`}>
-                  <span className={`rounded px-2 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
-                  <b className="text-lg text-slate-950">{filterCount(teamScopedAllCategories, option.key)}</b>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
+                  <b className="text-lg tabular-nums text-slate-950">{filterCount(teamScopedAllCategories, option.key)}</b>
                 </button>
               ))}
             </div>
           </section>
 
           <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">팀별 현황</h3></div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">팀별 현황</h3></div>
               <div className="divide-y divide-slate-100">
                 {teamRows.map((row) => (
                   <button key={row.name} type="button" onClick={() => { setTeam(team === row.name ? "전체" : row.name); setMember("전체"); }} className="block w-full px-4 py-3 text-left hover:bg-slate-50">
@@ -368,8 +369,8 @@ export default function OperationsDashboard({ author }: Props) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 px-4 py-3"><h3 className="font-black text-slate-950">인원별 현황</h3></div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">인원별 현황</h3></div>
               {peopleRows.length === 0 ? (
                 <div className="p-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다.</div>
               ) : (
@@ -404,9 +405,9 @@ export default function OperationsDashboard({ author }: Props) {
             </div>
           </section>
 
-          <details className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
-              <div><h3 className="font-black text-slate-950">업무 기록 확인</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">오전송은 원문을 남긴 채 집계에서 제외할 수 있습니다.</p></div>
+              <div><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">업무 기록 확인</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">오전송은 원문을 남긴 채 집계에서 제외할 수 있습니다.</p></div>
               <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
             </summary>
             {filtered.length > 0 && (() => {
@@ -445,7 +446,7 @@ export default function OperationsDashboard({ author }: Props) {
           </details>
 
           {cancelledFiltered.length > 0 && (
-            <details className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-600"><span>집계 제외 기록</span><span>{cancelledFiltered.length}건</span></summary>
               <div className="divide-y divide-slate-100 border-t border-slate-200">
                 {cancelledFiltered.slice(0, 50).map((event) => (

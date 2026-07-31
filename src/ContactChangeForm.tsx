@@ -13,8 +13,8 @@ function Field({ label, value, onChange, multiline = false }: {
   return <label className="block">
     <span className="text-xs font-black text-slate-500">{label}</span>
     {multiline
-      ? <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300" />
-      : <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300" />}
+      ? <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-blue-300" />
+      : <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300" />}
   </label>;
 }
 
@@ -59,7 +59,7 @@ export default function ContactChangeForm({ form, setForm, author, setAuthor, on
       <Field label="업체명(본사/지점 등)" value={form.company} onChange={(value) => set("company", value)} />
       <label className="block">
         <span className="text-xs font-black text-slate-500">퍼스트전산직원</span>
-        <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
+        <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
           <option value="">선택</option>
           {authors.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>

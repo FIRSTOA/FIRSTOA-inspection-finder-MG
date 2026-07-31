@@ -5935,7 +5935,7 @@ export default function App() {
 
         </div>
         <aside className="sticky top-5 hidden max-h-[calc(100vh-2.5rem)] min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:flex-col">
-          <div className="border-b border-slate-200 px-4 py-3">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
             <div className="text-sm font-black text-slate-950">결과 미리보기</div>
             <div className="mt-0.5 text-xs font-semibold text-slate-400">PC에서는 입력과 결과를 동시에 확인합니다.</div>
           </div>
@@ -5968,7 +5968,7 @@ export default function App() {
               <div className="flex items-center gap-2 overflow-x-auto">
                 {photos.map((p, i) => (
                   <div key={p.url} className="relative shrink-0">
-                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-md object-cover" />}
+                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-md object-cover" />}
                     <button type="button" onClick={() => removePhoto(i)} className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">×</button>
                   </div>
                 ))}
@@ -6217,13 +6217,13 @@ export default function App() {
 
             <div className="space-y-3 p-4">
               {/* 한 줄 소개 */}
-              <div className="rounded-2xl bg-white p-4 text-center text-sm text-slate-600 shadow-sm">
+              <div className="rounded-2xl bg-white p-4 text-center text-sm text-slate-600">
                 <b style={{ color: config.accent }}>거래처를 검색</b>해 지난 점검양식을 불러오거나,<br />
                 원본을 붙여넣어 <b style={{ color: config.accent }}>깔끔한 보고 양식</b>으로 바꿔주는 앱이에요 📄
               </div>
 
               {/* 기본 순서 - 스텝 배지 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-3 text-sm font-bold text-slate-900">⭐ 기본 순서 (이것만 기억!)</div>
                 <div className="space-y-2.5">
                   {[
@@ -6249,7 +6249,7 @@ export default function App() {
               </div>
 
               {/* 상단 아이콘 3개 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-2 text-sm font-bold text-slate-900">🔲 상단 아이콘</div>
                 <div className="space-y-1.5 text-sm text-slate-700">
                   <div><b className="text-slate-900">🔍 거래처검색</b> — 거래처명으로 지난 점검/AS 양식을 찾아 불러오기 (점검 탭)</div>
@@ -6259,7 +6259,7 @@ export default function App() {
               </div>
 
               {/* 탭 안내 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-2 text-sm font-bold text-slate-900">🗂️ 탭 안내</div>
                 <div className="space-y-1.5 text-sm text-slate-700">
                   <div><b className="text-slate-900">점검</b> — 복합기/프린터 점검 (거래처검색·사진양식 지원). 안에서 <b className="text-slate-900">복합기/청정기</b> 토글로 청정기 점검도</div>
@@ -6268,7 +6268,7 @@ export default function App() {
               </div>
 
               {/* 칸 채우기 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-2 text-sm font-bold text-slate-900">✏️ 칸 채우기</div>
                 <ul className="space-y-1.5 text-sm text-slate-700">
                   <li>• <b className="text-slate-900">작성자</b> : 탭하면 팀별 이름 → 내 이름 선택 (기억됨)</li>
@@ -6283,7 +6283,7 @@ export default function App() {
               </div>
 
               {/* 기기 여러 대 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-2 text-sm font-bold text-slate-900">🖨️ 기기가 여러 대일 때 (점검)</div>
                 <p className="text-sm leading-relaxed text-slate-700">
                   폼 위쪽 <b className="text-slate-900">“기기 선택”</b>에서 기기를 고르면 아래 결과도 그 기기로 따라가요.
@@ -6292,7 +6292,7 @@ export default function App() {
               </div>
 
               {/* 결과/복사 */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="rounded-2xl bg-white p-4">
                 <div className="mb-2 text-sm font-bold text-slate-900">📋 결과 / 복사</div>
                 <p className="text-sm leading-relaxed text-slate-700">
                   맨 아래 <b className="text-slate-900">결과 칸</b>은 위아래로 넘겨 보고, 글자를 직접 고칠 수도 있어요.
@@ -6376,7 +6376,7 @@ export default function App() {
             className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+            <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-base font-black text-slate-950">워킨맵 기기별 반영 결과</h2>
                 <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{workinSyncSummary(workinSyncResult)}</p>

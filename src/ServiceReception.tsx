@@ -945,9 +945,9 @@ export default function ServiceReception({ author }: { author: string }) {
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);
-                    const field = "rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-900";
+                    const field = "rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-900";
                     return (
-                      <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                      <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-black text-blue-700">원격 처리</span>
                           <span className="text-[10px] font-bold text-slate-400">한조처리 {meta.hanjo || (row.type === "IT" ? "IT" : "공백")}</span>
@@ -955,7 +955,7 @@ export default function ServiceReception({ author }: { author: string }) {
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {meta.start
                             ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">시작 {meta.start}</span>
-                            : <button type="button" onClick={() => void saveHandling(row, { start: kstNowHM() }, true)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">▶ 원격 시작</button>}
+                            : <button type="button" onClick={() => void saveHandling(row, { start: kstNowHM() }, true)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700">▶ 원격 시작</button>}
                           {meta.start && (meta.end
                             ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">종료 {meta.end}</span>
                             : <button type="button" onClick={() => void saveHandling(row, { end: kstNowHM() }, true)} className="rounded-full bg-slate-900 px-4 py-2 text-[12px] font-black text-white transition hover:bg-slate-800">■ 종료</button>)}
@@ -1048,7 +1048,7 @@ export default function ServiceReception({ author }: { author: string }) {
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-xs font-black text-white">1</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">1</span>
                 <div>
                   <div className="text-sm font-black text-white lg:text-[15px]">거래처 선택</div>
                   <div className="text-[11px] font-semibold text-slate-400">{page === "remote" ? "원격 처리할 거래처를 고릅니다." : "AS 대상 기기를 정확히 고릅니다."}</div>
@@ -1119,7 +1119,7 @@ export default function ServiceReception({ author }: { author: string }) {
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-xs font-black text-white">2</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">2</span>
                 <div>
                   <div className="text-sm font-black text-white lg:text-[15px]">접수 내용 입력</div>
                   <div className="text-[11px] font-semibold text-slate-400">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div>
@@ -1138,7 +1138,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 </div>
                 {custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
-                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
                 </label>}
                 {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
                   <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
@@ -1176,14 +1176,14 @@ export default function ServiceReception({ author }: { author: string }) {
                             : key === "grade" ? ["N", "NN", "S", "SS", "V"] : null;
                           return <label key={key} className="text-[10px] font-bold text-slate-500">{label}
                             {options && !(key === "leaseStatus" && newLease.leaseStatus === "직접기재")
-                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
+                              ? <select value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900"><option value="">선택</option>{options.map((option) => <option key={option}>{option}</option>)}</select>
                               : key === "leaseStatus"
                               // 직접기재를 고르면 같은 자리에서 입력 — 줄이 늘어나지 않게 select를 input으로 교체
                               ? <span className="mt-0.5 flex gap-1">
                                   <input autoFocus value={newLease.leaseStatusCustom || ""} onChange={(e) => setNewLease({ ...newLease, leaseStatusCustom: e.target.value })} placeholder="임대여부 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />
-                                  <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-lg border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">↺</button>
+                                  <button type="button" title="선택으로 되돌리기" onClick={() => setNewLease({ ...newLease, leaseStatus: "", leaseStatusCustom: "" })} className="shrink-0 rounded-full border border-slate-300 px-1.5 text-[10px] font-black text-slate-400 hover:text-slate-700 transition hover:bg-slate-50">↺</button>
                                 </span>
-                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-900" />}
+                              : <input value={newLease[key] || ""} onChange={(e) => setNewLease({ ...newLease, [key]: e.target.value })} className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900" />}
                           </label>;
                         })}
                       </div>
@@ -1224,7 +1224,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     {manual.유상무상 === "직접기재"
                       ? <span className="mt-1 flex gap-1">
                           <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-md border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900" />
-                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-lg border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">↺</button>
+                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-full border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700 transition hover:bg-slate-50">↺</button>
                         </span>
                       : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
                   </label>

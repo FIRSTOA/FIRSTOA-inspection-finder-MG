@@ -228,12 +228,12 @@ export default function StockBoard({ author }: { author: string }) {
             <div className="mt-4 space-y-3">
               {kind === "기기" && <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
+                  <select value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value as "새기기" | "리퍼" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                     <option>새기기</option><option>리퍼</option>
                   </select>
                 </label>

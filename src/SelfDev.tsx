@@ -306,7 +306,7 @@ function PraiseBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람 이름이 함께 표시됩니다</span></div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
-              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
+              <select value={toName} onChange={(e) => setToName(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                 <option value="">받는 사람</option>
                 {AUTHOR_TEAMS.map((team) => <optgroup key={team} label={`${team}팀`}>{book[team].map((name) => <option key={name}>{name}</option>)}</optgroup>)}
               </select>
@@ -484,18 +484,18 @@ function GoalsBoard({ author }: { author: string }) {
     const overdue = !goal.done && ddayLabel.startsWith("D+");
     if (editId === goal.id) {
       return (
-        <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4 shadow-sm">
+        <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
           <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
+            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
               {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
             </select>
-            <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={editDraft.start_date} onChange={(e) => setEditDraft({ ...editDraft, start_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-            <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <input type="date" value={editDraft.start_date} onChange={(e) => setEditDraft({ ...editDraft, start_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <input type="date" value={editDraft.target_date} onChange={(e) => setEditDraft({ ...editDraft, target_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
-          <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setEditId("")} className="rounded-md border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500">취소</button>
             <button type="button" onClick={() => void saveEdit()} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-5 py-2 text-xs font-black text-white">저장</button>
@@ -559,7 +559,7 @@ function GoalsBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">새 목표 추가</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
                 {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
               </select>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="목표 (예: 정보처리기사 필기 합격, 매주 책 1권)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />

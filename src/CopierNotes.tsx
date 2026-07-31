@@ -332,7 +332,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="mt-3 flex justify-center gap-2">
               {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
             </div>
-            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition hover:bg-blue-500">퀴즈 시작 →</button>
+            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition">퀴즈 시작 →</button>
             <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
           </div>;
         })()}
@@ -373,7 +373,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="mt-1 text-[10px] font-bold text-slate-400">{currentQuiz.note.author || "익명"} · {currentQuiz.note.created_at.slice(0, 10)}</div>
           </div>}
           {quizPick && <div className="mt-4 flex justify-end">
-            <button type="button" onClick={nextQuiz} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-7 py-3 text-sm font-black text-white shadow-sm">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
+            <button type="button" onClick={nextQuiz} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-7 py-3 text-sm font-black text-white">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
           </div>}
         </div>}
         {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-2xl py-4 text-center">
@@ -488,12 +488,12 @@ export default function CopierNotes({ author }: { author: string }) {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-bold text-slate-500">브랜드
-                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
+                  <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value, model: "" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                     {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-bold text-slate-500">구분
-                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-sm font-semibold">
+                  <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as "학습" | "처리이력" })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">
                     <option>학습</option><option>처리이력</option>
                   </select>
                 </label>
