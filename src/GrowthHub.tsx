@@ -670,8 +670,8 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => openGatherResult("growth")} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 모음</button>
-              <button onClick={() => openGatherResult("learning")} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운점 모음</button>
+              <button onClick={() => openGatherResult("growth")} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">성장노트 모음</button>
+              <button onClick={() => openGatherResult("learning")} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배운점 모음</button>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="내용 또는 직원 검색" className="min-w-64 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-300" />
             </div>
           </section>
@@ -713,7 +713,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                     {open && (
                       <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-2">
                         {recordTypes.map(([key, label]) => row[key].trim() && (
-                          <div key={key} className="rounded-md border border-slate-200 bg-white p-4">
+                          <div key={key} className="rounded-lg border border-slate-200 bg-white p-4">
                             <div className="text-xs font-black text-slate-500">{label}</div>
                             <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{row[key]}</div>
                           </div>
@@ -732,7 +732,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                   const parsed: Record<string, string> = type === "learning" ? parseLearningText(row[type]) : parseStructured(row[type], fieldLabels[type]);
                   return <article key={`${row.author}-${row.weekStart}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-900">{row.author}</b>{onOpenWeek ? <button type="button" onClick={() => onOpenWeek(row.weekStart)} className="text-[11px] font-black text-blue-600">{weekDisplay(row.weekStart)} ↗</button> : <span className="text-[11px] font-bold text-slate-400">{weekDisplay(row.weekStart)}</span>}</div>
-                    <div className="mt-3 space-y-2">{fieldLabels[type].map((label) => <div key={label} className="rounded-md bg-white p-3"><div className="text-[10px] font-black text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{parsed[label] || "-"}</div></div>)}</div>
+                    <div className="mt-3 space-y-2">{fieldLabels[type].map((label) => <div key={label} className="rounded-lg bg-white p-3"><div className="text-[10px] font-black text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{parsed[label] || "-"}</div></div>)}</div>
                   </article>;
                 })}
                 {!rows.length && <div className="p-10 text-center text-sm text-slate-400">선택한 기록이 없습니다.</div>}
@@ -775,9 +775,9 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               <p className="text-xs font-semibold leading-5 text-slate-500">엑셀/시트에서 목표 범위를 복사해 아래에 붙여넣으세요. 열 역할은 자동 추정되며 직접 바꿀 수 있습니다.</p>
-              <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder={"엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)"} className="w-full resize-y rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
+              <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder={"엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)"} className="w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5" />
               {pasteGrid.length > 0 && (
-                <div className="overflow-x-auto rounded-md border border-slate-200">
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50">
@@ -804,7 +804,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             </div>
             {pasteGrid.length > 0 && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
               <button type="button" onClick={() => importPasted(false)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">기본업무로 추가</button>
-              <button type="button" onClick={() => importPasted(true)} className="rounded-md bg-orange-600 px-4 py-2 text-sm font-black text-white">미션업무로 추가</button>
+              <button type="button" onClick={() => importPasted(true)} className="rounded-full bg-orange-600 px-4 py-2 text-sm font-black text-white">미션업무로 추가</button>
             </div>}
           </div>
         </div>
@@ -818,24 +818,24 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <p className="text-xs font-semibold text-slate-500">시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다.</p>
             </div>
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-              <button disabled={!person} onClick={() => setPasteOpen(true)} className="col-span-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-40 sm:px-4 sm:text-sm">📋 엑셀 붙여넣기</button>
+              <button disabled={!person} onClick={() => setPasteOpen(true)} className="col-span-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-40 sm:px-4 sm:text-sm">📋 엑셀 붙여넣기</button>
               <button disabled={!person} onClick={() => addGoal("regular")} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">기본업무 추가</button>
-              <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">미션업무 추가</button>
+              <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-full bg-orange-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 sm:px-4 sm:text-sm">미션업무 추가</button>
             </div>
           </div>
           {!person && <div className="mt-8 text-center text-sm text-amber-600">작성자 직원을 선택하세요.</div>}
           <div className="mt-5 space-y-4 md:hidden">
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
-              <div className="flex items-center justify-between"><b className="text-sm text-blue-800">기본업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-md bg-white text-rose-500">×</button></div>
+              <div className="flex items-center justify-between"><b className="text-sm text-blue-800">기본업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-lg bg-white text-rose-500">×</button></div>
               <div className="mt-3 grid grid-cols-2 gap-2"><select value={goal.category} onChange={(e) => setGoal(goal.id, { category: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select></div>
               <div className="mt-2"><RichGoalEditor key={goal.id} initialHtml={goalHtmlOf(goal)} onChange={(html, text) => setGoal(goal.id, { titleHtml: html, title: text })} /></div>
               <div className="mt-2 grid grid-cols-2 gap-2">{[["현재레벨", "currentLevel"], ["목표레벨", "targetLevel"], ["요청예산", "budget"], ["예산반영", "reflectedBudget"]] .map(([label, key]) => <label key={key} className="text-[10px] font-bold text-slate-500">{label}<input value={String(goal[key as keyof LevelGoal] || "")} onChange={(e) => setGoal(goal.id, { [key]: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" /></label>)}</div>
               <label className="mt-2 block text-[10px] font-bold text-slate-500">진도율<input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" /></label>
             </article>)}
             {missionGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-orange-100 bg-orange-50/40 p-4">
-              <div className="flex items-center justify-between"><b className="text-sm text-orange-800">미션업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-md bg-white text-rose-500">×</button></div>
+              <div className="flex items-center justify-between"><b className="text-sm text-orange-800">미션업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="h-8 w-8 rounded-lg bg-white text-rose-500">×</button></div>
               <div className="mt-3"><RichGoalEditor key={goal.id} initialHtml={goalHtmlOf(goal)} onChange={(html, text) => setGoal(goal.id, { titleHtml: html, title: text })} className="border-orange-200" /></div>
-              <div className="mt-2 grid grid-cols-2 gap-2"><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select><input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} placeholder="진도율 %" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.budget} onChange={(e) => setGoal(goal.id, { budget: e.target.value })} placeholder="요청예산" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.reflectedBudget || ""} onChange={(e) => setGoal(goal.id, { reflectedBudget: e.target.value })} placeholder="예산반영" className="rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /></div>
+              <div className="mt-2 grid grid-cols-2 gap-2"><select value={goal.grade || ""} onChange={(e) => setGoal(goal.id, { grade: e.target.value })} className="rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm"><option value="">등급</option>{GRADE_OPTIONS.map((grade) => <option key={grade}>{grade}</option>)}</select><input type="number" min="0" max="999" value={goal.progress || ""} onChange={(e) => setGoal(goal.id, { progress: Number(e.target.value) || 0 })} placeholder="진도율 %" className="rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.budget} onChange={(e) => setGoal(goal.id, { budget: e.target.value })} placeholder="요청예산" className="rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm" /><input value={goal.reflectedBudget || ""} onChange={(e) => setGoal(goal.id, { reflectedBudget: e.target.value })} placeholder="예산반영" className="rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm" /></div>
             </article>)}
           </div>
           <div className="mt-5 hidden overflow-x-auto md:block">
@@ -886,7 +886,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             </table>
           </div>
           {person && (
-            <button onClick={savePlan} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+            <button onClick={savePlan} className="mt-5 w-full rounded-lg border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
               {statusText[planAutoSaveStatus]} · 지금 저장
             </button>
           )}
@@ -905,7 +905,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="mt-5 space-y-4 md:hidden">
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black text-blue-600">{goal.category} · {goal.grade || "-"}</div><div className="mt-1 whitespace-pre-wrap text-sm font-black leading-6 text-slate-900">{goalTitleView(goal, `목표 ${index + 1}`)}</div></div><span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2 py-1 text-xs font-black text-white">{goal.progress || 0}%</span></div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-md bg-white p-2 text-slate-500">현재 <b className="float-right text-slate-800">{goal.currentLevel || "-"}</b></div><div className="rounded-md bg-white p-2 text-slate-500">목표 <b className="float-right text-slate-800">{goal.targetLevel || "-"}</b></div></div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-white p-2 text-slate-500">현재 <b className="float-right text-slate-800">{goal.currentLevel || "-"}</b></div><div className="rounded-lg bg-white p-2 text-slate-500">목표 <b className="float-right text-slate-800">{goal.targetLevel || "-"}</b></div></div>
               <div className="mt-3 flex justify-end"><button type="button" onClick={() => setGoal(goal.id, { resultMerged: !goal.resultMerged })} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-500">{goal.resultMerged ? "월별 나누기" : "분기 통합"}</button></div>
               {goal.resultMerged ? <div className="mt-2"><RichGoalEditor key={`${goal.id}-merged-m`} minHeight={165} initialHtml={monthHtmlOf(goal, 1)} onChange={(html, text) => setGoalMonth(goal.id, 1, html, text)} /></div> : <div className="mt-2 space-y-2">{([1, 2, 3] as const).map((m) => <div key={m} className="text-[10px] font-bold text-slate-500">{(quarter - 1) * 3 + m}월<div className="mt-1"><RichGoalEditor key={`${goal.id}-m${m}-m`} minHeight={120} initialHtml={monthHtmlOf(goal, m)} onChange={(html, text) => setGoalMonth(goal.id, m, html, text)} /></div></div>)}</div>}
             </article>)}
@@ -992,7 +992,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             {!missionGoals.length && <div className="rounded-lg border border-dashed border-slate-200 p-12 text-center text-sm text-slate-400">미션을 추가하세요.</div>}
           </div>
           {person && (
-            <button onClick={savePlan} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+            <button onClick={savePlan} className="mt-5 w-full rounded-lg border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
               {statusText[planAutoSaveStatus]} · 지금 저장
             </button>
           )}
@@ -1006,7 +1006,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <h3 className="text-xl font-black text-slate-950">{year}년 {quarter}분기 골든미팅카드</h3>
               <p className="text-xs font-semibold text-slate-500">최신 선택 분기의 계획표·분기결과표·미션결과표를 근거로 작성하세요.</p>
             </div>
-            <button type="button" onClick={runGoldenAi} disabled={goldenBusy} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+            <button type="button" onClick={runGoldenAi} disabled={goldenBusy} className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50">
               {goldenBusy ? "AI 변환 중..." : "최신분기 AI변환"}
             </button>
           </div>
@@ -1016,11 +1016,11 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="mt-5">
             <h4 className="text-lg font-black text-slate-900">{GOLDEN_QUESTIONS[question]}</h4>
             <div className="mt-3 grid gap-4 md:grid-cols-2">
-              {GOLDEN_CATEGORIES.map((cat) => <label key={cat} className="text-xs font-bold text-slate-500">{cat}<textarea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(e) => setAnswer(GOLDEN_QUESTIONS[question], cat, e.target.value)} rows={8} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
+              {GOLDEN_CATEGORIES.map((cat) => <label key={cat} className="text-xs font-bold text-slate-500">{cat}<textarea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(e) => setAnswer(GOLDEN_QUESTIONS[question], cat, e.target.value)} rows={8} className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-white p-3 text-sm font-normal leading-relaxed outline-none focus:border-blue-300" /></label>)}
             </div>
           </div>
           {person && (
-            <button onClick={saveCard} className="mt-5 w-full rounded-md border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
+            <button onClick={saveCard} className="mt-5 w-full rounded-lg border border-blue-100 bg-blue-50 py-3 text-sm font-black text-blue-700 hover:bg-blue-100">
               {statusText[cardAutoSaveStatus]} · 지금 저장
             </button>
           )}
@@ -1035,7 +1035,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 <div className="text-base font-black text-slate-950">{gatherResult.title}</div>
                 <div className="mt-0.5 text-xs font-semibold text-slate-400">확인 후 복사하거나 txt로 받을 수 있습니다.</div>
               </div>
-              <button type="button" onClick={() => setGatherResult(null)} className="rounded-md px-3 py-2 text-sm font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700">닫기</button>
+              <button type="button" onClick={() => setGatherResult(null)} className="rounded-full px-3 py-2 text-sm font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700">닫기</button>
             </div>
             <textarea
               value={gatherResult.text}

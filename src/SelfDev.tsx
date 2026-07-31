@@ -166,7 +166,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
         </div>
         <div className="mt-2 space-y-1.5">
           {praises.slice(0, 3).map((praise) => (
-            <div key={praise.id} className="rounded-md bg-rose-50/50 px-3 py-2 text-xs font-semibold text-slate-700">
+            <div key={praise.id} className="rounded-lg bg-rose-50/50 px-3 py-2 text-xs font-semibold text-slate-700">
               <b className="font-black text-rose-600">{praise.to_name}</b> — {praise.content.length > 60 ? `${praise.content.slice(0, 60)}…` : praise.content}
             </div>
           ))}
@@ -318,11 +318,11 @@ function PraiseBoard({ author }: { author: string }) {
           </section>
 
           <div className="flex flex-wrap items-center gap-2">
-            <select value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+            <select value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
               <option value="전체">받은 사람: 전체</option>
               {people.map((name) => <option key={name} value={name}>받은 사람: {name}</option>)}
             </select>
-            <select value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
+            <select value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-600">
               <option value="전체">보낸 사람: 전체</option>
               {people.map((name) => <option key={name} value={name}>보낸 사람: {name}</option>)}
             </select>
@@ -345,7 +345,7 @@ function PraiseBoard({ author }: { author: string }) {
               {editId === row.id ? (
                 <div className="mt-2 flex gap-1.5">
                   <input value={editContent} onChange={(e) => setEditContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveEditPraise(); }} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                  <button type="button" onClick={() => setEditId("")} className="shrink-0 rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500">취소</button>
+                  <button type="button" onClick={() => setEditId("")} className="shrink-0 rounded-full border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500">취소</button>
                   <button type="button" onClick={() => void saveEditPraise()} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">저장</button>
                 </div>
               ) : <p className="mt-2 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800">{row.content}</p>}
@@ -497,7 +497,7 @@ function GoalsBoard({ author }: { author: string }) {
           </div>
           <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} placeholder="메모" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setEditId("")} className="rounded-md border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500">취소</button>
+            <button type="button" onClick={() => setEditId("")} className="rounded-full border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500">취소</button>
             <button type="button" onClick={() => void saveEdit()} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-5 py-2 text-xs font-black text-white">저장</button>
           </div>
         </article>

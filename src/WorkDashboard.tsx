@@ -212,20 +212,20 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
           const next = rows.filter((_, i) => i !== index);
           commitRows(next.length ? next : [emptyLearningRow()]);
         };
-        const inputClass = "rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:bg-white";
+        const inputClass = "rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:bg-white";
         return (
-          <div key={index} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50/60 p-2 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px] lg:border-0 lg:bg-transparent lg:p-0">
+          <div key={index} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50/60 p-2 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px] lg:border-0 lg:bg-transparent lg:p-0">
             <input value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
             <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
             <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
             <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
             <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
             <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
-            <button type="button" onClick={remove} className="rounded-md text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
+            <button type="button" onClick={remove} className="rounded-lg text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
           </div>
         );
       })}
-      <button type="button" onClick={() => commitRows([...rows, emptyLearningRow()])} className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">
+      <button type="button" onClick={() => commitRows([...rows, emptyLearningRow()])} className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">
         행 추가
       </button>
     </div>
@@ -375,12 +375,12 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
         <div className="space-y-6">
           <section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="text-lg font-black text-slate-950">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
-          ].map(([l, v]) => <div key={String(l)} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
+          ].map(([l, v]) => <div key={String(l)} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
           <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
         </div>
         <section className="h-fit rounded-lg border border-slate-200 bg-white p-5 xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-lg font-black text-slate-950">내근 업무 입력</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs text-slate-500">복귀시간<input type="time" value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label><label className="text-[10px] text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label></div>)}</div>
-          <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
+          <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
       </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
         <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} />
@@ -408,7 +408,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
           <h3 className="text-lg font-black text-slate-950">주간 목표·성장 기록</h3>
           <p className="mt-0.5 text-xs font-semibold text-slate-400">목표는 요약 카드로, 성장기록은 항목별로 나누어 확인합니다.</p>
         </div>
-        <div className={`rounded-md px-3 py-2 text-xs font-black ${autoSaveStatus === "saving" ? "bg-blue-50 text-blue-700" : autoSaveStatus === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+        <div className={`rounded-lg px-3 py-2 text-xs font-black ${autoSaveStatus === "saving" ? "bg-blue-50 text-blue-700" : autoSaveStatus === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
           {autoSaveStatus === "saving" ? "자동 저장중" : autoSaveStatus === "saved" ? "자동 저장됨" : "자동 저장"}
         </div>
       </div>
@@ -438,7 +438,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
         {goalCards.map(([key, label, desc]) => (
           <div key={key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
             <div><div className="text-sm font-black text-slate-900">{label}</div><div className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</div></div>
-            <AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
+            <AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={1} className="mt-4 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
           </div>
         ))}
       </div>
@@ -447,13 +447,13 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
           return (
             <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm">
               <div className="flex items-center justify-between gap-2">
-                <div className={`inline-flex rounded-md px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
+                <div className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
                 {item.key === "growth" && (
                   <div className="flex gap-1">
                     <button type="button" onClick={() => onNoteChange("growth", GROWTH_NOTE_TEMPLATE)} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-50">
                       틀 추가
                     </button>
-                    <button type="button" onClick={runGrowthAiTransform} disabled={aiBusy} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-50" title="API를 호출해 상황, 문제점, 개선해야 할 점, 실행으로 변환">
+                    <button type="button" onClick={runGrowthAiTransform} disabled={aiBusy} className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-50" title="API를 호출해 상황, 문제점, 개선해야 할 점, 실행으로 변환">
                       {aiBusy ? "변환중" : "✨ AI변환"}
                     </button>
                   </div>
@@ -462,7 +462,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
               {item.key === "learning" ? (
                 <LearningRowsEditor value={String(note.learning)} onChange={(value) => onNoteChange("learning", value)} />
               ) : (
-                <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
+                <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
               )}
             </div>
           );

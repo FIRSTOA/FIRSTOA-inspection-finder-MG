@@ -119,7 +119,7 @@ export default function AlbumView({ id }: { id: string }) {
                 aria-label={`사진 ${i + 1} 다운로드`}
                 disabled={downloading}
                 onClick={() => void handleDownload(u, i)}
-                className="absolute bottom-1 right-1 rounded-md bg-black/70 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
+                className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
               >
                 저장
               </button>

@@ -66,12 +66,12 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
           <div className="mb-2 flex flex-wrap gap-1.5">
             {REASON_PRESETS.map((preset) => (
               <button key={preset} type="button" onClick={() => setForm((current) => ({ ...current, reason: preset, short: preset }))}
-                className={`rounded-md border px-3 py-2 text-xs font-black ${form.reason === preset ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                className={`rounded-full border px-3 py-2 text-xs font-black ${form.reason === preset ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
                 {preset}
               </button>
             ))}
           </div>
-          <textarea value={form.reason} onChange={(e) => set("reason", e.target.value)} rows={2} placeholder="직접 입력하거나 위 버튼으로 선택" className="w-full resize-y rounded-md border border-slate-300 p-2.5 text-sm outline-none focus:border-blue-500" />
+          <textarea value={form.reason} onChange={(e) => set("reason", e.target.value)} rows={2} placeholder="직접 입력하거나 위 버튼으로 선택" className="w-full resize-y rounded-lg border border-slate-300 p-2.5 text-sm outline-none focus:border-blue-500" />
         </div>
         <label className="sm:col-span-2"><span className="mb-1 block text-xs font-black text-slate-600">간단 (한 줄 요약 — 비우면 칭찬이유가 들어가요)</span>
           <input value={form.short} onChange={(e) => set("short", e.target.value)} className={field} />

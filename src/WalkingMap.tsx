@@ -452,7 +452,7 @@ function NavLinks({ place, large }: { place: MapPlace; large?: boolean }) {
     ? kakaoMapRouteLink((place.name || address).slice(0, 30), place.latitude, place.longitude)
     : kakaoMapSearchLink(address);
   const tmap = hasCoord ? `tmap://route?goalname=${name}&goalx=${place.longitude}&goaly=${place.latitude}` : "";
-  const cls = large ? "rounded-md px-2.5 py-1.5 text-xs font-black" : "rounded px-1.5 py-0.5 text-[10px] font-black";
+  const cls = large ? "rounded-lg px-2.5 py-1.5 text-xs font-black" : "rounded px-1.5 py-0.5 text-[10px] font-black";
   return (
     <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>
       <a href={naver} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} title="네이버지도" className={`${cls} bg-[#03C75A] text-white`}>N</a>
@@ -1786,7 +1786,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     {place.kind === "quarter" && <div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-black text-slate-400">최근 점검 비교</span>
-                        <button type="button" onClick={() => setComparePopupId(place.id)} className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">자세히 보기</button>
+                        <button type="button" onClick={() => setComparePopupId(place.id)} className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">자세히 보기</button>
                       </div>
                       {historyLoading ? <div className="mt-1 font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
                       : inspectionSnapshots.length ? <div className="mt-1 space-y-1">
@@ -1845,11 +1845,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             onFocus={() => setMapSearchFocused(true)}
             onBlur={() => window.setTimeout(() => setMapSearchFocused(false), 120)}
             placeholder="거래처 검색"
-            className="w-full rounded-md border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
+            className="w-full rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
           />
           {mapQuery && <button type="button" onClick={() => setMapQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
           {mapSearchFocused && mapQuery.trim() && (
-            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white shadow-2xl">
+            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white shadow-2xl">
               {mapSearchResults.map((place) => (
                 <button
                   key={place.id}
@@ -1876,7 +1876,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         onClick={toggleLocationTracking}
         title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"}
         aria-pressed={locationTracking}
-        className={`absolute left-3 top-[5.75rem] z-[900] flex h-10 w-10 items-center justify-center rounded-md border text-xl font-black shadow-lg ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+        className={`absolute left-3 top-[5.75rem] z-[900] flex h-10 w-10 items-center justify-center rounded-lg border text-xl font-black shadow-lg ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
       >
         <LocateFixed size={19} strokeWidth={2.4} />
       </button>
@@ -1884,10 +1884,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         <div className="relative flex gap-1">
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
-          <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-md border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
+          <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
 
           {conditionMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-lg border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
                 {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
@@ -1905,7 +1905,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
 
           {colorMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-md border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-lg border border-slate-200 bg-white p-3 shadow-2xl">
               <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
               <div className="grid grid-cols-3 gap-2">
                 {mapLabels.map((item) => (
@@ -1919,7 +1919,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
 
           {progressMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] max-h-[calc(100dvh-230px)] w-[370px] max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-4 pb-6 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-black text-slate-950">{progressQuarter}분기 팀별 진행률</div>
@@ -1936,7 +1936,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   const renewalRate = item.renewalTotal ? Math.round((item.renewalDone / item.renewalTotal) * 100) : 0;
                   const remaining = Math.max(0, item.inspectionTotal - item.inspectionDone);
                   return (
-                    <div key={item.team} className="rounded-md border border-slate-200 p-3">
+                    <div key={item.team} className="rounded-lg border border-slate-200 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="text-xs font-black text-slate-900">{item.team}팀</div>
                         <div className="text-[10px] font-black text-blue-700">점검 {item.inspectionDone}/{item.inspectionTotal} · {inspectionRate}%</div>
@@ -2009,12 +2009,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="text-xs font-black text-blue-600">최근 점검 비교</div>
                 <div className="truncate text-base font-black text-slate-950">{place.name}</div>
               </div>
-              <button type="button" onClick={() => setComparePopupId(null)} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+              <button type="button" onClick={() => setComparePopupId(null)} className="h-9 w-9 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
             </div>
             <div className="min-h-0 space-y-3 overflow-y-auto p-5">
               {loading ? <div className="py-6 text-center text-sm font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
               : snapshots.length ? <>
-                {snapshots.map((snapshot, index) => <div key={`${place.id}-popup-${snapshot.date}-${index}`} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                {snapshots.map((snapshot, index) => <div key={`${place.id}-popup-${snapshot.date}-${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                   <div className="text-sm font-black text-slate-800">{index === 0 ? "최근 방문" : "이전 방문"} · {snapshot.date}</div>
                   <div className="mt-1.5 space-y-1 text-xs font-semibold leading-5 text-slate-600">{snapshotDeviceLabel(snapshot) && <div className="text-slate-500">기기: {snapshotDeviceLabel(snapshot)}</div>}<div>매수: {snapshot.counts || "기록 없음"}</div><div>토너잔량: {snapshot.toner || "기록 없음"}</div><div>여분: {snapshot.spare || "기록 없음"}</div>{snapshot.spareLocation && <div>여분 위치: {snapshot.spareLocation}</div>}</div>
                 </div>)}
@@ -2118,7 +2118,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="text-xs font-black text-blue-600">엑셀 불러오기</div>
                 <div className="mt-1 text-lg font-black text-slate-950">거래처 {pendingImport.length}곳</div>
               </div>
-              <button type="button" onClick={() => setPendingImport([])} className="h-9 w-9 rounded-md text-xl font-black text-slate-400">×</button>
+              <button type="button" onClick={() => setPendingImport([])} className="h-9 w-9 rounded-lg text-xl font-black text-slate-400">×</button>
             </div>
             <div className="mt-5 grid grid-cols-3 gap-2">
               <label className="text-xs font-black text-slate-500">팀<select value={importTeam} onChange={(event) => setImportTeam(event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm">{teams.map((item) => <option key={item} value={item}>{item}팀</option>)}</select></label>
@@ -2142,7 +2142,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="text-xs font-black text-blue-600">거래처 정보</div>
                 <div className="text-lg font-black text-slate-950">{places.some((place) => place.id === draft.id) ? "수정" : "추가"}</div>
               </div>
-              <button type="button" onClick={() => setDraft(null)} className="h-9 w-9 rounded-md text-xl font-black text-slate-400 hover:bg-slate-100">×</button>
+              <button type="button" onClick={() => setDraft(null)} className="h-9 w-9 rounded-lg text-xl font-black text-slate-400 hover:bg-slate-100">×</button>
             </div>
 
             <div className="grid gap-4 p-4 lg:grid-cols-2">
@@ -2156,7 +2156,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       key={item.code}
                       type="button"
                       onClick={() => setDraft({ ...draft, label: item.code })}
-                      className={`min-h-12 rounded-md border px-2 py-1.5 text-left transition ${active ? "border-slate-950 ring-2 ring-slate-300" : "border-slate-200 hover:border-slate-400"}`}
+                      className={`min-h-12 rounded-lg border px-2 py-1.5 text-left transition ${active ? "border-slate-950 ring-2 ring-slate-300" : "border-slate-200 hover:border-slate-400"}`}
                       style={{ background: active ? item.color : `${item.color}18` }}
                     >
                       <span className="flex items-center gap-1.5">
@@ -2183,22 +2183,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <div className="lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-xs font-black text-slate-500">메모 {draft.memos.length}개</div>
-                  <button type="button" onClick={() => setDraft({ ...draft, memos: [...draft.memos, ""] })} className="rounded-md border border-blue-200 px-3 py-1.5 text-xs font-black text-blue-600">+ 메모 추가</button>
+                  <button type="button" onClick={() => setDraft({ ...draft, memos: [...draft.memos, ""] })} className="rounded-full border border-blue-200 px-3 py-1.5 text-xs font-black text-blue-600">+ 메모 추가</button>
                 </div>
                 <div className="space-y-2">
                   {draft.memos.map((memo, index) => (
                     <div key={index} className="flex gap-2">
                       <input value={memo} onChange={(event) => setDraft({ ...draft, memos: draft.memos.map((item, memoIndex) => memoIndex === index ? event.target.value : item) })} placeholder={`메모${index + 1}`} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                      <button type="button" aria-label={`메모${index + 1} 삭제`} onClick={() => setDraft({ ...draft, memos: draft.memos.filter((_, memoIndex) => memoIndex !== index) })} className="h-10 w-10 rounded-md border border-slate-200 text-lg font-black text-slate-400">×</button>
+                      <button type="button" aria-label={`메모${index + 1} 삭제`} onClick={() => setDraft({ ...draft, memos: draft.memos.filter((_, memoIndex) => memoIndex !== index) })} className="h-10 w-10 rounded-lg border border-slate-200 text-lg font-black text-slate-400">×</button>
                     </div>
                   ))}
-                  {!draft.memos.length && <button type="button" onClick={() => setDraft({ ...draft, memos: [""] })} className="w-full rounded-md border border-dashed border-slate-300 py-4 text-sm font-black text-slate-400">메모 추가</button>}
+                  {!draft.memos.length && <button type="button" onClick={() => setDraft({ ...draft, memos: [""] })} className="w-full rounded-lg border border-dashed border-slate-300 py-4 text-sm font-black text-slate-400">메모 추가</button>}
                 </div>
               </div>
             </div>
 
             <div className="sticky bottom-0 flex gap-2 border-t border-slate-200 bg-white p-4">
-              <button type="button" onClick={deleteDraft} className="rounded-md border border-rose-200 px-4 py-2.5 text-sm font-black text-rose-600">삭제</button>
+              <button type="button" onClick={deleteDraft} className="rounded-full border border-rose-200 px-4 py-2.5 text-sm font-black text-rose-600">삭제</button>
               <button type="button" onClick={saveDraft} disabled={!draft.name.trim()} className="ml-auto rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">저장</button>
             </div>
           </div>

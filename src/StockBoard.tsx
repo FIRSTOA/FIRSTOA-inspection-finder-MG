@@ -144,7 +144,7 @@ export default function StockBoard({ author }: { author: string }) {
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <button type="button" onClick={() => void changeQty(item, -1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">−</button>
-        <span className={`min-w-12 rounded-md px-2 py-1.5 text-center text-base font-black ${qtyTone(item.qty)}`}>{item.qty}</span>
+        <span className={`min-w-12 rounded-lg px-2 py-1.5 text-center text-base font-black ${qtyTone(item.qty)}`}>{item.qty}</span>
         <button type="button" onClick={() => void changeQty(item, 1)} className="h-9 w-9 rounded-full border border-slate-200 text-base font-black text-slate-500 transition hover:bg-slate-50">＋</button>
         <button type="button" onClick={() => void removeItem(item)} className="ml-1 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
       </div>
@@ -259,7 +259,7 @@ export default function StockBoard({ author }: { author: string }) {
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setAddOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+              <button type="button" onClick={() => setAddOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
               <button type="button" disabled={busy || !draft.name.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "추가"}</button>
             </div>
           </div>

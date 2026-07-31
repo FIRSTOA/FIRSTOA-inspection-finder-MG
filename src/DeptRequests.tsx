@@ -82,7 +82,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 text-lg font-black leading-6 text-slate-950">{valueOf("_업체명") || title}</div>
-            <button type="button" onClick={onClose} className="h-8 w-8 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+            <button type="button" onClick={onClose} className="h-8 w-8 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
           </div>
           {badges.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">
             {badges.map(([key, value]) => <span key={key} className={`rounded px-1.5 py-0.5 text-[11px] font-black ${key === "등급" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"}`}>{key === "등급" ? `${value}등급` : value}</span>)}
@@ -551,9 +551,9 @@ export default function DeptRequests({ author }: { author: string }) {
               <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{row.content}</p>
               {row.status === "완료" && row.handled_by && <div className="mt-1.5 text-[11px] font-bold text-emerald-600">✓ {row.handled_by} 처리 · {String(row.handled_at || "").slice(0, 10)}</div>}
               <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-                {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">처리 시작</button>}
+                {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">처리 시작</button>}
                 {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">완료</button>}
-                {row.status === "완료" && <button type="button" onClick={() => void setStatus(row, "대기")} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button>}
+                {row.status === "완료" && <button type="button" onClick={() => void setStatus(row, "대기")} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button>}
                 <button type="button" onClick={() => void remove(row)} className="ml-auto text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>
               </div>
             </article>
@@ -587,7 +587,7 @@ export default function DeptRequests({ author }: { author: string }) {
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+              <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
               <button type="button" disabled={busy || !draft.content.trim() || !draft.requester.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
             </div>
           </div>

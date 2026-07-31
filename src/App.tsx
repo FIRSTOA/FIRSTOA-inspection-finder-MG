@@ -2991,7 +2991,7 @@ function NumSelect({ value, onChange, options, labels, placeholder, accent, suff
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-xs text-slate-500"
+                className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100"
               >
                 닫기
               </button>
@@ -3109,7 +3109,7 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
   };
 
   return <div className="relative mb-2 rounded-lg bg-slate-50 p-2">
-    <button type="button" onClick={() => beginEdit("new")} className="absolute right-2 top-2 rounded-md bg-blue-700 px-2 py-1 text-[10px] font-bold leading-none text-white shadow-sm">＋ 추가</button>
+    <button type="button" onClick={() => beginEdit("new")} className="absolute right-2 top-2 rounded-full bg-blue-700 px-2 py-1 text-[10px] font-bold leading-none text-white shadow-sm">＋ 추가</button>
     <div className="mb-1 flex items-center justify-between pr-14">
       <span className="text-sm font-bold text-slate-900">기기 선택</span>
       <span className="text-[10px] text-slate-500">{forms.length}대 중 {selected + 1}번 편집 중</span>
@@ -3203,7 +3203,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-xs text-slate-500"
+                className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100"
               >
                 닫기
               </button>
@@ -3320,7 +3320,7 @@ function ProcessingFormPanel({
       {/* 작성자 / 구분 / 레벨 */}
       <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]" : "grid-cols-2"}`} style={{ background: bgSoft }}>
         <div>
-          <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
+          <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
           <AuthorPicker
             value={author}
             onChange={setAuthor}
@@ -3328,12 +3328,12 @@ function ProcessingFormPanel({
           />
         </div>
         <div className="min-w-0">
-          <div className="mb-1.5 flex items-center gap-1"><span className="rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">구분</span><span className="text-[9px] text-slate-400">중복</span></div>
+          <div className="mb-1.5 flex items-center gap-1"><span className="rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">구분</span><span className="text-[9px] text-slate-400">중복</span></div>
           <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} accent={accent} />
         </div>
         {showLevel && (
           <div className="min-w-0">
-            <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">레벨</div>
+            <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">레벨</div>
             <NumSelect
               value={shared.level}
               onChange={(v) => setSharedF("level", v)}
@@ -3351,7 +3351,7 @@ function ProcessingFormPanel({
 
       {/* 처리내용 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">처리내용</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">처리내용</div>
         <textarea
           value={itemForm.processContent}
           onChange={(e) => setItemF("processContent", e.target.value)}
@@ -3362,7 +3362,7 @@ function ProcessingFormPanel({
 
       {/* 매수 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">매수</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">매수</div>
         <div className="grid grid-cols-2 gap-1.5">
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
             <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">흑</span>
@@ -3385,7 +3385,7 @@ function ProcessingFormPanel({
 
       {/* 잔량 — K/C/M/Y + 폐통, 직접 입력 (5칸) */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">잔량</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">잔량</div>
         <div className="grid grid-cols-5 gap-1">
           {(["K", "C", "M", "Y"] as const).map((ch: "K" | "C" | "M" | "Y") => {
             const key = (`toner${ch}`) as "tonerK" | "tonerC" | "tonerM" | "tonerY";
@@ -3421,7 +3421,7 @@ function ProcessingFormPanel({
 
       {/* 여분 — 원문은 보존하고 알려진 수량만 빠르게 조정 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">여분</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">여분</div>
         <SpareQuickEditor value={itemForm.spareRaw} onChange={(v)=>setItemF("spareRaw",v)} />
       </div>
       </div>{/* /기본 입력 */}
@@ -3432,7 +3432,7 @@ function ProcessingFormPanel({
         <>
           {/* 한틴이카 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">한틴이카유무</div>
+            <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">한틴이카유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {HANTIN_OPTIONS.map((opt: string) => {
                 const active = itemForm.hantin === opt;
@@ -3463,7 +3463,7 @@ function ProcessingFormPanel({
 
           {/* 주차비 — 칩 빠른선택 + 직접입력 */}
           <div className="mb-2">
-            <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">주차비지원유무</div>
+            <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">주차비지원유무</div>
             <div className="mb-1 flex flex-wrap gap-1">
               {PARKING_OPTIONS.map((opt: string) => {
                 const active = itemForm.parking === opt;
@@ -3496,7 +3496,7 @@ function ProcessingFormPanel({
 
       {/* 특이사항 */}
       <div>
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">특이사항</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">특이사항</div>
         <textarea
           value={itemForm.notes}
           onChange={(e) => setItemF("notes", e.target.value)}
@@ -3633,7 +3633,7 @@ function ProcessingFormPanel({
                 <button
                   type="button"
                   onClick={() => setSharedF("duration", "")}
-                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 active:scale-95"
+                  className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600 transition hover:bg-slate-200 active:scale-95"
                 >
                   초기화
                 </button>
@@ -3678,7 +3678,7 @@ function AirPurifierFormPanel({
     <section className="mb-3 rounded-2xl bg-white px-1 py-2 sm:px-1.5">
       {/* 작성자 */}
       <div className="mb-2">
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
         <AuthorPicker
           value={author}
           onChange={setAuthor}
@@ -3689,7 +3689,7 @@ function AirPurifierFormPanel({
       {/* 필터리셋 / 필터교체 */}
       <div className="mb-2 grid grid-cols-2 gap-2">
         <div>
-          <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">필터리셋</div>
+          <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">필터리셋</div>
           <NumSelect
             value={form.filterReset}
             onChange={(v) => setAirF("filterReset", v)}
@@ -3699,7 +3699,7 @@ function AirPurifierFormPanel({
           />
         </div>
         <div>
-          <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">필터교체</div>
+          <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">필터교체</div>
           <NumSelect
             value={form.filterChange}
             onChange={(v) => setAirF("filterChange", v)}
@@ -3712,7 +3712,7 @@ function AirPurifierFormPanel({
 
       {/* 특이사항 */}
       <div className="mb-3">
-        <div className="mb-1.5 inline-block rounded-md bg-slate-200 px-2.5 py-0.5 text-[13px] font-bold text-slate-700">특이사항</div>
+        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">특이사항</div>
         <textarea
           value={form.notes}
           onChange={(e) => setAirF("notes", e.target.value)}
@@ -3763,7 +3763,7 @@ function AirPurifierFormPanel({
                 <button
                   type="button"
                   onClick={() => setAirF("duration", "")}
-                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 active:scale-95"
+                  className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600 transition hover:bg-slate-200 active:scale-95"
                 >
                   초기화
                 </button>
@@ -5822,18 +5822,18 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setWorkinSyncResult(null)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg text-slate-400 hover:bg-white hover:text-slate-700"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-lg text-slate-400 hover:bg-white hover:text-slate-700"
                 aria-label="워킨맵 반영 결과 닫기"
               >
                 ×
               </button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-black">
-              <span className="rounded-md bg-emerald-100 px-2 py-1 text-emerald-800">반영 완료 {workinSyncResult.updatedDevices}</span>
-              <span className="rounded-md bg-blue-100 px-2 py-1 text-blue-800">이미 반영 {workinSyncResult.alreadyDevices}</span>
-              <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">다음 분기 이관 {workinSyncResult.carriedDevices}</span>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">반영 완료 {workinSyncResult.updatedDevices}</span>
+              <span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">이미 반영 {workinSyncResult.alreadyDevices}</span>
+              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">다음 분기 이관 {workinSyncResult.carriedDevices}</span>
               {workinSyncResult.reviewDevices > 0 && (
-                <span className="rounded-md bg-amber-200 px-2 py-1 text-amber-950">확인 필요 {workinSyncResult.reviewDevices}</span>
+                <span className="rounded-full bg-amber-200 px-2.5 py-1 text-amber-950">확인 필요 {workinSyncResult.reviewDevices}</span>
               )}
             </div>
             <button
@@ -5968,7 +5968,7 @@ export default function App() {
               <div className="flex items-center gap-2 overflow-x-auto">
                 {photos.map((p, i) => (
                   <div key={p.url} className="relative shrink-0">
-                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-md object-cover" />}
+                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-lg object-cover" />}
                     <button type="button" onClick={() => removePhoto(i)} className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">×</button>
                   </div>
                 ))}
@@ -6018,7 +6018,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setPreviewCollapsed((v) => !v)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+              className="flex w-full items-center justify-center gap-1.5 rounded-full py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-600"
             >
               {previewCollapsed ? "결과 미리보기 펼치기 ▲" : "결과 미리보기 접기 ▼"}
             </button>
@@ -6146,7 +6146,7 @@ export default function App() {
             </div>
             <div className="flex min-h-10 items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
               {detectedDraftMode ? (
-                <span className={`rounded-md px-2 py-1 text-xs font-black ${detectedDraftMode === "blank-report" ? "bg-rose-50 text-rose-700" : "bg-blue-50 text-blue-700"}`}>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-black ${detectedDraftMode === "blank-report" ? "bg-rose-50 text-rose-700" : "bg-blue-50 text-blue-700"}`}>
                   {detectedDraftMode === "blank-report" ? "AS 접수 원본으로 인식" : "점검 양식으로 인식"}
                 </span>
               ) : <span className="text-xs font-semibold text-slate-400">원본을 붙여넣으면 인식 결과가 표시됩니다.</span>}
@@ -6404,7 +6404,7 @@ export default function App() {
                           <div className="mt-0.5 text-xs font-bold text-slate-600">{device.model}</div>
                         )}
                       </div>
-                      <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-black ${meta.badge}`}>{meta.label}</span>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${meta.badge}`}>{meta.label}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
                       <span>시리얼 {device.serial || "-"}</span>

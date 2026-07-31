@@ -39,9 +39,9 @@ function MdView({ text }: { text: string }) {
     <div className="space-y-2">
       {lines.map((line, index) => {
         const image = line.trim().match(/^!\[[^\]]*\]\(([^)]+)\)$/);
-        if (image) return <a key={index} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-md border border-slate-200" /></a>;
+        if (image) return <a key={index} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-lg border border-slate-200" /></a>;
         const file = line.trim().match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
-        if (file) return <a key={index} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
+        if (file) return <a key={index} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
         if (/^###\s/.test(line)) return <h4 key={index} className="pt-1 text-sm font-black text-slate-900">{line.replace(/^###\s*/, "")}</h4>;
         if (/^##\s/.test(line)) return <h3 key={index} className="pt-1.5 text-base font-black text-slate-950">{line.replace(/^##\s*/, "")}</h3>;
         if (!line.trim()) return null;
@@ -70,11 +70,11 @@ function NoteBody({ note }: { note: CopierNote }) {
   return (
     <div className="mt-2 space-y-1.5">
       {meta && <div className="text-xs font-black text-slate-500">{meta}</div>}
-      {parsed["증상"] && <div className="rounded-md bg-rose-50/60 px-3 py-2">
+      {parsed["증상"] && <div className="rounded-lg bg-rose-50/60 px-3 py-2">
         <span className="text-[10px] font-black text-rose-500">증상</span>
         <p className="mt-0.5 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{parsed["증상"]}</p>
       </div>}
-      <div className="rounded-md bg-emerald-50/60 px-3 py-2">
+      <div className="rounded-lg bg-emerald-50/60 px-3 py-2">
         <span className="text-[10px] font-black text-emerald-600">처리</span>
         <p className="mt-0.5 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{parsed["처리"]}</p>
       </div>
@@ -258,7 +258,7 @@ export default function CopierNotes({ author }: { author: string }) {
                 {categories.map((name) => (
                   <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
                 ))}
-                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-md border border-slate-200 px-2.5 text-xs font-semibold" />
+                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold" />
                 <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
               </div>
               {topParts.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -298,12 +298,12 @@ export default function CopierNotes({ author }: { author: string }) {
                       </div>
                       <div className="mt-1 text-base font-black leading-6 text-slate-950">{openGuide.title}</div>
                     </div>
-                    <button type="button" onClick={() => setOpenGuide(null)} className="h-8 w-8 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+                    <button type="button" onClick={() => setOpenGuide(null)} className="h-8 w-8 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                    {openGuide.summary && <div className="mb-3 rounded-md bg-blue-50/60 px-3 py-2 text-sm font-bold text-blue-800">{openGuide.summary}</div>}
+                    {openGuide.summary && <div className="mb-3 rounded-lg bg-blue-50/60 px-3 py-2 text-sm font-bold text-blue-800">{openGuide.summary}</div>}
                     <MdView text={!showOriginal && openGuide.content_clean ? openGuide.content_clean : openGuide.content} />
-                    {!!openGuide.content_clean && <button type="button" onClick={() => setShowOriginal((v) => !v)} className="mt-4 rounded-md border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">{showOriginal ? "정리본 보기" : "원본(노션 그대로) 보기"}</button>}
+                    {!!openGuide.content_clean && <button type="button" onClick={() => setShowOriginal((v) => !v)} className="mt-4 rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">{showOriginal ? "정리본 보기" : "원본(노션 그대로) 보기"}</button>}
                   </div>
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function CopierNotes({ author }: { author: string }) {
               })}
             </div>
             <div className="mt-3 flex justify-center gap-2">
-              {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-md px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
+              {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
             </div>
             <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition">퀴즈 시작 →</button>
             <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
@@ -520,7 +520,7 @@ export default function CopierNotes({ author }: { author: string }) {
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-              <button type="button" onClick={() => setWriteOpen(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+              <button type="button" onClick={() => setWriteOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
               <button type="button" disabled={busy || !draft.content.trim()} onClick={() => void submit()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2 text-sm font-black text-white disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>
             </div>
           </div>

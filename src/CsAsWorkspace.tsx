@@ -704,7 +704,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const renderTicketCard = (ticket: AsTicket) => (
-    <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className="block w-full rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
+    <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-sm font-black text-slate-900">{ticket.vendor}</div>
@@ -796,7 +796,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       }, new Map<string, AsTicket[]>()),
                   ).map(([date, list]) => (
                     <div key={date}>
-                      <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-md bg-slate-100/95 px-3 py-1.5 backdrop-blur ${date === todayYmd ? "text-blue-700" : "text-slate-600"}`}>
+                      <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg bg-slate-100/95 px-3 py-1.5 backdrop-blur ${date === todayYmd ? "text-blue-700" : "text-slate-600"}`}>
                         <span className="text-sm font-black">{Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()]})</span>
                         {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
                         <span className="text-[11px] font-bold text-slate-400">{list.length}건</span>
@@ -837,7 +837,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     </div>
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
-                        <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`block w-full rounded-md px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                        <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`block w-full rounded-lg px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
                           <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {ticket.scheduleType}</span></div>
                           {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
                         </button>
@@ -881,7 +881,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       ) : (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="grid w-full grid-cols-3 rounded-md bg-slate-100 p-1 sm:w-auto">
+            <div className="grid w-full grid-cols-3 rounded-lg bg-slate-100 p-1 sm:w-auto">
               {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded-full px-4 py-2 text-sm font-black ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
@@ -911,10 +911,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 </select>
                 <div className="mt-3 flex gap-2" onClick={(event) => event.stopPropagation()}>
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-full bg-slate-900 transition hover:bg-slate-800 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => toggleDone(ticket)} className={`flex-1 rounded-md border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
-                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-2.5 text-xs font-black text-rose-600">삭제</button>
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
+                  <button type="button" onClick={() => toggleDone(ticket)} className={`flex-1 rounded-full border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
               </article>
             ))}
@@ -955,10 +955,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
                         {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
-                        <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
-                        <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-md border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
-                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
-                        <button type="button" onClick={() => removeTicket(ticket)} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
+                        <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
+                        <button type="button" onClick={() => toggleDone(ticket)} className={`rounded-full border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
+                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-full border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
+                        <button type="button" onClick={() => removeTicket(ticket)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
                       </div>
                     </td>
                   </tr>
@@ -998,7 +998,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                   <div className="mt-1 flex items-center gap-2"><span className="truncate text-lg font-black text-slate-950">{ticket.vendor || "업체 미기재"}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁 매월</span>}</div>
                 </div>
-                <button type="button" onClick={() => setDetailId("")} className="h-9 w-9 shrink-0 rounded-md text-xl font-black text-slate-400">×</button>
+                <button type="button" onClick={() => setDetailId("")} className="h-9 w-9 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
                 {!!ticket.issue && <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3"><div className="text-[10px] font-black text-blue-500">접수 내용</div><div className="mt-1 whitespace-pre-wrap text-sm font-bold leading-6 text-slate-800">{ticket.issue}</div></div>}
@@ -1017,7 +1017,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   {reception && infoCell("유상/무상", reception.paid)}
                   {ticket.department && infoCell("부서", ticket.department)}
                 </div>
-                {phoneEntries.length > 0 && <div className="rounded-md border border-slate-200 p-3">
+                {phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
                   <div className="text-[10px] font-black text-slate-400">연락처 — 누를 상대를 선택하세요</div>
                   <div className="mt-1.5 space-y-1.5">
                     {phoneEntries.map(({ line, phone }, index) => (
@@ -1028,17 +1028,17 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     ))}
                   </div>
                 </div>}
-                {!phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-md border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
-                {!!ticket.address && <div className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/50 p-3">
+                {!phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
+                {!!ticket.address && <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
                   <div className="min-w-0"><div className="text-[10px] font-black text-amber-600">방문 주소</div><div className="mt-0.5 text-sm font-black text-slate-800">{ticket.address}</div></div>
                   <AddrNav address={ticket.address} />
                 </div>}
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {!!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
-                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-md border border-slate-200 object-cover" /></a>)}</div>
+                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
                 </div>}
-                {!!reception?.report_text && <details className="rounded-md border border-slate-200">
+                {!!reception?.report_text && <details className="rounded-lg border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-600">원본 보고양식 펼치기</summary>
                   <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-slate-100 bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{reception.report_text}</pre>
                   <div className="border-t border-slate-100 p-2 text-right"><button type="button" onClick={() => void navigator.clipboard.writeText(reception.report_text)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-[11px] font-black text-white">복사</button></div>
@@ -1048,14 +1048,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="flex gap-2">
                   <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">수정</button>
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">복제</button>
-                  <button type="button" disabled={naverBusyId === ticket.id} onClick={() => void sendToNaver(ticket)} title="네이버 캘린더에 이 일정을 등록합니다" className={`rounded-md border px-4 py-2 text-sm font-black disabled:opacity-50 ${ticket.naverPushedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-700"}`}>{naverBusyId === ticket.id ? "등록 중…" : ticket.naverPushedAt ? "네이버 ✓" : "네이버 캘린더"}</button>
+                  <button type="button" disabled={naverBusyId === ticket.id} onClick={() => void sendToNaver(ticket)} title="네이버 캘린더에 이 일정을 등록합니다" className={`rounded-full border px-4 py-2 text-sm font-black disabled:opacity-50 ${ticket.naverPushedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-700"}`}>{naverBusyId === ticket.id ? "등록 중…" : ticket.naverPushedAt ? "네이버 ✓" : "네이버 캘린더"}</button>
                 </div>
                 <div className="flex gap-2">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-md border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
-                  <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">배정</button>
+                  <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-full border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
+                  <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>
                 </div>
               </div>
             </div>
@@ -1079,7 +1079,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="mt-1 text-sm font-semibold text-slate-500">{dupTicket.vendor || "이 일정"} — 어느 날짜로 복제할까요?</div>
             <div className="mt-5 grid grid-cols-3 gap-2">
               {([["같은 날", dupTicket.date], ["익일", nextBusinessDay(dupTicket.date)], ["다음 달", nextMonthSameDay(dupTicket.date)]] as [string, string][]).map(([label, date]) => (
-                <button key={label} type="button" onClick={() => duplicateTicket(dupTicket, date)} className="rounded-md border border-slate-200 px-2 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+                <button key={label} type="button" onClick={() => duplicateTicket(dupTicket, date)} className="rounded-full border border-slate-200 px-2 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
                   {label}<div className="mt-1 text-xs font-bold text-slate-400">{date.slice(5)}</div>
                 </button>
               ))}
@@ -1098,11 +1098,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="mt-1 text-sm font-semibold text-slate-500">{assignTicket.vendor || "이 일정"} · {assignTicket.team}팀 · 현재 {assignTicket.assignee || "미배정"}</div>
             <div className="mt-5 grid grid-cols-2 gap-2">
               {teamAssignees[assignTicket.team].map((name) => (
-                <button key={name} type="button" onClick={() => applyAssign(assignTicket, name)} className={`rounded-md border px-3 py-3 text-sm font-black ${assignTicket.assignee === name ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{name}</button>
+                <button key={name} type="button" onClick={() => applyAssign(assignTicket, name)} className={`rounded-full border px-3 py-3 text-sm font-black ${assignTicket.assignee === name ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{name}</button>
               ))}
             </div>
             <div className="mt-3 flex items-center justify-between">
-              <button type="button" onClick={() => applyAssign(assignTicket, "")} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-50">미배정으로</button>
+              <button type="button" onClick={() => applyAssign(assignTicket, "")} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-50">미배정으로</button>
               <button type="button" onClick={() => setAssignId("")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">닫기</button>
             </div>
           </div>
@@ -1114,10 +1114,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="text-lg font-black text-slate-950">🔁 매월 반복 일정 이동</div>
             <div className="mt-1 text-sm font-semibold text-slate-500">{moveTarget.ticket.vendor || "이 일정"} · {moveTarget.ticket.date} → {moveTarget.date}</div>
             <div className="mt-5 space-y-2">
-              <button type="button" onClick={() => { update(moveTarget.ticket.id, { date: moveTarget.date }); setMoveTarget(null); }} className="w-full rounded-md border border-slate-200 px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={() => { update(moveTarget.ticket.id, { date: moveTarget.date }); setMoveTarget(null); }} className="w-full rounded-lg border border-slate-200 px-4 py-3 text-left text-sm font-black text-slate-700 hover:bg-slate-50">
                 이 일정만 이동<div className="mt-0.5 text-xs font-bold text-slate-400">이번 건만 {moveTarget.date}로 옮기고, 다른 달은 그대로 둡니다</div>
               </button>
-              <button type="button" onClick={() => { applyMoveAll(moveTarget.ticket, moveTarget.date); setMoveTarget(null); }} className="w-full rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-black text-blue-700 hover:bg-blue-100">
+              <button type="button" onClick={() => { applyMoveAll(moveTarget.ticket, moveTarget.date); setMoveTarget(null); }} className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-black text-blue-700 hover:bg-blue-100">
                 전체 반복 일정 이동 ({seriesOthers(moveTarget.ticket).length + 1}건)<div className="mt-0.5 text-xs font-bold text-blue-500/80">앞으로 오는 미완료 반복 일정을 전부 매월 {Number(moveTarget.date.slice(8, 10))}일로 바꿉니다 (완료된 지난 기록은 유지)</div>
               </button>
             </div>
@@ -1177,23 +1177,23 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             키맨 정보 <span className="font-semibold text-slate-400">(FIELD 양식의 키맨/접수자 아랫줄에 그대로 들어감)</span>
-            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
+            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal" />
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             접수내용
-            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm font-normal" />
+            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal" />
           </label>
           <label className="text-xs font-bold text-slate-500 md:col-span-2">
             내용 <span className="font-semibold text-slate-400">— 처리 결과·점검/AS 양식 (완료 처리 시 자동으로 쌓임, 직접 붙여넣기도 가능)</span>
-            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-md border border-slate-300 p-3 font-mono text-xs leading-5" />
+            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5" />
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
-          <div>{onDelete && <button type="button" onClick={onDelete} className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}</div>
+          <div>{onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}</div>
           <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-            {onDefer && <button type="button" onClick={onDefer} className="rounded-md border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}
-            {onComplete && <button type="button" onClick={onComplete} className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">{ticket.status === "완료" ? "완료 취소" : "완료"}</button>}
+            <button type="button" onClick={onClose} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+            {onDefer && <button type="button" onClick={onDefer} className="rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}
+            {onComplete && <button type="button" onClick={onComplete} className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">{ticket.status === "완료" ? "완료 취소" : "완료"}</button>}
             <button type="button" onClick={() => onSave(draft)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">저장</button>
           </div>
         </div>
@@ -1218,7 +1218,7 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         <div className="mt-5 grid grid-cols-2 gap-2">
           {options.map(([label, date]) => (
-            <button key={label} type="button" onClick={() => onApply(date)} className="rounded-md border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+            <button key={label} type="button" onClick={() => onApply(date)} className="rounded-full border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
               {label}
               <div className="mt-1 text-xs text-slate-400">{date}</div>
             </button>
@@ -1226,7 +1226,7 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
         </div>
         <div className="mt-4 flex gap-2">
           <input type="date" value={customDate} onChange={(event) => onCustomDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <button type="button" onClick={() => onApply(customDate)} className="rounded-md bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+          <button type="button" onClick={() => onApply(customDate)} className="rounded-full bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
         </div>
       </div>
     </div>

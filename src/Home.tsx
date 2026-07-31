@@ -116,7 +116,7 @@ function MenuRow({ item, onOpen }: { item: MenuItem; onOpen: (screen: Screen) =>
   const Icon = item.icon;
   return (
     <button type="button" onClick={() => onOpen(item.key)} className="group flex min-h-[64px] w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left transition first:border-t-0 hover:bg-slate-50 active:bg-slate-100">
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${item.tone}`}><Icon size={18} strokeWidth={2.2} /></span>
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${item.tone}`}><Icon size={18} strokeWidth={2.2} /></span>
       <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-black text-slate-950">{item.title}</span>{item.pending && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-500">준비 중</span>}</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">{item.desc}</span></span>
       <ArrowRight size={15} className="shrink-0 text-slate-300 group-hover:text-blue-600" />
     </button>
@@ -162,7 +162,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {primaryLinks.map((item) => {
             const Icon = item.icon;
-            return <button key={item.key} type="button" onClick={() => go(item.key)} className="flex min-h-[96px] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md sm:p-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${item.tone}`}><Icon size={19} /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-950">{item.title}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.desc}</span></span></button>;
+            return <button key={item.key} type="button" onClick={() => go(item.key)} className="flex min-h-[96px] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md sm:p-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.tone}`}><Icon size={19} /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-950">{item.title}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.desc}</span></span></button>;
           })}
         </div>
       </section>
@@ -207,7 +207,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           {manuals.map((manual) => {
             const Icon = manual.icon;
             const open = openManual === manual.id;
-            return <div key={manual.id}><button type="button" aria-expanded={open} onClick={() => setOpenManual(open ? "" : manual.id)} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50 sm:px-5"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${open ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><Icon size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-950">{manual.title}</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">{manual.summary}</span></span><ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>{open && <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 sm:px-5"><ol className="space-y-3">{manual.steps.map((step) => <li key={step} className="flex gap-3"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check size={13} strokeWidth={3} /></span><span className="text-sm font-semibold leading-6 text-slate-700">{step}</span></li>)}</ol></div>}</div>;
+            return <div key={manual.id}><button type="button" aria-expanded={open} onClick={() => setOpenManual(open ? "" : manual.id)} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50 sm:px-5"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${open ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><Icon size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-950">{manual.title}</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">{manual.summary}</span></span><ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>{open && <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 sm:px-5"><ol className="space-y-3">{manual.steps.map((step) => <li key={step} className="flex gap-3"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check size={13} strokeWidth={3} /></span><span className="text-sm font-semibold leading-6 text-slate-700">{step}</span></li>)}</ol></div>}</div>;
           })}
         </div>
       </section>

@@ -453,7 +453,7 @@ export default function OperationsDashboard({ author }: Props) {
                   <div key={event.id} className="flex items-center gap-3 px-4 py-3">
                     <span className={`rounded px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{eventDisplayLabel(event)}</span>
                     <div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-500 line-through">{event.vendor || "거래처 미기재"}</b><span className="text-[11px] text-slate-400">{event.activityDate} · {event.author}</span></div>
-                    <button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, false)} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-50">복원</button>
+                    <button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, false)} className="rounded-full border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-50">복원</button>
                   </div>
                 ))}
               </div>
