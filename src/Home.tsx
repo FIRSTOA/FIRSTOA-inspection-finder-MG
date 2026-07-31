@@ -141,7 +141,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-200 sm:text-base">카톡 원본을 다시 고치고, 여러 방에 보내고, 일지에 또 적던 반복 업무를 하나의 흐름으로 연결합니다.</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <button type="button" onClick={() => go("field")} className="flex min-h-11 items-center gap-2 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2.5 text-sm font-black"><Plus size={17} />FIELD 바로 작성</button>
-            <button type="button" onClick={() => go("calendar")} className="min-h-11 rounded-md border border-white/25 bg-slate-950/45 px-4 py-2.5 text-sm font-black hover:bg-white/10">오늘 일정 확인</button>
+            <button type="button" onClick={() => go("calendar")} className="min-h-11 rounded-full border border-white/25 bg-white/5 px-4 py-2.5 text-sm font-black transition hover:bg-white/15">오늘 일정 확인</button>
           </div>
         </div>
       </section>
@@ -162,7 +162,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {primaryLinks.map((item) => {
             const Icon = item.icon;
-            return <button key={item.key} type="button" onClick={() => go(item.key)} className="flex min-h-[96px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${item.tone}`}><Icon size={19} /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-950">{item.title}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.desc}</span></span></button>;
+            return <button key={item.key} type="button" onClick={() => go(item.key)} className="flex min-h-[96px] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md sm:p-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${item.tone}`}><Icon size={19} /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-950">{item.title}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.desc}</span></span></button>;
           })}
         </div>
       </section>
@@ -170,7 +170,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
           <div><div className="text-xs font-black text-blue-600">BEFORE → NOW</div><h3 className="mt-1 text-lg font-black text-slate-950">반복 업무가 어떻게 줄었는지</h3><p className="mt-1 text-xs font-semibold text-slate-500">기존 현장 흐름을 기준으로 한 예상 시간이며 실제 운영 데이터로 조정할 수 있습니다.</p></div>
-          <div className="shrink-0 rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800">건당 약 11~19분 절감 여지</div>
+          <div className="shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 py-1.5 text-sm font-black text-emerald-800">건당 약 11~19분 절감 여지</div>
         </div>
         <div className="hidden grid-cols-[110px_minmax(0,1fr)_80px_minmax(0,1fr)_80px] bg-slate-50 px-5 py-2 text-[11px] font-black text-slate-500 md:grid"><span>업무</span><span>기존 방식</span><span>예상</span><span>현재 웹앱</span><span>예상</span></div>
         <div className="divide-y divide-slate-100">
@@ -193,12 +193,12 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           { icon: Clock3, title: "반복 시간 감소", desc: "현장 내용의 재작성과 카톡방별 반복 전송을 줄여 실제 처리 업무에 시간을 씁니다." },
           { icon: CheckCircle2, title: "누락과 오기입 감소", desc: "사진, 기기정보, 전송 대상과 방문기록을 한 흐름에서 확인해 빠뜨릴 가능성을 낮춥니다." },
           { icon: UsersRound, title: "팀 운영 가시화", desc: "캘린더, 워킨맵 진행률, 일일·주간 실적으로 현재 업무 상태를 함께 확인합니다." },
-        ].map((item) => <div key={item.title} className="border-l-4 border-blue-600 bg-white px-4 py-4 shadow-sm"><item.icon size={20} className="text-blue-600" /><h3 className="mt-3 text-sm font-black text-slate-950">{item.title}</h3><p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{item.desc}</p></div>)}
+        ].map((item) => <div key={item.title} className="rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white px-4 py-4 shadow-sm"><item.icon size={20} className="text-blue-600" /><h3 className="mt-3 text-sm font-black text-slate-950">{item.title}</h3><p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{item.desc}</p></div>)}
       </section>
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <button type="button" aria-expanded={showAllMenus} onClick={() => setShowAllMenus(!showAllMenus)} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50 sm:px-5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white"><ClipboardList size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-950">전체 업무 메뉴</span><span className="mt-0.5 block text-xs font-semibold text-slate-500">현장 운영·고객 관리·기록 성과 기능 보기</span></span><ChevronDown size={18} className={`text-slate-400 transition ${showAllMenus ? "rotate-180" : ""}`} /></button>
-        {showAllMenus && <div className="grid border-t border-slate-200 lg:grid-cols-3">{workGroups.map((group, index) => <div key={group.title} className={index ? "border-t border-slate-200 lg:border-l lg:border-t-0" : ""}><div className="bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700">{group.title}</div>{group.items.map((item) => <MenuRow key={item.key} item={item} onOpen={go} />)}</div>)}</div>}
+        {showAllMenus && <div className="grid border-t border-slate-200 lg:grid-cols-3">{workGroups.map((group, index) => <div key={group.title} className={index ? "border-t border-slate-200 lg:border-l lg:border-t-0" : ""}><div className="bg-slate-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-wide text-slate-500">{group.title}</div>{group.items.map((item) => <MenuRow key={item.key} item={item} onOpen={go} />)}</div>)}</div>}
       </section>
 
       <section id="home-manual" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

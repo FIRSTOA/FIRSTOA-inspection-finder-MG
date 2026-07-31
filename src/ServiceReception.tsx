@@ -1293,7 +1293,7 @@ export default function ServiceReception({ author }: { author: string }) {
                       </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                         {checkItems.map(([label, value, required]) => (
-                          <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
+                          <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
                             <div className="text-[10px] font-black text-slate-400">{label}</div>
                             <div className={`mt-0.5 truncate text-xs font-black ${value ? "text-slate-800" : required ? "text-rose-600" : "text-slate-400"}`}>{value || "미기재"}</div>
                           </div>

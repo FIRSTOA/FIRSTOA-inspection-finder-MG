@@ -238,7 +238,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
         </div>
         {openComments.has(post.id) && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 sm:pl-8">
           {(commentsByPost.get(post.id) || []).map((comment) => (
-            <div key={comment.id} className="flex items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2">
+            <div key={comment.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
               <div className="min-w-0">
                 <span className="text-[10px] font-black text-slate-400">익명{comment.author === author ? " (나)" : ""} · {comment.created_at.slice(5, 10)}</span>
                 <p className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-700"><Linkified text={comment.content} /></p>
@@ -247,7 +247,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
             </div>
           ))}
           <div className="flex gap-1.5">
-            <input value={commentDrafts[post.id] || ""} onChange={(e) => setCommentDrafts((current) => ({ ...current, [post.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void submitComment(post.id); }} placeholder="익명 댓글 남기기" className="min-w-0 flex-1 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold" />
+            <input value={commentDrafts[post.id] || ""} onChange={(e) => setCommentDrafts((current) => ({ ...current, [post.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void submitComment(post.id); }} placeholder="익명 댓글 남기기" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <button type="button" onClick={() => void submitComment(post.id)} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">등록</button>
           </div>
         </div>}
@@ -297,7 +297,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
                 <button key={mode} type="button" onClick={() => setSortMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${sortMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
               ))}
             </div>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="제목·내용 검색" className="w-44 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="제목·내용 검색" className="w-44 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
 
           {/* 글 목록 */}
@@ -320,7 +320,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           <div className="mt-3 space-y-1.5">
             {!points.length && <div className="py-6 text-center text-xs font-bold text-slate-400">{pointsMonthly ? "이번 달 추천 기록이 없어요." : "아직 추천 기록이 없어요."}</div>}
             {points.map(([name, score], index) => (
-              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
+              <div key={name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
                 <span className="text-xs font-black text-amber-600">{fmtP(score)}P</span>
               </div>

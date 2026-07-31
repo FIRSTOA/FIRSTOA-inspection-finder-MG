@@ -89,7 +89,7 @@ function statusLabel(status: HappycallStatus) { return status === "scheduled" ? 
 function ContactsEditor({ contacts, onChange, email = false }: { contacts: Contact[]; onChange: (contacts: Contact[]) => void; email?: boolean }) {
   const patch = (id: string, values: Partial<Contact>) => onChange(contacts.map((contact) => contact.id === id ? { ...contact, ...values } : contact));
   return <div className="space-y-2">
-    {contacts.map((contact, index) => <div key={contact.id} className={`grid grid-cols-[24px_minmax(0,1fr)_32px] items-start gap-2 rounded-md border p-2 ${contact.selected ? "border-blue-200 bg-blue-50/50" : "border-slate-200 bg-slate-50 opacity-60"}`}>
+    {contacts.map((contact, index) => <div key={contact.id} className={`grid grid-cols-[24px_minmax(0,1fr)_32px] items-start gap-2 rounded-lg border p-2 ${contact.selected ? "border-blue-200 bg-blue-50/50" : "border-slate-200 bg-slate-50 opacity-60"}`}>
       <input type="checkbox" checked={contact.selected} onChange={(event) => patch(contact.id, { selected: event.target.checked })} className="h-4 w-4 accent-blue-600" aria-label={`${index + 1}번 고객 선택`} />
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         <input value={contact.name} onChange={(event) => patch(contact.id, { name: event.target.value })} placeholder="고객명" className="min-w-0 rounded border border-slate-200 bg-white px-2 py-2 text-xs" />
@@ -98,7 +98,7 @@ function ContactsEditor({ contacts, onChange, email = false }: { contacts: Conta
       </div>
       <button type="button" onClick={() => onChange(contacts.filter((item) => item.id !== contact.id))} aria-label="연락처 삭제" className="h-8 w-8 rounded text-lg font-black text-slate-400 hover:bg-white">×</button>
     </div>)}
-    <button type="button" onClick={() => onChange([...contacts, newContact()])} className="w-full rounded-md border border-dashed border-slate-300 py-2 text-xs font-black text-slate-500">+ 고객 직접 추가</button>
+    <button type="button" onClick={() => onChange([...contacts, newContact()])} className="w-full rounded-lg border border-dashed border-slate-300 py-2.5 text-xs font-black text-slate-500">+ 고객 직접 추가</button>
   </div>;
 }
 
@@ -155,14 +155,14 @@ function TemplateBar({ context, author, body, onApply, preferredTitle = "", appl
     setSelected(preferred.id);
     onApply(preferred.body);
   }, [applyRevision, onApply, preferredTitle, templates]);
-  return <div className="grid grid-cols-3 gap-2 rounded-md border border-blue-100 bg-blue-50/50 p-2">
+  return <div className="grid grid-cols-3 gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
     <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
     <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
-    <button type="button" onClick={() => void save(body)} className="rounded-md border border-blue-200 bg-white px-2 py-2 text-xs font-black text-blue-600">공용 추가</button>
+    <button type="button" onClick={() => void save(body)} className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-600 transition hover:bg-blue-50">공용 추가</button>
     <button type="button" onClick={() => void update(selectedId, body)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">공용 수정</button>
-    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-40">공용 삭제</button>
+    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40">공용 삭제</button>
   </div>;
 }
 
@@ -184,7 +184,7 @@ export function HappyCallWorkspace({ author }: { author: string }) {
     <div className="mt-4"><TemplateBar context="happycall" author={author} body={message} onApply={setMessage} preferredTitle={selected.workKinds.includes("as") ? "AS 기본 확인형" : "점검 기본 확인형"} applyRevision={selectedRecord?.message ? "" : selected.id} /></div>
     <textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm leading-6" />
     <div className="text-[10px] font-bold text-slate-400">사용 가능: {'{고객명}'} {'{업체명}'} {'{담당자}'} {'{업무}'} {'{방문일}'}</div>
-    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-black text-slate-500">예약 발송 시간<input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm" /></label></div>
+    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-black text-slate-500">예약 발송 시간<input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" /></label></div>
     {notice && <div className="mt-3 rounded-md bg-slate-100 p-3 text-xs font-bold text-slate-600">{notice}</div>}
     <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur sm:flex sm:flex-wrap xl:static xl:mx-0 xl:p-0 xl:pt-4">
       <button onClick={() => void saveRecord("skip")} className="rounded-md border px-3 py-2.5 text-sm font-black text-slate-500">대상 제외</button>

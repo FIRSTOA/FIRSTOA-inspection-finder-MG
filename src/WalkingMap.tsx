@@ -1668,45 +1668,45 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   const placeList = (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="border-b border-slate-200 p-3">
-        <div className="mb-2 truncate text-xs font-black text-blue-700">{conditionTitle}</div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-black text-slate-950">거래처 {filtered.length}곳</div>
-            <div className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-600" : "text-slate-400"}`}>
+      <div className="flex items-center justify-between gap-2 bg-[#171C26] px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
+            <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-500"}`}>
               {syncState === "loading" ? "공용 저장 중" : syncState === "error" ? "공용 DB 연결 필요" : "공용 저장됨"}
-            </div>
-          </div>
-          <div className="flex gap-1.5">
-            <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`rounded-full px-3 py-2 text-xs font-black ${editMode ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
-              {editMode ? "편집 종료" : "목록 편집"}
-            </button>
+            </span>
           </div>
         </div>
-        <div className="mt-2 flex gap-2">
+        <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${editMode ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20"}`}>
+          {editMode ? "편집 종료" : "목록 편집"}
+        </button>
+      </div>
+      <div className="border-b border-slate-200 p-3">
+        <div className="flex gap-2">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          {misuFailed && <span className="self-center whitespace-nowrap rounded bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
+          {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
-        {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+        {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-3 gap-1">
             {([['default', '기본순'], ['asc', '종료 빠른순'], ['desc', '종료 나중순']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setRenewalOrder(value)} className={`rounded-full px-2 py-2 text-[11px] font-black ${renewalOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
+            {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
           </div>
         </div>}
-        {kindFilter === "quarter" && <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+        {kindFilter === "quarter" && <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="flex flex-wrap items-center gap-1">
-            <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500"}`}>재계약 있음</button>
-            <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500"}`}>미수 있음</button>
-            {(quarterHasRenewal || quarterHasMisu || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterGrades([]); }} className="ml-auto rounded px-2 py-1.5 text-[11px] font-black text-slate-400">초기화</button>}
+            <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>재계약 있음</button>
+            <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>미수 있음</button>
+            {(quarterHasRenewal || quarterHasMisu || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded px-2 py-1.5 text-[11px] font-black ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500"}`}>{grade}</button>)}
+            {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade}</button>)}
           </div>
         </div>}
-        {kindFilter === "monthly" && <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+        {kindFilter === "monthly" && <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-2 gap-1">
             {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded-full px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
@@ -1778,7 +1778,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   {misu && <span className="mt-1 block text-[11px] font-black text-amber-600">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
                 </span>
               </button>
-              {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-black text-slate-500 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
+              {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
               </div>
               {expandedId === place.id && !editMode && (
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
@@ -1794,7 +1794,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         {spareAdviceResult && <div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                           const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0];
                           void requestSelfForm(place, latestVisit, inspectionSnapshots[0], spareAdviceResult.needsList, latestVisit?.vendor || place.name);
-                        }} className="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-black text-white">자가신청</button>}</div>}
+                        }} className="shrink-0 rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-black text-white">자가신청</button>}</div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>
@@ -2100,7 +2100,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             </section>
             <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">업무 정보</div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded bg-slate-100 px-2 py-1">{place.team}팀</span><span className="rounded bg-slate-100 px-2 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}</span><span className="rounded bg-slate-100 px-2 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.team}팀</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
             </section>
             <section className="px-4 py-4">
               <div className="text-xs font-black text-slate-400">메모</div>
@@ -2126,8 +2126,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <label className="text-xs font-black text-slate-500">업무<select value={importKind} onChange={(event) => setImportKind(event.target.value as WorkKind)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-sm">{workKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
-              <button type="button" onClick={() => setImportMode("replace")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "replace" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>같은 목록 교체</button>
-              <button type="button" onClick={() => setImportMode("append")} className={`rounded px-3 py-2 text-xs font-black ${importMode === "append" ? "bg-white text-slate-950 shadow" : "text-slate-500"}`}>기존 목록에 추가</button>
+              <button type="button" onClick={() => setImportMode("replace")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${importMode === "replace" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>같은 목록 교체</button>
+              <button type="button" onClick={() => setImportMode("append")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${importMode === "append" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>기존 목록에 추가</button>
             </div>
             <button type="button" onClick={() => void applyExcelImport()} className="mt-5 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-4 py-3 text-sm font-black text-white">불러오기 적용</button>
           </div>

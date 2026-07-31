@@ -114,7 +114,7 @@ ${names}${matches.length > 5 ? `
         {!filtered.length ? <div className="p-12 text-center text-sm font-semibold text-slate-400">아직 저장된 변경 기록이 없습니다.</div> : <div className="divide-y divide-slate-100">
           {filtered.map((row) => <details key={row.id} className="group">
             <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">
-              <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{row.region || "-"}</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">{row.region || "-"}</span>
               <span className="min-w-0"><b className="block truncate text-sm text-slate-900">{row.company || "업체명 미기재"}</b><span className="block truncate text-xs font-semibold text-slate-500">{row.category || "변경"} · {row.reason || "사유 미기재"}</span></span>
               <span className="text-right text-[11px] font-semibold text-slate-400">{dateLabel(row.change_date || row.created_at)}<br />{row.author || "-"}</span>
             </summary>

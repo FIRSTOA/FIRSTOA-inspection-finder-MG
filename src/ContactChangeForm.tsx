@@ -49,7 +49,7 @@ export default function ContactChangeForm({ form, setForm, author, setAuthor, on
       <div className="text-sm font-black text-slate-950">담당자/주소 변경</div>
       <div className="mt-1 text-xs font-semibold leading-5 text-slate-400">변경 전·후 정보를 작성하고 명함 사진이 있으면 하단 사진 버튼으로 첨부합니다.</div>
     </div>
-    <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
       <span className="text-xs font-black text-slate-500">불러오기</span>
       <button type="button" onClick={() => handleLoad("inspection")} className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 shadow-sm">점검</button>
       <button type="button" onClick={() => handleLoad("as")} className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 shadow-sm">AS</button>

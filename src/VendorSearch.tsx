@@ -30,7 +30,7 @@ function MetaLine({ gubun, e }: { gubun: string; e: VendorMetaEntry }) {
   if (e.author) chips.push(e.author);
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-      <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ background: st.bg, color: st.fg }}>{gubun}</span>
+      <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: st.bg, color: st.fg }}>{gubun}</span>
       <span className="truncate">{chips.join(" · ")}</span>
     </div>
   );
@@ -194,14 +194,14 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
               <div className="border-b border-slate-100 bg-slate-50">
                 <div className="flex items-center justify-between gap-2 px-3 pt-2">
                   <span className="text-[11px] font-semibold text-slate-400">검색 결과 {typeBase.length}곳</span>
-                  <div className="flex rounded-md bg-slate-200/70 p-0.5">
-                    <button type="button" onClick={() => setSortMode("recent")} className={`rounded px-2 py-1 text-[10px] font-bold ${sortMode === "recent" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>최근순</button>
-                    <button type="button" onClick={() => setSortMode("name")} className={`rounded px-2 py-1 text-[10px] font-bold ${sortMode === "name" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>이름순</button>
+                  <div className="flex rounded-full bg-slate-200/70 p-1">
+                    <button type="button" onClick={() => setSortMode("recent")} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${sortMode === "recent" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>최근순</button>
+                    <button type="button" onClick={() => setSortMode("name")} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${sortMode === "name" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>이름순</button>
                   </div>
                 </div>
                 <div className="flex gap-1 px-2 pt-1.5">
                   {(["전체", "점검", "AS"] as const).map((type) => (
-                    <button key={type} type="button" onClick={() => { setActiveType(type); setActiveRegion("전체"); }} className={`rounded-md px-3 py-1.5 text-xs font-black ${activeType === type ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{type}</button>
+                    <button key={type} type="button" onClick={() => { setActiveType(type); setActiveRegion("전체"); }} className={`rounded-full px-3.5 py-1.5 text-xs font-black ${activeType === type ? "bg-slate-800 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{type}</button>
                   ))}
                 </div>
                 <div className="flex gap-1 overflow-x-auto px-2 py-1.5">
@@ -245,7 +245,7 @@ export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: 
                     >
                       <div className="flex items-center gap-1.5">
                         {reg && (
-                          <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{reg}</span>
+                          <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-white">{reg}</span>
                         )}
                         <span className="truncate text-[15px] font-medium text-slate-800">{h.vendor}</span>
                         {h.matchedBy && <span className="ml-auto shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{h.matchedBy}</span>}

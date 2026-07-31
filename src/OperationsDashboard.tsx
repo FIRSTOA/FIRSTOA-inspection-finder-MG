@@ -437,7 +437,7 @@ export default function OperationsDashboard({ author }: Props) {
                   </summary>
                   <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
                     <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-slate-600">{event.sourceText || "저장된 원문이 없습니다."}</pre>
-                    <div className="mt-3 flex justify-end"><button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, true)} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-50">{event.sourceText ? "오전송 처리" : "집계 제외"}</button></div>
+                    <div className="mt-3 flex justify-end"><button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, true)} className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50">{event.sourceText ? "오전송 처리" : "집계 제외"}</button></div>
                   </div>
                 </details>
               ))}

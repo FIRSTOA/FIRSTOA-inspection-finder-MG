@@ -798,7 +798,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <div key={date}>
                       <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-md bg-slate-100/95 px-3 py-1.5 backdrop-blur ${date === todayYmd ? "text-blue-700" : "text-slate-600"}`}>
                         <span className="text-sm font-black">{Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()]})</span>
-                        {date === todayYmd && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-black text-white">오늘</span>}
+                        {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
                         <span className="text-[11px] font-bold text-slate-400">{list.length}건</span>
                       </div>
                       <div className="mt-1.5 space-y-2">
@@ -895,7 +895,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 text-left">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-slate-900 px-2 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
                       <span className="text-xs font-black text-slate-500">{ticket.date} {ticket.time}</span>
                     </div>
                     <div className={`mt-2 text-base font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{ticket.vendor}</div>
@@ -905,7 +905,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                   {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
                 </div>
-                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2.5 text-sm font-bold">
+                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold">
                   <option value="">미배정</option>
                   {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
                 </select>
@@ -984,7 +984,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           });
         const reception = detailReception;
         const infoCell = (label: string, value: string) => (
-          <div className="rounded-md bg-slate-50 px-3 py-2"><div className="text-[10px] font-black text-slate-400">{label}</div><div className="mt-0.5 truncate text-xs font-black text-slate-800">{value || "-"}</div></div>
+          <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[10px] font-black text-slate-400">{label}</div><div className="mt-0.5 truncate text-xs font-black text-slate-800">{value || "-"}</div></div>
         );
         return (
           <div className="fixed inset-0 z-[115] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetailId("")}>
@@ -1144,19 +1144,19 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
         <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
           <label className="text-xs font-bold text-slate-500">
             팀
-            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
               {teams.map((item) => <option key={item} value={item}>{item}팀</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             캘린더
-            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
               {(["AS", "물류", "휴가", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-slate-500">
             담당자
-            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-sm font-normal">
+            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
               <option value="">미배정</option>
               {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
             </select>

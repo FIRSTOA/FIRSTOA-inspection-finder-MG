@@ -137,7 +137,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           <div className="mt-3 space-y-1.5">
             {!monthlyRank.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 추천 기록이 아직 없어요.</div>}
             {monthlyRank.map(([name, count], index) => (
-              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-violet-50 ring-1 ring-violet-200" : "bg-slate-50"}`}>
+              <div key={name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${name === author ? "bg-violet-50 ring-1 ring-violet-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
                 <span className="text-xs font-black text-violet-600">{fmtP(count)}P</span>
               </div>
@@ -149,7 +149,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           <div className="mt-3 space-y-1.5">
             {!hallOfFame.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 마감된 달의 기록이 없어요.</div>}
             {hallOfFame.map((entry) => (
-              <div key={entry.month} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+              <div key={entry.month} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
                 <span className="text-xs font-black text-slate-500">{Number(entry.month.slice(5, 7))}월</span>
                 <span className="text-xs font-black text-slate-800">👑 {entry.name}</span>
                 <span className="text-xs font-black text-amber-600">{fmtP(entry.votes)}P</span>
@@ -358,7 +358,7 @@ function PraiseBoard({ author }: { author: string }) {
           <div className="mt-3 space-y-1.5">
             {!monthlyKing.length && <div className="py-6 text-center text-xs font-bold text-slate-400">이번 달 칭찬이 아직 없어요.</div>}
             {monthlyKing.map(([name, count], index) => (
-              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
+              <div key={name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${name === author ? "bg-amber-50 ring-1 ring-amber-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "👑" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
                 <span className="text-xs font-black text-amber-600">{count}회</span>
               </div>
@@ -486,7 +486,7 @@ function GoalsBoard({ author }: { author: string }) {
       return (
         <article key={goal.id} className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
           <div className="grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-2 py-2 text-sm font-semibold">
+            <select value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-semibold">
               {GOAL_CATEGORIES.map((name) => <option key={name}>{name}</option>)}
             </select>
             <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -606,7 +606,7 @@ function GoalsBoard({ author }: { author: string }) {
           <div className="mt-3 space-y-1.5">
             {!teamStats.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 목표 기록이 없어요.</div>}
             {teamStats.map(([name, stat], index) => (
-              <div key={name} className={`flex items-center justify-between rounded-md px-3 py-2 ${name === author ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-slate-50"}`}>
+              <div key={name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${name === author ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-slate-50"}`}>
                 <span className="text-xs font-black text-slate-700">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
                 <span className="text-xs font-black text-emerald-600">{stat.done}/{stat.total}</span>
               </div>

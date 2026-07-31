@@ -105,7 +105,7 @@ function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: st
   });
   return <button type="button" onClick={() => onSelect(hit.vendor)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50">
     <div className="flex items-center gap-2">
-      {region && <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-black text-white">{region}</span>}
+      {region && <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-black text-white">{region}</span>}
       <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-800">{hit.vendor}</span>
       {hit.matchedBy && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">{hit.matchedBy}</span>}
     </div>
@@ -253,15 +253,15 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           <h2 className="text-sm font-black sm:text-base">통합이력</h2>
           <p className="truncate text-[11px] font-semibold text-slate-400">{queryVendor || "거래처를 검색하세요"}</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="닫기" className="flex h-9 w-9 items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white"><X size={19} /></button>
+        <button type="button" onClick={onClose} aria-label="닫기" className="flex h-9 w-9 items-center justify-center rounded-full text-slate-300 hover:bg-white/10 hover:text-white"><X size={19} /></button>
       </header>
 
       <div className="relative border-b border-slate-200 bg-white p-3 sm:px-5">
         <Search size={17} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 sm:left-8" />
-        <input value={q} onChange={(event) => { const value = event.target.value; setQ(value); setHits([]); setShowHits(value.trim().length >= 2); }} onFocus={() => hits.length && setShowHits(true)} placeholder="거래처 이름 검색" className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none focus:border-blue-500 focus:bg-white" />
-        {showHits && <div className="absolute left-3 right-3 top-[54px] z-30 max-h-[55vh] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-xl sm:left-5 sm:right-5">
+        <input value={q} onChange={(event) => { const value = event.target.value; setQ(value); setHits([]); setShowHits(value.trim().length >= 2); }} onFocus={() => hits.length && setShowHits(true)} placeholder="거래처 이름 검색" className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none focus:border-blue-500 focus:bg-white" />
+        {showHits && <div className="absolute left-3 right-3 top-[54px] z-30 max-h-[55vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl sm:left-5 sm:right-5">
           {searching && <div className="px-3 py-3 text-xs font-semibold text-slate-400">검색 중...</div>}
-          {!searching && searchBase.length > 0 && <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-2">{searchRegionTabs.map((region) => <button key={region} type="button" onClick={() => setSearchRegion(region)} className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-black ${searchRegion === region ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}</button>)}</div>}
+          {!searching && searchBase.length > 0 && <div className="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2 py-2">{searchRegionTabs.map((region) => <button key={region} type="button" onClick={() => setSearchRegion(region)} className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-black ${searchRegion === region ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}</button>)}</div>}
           {!searching && visibleSearchHits.map((hit) => <SearchResult key={hit.vendor} hit={hit} onSelect={selectNewVendor} />)}
           {!searching && visibleSearchHits.length === 0 && <div className="px-3 py-3 text-xs font-semibold text-slate-400">이력이 있는 거래처가 없습니다.</div>}
         </div>}
