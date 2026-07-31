@@ -5407,9 +5407,9 @@ export default function App() {
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
           <div className="flex h-full w-72 flex-col bg-[#0B0F17] text-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.07] px-4 py-4">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950">F</span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[13px] font-black text-slate-950">F</span>
               <span>
-                <span className="block text-[13px] font-black leading-tight">FIRSTOA CS</span>
+                <span className="block text-[13px] font-bold leading-tight">FIRSTOA CS</span>
                 <span className="block text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
               </span>
             </div>
@@ -5470,12 +5470,12 @@ export default function App() {
       <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#0B0F17] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
         {/* 높이를 상단 헤더(h-16)와 똑같이 고정한다 — 안 맞으면 구분선이 몇 px 엇갈려 보인다.
             접었을 때는 폭이 좁아 로고와 접기 버튼이 한 줄에 못 들어가므로, 접기 버튼을 메뉴 첫 칸으로 내린다. */}
-        <div className={`flex h-16 shrink-0 items-center border-b border-white/[0.07] ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
+        <div className={`flex h-14 shrink-0 items-center border-b border-white/[0.07] ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950">F</span>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[13px] font-black text-slate-950">F</span>
             {!sidebarCollapsed && <span className="min-w-0">
-              <span className="block truncate text-[13px] font-black leading-tight">FIRSTOA CS</span>
-              <span className="block truncate text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
+              <span className="block truncate text-[13px] font-bold leading-tight">FIRSTOA CS</span>
+              <span className="block truncate text-[10px] font-semibold leading-tight text-slate-500">CS 업무 통합</span>
             </span>}
           </div>
           {!sidebarCollapsed && <button type="button" onClick={() => setSidebarCollapsed(true)}
@@ -5572,21 +5572,21 @@ export default function App() {
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0B0F17] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
-        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:h-16 lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
+        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : "mb-2.5"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
             </button>
             {screen !== "field" && (() => {
               const Icon = SCREEN_ICON[screen] || FileText;
-              return <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] text-slate-300 lg:flex"><Icon size={18} /></span>;
+              return <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] text-slate-300 lg:flex"><Icon size={17} /></span>;
             })()}
-            <h1 className="truncate text-xl font-black tracking-tight text-white sm:text-2xl">
+            <h1 className="truncate text-[17px] font-bold tracking-tight text-white lg:text-[18px]">
               {screenTitle}
             </h1>
           </div>
-          {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[12px] font-bold text-slate-400 lg:flex">
+          {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[11px] font-bold text-slate-400 lg:flex">
             <span className="tabular-nums">{todayLabel}</span>
             <span className="h-3 w-px bg-white/15" />
             <span className="text-slate-300">{author || "작성자 미선택"}</span>
