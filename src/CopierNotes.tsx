@@ -269,7 +269,7 @@ export default function CopierNotes({ author }: { author: string }) {
               </div>}
             </div>
             {guides === null && <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {filtered.map((doc) => (
                 <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-lg border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
                   <div className="flex flex-wrap items-center gap-1">
@@ -401,7 +401,7 @@ export default function CopierNotes({ author }: { author: string }) {
 
       {view === "notes" && <>
       {stats && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
           {([
             [`${stats.total.toLocaleString()}건`, "전체 기록"],
             [`${stats.learn.toLocaleString()}건`, "학습"],

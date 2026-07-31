@@ -720,7 +720,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   return (
     <div className="space-y-5">
       {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
-      {view === "as" && <section className="flex flex-col gap-3 rounded-xl bg-[#171C26] px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+      {view === "as" && <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <p className="text-[11px] font-semibold text-slate-400">팀별 AS·물류·휴가·매월점검 일정을 확인하고 담당자 배정·완료·일정 변경을 처리합니다.</p>
         <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
           <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>

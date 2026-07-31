@@ -5399,9 +5399,9 @@ export default function App() {
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
-          <div className="flex h-full w-72 flex-col bg-[#0F172A] text-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex h-full w-72 flex-col bg-[#0B0F17] text-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.07] px-4 py-4">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white">F</span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950">F</span>
               <span>
                 <span className="block text-[13px] font-black leading-tight">FIRSTOA CS</span>
                 <span className="block text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
@@ -5413,7 +5413,7 @@ export default function App() {
                   const Icon = SCREEN_ICON[key] || FileText;
                   return (
                     <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
-                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                       <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
                     </button>
                   );
@@ -5430,7 +5430,7 @@ export default function App() {
                       const Icon = SCREEN_ICON[key] || FileText;
                       return (
                         <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
-                          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                           <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
                         </button>
                       );
@@ -5443,7 +5443,7 @@ export default function App() {
                   const Icon = SCREEN_ICON[key] || FileText;
                   return (
                     <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
-                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                       <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
                     </button>
                   );
@@ -5460,10 +5460,10 @@ export default function App() {
       )}
 
       {/* PC 사이드바 — 펼침: 아이콘+글자 / 접힘: 아이콘 레일 (잘린 한글 대신 아이콘) */}
-      <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#0F172A] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#0B0F17] text-white transition-[width] duration-200 lg:flex ${sidebarCollapsed ? "w-20" : "w-64"}`}>
         <div className={`flex shrink-0 items-center border-b border-white/[0.07] py-4 ${sidebarCollapsed ? "flex-col gap-2 px-2" : "justify-between px-4"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]">F</span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950">F</span>
             {!sidebarCollapsed && <span className="min-w-0">
               <span className="block truncate text-[13px] font-black leading-tight">FIRSTOA CS</span>
               <span className="block truncate text-[11px] font-semibold text-slate-400">CS 업무 통합</span>
@@ -5483,7 +5483,7 @@ export default function App() {
                 const Icon = SCREEN_ICON[key] || FileText;
                 return (
                   <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                    className={`flex h-11 w-full items-center justify-center rounded-xl transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                    className={`flex h-11 w-full items-center justify-center rounded-xl transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                     <Icon size={19} />
                   </button>
                 );
@@ -5494,7 +5494,7 @@ export default function App() {
                     const Icon = SCREEN_ICON[key] || FileText;
                     return (
                       <button key={key} type="button" onClick={() => setScreen(key)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                         <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
                       </button>
                     );
@@ -5512,7 +5512,7 @@ export default function App() {
                         const Icon = SCREEN_ICON[key] || FileText;
                         return (
                           <button key={key} type="button" onClick={() => setScreen(key)}
-                            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                             <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
                           </button>
                         );
@@ -5525,7 +5525,7 @@ export default function App() {
                     const Icon = SCREEN_ICON[key] || FileText;
                     return (
                       <button key={key} type="button" onClick={() => setScreen(key)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                         <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
                       </button>
                     );
@@ -5539,7 +5539,7 @@ export default function App() {
             const Icon = SCREEN_ICON[key] || FileText;
             return (
               <button key={key} type="button" onClick={() => setScreen(key)}
-                className={`mb-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                className={`mb-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                 <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
               </button>
             );
@@ -5554,11 +5554,11 @@ export default function App() {
         </div>
       </aside>
 
-      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1500px] ${screen === "walkingMap" ? "pb-0 lg:max-w-none lg:px-0" : "pb-16 lg:px-8"} ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1800px] ${screen === "walkingMap" ? "pb-0 lg:max-w-none lg:px-0" : "pb-16 lg:px-8"} ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
-        <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0F172A] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
+        <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0B0F17] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
-        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0F172A] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0F172A] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
+        <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:h-16 lg:px-8" : "mb-2.5"}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
@@ -5764,7 +5764,7 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_520px] lg:items-start">
         <div className="min-w-0 space-y-3">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-start gap-2.5">

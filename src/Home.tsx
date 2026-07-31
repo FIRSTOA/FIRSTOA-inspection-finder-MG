@@ -159,7 +159,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
       <section>
         <div className="mb-3 px-1"><h3 className="text-lg font-black text-slate-950">바로 시작</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">현장과 이동 중 가장 자주 쓰는 메뉴입니다.</p></div>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 2xl:grid-cols-8">
           {primaryLinks.map((item) => {
             const Icon = item.icon;
             return <button key={item.key} type="button" onClick={() => go(item.key)} className="flex min-h-[96px] items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md sm:p-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.tone}`}><Icon size={19} /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-950">{item.title}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.desc}</span></span></button>;
@@ -188,7 +188,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
       </section>
 
-      <section className="grid gap-3 lg:grid-cols-3">
+      <section className="grid gap-3 lg:grid-cols-3 2xl:grid-cols-6">
         {[
           { icon: Clock3, title: "반복 시간 감소", desc: "현장 내용의 재작성과 카톡방별 반복 전송을 줄여 실제 처리 업무에 시간을 씁니다." },
           { icon: CheckCircle2, title: "누락과 오기입 감소", desc: "사진, 기기정보, 전송 대상과 방문기록을 한 흐름에서 확인해 빠뜨릴 가능성을 낮춥니다." },

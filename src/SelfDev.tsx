@@ -105,7 +105,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm">
         <h2 className="text-xl font-black">🌱 자기개발 / 지식공유</h2>
         <p className="mt-1 text-xs font-semibold text-slate-300">읽고, 나누고, 목표를 이루는 공간. 추천 1개 = 0.2P</p>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
           {([
             [`${fmtP(myVotesReceived)}P`, "내 포인트"],
             [`${myPosts}`, "내가 쓴 글"],

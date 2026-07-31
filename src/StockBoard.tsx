@@ -133,7 +133,7 @@ export default function StockBoard({ author }: { author: string }) {
   const qtyTone = (qty: number) => qty === 0 ? "bg-rose-50 text-rose-600" : qty <= 2 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700";
 
   const renderRow = (item: StockItem) => (
-    <div key={item.id} className="flex items-center gap-3 border-t border-slate-100 px-4 py-3 first:border-t-0">
+    <div key={item.id} className="flex items-center gap-3 border-t border-slate-100 px-4 py-3 first:border-t-0 2xl:border-t 2xl:first:border-t 2xl:[&:nth-child(-n+2)]:border-t-0 2xl:[&:nth-child(odd)]:border-r">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-sm font-black text-slate-900">{item.name}</span>
@@ -165,7 +165,7 @@ export default function StockBoard({ author }: { author: string }) {
         <button type="button" onClick={() => setAddOpen(true)} className="my-2 mr-3 shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">+ 항목 추가</button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
         {([
           [`${summary.qty}${kind === "기기" ? "대" : "개"}`, `${kind} 총수량`, "text-slate-950"],
           [`${summary.types}종`, "품목 수", "text-slate-950"],
@@ -219,7 +219,7 @@ export default function StockBoard({ author }: { author: string }) {
           </section>
         ))
       ) : (
-        !loading && filtered.length > 0 && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{filtered.map(renderRow)}</section>
+        !loading && filtered.length > 0 && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm 2xl:grid 2xl:grid-cols-2 2xl:gap-x-0">{filtered.map(renderRow)}</section>
       )}
 
       {addOpen && (

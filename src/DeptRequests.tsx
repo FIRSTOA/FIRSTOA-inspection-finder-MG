@@ -538,12 +538,12 @@ export default function DeptRequests({ author }: { author: string }) {
         {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
         {!loading && !filtered.length && <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 요청이 없어요." : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
 
-        <div className="space-y-2">
+        <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
           {filtered.map((row) => (
-            <article key={row.id} className={`rounded-lg border p-4 shadow-sm ${row.status === "대기" ? "border-rose-200 bg-white" : row.status === "처리중" ? "border-amber-200 bg-amber-50/30" : "border-slate-200 bg-slate-50/50"}`}>
+            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.status === "대기" ? "border-rose-200 bg-white" : row.status === "처리중" ? "border-amber-200 bg-amber-50/30" : "border-slate-200 bg-slate-50/50"}`}>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${KIND_TONE[row.kind] || "bg-slate-100 text-slate-600"}`}>{row.kind}</span>
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${KIND_TONE[row.kind] || "bg-slate-100 text-slate-600"}`}>{row.kind}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
                 {row.vendor && <span className="text-sm font-black text-slate-900">{row.vendor}</span>}
                 {row.due_date && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">희망 {row.due_date}</span>}
                 <span className="ml-auto text-[11px] font-bold text-slate-400">{row.requester} · {row.created_at.slice(5, 10)}</span>

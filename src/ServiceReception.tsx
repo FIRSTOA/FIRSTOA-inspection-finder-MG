@@ -1004,7 +1004,7 @@ export default function ServiceReception({ author }: { author: string }) {
         if (!groupRows.length) return null;
         return (
           <div key={state}>
-            <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#171C26]/95 px-4 py-2 backdrop-blur">
+            <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#151A23]/95 px-4 py-2 backdrop-blur">
               <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${REMOTE_STATE_TONE[state]}`}>{state}</span>
               <span className="text-[11px] font-bold text-slate-400">{groupRows.length}건</span>
             </div>
@@ -1016,11 +1016,11 @@ export default function ServiceReception({ author }: { author: string }) {
 
 
   return (
-    <div className="mx-auto w-full max-w-[1240px] space-y-4 pb-16">
+    <div className="mx-auto w-full max-w-[1560px] space-y-4 pb-16">
       {/* 헤더 + 탭 — 한 번에 한 가지 일만 보이게 나눈다 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
         {/* 다크 상태바 — 오늘 상황과 현재 시각을 한 줄로 (제목은 상단 헤더에 이미 있다) */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#171C26] px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#151A23] px-4 py-2.5">
           <span className="flex items-center gap-1.5 text-[13px] font-black text-white">
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.25)]" />접수 가능
           </span>
@@ -1042,11 +1042,11 @@ export default function ServiceReception({ author }: { author: string }) {
         </div>
       </section>
 
-      <div className="space-y-4">
+      <div className={`space-y-4 ${page === "remote" ? "2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(420px,560px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0" : ""}`}>
         {/* ==== 접수 작성 (리스트 탭에서는 감춘다) ==== */}
         <div className={page === "list" ? "hidden" : "space-y-4"}>
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">1</span>
                 <div>
@@ -1117,7 +1117,7 @@ export default function ServiceReception({ author }: { author: string }) {
           </section>
 
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1F2937] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">2</span>
                 <div>
@@ -1169,7 +1169,7 @@ export default function ServiceReception({ author }: { author: string }) {
                       <summary className="cursor-pointer px-2.5 py-2 text-xs font-black text-slate-600">
                         {sec.label} <span className={`ml-1 text-[10px] ${filled ? "text-blue-600" : "text-slate-300"}`}>{filled}/{sec.fields.length}</span>
                       </summary>
-                      <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2.5 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
                         {sec.fields.map(([key, label]) => {
                           const options = key === "leaseStatus" ? ["임대중", "임대종료", "직접기재"]
                             : key === "warranty" ? ["보증O", "보증X"]
@@ -1191,7 +1191,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   );
                 })}
               </div>}
-              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
                   <label key={key} className="text-[11px] font-black text-slate-500">{label}
                     <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -1322,7 +1322,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
         {/* ==== 목록: 원격 탭은 작업 보드, 리스트 탭은 기간별 접수 기록 ==== */}
         {page !== "copier" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1F2937] px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
             <div>
               <h3 className="text-sm font-black text-white lg:text-[15px]">{page === "remote" ? "원격 · IT 작업" : "접수 리스트"}</h3>
               <p className="text-[11px] font-semibold text-slate-400">{page === "remote" ? "최근 30일 · 카드를 열어 시작·종료와 처리 결과를 남깁니다" : "행을 열어 상세·일정 등록·주소 확인을 처리합니다"}</p>

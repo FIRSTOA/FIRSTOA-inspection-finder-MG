@@ -295,7 +295,7 @@ export default function OperationsDashboard({ author }: Props) {
     <div className="space-y-3 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 다크 툴바 — 화면의 기준(기간)을 가장 위에서 정한다 */}
-        <div className="flex flex-col gap-3 bg-[#171C26] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
           <div className="grid grid-cols-4 rounded-full bg-white/10 p-1 lg:w-72">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
@@ -333,7 +333,7 @@ export default function OperationsDashboard({ author }: Props) {
 
       {!loading && !error && (
         <>
-          <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <section className="grid grid-cols-2 gap-2 lg:grid-cols-4 2xl:grid-cols-8">
             {[["업무", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
               <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
                 <div className="text-[11px] font-bold text-slate-400">{label}</div>
@@ -346,7 +346,7 @@ export default function OperationsDashboard({ author }: Props) {
             <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
               <h3 className="text-sm font-black text-slate-950 lg:text-[15px]">업무 구성</h3>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 xl:grid-cols-6">
+            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
               {FILTER_OPTIONS.map((option) => (
                 <button key={option.key} type="button" onClick={() => setCategory(category === option.key ? "all" : option.key)} className={`flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 ${category === option.key ? "bg-blue-50" : ""}`}>
                   <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
@@ -356,7 +356,7 @@ export default function OperationsDashboard({ author }: Props) {
             </div>
           </section>
 
-          <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)]">
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">팀별 현황</h3></div>
               <div className="divide-y divide-slate-100">

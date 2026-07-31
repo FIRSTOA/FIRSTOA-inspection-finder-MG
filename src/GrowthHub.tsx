@@ -615,7 +615,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     <div className="space-y-5 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 다크 헤더 — 설명 + 조회 조건(연도/분기/직원)을 한 줄에 모은다 */}
-        <div className="flex flex-col gap-3 bg-[#171C26] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
           <div className="flex flex-wrap gap-2">
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400">
@@ -1010,7 +1010,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               {goldenBusy ? "AI 변환 중..." : "최신분기 AI변환"}
             </button>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4 2xl:grid-cols-8">
             {GOLDEN_QUESTIONS.map((q, i) => <button key={q} onClick={() => setQuestion(i)} className={`rounded-full px-3 py-3 text-xs font-bold transition ${question === i ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:text-slate-800"}`}>{q}</button>)}
           </div>
           <div className="mt-5">

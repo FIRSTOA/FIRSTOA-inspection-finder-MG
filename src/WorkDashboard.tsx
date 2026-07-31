@@ -332,7 +332,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
 
   if (!author) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-4 pb-16">
-    <section className="flex flex-col gap-3 rounded-xl bg-[#171C26] p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+    <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
       {kind === "daily" && <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>}
       <div className="flex flex-wrap items-center gap-2">
         {kind === "daily" && period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]" />}
@@ -360,7 +360,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
     {!loading && <>
-      <section><div className="mb-3 flex items-end justify-between"><div><h3 className="text-lg font-black text-slate-950">외근</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">방문·현장 업무 건수와 소요시간</p></div></div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <section><div className="mb-3 flex items-end justify-between"><div><h3 className="text-lg font-black text-slate-950">외근</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">방문·현장 업무 건수와 소요시간</p></div></div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="inline-flex rounded-full bg-slate-900 transition hover:bg-slate-800 px-2 py-1 text-xs font-bold text-white">🏢 방문 거래처</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{sum.visits}<span className="ml-1 text-xs font-semibold text-slate-400">곳</span></div><div className="text-xs font-bold text-slate-500">기기 {sum.machines}대</div></div></div>
         {KINDS.map((k) => {
           const target = Number(note.goals[k] || 0);
@@ -373,7 +373,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
 
       {kind === "daily" && period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
         <div className="space-y-6">
-          <section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="text-lg font-black text-slate-950">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">{[
+          <section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="text-lg font-black text-slate-950">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
           ].map(([l, v]) => <div key={String(l)} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{l}</div><div className="mt-1 text-xl font-bold text-slate-900">{v}<span className="ml-1 text-xs text-slate-400">건</span></div></div>)}</div></section>
           <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
@@ -420,7 +420,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
           </div>
           <div className="text-xs font-semibold text-slate-400">병목현상 / 원인 / 해결방안</div>
         </div>
-        <div className="grid gap-3 xl:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-3 2xl:grid-cols-6">
           {note.bottlenecks.map((item, i) => (
             <div key={i} className="rounded-lg border border-rose-100 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
