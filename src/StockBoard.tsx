@@ -181,29 +181,31 @@ export default function StockBoard({ author }: { author: string }) {
         ))}
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold text-slate-500">교체 약속 전 기기 재고, 재방문 전 부품 재고를 여기서 바로 확인하세요. 수량은 관리부가 관리하며 마지막 수정자·시각이 함께 남습니다.</p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <div className="flex flex-wrap items-center gap-1">
-            {kind === "기기" && <span className="flex rounded-full bg-slate-100 p-1">
-              {(["전체", "새기기", "리퍼"] as const).map((value) => (
-                <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
-              ))}
-            </span>}
-            <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${lowOnly ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}>⚠ 부족만</button>
-            <span className="flex rounded-full bg-slate-100 p-1">
-              {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded-full px-2 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-              ))}
-            </span>
-          </div>
-        </div>
-        {kind === "기기" && <div className="mt-2 flex flex-wrap gap-1">
+      <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        {/* 다른 보드(미수·초과료)와 같은 라벨 줄 구조: 브랜드 / 조건 / 검색 */}
+        {kind === "기기" && <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <span className="w-10 shrink-0 text-[10px] font-black text-slate-400">브랜드</span>
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => setBrand(name)} className={`rounded-full px-2.5 py-1.5 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+            <button key={name} type="button" onClick={() => setBrand(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
           ))}
         </div>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-10 shrink-0 text-[10px] font-black text-slate-400">조건</span>
+          {kind === "기기" && <span className="flex rounded-full bg-slate-100 p-1">
+            {(["전체", "새기기", "리퍼"] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setCondition(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${condition === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
+            ))}
+          </span>}
+          <button type="button" onClick={() => setLowOnly((v) => !v)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${lowOnly ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>⚠ 부족만</button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          <span className="w-6 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
+          <span className="flex rounded-full bg-slate-100 p-1">
+            {([["name", "이름순"], ["qty", "수량 적은순"]] as const).map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setSortMode(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sortMode === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+            ))}
+          </span>
+        </div>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "기기" ? "기종 검색" : "부품명 검색"} className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
       </section>
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}

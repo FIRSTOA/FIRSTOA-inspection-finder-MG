@@ -1,3 +1,4 @@
+import PortalSelect from "./PortalSelect";
 import { useEffect, useMemo, useState } from "react";
 import { selectAllRows, selectRows } from "./supabase";
 
@@ -269,8 +270,9 @@ export function MisuBoard() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
-          {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${monthsFilter === name ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
-          <span className="ml-2 flex rounded-full bg-slate-100 p-1">
+          {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${monthsFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
+          <span className="ml-2 w-8 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
+          <span className="flex rounded-full bg-slate-100 p-1">
             {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-9 min-w-32 flex-1 rounded-lg border border-slate-300 px-3 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -383,16 +385,14 @@ export function OverageBoard() {
           {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition sm:px-3.5 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-8 text-[10px] font-black text-slate-400">년월</span>
-          <select value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-black text-slate-600 outline-none transition focus:border-blue-500">
-            {yearMonths.map((name) => <option key={name}>{name}</option>)}
-          </select>
+          <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">조건</span>
+          <PortalSelect width={110} value={yearMonth} onChange={setYearMonth}
+            options={yearMonths.map((name) => ({ value: name, label: name === "전체" ? "전체 년월" : name }))} />
+          <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-8 text-[10px] font-black text-slate-400">등급</span>
-          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
           <span className="flex rounded-full bg-slate-100 p-1">
             {(["최신순", "금액순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
           </span>
