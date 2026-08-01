@@ -186,6 +186,12 @@ function getOrCreateTestSheet_(spreadsheet, sourceSheet, category) {
 }
 
 function fieldValue_(category, header, column, data, request, labels) {
+  // 복합기 접수의 "갱신" 잡(완료/익일 기입)은 처리완료 열 하나만 쓴다.
+  // 날짜·접수시간·접수자 등 접수 시점 값이 완료 시각으로 덮이는 사고 방지.
+  var isUpdateJob = !!(data["_updateRow"] || data["_findKeyValue"]);
+  if (category === "reception_copier" && isUpdateJob) {
+    return String(header).replace(/\s+/g, "") === "처리완료" ? (data["complete"] || undefined) : undefined;
+  }
   // 담당자·주소 변경 표는 A:M까지만 사용합니다. 오른쪽 보조 영역의 같은 헤더는 건드리지 않습니다.
   if (category === "contact_change" && column > 13) return undefined;
   // 접수(복합기 기존): A~T까지만 기입 — 퍼스트순(F) 기준 함수가 채우는 오른쪽 열들을 건드리지 않는다 (AK열 업체담당자 중복 보호)
@@ -228,9 +234,8 @@ function fieldValue_(category, header, column, data, request, labels) {
       "분류": "칭찬",
     };
   })() : {};
-  // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준.
-  // 행 갱신(처리완료 기입)일 땐 건드리지 않는다 — 접수시간이 완료시간으로 덮이면 안 됨.
-  const receptionPeriod = (category === "reception_copier" || category === "reception_copier_new") && !data["_updateRow"] ? {
+  // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준 (갱신 잡은 위 가드에서 이미 차단)
+  const receptionPeriod = category === "reception_copier" || category === "reception_copier_new" ? {
     "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
     "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
