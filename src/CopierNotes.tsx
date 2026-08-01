@@ -30,6 +30,17 @@ const BRANDS: Record<string, string[]> = {
 };
 const BRAND_NAMES = Object.keys(BRANDS);
 
+// 증상 유형 필터 — 제목·내용 키워드로 서버에서 거른다 (기종 × 증상으로 범위 축소)
+const SYMPTOM_FILTERS: Record<string, string[]> = {
+  "급지·걸림": ["급지", "걸림", "잼", "JAM"],
+  "줄·화질": ["세로줄", "가로줄", "얼룩", "화질", "번짐", "흐림", "비침"],
+  "에러코드": ["에러", "error", "E-", "SC", "코드"],
+  "토너·드럼": ["토너", "드럼", "카트리지", "폐토너"],
+  "정착기·롤러": ["정착", "퓨저", "롤러", "히터"],
+  "스캔·팩스": ["스캔", "팩스", "ADF"],
+  "네트워크·드라이버": ["네트워크", "드라이버", "IP", "무선", "포트", "공유"],
+};
+
 type QuizItem = { note: CopierNote; options: CopierNote[] };
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
@@ -127,6 +138,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [kindFilter, setKindFilter] = useState<"전체" | "학습" | "처리이력">("전체");
   const [query, setQuery] = useState("");
   const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [symptomFilter, setSymptomFilter] = useState("전체");
   // 상단 통계 (전체 기준 — 필터와 무관)
   const [stats, setStats] = useState<{ total: number; learn: number; cases: number; month: number } | null>(null);
   useEffect(() => {
@@ -149,6 +161,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guideBrand, setGuideBrand] = useState("전체");
   const [guideCategory, setGuideCategory] = useState("전체");
   const [guidePart, setGuidePart] = useState("전체");
+  const [guideDiff, setGuideDiff] = useState("전체");
   const [showOriginal, setShowOriginal] = useState(false);
   const [guideQuery, setGuideQuery] = useState("");
   const [openGuide, setOpenGuide] = useState<KnowledgeDoc | null>(null);
@@ -230,22 +243,45 @@ export default function CopierNotes({ author }: { author: string }) {
   // 퀴즈: 처리이력·학습 기록을 문제 은행으로 쓰는 4지선다 (IT 기술퀴즈와 같은 흐름)
   const [quizBrand, setQuizBrand] = useState("전체");
   const [quizCount, setQuizCount] = useState(5);
+  const [quizCounts, setQuizCounts] = useState<Record<string, number> | null>(null);
+  const [quizBank, setQuizBank] = useState<CopierNote[]>([]);
+  const [quizLoading, setQuizLoading] = useState(false);
+  // 브랜드별 문제은행 크기 — 화면에 로드된 페이지가 아니라 전체 기록 기준
+  useEffect(() => {
+    if (view !== "quiz" || quizCounts !== null) return;
+    void Promise.all(["전체", ...BRAND_NAMES].map(async (name) => {
+      const filter = `title=neq.&content=neq.${name === "전체" ? "" : `&brand=eq.${encodeURIComponent(name)}`}`;
+      return [name, await countRows("copier_notes", filter).catch(() => 0)] as const;
+    })).then((entries) => setQuizCounts(Object.fromEntries(entries)));
+  }, [view, quizCounts]);
   const [quiz, setQuiz] = useState<QuizItem[]>([]);
   const [quizIndex, setQuizIndex] = useState(-1);
   const [quizPick, setQuizPick] = useState("");
   const [quizScore, setQuizScore] = useState(0);
   const [wrongNotes, setWrongNotes] = useState<QuizItem[]>([]);
 
-  const startQuiz = () => {
-    const pool = quizBrand === "전체" ? notes : notes.filter((note) => note.brand === quizBrand);
-    const built = buildQuiz(pool, quizCount);
-    if (!built.length) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
-    setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
+  // 문제은행을 서버에서 새로 뽑는다 — 화면 필터·페이지에 갇히지 않게 (최근 400건)
+  const startQuiz = async () => {
+    if (quizLoading) return;
+    setQuizLoading(true);
+    try {
+      const parts = ["select=*", "title=neq.", "content=neq.", "order=created_at.desc", "limit=400"];
+      if (quizBrand !== "전체") parts.push(`brand=eq.${encodeURIComponent(quizBrand)}`);
+      const pool = await selectRows<CopierNote>("copier_notes", parts.join("&"));
+      const built = buildQuiz(pool, quizCount);
+      if (!built.length) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
+      setQuizBank(pool);
+      setQuiz(built); setQuizIndex(0); setQuizPick(""); setQuizScore(0); setWrongNotes([]);
+    } catch (e) {
+      notify((e as Error).message, "error");
+    } finally {
+      setQuizLoading(false);
+    }
   };
   // 오답만 다시: 틀린 문제의 원본 노트로 새 퀴즈 구성
   const retryWrong = () => {
     const pool = wrongNotes.map((item) => item.note);
-    const bank = notes.filter((note) => note.title.trim() && note.content.trim());
+    const bank = (quizBank.length ? quizBank : notes).filter((note) => note.title.trim() && note.content.trim());
     const built = pool.map((note) => {
       const others = bank.filter((item) => item.id !== note.id).sort(() => Math.random() - 0.5).slice(0, 3);
       return { note, options: [note, ...others].sort(() => Math.random() - 0.5) };
@@ -270,13 +306,20 @@ export default function CopierNotes({ author }: { author: string }) {
     if (brand !== "전체") parts.push(`brand=eq.${encodeURIComponent(brand)}`);
     if (model !== "전체") parts.push(`model=eq.${encodeURIComponent(model)}`);
     if (kindFilter !== "전체") parts.push(`kind=eq.${encodeURIComponent(kindFilter)}`);
+    const groups: string[] = [];
     const keyword = query.trim().replace(/["\\%,()]/g, "");
     if (keyword) {
       const pattern = `"*${keyword}*"`;
-      parts.push(`or=${encodeURIComponent(`(title.ilike.${pattern},content.ilike.${pattern},model.ilike.${pattern},author.ilike.${pattern})`)}`);
+      groups.push(`or(title.ilike.${pattern},content.ilike.${pattern},model.ilike.${pattern},author.ilike.${pattern})`);
     }
+    if (symptomFilter !== "전체") {
+      const words = SYMPTOM_FILTERS[symptomFilter] || [];
+      const clause = words.flatMap((word) => [`title.ilike."*${word}*"`, `content.ilike."*${word}*"`]).join(",");
+      if (clause) groups.push(`or(${clause})`);
+    }
+    if (groups.length) parts.push(`and=${encodeURIComponent(`(${groups.join(",")})`)}`);
     return parts.join("&");
-  }, [brand, model, kindFilter, query, order]);
+  }, [brand, model, kindFilter, query, order, symptomFilter]);
   const load = useCallback(async (offset = 0) => {
     setLoading(true);
     setError("");
@@ -363,49 +406,68 @@ export default function CopierNotes({ author }: { author: string }) {
           (guideBrand === "전체" || d.brand === guideBrand) &&
           (guideCategory === "전체" || d.category === guideCategory) &&
           (guidePart === "전체" || (d.parts || []).includes(guidePart)) &&
+          (guideDiff === "전체" || d.difficulty === guideDiff) &&
           (!keyword || `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.content}`.toLowerCase().includes(keyword)));
+        const brandCount = (name: string) => name === "전체" ? list.length : list.filter((d) => d.brand === name).length;
         return (
           <div className="space-y-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex flex-wrap items-center gap-1">
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {/* 다크 검색바 */}
+              <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
+                <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-full bg-white/[0.08] px-4 py-2 transition focus-within:bg-white/[0.14] sm:max-w-md">
+                  <span className="shrink-0 text-xs text-slate-500">🔍</span>
+                  <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목 · 요약 · 기종 · 부품 검색"
+                    className="min-w-0 flex-1 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500" />
+                </label>
+                <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">가이드 <b className="tabular-nums text-white">{filtered.length}</b></span>
+                <button type="button" onClick={() => openGuideEditor()} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 가이드 작성</button>
+              </div>
+              {/* 브랜드(건수) */}
+              <div className="flex flex-wrap gap-1 border-b border-slate-100 px-4 py-2.5">
                 {brands.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                    {name} <span className={`tabular-nums ${guideBrand === name ? "text-slate-400" : "text-slate-400"}`}>{brandCount(name)}</span>
+                  </button>
                 ))}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1">
+              {/* 분류 + 난이도 */}
+              <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/50 px-4 py-2">
+                <span className="mr-0.5 text-[10px] font-black text-slate-400">분류</span>
                 {categories.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
+                  <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guideCategory === name ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{name}</button>
                 ))}
-                <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <span className="text-xs font-black tabular-nums text-slate-500">{filtered.length}건</span>
-                <button type="button" onClick={() => openGuideEditor()} className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 가이드 작성</button>
+                <div className="ml-auto flex rounded-full bg-white p-0.5 ring-1 ring-slate-200">
+                  {["전체", "쉬움", "보통", "어려움"].map((name) => (
+                    <button key={name} type="button" onClick={() => setGuideDiff(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guideDiff === name ? "bg-slate-900 text-white" : "text-slate-500"}`}>{name}</button>
+                  ))}
+                </div>
               </div>
-              {topParts.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1">
-                <span className="text-[10px] font-black text-slate-400">부품</span>
+              {topParts.length > 1 && <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 py-2">
+                <span className="mr-0.5 text-[10px] font-black text-slate-400">부품</span>
                 {topParts.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuidePart(name)} className={`rounded px-2 py-1 text-[11px] font-black ${guidePart === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
+                  <button key={name} type="button" onClick={() => setGuidePart(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guidePart === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
                 ))}
               </div>}
-            </div>
-            {guides === null && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-              {filtered.map((doc) => (
-                <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {doc.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
-                    {doc.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
-                    {doc.content.includes("storage/v1") && <span className="text-[10px]">📷</span>}
-                  </div>
-                  <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{doc.title}</div>
-                  {doc.summary && <div className="mt-1 truncate text-xs font-semibold text-slate-500">{doc.summary}</div>}
-                  {((doc.models || []).length > 0 || doc.difficulty) && <div className="mt-1.5 flex flex-wrap gap-1">
-                    {(doc.models || []).slice(0, 3).map((model) => <span key={model} className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{model}</span>)}
-                    {doc.difficulty && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${doc.difficulty === "어려움" ? "bg-rose-50 text-rose-600" : doc.difficulty === "보통" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>{doc.difficulty}</span>}
-                  </div>}
-                </button>
-              ))}
-            </div>
-            {guides !== null && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
+              {guides === null && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+              {guides !== null && !filtered.length && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요 — 첫 가이드를 작성해 보세요.</div>}
+              {filtered.length > 0 && <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {filtered.map((doc) => (
+                  <button key={doc.id} type="button" onClick={() => { setOpenGuide(doc); setShowOriginal(false); }} className="rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {doc.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{doc.brand}</span>}
+                      {doc.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{doc.category}</span>}
+                      {doc.content.includes("storage/v1") && <span className="text-[10px]">📷</span>}
+                    </div>
+                    <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{doc.title}</div>
+                    {doc.summary && <div className="mt-1 truncate text-xs font-semibold text-slate-500">{doc.summary}</div>}
+                    {((doc.models || []).length > 0 || doc.difficulty) && <div className="mt-1.5 flex flex-wrap gap-1">
+                      {(doc.models || []).slice(0, 3).map((model) => <span key={model} className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{model}</span>)}
+                      {doc.difficulty && <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${doc.difficulty === "어려움" ? "bg-rose-50 text-rose-600" : doc.difficulty === "보통" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>{doc.difficulty}</span>}
+                    </div>}
+                  </button>
+                ))}
+              </div>}
+            </section>
             {openGuide && (
               <FormModal wide icon={<span className="text-base">📘</span>} onClose={() => setOpenGuide(null)}
                 title={
@@ -506,26 +568,27 @@ export default function CopierNotes({ author }: { author: string }) {
 
       {view === "quiz" && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {quizIndex < 0 && (() => {
-          const bank = notes.filter((n) => n.title.trim() && n.content.trim());
-          const bankOf = (name: string) => name === "전체" ? bank.length : bank.filter((n) => n.brand === name).length;
+          const bankOf = (name: string) => quizCounts ? (quizCounts[name] ?? 0) : -1;
+          const total = bankOf("전체");
           return <div className="mx-auto max-w-xl py-4 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-3xl shadow-lg shadow-blue-200">🎓</div>
             <h3 className="mt-3 text-xl font-black text-slate-950">복합기 기술 퀴즈</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-500">팀이 쌓은 <b className="text-blue-600">{bank.length}건</b>의 실제 처리 사례가 문제가 됩니다.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">팀이 쌓은 <b className="tabular-nums text-blue-600">{total >= 0 ? total.toLocaleString() : "…"}건</b>의 실제 처리 사례가 문제가 됩니다.</p>
             <div className="mt-5 flex flex-wrap justify-center gap-1.5">
               {["전체", ...BRAND_NAMES].map((name) => {
                 const count = bankOf(name);
+                const short = count >= 0 && count < 4;
                 return (
-                  <button key={name} type="button" disabled={count < 4} onClick={() => setQuizBrand(name)} className={`rounded-full px-3 py-2 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : count < 4 ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-                    {name} <span className={quizBrand === name ? "text-slate-300" : "text-slate-400"}>{count}</span>
+                  <button key={name} type="button" disabled={short} onClick={() => setQuizBrand(name)} className={`rounded-full px-3 py-2 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : short ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                    {name} <span className={`tabular-nums ${quizBrand === name ? "text-slate-300" : "text-slate-400"}`}>{count >= 0 ? count.toLocaleString() : "…"}</span>
                   </button>
                 );
               })}
             </div>
             <div className="mt-3 flex justify-center gap-2">
-              {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-5 py-2.5 text-sm font-black ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 text-slate-600"}`}>{count}문제</button>)}
+              {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-5 py-2.5 text-sm font-black transition ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{count}문제</button>)}
             </div>
-            <button type="button" onClick={startQuiz} className="mt-6 h-12 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-10 text-sm font-black text-white shadow-md shadow-blue-200 transition">퀴즈 시작 →</button>
+            <button type="button" onClick={() => void startQuiz()} disabled={quizLoading} className="mt-6 h-12 rounded-full bg-blue-600 px-10 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:bg-slate-300 disabled:shadow-none">{quizLoading ? "문제 만드는 중…" : "퀴즈 시작 →"}</button>
             <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
           </div>;
         })()}
@@ -575,7 +638,7 @@ export default function CopierNotes({ author }: { author: string }) {
           <p className="mt-1 text-sm font-bold text-slate-500">정답률 {Math.round((quizScore / quiz.length) * 100)}%{quizScore === quiz.length ? " — 완벽합니다!" : ""}</p>
           {wrongNotes.length > 0 && <div className="mt-5 space-y-2 text-left">
             <div className="text-xs font-black text-slate-400">오답 노트 {wrongNotes.length}건 — 실제 처리 사례로 복습하세요</div>
-            {wrongNotes.map((item) => <div key={item.note.id} className="rounded-lg border border-rose-200 bg-white p-3">
+            {wrongNotes.map((item) => <div key={item.note.id} className="rounded-xl border border-rose-200 bg-white p-3.5">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{item.note.brand}</span>
                 {item.note.model && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-black text-slate-600">{item.note.model}</span>}
@@ -585,7 +648,7 @@ export default function CopierNotes({ author }: { author: string }) {
             </div>)}
           </div>}
           <div className="mt-6 flex justify-center gap-2">
-            {wrongNotes.length > 0 && <button type="button" onClick={retryWrong} className="rounded-lg border border-rose-300 bg-rose-50 px-6 py-3 text-sm font-black text-rose-700">오답만 다시 풀기</button>}
+            {wrongNotes.length > 0 && <button type="button" onClick={retryWrong} className="rounded-full border border-rose-300 bg-rose-50 px-6 py-3 text-sm font-black text-rose-700 transition hover:bg-rose-100">오답만 다시 풀기</button>}
             <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-6 py-3 text-sm font-black text-white">새 퀴즈</button>
           </div>
         </div>}
@@ -637,11 +700,20 @@ export default function CopierNotes({ author }: { author: string }) {
         </div>
         {brand !== "전체" && (
           <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50/50 px-4 py-2">
+            <span className="mr-0.5 self-center text-[10px] font-black text-slate-400">기종</span>
             {["전체", ...(BRANDS[brand] || [])].map((name) => (
               <button key={name} type="button" onClick={() => setModel(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${model === name ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{name}</button>
             ))}
           </div>
         )}
+        {/* 증상 유형 — 기종 × 증상으로 1만 건을 수십 건까지 좁힌다 */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 py-2">
+          <span className="mr-0.5 text-[10px] font-black text-slate-400">증상</span>
+          {["전체", ...Object.keys(SYMPTOM_FILTERS)].map((name) => (
+            <button key={name} type="button" onClick={() => setSymptomFilter(name)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${symptomFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+          ))}
+        </div>
 
         {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
         {loading && !notes.length && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
