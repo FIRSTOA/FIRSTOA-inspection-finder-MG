@@ -2,8 +2,9 @@
  * 복합기 학습·처리이력 — 브랜드/기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스.
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
-import { useCallback, useEffect, useState } from "react";
-import { countRows, deleteRows, insertRow, selectRows } from "./supabase";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
+import FormModal from "./FormModal";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
 import { notify } from "./toast";
 
@@ -43,6 +44,7 @@ function MdView({ text }: { text: string }) {
         if (image) return <a key={index} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-lg border border-slate-200" /></a>;
         const file = line.trim().match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
         if (file) return <a key={index} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
+        if (/^[-•]\s/.test(line.trim())) return <li key={index} className="ml-5 list-disc text-sm leading-6 text-slate-800">{line.trim().replace(/^[-•]\s*/, "")}</li>;
         if (/^###\s/.test(line)) return <h4 key={index} className="pt-1 text-sm font-black text-slate-900">{line.replace(/^###\s*/, "")}</h4>;
         if (/^##\s/.test(line)) return <h3 key={index} className="pt-1.5 text-base font-black text-slate-950">{line.replace(/^##\s*/, "")}</h3>;
         if (!line.trim()) return null;
@@ -123,6 +125,61 @@ export default function CopierNotes({ author }: { author: string }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [guideQuery, setGuideQuery] = useState("");
   const [openGuide, setOpenGuide] = useState<KnowledgeDoc | null>(null);
+  // 가이드 위키 편집 — 누구나 작성·수정 (노션처럼)
+  const emptyGuideDraft = { id: "", title: "", brand: "", category: "", difficulty: "", summary: "", modelsText: "", content: "" };
+  const [guideDraft, setGuideDraft] = useState(emptyGuideDraft);
+  const [guideEditOpen, setGuideEditOpen] = useState(false);
+  const [guideBusy, setGuideBusy] = useState(false);
+  const [guidePhotoBusy, setGuidePhotoBusy] = useState(false);
+  const guidePhotoRef = useRef<HTMLInputElement>(null);
+  const openGuideEditor = (doc?: KnowledgeDoc) => {
+    setGuideDraft(doc ? {
+      id: doc.id, title: doc.title, brand: doc.brand, category: doc.category, difficulty: doc.difficulty,
+      summary: doc.summary, modelsText: (doc.models || []).join(", "),
+      content: (!doc.content_clean ? doc.content : doc.content_clean),
+    } : { ...emptyGuideDraft, brand: guideBrand === "전체" ? "" : guideBrand, category: guideCategory === "전체" ? "" : guideCategory });
+    setGuideEditOpen(true);
+  };
+  const saveGuide = async () => {
+    if (guideBusy || !guideDraft.title.trim() || !guideDraft.content.trim()) return;
+    setGuideBusy(true);
+    try {
+      const payload = {
+        title: guideDraft.title.trim(), brand: guideDraft.brand.trim(), category: guideDraft.category.trim(),
+        difficulty: guideDraft.difficulty, summary: guideDraft.summary.trim(),
+        models: guideDraft.modelsText.split(",").map((t) => t.trim()).filter(Boolean),
+        content: guideDraft.content, content_clean: "", updated_at: new Date().toISOString(),
+      };
+      if (guideDraft.id) await updateRows("knowledge_docs", `id=eq.${guideDraft.id}`, payload);
+      else await insertRow("knowledge_docs", { ...payload, author: author || "미지정", source: "webapp" });
+      setGuideEditOpen(false);
+      setOpenGuide(null);
+      setGuides(null); // 다시 불러오기
+      notify(guideDraft.id ? "가이드를 수정했습니다." : "가이드를 등록했습니다.");
+    } catch (e) {
+      notify(`저장 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setGuideBusy(false);
+    }
+  };
+  const removeGuide = async (doc: KnowledgeDoc) => {
+    if (!window.confirm(`"${doc.title}" 가이드를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
+    try {
+      await deleteRows("knowledge_docs", `id=eq.${doc.id}`);
+      setOpenGuide(null);
+      setGuides(null);
+    } catch (e) { notify(`삭제 실패: ${(e as Error).message}`, "error"); }
+  };
+  const attachGuidePhoto = async (file: File | null) => {
+    if (!file || !/^image\//.test(file.type)) return;
+    setGuidePhotoBusy(true);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const url = await uploadPublicFile("photos", `guides/${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, file, file.type);
+      setGuideDraft((current) => ({ ...current, content: `${current.content.trimEnd()}\n\n![](${url})\n` }));
+    } catch (e) { notify(`사진 업로드 실패: ${(e as Error).message}`, "error"); }
+    finally { setGuidePhotoBusy(false); }
+  };
   useEffect(() => {
     if (view !== "guide" || guides !== null) return;
     selectRows<KnowledgeDoc>("knowledge_docs", "select=*&order=brand.asc,title.asc&limit=1000")
@@ -266,7 +323,8 @@ export default function CopierNotes({ author }: { author: string }) {
                   <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded px-2.5 py-1 text-[11px] font-black ${guideCategory === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>
                 ))}
                 <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목·요약·기종·부품 검색" className="h-8 min-w-40 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <span className="text-xs font-black text-slate-500">{filtered.length}건</span>
+                <span className="text-xs font-black tabular-nums text-slate-500">{filtered.length}건</span>
+                <button type="button" onClick={() => openGuideEditor()} className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 가이드 작성</button>
               </div>
               {topParts.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1">
                 <span className="text-[10px] font-black text-slate-400">부품</span>
@@ -295,25 +353,79 @@ export default function CopierNotes({ author }: { author: string }) {
             </div>
             {guides !== null && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요.</div>}
             {openGuide && (
-              <div className="fixed inset-0 z-[210] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setOpenGuide(null)}>
-                <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap gap-1">
-                        {openGuide.brand && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{openGuide.brand}</span>}
-                        {openGuide.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{openGuide.category}</span>}
-                      </div>
-                      <div className="mt-1 text-base font-black leading-6 text-slate-950">{openGuide.title}</div>
-                    </div>
-                    <button type="button" onClick={() => setOpenGuide(null)} className="h-8 w-8 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
+              <FormModal wide icon={<span className="text-base">📘</span>} onClose={() => setOpenGuide(null)}
+                title={
+                  <span className="flex flex-col gap-1.5">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {openGuide.brand && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-300">{openGuide.brand}</span>}
+                      {openGuide.category && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">{openGuide.category}</span>}
+                      {openGuide.difficulty && <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${openGuide.difficulty === "어려움" ? "bg-rose-50 text-rose-600" : openGuide.difficulty === "보통" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>{openGuide.difficulty}</span>}
+                    </span>
+                    <span className="text-base leading-snug">{openGuide.title}</span>
+                  </span>
+                }
+                subtitle={`${openGuide.author || "노션 이관"} · ${openGuide.created_at.slice(0, 10)}`}
+                footer={<>
+                  <button type="button" onClick={() => void removeGuide(openGuide)} className="mr-auto rounded-full px-3 py-2 text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-500">삭제</button>
+                  <button type="button" onClick={() => openGuideEditor(openGuide)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">✎ 수정</button>
+                  <button type="button" onClick={() => setOpenGuide(null)} className="rounded-full bg-slate-900 px-6 py-2 text-xs font-black text-white transition hover:bg-slate-800">확인</button>
+                </>}>
+                {openGuide.summary && <div className="rounded-lg bg-blue-50/60 px-3 py-2 text-sm font-bold text-blue-800">{openGuide.summary}</div>}
+                <MdView text={!showOriginal && openGuide.content_clean ? openGuide.content_clean : openGuide.content} />
+                {!!openGuide.content_clean && <button type="button" onClick={() => setShowOriginal((v) => !v)} className="rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50">{showOriginal ? "정리본 보기" : "원본(노션 그대로) 보기"}</button>}
+              </FormModal>
+            )}
+            {guideEditOpen && (
+              <FormModal wide title={guideDraft.id ? "가이드 수정" : "새 가이드 작성"} subtitle="저장하면 모든 직원의 가이드 목록에 바로 반영됩니다" icon={<span className="text-base">📘</span>} onClose={() => setGuideEditOpen(false)}
+                footer={<>
+                  <button type="button" onClick={() => setGuideEditOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
+                  <button type="button" disabled={guideBusy || !guideDraft.title.trim() || !guideDraft.content.trim()} onClick={() => void saveGuide()}
+                    className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{guideBusy ? "저장 중…" : guideDraft.id ? "수정 저장" : "가이드 등록"}</button>
+                </>}>
+                <div className="space-y-4">
+                  <label className="block text-xs font-bold text-slate-500">제목 <b className="text-rose-500">*</b>
+                    <input autoFocus value={guideDraft.title} onChange={(e) => setGuideDraft({ ...guideDraft, title: e.target.value })} placeholder="예: 세이토 정착기 탈거·조립"
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="text-xs font-bold text-slate-500">브랜드
+                      <select value={guideDraft.brand} onChange={(e) => setGuideDraft({ ...guideDraft, brand: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+                        <option value="">공통</option>
+                        {BRAND_NAMES.map((name) => <option key={name}>{name}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold text-slate-500">분류
+                      <input value={guideDraft.category} onChange={(e) => setGuideDraft({ ...guideDraft, category: e.target.value })} list="guide-category-list" placeholder="예: 탈거·조립"
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                      <datalist id="guide-category-list">{categories.filter((name) => name !== "전체").map((name) => <option key={name} value={name} />)}</datalist>
+                    </label>
+                    <label className="text-xs font-bold text-slate-500">난이도
+                      <select value={guideDraft.difficulty} onChange={(e) => setGuideDraft({ ...guideDraft, difficulty: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+                        <option value="">선택 안 함</option><option>쉬움</option><option>보통</option><option>어려움</option>
+                      </select>
+                    </label>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                    {openGuide.summary && <div className="mb-3 rounded-lg bg-blue-50/60 px-3 py-2 text-sm font-bold text-blue-800">{openGuide.summary}</div>}
-                    <MdView text={!showOriginal && openGuide.content_clean ? openGuide.content_clean : openGuide.content} />
-                    {!!openGuide.content_clean && <button type="button" onClick={() => setShowOriginal((v) => !v)} className="mt-4 rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">{showOriginal ? "정리본 보기" : "원본(노션 그대로) 보기"}</button>}
+                  <label className="block text-xs font-bold text-slate-500">한 줄 요약
+                    <input value={guideDraft.summary} onChange={(e) => setGuideDraft({ ...guideDraft, summary: e.target.value })} placeholder="목록 카드에 보이는 설명"
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  </label>
+                  <label className="block text-xs font-bold text-slate-500">적용 기종 <span className="font-semibold text-slate-400">— 쉼표로 구분</span>
+                    <input value={guideDraft.modelsText} onChange={(e) => setGuideDraft({ ...guideDraft, modelsText: e.target.value })} placeholder="예: 키슈, 세이토"
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  </label>
+                  <div className="text-xs font-bold text-slate-500">
+                    <div className="flex items-center justify-between">
+                      <span>본문 <b className="text-rose-500">*</b> <span className="font-semibold text-slate-400">— ## 제목 · ### 소제목 · - 목록</span></span>
+                      <button type="button" onClick={() => guidePhotoRef.current?.click()} disabled={guidePhotoBusy}
+                        className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">{guidePhotoBusy ? "올리는 중…" : "📷 사진 넣기"}</button>
+                      <input ref={guidePhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachGuidePhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
+                    </div>
+                    <textarea value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
+                      placeholder={"## 준비물\n- 십자드라이버\n\n## 순서\n1단계 설명…\n\n(📷 사진 넣기를 누르면 이 자리에 사진이 붙습니다)"}
+                      className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 font-mono text-[13px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </div>
                 </div>
-              </div>
+              </FormModal>
             )}
           </div>
         );

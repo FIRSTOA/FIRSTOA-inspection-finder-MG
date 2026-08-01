@@ -6,6 +6,7 @@ import {
   type BottleneckItem, type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WorkKind,
 } from "./visits";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
+import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 
 const KINDS = Object.keys(WORK_LABELS) as WorkKind[];
 const OFFICE_KINDS = Object.keys(OFFICE_LABELS) as OfficeKind[];
@@ -235,6 +236,16 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
 
 export default function WorkDashboard({ kind, author, focusDate }: { kind: "daily" | "weekly"; author: string; focusDate?: string | null }) {
   const today = kstDate();
+  // 열람 대상 — 기본은 나, 다른 직원을 고르면 그 사람 기록을 읽기 전용으로 본다
+  const { book } = useAuthorBook();
+  const [viewAs, setViewAs] = useState(author);
+  useEffect(() => { setViewAs(author); }, [author]);
+  const subject = viewAs || author;
+  const readOnly = subject !== author;
+  const viewerOptions = useMemo(() => [
+    { value: author, label: `${author} (나)` },
+    ...AUTHOR_TEAMS.flatMap((team) => (book[team] || []).filter((name) => name !== author).map((name) => ({ value: name, label: name, group: `${team}팀` }))),
+  ], [book, author]);
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
   const [period, setPeriod] = useState<Period>("day");
@@ -267,15 +278,15 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
   useEffect(() => {
     let alive = true; setLoading(true); setError("");
     Promise.all([
-      getVisits(author, range.start, range.end),
-      getOfficeLogs(author, range.start, range.end),
-      kind === "weekly" ? getWeeklyNote(author, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
+      getVisits(subject, range.start, range.end),
+      getOfficeLogs(subject, range.start, range.end),
+      kind === "weekly" ? getWeeklyNote(subject, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
     ])
       .then(([visits, offices, weekly]) => { if (!alive) return; if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); setRows(visits); setOfficeLogs(offices); setNote(weekly); setAutoSaveStatus("idle"); setOffice(offices.find((o) => o.workDate === selectedDay) || { workDate: selectedDay, author, returnTime: "", values: emptyOfficeValues() }); })
       .catch((e) => { if (alive) setError((e as Error).message); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [author, kind, range.start, range.end, editWeek.start, selectedDay]);
+  }, [subject, kind, range.start, range.end, editWeek.start, selectedDay]);
 
   // 디바운스 대기 중인 주간노트를 기억해, 주차 전환/화면 이탈 시 유실 없이 즉시 저장(flush)한다.
   const pendingWeeklyRef = useRef<{ weekStart: string; note: WeeklyNote } | null>(null);
@@ -290,7 +301,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
   useEffect(() => () => flushWeeklySave(), []); // 언마운트 시 flush
 
   const scheduleWeeklySave = (nextNote: WeeklyNote) => {
-    if (kind !== "weekly" || loading) return;
+    if (kind !== "weekly" || loading || readOnly) return;
     if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
     pendingWeeklyRef.current = { weekStart: editWeek.start, note: nextNote };
     setAutoSaveStatus("saving");
@@ -327,7 +338,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
     scheduleWeeklySave(nextNote);
   };
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
-  const saveOffice = async () => { setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
+  const saveOffice = async () => { if (readOnly) return; setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
   const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${selectedWeekLabel} 주간 업무 현황` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
   const periodTabs = ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
@@ -343,12 +354,14 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
           {(kind === "weekly" || period === "week") && <PortalSelect tone="dark" width={220} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
         </>}
         {kind === "daily" && period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "border border-white/15 text-slate-300 hover:bg-white/10"}`}>{q}분기</button>)}</div>}
+        <PortalSelect tone="dark" width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
         <div className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold tabular-nums text-slate-300">{range.start} ~ {range.end}</div>
       </div>
     </section>
+    {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">{author} · <span className="tabular-nums">{range.start} ~ {range.end}</span></div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">{subject} · <span className="tabular-nums">{range.start} ~ {range.end}</span></div>
         <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{kind === "daily" ? periodTitle : "주간 현황판"}</h2>
         <p className="mt-1 text-[11px] font-semibold text-slate-400">FIELD 기록을 기준으로 자동 집계됩니다.</p>
       </div>
@@ -370,7 +383,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
           const actual = sum.count[k];
           const percent = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
           const gap = actual - target;
-          return <div key={k} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{actual}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div><div className="text-xs font-bold text-slate-500">{hm(sum.minutes[k])}</div></div>{kind === "weekly" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-500">목표</span><input type="number" min="0" value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-xs font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
+          return <div key={k} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{actual}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div><div className="text-xs font-bold text-slate-500">{hm(sum.minutes[k])}</div></div>{kind === "weekly" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-500">목표</span><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-xs font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
         })}
       </div></section>
 
@@ -381,19 +394,19 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
           ].map(([l, v]) => <div key={String(l)} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div></div>)}</div></section>
           <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
         </div>
-        <section className="h-fit rounded-xl border border-slate-200 bg-white p-5 xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">내근 업무 입력</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs font-bold text-slate-500">복귀시간<input type="time" value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>
-          <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] font-bold text-slate-400">수량/건<input type="number" min="0" value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label><label className="text-[10px] font-bold text-slate-400">시간(분)<input type="number" min="0" value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>)}</div>
-          <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg font-black tabular-nums text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office"} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
+        <section className="h-fit rounded-xl border border-slate-200 bg-white p-5 xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">내근 업무 입력</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs font-bold text-slate-500">복귀시간<input type="time" disabled={readOnly} value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>
+          <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] font-bold text-slate-400">수량/건<input type="number" min="0" disabled={readOnly} value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label><label className="text-[10px] font-bold text-slate-400">시간(분)<input type="number" min="0" disabled={readOnly} value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>)}</div>
+          <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg font-black tabular-nums text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office" || readOnly} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{readOnly ? "읽기 전용" : saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
       </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
-        <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} />
+        <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} readOnly={readOnly} />
         <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
       </div>}
     </>}
   </div>;
 }
 
-function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved" }) {
+function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus, readOnly = false }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved"; readOnly?: boolean }) {
   const goalCards = ([["thisWeekGoal", "이번 주 목표", "이번 주 집중할 결과"], ["thisWeekResult", "결과·미진행 사유", "실행 결과와 밀린 이유"], ["nextWeekGoal", "다음 주 목표", "다음 실행으로 넘길 항목"]] as [WeeklyTextKey, string, string][]);
   const [aiBusy, setAiBusy] = useState(false);
   const runGrowthAiTransform = async () => {
@@ -411,10 +424,11 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
           <h3 className="text-base font-black text-slate-950 lg:text-lg">주간 목표·성장 기록</h3>
           <p className="mt-0.5 text-xs font-semibold text-slate-400">목표는 요약 카드로, 성장기록은 항목별로 나누어 확인합니다.</p>
         </div>
-        <div className={`rounded-full px-3 py-1.5 text-[11px] font-black ${autoSaveStatus === "saving" ? "bg-blue-50 text-blue-700" : autoSaveStatus === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-          {autoSaveStatus === "saving" ? "자동 저장중" : autoSaveStatus === "saved" ? "자동 저장됨" : "자동 저장"}
+        <div className={`rounded-full px-3 py-1.5 text-[11px] font-black ${readOnly ? "bg-amber-50 text-amber-700" : autoSaveStatus === "saving" ? "bg-blue-50 text-blue-700" : autoSaveStatus === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+          {readOnly ? "읽기 전용" : autoSaveStatus === "saving" ? "자동 저장중" : autoSaveStatus === "saved" ? "자동 저장됨" : "자동 저장"}
         </div>
       </div>
+      <fieldset disabled={readOnly} className="contents">
       <div className="border-b border-slate-200 bg-rose-50/40 p-4">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
@@ -471,6 +485,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
           );
         })}
       </div>
+      </fieldset>
     </section>
   );
 }
