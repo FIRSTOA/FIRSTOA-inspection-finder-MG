@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
-import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow } from "./api";
+import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { notify } from "./toast";
 
@@ -568,6 +568,19 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         ? { at: new Date().toISOString(), by: changed.assignee || author || "" }
         : { at: null, by: "" };
       void setServiceReceptionStatus(changed.receptionId, mapped, done).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
+      // 완료면 접수 시트 BD열(처리완료)에도 기입 — 접수 때 저장한 행번호 기준(퍼스트순 검증)
+      if (mapped === "완료") {
+        void (async () => {
+          try {
+            const reception = await getServiceReceptionById(changed.receptionId!);
+            if (reception && reception.type === "복합기 AS" && reception.sheet_row && reception.lease_no) {
+              const now = new Date();
+              const stamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+              await sendReceptionCopierCompleteJob({ author: reception.author, vendor: reception.vendor, firstNo: reception.lease_no, sheetRow: reception.sheet_row, doneText: `완료 ${stamp}${done.by ? ` ${done.by}` : ""}` });
+            }
+          } catch { /* 시트 반영 실패는 DB 상태에 영향 없음 */ }
+        })();
+      }
     }
   };
 

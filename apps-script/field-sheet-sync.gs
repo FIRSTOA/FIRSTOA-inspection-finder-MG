@@ -166,7 +166,8 @@ function fieldValue_(category, header, column, data, request, labels) {
   // 담당자·주소 변경 표는 A:M까지만 사용합니다. 오른쪽 보조 영역의 같은 헤더는 건드리지 않습니다.
   if (category === "contact_change" && column > 13) return undefined;
   // 접수(복합기 기존): A~T까지만 기입 — 퍼스트순(F) 기준 함수가 채우는 오른쪽 열들을 건드리지 않는다 (AK열 업체담당자 중복 보호)
-  if (category === "reception_copier" && column > 20) return undefined;
+  // 예외: BD열 "처리완료" — 일정리스트에서 완료 치면 웹앱이 행 갱신으로 채운다
+  if (category === "reception_copier" && column > 20 && String(header).replace(/\s+/g, "") !== "처리완료") return undefined;
   // 접수(원격·IT): A열(행 순번)·C열(년월)은 자동 계산 — 덮어쓰면 수식이 깨진다.
   // "순" 헤더가 A열과 M열에 중복되므로 임대리스트 순번은 M열(13)에만 기입한다.
   if (category === "reception_remote") {
@@ -204,8 +205,9 @@ function fieldValue_(category, header, column, data, request, labels) {
       "분류": "칭찬",
     };
   })() : {};
-  // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준
-  const receptionPeriod = category === "reception_copier" || category === "reception_copier_new" ? {
+  // 접수(복합기 기존): 날짜·시간·접수자는 접수 시각 기준.
+  // 행 갱신(처리완료 기입)일 땐 건드리지 않는다 — 접수시간이 완료시간으로 덮이면 안 됨.
+  const receptionPeriod = (category === "reception_copier" || category === "reception_copier_new") && !data["_updateRow"] ? {
     "날짜": Utilities.formatDate(submittedAt, "Asia/Seoul", "M월 d일"),
     "접수시간": Utilities.formatDate(submittedAt, "Asia/Seoul", "HH:mm"),
     "접수자": request.author,
@@ -265,11 +267,15 @@ function fieldValue_(category, header, column, data, request, labels) {
     reception_copier: {
       "퍼스트순": "firstNo", "접수유형": "route", "접수분야": "field", "유상/무상": "paid",
       "업체담당자": "receiverName", "전화번호": "receiverPhone", "제목(짧게)": "title", "내용": "symptom",
+      "처리완료": "complete",   // BD열 — 일정리스트 완료 시 행 갱신으로 기입
     },
     reception_remote: {
       "시작": "start", "종료": "end", "처리여부": "result", "유입경로": "route", "처리자": "handler",
       "한조처리": "hanjo", "순": "leaseNo", "연락처": "contact", "증상": "symptom",
       "추가대수": "extraCount", "처리내용": "handled", "연동완료": "linked",
+      // 신규 거래처(순번 없음)는 함수가 못 채우므로 웹앱이 직접 기입 — 기존 접수는 이 키를 안 보내 수식 유지
+      "상호": "company", "등급": "grade", "미수": "misuMonths", "특이사항": "notes", "지역": "region",
+      "마감일": "dueDate", "기종": "series", "브랜드": "brand", "자산번호": "assetNo", "시리얼번호": "serialNo",
     },
     reception_copier_new: {
       "퍼스트순": "firstNo", "임대여부": "leaseStatus", "업체명": "company", "접수유형": "route", "접수분야": "field",

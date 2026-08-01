@@ -228,6 +228,8 @@ export default function ServiceReception({ author }: { author: string }) {
   const [fieldCustom, setFieldCustom] = useState("");
   const [paidCustom, setPaidCustom] = useState("");
   const [newLease, setNewLease] = useState<Record<string, string>>({ ...EMPTY_NEW_LEASE });
+  // 원격·IT 신규 거래처 — 원격 시트에 직접 기입할 값 (순번 함수가 못 채우는 열들)
+  const [newRemote, setNewRemote] = useState<Record<string, string>>({});
   // 원격·IT 접수 시트('원격' 탭) 전용 입력 — IT/원격이관은 같은 탭을 쓰고 L열(한조처리)로만 갈린다
   const [remote, setRemote] = useState({ hanjoCustom: "", hanjoDirect: false });
   const isRemoteType = type === "IT" || type === "원격이관";
@@ -314,7 +316,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
-    if (!row.lease_no) return;
+    if (!row.lease_no && !row.sheet_row) return; // 신규는 접수 때 만든 행번호로 갱신(상호 검증)
     void runSheetWrite(row.id, async (chained) => {
       // 앞 작업이 알려준 행 → 화면에 있는 행 → DB에 저장된 행 순으로 대상을 찾는다
       let target = chained ?? row.sheet_row ?? null;
@@ -596,21 +598,22 @@ export default function ServiceReception({ author }: { author: string }) {
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
-    setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setRemote({ hanjoCustom: "", hanjoDirect: false });
+    setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setNewRemote({}); setRemote({ hanjoCustom: "", hanjoDirect: false });
   };
 
   // 복합기 AS 접수를 접수 시트에 자동 기입 (기존: 퍼스트순 기준 자동 채움 / 신규: 직접 기재) — 실패해도 접수 저장은 유효
   const writeReceptionSheet = async (): Promise<string> => {
     if (isRemoteType) {
-      if (custKind === "신규") return " · 원격 신규는 시트 기입 준비 중 (접수는 저장됨)";
-      if (!firstNo.trim()) return " · 순번 미입력 — 시트 기입 생략";
+      if (custKind === "기존" && !firstNo.trim()) return " · 순번 미입력 — 시트 기입 생략";
       // 폼이 곧 초기화되므로 보낼 값을 먼저 복사해 둔다 (비동기 중에 빈 값이 되는 것 방지)
       const payload = {
-        author, vendor: vendorName, leaseNo: firstNo.trim(), route, hanjo: hanjoFinal,
+        author, vendor: vendorName, leaseNo: custKind === "신규" ? "" : firstNo.trim(), route, hanjo: hanjoFinal,
         start: "", end: "", result: "", handler: "",
         // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
         contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
         symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
+        // 신규는 순번 함수가 못 채우는 열을 직접 기입 (기존은 보내지 않아 수식 유지)
+        ...(custKind === "신규" ? { company: vendorName, ...newRemote } : {}),
       };
       const receptionId = sheetRowTargetRef.current;
       try {
@@ -639,7 +642,8 @@ export default function ServiceReception({ author }: { author: string }) {
         paid: paidFinal, receiverName: manual.접수자성함.trim(), receiverPhone: manual.접수자연락처.trim(),
         title: manual.제목.trim(), symptom: manual.증상.trim(),
       };
-      const message = custKind === "기존"
+      const receptionId = sheetRowTargetRef.current;
+      const result = custKind === "기존"
         ? await sendReceptionCopierSheetJob(base)
         : await (async () => {
           const address = manual.주소.trim();
@@ -653,7 +657,12 @@ export default function ServiceReception({ author }: { author: string }) {
             district,
           });
         })();
-      return ` · ${message}`;
+      if (result.row && receptionId) {
+        // 완료 시 BD열(처리완료)을 이 행에 기입할 수 있게 행번호를 저장
+        await updateServiceReception(receptionId, { sheet_row: result.row }).catch(() => {});
+        setListRows((current) => current.map((item) => (item.id === receptionId ? { ...item, sheet_row: result.row } : item)));
+      }
+      return ` · ${result.message}`;
     } catch (e) {
       return ` · 시트 기입 실패(${(e as Error).message})`;
     }
@@ -1194,9 +1203,20 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 </div>}
               </div>
-              {isRemoteType && custKind === "신규" && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2.5 text-[11px] font-bold leading-5 text-amber-800">
-                원격 시트는 임대리스트 순번으로 업체 정보를 자동 계산하는 구조라, <b>신규 업체는 시트에 업체 정보가 채워지지 않습니다.</b><br />
-                업체명·연락처·증상은 아래에 입력하면 접수 기록(DB)과 접수 리스트에는 정상 저장됩니다.
+              {isRemoteType && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
+                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 순번 함수가 못 채우는 열이라 여기 값이 원격 시트에 그대로 기입됩니다 (아는 것만)</div>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                  {([["grade", "등급"], ["misuMonths", "미수(개월)"], ["region", "지역"], ["dueDate", "마감일"], ["series", "기종"], ["brand", "브랜드"], ["assetNo", "자산번호"], ["serialNo", "시리얼번호"]] as [string, string][]).map(([key, label]) => (
+                    <label key={key} className="text-[10px] font-bold text-slate-500">{label}
+                      <input value={newRemote[key] || ""} onChange={(e) => setNewRemote({ ...newRemote, [key]: e.target.value })}
+                        className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                    </label>
+                  ))}
+                  <label className="col-span-2 text-[10px] font-bold text-slate-500 sm:col-span-4">특이사항
+                    <input value={newRemote.notes || ""} onChange={(e) => setNewRemote({ ...newRemote, notes: e.target.value })}
+                      className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  </label>
+                </div>
               </div>}
               {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>

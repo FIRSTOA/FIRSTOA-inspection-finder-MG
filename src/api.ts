@@ -971,20 +971,34 @@ export type ReceptionSheetInput = {
   paid: string; receiverName: string; receiverPhone: string; title: string; symptom: string;
 };
 
-export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, extra?: Record<string, string>): Promise<string> {
+export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, extra?: Record<string, string>): Promise<{ message: string; row: number | null }> {
   const id = crypto.randomUUID();
   await enqueueFieldSheetSyncJob({
     id, category: extra ? "reception_copier_new" : "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(),
     sourceText: "", payload: { data: { ...input, ...(extra || {}) } }, dupKey: id,
   });
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
-  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return "시트 동기화 설정 꺼짐";
+  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return { message: "시트 동기화 설정 꺼짐", row: null };
   try {
     const result = await invokeEdgeFunction<{ status?: string; row?: number }>("field-sheet-sync", { jobId: id });
-    return result.status === "synced" ? `접수시트 ${result.row ? `${result.row}행 ` : ""}기입` : "접수시트 반영 대기";
+    if (result.status !== "synced") return { message: "접수시트 반영 대기", row: null };
+    return { message: `접수시트 ${result.row ? `${result.row}행 ` : ""}기입`, row: result.row ?? null };
   } catch {
-    return "접수시트 반영 재시도 대기";
+    return { message: "접수시트 반영 재시도 대기", row: null };
   }
+}
+
+// 복합기 AS 완료 → 접수 시트 BD열(처리완료)에 행 갱신으로 기입. 퍼스트순으로 행 검증.
+export async function sendReceptionCopierCompleteJob(input: { author: string; vendor: string; firstNo: string; sheetRow: number; doneText: string }): Promise<void> {
+  const id = crypto.randomUUID();
+  await enqueueFieldSheetSyncJob({
+    id, category: "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(), sourceText: "",
+    payload: { data: { firstNo: input.firstNo, complete: input.doneText, _updateRow: String(input.sheetRow), _updateKeyHeader: "퍼스트순", _updateKeyValue: input.firstNo } },
+    dupKey: id,
+  });
+  const cfg = await getConfig().catch(() => ({} as Record<string, string>));
+  if (!isEnabled(cfg.FIELD_SHEET_SYNC_ENABLED)) return;
+  await invokeEdgeFunction("field-sheet-sync", { jobId: id }).catch(() => { /* 워커가 재시도 */ });
 }
 
 // 서비스접수(원격·IT) → 접수 시트 '원격' 탭 기입. 순(M)만 정확하면 N~T 등은 시트 함수가 채운다.
@@ -993,6 +1007,9 @@ export type RemoteReceptionSheetInput = {
   result: string; handler: string; hanjo: string; contact: string; symptom: string;
   extraCount: string; handled: string; linked: string;
   receiptDate?: string; receiptTime?: string; receiptAuthor?: string;  // 접수 당시 값 (처리 단계 갱신 때도 유지)
+  // 신규 거래처(순번 없음) 직접 기입분 — 기존 접수는 보내지 않아 시트 수식이 유지된다
+  company?: string; grade?: string; misuMonths?: string; notes?: string; region?: string;
+  dueDate?: string; series?: string; brand?: string; assetNo?: string; serialNo?: string;
 };
 
 // updateRow를 주면 접수 때 만든 그 행을 갱신한다 (처리 결과 보완). 없으면 새 행 추가.
@@ -1001,9 +1018,14 @@ export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInp
   const data: Record<string, string> = { ...input };
   if (updateRow) {
     data["_updateRow"] = String(updateRow);
-    data["_updateKeyHeader"] = "순";            // 행이 밀렸는지 검증할 키 열
-    data["_updateKeyColumn"] = "13";           // 원격 탭은 "순" 헤더가 A·M열에 중복 — M열로 고정
-    data["_updateKeyValue"] = input.leaseNo;
+    if (input.leaseNo) {
+      data["_updateKeyHeader"] = "순";          // 행이 밀렸는지 검증할 키 열
+      data["_updateKeyColumn"] = "13";         // 원격 탭은 "순" 헤더가 A·M열에 중복 — M열로 고정
+      data["_updateKeyValue"] = input.leaseNo;
+    } else {
+      data["_updateKeyHeader"] = "상호";        // 신규(순번 없음)는 상호로 검증
+      data["_updateKeyValue"] = input.vendor;
+    }
   }
   await enqueueFieldSheetSyncJob({
     id, category: "reception_remote", author: input.author.trim(), vendor: input.vendor.trim(),
