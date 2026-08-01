@@ -187,14 +187,14 @@ export default function MemberAdmin() {
   return (
     <div className="space-y-4">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
           <div>
-            <h3 className="text-base font-black text-slate-950 lg:text-lg">인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
+            <h3 className="text-base font-black text-white lg:text-lg">인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로".</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-500">재직 {active.length}명</span>
-            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50">퇴사 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-300">재직 {active.length}명</span>
+            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-white/10">퇴사 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
             <button type="button" onClick={() => { const dept = deptFilter === "전체" ? "CS팀" : deptFilter; setDraft({ ...draft, dept, team: TEAM_OPTIONS[dept]?.[0] ?? "" }); setAddOpen(true); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
               <UserPlus size={15} />인원 추가

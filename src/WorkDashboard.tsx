@@ -347,11 +347,13 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
       </div>
     </section>
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-end lg:justify-between">
-        <div><div className="text-xs font-bold uppercase tracking-wide text-blue-600">{author} · {kind === "daily" ? `${range.start} ~ ${range.end}` : `${range.start} ~ ${range.end}`}</div><h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 lg:text-2xl">{kind === "daily" ? periodTitle : "주간 현황판"}</h2><p className="mt-2 text-sm font-medium text-slate-500">FIELD 기록을 기준으로 자동 집계됩니다.</p></div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[620px]">
-          {[['방문 거래처', `${sum.visits}곳`], ['기계 대수', `${sum.machines}대`], ['외근 시간', hm(sum.fieldMinutes)], ['내근 시간', hm(insideMinutes)]].map(([l, v]) => <div key={l} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}</div></div>)}
-        </div>
+      <div className="bg-[#1E252F] px-5 py-4">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">{author} · <span className="tabular-nums">{range.start} ~ {range.end}</span></div>
+        <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{kind === "daily" ? periodTitle : "주간 현황판"}</h2>
+        <p className="mt-1 text-[11px] font-semibold text-slate-400">FIELD 기록을 기준으로 자동 집계됩니다.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">
+        {[['방문 거래처', `${sum.visits}곳`], ['기계 대수', `${sum.machines}대`], ['외근 시간', hm(sum.fieldMinutes)], ['내근 시간', hm(insideMinutes)]].map(([l, v]) => <div key={l} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}</div></div>)}
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-100 px-6 py-3 text-xs font-semibold text-slate-500 lg:px-8"><span>총 활동시간 <b className="ml-1 text-slate-950">{hm(sum.fieldMinutes + insideMinutes)}</b></span>{kind === "daily" && period === "day" && <><span>마감 <b className="ml-1 text-slate-950">{commute || "미선택"}</b></span><span>복귀시간 <b className="ml-1 text-slate-950">{office.returnTime || "미입력"}</b></span></>}</div>
     </section>

@@ -617,7 +617,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 다크 헤더 — 설명 + 조회 조건(연도/분기/직원)을 한 줄에 모은다 */}
         <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-          <p className="text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
+          <div>
+            <h2 className="text-base font-black text-white lg:text-lg">성장기록</h2>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <PortalSelect tone="dark" width={140} value={String(year)} onChange={(next) => setYear(Number(next))}
               options={Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />
