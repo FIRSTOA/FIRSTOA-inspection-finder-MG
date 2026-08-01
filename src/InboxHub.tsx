@@ -62,6 +62,10 @@ export default function InboxHub({ author }: { author: string }) {
   return (
     <div className="space-y-4 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-[#1E252F] px-5 py-4">
+          <h2 className="text-base font-black text-white lg:text-lg">공지·요청</h2>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">공지는 읽으면 끝, 요청은 처리해야 끝 — 나에게 온 것부터 보여줍니다</p>
+        </div>
         <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
           {chip("안 읽은 공지", unreadNotices, (unreadNotices ?? 0) > 0, "notice")}
           {chip("내 대기 요청", myWaiting, (myWaiting ?? 0) > 0, "request")}

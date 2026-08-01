@@ -74,6 +74,10 @@ export default function AdminHub({ author }: { author: string }) {
   return (
     <div className="space-y-4">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-[#1E252F] px-5 py-4">
+          <h2 className="text-base font-black text-white lg:text-lg">관리</h2>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">인원·주소변경·동기화·전송/카톡방 — 웹앱 운영을 한 곳에서</p>
+        </div>
         {/* 다크 상태줄 */}
         <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
           {summary ? (

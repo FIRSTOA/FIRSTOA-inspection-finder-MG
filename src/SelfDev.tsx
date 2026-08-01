@@ -12,6 +12,9 @@ import PortalSelect from "./PortalSelect";
 type Tab = "home" | "reading" | "tips" | "goals" | "praise";
 const GOAL_CATEGORIES = ["자격증", "학습", "독서", "건강", "습관", "기타"] as const;
 const fmtP = (votes: number) => (Math.round(votes * 2) / 10).toFixed(1); // 추천 1개 = 0.2P
+// 책 제목으로 정해지는 표지 색 — 이미지 없이도 책장 느낌을 낸다
+const COVER_TONES = ["from-blue-600 to-indigo-700", "from-emerald-600 to-teal-700", "from-rose-500 to-pink-600", "from-amber-500 to-orange-600", "from-violet-600 to-purple-700", "from-slate-700 to-slate-900"];
+const coverTone = (title: string) => COVER_TONES[[...title].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % COVER_TONES.length];
 
 type SelfGoal = {
   id: string; created_at: string; author: string; title: string; memo: string;
@@ -95,110 +98,139 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
     return pool[seed % pool.length];
   };
   const readingPick = useMemo(() => dailyPick("reading"), [posts, voteCount]); // eslint-disable-line react-hooks/exhaustive-deps
-  const tipPick = useMemo(() => dailyPick("tip"), [posts, voteCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const myPraiseCount = praises.filter((p) => p.to_name === author).length;
-  const myActiveGoals = myGoals.filter((g) => !g.done).slice(0, 4);
-  const twoWeeksAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString(); }, []);
-  const hotPosts = useMemo(() => {
-    const recent = posts.filter((p) => p.created_at >= twoWeeksAgo);
-    return [...(recent.length >= 3 ? recent : posts)].sort((a, b) => (voteCount.get(b.id) || 0) - (voteCount.get(a.id) || 0)).slice(0, 3);
-  }, [posts, voteCount, twoWeeksAgo]);
-  const shownPraises = (praises.some((p) => p.to_name === author) ? praises.filter((p) => p.to_name === author) : praises).slice(0, 3);
+  const myRecentPraises = praises.filter((p) => p.to_name === author).slice(0, 3);
+  const feedPraises = praises.slice(0, 4);
+  const topActiveGoal = [...myGoals.filter((g) => !g.done)].sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0))[0];
+  const recentDoneGoals = [...myGoals.filter((g) => g.done)].sort((a, b) => String(b.done_at || "").localeCompare(String(a.done_at || ""))).slice(0, 2);
+  const books = useMemo(() => {
+    const seen = new Set<string>();
+    const out: AnyPost[] = [];
+    for (const post of posts) {
+      if ((post.kind || "reading") !== "reading" || !post.title.trim()) continue;
+      const key = post.title.trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(post);
+      if (out.length >= 4) break;
+    }
+    return out;
+  }, [posts]);
+  const tips = useMemo(() => posts.filter((post) => post.kind === "tip").slice(0, 4), [posts]);
 
   if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>;
 
   const widgetHead = (title: string, action: string, go: Tab) => (
     <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
       <h3 className="text-sm font-black text-slate-950">{title}</h3>
-      <button type="button" onClick={() => onGo(go)} className="text-[11px] font-black text-blue-600 transition hover:text-blue-700">{action} →</button>
+      <button type="button" onClick={() => onGo(go)} className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-600 transition hover:bg-blue-100">{action}</button>
     </div>
   );
+  const miniCard = "block w-full rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-left transition hover:border-slate-200 hover:bg-slate-50";
 
   return (
     <div className="space-y-4 pb-16">
-      {/* 내 활동 요약 — 누르면 해당 탭으로 */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {([
-          [`${fmtP(myVotesReceived)}P`, "내 포인트", "reading"],
-          [`${myPosts}`, "내가 쓴 글", "tips"],
-          [`${myPraiseCount}`, "받은 칭찬", "praise"],
-          [`${myGoalsDone}/${myGoals.length}`, "목표 달성", "goals"],
-        ] as [string, string, Tab][]).map(([value, label, go]) => (
-          <button key={label} type="button" onClick={() => onGo(go)} className="rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition hover:border-slate-300 hover:shadow">
-            <div className="text-[11px] font-bold text-slate-400">{label}</div>
-            <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{value}</div>
-          </button>
-        ))}
-      </div>
-
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        {readingPick && <button type="button" onClick={() => onGo("reading")} className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-left shadow-sm transition hover:shadow">
-          <div className="text-[10px] font-black tracking-wide text-amber-600">📖 오늘의 구절 {readingPick.title ? `· 《${readingPick.title}》` : ""}</div>
-          <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-800">{readingPick.content}</p>
-        </button>}
-        {tipPick && <button type="button" onClick={() => onGo("tips")} className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-left shadow-sm transition hover:shadow">
-          <div className="text-[10px] font-black tracking-wide text-blue-600">💡 오늘의 팁 {tipPick.title ? `· ${tipPick.title}` : ""}</div>
-          <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-800">{tipPick.content}</p>
-        </button>}
-      </div>
-
-      <div className="grid items-start gap-4 xl:grid-cols-2">
-        {/* 내 목표 진척도 */}
+        {/* 나의 성장 대시보드 */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {widgetHead("🎯 내 목표 진척도", "목표 관리", "goals")}
-          <div className="space-y-3 p-4">
-            {!myActiveGoals.length && <div className="py-4 text-center text-xs font-bold text-slate-400">진행 중인 목표가 없어요 — 첫 목표를 걸어보세요.</div>}
-            {myActiveGoals.map((goal) => (
-              <button key={goal.id} type="button" onClick={() => onGo("goals")} className="block w-full text-left">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-black text-slate-700">{goal.title}</span>
-                  <span className="shrink-0 text-[11px] font-black tabular-nums text-slate-500">{goal.progress ?? 0}%</span>
-                </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${goal.progress ?? 0}%` }} />
-                </div>
-              </button>
-            ))}
+          {widgetHead("🌱 나의 성장 대시보드", "목표 관리", "goals")}
+          <div className="grid grid-cols-2 gap-2 p-3.5">
+            <button type="button" onClick={() => onGo("goals")} className={miniCard}>
+              <div className="text-[10px] font-black text-slate-400">내 목표 달성</div>
+              <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{myGoalsDone}<span className="text-sm font-black text-slate-400">/{myGoals.length}</span></div>
+              {topActiveGoal ? <>
+                <div className="mt-1.5 truncate text-[10px] font-bold text-slate-500">{topActiveGoal.title}</div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200/70"><div className="h-full rounded-full bg-blue-500" style={{ width: `${topActiveGoal.progress ?? 0}%` }} /></div>
+              </> : <div className="mt-1.5 text-[10px] font-bold text-slate-400">진행 중 목표 없음</div>}
+            </button>
+            <button type="button" onClick={() => onGo("praise")} className={miniCard}>
+              <div className="text-[10px] font-black text-slate-400">내가 받은 칭찬</div>
+              <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{myPraiseCount}</div>
+              {myRecentPraises.length ? <div className="mt-1.5 flex items-center">
+                <span className="flex -space-x-1.5">{myRecentPraises.map((praise) => <span key={praise.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-[9px] font-black text-rose-600 ring-2 ring-white">{(praise.from_author || "?").slice(0, 1)}</span>)}</span>
+                <span className="ml-1.5 text-[10px] font-bold text-slate-400">최근 {myRecentPraises.length}건</span>
+              </div> : <div className="mt-1.5 text-[10px] font-bold text-slate-400">아직 없음 — 먼저 칭찬해 보세요</div>}
+            </button>
+            <button type="button" onClick={() => onGo("goals")} className={miniCard}>
+              <div className="text-[10px] font-black text-slate-400">달성 목표</div>
+              {recentDoneGoals.length ? <div className="mt-1.5 flex flex-wrap gap-1">
+                {recentDoneGoals.map((goal) => <span key={goal.id} className="max-w-full truncate rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">✓ {goal.title}</span>)}
+              </div> : <div className="mt-1 text-xl font-black tabular-nums text-slate-950">0</div>}
+            </button>
+            <button type="button" onClick={() => onGo("tips")} className={miniCard}>
+              <div className="text-[10px] font-black text-slate-400">배움·팁 포인트</div>
+              <div className="mt-1 text-xl font-black tabular-nums text-violet-600">{fmtP(myVotesReceived)}P</div>
+              <div className="mt-1.5 text-[10px] font-bold text-slate-400">내가 쓴 글 {myPosts} · 받은 추천 {myVotesReceived}</div>
+            </button>
           </div>
         </section>
 
-        {/* 최근 받은 칭찬 */}
+        {/* 독서 책장 */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {widgetHead(shownPraises.some((p) => p.to_name === author) ? "💖 최근 받은 칭찬" : "💖 최근 칭찬", "칭찬하러 가기", "praise")}
-          <div className="space-y-2 p-4">
-            {!shownPraises.length && <div className="py-4 text-center text-xs font-bold text-slate-400">아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요.</div>}
-            {shownPraises.map((praise) => (
-              <div key={praise.id} className="flex items-start gap-2.5 rounded-lg bg-rose-50/50 px-3 py-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[10px] font-black text-rose-600">{praise.to_name.slice(0, 2)}</span>
+          {widgetHead("📚 독서 — 최근 책장", "+ 새 글 쓰기", "reading")}
+          {books.length ? (
+            <div className="grid grid-cols-4 gap-3 p-4">
+              {books.map((book) => (
+                <button key={book.id} type="button" onClick={() => onGo("reading")} className="group text-left">
+                  <div className={`flex aspect-[3/4] items-center justify-center rounded-lg bg-gradient-to-br p-2 shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-lg ${coverTone(book.title)}`}>
+                    <span className="line-clamp-4 text-center text-[11px] font-black leading-4 text-white">{book.title}</span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between px-0.5">
+                    <span className="text-[10px] font-bold tabular-nums text-slate-400">{book.created_at.slice(5, 10)}</span>
+                    <span className="shrink-0 text-[10px] font-black tabular-nums text-amber-600">👍 {voteCount.get(book.id) || 0}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : <div className="p-8 text-center text-xs font-bold text-slate-400">책 제목이 담긴 글이 아직 없어요 — 첫 구절을 남겨보세요.</div>}
+          {readingPick && <button type="button" onClick={() => onGo("reading")} className="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50">
+            <span className="text-[10px] font-black tracking-wide text-amber-600">📖 오늘의 구절{readingPick.title ? ` · 《${readingPick.title}》` : ""}</span>
+            <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">{readingPick.content}</p>
+          </button>}
+        </section>
+      </div>
+
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        {/* 칭찬 릴레이 */}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {widgetHead("💖 칭찬 릴레이", "나도 칭찬하기", "praise")}
+          <div className="divide-y divide-slate-50">
+            {!feedPraises.length && <div className="p-8 text-center text-xs font-bold text-slate-400">아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요.</div>}
+            {feedPraises.map((praise) => (
+              <div key={praise.id} className="flex items-start gap-2.5 px-4 py-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[10px] font-black text-rose-600">{praise.to_name.slice(0, 2)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold leading-5 text-slate-700"><b className="font-black text-rose-600">{praise.to_name}</b> — {praise.content.length > 70 ? `${praise.content.slice(0, 70)}…` : praise.content}</span>
-                  <span className="text-[10px] font-bold text-slate-400">{praise.created_at.slice(5, 10)}</span>
+                  <span className="block text-xs leading-5"><span className="font-black text-slate-500">{praise.from_author || "익명"}</span> <span className="text-slate-300">→</span> <b className="font-black text-rose-600">{praise.to_name}</b></span>
+                  <span className="block truncate text-xs font-semibold text-slate-600">{praise.content}</span>
                 </span>
+                <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-300">{praise.created_at.slice(5, 10)}</span>
               </div>
             ))}
           </div>
         </section>
+
+        {/* 지식창고 */}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {widgetHead("💡 지식창고 — 배움·팁", "+ 새 팁 등록", "tips")}
+          {tips.length ? (
+            <div className="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
+              {tips.map((tip) => (
+                <button key={tip.id} type="button" onClick={() => onGo("tips")} className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-200 hover:shadow">
+                  {tip.title && <div className="truncate text-xs font-black text-slate-900">{tip.title}</div>}
+                  <p className={`${tip.title ? "mt-1 " : ""}line-clamp-3 text-[11px] font-semibold leading-5 text-slate-600`}>{tip.content}</p>
+                  <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-400">
+                    <span className="tabular-nums">{tip.created_at.slice(5, 10)}</span>
+                    <span className="font-black tabular-nums text-blue-600">👍 {voteCount.get(tip.id) || 0}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : <div className="p-8 text-center text-xs font-bold text-slate-400">아직 팁이 없어요 — 오늘 배운 것 하나를 남겨보세요.</div>}
+        </section>
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        {/* 요즘 인기 글 */}
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {widgetHead("🔥 요즘 인기 글", "전체 보기", "tips")}
-          <div className="divide-y divide-slate-50">
-            {!hotPosts.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 글이 없어요.</div>}
-            {hotPosts.map((post, index) => (
-              <button key={post.id} type="button" onClick={() => onGo((post.kind || "reading") === "tip" ? "tips" : "reading")} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition hover:bg-slate-50">
-                <span className="w-4 shrink-0 text-center text-sm font-black tabular-nums text-slate-300">{index + 1}</span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${(post.kind || "reading") === "tip" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-700"}`}>{(post.kind || "reading") === "tip" ? "팁" : "독서"}</span>
-                <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-700">{post.title ? `《${post.title}》 ` : ""}{post.content}</span>
-                <span className="shrink-0 text-[10px] font-black tabular-nums text-slate-400">👍 {voteCount.get(post.id) || 0}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* 이번 달 포인트 랭킹 */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {widgetHead("🏆 이번 달 포인트 랭킹", "글 쓰러 가기", "reading")}
           <div className="space-y-1.5 p-4">
@@ -211,9 +243,6 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
             ))}
           </div>
         </section>
-      </div>
-
-      <div className="grid items-start gap-4 xl:grid-cols-2">
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {widgetHead("🏛 명예의 전당 — 월간 1위", "포인트 쌓기", "tips")}
           <div className="space-y-1.5 p-4">
@@ -225,20 +254,6 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
                 <span className="text-xs font-black tabular-nums text-amber-600">{fmtP(entry.votes)}P</span>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {widgetHead("🕘 최근 올라온 글", "배움·팁", "tips")}
-          <div className="divide-y divide-slate-50">
-            {posts.slice(0, 5).map((post) => (
-              <button key={post.id} type="button" onClick={() => onGo((post.kind || "reading") === "tip" ? "tips" : "reading")} className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition hover:bg-slate-50">
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${(post.kind || "reading") === "tip" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-700"}`}>{(post.kind || "reading") === "tip" ? "팁" : "독서"}</span>
-                <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-700">{post.title ? `《${post.title}》 ` : ""}{post.content}</span>
-                <span className="shrink-0 text-[10px] font-black tabular-nums text-slate-400">👍 {voteCount.get(post.id) || 0}</span>
-              </button>
-            ))}
-            {!posts.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 글이 없어요.</div>}
           </div>
         </section>
       </div>

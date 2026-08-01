@@ -228,12 +228,18 @@ export default function CopierNotes({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        {([["notes", "기록"], ["guide", "가이드"], ["quiz", "복합기 퀴즈"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setView(key)}
-            className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
-        ))}
-      </div>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-[#1E252F] px-5 py-4">
+          <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 가이드를 쌓고, 퀴즈로 복합기 기술을 점검합니다.</p>
+        </div>
+        <div className="flex overflow-x-auto">
+          {([["notes", "기록"], ["guide", "가이드"], ["quiz", "복합기 퀴즈"]] as const).map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setView(key)}
+              className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
+          ))}
+        </div>
+      </section>
       {view === "guide" && (() => {
         const list = guides || [];
         const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
