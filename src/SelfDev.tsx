@@ -15,6 +15,21 @@ const fmtP = (votes: number) => (Math.round(votes * 2) / 10).toFixed(1); // 추�
 // 책 제목으로 정해지는 표지 색 — 이미지 없이도 책장 느낌을 낸다
 const COVER_TONES = ["from-blue-600 to-indigo-700", "from-emerald-600 to-teal-700", "from-rose-500 to-pink-600", "from-amber-500 to-orange-600", "from-violet-600 to-purple-700", "from-slate-700 to-slate-900"];
 const coverTone = (title: string) => COVER_TONES[[...title].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % COVER_TONES.length];
+// 아바타 이니셜 — 성 빼고 이름 두 글자("한지우"→"지우"), 두 글자 이하는 그대로
+const initials = (name: string) => (name.length > 2 ? name.slice(-2) : name);
+
+/** 달성률 도넛 링 */
+function Ring({ percent, size = 52, stroke = 6 }: { percent: number; size?: number; stroke?: number }) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const filled = (circumference * Math.max(0, Math.min(100, percent))) / 100;
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E2E8F0" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#2563EB" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${filled} ${circumference}`} className="transition-all" />
+    </svg>
+  );
+}
 
 type SelfGoal = {
   id: string; created_at: string; author: string; title: string; memo: string;
@@ -22,7 +37,7 @@ type SelfGoal = {
   start_date?: string | null; progress?: number;
 };
 
-type AnyPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string };
+type AnyPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string };
 type PraisePost = { id: string; created_at: string; from_author: string; to_name: string; content: string };
 type AnyVote = { post_id: string; voter: string; created_at?: string };
 
@@ -138,17 +153,22 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           <div className="grid grid-cols-2 gap-2 p-3.5">
             <button type="button" onClick={() => onGo("goals")} className={miniCard}>
               <div className="text-[10px] font-black text-slate-400">내 목표 달성</div>
-              <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{myGoalsDone}<span className="text-sm font-black text-slate-400">/{myGoals.length}</span></div>
-              {topActiveGoal ? <>
-                <div className="mt-1.5 truncate text-[10px] font-bold text-slate-500">{topActiveGoal.title}</div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200/70"><div className="h-full rounded-full bg-blue-500" style={{ width: `${topActiveGoal.progress ?? 0}%` }} /></div>
-              </> : <div className="mt-1.5 text-[10px] font-bold text-slate-400">진행 중 목표 없음</div>}
+              <div className="mt-1.5 flex items-center gap-2.5">
+                <span className="relative inline-flex shrink-0">
+                  <Ring percent={myGoals.length ? Math.round((myGoalsDone / myGoals.length) * 100) : 0} />
+                  <span className="absolute inset-0 flex items-center justify-center text-[11px] font-black tabular-nums text-slate-800">{myGoals.length ? Math.round((myGoalsDone / myGoals.length) * 100) : 0}%</span>
+                </span>
+                <span className="min-w-0">
+                  <div className="text-lg font-black tabular-nums text-slate-950">{myGoalsDone}<span className="text-xs font-black text-slate-400">/{myGoals.length}</span></div>
+                  {topActiveGoal ? <div className="truncate text-[10px] font-bold text-slate-500">{topActiveGoal.title} · {topActiveGoal.progress ?? 0}%</div> : <div className="text-[10px] font-bold text-slate-400">진행 중 없음</div>}
+                </span>
+              </div>
             </button>
             <button type="button" onClick={() => onGo("praise")} className={miniCard}>
               <div className="text-[10px] font-black text-slate-400">내가 받은 칭찬</div>
               <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{myPraiseCount}</div>
               {myRecentPraises.length ? <div className="mt-1.5 flex items-center">
-                <span className="flex -space-x-1.5">{myRecentPraises.map((praise) => <span key={praise.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-[9px] font-black text-rose-600 ring-2 ring-white">{(praise.from_author || "?").slice(0, 1)}</span>)}</span>
+                <span className="flex -space-x-1.5">{myRecentPraises.map((praise) => <span key={praise.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-[9px] font-black text-amber-700 ring-2 ring-white">{initials(praise.from_author || "?").slice(0, 2)}</span>)}</span>
                 <span className="ml-1.5 text-[10px] font-bold text-slate-400">최근 {myRecentPraises.length}건</span>
               </div> : <div className="mt-1.5 text-[10px] font-bold text-slate-400">아직 없음 — 먼저 칭찬해 보세요</div>}
             </button>
@@ -173,9 +193,13 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
             <div className="grid grid-cols-4 gap-3 p-4">
               {books.map((book) => (
                 <button key={book.id} type="button" onClick={() => onGo("reading")} className="group text-left">
-                  <div className={`flex aspect-[3/4] items-center justify-center rounded-lg bg-gradient-to-br p-2 shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-lg ${coverTone(book.title)}`}>
-                    <span className="line-clamp-4 text-center text-[11px] font-black leading-4 text-white">{book.title}</span>
-                  </div>
+                  {book.cover_url ? (
+                    <img src={book.cover_url} alt={book.title} loading="lazy" className="aspect-[3/4] w-full rounded-lg object-cover shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-lg" />
+                  ) : (
+                    <div className={`flex aspect-[3/4] items-center justify-center rounded-lg bg-gradient-to-br p-2 shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-lg ${coverTone(book.title)}`}>
+                      <span className="line-clamp-4 text-center text-[11px] font-black leading-4 text-white">{book.title}</span>
+                    </div>
+                  )}
                   <div className="mt-1.5 flex items-center justify-between px-0.5">
                     <span className="text-[10px] font-bold tabular-nums text-slate-400">{book.created_at.slice(5, 10)}</span>
                     <span className="shrink-0 text-[10px] font-black tabular-nums text-amber-600">👍 {voteCount.get(book.id) || 0}</span>
@@ -199,9 +223,9 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
             {!feedPraises.length && <div className="p-8 text-center text-xs font-bold text-slate-400">아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요.</div>}
             {feedPraises.map((praise) => (
               <div key={praise.id} className="flex items-start gap-2.5 px-4 py-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[10px] font-black text-rose-600">{praise.to_name.slice(0, 2)}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-black text-amber-700">{initials(praise.to_name)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs leading-5"><span className="font-black text-slate-500">{praise.from_author || "익명"}</span> <span className="text-slate-300">→</span> <b className="font-black text-rose-600">{praise.to_name}</b></span>
+                  <span className="block text-xs leading-5"><span className="font-black text-slate-500">{praise.from_author || "익명"}</span> <span className="text-slate-300">→</span> <b className="font-black text-slate-900">{praise.to_name}</b></span>
                   <span className="block truncate text-xs font-semibold text-slate-600">{praise.content}</span>
                 </span>
                 <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-300">{praise.created_at.slice(5, 10)}</span>
@@ -314,12 +338,18 @@ function PraiseBoard({ author }: { author: string }) {
   }, [rows]);
   const visibleRows = useMemo(() => rows.filter((row) =>
     (filterTo === "전체" || row.to_name === filterTo) && (filterFrom === "전체" || row.from_author === filterFrom)), [rows, filterTo, filterFrom]);
-  // 받는 사람: 회사 전체(인원 DB) — 없으면 CS 명단 폴백
-  const personOptions = useMemo(() => {
-    const active = members.filter((m) => m.active && m.name !== author);
-    if (active.length) return active.map((m) => ({ value: m.name, label: m.name, group: m.team ? `${m.dept} · ${m.team}` : m.dept, hint: displayTitle(m) }));
+  // 받는 사람: 부서 먼저 → 해당 부서 이름만 (52명 전체 스크롤 방지)
+  const depts = useMemo(() => {
+    const order = ["임원", "CS팀", "영업팀", "CSS·운영지원"];
+    const set = new Set(members.filter((m) => m.active).map((m) => m.dept).filter(Boolean));
+    return [...set].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  }, [members]);
+  const [praiseDept, setPraiseDept] = useState("CS팀");
+  const nameOptions = useMemo(() => {
+    const active = members.filter((m) => m.active && m.name !== author && m.dept === praiseDept);
+    if (active.length) return active.map((m) => ({ value: m.name, label: m.name, group: m.team || undefined, hint: displayTitle(m) }));
     return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).filter((name) => name !== author).map((name) => ({ value: name, label: name, group: `${team}팀` })));
-  }, [members, book, author]);
+  }, [members, book, author, praiseDept]);
 
   const saveEditPraise = async () => {
     if (!editContent.trim()) return;
@@ -368,10 +398,11 @@ function PraiseBoard({ author }: { author: string }) {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-black text-slate-500">💌 칭찬 보내기 <span className="font-bold text-slate-300">— 보낸 사람 이름이 함께 표시됩니다</span></div>
-              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black tabular-nums text-rose-500">내가 받은 칭찬 {myReceived}</span>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black tabular-nums text-amber-700">내가 받은 칭찬 {myReceived}</span>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <PortalSelect width={190} value={toName} onChange={setToName} placeholder="받는 사람 (회사 전체)" options={personOptions} />
+              {depts.length > 0 && <PortalSelect width={135} value={praiseDept} onChange={(dept) => { setPraiseDept(dept); setToName(""); }} options={depts.map((dept) => ({ value: dept, label: dept }))} />}
+              <PortalSelect width={150} value={toName} onChange={setToName} placeholder="받는 사람" options={nameOptions} />
               <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="min-w-[200px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="shrink-0 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "보내는 중…" : "보내기"}</button>
             </div>
@@ -391,13 +422,13 @@ function PraiseBoard({ author }: { author: string }) {
           {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
           {!loading && !visibleRows.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">{rows.length ? "조건에 맞는 칭찬이 없어요." : "아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요."}</div>}
           {visibleRows.map((row) => (
-            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.to_name === author ? "border-rose-200 bg-rose-50/40" : "border-slate-200 bg-white"}`}>
+            <article key={row.id} className={`rounded-xl border p-4 shadow-sm ${row.to_name === author ? "border-amber-200 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
               <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
                 <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[11px] font-black text-rose-600">{row.to_name.slice(0, 2)}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-black text-amber-700">{initials(row.to_name)}</span>
                   <span className="min-w-0">
-                    <span className="block truncate text-[13px]"><span className="font-black text-slate-600">{row.from_author || "익명"}</span>{row.from_author === author ? " (나)" : ""} <span className="text-slate-300">→</span> <b className="font-black text-rose-600">{row.to_name}</b></span>
-                    <span className="rounded-full bg-rose-50 px-2 py-px text-[10px] font-black text-rose-400">칭찬</span>
+                    <span className="block truncate text-[13px]"><span className="font-black text-slate-600">{row.from_author || "익명"}</span>{row.from_author === author ? " (나)" : ""} <span className="text-slate-300">→</span> <b className="font-black text-slate-900">{row.to_name}</b></span>
+                    <span className="rounded-full bg-amber-50 px-2 py-px text-[10px] font-black text-amber-600">칭찬</span>
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">

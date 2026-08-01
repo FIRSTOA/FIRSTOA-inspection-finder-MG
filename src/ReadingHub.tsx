@@ -5,7 +5,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows } from "./supabase";
 
-type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string };
+type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string };
+type BookHit = { title: string; authors: string; thumbnail: string };
+
+/** 구글 도서 검색 — 키 없이 사용 가능, 표지 썸네일 포함 */
+async function searchGoogleBooks(query: string): Promise<BookHit[]> {
+  const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&printType=books`);
+  if (!res.ok) throw new Error("책 검색에 실패했습니다.");
+  const data = await res.json() as { items?: Array<{ volumeInfo?: { title?: string; authors?: string[]; imageLinks?: { thumbnail?: string; smallThumbnail?: string } } }> };
+  return (data.items || []).map((item) => ({
+    title: item.volumeInfo?.title || "",
+    authors: (item.volumeInfo?.authors || []).join(", "),
+    thumbnail: String(item.volumeInfo?.imageLinks?.thumbnail || item.volumeInfo?.imageLinks?.smallThumbnail || "").replace("http://", "https://"),
+  })).filter((book) => book.title);
+}
 
 export type BoardLabels = {
   heading: string; sub: string; titlePlaceholder: string; contentPlaceholder: string;
@@ -44,6 +57,10 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const [error, setError] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [cover, setCover] = useState("");
+  const [bookResults, setBookResults] = useState<BookHit[]>([]);
+  const [bookSearching, setBookSearching] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [query, setQuery] = useState("");
@@ -120,15 +137,28 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const weekAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString(); }, []);
   const weeklyNew = posts.filter((p) => p.created_at >= weekAgo).length;
 
+  const runBookSearch = async () => {
+    const query = title.trim();
+    if (!query || bookSearching) return;
+    setBookSearching(true);
+    setBookOpen(true);
+    try { setBookResults(await searchGoogleBooks(query)); }
+    catch { setBookResults([]); }
+    finally { setBookSearching(false); }
+  };
+
   const submit = async () => {
     if (busy || !content.trim()) return;
     if (!author) { setError("작성자를 먼저 선택하세요."); return; }
     setBusy(true);
     setError("");
     try {
-      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim(), ...(kind !== "reading" ? { kind } : {}) });
+      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim(), cover_url: kind === "reading" ? cover : "", ...(kind !== "reading" ? { kind } : {}) });
       setTitle("");
       setContent("");
+      setCover("");
+      setBookResults([]);
+      setBookOpen(false);
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -224,7 +254,9 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           {mine && !highlight && <button type="button" onClick={() => void removePost(post)} className="shrink-0 text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
         </div>
         <div className="mt-3 flex gap-3">
-          <span className="select-none font-serif text-3xl leading-none text-amber-300">“</span>
+          {post.cover_url
+            ? <img src={post.cover_url} alt={post.title || "책 표지"} loading="lazy" className="h-24 w-16 shrink-0 self-start rounded-md object-cover shadow" />
+            : <span className="select-none font-serif text-3xl leading-none text-amber-300">“</span>}
           <p className="min-w-0 flex-1 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800"><Linkified text={body} /></p>
         </div>
         <div className="mt-3 flex items-center gap-2 pl-8">
@@ -267,7 +299,35 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           {/* 글쓰기 */}
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-black text-slate-400">{labels.writeHint} <span className="font-bold text-slate-300">— 익명으로 공유됩니다</span></div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={labels.titlePlaceholder} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <div className="mt-2 flex gap-1.5">
+              {kind === "reading" && cover && <span className="relative shrink-0">
+                <img src={cover} alt="선택한 책 표지" className="h-[38px] w-7 rounded object-cover shadow" />
+                <button type="button" onClick={() => setCover("")} aria-label="표지 제거" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">×</button>
+              </span>}
+              <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && kind === "reading") void runBookSearch(); }} placeholder={labels.titlePlaceholder} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              {kind === "reading" && <button type="button" onClick={() => void runBookSearch()} disabled={!title.trim() || bookSearching} className="shrink-0 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">{bookSearching ? "검색 중…" : "📖 책 검색"}</button>}
+            </div>
+            {kind === "reading" && bookOpen && (
+              <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+                <div className="flex items-center justify-between px-1 pb-1.5">
+                  <span className="text-[10px] font-black text-slate-400">책을 고르면 제목·표지가 채워집니다</span>
+                  <button type="button" onClick={() => setBookOpen(false)} className="text-[10px] font-black text-slate-400 hover:text-slate-600">닫기 ✕</button>
+                </div>
+                {!bookSearching && !bookResults.length && <div className="px-1 pb-1 text-[11px] font-bold text-slate-400">검색 결과가 없어요 — 제목을 바꿔 다시 검색해 보세요.</div>}
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {bookResults.map((book, index) => (
+                    <button key={`${book.title}-${index}`} type="button" onClick={() => { setTitle(book.title); setCover(book.thumbnail); setBookOpen(false); }}
+                      className="flex items-center gap-2 rounded-lg bg-white p-2 text-left ring-1 ring-slate-200 transition hover:ring-blue-300">
+                      {book.thumbnail ? <img src={book.thumbnail} alt="" className="h-12 w-8 shrink-0 rounded object-cover shadow-sm" /> : <span className="flex h-12 w-8 shrink-0 items-center justify-center rounded bg-slate-100 text-[9px] font-black text-slate-400">표지<br />없음</span>}
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-black text-slate-800">{book.title}</span>
+                        {book.authors && <span className="block truncate text-[10px] font-bold text-slate-400">{book.authors}</span>}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>

@@ -27,3 +27,6 @@ create policy "reading_posts anon all" on public.reading_posts for all to anon u
 create policy "reading_votes anon all" on public.reading_votes for all to anon using (true) with check (true);
 grant select, insert, update, delete on public.reading_posts to anon;
 grant select, insert, delete on public.reading_votes to anon;
+
+-- 2026-08-01 추가: 책 표지 (구글 도서 검색에서 선택)
+-- alter table reading_posts add column if not exists cover_url text not null default '';
