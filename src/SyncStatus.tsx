@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
+import { GAS_GET_URL } from "./api";
 
 /**
  * 동기화 현황 — 조회 화면이 읽는 표들이 "어디서, 언제까지" 채워졌는지 보여준다.
@@ -11,7 +12,7 @@ import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
  *  - 웹앱: FIELD·접수 화면에서 저장 즉시 직접 기록
  * 여기서는 길별 "마지막 기록 시각"을 보여준다 — 어느 길이 끊겼는지 바로 드러난다.
  */
-type Route = { label: "시트" | "카톡" | "웹앱"; filter: string };
+type Route = { label: string; filter: string; quiet?: boolean };  // quiet: 예전 경로라 조용해도 정상 (회색 표시)
 type CategoryDef = {
   label: string;
   table: string;
@@ -23,21 +24,44 @@ type CategoryDef = {
 
 const ENC = (v: string) => encodeURIComponent(v);
 const CATEGORIES: CategoryDef[] = [
-  { label: "점검", table: "jeomgeom", routes: [{ label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }, { label: "웹앱", filter: `_출처=not.like.${ENC("카톡")}*` }], sheetNote: "팀별 점검방 메시지 + FIELD 전송" },
-  { label: "AS", table: "as_records", routes: [{ label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }, { label: "시트", filter: `_출처=like.${ENC("시트")}*` }], sheetNote: "팀별 AS방 메시지 + AS접수 시트" },
-  { label: "물류", table: "logistics_records", routes: [{ label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }], sheetNote: "FIELD 물류 양식" },
-  { label: "불만", table: "bulman", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }, { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }, { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }], sheetNote: "불만 시트 + CD불만고객방" },
-  { label: "미수", table: "misu", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }, { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }], sheetNote: "미수현황 시트(수도권A~E) + 미수 보고방" },
-  { label: "초과료", table: "overage", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }], sheetNote: "초과 시트" },
-  { label: "초과조정", table: "overage_adjust", routes: [{ label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }, { label: "웹앱", filter: `_출처=not.like.${ENC("카톡")}*` }], sheetNote: "초과업체조정 방 + FIELD" },
-  { label: "재계약", table: "recontract", routes: [{ label: "카톡", filter: `_출처=like.${ENC("카톡")}*` }, { label: "시트", filter: `_출처=like.${ENC("시트")}*` }], sheetNote: "팀별 계약종료체크 방" },
-  { label: "해지방어", table: "churn_defense", routes: [{ label: "웹앱", filter: "" }], sheetNote: "FIELD 해지방어 양식" },
-  { label: "관리지원", table: "mgmt_support", routes: [{ label: "웹앱", filter: "" }], sheetNote: "FIELD 관리지원 양식" },
-  { label: "PC 확장성", table: "pc_expansion", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }, { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }], sheetNote: "PC 확장성 DB 시트 + IT통합 양식" },
-  { label: "복합기 확장성", table: "mfp_expansion", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }], sheetNote: "영업확장성 DB 통합추출 시트" },
+  // "웹앱" = FIELD에서 전송한 것 (카톡방을 거쳐 봇이 기록하므로 출처는 카톡:웹앱).
+  // "카톡 수기" = 팀원이 카톡방에 직접 쓴 양식 — 6월 말 웹앱 전환 후 자연히 줄어든 경로라 quiet.
+  { label: "점검", table: "jeomgeom", sheetNote: "FIELD 전송 + 팀별 점검방", routes: [
+    { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
+    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡:점검")}*`, quiet: true },
+  ] },
+  { label: "AS", table: "as_records", sheetNote: "FIELD 전송 + 팀별 AS방 (시트분은 초기 이관)", routes: [
+    { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
+    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡:AS")}*`, quiet: true },
+  ] },
+  { label: "물류", table: "logistics_records", sheetNote: "FIELD 물류 양식", staleDays: 30, routes: [{ label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }] },
+  { label: "불만", table: "bulman", sheetNote: "불만 시트 + FIELD (카톡 수기는 예전 경로)", routes: [
+    { label: "시트", filter: `_출처=like.${ENC("시트")}*`, },
+    { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*`, quiet: true },
+    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
+  ] },
+  { label: "미수", table: "misu", sheetNote: "미수현황 시트(수도권A~E) + 미수 보고방", routes: [
+    { label: "시트", filter: `_출처=like.${ENC("시트")}*` },
+    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` },
+  ] },
+  { label: "초과료", table: "overage", sheetNote: "초과 시트", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }] },
+  { label: "초과조정", table: "overage_adjust", sheetNote: "초과업체조정 방 + FIELD (드문 업무)", staleDays: 90, routes: [
+    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
+    { label: "웹앱", filter: `_출처=not.like.${ENC("카톡")}*`, quiet: true },
+  ] },
+  // 재계약은 카톡방 수집이 유일한 경로인데 6/20 이후 0건 — 진짜 끊겼을 수 있어 빨강 유지
+  { label: "재계약", table: "recontract", sheetNote: "팀별 계약종료체크 방 (유일한 경로)", routes: [
+    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` },
+  ] },
+  { label: "해지방어", table: "churn_defense", sheetNote: "FIELD 해지방어 양식", routes: [{ label: "웹앱", filter: "" }] },
+  { label: "관리지원", table: "mgmt_support", sheetNote: "FIELD 관리지원 양식", routes: [{ label: "웹앱", filter: "" }] },
+  { label: "PC 확장성", table: "pc_expansion", sheetNote: "PC 확장성 DB 시트 + IT통합 양식", staleDays: 9, routes: [
+    { label: "시트", filter: `_출처=like.${ENC("시트")}*` },
+    { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*`, quiet: true },
+  ] },
+  { label: "복합기 확장성", table: "mfp_expansion", sheetNote: "영업확장성 DB 통합추출 시트", staleDays: 9, routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }] },
   // 임대리스트는 주 1회 전체 업서트 — 서울 이전 때 조용히 실패해 5일 묵었던 전례가 있어 감시망에 넣는다
   { label: "임대리스트", table: "vendor_info", timeField: "_등록시각", staleDays: 9, routes: [{ label: "시트", filter: "" }], sheetNote: "임대리스트 원본시트 (주 1회 전체 동기화)" },
-  { label: "임대현황표", table: "lease_status", timeField: "_등록시각", staleDays: 9, routes: [{ label: "시트", filter: "" }], sheetNote: "임대현황표 (주 1회 전체 동기화)" },
 ];
 
 type RowState = {
@@ -68,10 +92,15 @@ async function countOf(table: string): Promise<number | null> {
   return Number.isFinite(total) ? total : null;
 }
 
+function kstDate(iso: string) {
+  // sv-SE 로케일 = YYYY-MM-DD 형식
+  return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
 function ago(iso: string, staleDays = 7) {
   if (!iso) return { text: "기록 없음", stale: true };
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
+  // 시각 차가 아니라 달력 날짜 차이 — 어제 저녁 기록을 "오늘"이라 부르지 않도록
+  const days = Math.round((Date.parse(kstDate(new Date().toISOString())) - Date.parse(kstDate(iso))) / 86400000);
   const text = days <= 0 ? "오늘" : days === 1 ? "어제" : `${days}일 전`;
   // 기준 일수 넘게 조용하면 길이 끊겼을 수 있다 (주 1회 동기화 표는 기준을 늘려 잡는다)
   return { text, stale: days >= staleDays };
@@ -116,11 +145,17 @@ export default function SyncStatus() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
           <div>
             <h3 className="text-base font-black text-slate-950 lg:text-lg">동기화 현황</h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">조회가 읽는 표마다 기록이 들어오는 길(시트·카톡·웹앱)별 마지막 기록 시각입니다. 7일 이상 조용한 길은 빨갛게 표시됩니다.</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">표마다 기록이 들어오는 길별 마지막 기록 시각. 빨강 = 끊긴 것으로 의심, 회색 = 예전 경로라 조용해도 정상.</p>
           </div>
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />새로고침
-          </button>
+          <div className="flex items-center gap-2">
+            <a href={GAS_GET_URL} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
+              <ExternalLink size={13} />First-DATA 웹 콘솔
+            </a>
+            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />새로고침
+            </button>
+          </div>
         </div>
 
         {/* 표 머리 */}
@@ -140,11 +175,17 @@ export default function SyncStatus() {
                 <span className="truncate text-[11px] font-semibold text-slate-500" title={category.sheetNote}>{category.sheetNote}</span>
                 <span className="font-mono text-xs font-bold tabular-nums text-slate-700 sm:text-right">{state?.total != null ? state.total.toLocaleString() : "…"}</span>
                 <span className="flex flex-wrap items-center gap-1.5">
-                  {state ? state.routes.map((route) => {
+                  {state && state.total === 0 ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-400">아직 기록 없음</span>
+                  ) : state ? state.routes.map((route, index) => {
+                    const def = category.routes[index];
                     const meta = ago(route.latest, category.staleDays);
+                    const tone = def?.quiet
+                      ? "bg-slate-100 text-slate-400"                             // 휴면 경로 — 조용해도 정상
+                      : meta.stale ? "bg-rose-50 text-rose-600" : routeTone(route.label);
                     return (
                       <span key={route.label} title={route.latest ? `마지막 기록 ${stamp(route.latest)}` : "기록 없음"}
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.stale ? "bg-rose-50 text-rose-600" : routeTone(route.label)}`}>
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>
                         {route.label} <b className="tabular-nums">{meta.text}</b>
                         {route.latest && <span className="hidden font-mono text-[10px] font-semibold opacity-60 lg:inline">{stamp(route.latest)}</span>}
                       </span>
