@@ -1206,7 +1206,7 @@ export default function ServiceReception({ author }: { author: string }) {
               {isRemoteType && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 순번 함수가 못 채우는 열이라 여기 값이 원격 시트에 그대로 기입됩니다 (아는 것만)</div>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                  {([["grade", "등급"], ["misuMonths", "미수(개월)"], ["region", "지역"], ["dueDate", "마감일"], ["series", "기종"], ["brand", "브랜드"], ["assetNo", "자산번호"], ["serialNo", "시리얼번호"]] as [string, string][]).map(([key, label]) => (
+                  {([["grade", "등급"], ["misuMonths", "미수(개월)"], ["region", "지역"], ["dueDate", "마감일"], ["series", "기종"], ["brand", "브랜드"], ["assetNo", "자산번호"], ["serialNo", "시리얼번호"], ["extraCount", "추가대수"], ["handled", "처리내용"], ["linked", "연동완료"]] as [string, string][]).map(([key, label]) => (
                     <label key={key} className="text-[10px] font-bold text-slate-500">{label}
                       <input value={newRemote[key] || ""} onChange={(e) => setNewRemote({ ...newRemote, [key]: e.target.value })}
                         className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
