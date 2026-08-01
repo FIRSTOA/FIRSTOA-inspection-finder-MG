@@ -15,8 +15,8 @@ import UnifiedHistory from "./UnifiedHistory";
 import WorkDashboard from "./WorkDashboard";
 import OperationsDashboard from "./OperationsDashboard";
 import AdminHub from "./AdminHub";
+import LookupHub from "./LookupHub";
 import { ToastHost } from "./toast";
-import DataLookup from "./DataLookup";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
@@ -4587,7 +4587,6 @@ export default function App() {
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
-  const [lookupTab, setLookupTab] = useState<"records" | "status">("records"); // 조회 화면 하위 탭
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5618,18 +5617,7 @@ export default function App() {
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && <AdminHub author={author} />}
-        {screen === "lookup" && (
-          <div className="space-y-4">
-            {/* 조회 = 보기 전용. 기록 표를 그대로 훑고, 집계는 현황판 탭에서 본다. */}
-            <div className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              {([["records", "기록 조회"], ["status", "업무 현황판"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setLookupTab(key)}
-                  className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${lookupTab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
-              ))}
-            </div>
-            {lookupTab === "records" ? <DataLookup /> : <OperationsDashboard author={author} />}
-          </div>
-        )}
+        {screen === "lookup" && <LookupHub author={author} />}
         {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} focusDate={weeklyFocus} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}

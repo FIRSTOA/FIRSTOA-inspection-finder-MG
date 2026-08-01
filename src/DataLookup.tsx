@@ -133,13 +133,13 @@ export default function DataLookup() {
     <div className="space-y-4">
       {/* 카테고리 — 그룹별로 묶어 한 줄씩 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-[#151A23] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <p className="text-[11px] font-semibold text-slate-400">기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다.</p>
           <div className="ml-auto flex items-center gap-2">
-            <PortalSelect tone="dark" width={150} value={period} onChange={(next) => setPeriod(next as PeriodKey)}
+            <PortalSelect width={150} value={period} onChange={(next) => setPeriod(next as PeriodKey)}
               options={PERIODS.map(([value, label]) => ({ value, label }))} />
             <button type="button" onClick={() => void fetchPage(0)} title="새로고침"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-slate-300 transition hover:bg-white/20 hover:text-white">
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
           </div>

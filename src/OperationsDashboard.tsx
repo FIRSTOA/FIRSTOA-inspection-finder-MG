@@ -295,12 +295,12 @@ export default function OperationsDashboard({ author }: Props) {
   return (
     <div className="space-y-3 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {/* 다크 툴바 — 화면의 기준(기간)을 가장 위에서 정한다 */}
-        <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        {/* 기간 선택 — 조회 허브의 다크바 아래 밝은 헤더 (관리 내부 카드와 같은 톤) */}
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
-          <div className="grid grid-cols-4 rounded-full bg-white/10 p-1 lg:w-72">
+          <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1 lg:w-72">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
             ))}
           </div>
         </div>

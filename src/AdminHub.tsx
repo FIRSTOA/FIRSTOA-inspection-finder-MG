@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { selectRows } from "./supabase";
+import { GAS_GET_URL } from "./api";
 import MemberAdmin from "./MemberAdmin";
 import ContactChangeHistory from "./ContactChangeHistory";
 import SyncStatus from "./SyncStatus";
@@ -22,7 +23,11 @@ const TABS: Array<[Tab, string]> = [
   ["system", "전송·카톡방"],
 ];
 
-type Summary = { members: number; kakaoOn: boolean; sheetOn: boolean; testMode: boolean };
+type Summary = {
+  members: number;
+  sheetFails: number;        // 최근 시트 기입 실패 수 (20건 창)
+  kakaoOn: boolean; sheetOn: boolean; testMode: boolean;
+};
 
 export default function AdminHub({ author }: { author: string }) {
   void author;
@@ -31,6 +36,7 @@ export default function AdminHub({ author }: { author: string }) {
     return TABS.some(([key]) => key === saved) ? saved : "members";
   });
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [drivePending, setDrivePending] = useState<number | null>(null);   // 수집함 대기 txt (GAS라 따로 로드)
 
   useEffect(() => { window.localStorage.setItem("cs_admin_tab_v1", tab); }, [tab]);
 
@@ -38,14 +44,16 @@ export default function AdminHub({ author }: { author: string }) {
     let alive = true;
     void (async () => {
       try {
-        const [members, config] = await Promise.all([
+        const [members, config, jobs] = await Promise.all([
           selectRows<{ id: string }>("cs_members", "select=id&active=eq.true"),
           selectRows<{ key: string; value: string }>("app_config", "select=key,value"),
+          selectRows<{ status?: string; error?: string }>("field_sheet_sync_jobs", "select=status,error&order=created_at.desc&limit=20").catch(() => []),
         ]);
         if (!alive) return;
         const on = (key: string) => /^(true|1|on|y)$/i.test(config.find((row) => row.key === key)?.value || "");
         setSummary({
           members: members.length,
+          sheetFails: jobs.filter((job) => /fail|error/i.test(String(job.status || "")) || !!job.error).length,
           kakaoOn: on("FIELD_KAKAO_SEND_ENABLED"),
           sheetOn: on("FIELD_SHEET_SYNC_ENABLED"),
           testMode: on("TEST_MODE") || on("FIELD_SHEET_TEST_MODE"),
@@ -54,6 +62,14 @@ export default function AdminHub({ author }: { author: string }) {
     })();
     return () => { alive = false; };
   }, [tab]); // 탭에서 값을 바꾸고 돌아오면 요약도 갱신
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json())
+      .then((data) => { if (alive) setDrivePending(Number(data?.drive?.pending ?? 0)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -66,6 +82,16 @@ export default function AdminHub({ author }: { author: string }) {
                 className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14] hover:text-slate-200">
                 재직 <b className="tabular-nums text-white">{summary.members}명</b>
               </button>
+              <button type="button" onClick={() => setTab("system")}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${summary.sheetFails > 0 ? "bg-rose-400/15 text-rose-300 hover:bg-rose-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
+                시트기입 실패 <b className={`tabular-nums ${summary.sheetFails > 0 ? "" : "text-white"}`}>{summary.sheetFails}건</b>
+              </button>
+              {drivePending !== null && (
+                <button type="button" onClick={() => setTab("system")}
+                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${drivePending > 0 ? "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
+                  수집 대기 <b className={`tabular-nums ${drivePending > 0 ? "" : "text-white"}`}>{drivePending}개</b>
+                </button>
+              )}
               <span className="ml-auto flex items-center gap-2">
                 {summary.testMode && (
                   <button type="button" onClick={() => setTab("system")}
