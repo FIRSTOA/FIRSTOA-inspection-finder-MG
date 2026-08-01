@@ -23,3 +23,6 @@ drop policy if exists "notice_reads anon all" on public.notice_reads;
 create policy "notice_reads anon all" on public.notice_reads for all to anon using (true) with check (true);
 grant select, insert, update, delete on public.notices to anon;
 grant select, insert, update, delete on public.notice_reads to anon;
+
+-- 2026-08-01 추가: 공지 구분 (일반/긴급/인사/시스템) — 긴급은 목록 상단 정렬
+-- alter table notices add column if not exists category text not null default '일반';
