@@ -2,7 +2,7 @@
  * 복합기 학습·처리이력 — 브랜드/기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스.
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import FormModal from "./FormModal";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
@@ -34,24 +34,47 @@ type QuizItem = { note: CopierNote; options: CopierNote[] };
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
 
-// 노션 md 최소 렌더러: 제목(#), 이미지, 일반 문단만 처리
+// 노션식 미니 렌더러 — 제목(##/###) · 목록(-, 1.) · 구분선(---) · 토글(::: 제목 ~ :::) · 이미지 · 파일링크
+function mdLine(line: string, key: number): ReactNode {
+  const trimmed = line.trim();
+  const image = trimmed.match(/^!\[[^\]]*\]\(([^)]+)\)$/);
+  if (image) return <a key={key} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-lg border border-slate-200" /></a>;
+  const file = trimmed.match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
+  if (file) return <a key={key} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
+  if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) return <hr key={key} className="my-3 border-slate-200" />;
+  if (/^\d+[.)]\s/.test(trimmed)) return <li key={key} className="ml-5 list-decimal text-sm leading-6 text-slate-800">{trimmed.replace(/^\d+[.)]\s*/, "")}</li>;
+  if (/^[-•]\s/.test(trimmed)) return <li key={key} className="ml-5 list-disc text-sm leading-6 text-slate-800">{trimmed.replace(/^[-•]\s*/, "")}</li>;
+  if (/^###/.test(trimmed)) return <h4 key={key} className="pt-1.5 text-[15px] font-black text-slate-800">{trimmed.replace(/^###\s*/, "")}</h4>;
+  if (/^##/.test(trimmed)) return <h3 key={key} className="border-b border-slate-100 pb-1 pt-2.5 text-lg font-black text-slate-950">{trimmed.replace(/^##\s*/, "")}</h3>;
+  if (!trimmed) return null;
+  return <p key={key} className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{line}</p>;
+}
+
 function MdView({ text }: { text: string }) {
   const lines = String(text || "").split("\n");
-  return (
-    <div className="space-y-2">
-      {lines.map((line, index) => {
-        const image = line.trim().match(/^!\[[^\]]*\]\(([^)]+)\)$/);
-        if (image) return <a key={index} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-lg border border-slate-200" /></a>;
-        const file = line.trim().match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
-        if (file) return <a key={index} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
-        if (/^[-•]\s/.test(line.trim())) return <li key={index} className="ml-5 list-disc text-sm leading-6 text-slate-800">{line.trim().replace(/^[-•]\s*/, "")}</li>;
-        if (/^###\s/.test(line)) return <h4 key={index} className="pt-1 text-sm font-black text-slate-900">{line.replace(/^###\s*/, "")}</h4>;
-        if (/^##\s/.test(line)) return <h3 key={index} className="pt-1.5 text-base font-black text-slate-950">{line.replace(/^##\s*/, "")}</h3>;
-        if (!line.trim()) return null;
-        return <p key={index} className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{line}</p>;
-      })}
-    </div>
-  );
+  const out: ReactNode[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    // ::: 제목 ~ ::: → 접었다 펴는 토글
+    if (/^:::\s*\S/.test(trimmed)) {
+      const title = trimmed.replace(/^:::\s*/, "");
+      const body: string[] = [];
+      index += 1;
+      while (index < lines.length && lines[index].trim() !== ":::") { body.push(lines[index]); index += 1; }
+      index += 1; // 닫는 ::: 건너뛰기
+      out.push(
+        <details key={`toggle-${out.length}`} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5">
+          <summary className="cursor-pointer select-none text-sm font-black text-slate-800">{title}</summary>
+          <div className="mt-2"><MdView text={body.join("\n")} /></div>
+        </details>,
+      );
+      continue;
+    }
+    out.push(mdLine(lines[index], out.length));
+    index += 1;
+  }
+  return <div className="space-y-2">{out}</div>;
 }
 
 // content("증상: …\n처리: …\n지역: …" 형식)를 구조화 — 형식이 아니면 raw로 표시
@@ -132,6 +155,19 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guideBusy, setGuideBusy] = useState(false);
   const [guidePhotoBusy, setGuidePhotoBusy] = useState(false);
   const guidePhotoRef = useRef<HTMLInputElement>(null);
+  const guideBodyRef = useRef<HTMLTextAreaElement>(null);
+  // 커서 위치에 스니펫 삽입 — 서식 버튼·사진·붙여넣기가 모두 이 길로
+  const insertAtCursor = (snippet: string) => {
+    const el = guideBodyRef.current;
+    if (!el) { setGuideDraft((current) => ({ ...current, content: `${current.content.trimEnd()}\n${snippet}` })); return; }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const before = el.value.slice(0, start);
+    const pad = before && !before.endsWith("\n") ? "\n" : "";
+    const next = before + pad + snippet + el.value.slice(end);
+    setGuideDraft((current) => ({ ...current, content: next }));
+    requestAnimationFrame(() => { el.focus(); const pos = (before + pad + snippet).length; el.setSelectionRange(pos, pos); });
+  };
   const openGuideEditor = (doc?: KnowledgeDoc) => {
     setGuideDraft(doc ? {
       id: doc.id, title: doc.title, brand: doc.brand, category: doc.category, difficulty: doc.difficulty,
@@ -176,7 +212,7 @@ export default function CopierNotes({ author }: { author: string }) {
     try {
       const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const url = await uploadPublicFile("photos", `guides/${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, file, file.type);
-      setGuideDraft((current) => ({ ...current, content: `${current.content.trimEnd()}\n\n![](${url})\n` }));
+      insertAtCursor(`![](${url})\n`);
     } catch (e) { notify(`사진 업로드 실패: ${(e as Error).message}`, "error"); }
     finally { setGuidePhotoBusy(false); }
   };
@@ -395,9 +431,11 @@ export default function CopierNotes({ author }: { author: string }) {
                       </select>
                     </label>
                     <label className="text-xs font-bold text-slate-500">분류
-                      <input value={guideDraft.category} onChange={(e) => setGuideDraft({ ...guideDraft, category: e.target.value })} list="guide-category-list" placeholder="예: 탈거·조립"
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                      <datalist id="guide-category-list">{categories.filter((name) => name !== "전체").map((name) => <option key={name} value={name} />)}</datalist>
+                      <select value={guideDraft.category} onChange={(e) => setGuideDraft({ ...guideDraft, category: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+                        <option value="">선택 안 함</option>
+                        {[...new Set(["시스템 설정/에러", "부품 교체", "기타", ...categories.filter((name) => name !== "전체")])].map((name) => <option key={name}>{name}</option>)}
+                      </select>
                     </label>
                     <label className="text-xs font-bold text-slate-500">난이도
                       <select value={guideDraft.difficulty} onChange={(e) => setGuideDraft({ ...guideDraft, difficulty: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
@@ -414,15 +452,26 @@ export default function CopierNotes({ author }: { author: string }) {
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </label>
                   <div className="text-xs font-bold text-slate-500">
-                    <div className="flex items-center justify-between">
-                      <span>본문 <b className="text-rose-500">*</b> <span className="font-semibold text-slate-400">— ## 제목 · ### 소제목 · - 목록</span></span>
-                      <button type="button" onClick={() => guidePhotoRef.current?.click()} disabled={guidePhotoBusy}
-                        className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">{guidePhotoBusy ? "올리는 중…" : "📷 사진 넣기"}</button>
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <span>본문 <b className="text-rose-500">*</b></span>
+                      <span className="flex flex-wrap gap-1">
+                        {([["H 제목", "## 제목\n"], ["h 소제목", "### 소제목\n"], ["• 목록", "- 항목\n"], ["1. 번호", "1. 첫 단계\n"], ["— 구분선", "---\n"], ["▸ 토글", "::: 눌러서 펼치기\n내용을 여기에\n:::\n"]] as [string, string][]).map(([label, snippet]) => (
+                          <button key={label} type="button" onClick={() => insertAtCursor(snippet)}
+                            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 transition hover:bg-slate-50 hover:text-slate-700">{label}</button>
+                        ))}
+                        <button type="button" onClick={() => guidePhotoRef.current?.click()} disabled={guidePhotoBusy}
+                          className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-600 transition hover:bg-blue-100 disabled:opacity-40">{guidePhotoBusy ? "올리는 중…" : "📷 사진"}</button>
+                      </span>
                       <input ref={guidePhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachGuidePhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
                     </div>
-                    <textarea value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
-                      placeholder={"## 준비물\n- 십자드라이버\n\n## 순서\n1단계 설명…\n\n(📷 사진 넣기를 누르면 이 자리에 사진이 붙습니다)"}
+                    <textarea ref={guideBodyRef} value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
+                      onPaste={(e) => {
+                        const pasted = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
+                        if (pasted) { e.preventDefault(); void attachGuidePhoto(pasted); }
+                      }}
+                      placeholder={"위 버튼으로 서식을 넣거나, 캡처한 사진을 Ctrl+V로 바로 붙여넣으세요.\n\n## 준비물\n- 십자드라이버\n\n::: 자세한 순서 (누르면 펼쳐짐)\n1. 전원 차단\n2. 커버 탈거\n:::"}
                       className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 font-mono text-[13px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                    <div className="mt-1 text-[10px] font-semibold text-slate-400">💡 사진은 Ctrl+V 붙여넣기 지원 — 커서 위치에 바로 들어갑니다</div>
                   </div>
                 </div>
               </FormModal>
