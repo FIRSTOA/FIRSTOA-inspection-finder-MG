@@ -20,6 +20,7 @@ import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
 import InboxHub from "./InboxHub";
+import { useInboxBadge } from "./useInboxBadge";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
@@ -5393,6 +5394,7 @@ export default function App() {
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   const detectedDraftMode = draftInput.trim() ? detectUnifiedInputMode(draftInput) : null;
   const { book: authorBook } = useAuthorBook();
+  const inboxBadge = useInboxBadge(author);
   const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
   const authorTeamLabel = (() => {
     const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
@@ -5438,6 +5440,7 @@ export default function App() {
                         <button key={key} type="button" onClick={() => { setScreen(key); setMenuOpen(false); }}
                           className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${screen === key ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                           <Icon size={18} className="shrink-0" /><span className="truncate">{label}</span>
+                          {key === "inbox" && inboxBadge > 0 && <span className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{inboxBadge}</span>}
                         </button>
                       );
                     })}
@@ -5497,8 +5500,9 @@ export default function App() {
                 const Icon = SCREEN_ICON[key] || FileText;
                 return (
                   <button key={key} type="button" title={label} onClick={() => setScreen(key)}
-                    className={`flex h-11 w-full items-center justify-center rounded-xl transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
+                    className={`relative flex h-11 w-full items-center justify-center rounded-xl transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                     <Icon size={19} />
+                    {key === "inbox" && inboxBadge > 0 && <span className="absolute right-2.5 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-[#0B0F17]" />}
                   </button>
                 );
               })
@@ -5528,6 +5532,7 @@ export default function App() {
                           <button key={key} type="button" onClick={() => setScreen(key)}
                             className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-bold transition ${screen === key ? "bg-white text-slate-950 shadow-[0_2px_10px_rgba(0,0,0,0.35)]" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"}`}>
                             <Icon size={17} className="shrink-0" /><span className="truncate">{label}</span>
+                            {key === "inbox" && inboxBadge > 0 && <span className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{inboxBadge}</span>}
                           </button>
                         );
                       })}

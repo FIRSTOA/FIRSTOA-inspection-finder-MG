@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { COMPANY_DIRECTORY } from "./companyDirectory";
 import PortalSelect from "./PortalSelect";
 import { notify } from "./toast";
 
@@ -43,7 +44,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({
-    requester: "", kind: "카운터확인" as string, vendor: "", content: "", due_date: "",
+    requester: "", kind: "카운터확인" as string, kindCustom: "", vendor: "", content: "", due_date: "",
     target_type: "전체" as DeptRequest["target_type"], target: "",
   });
   const [busy, setBusy] = useState(false);
@@ -80,23 +81,25 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const hiddenCount = rows.length - visible.length;
 
   const filtered = useMemo(() => visible.filter((row) => {
-    if (kindFilter !== "전체" && row.kind !== kindFilter) return false;
+    if (kindFilter !== "전체" && !(row.kind === kindFilter || (kindFilter === "기타" && row.kind.startsWith("기타")))) return false;
     if (statusFilter === "진행") return row.status !== "완료";
     if (statusFilter !== "전체" && row.status !== statusFilter) return false;
     return true;
   }), [visible, kindFilter, statusFilter]);
 
   const submit = async () => {
-    if (busy || !draft.content.trim() || !draft.requester.trim()) return;
+    const requester = draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim();
+    if (busy || !draft.content.trim() || !requester) return;
     if (draft.target_type !== "전체" && !draft.target) { notify("대상 팀/직원을 선택하세요.", "error"); return; }
     setBusy(true);
     try {
+      const kind = draft.kind === "기타" && draft.kindCustom.trim() ? `기타(${draft.kindCustom.trim()})` : draft.kind;
       await insertRow("dept_requests", {
-        requester: draft.requester.trim(), kind: draft.kind, vendor: draft.vendor.trim(),
+        requester, kind, vendor: draft.vendor.trim(),
         content: draft.content.trim(), due_date: draft.due_date || null,
         target_type: draft.target_type, target: draft.target_type === "전체" ? "" : draft.target,
       });
-      setDraft({ ...draft, vendor: "", content: "", due_date: "" });
+      setDraft({ ...draft, vendor: "", content: "", due_date: "", kindCustom: "" });
       setFormOpen(false);
       await load();
     } catch (e) {
@@ -201,9 +204,20 @@ export default function DeptRequests({ author, embedded = false }: { author: str
           <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <b className="text-slate-950">요청 등록</b>
             <div className="mt-4 space-y-3">
-              <label className="block text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>
-                <input value={draft.requester} onChange={(e) => setDraft({ ...draft, requester: e.target.value })} placeholder="예: 관리부 김OO" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              </label>
+              <div className="text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <PortalSelect width={200} value={draft.requester.startsWith("__") ? "__custom" : draft.requester} placeholder="명단에서 선택"
+                    onChange={(next) => setDraft({ ...draft, requester: next === "__custom" ? "__" : next })}
+                    options={[
+                      ...COMPANY_DIRECTORY.flatMap((group) => group.members.map((name) => ({ value: `${group.dept} ${name}`, label: name, group: group.dept }))),
+                      { value: "__custom", label: "직접 입력…" },
+                    ]} />
+                  {draft.requester.startsWith("__") && (
+                    <input autoFocus value={draft.requester.slice(2)} onChange={(e) => setDraft({ ...draft, requester: "__" + e.target.value })}
+                      placeholder="부서 이름 직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  )}
+                </div>
+              </div>
               <div className="text-xs font-bold text-slate-500">누구에게 <b className="text-rose-500">*</b>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <div className="flex rounded-full bg-slate-100 p-1">
@@ -225,16 +239,20 @@ export default function DeptRequests({ author, embedded = false }: { author: str
                 </div>
               </div>
               <div className="text-xs font-bold text-slate-500">유형
-                <div className="mt-1 flex flex-wrap gap-1">
+                <div className="mt-1 flex flex-wrap items-center gap-1">
                   {KINDS.map((name) => <button key={name} type="button" onClick={() => setDraft({ ...draft, kind: name })} className={`rounded-full px-3 py-2 text-xs font-black ${draft.kind === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{name}</button>)}
+                  {draft.kind === "기타" && (
+                    <input autoFocus value={draft.kindCustom} onChange={(e) => setDraft({ ...draft, kindCustom: e.target.value })}
+                      placeholder="어떤 업무인지 입력" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
-                <label className="text-xs font-bold text-slate-500">업체명 (선택)
-                  <input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                <label className="text-xs font-bold text-slate-500">제목 (선택)
+                  <input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="예: ○○업체 카운터" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
                 <label className="text-xs font-bold text-slate-500">희망일 (선택)
-                  <input type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  <input type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} onClick={(e) => e.currentTarget.showPicker?.()} className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
               </div>
               <label className="block text-xs font-bold text-slate-500">요청 내용 <b className="text-rose-500">*</b>
@@ -243,7 +261,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.content.trim() || !draft.requester.trim()} onClick={() => void submit()} className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
+              <button type="button" disabled={busy || !draft.content.trim() || !(draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim())} onClick={() => void submit()} className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
             </div>
           </div>
         </div>
