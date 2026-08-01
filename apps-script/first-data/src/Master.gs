@@ -26,6 +26,11 @@ function syncCategoryToMaster(cat) {
   const sheet = ensureMasterTab_(masterSs, cat, tabName);
   const headerCols = masterHeaders_(cat);
 
+  const toSupa = !!SUPABASE_SHEET_TABLE[cat];   // 시트소스 → Supabase 미러(전체교체)
+  // 불만처럼 시트+카톡 혼합인데 Supabase는 카톡 증분 테이블인 경우: 시트행만 증분 insert(중복무시).
+  const toSupaInc = !toSupa && !!SUPABASE_TABLE[cat];
+  const supaRows = [];
+
   // 시트 미러는 매번 전체 교체하므로, 카톡으로 적재된 행은 따로 보존한다.
   const preserved = loadRowsBySourcePrefix_(sheet, '카톡');
 
@@ -90,9 +95,23 @@ function syncCategoryToMaster(cat) {
         obj[colName] = v;
       }
 
+      const key = dupKey_(cat, vendor, obj);
       const outRow = cfg.displayCols.map(c => (obj[c] == null ? '' : obj[c]));
-      outRow.push(vendor, '시트:' + sheetName, '', new Date(), dupKey_(cat, vendor, obj));
+      outRow.push(vendor, '시트:' + sheetName, '', new Date(), key);
       sheetRows.push(outRow);
+
+      if (toSupa || toSupaInc) {
+        // 원본 한 줄 전체(모든 열) → _raw. 헤더 중복은 첫 헤더 우선. Date 는 yyyy-MM-dd 문자열.
+        const rawObj = {};
+        for (let c = 0; c < rawHeaders.length; c++) {
+          const h = String(rawHeaders[c] == null ? '' : rawHeaders[c]).replace(/\s+/g, ' ').trim();  // 줄바꿈/중복공백 → 공백1
+          if (!h || rawObj[h] !== undefined) continue;
+          let rv = row[c];
+          if (rv instanceof Date) rv = Utilities.formatDate(rv, 'Asia/Seoul', 'yyyy-MM-dd');
+          rawObj[h] = (rv == null ? '' : rv);
+        }
+        supaRows.push(buildSupaRow_(cat, obj, vendor, '시트:' + sheetName, '', key, rawObj));
+      }
     }
   }
 
@@ -108,6 +127,16 @@ function syncCategoryToMaster(cat) {
       sheet.getRange(2 + i, 1, slice.length, headerCols.length).setValues(slice);
     }
   }
+
+  // 혼합 카테고리: 보존된 카톡행도 Supabase 미러에 포함 (마스터 탭 전체를 그대로 반영).
+  if (toSupa) {
+    for (let p = 0; p < preserved.length; p++) supaRows.push(buildSupaRowFromArray_(cat, preserved[p]));
+  }
+  // 시트소스 → Supabase 미러 전체교체 (실패해도 시트 적재엔 영향 없음). 빈 결과면 보호상 스킵.
+  if (toSupa && supaRows.length) supabaseReplaceAll_(SUPABASE_SHEET_TABLE[cat], supaRows);
+  // 불만 등: 시트행만 증분 insert(중복 자동무시). 카톡행은 appendKakaoRecords_ 가 이미 적재 → 제외.
+  // delete-all 안 하므로 카톡 적재분 안 깨짐. supaRows 엔 현재 시트행만 들어있음(보존행 미추가).
+  else if (toSupaInc && supaRows.length) supabaseInsertIgnore_(SUPABASE_TABLE[cat], supaRows);
 
   Logger.log(cat + ' → ' + tabName + ': 시트 ' + sheetRows.length + '행 + 카톡 ' + preserved.length + '행 = ' + allRows.length);
   return { ok: true, tab: tabName, sheetRows: sheetRows.length, kakaoRows: preserved.length, total: allRows.length };

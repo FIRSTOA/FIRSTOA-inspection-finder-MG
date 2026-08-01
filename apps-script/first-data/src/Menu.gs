@@ -16,11 +16,6 @@ function onOpen() {
     .addItem('드라이브 수신함 지금 적재', 'ingestFromDriveFolder')
     .addItem('드라이브 자동적재 끄기', 'disableDriveIngest')
     .addSeparator()
-    .addItem('임대리스트 → Supabase 동기화 미리보기', 'previewLeaseSupabaseSync')
-    .addItem('임대리스트 → Supabase 지금 동기화', 'syncLeaseToSupabase')
-    .addItem('임대리스트 Supabase 주간 트리거 켜기 (월 5시)', 'installLeaseSupabaseTrigger')
-    .addItem('임대리스트 Supabase 주간 트리거 끄기', 'removeLeaseSupabaseTrigger')
-    .addSeparator()
     .addItem('바로가기 탭 생성/갱신', 'buildShortcutSheet')
     .addItem('접근 권한 점검', 'diagAccess')
     .addToUi();
@@ -35,10 +30,10 @@ function onOpen() {
 function installDailyTrigger() {
   removeDailyTriggers();
   ScriptApp.newTrigger('syncNonLeaseOnly').timeBased().everyDays(1).atHour(0).create();
-  ScriptApp.newTrigger('refreshIndexOnly').timeBased().everyDays(1).atHour(6).create();
+  // 검색 인덱스(_idx_*)는 Supabase RPC로 이전되어 은퇴 → 6시 인덱스 재생성 트리거 제거됨.
   ScriptApp.newTrigger('syncBizInfoOnly').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(2).create();
   ScriptApp.newTrigger('syncLeaseStatusOnly').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create();
-  Logger.log('트리거 생성: 매일 0시 비임대동기화 / 6시 인덱스 / 월 2시 업체정보 / 월 4시 임대현황표');
+  Logger.log('트리거 생성: 매일 0시 비임대동기화 / 월 2시 업체정보 / 월 4시 임대현황표 (인덱스 트리거 제거)');
   return { ok: true };
 }
 

@@ -45,6 +45,9 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
   const cat = src.category;
   if (!CONFIG[cat]) return { ok: false, error: '카테고리 미정의: ' + cat };
 
+  // 재계약방: "초과업체조정" 폼은 별도 캡처(재계약 AI 처리와 별개 패스)
+  if (cat === '재계약') captureOverageAdjust_(txtContent, teamLabel);
+
   let messages = parseKakaoMessages_(txtContent);
   if (!messages.length) {
     const head = String(txtContent || '').slice(0, 100).replace(/\n/g, '⏎');
@@ -99,6 +102,9 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
   const headerCols = masterHeaders_(cat);
   const srcLabel = '카톡:' + roomType + (teamLabel ? '(' + teamLabel + ')' : '');
 
+  const toSupa = !!SUPABASE_TABLE[cat];   // 점검/AS 는 Supabase 에도 적재(단일화 전환)
+  const supaRows = [];
+
   const newRows = [];
   for (const rec of records) {
     const vendor = String(rec.vendor || '').trim();
@@ -111,12 +117,17 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
     const outRow = CONFIG[cat].displayCols.map(c => (obj[c] == null ? '' : obj[c]));
     outRow.push(vendor, srcLabel, rec.raw || '', new Date(), key);
     newRows.push(outRow);
+
+    if (toSupa) supaRows.push(buildSupaRow_(cat, obj, vendor, srcLabel, rec.raw || '', key));
   }
 
   if (newRows.length) {
     const start = sheet.getLastRow() + 1;
     sheet.getRange(start, 1, newRows.length, headerCols.length).setValues(newRows);
   }
+  // 점검/AS 는 Supabase 에도 적재(중복은 _dupKey on_conflict 로 자동무시). 실패해도 시트 적재엔 영향 없음.
+  if (toSupa && supaRows.length) supabaseInsertIgnore_(SUPABASE_TABLE[cat], supaRows);
+
   return { added: newRows.length, skipped: records.length - newRows.length, tab: tabName };
 }
 
@@ -593,9 +604,9 @@ function extractASFields_(content) {
 
 function extractASField_(content, label, multiline) {
   const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼켜서
-  // 빈 칸("자산기번:")일 때 다음 줄("내용: …")이 값으로 들어갔다.
   const pattern = new RegExp(
+    // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼켜서
+    // 빈 칸("자산기번:")일 때 다음 줄("내용: …")이 값으로 들어갔다.
     '(?:^|[\\r\\n])' + escLabel + '[ \\t]*:?[ \\t]*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?:|-{5,}|※|\\d+\\.\\s*[가-힣]+:))',
     ''
   );
@@ -659,11 +670,74 @@ function ingestInspectFormsUpload(content, regionFallback) {
       return { ok: false, error: '파싱 0건 (수신 ' + String(content).length + '자, 시작: "' + head + '")' };
     }
     const records = extractInspectForms_(messages, regionFallback || '');
-    if (!records.length) return { ok: false, error: '점검 양식(구분:점검) 메시지를 찾지 못했습니다.', parsed: messages.length };
+    if (!records.length) return { ok: false, error: '구분 양식 메시지를 찾지 못했습니다.', parsed: messages.length };
     const r = appendKakaoRecords_('점검', '점검', regionFallback || '', records);
     return { ok: true, tab: r.tab, parsed: messages.length, records: records.length, added: r.added, skipped: r.skipped };
   } catch (err) {
     return { ok: false, error: err.toString() };
+  }
+}
+
+// 재계약방의 "/1년 누적 초과 업체 조정" 폼 식별
+function isOverageAdjustForm_(content) {
+  var t = String(content || '');
+  return /1년\s*누적\s*초과|초과\s*업체\s*조정|누적\s*결과/.test(t);
+}
+
+// ■/-/* 불릿 접두사 허용 라벨 추출 ("■ 업체명: 값" → "값"). 새 카톡 폼(■ 라벨)용. (한 줄 값)
+function extractBulletField_(content, label) {
+  var esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var re = new RegExp('(?:^|[\\r\\n])\\s*[■\\-\\*•▪]?\\s*' + esc + '\\s*[:：]\\s*([^\\r\\n]*)');
+  var m = String(content || '').match(re);
+  return m ? m[1].trim() : '';
+}
+
+// ■ 섹션(여러 줄) 추출: "■ 라벨" 줄부터 다음 "■" 직전까지의 본문. 라벨 내부 공백은 유연 매칭.
+// 예) "■ 제안\n줄1\n줄2\n■ 다음" → "줄1\n줄2"
+function extractBulletSection_(content, label) {
+  var esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[^\\S\\r\\n]*');
+  // ■ 라벨 + 콜론(선택) + 수평공백만 소비(개행 X) → 본문(같은 줄/다음 줄들)을 다음 ■ 직전·끝까지 캡처.
+  // ([^\S\r\n] = 개행 제외 공백) 개행을 안 먹어야 첫 본문 줄이 라벨줄로 빨려가지 않음.
+  var re = new RegExp('[■▪][^\\S\\r\\n]*' + esc + '[^\\S\\r\\n]*[:：]?[^\\S\\r\\n]*([\\s\\S]*?)(?=[\\r\\n][^\\S\\r\\n]*[■▪]|$)');
+  var m = String(content || '').match(re);
+  return m ? m[1].replace(/^[\r\n]+/, '').trim() : '';
+}
+
+// 재계약방 메시지 중 "초과업체조정" 폼만 골라 규칙파싱(기본필드+원문) → '초과업체조정' 탭/Supabase 적재.
+// (재계약 AI 처리와 별개 패스. dupKey 중복방어로 재실행해도 안전.)
+function captureOverageAdjust_(content, regionFallback) {
+  try {
+    var messages = parseKakaoMessages_(String(content || ''));
+    var recs = [];
+    for (var i = 0; i < messages.length; i++) {
+      var m = messages[i];
+      var text = m.text || '';
+      if (!isOverageAdjustForm_(text)) continue;
+      var vendor = extractBulletField_(text, '업체명');
+      if (!vendor || vendor.length < 2) continue;
+      var obj = {
+        '방문일': extractBulletField_(text, '방문일') || m.date || '',
+        '작성자': extractBulletField_(text, '작성자') || String(m.author || '').replace(/님$/, ''),
+        '지역': extractBulletField_(text, '지역') || regionFallback || '',
+        '업체명': vendor,
+        '담당자': extractBulletField_(text, '담당자'),
+        '기종': extractBulletField_(text, '기종'),
+        // 여러 줄 ■ 섹션들 → 각 컬럼 (검색·리포트용. 원문에도 전체 보존)
+        '현재조건': extractBulletSection_(text, '현재기본금액 및 조건'),
+        '누적결과': extractBulletSection_(text, '1년 누적 결과'),
+        '제안': extractBulletSection_(text, '제안'),
+        '고객반응': extractBulletSection_(text, '고객 반응'),
+        '할인조건변경': extractBulletSection_(text, '초과료 할인 및 조건 변경'),
+        '진행상태': extractBulletSection_(text, '진행상태'),
+        '원문': text
+      };
+      recs.push({ vendor: vendor, obj: obj, raw: text });
+    }
+    if (recs.length) return appendKakaoRecords_('초과업체조정', '초과업체조정', regionFallback || '', recs);
+    return { added: 0, skipped: 0 };
+  } catch (e) {
+    Logger.log('[초과업체조정] 캡처 예외: ' + e);
+    return { added: 0, error: String(e) };
   }
 }
 
@@ -680,7 +754,10 @@ function extractInspectForms_(messages, regionFallback) {
   const out = [];
   for (const m of messages) {
     const content = m.text || '';
-    if (!isInspectForm_(content)) continue;
+    // 점검방: 구분이 있는 메시지는 모두 점검으로 수집(이전요청/여분요청/이전세팅 등도 점검 탭에).
+    // 구분 값 자체는 '구분' 컬럼에 그대로 보존. 단, 순수 AS 양식(점검 없음)은 AS방이 처리하므로 제외.
+    if (!/구분\s*[:：]/.test(content)) continue;
+    if (isASForm_(content) && !isInspectForm_(content)) continue;
 
     const f = extractInspectFields_(content);
     const vendor = f['업체명'];
@@ -724,8 +801,8 @@ function extractInspectFields_(content) {
 // 점검 양식의 블록 구분선이 값에 섞이지 않게 한다.
 function extractInspectField_(content, label, multiline) {
   const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼킨다 (AS 파서와 동일 수정)
   const pattern = new RegExp(
+    // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼킨다 (AS 파서와 동일 수정)
     '(?:^|[\\r\\n])' + escLabel + '[ \\t]*[:：]?[ \\t]*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?[:：]|[-=]{2,}|※|＊|\\*)|$)',
     ''
   );

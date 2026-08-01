@@ -33,6 +33,42 @@ function syncLeaseStatusOnly() { return { 임대현황표: syncCategoryToMaster(
 function syncNonLeaseOnly() { return syncAllToMaster(LEASE_CATEGORIES); }                  // 임대 제외 전체(가벼움)
 function refreshIndexOnly() { return rebuildIndex(); }                                      // 인덱스만 단독
 
+// [진단] 불만 원본시트 헤더 덤프 — Supabase displayCols 정합용. 실행 후 로그 확인.
+function _dumpBulmanHeaders() {
+  var cfg = CONFIG['불만'];
+  var ss = SpreadsheetApp.openById(cfg.ssId);
+  var sh = ss.getSheetByName(cfg.sheets[0]);
+  if (!sh) { Logger.log('시트 없음: ' + cfg.sheets[0]); return; }
+  var hdr = sh.getRange(cfg.headerRow, 1, 1, sh.getLastColumn()).getValues()[0];
+  var clean = hdr.map(function (h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim(); }).filter(String);
+  Logger.log('불만 시트 헤더(' + clean.length + '개): ' + JSON.stringify(clean));
+  Logger.log('데이터 행수: ' + (sh.getLastRow() - cfg.headerRow));
+}
+
+// [1회 실행] 검색 인덱스(_idx_*) 은퇴: 검색이 Supabase RPC로 이전됐으므로 더 이상 불필요.
+//   - refreshIndexOnly(6시)·warmVendorIndexCache(4시간) 트리거 제거
+//   - _idx_vendors/_idx_data/_idx_meta 탭 삭제
+//   ※ 적재(통합탭+Supabase 미러/증분)·미러 동기화(0/2/4시)는 그대로 유지 — 영향 없음.
+function retireSearchIndex() {
+  var removed = [];
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'refreshIndexOnly' || fn === 'warmVendorIndexCache') {
+      ScriptApp.deleteTrigger(triggers[i]); removed.push(fn);
+    }
+  }
+  var ss = SpreadsheetApp.openById(INDEX_SS_ID);
+  var deleted = [];
+  [INDEX_VENDORS, INDEX_DATA, INDEX_META].forEach(function (name) {
+    var sh = ss.getSheetByName(name);
+    if (sh) { ss.deleteSheet(sh); deleted.push(name); }
+  });
+  var msg = '트리거 제거: ' + (removed.join(', ') || '없음') + ' / 탭 삭제: ' + (deleted.join(', ') || '없음');
+  Logger.log(msg);
+  return { ok: true, removedTriggers: removed, deletedTabs: deleted, msg: msg };
+}
+
 // 기본 인덱스 재생성은 통합 탭 기준
 function rebuildIndex() {
   return rebuildIndexFromMaster();

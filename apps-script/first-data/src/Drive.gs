@@ -128,6 +128,15 @@ function ingestFromDriveFolder() {
       const key = route.category + '|' + route.team + '|' + mode;
       const sl = sliceIncremental_(key, text);
 
+      // 재계약방: "초과업체조정" 폼 별도 캡처(전체 text 스캔, dupKey 중복방어로 재스캔 안전).
+      // nothingNew/mode 와 무관하게 항상 실행 → 과거분·재업로드도 누락 없이 잡힘. 결과는 별도 로그.
+      if (route.category === '재계약') {
+        try {
+          const oa = captureOverageAdjust_(text, route.team);
+          if (oa && oa.added) logUpload({ category: '초과업체조정', team: route.team, roomName: room, parsed: (oa.added + (oa.skipped || 0)), added: oa.added, skipped: oa.skipped || 0, status: '완료(드라이브·분리캡처)' });
+        } catch (e) {}
+      }
+
       let res;
       if (sl.nothingNew) {
         res = { ok: true, added: 0, nothingNew: true, parsed: 0, skipped: 0 };
