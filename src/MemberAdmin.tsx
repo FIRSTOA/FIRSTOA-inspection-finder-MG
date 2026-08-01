@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pencil, UserPlus, UserRound, Undo2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
 import { addMember, displayTitle, fetchMembers, restoreMember, retireMember, updateMember, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
 
 /**
- * 인원 관리 — 회사 전체 명단 (부서·팀·직책).
+ * 인원 관리 — 회사 전체 명단을 ERP식 한 표로.
  *
- * 부서 안에서 [리더(팀장·파트장·겸임) 상단] → [팀별 구분선 + 명단] 순으로 보여준다.
- * CS팀의 팀장/A~D 팀 값은 작성자 명단·일정 팀 필터가 그대로 쓰므로 바꾸면 즉시 반영된다.
+ * [다크 툴바: 검색 + 부서 필터] 아래 테이블. 전체 보기에선 부서 구분행 → 팀 구분행의
+ * 2단으로 나뉘고, 부서를 고르면 팀 구분행만 남는다 (CS팀 A/B/C/D가 바로 나뉘어 보이게).
+ * CS팀의 팀장/A~D 값은 작성자 명단·일정 팀 필터가 그대로 쓰므로 바꾸면 즉시 반영된다.
  * 퇴사는 행을 지우지 않고 재직 여부만 내린다 — 과거 기록의 이름이 살아 있어야 집계가 안 깨진다.
  */
 const DEPTS = ["임원", "CS팀", "영업팀", "CSS·운영지원"] as const;
@@ -25,9 +26,10 @@ const TITLE_TONE: Record<string, string> = {
   임원: "bg-amber-50 text-amber-700", 프로: "bg-slate-100 text-slate-500",
 };
 
-/** 리더 블록 판정: 팀 미지정·팀장·겸임(A·B) — 팀 구분선 위에 따로 보여준다 */
+/** 리더 판정: 팀장·겸임(A·B)·팀 없는 직책자 — 팀 구분행보다 위에 따로 묶는다 */
 function isLeaderRow(row: MemberRow) {
-  return !row.team || row.team === "팀장" || row.team.includes("·");
+  if (row.dept === "임원") return true;
+  return row.team === "팀장" || row.team.includes("·") || (!row.team && !!row.title);
 }
 
 function teamLabel(dept: string, team: string) {
@@ -35,6 +37,19 @@ function teamLabel(dept: string, team: string) {
   return dept === "CS팀" && team.length === 1 ? `${team}팀` : team;
 }
 
+/** 입사일 → "N년 M개월" (미래·파싱 불가면 빈값) */
+function tenure(joined: string | null | undefined, today: Date): string {
+  if (!joined) return "";
+  const start = new Date(joined);
+  if (Number.isNaN(start.getTime())) return "";
+  let months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+  if (today.getDate() < start.getDate()) months -= 1;
+  if (months < 0) return "";
+  const years = Math.floor(months / 12);
+  return years > 0 ? `${years}년 ${months % 12}개월` : `${months % 12}개월`;
+}
+
+type Section = { key: string; label: string; rows: MemberRow[] };
 type EditState = { row: MemberRow; dept: string; team: string; teamCustom: boolean; title: string };
 
 export default function MemberAdmin() {
@@ -43,11 +58,13 @@ export default function MemberAdmin() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [showLeft, setShowLeft] = useState(false);
+  const [deptFilter, setDeptFilter] = useState<string>("전체");
+  const [search, setSearch] = useState("");
   const [draft, setDraft] = useState({ name: "", dept: "CS팀" as string, team: "A", title: "", joined: new Date().toISOString().slice(0, 10) });
   const [adding, setAdding] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [deptTab, setDeptTab] = useState<string>("CS팀");
   const [edit, setEdit] = useState<EditState | null>(null);
+  const today = useMemo(() => new Date(), []);
 
   const load = async () => {
     setLoading(true);
@@ -64,23 +81,35 @@ export default function MemberAdmin() {
 
   const active = rows.filter((row) => row.active);
   const left = rows.filter((row) => !row.active);
+  const deptCount = (dept: string) => active.filter((row) => row.dept === dept).length;
 
-  const byDept = useMemo(() => {
+  const grouped = useMemo(() => {
     const rank = (row: MemberRow) => TITLE_RANK[row.title] ?? 9;
-    const map = new Map<string, { leaders: MemberRow[]; teams: Array<[string, MemberRow[]]> }>();
+    const query = search.trim();
+    const out: Array<{ dept: string; count: number; sections: Section[] }> = [];
     for (const dept of DEPTS) {
-      const list = active.filter((row) => row.dept === dept);
+      if (deptFilter !== "전체" && deptFilter !== dept) continue;
+      let list = active.filter((row) => row.dept === dept);
+      if (query) list = list.filter((row) => row.name.includes(query) || row.team.includes(query) || teamLabel(dept, row.team).includes(query));
+      if (!list.length) continue;
       const leaders = list.filter(isLeaderRow).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
       const rest = list.filter((row) => !isLeaderRow(row));
-      const teamNames = [...new Set(rest.map((row) => row.team))].sort();
-      const teams: Array<[string, MemberRow[]]> = teamNames.map((team) => [
-        team,
-        rest.filter((row) => row.team === team).sort((a, b) => rank(a) - rank(b) || a.sort - b.sort || a.name.localeCompare(b.name)),
-      ]);
-      map.set(dept, { leaders, teams });
+      const teamNames = [...new Set(rest.map((row) => row.team))]
+        .sort((a, b) => (a === "" ? 1 : 0) - (b === "" ? 1 : 0) || a.localeCompare(b));
+      const sections: Section[] = [];
+      // 임원은 구분행 없이 부서행 바로 아래 — 2명뿐이라 소제목이 소음이다
+      if (leaders.length && dept !== "임원") sections.push({ key: "_lead", label: "팀장 · 파트장", rows: leaders });
+      else if (leaders.length) sections.push({ key: "_lead", label: "", rows: leaders });
+      for (const team of teamNames) {
+        sections.push({
+          key: team || "_none", label: teamLabel(dept, team),
+          rows: rest.filter((row) => row.team === team).sort((a, b) => rank(a) - rank(b) || a.sort - b.sort || a.name.localeCompare(b.name)),
+        });
+      }
+      out.push({ dept, count: list.length, sections });
     }
-    return map;
-  }, [active]);
+    return out;
+  }, [active, deptFilter, search]);
 
   const submit = async () => {
     if (!draft.name.trim() || adding) return;
@@ -115,55 +144,78 @@ export default function MemberAdmin() {
     return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${TITLE_TONE[label] || TITLE_TONE.프로}`}>{label}</span>;
   };
 
-  const memberLine = (row: MemberRow, showTeamChip = false) => (
-    <div key={row.id} className="group flex items-center gap-2 px-4 py-2">
-      <UserRound size={14} className="shrink-0 text-slate-300" />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-black text-slate-900">{row.name}</span>
-          {titleChip(row)}
-          {showTeamChip && row.team && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{row.team}</span>}
+  const memberTr = (row: MemberRow) => (
+    <tr key={row.id} className="group border-b border-slate-50 transition hover:bg-slate-50/60">
+      <td className="px-4 py-2">
+        <span className="flex items-center gap-2">
+          <UserRound size={14} className="shrink-0 text-slate-300" />
+          <span className="whitespace-nowrap text-sm font-black text-slate-900">{row.name}</span>
         </span>
-        {row.joined_on && <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.joined_on} 입사</span>}
-      </span>
-      <button type="button" title="정보 수정" disabled={busyId === row.id}
-        onClick={() => setEdit({ row, dept: row.dept, team: row.team, teamCustom: !(TEAM_OPTIONS[row.dept] || []).includes(row.team), title: row.title })}
-        className="shrink-0 rounded-full p-1.5 text-slate-300 opacity-100 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">
-        <Pencil size={13} />
-      </button>
-      <button type="button" disabled={busyId === row.id}
-        onClick={() => { if (window.confirm(`${row.name} 님을 퇴사 처리할까요?\n\n명단에서만 빠지고 과거 기록은 그대로 남습니다.`)) void act(row.id, () => retireMember(row.id)); }}
-        className="shrink-0 rounded-full px-2 py-1 text-[11px] font-black text-slate-300 opacity-100 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">퇴사</button>
-    </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold text-slate-500">{row.dept}</td>
+      <td className="whitespace-nowrap px-4 py-2">
+        {row.team ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{teamLabel(row.dept, row.team)}</span> : <span className="text-xs text-slate-300">—</span>}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2">{titleChip(row)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-500">{row.joined_on || "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-400">{tenure(row.joined_on, today)}</td>
+      <td className="px-4 py-2">
+        <span className="flex items-center justify-end gap-1">
+          <button type="button" title="정보 수정" disabled={busyId === row.id}
+            onClick={() => setEdit({ row, dept: row.dept, team: row.team, teamCustom: !(TEAM_OPTIONS[row.dept] || []).includes(row.team), title: row.title })}
+            className="rounded-full p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">
+            <Pencil size={13} />
+          </button>
+          <button type="button" disabled={busyId === row.id}
+            onClick={() => { if (window.confirm(`${row.name} 님을 퇴사 처리할까요?\n\n명단에서만 빠지고 과거 기록은 그대로 남습니다.`)) void act(row.id, () => retireMember(row.id)); }}
+            className="whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">퇴사</button>
+        </span>
+      </td>
+    </tr>
+  );
+
+  const divider = (label: string, count: number, strong = false) => (
+    <tr>
+      <td colSpan={7} className={strong
+        ? "border-y border-slate-200 bg-slate-100/90 px-4 py-1.5 text-xs font-black text-slate-700"
+        : "border-b border-slate-100 bg-slate-50/70 px-4 py-1 text-[11px] font-black tracking-wide text-slate-500"}>
+        {label} <span className="ml-1 text-[10px] font-bold tabular-nums text-slate-400">{count}명</span>
+      </td>
+    </tr>
   );
 
   return (
     <div className="space-y-4">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
             <h3 className="text-base font-black text-slate-950 lg:text-lg">인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서를 골라 명단을 보고, 이름에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로".</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로".</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-500">재직 {active.length}명</span>
             {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50">퇴사 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
-            <button type="button" onClick={() => { setDraft({ ...draft, dept: deptTab === "임원" ? "임원" : deptTab, team: TEAM_OPTIONS[deptTab]?.[0] ?? "" }); setAddOpen(true); }}
+            <button type="button" onClick={() => { const dept = deptFilter === "전체" ? "CS팀" : deptFilter; setDraft({ ...draft, dept, team: TEAM_OPTIONS[dept]?.[0] ?? "" }); setAddOpen(true); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
               <UserPlus size={15} />인원 추가
             </button>
           </div>
         </div>
 
-        {/* 부서 선택 — 한 번에 한 부서만 보여 화면이 조용하다 */}
-        <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-4 py-3">
-          {DEPTS.map((dept) => {
-            const group = byDept.get(dept);
-            const count = group ? group.leaders.length + group.teams.reduce((sum, [, list]) => sum + list.length, 0) : 0;
+        {/* 다크 툴바 — 검색 + 부서 필터 */}
+        <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
+          <label className="flex items-center gap-2 rounded-full bg-white/[0.08] px-3.5 py-1.5 transition focus-within:bg-white/[0.14]">
+            <Search size={13} className="shrink-0 text-slate-500" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름·팀 검색"
+              className="w-24 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500 lg:w-36" />
+          </label>
+          {["전체", ...DEPTS].map((dept) => {
+            const count = dept === "전체" ? active.length : deptCount(dept);
+            const on = deptFilter === dept;
             return (
-              <button key={dept} type="button" onClick={() => setDeptTab(dept)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${deptTab === dept ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                {dept} <span className={`tabular-nums ${deptTab === dept ? "text-slate-300" : "text-slate-400"}`}>{count}</span>
+              <button key={dept} type="button" onClick={() => setDeptFilter(dept)}
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
+                {dept} <span className={`tabular-nums ${on ? "text-slate-400" : "text-slate-500"}`}>{count}</span>
               </button>
             );
           })}
@@ -172,27 +224,41 @@ export default function MemberAdmin() {
         {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
         {loading && <div className="p-10 text-center text-sm font-bold text-slate-400">명단을 불러오는 중…</div>}
 
-        {!loading && (() => {
-          const group = byDept.get(deptTab) || { leaders: [], teams: [] };
-          const total = group.leaders.length + group.teams.reduce((sum, [, list]) => sum + list.length, 0);
-          return (
-            <div className="mx-auto max-w-2xl">
-              {group.leaders.length > 0 && <div className="divide-y divide-slate-50 border-b border-slate-100 bg-slate-50/40">
-                {group.leaders.map((row) => memberLine(row, true))}
-              </div>}
-              {group.teams.map(([team, list]) => (
-                <div key={team || "_"}>
-                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-1.5">
-                    <span className="text-[11px] font-black tracking-wide text-slate-500">{teamLabel(deptTab, team)}</span>
-                    <span className="text-[10px] font-bold tabular-nums text-slate-400">{list.length}명</span>
-                  </div>
-                  <div className="divide-y divide-slate-50">{list.map((row) => memberLine(row))}</div>
-                </div>
-              ))}
-              {!total && <div className="px-4 py-10 text-center text-[11px] font-bold text-slate-300">인원 없음 — 우측 상단 "인원 추가"로 등록하세요</div>}
-            </div>
-          );
-        })()}
+        {!loading && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-[11px] font-black tracking-wide text-slate-400">
+                  <th className="px-4 py-2.5">이름</th>
+                  <th className="px-4 py-2.5">부서</th>
+                  <th className="px-4 py-2.5">팀/파트</th>
+                  <th className="px-4 py-2.5">직책</th>
+                  <th className="px-4 py-2.5">입사일</th>
+                  <th className="px-4 py-2.5">근속</th>
+                  <th className="px-4 py-2.5 text-right">관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.map((group) => (
+                  <Fragment key={group.dept}>
+                    {deptFilter === "전체" && divider(group.dept, group.count, true)}
+                    {group.sections.map((section) => (
+                      <Fragment key={section.key}>
+                        {section.label && divider(section.label, section.rows.length)}
+                        {section.rows.map(memberTr)}
+                      </Fragment>
+                    ))}
+                  </Fragment>
+                ))}
+                {!grouped.length && (
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-xs font-bold text-slate-300">
+                    {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다` : "인원 없음 — 우측 상단 \"인원 추가\"로 등록하세요"}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {showLeft && left.length > 0 && (
