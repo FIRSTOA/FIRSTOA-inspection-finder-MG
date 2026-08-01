@@ -390,6 +390,16 @@ function kakaoQueueStatus() {
   return { ok: true, jobs: jobs, active: active, allDone: allDone };
 }
 
+// 끝난(done/error) 작업을 큐에서 제거 — CS 웹앱 관리 탭의 "정리" 버튼용.
+// 실패 작업의 메시지는 seen에 기록되지 않았으므로, 지워도 재업로드하면 다시 처리된다.
+function kakaoClearFinished_() {
+  const props = PropertiesService.getScriptProperties();
+  const queue = JSON.parse(props.getProperty(KAKAO_QUEUE_PROP) || '[]');
+  const keep = queue.filter(function (j) { return j.status !== 'done' && j.status !== 'error'; });
+  props.setProperty(KAKAO_QUEUE_PROP, JSON.stringify(keep));
+  return { ok: true, removed: queue.length - keep.length, remaining: keep.length };
+}
+
 // 진행 중인 백그라운드 업로드를 즉시 중지 (워커가 다음 배치에서 종료)
 function kakaoStopAll() {
   const props = PropertiesService.getScriptProperties();

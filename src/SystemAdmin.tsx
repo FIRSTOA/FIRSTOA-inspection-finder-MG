@@ -251,7 +251,22 @@ export default function SystemAdmin() {
               )}
             </div>
             <div className="bg-white p-4">
-              <div className="text-xs font-black text-slate-700">일괄 수집 작업 큐</div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-black text-slate-700">일괄 수집 작업 큐</div>
+                {(gas.queue?.jobs?.length || 0) > 0 && (
+                  <button type="button" disabled={busy === "kakaoclear"}
+                    onClick={() => {
+                      setBusy("kakaoclear");
+                      fetch(`${GAS_GET_URL}?action=kakaoclear`).then((res) => res.json())
+                        .then(() => fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json()).then(setGas))
+                        .catch((e) => setGasError((e as Error).message))
+                        .finally(() => setBusy(""));
+                    }}
+                    className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">
+                    {busy === "kakaoclear" ? "정리 중…" : "끝난 작업 정리"}
+                  </button>
+                )}
+              </div>
               {gas.queue?.jobs?.length ? (
                 <div className="mt-2 space-y-1">
                   {gas.queue.jobs.slice(0, 5).map((job, index) => (

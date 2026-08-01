@@ -21,6 +21,7 @@ function doGet(e) {
     else if (action === 'inspforms') result = getInspectionFormsByVendor(q);
     else if (action === 'ping') result = { ok: true, time: new Date().toISOString(), indexInfo: getIndexMeta() };
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
+    else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
