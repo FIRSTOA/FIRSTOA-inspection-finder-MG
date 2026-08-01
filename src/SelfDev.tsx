@@ -7,6 +7,7 @@ import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import ReadingHub from "./ReadingHub";
 import { kstDate } from "./visits";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { teamTargetLabel } from "./audience";
 import PortalSelect from "./PortalSelect";
 
 type Tab = "home" | "reading" | "tips" | "goals" | "praise";
@@ -338,18 +339,24 @@ function PraiseBoard({ author }: { author: string }) {
   }, [rows]);
   const visibleRows = useMemo(() => rows.filter((row) =>
     (filterTo === "전체" || row.to_name === filterTo) && (filterFrom === "전체" || row.from_author === filterFrom)), [rows, filterTo, filterFrom]);
-  // 받는 사람: 부서 먼저 → 해당 부서 이름만 (52명 전체 스크롤 방지)
+  // 받는 사람: 부서 → 팀 → 이름 순서로 좁혀간다 (긴 스크롤 방지)
   const depts = useMemo(() => {
     const order = ["임원", "CS팀", "영업팀", "CSS·운영지원"];
     const set = new Set(members.filter((m) => m.active).map((m) => m.dept).filter(Boolean));
     return [...set].sort((a, b) => order.indexOf(a) - order.indexOf(b));
   }, [members]);
   const [praiseDept, setPraiseDept] = useState("CS팀");
+  const [praiseTeam, setPraiseTeam] = useState("전체");
+  const teamsOfDept = useMemo(() => {
+    const set = new Set(members.filter((m) => m.active && m.dept === praiseDept && m.team && !m.team.includes("·")).map((m) => m.team));
+    return [...set].sort();
+  }, [members, praiseDept]);
   const nameOptions = useMemo(() => {
-    const active = members.filter((m) => m.active && m.name !== author && m.dept === praiseDept);
+    const active = members.filter((m) => m.active && m.name !== author && m.dept === praiseDept
+      && (praiseTeam === "전체" || m.team === praiseTeam || m.team.split("·").includes(praiseTeam)));
     if (active.length) return active.map((m) => ({ value: m.name, label: m.name, group: m.team || undefined, hint: displayTitle(m) }));
     return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).filter((name) => name !== author).map((name) => ({ value: name, label: name, group: `${team}팀` })));
-  }, [members, book, author, praiseDept]);
+  }, [members, book, author, praiseDept, praiseTeam]);
 
   const saveEditPraise = async () => {
     if (!editContent.trim()) return;
@@ -401,8 +408,10 @@ function PraiseBoard({ author }: { author: string }) {
               <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black tabular-nums text-amber-700">내가 받은 칭찬 {myReceived}</span>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {depts.length > 0 && <PortalSelect width={135} value={praiseDept} onChange={(dept) => { setPraiseDept(dept); setToName(""); }} options={depts.map((dept) => ({ value: dept, label: dept }))} />}
-              <PortalSelect width={150} value={toName} onChange={setToName} placeholder="받는 사람" options={nameOptions} />
+              {depts.length > 0 && <PortalSelect width={125} value={praiseDept} onChange={(dept) => { setPraiseDept(dept); setPraiseTeam("전체"); setToName(""); }} options={depts.map((dept) => ({ value: dept, label: dept }))} />}
+              {teamsOfDept.length > 0 && <PortalSelect width={110} value={praiseTeam} onChange={(team) => { setPraiseTeam(team); setToName(""); }}
+                options={[{ value: "전체", label: "팀 전체" }, ...teamsOfDept.map((team) => ({ value: team, label: teamTargetLabel(team) }))]} />}
+              <PortalSelect width={140} value={toName} onChange={setToName} placeholder="받는 사람" options={nameOptions} />
               <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="min-w-[200px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="shrink-0 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "보내는 중…" : "보내기"}</button>
             </div>

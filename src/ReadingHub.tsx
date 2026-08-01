@@ -8,15 +8,45 @@ import { deleteRows, insertRow, selectRows } from "./supabase";
 type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string };
 type BookHit = { title: string; authors: string; thumbnail: string };
 
-/** 구글 도서 검색 — 키 없이 사용 가능, 표지 썸네일 포함 */
+/**
+ * 책 검색 — 카카오(app_config의 KAKAO_BOOK_KEY, 한국 책 최강) → 구글 도서(무키,
+ * 공용 쿼터라 자주 마름) → 오픈라이브러리(무키, 한국 책 빈약) 순서로 시도한다.
+ */
+let kakaoKeyCache: string | null = null;
+async function getKakaoBookKey(): Promise<string> {
+  if (kakaoKeyCache !== null) return kakaoKeyCache;
+  try {
+    const rows = await selectRows<{ value: string }>("app_config", "select=value&key=eq.KAKAO_BOOK_KEY&limit=1");
+    kakaoKeyCache = (rows[0]?.value || "").trim();
+  } catch { kakaoKeyCache = ""; }
+  return kakaoKeyCache;
+}
+async function searchKakaoBooks(query: string, key: string): Promise<BookHit[]> {
+  const res = await fetch(`https://dapi.kakao.com/v3/search/book?query=${encodeURIComponent(query)}&size=8`, { headers: { Authorization: `KakaoAK ${key}` } });
+  if (!res.ok) throw new Error(`카카오 ${res.status}`);
+  const data = await res.json() as { documents?: Array<{ title?: string; authors?: string[]; thumbnail?: string }> };
+  return (data.documents || []).map((doc) => ({
+    title: doc.title || "", authors: (doc.authors || []).join(", "),
+    thumbnail: String(doc.thumbnail || "").replace("http://", "https://"),
+  })).filter((book) => book.title);
+}
 async function searchGoogleBooks(query: string): Promise<BookHit[]> {
-  const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&printType=books`);
-  if (!res.ok) throw new Error("책 검색에 실패했습니다.");
+  const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=8&printType=books&country=KR`);
+  if (!res.ok) throw new Error(`구글 도서 ${res.status}`);
   const data = await res.json() as { items?: Array<{ volumeInfo?: { title?: string; authors?: string[]; imageLinks?: { thumbnail?: string; smallThumbnail?: string } } }> };
   return (data.items || []).map((item) => ({
     title: item.volumeInfo?.title || "",
     authors: (item.volumeInfo?.authors || []).join(", "),
     thumbnail: String(item.volumeInfo?.imageLinks?.thumbnail || item.volumeInfo?.imageLinks?.smallThumbnail || "").replace("http://", "https://"),
+  })).filter((book) => book.title);
+}
+async function searchOpenLibrary(query: string): Promise<BookHit[]> {
+  const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=title,author_name,cover_i`);
+  if (!res.ok) throw new Error(`openlibrary ${res.status}`);
+  const data = await res.json() as { docs?: Array<{ title?: string; author_name?: string[]; cover_i?: number }> };
+  return (data.docs || []).map((doc) => ({
+    title: doc.title || "", authors: (doc.author_name || []).join(", "),
+    thumbnail: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "",
   })).filter((book) => book.title);
 }
 
@@ -61,6 +91,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const [bookResults, setBookResults] = useState<BookHit[]>([]);
   const [bookSearching, setBookSearching] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
+  const [bookNote, setBookNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [query, setQuery] = useState("");
@@ -142,9 +173,15 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
     if (!query || bookSearching) return;
     setBookSearching(true);
     setBookOpen(true);
-    try { setBookResults(await searchGoogleBooks(query)); }
-    catch { setBookResults([]); }
-    finally { setBookSearching(false); }
+    setBookNote("");
+    let hits: BookHit[] = [];
+    const kakaoKey = await getKakaoBookKey();
+    if (kakaoKey) { try { hits = await searchKakaoBooks(query, kakaoKey); } catch { /* 다음 제공자로 */ } }
+    if (!hits.length) { try { hits = await searchGoogleBooks(query); } catch { /* 다음 제공자로 */ } }
+    if (!hits.length) { try { hits = await searchOpenLibrary(query); } catch { /* 아래 안내로 */ } }
+    setBookResults(hits);
+    if (!hits.length && !kakaoKey) setBookNote("공용 검색(구글)이 쿼터를 소진했을 수 있어요 — 관리자가 카카오 책검색 키를 등록하면 안정적으로 검색됩니다.");
+    setBookSearching(false);
   };
 
   const submit = async () => {
@@ -313,7 +350,8 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
                   <span className="text-[10px] font-black text-slate-400">책을 고르면 제목·표지가 채워집니다</span>
                   <button type="button" onClick={() => setBookOpen(false)} className="text-[10px] font-black text-slate-400 hover:text-slate-600">닫기 ✕</button>
                 </div>
-                {!bookSearching && !bookResults.length && <div className="px-1 pb-1 text-[11px] font-bold text-slate-400">검색 결과가 없어요 — 제목을 바꿔 다시 검색해 보세요.</div>}
+                {bookSearching && <div className="px-1 pb-1 text-[11px] font-bold text-slate-400">책을 찾는 중…</div>}
+                {!bookSearching && !bookResults.length && <div className="px-1 pb-1 text-[11px] font-bold text-slate-400">검색 결과가 없어요 — 제목을 바꿔 다시 검색해 보세요.{bookNote && <span className="mt-0.5 block font-semibold text-amber-600">{bookNote}</span>}</div>}
                 <div className="grid gap-1 sm:grid-cols-2">
                   {bookResults.map((book, index) => (
                     <button key={`${book.title}-${index}`} type="button" onClick={() => { setTitle(book.title); setCover(book.thumbnail); setBookOpen(false); }}
