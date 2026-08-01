@@ -21,13 +21,20 @@ export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
 export type MemberRow = {
   id: string;
   name: string;
-  team: AuthorTeam;
+  team: string;            // CS: 팀장/A~D (작성자 명단용) · 타부서: 전략영업/IT/운영지원 등
+  dept: string;            // 임원 / CS팀 / 영업팀 / CSS·운영지원
+  title: string;           // 팀장/파트장/부파트장 — 빈값이면 호칭은 "프로"
   active: boolean;
   joined_on: string | null;
   left_on: string | null;
   note: string;
   sort: number;
 };
+
+/** 호칭: 직책이 없으면 전부 "프로", 임원은 "임원" */
+export function displayTitle(member: Pick<MemberRow, "title" | "dept">): string {
+  return member.title || (member.dept === "임원" ? "임원" : "프로");
+}
 
 const MIRROR_KEY = "firstoa.memberBook.v2";
 const CHANGE_EVENT = "firstoa-authors-change";
@@ -41,8 +48,9 @@ function emptyBook(): Book {
 function bookOf(rows: MemberRow[]): Book {
   const next = emptyBook();
   for (const row of rows.filter((item) => item.active)) {
-    if (!AUTHOR_TEAMS.includes(row.team)) continue;
-    if (!next[row.team].includes(row.name)) next[row.team].push(row.name);
+    if (!AUTHOR_TEAMS.includes(row.team as AuthorTeam)) continue;
+    const team = row.team as AuthorTeam;
+    if (!next[team].includes(row.name)) next[team].push(row.name);
   }
   return next;
 }
@@ -57,10 +65,12 @@ function readMirror(): Book | null {
 
 // 화면 여러 곳에서 같은 훅을 쓰므로 모듈 단위로 한 번만 받아 공유한다.
 let cache: Book | null = readMirror();
+let rowsCache: MemberRow[] = [];
 let inflight: Promise<MemberRow[]> | null = null;
 
 export async function fetchMembers(): Promise<MemberRow[]> {
-  const rows = await selectRows<MemberRow>("cs_members", "select=*&order=team.asc,sort.asc,name.asc");
+  const rows = await selectRows<MemberRow>("cs_members", "select=*&order=dept.asc,team.asc,sort.asc,name.asc");
+  rowsCache = rows;
   cache = bookOf(rows);
   if (typeof window !== "undefined") {
     window.localStorage.setItem(MIRROR_KEY, JSON.stringify(cache));
@@ -74,18 +84,36 @@ function refresh() {
   return inflight;
 }
 
-async function findMember(team: AuthorTeam, name: string) {
+async function findMember(team: string, name: string) {
   const rows = await selectRows<MemberRow>("cs_members", `select=id,active&name=eq.${encodeURIComponent(name)}&team=eq.${encodeURIComponent(team)}`);
   return rows[0];
 }
 
-export async function addMember(team: AuthorTeam, name: string, joinedOn?: string) {
+export async function addMember(team: string, name: string, joinedOn?: string, dept = "CS팀", title = "") {
   const clean = name.trim();
   if (!clean) return;
   const found = await findMember(team, clean);
-  if (found) await updateRows("cs_members", `id=eq.${found.id}`, { active: true, left_on: null, updated_at: new Date().toISOString() });
-  else await insertRow("cs_members", { name: clean, team, active: true, joined_on: joinedOn || new Date().toISOString().slice(0, 10), sort: 99 });
+  if (found) await updateRows("cs_members", `id=eq.${found.id}`, { active: true, left_on: null, dept, title, updated_at: new Date().toISOString() });
+  else await insertRow("cs_members", { name: clean, team, dept, title, active: true, joined_on: joinedOn || new Date().toISOString().slice(0, 10), sort: 99 });
   await fetchMembers();
+}
+
+export async function updateMember(id: string, patch: Partial<Pick<MemberRow, "team" | "dept" | "title">>) {
+  await updateRows("cs_members", `id=eq.${id}`, { ...patch, updated_at: new Date().toISOString() });
+  await fetchMembers();
+}
+
+/** 전 인원(회사 전체) 행 — 부서 요청 요청자 선택·프로필 표시용 */
+export function useMembers(): MemberRow[] {
+  const [rows, setRows] = useState<MemberRow[]>(rowsCache);
+  useEffect(() => {
+    let alive = true;
+    const sync = () => { if (alive) setRows(rowsCache); };
+    window.addEventListener(CHANGE_EVENT, sync);
+    void refresh().then(sync).catch(() => {});
+    return () => { alive = false; window.removeEventListener(CHANGE_EVENT, sync); };
+  }, []);
+  return rows;
 }
 
 /** 퇴사 처리 — 행을 지우지 않는다 (과거 기록에 남은 작성자명이 살아 있어야 한다) */
@@ -99,7 +127,7 @@ export async function restoreMember(id: string) {
   await fetchMembers();
 }
 
-export async function moveMemberTeam(id: string, team: AuthorTeam) {
+export async function moveMemberTeam(id: string, team: string) {
   await updateRows("cs_members", `id=eq.${id}`, { team, updated_at: new Date().toISOString() });
   await fetchMembers();
 }

@@ -45,7 +45,7 @@ import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 import { prepareImageForUpload } from "./imageUpload";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
@@ -5396,10 +5396,16 @@ export default function App() {
   const { book: authorBook } = useAuthorBook();
   const inboxBadge = useInboxBadge(author);
   const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
-  const authorTeamLabel = (() => {
-    const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
-    return team ? (team === "팀장" ? "팀장" : `${team}팀`) : "CS팀";
-  })();
+  const members = useMembers();
+  const myMember = members.find((member) => member.active && member.name === author);
+  // 좌하단·우상단 프로필: "CS팀 C · 프로" 처럼 부서·팀·호칭까지
+  const authorTeamLabel = myMember
+    ? `${myMember.dept}${myMember.team && myMember.team !== "팀장" ? ` ${myMember.team}` : ""} · ${displayTitle(myMember)}`
+    : (() => {
+        const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
+        return team ? (team === "팀장" ? "CS팀 · 팀장" : `CS팀 ${team} · 프로`) : "CS팀";
+      })();
+  const authorTitleSuffix = myMember ? ` ${displayTitle(myMember)}` : "";
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
@@ -5594,7 +5600,7 @@ export default function App() {
           {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[11px] font-bold text-slate-400 lg:flex">
             <span className="tabular-nums">{todayLabel}</span>
             <span className="h-3 w-px bg-white/15" />
-            <span className="text-slate-300">{author || "작성자 미선택"}</span>
+            <span className="text-slate-300">{author ? `${author}${authorTitleSuffix}` : "작성자 미선택"}</span>
           </div>}
           {screen === "field" && (
             <div className="flex items-center gap-1">

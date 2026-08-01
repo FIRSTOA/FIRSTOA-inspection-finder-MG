@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pin, Plus, Trash2 } from "lucide-react";
+import { Megaphone, Pin, Plus, Trash2 } from "lucide-react";
+import FormModal from "./FormModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import PortalSelect from "./PortalSelect";
@@ -209,10 +210,13 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
       </div>
 
       {formOpen && (
-        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFormOpen(false)}>
-          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <b className="text-slate-950">공지 작성</b>
-            <div className="mt-4 space-y-3">
+        <FormModal title="새 공지" subtitle={`${author || "작성자 미선택"} 이름으로 올라갑니다 — 읽음 여부가 모두에게 보여요`} icon={<Megaphone size={17} />} onClose={() => setFormOpen(false)}
+          footer={<>
+            <button type="button" onClick={() => setFormOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
+            <button type="button" disabled={busy || !draft.title.trim()} onClick={() => void submit()}
+              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "올리는 중…" : "공지 올리기"}</button>
+          </>}>
+          <div className="space-y-4">
               <label className="block text-xs font-bold text-slate-500">제목 <b className="text-rose-500">*</b>
                 <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -245,14 +249,8 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
                 <input type="checkbox" checked={draft.pinned} onChange={(e) => setDraft({ ...draft, pinned: e.target.checked })} className="h-4 w-4 accent-blue-600" />
                 목록 상단에 고정 (중요 공지)
               </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.title.trim()} onClick={() => void submit()}
-                className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">{busy ? "등록 중…" : "공지 올리기"}</button>
-            </div>
           </div>
-        </div>
+        </FormModal>
       )}
     </div>
   );

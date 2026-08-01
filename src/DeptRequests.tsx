@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
-import { COMPANY_MEMBERS, memberGroup, memberValue } from "./companyDirectory";
+import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import FormModal from "./FormModal";
+import { Send } from "lucide-react";
+import { COMPANY_MEMBERS, memberGroup, memberValue } from "./companyDirectory";  // DB를 못 읽을 때 폴백
 import PortalSelect from "./PortalSelect";
 import { notify } from "./toast";
 
@@ -36,6 +38,18 @@ const STATUS_BAR: Record<string, string> = { 대기: "bg-rose-500", 처리중: "
 
 export default function DeptRequests({ author, embedded = false }: { author: string; embedded?: boolean }) {
   const { book } = useAuthorBook();
+  const members = useMembers();
+  // 요청자 선택지: 관리 > 인원(DB)이 원본, 비어 있으면 정적 명단 폴백
+  const requesterOptions = useMemo(() => {
+    const fromDb = members.filter((member) => member.active).map((member) => ({
+      value: [member.dept, member.name, displayTitle(member)].join(" "),
+      label: member.name,
+      group: member.team ? `${member.dept} · ${member.team}` : member.dept,
+      hint: displayTitle(member),
+    }));
+    const base = fromDb.length ? fromDb : COMPANY_MEMBERS.map((member) => ({ value: memberValue(member), label: member.name, group: memberGroup(member), hint: member.title }));
+    return [...base, { value: "__custom", label: "직접 입력…" }];
+  }, [members]);
   const [rows, setRows] = useState<DeptRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,6 +64,14 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [busy, setBusy] = useState(false);
 
   const myTeam = useMemo(() => AUTHOR_TEAMS.find((team) => book[team]?.includes(author)) || "", [book, author]);
+
+  // 폼을 열면 요청자에 본인을 자동으로 — 어차피 내 계정으로 올리니까. (대리 등록 시 바꾸면 됨)
+  useEffect(() => {
+    if (!formOpen || draft.requester || !author) return;
+    const me = members.find((member) => member.active && member.name === author);
+    if (me) setDraft((current) => ({ ...current, requester: [me.dept, me.name, displayTitle(me)].join(" ") }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, author, members]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -200,18 +222,18 @@ export default function DeptRequests({ author, embedded = false }: { author: str
       </div>
 
       {formOpen && (
-        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFormOpen(false)}>
-          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <b className="text-slate-950">요청 등록</b>
-            <div className="mt-4 space-y-3">
+        <FormModal title="새 요청" subtitle="CS팀에 처리해 달라고 보내는 요청입니다" icon={<Send size={17} />} onClose={() => setFormOpen(false)}
+          footer={<>
+            <button type="button" onClick={() => setFormOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
+            <button type="button" disabled={busy || !draft.content.trim() || !(draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim())} onClick={() => void submit()}
+              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "보내는 중…" : "요청 보내기"}</button>
+          </>}>
+          <div className="space-y-4">
               <div className="text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <PortalSelect width={200} value={draft.requester.startsWith("__") ? "__custom" : draft.requester} placeholder="명단에서 선택"
                     onChange={(next) => setDraft({ ...draft, requester: next === "__custom" ? "__" : next })}
-                    options={[
-                      ...COMPANY_MEMBERS.map((member) => ({ value: memberValue(member), label: member.name, group: memberGroup(member), hint: member.title })),
-                      { value: "__custom", label: "직접 입력…" },
-                    ]} />
+                    options={requesterOptions} />
                   {draft.requester.startsWith("__") && (
                     <input autoFocus value={draft.requester.slice(2)} onChange={(e) => setDraft({ ...draft, requester: "__" + e.target.value })}
                       placeholder="부서 이름 직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -258,13 +280,8 @@ export default function DeptRequests({ author, embedded = false }: { author: str
               <label className="block text-xs font-bold text-slate-500">요청 내용 <b className="text-rose-500">*</b>
                 <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={3} placeholder="예: OO업체 카운터 확인 부탁드립니다 / OO업체 미수 3개월 체크 요청" className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-              <button type="button" disabled={busy || !draft.content.trim() || !(draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim())} onClick={() => void submit()} className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">{busy ? "등록 중…" : "등록"}</button>
-            </div>
           </div>
-        </div>
+        </FormModal>
       )}
     </div>
   );
