@@ -19,7 +19,7 @@ import { ToastHost } from "./toast";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
-import DeptRequests from "./DeptRequests";
+import InboxHub from "./InboxHub";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
@@ -4585,7 +4585,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5375,10 +5375,10 @@ export default function App() {
     walkingMap: MapIcon, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
     itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
     growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
-    operations: Settings2, lookup: Database,
+    operations: Settings2, lookup: Database, inbox: Inbox,
   };
   const navGroups = [
-    { title: "요청", items: [["deptRequests", "부서 요청"]] },
+    { title: "소식", items: [["inbox", "공지·요청"]] },
     { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
     { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "고객·홍보", items: [["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
@@ -5660,7 +5660,7 @@ export default function App() {
         {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "stock" && <StockBoard author={author} />}
-        {screen === "deptRequests" && <DeptRequests author={author} />}
+        {(screen === "inbox" || screen === "deptRequests") && <InboxHub author={author} />}
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}

@@ -33,7 +33,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 const STATUS_BAR: Record<string, string> = { 대기: "bg-rose-500", 처리중: "bg-amber-400", 완료: "bg-slate-200" };
 
-export default function DeptRequests({ author }: { author: string }) {
+export default function DeptRequests({ author, embedded = false }: { author: string; embedded?: boolean }) {
   const { book } = useAuthorBook();
   const [rows, setRows] = useState<DeptRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,16 +138,14 @@ export default function DeptRequests({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
-      {/* 다크 상태줄 + 등록 버튼 — 다른 허브들과 같은 구조 */}
+      {/* 허브(공지·요청)에 안겨 있으면 다크바는 허브가 담당 — 여기선 필터만 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
+        {!embedded && <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
           <span className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400">
             내 대기 요청 <b className={`tabular-nums ${waiting > 0 ? "text-rose-300" : "text-white"}`}>{waiting}건</b>
           </span>
           {myTeam && <span className="rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400">{author} · {myTeam}팀 기준</span>}
-          <button type="button" onClick={() => setFormOpen(true)}
-            className="ml-auto rounded-full bg-blue-600 px-4 py-1.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 요청 등록</button>
-        </div>
+        </div>}
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="flex rounded-full bg-slate-100 p-1">
             {([["mine", "내 것"], ["all", "모든 요청"]] as const).map(([key, label]) => (
@@ -160,8 +158,12 @@ export default function DeptRequests({ author }: { author: string }) {
           <div className="flex flex-wrap gap-1">
             {["전체", ...KINDS].map((name) => <button key={name} type="button" onClick={() => setKindFilter(name)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${kindFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
           </div>
-          <div className="ml-auto flex rounded-full bg-slate-100 p-1">
-            {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex rounded-full bg-slate-100 p-1">
+              {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+            </div>
+            <button type="button" onClick={() => setFormOpen(true)}
+              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 요청 등록</button>
           </div>
         </div>
       </section>
