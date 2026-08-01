@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; color: #222; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p.sub { color: #666; margin: 0 0 20px; font-size: 13px; }
+    label { display: block; font-weight: 600; margin: 16px 0 6px; font-size: 14px; }
+    select, input[type=text] { width: 100%; padding: 10px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    input[type=file] { margin-top: 6px; }
+    button { margin-top: 22px; width: 100%; padding: 13px; font-size: 16px; font-weight: 600; color: #fff; background: #2b6cb0; border: 0; border-radius: 6px; cursor: pointer; }
+    button:disabled { background: #9bb6d2; cursor: default; }
+    #result { margin-top: 20px; padding: 14px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; display: none; }
+    #result.ok { background: #e6f4ea; border: 1px solid #b7e1c4; }
+    #result.err { background: #fdecea; border: 1px solid #f5c2bd; }
+    .hint { color: #888; font-size: 12px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>카톡 TXT 업로드</h1>
+  <p class="sub">카카오톡 대화 내보내기(.txt) 파일을 올리면 통합 DB에 적재됩니다.</p>
+
+  <label for="room">카톡방 유형</label>
+  <select id="room"></select>
+
+  <label for="team">담당팀 (선택)</label>
+  <input type="text" id="team" placeholder="예: A / B / C / D">
+
+  <label for="file">TXT 파일</label>
+  <input type="file" id="file" accept=".txt,text/plain">
+  <div class="hint">AS방은 양식 기반 자동 추출(빠름). 그 외 방은 AI 추출이라 대용량 파일은 시간이 오래 걸리거나 제한시간을 넘을 수 있습니다.</div>
+
+  <button id="go" onclick="submit()">업로드 &amp; 적재</button>
+  <div id="result"></div>
+
+<script>
+  // 지원 방 유형 로드
+  google.script.run.withSuccessHandler(function (types) {
+    var sel = document.getElementById('room');
+    types.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t.type;
+      o.textContent = t.type + ' (' + (t.mode === 'rule' ? '양식' : 'AI') + ')';
+      sel.appendChild(o);
+    });
+  }).getKakaoRoomTypes();
+
+  function show(cls, msg) {
+    var r = document.getElementById('result');
+    r.className = cls;
+    r.textContent = msg;
+    r.style.display = 'block';
+  }
+
+  function gasRun(fn, args) {
+    return new Promise(function (resolve, reject) {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn].apply(google.script.run, args);
+    });
+  }
+
+  // 큰 파일을 한 번에 보내면 HTTP 413으로 거부된다. 큰 파일은 청크로 나눠 stash 후 조립.
+  var UPLOAD_CHUNK = 30000;
+  async function ingestKakao(room, team, text, onProgress) {
+    if (text.length <= UPLOAD_CHUNK) return gasRun('ingestKakaoUpload', [room, team, text]);
+    var begin = await gasRun('uploadStashBegin', []);
+    if (!begin || !begin.ok) throw new Error(begin && begin.error ? begin.error : '업로드 준비 실패');
+    var total = Math.ceil(text.length / UPLOAD_CHUNK);
+    var i = 0, idx = 0;
+    while (i < text.length) {
+      var end = Math.min(i + UPLOAD_CHUNK, text.length);
+      if (end < text.length) {
+        var code = text.charCodeAt(end - 1);
+        if (code >= 0xD800 && code <= 0xDBFF && end - 1 > i) end--;
+      }
+      var r = await gasRun('uploadStashChunk', [idx, text.slice(i, end)]);
+      if (!r || !r.ok) throw new Error(r && r.error ? r.error : '청크 전송 실패');
+      i = end; idx++;
+      if (onProgress) onProgress(idx, total);
+    }
+    return gasRun('ingestKakaoUploadStashed', [room, team]);
+  }
+
+  function submit() {
+    var room = document.getElementById('room').value;
+    var team = document.getElementById('team').value.trim();
+    var fileInput = document.getElementById('file');
+    if (!fileInput.files.length) { show('err', 'TXT 파일을 선택하세요.'); return; }
+
+    var btn = document.getElementById('go');
+    btn.disabled = true;
+    show('ok', '읽는 중...');
+
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var b = new Uint8Array(ev.target.result);
+      var enc = 'utf-8';
+      if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) enc = 'utf-16le';
+      else if (b.length >= 2 && b[0] === 0xFE && b[1] === 0xFF) enc = 'utf-16be';
+      var text;
+      try { text = new TextDecoder(enc).decode(b); } catch (e) { text = new TextDecoder('utf-8').decode(b); }
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+      show('ok', '적재 중... (대용량 AI 추출은 몇 분 걸릴 수 있습니다)');
+      ingestKakao(room, team, text, function (sent, tot) {
+        show('ok', '전송 중 ' + sent + '/' + tot + ' …');
+      }).then(function (res) {
+        btn.disabled = false;
+        if (res && res.ok) {
+          show('ok',
+            '완료 ✓\n' +
+            '탭: ' + res.tab + '  (방식: ' + res.mode + ')\n' +
+            '파싱 메시지: ' + res.parsed + '건\n' +
+            '추출 레코드: ' + res.records + '건\n' +
+            '신규 추가: ' + res.added + '건 / 중복 제외: ' + res.skipped + '건');
+        } else {
+          show('err', '실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
+        }
+      }).catch(function (err) {
+        btn.disabled = false;
+        show('err', '오류: ' + (err && err.message ? err.message : err));
+      });
+    };
+    reader.onerror = function () { btn.disabled = false; show('err', '파일 읽기 실패'); };
+    reader.readAsArrayBuffer(fileInput.files[0]);
+  }
+</script>
+</body>
+</html>
