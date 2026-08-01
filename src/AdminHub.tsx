@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { selectRows } from "./supabase";
 import MemberAdmin from "./MemberAdmin";
-import StockBoard from "./StockBoard";
 import ContentAdmin from "./ContentAdmin";
 import SystemAdmin from "./SystemAdmin";
 
@@ -12,11 +11,10 @@ import SystemAdmin from "./SystemAdmin";
  * 상단 다크 상태줄은 각 탭에 들어가지 않아도 "지금 상태가 정상인지"를 보여준다.
  * 특히 테스트 모드·전송 꺼짐은 회사 전체 전송이 멈추는 상태라 어느 탭에 있든 보여야 한다.
  */
-type Tab = "members" | "stock" | "template" | "promo" | "system";
+type Tab = "members" | "template" | "promo" | "system";
 
 const TABS: Array<[Tab, string]> = [
   ["members", "인원"],
-  ["stock", "재고"],
   ["template", "문자 문구"],
   ["promo", "홍보물"],
   ["system", "전송·카톡방"],
@@ -32,8 +30,11 @@ type Summary = {
   testMode: boolean;
 };
 
-export default function AdminHub({ author }: { author: string }) {
-  const [tab, setTab] = useState<Tab>(() => (window.localStorage.getItem("cs_admin_tab_v1") as Tab) || "members");
+export default function AdminHub({ author, onOpenStock }: { author: string; onOpenStock?: () => void }) {
+  const [tab, setTab] = useState<Tab>(() => {
+    const saved = window.localStorage.getItem("cs_admin_tab_v1") as Tab;
+    return TABS.some(([key]) => key === saved) ? saved : "members";
+  });
   const [summary, setSummary] = useState<Summary | null>(null);
 
   useEffect(() => { window.localStorage.setItem("cs_admin_tab_v1", tab); }, [tab]);
@@ -66,8 +67,8 @@ export default function AdminHub({ author }: { author: string }) {
     return () => { alive = false; };
   }, [tab]); // 탭에서 값을 바꾸고 돌아오면 요약도 갱신
 
-  const chip = (label: string, value: string, target: Tab, warn = false) => (
-    <button key={label} type="button" onClick={() => setTab(target)}
+  const chip = (label: string, value: string, go: () => void, warn = false) => (
+    <button key={label} type="button" onClick={go}
       className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${warn ? "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
       {label} <b className={`tabular-nums ${warn ? "" : "text-white"}`}>{value}</b>
     </button>
@@ -80,10 +81,10 @@ export default function AdminHub({ author }: { author: string }) {
         <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
           {summary ? (
             <>
-              {chip("재직", `${summary.members}명`, "members")}
-              {chip("재고 부족", `${summary.stockLow}종`, "stock", summary.stockLow > 0)}
-              {chip("문구", `${summary.templates}개`, "template")}
-              {chip("홍보물", `${summary.promos}개`, "promo")}
+              {chip("재직", `${summary.members}명`, () => setTab("members"))}
+              {chip("재고 부족", `${summary.stockLow}종`, () => onOpenStock?.(), summary.stockLow > 0)}
+              {chip("문구", `${summary.templates}개`, () => setTab("template"))}
+              {chip("홍보물", `${summary.promos}개`, () => setTab("promo"))}
               <span className="ml-auto flex items-center gap-2">
                 {summary.testMode && (
                   <button type="button" onClick={() => setTab("system")}
@@ -111,7 +112,6 @@ export default function AdminHub({ author }: { author: string }) {
       </section>
 
       {tab === "members" && <MemberAdmin />}
-      {tab === "stock" && <StockBoard author={author} />}
       {tab === "template" && <ContentAdmin author={author} view="template" />}
       {tab === "promo" && <ContentAdmin author={author} view="promo" />}
       {tab === "system" && <SystemAdmin />}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTeamVisits, kstDate, WORK_LABELS, type VisitRow } from "./visits";
-import { insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
+import { invokeEdgeFunction, selectRows, updateRows, upsertRow } from "./supabase";
 
 type Contact = { id: string; name: string; phone: string; email: string; selected: boolean };
 type HappycallStatus = "pending" | "scheduled" | "sent" | "failed" | "skip" | "cancelled";
@@ -102,7 +102,7 @@ function ContactsEditor({ contacts, onChange, email = false }: { contacts: Conta
   </div>;
 }
 
-function useMessageTemplates(context: "happycall" | "promotion", author: string) {
+function useMessageTemplates(context: "happycall" | "promotion") {
   const defaults = context === "happycall" ? happycallDefaults : promotionDefaults;
   const [custom, setCustom] = useState<MessageTemplate[]>([]);
   const reload = useCallback(() => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`).then(setCustom).catch(() => setCustom([])), [context]);
@@ -118,33 +118,14 @@ function useMessageTemplates(context: "happycall" | "promotion", author: string)
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [reload]);
-  const save = async (body: string) => {
-    const title = window.prompt("전 직원에게 공유할 새 문구 이름을 입력하세요.");
-    if (!title?.trim() || !body.trim()) return;
-    if (!window.confirm(`'${title.trim()}' 문구를 회사 공용으로 추가할까요?\n모든 직원에게 동일하게 표시됩니다.`)) return;
-    await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
-    await reload();
-  };
-  const update = async (id: string, body: string) => {
-    const current = custom.find((item) => item.id === id);
-    if (!current) return save(body);
-    const title = window.prompt("회사 공용 문구 이름", current.title);
-    if (!title?.trim() || !body.trim()) return;
-    if (!window.confirm(`'${current.title}' 공용 문구를 수정할까요?\n변경 내용은 모든 직원에게 반영됩니다.`)) return;
-    await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
-    await reload();
-  };
-  const remove = async (id: string) => {
-    const current = custom.find((item) => item.id === id);
-    if (!current || !window.confirm(`'${current.title}' 공용 문구를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
-    await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { active: false });
-    await reload();
-  };
-  return { templates: custom.length ? custom : defaults, save, update, remove, editableIds: new Set(custom.map((item) => item.id)) };
+  // 추가·수정·삭제는 관리 > 문자 문구 한 곳에서만 한다.
+  // (여기에도 편집이 있으면 같은 데이터를 두 곳에서 고치게 되어 헷갈린다)
+  return { templates: custom.length ? custom : defaults };
 }
 
-function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
-  const { templates, save, update, remove, editableIds } = useMessageTemplates(context, author);
+function TemplateBar({ context, author, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion"; author: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
+  void author;
+  const { templates } = useMessageTemplates(context);
   const [selected, setSelected] = useState(templates[0]?.id || "");
   const appliedRevision = useRef("");
   const selectedId = templates.some((item) => item.id === selected) ? selected : templates[0]?.id || "";
@@ -155,14 +136,12 @@ function TemplateBar({ context, author, body, onApply, preferredTitle = "", appl
     setSelected(preferred.id);
     onApply(preferred.body);
   }, [applyRevision, onApply, preferredTitle, templates]);
-  return <div className="grid grid-cols-3 gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
-    <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
-    <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+  return <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
+    <span className="shrink-0 px-1 text-[11px] font-black text-blue-700">회사 공용 문구</span>
+    <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
-    <button type="button" onClick={() => void save(body)} className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-600 transition hover:bg-blue-50">공용 추가</button>
-    <button type="button" onClick={() => void update(selectedId, body)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">공용 수정</button>
-    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40">공용 삭제</button>
+    <span className="shrink-0 text-[10px] font-bold text-slate-400">문구 추가·수정: 관리 › 문자 문구</span>
   </div>;
 }
 
@@ -181,7 +160,7 @@ export function HappyCallWorkspace({ author }: { author: string }) {
   const detail = selected ? <div className="flex min-h-0 flex-col">
     <div className="border-b pb-3"><div className="text-xs font-black text-blue-600">{selected.workDate} · {visitType(selected)}</div><div className="mt-1 text-lg font-black">{selected.vendor}</div></div>
     <div className="mt-4"><div className="mb-2 text-xs font-black text-slate-500">발송 대상</div><ContactsEditor contacts={contacts} onChange={setContacts} /></div>
-    <div className="mt-4"><TemplateBar context="happycall" author={author} body={message} onApply={setMessage} preferredTitle={selected.workKinds.includes("as") ? "AS 기본 확인형" : "점검 기본 확인형"} applyRevision={selectedRecord?.message ? "" : selected.id} /></div>
+    <div className="mt-4"><TemplateBar context="happycall" author={author} onApply={setMessage} preferredTitle={selected.workKinds.includes("as") ? "AS 기본 확인형" : "점검 기본 확인형"} applyRevision={selectedRecord?.message ? "" : selected.id} /></div>
     <textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-3 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
     <div className="text-[10px] font-bold text-slate-400">사용 가능: {'{고객명}'} {'{업체명}'} {'{담당자}'} {'{업무}'} {'{방문일}'}</div>
     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-black text-slate-500">예약 발송 시간<input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>
@@ -218,17 +197,16 @@ function MaterialPreview({ material, compact = false }: { material: PromoMateria
 
 export function PromoWorkspace({ author }: { author: string }) {
   const [materials, setMaterials] = useState<PromoMaterial[]>([]); const [visits, setVisits] = useState<VisitRow[]>([]); const [selectedId, setSelectedId] = useState(""); const [sourceVisitId, setSourceVisitId] = useState(""); const [visitPickerOpen, setVisitPickerOpen] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>([newContact()]); const [message, setMessage] = useState(""); const [category, setCategory] = useState("전체"); const [uploadOpen, setUploadOpen] = useState(false);
-  const [title, setTitle] = useState(""); const [uploadCategory, setUploadCategory] = useState(promoCategories[0]); const [description, setDescription] = useState(""); const [file, setFile] = useState<File | null>(null); const [uploading, setUploading] = useState(false); const [notice, setNotice] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
+  const [contacts, setContacts] = useState<Contact[]>([newContact()]); const [message, setMessage] = useState(""); const [category, setCategory] = useState("전체");
+  const [notice, setNotice] = useState("");
   const reload = () => selectRows<PromoMaterial>("promo_materials", "select=*&active=eq.true&order=created_at.desc").then(setMaterials).catch((error) => setNotice((error as Error).message));
   useEffect(() => { void reload(); void getTeamVisits(dateBefore(30), kstDate()).then((rows) => setVisits(rows.filter((visit) => visit.visited).reverse())); }, []);
   const visible = materials.filter((item) => category === "전체" || item.category === category); const selected = materials.find((item) => item.id === selectedId); const sourceVisit = visits.find((visit) => visit.id === sourceVisitId);
   const chooseVisit = (id: string) => { setSourceVisitId(id); setVisitPickerOpen(false); const visit = visits.find((item) => item.id === id); if (!visit) { setContacts([newContact()]); return; } const found = extractVisitContacts(visit.sourceText || visit.note); setContacts(found.length ? found : [newContact()]); setNotice(found.length ? `${visit.vendor} 고객 ${found.length}명을 불러왔습니다.` : "연락처를 찾지 못했습니다. 직접 입력해 주세요."); };
-  const upload = async () => { if (!file || !title.trim()) return; if (!/^(image\/|application\/pdf)/.test(file.type)) return setNotice("이미지 또는 PDF만 등록할 수 있습니다."); setUploading(true); try { const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_"); const url = await uploadPublicFile("promo-materials", `${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, file, file.type); await insertRow("promo_materials", { title: title.trim(), category: uploadCategory, description: description.trim(), file_url: url, file_type: file.type, active: true, created_by: author, _dupKey: crypto.randomUUID() }); setUploadOpen(false); setTitle(""); setDescription(""); setFile(null); await reload(); } catch (error) { setNotice((error as Error).message); } finally { setUploading(false); } };
-  const removeMaterial = async () => { if (!selected || !window.confirm(`${selected.title} 게시물을 삭제할까요?`)) return; await updateRows("promo_materials", `id=eq.${encodeURIComponent(selected.id)}`, { active: false }); setSelectedId(""); await reload(); };
+
   const send = async (channel: "sms" | "email") => { if (!selected) return; const targets = contacts.filter((contact) => contact.selected && (channel === "sms" ? validPhone(contact.phone) : validEmail(contact.email))); if (!targets.length) return setNotice(channel === "sms" ? "발송할 휴대전화 번호를 확인해 주세요." : "발송할 이메일 주소를 확인해 주세요."); try { for (const contact of targets) { const text = applyTokens(message, { 고객명: contact.name || "고객", 업체명: sourceVisit?.vendor || "", 담당자: author, 자료명: selected.title, 자료설명: selected.description, 자료링크: selected.file_url }); await invokeEdgeFunction("customer-message-send", { channel, type: "promotion", to: channel === "sms" ? contact.phone : contact.email, text, materialId: selected.id, author }); } setNotice(`${targets.length}명에게 ${channel === "sms" ? "문자" : "메일"}를 발송했습니다.`); } catch (error) { setNotice(`발송 실패: ${(error as Error).message}`); } };
   const detail = selected ? <div className="flex min-h-0 flex-col">
-    <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black text-blue-600">{selected.category}</div><div className="mt-1 text-lg font-black">{selected.title}</div></div><button onClick={() => void removeMaterial()} className="rounded-full border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">삭제</button></div>
+    <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black text-blue-600">{selected.category}</div><div className="mt-1 text-lg font-black">{selected.title}</div></div></div>
     <div className="mt-3 aspect-[16/9] overflow-hidden rounded-lg border bg-slate-100"><MaterialPreview material={selected} /></div>
     <div className="mt-4 text-xs font-black text-slate-500">
       최근 방문 업체
@@ -242,14 +220,14 @@ export function PromoWorkspace({ author }: { author: string }) {
       </div>}
     </div>
     <div className="mt-3"><ContactsEditor contacts={contacts} onChange={setContacts} email /></div>
-    <div className="mt-4"><TemplateBar context="promotion" author={author} body={message} onApply={setMessage} preferredTitle="자료 안내형" applyRevision={selected.id} /></div>
+    <div className="mt-4"><TemplateBar context="promotion" author={author} onApply={setMessage} preferredTitle="자료 안내형" applyRevision={selected.id} /></div>
     <textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-3 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-    <div className="mt-1 text-[10px] font-bold text-slate-400">이 칸만 고치면 현재 발송에만 적용됩니다. 전체 문구를 바꾸려면 공용 수정 버튼을 누르세요.</div>
+    <div className="mt-1 text-[10px] font-bold text-slate-400">이 칸을 고치면 현재 발송에만 적용됩니다. 공용 문구 자체는 관리 › 문자 문구에서 바꿉니다.</div>
     {notice && <div className="mt-3 rounded-lg bg-slate-100 p-3 text-xs font-bold text-slate-600">{notice}</div>}
     <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2.5 text-sm font-black text-white">문자 발송</button><button onClick={() => void send("email")} className="rounded-full border border-blue-200 px-3 py-2.5 text-sm font-black text-blue-700">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-lg border px-3 py-2.5 text-center text-sm font-black">원본 열기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-lg border px-3 py-2.5 text-center text-sm font-black">파일 저장</a></div>
   </div> : <div className="flex min-h-[400px] items-center justify-center text-sm font-semibold text-slate-400">홍보물을 선택하세요.</div>;
-  return <div className="space-y-4"><section className="flex items-end justify-between gap-3 rounded-lg border bg-white p-4 sm:p-5"><div><h2 className="text-xl font-black">홍보물 센터</h2><p className="mt-1 hidden text-sm font-semibold text-slate-500 sm:block">방문 업체를 불러오거나 직접 입력해 문자·메일·인쇄합니다.</p></div><button onClick={() => setUploadOpen(true)} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2.5 text-sm font-black text-white">+ 자료 등록</button></section><div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(470px,.9fr)]"><section className="rounded-lg border bg-white"><div className="grid grid-cols-3 gap-2 border-b p-3 sm:grid-cols-6">{["전체", ...promoCategories].map((item) => <button key={item} onClick={() => setCategory(item)} className={`rounded-full px-1 py-2 text-[11px] font-black sm:text-xs ${category === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}</div><div className="grid grid-cols-2 gap-3 p-3 sm:p-4 lg:grid-cols-3">{visible.map((item) => <button key={item.id} onClick={() => setSelectedId(item.id)} className={`overflow-hidden rounded-lg border text-left ${selectedId === item.id ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"}`}><div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100"><MaterialPreview material={item} compact /></div><div className="p-3"><span className="text-[10px] font-black text-blue-600">{item.category}</span><div className="mt-1 line-clamp-2 text-sm font-black">{item.title}</div></div></button>)}</div></section><section className="hidden rounded-lg border bg-white p-5 shadow-sm xl:block">{detail}</section></div>
+  return <div className="space-y-4"><section className="flex items-end justify-between gap-3 rounded-lg border bg-white p-4 sm:p-5"><div><h2 className="text-xl font-black">홍보물 센터</h2><p className="mt-1 hidden text-sm font-semibold text-slate-500 sm:block">방문 업체를 불러오거나 직접 입력해 문자·메일·인쇄합니다.</p></div><span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-500">자료 등록·삭제: 관리 › 홍보물</span></section><div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(470px,.9fr)]"><section className="rounded-lg border bg-white"><div className="grid grid-cols-3 gap-2 border-b p-3 sm:grid-cols-6">{["전체", ...promoCategories].map((item) => <button key={item} onClick={() => setCategory(item)} className={`rounded-full px-1 py-2 text-[11px] font-black sm:text-xs ${category === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}</div><div className="grid grid-cols-2 gap-3 p-3 sm:p-4 lg:grid-cols-3">{visible.map((item) => <button key={item.id} onClick={() => setSelectedId(item.id)} className={`overflow-hidden rounded-lg border text-left ${selectedId === item.id ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"}`}><div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100"><MaterialPreview material={item} compact /></div><div className="p-3"><span className="text-[10px] font-black text-blue-600">{item.category}</span><div className="mt-1 line-clamp-2 text-sm font-black">{item.title}</div></div></button>)}</div></section><section className="hidden rounded-lg border bg-white p-5 shadow-sm xl:block">{detail}</section></div>
     {selected && <div className="fixed inset-0 z-[2100] flex items-end bg-slate-950/45 xl:hidden" onMouseDown={() => setSelectedId("")}><section className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-0 pt-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><button type="button" onClick={() => setSelectedId("")} className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/80 text-xl text-white shadow-lg" aria-label="닫기">×</button>{detail}</section></div>}
-    {uploadOpen && <div className="fixed inset-0 z-[2200] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setUploadOpen(false)}><div className="w-full rounded-t-xl bg-white p-5 sm:max-w-lg sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex justify-between"><div className="text-lg font-black">홍보물 등록</div><button onClick={() => setUploadOpen(false)} className="text-xl text-slate-400">×</button></div><div className="mt-5 space-y-4"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="자료 제목" className="w-full rounded-lg border p-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)} className="w-full rounded-lg border bg-white p-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{promoCategories.map((item) => <option key={item}>{item}</option>)}</select><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="자료 설명" className="w-full rounded-lg border p-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><button onClick={() => fileRef.current?.click()} className="w-full rounded-lg border border-dashed p-5 text-sm font-black">{file ? file.name : "이미지 또는 PDF 선택"}</button><input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} /><button disabled={uploading || !title.trim() || !file} onClick={() => void upload()} className="w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 p-3 text-sm font-black text-white disabled:opacity-40">{uploading ? "등록 중" : "홍보물 센터에 등록"}</button></div></div></div>}
+
   </div>;
 }

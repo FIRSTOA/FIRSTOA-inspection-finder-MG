@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import PortalSelect from "./PortalSelect";
 
 /**
@@ -13,6 +13,8 @@ type Template = { id: string; context: string; title: string; body: string; acti
 type Promo = { id: string; title: string; category?: string; description?: string; file_url?: string; file_type?: string; active: boolean; created_by?: string };
 
 const CONTEXTS = [["happycall", "해피콜"], ["promotion", "홍보"]] as const;
+// 홍보물 발송 화면의 분류와 같아야 필터가 맞는다
+const PROMO_CATEGORIES = ["IT", "소프트웨어", "퇴사자 보안", "복합기", "기타"];
 
 export default function ContentAdmin({ author, view }: { author: string; view: "template" | "promo" }) {
   const tab = view;
@@ -22,7 +24,9 @@ export default function ContentAdmin({ author, view }: { author: string; view: "
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [tplDraft, setTplDraft] = useState({ context: "happycall", title: "", body: "" });
-  const [promoDraft, setPromoDraft] = useState({ title: "", category: "", description: "", file_url: "" });
+  const [promoDraft, setPromoDraft] = useState({ title: "", category: PROMO_CATEGORIES[0], description: "" });
+  const [promoFile, setPromoFile] = useState<File | null>(null);
+  const promoFileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -70,11 +74,15 @@ export default function ContentAdmin({ author, view }: { author: string; view: "
   };
 
   const addPromo = async () => {
-    if (!promoDraft.title.trim()) return;
+    if (!promoDraft.title.trim() || !promoFile) return;
+    if (!/^(image\/|application\/pdf)/.test(promoFile.type)) { setError("이미지 또는 PDF만 등록할 수 있습니다."); return; }
     setBusy("promo-add");
     try {
-      await insertRow("promo_materials", { id: crypto.randomUUID(), ...promoDraft, title: promoDraft.title.trim(), active: true, created_by: author });
-      setPromoDraft({ title: "", category: "", description: "", file_url: "" });
+      const safe = promoFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const url = await uploadPublicFile("promo-materials", `${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, promoFile, promoFile.type);
+      await insertRow("promo_materials", { title: promoDraft.title.trim(), category: promoDraft.category, description: promoDraft.description.trim(), file_url: url, file_type: promoFile.type, active: true, created_by: author, _dupKey: crypto.randomUUID() });
+      setPromoDraft({ title: "", category: PROMO_CATEGORIES[0], description: "" });
+      setPromoFile(null);
       await load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(""); }
   };
@@ -165,17 +173,26 @@ export default function ContentAdmin({ author, view }: { author: string; view: "
             <h3 className="text-base font-black text-slate-950 lg:text-lg">홍보물</h3>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">홍보물 발송·인쇄 화면에서 고르는 목록입니다.</p>
           </div>
-          <div className="grid gap-2 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-4">
-            {([["title", "제목"], ["category", "분류"], ["description", "설명"], ["file_url", "파일 주소"]] as const).map(([key, label]) => (
-              <label key={key} className="text-[11px] font-black text-slate-500">{label}
-                <input value={promoDraft[key]} onChange={(e) => setPromoDraft({ ...promoDraft, [key]: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              </label>
-            ))}
-            <div className="sm:col-span-2 lg:col-span-4">
-              <button type="button" onClick={() => void addPromo()} disabled={!promoDraft.title.trim() || busy === "promo-add"}
-                className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40"><Plus size={15} />홍보물 추가</button>
-            </div>
+          <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-4">
+            <label className="text-[11px] font-black text-slate-500">제목
+              <input value={promoDraft.title} onChange={(e) => setPromoDraft({ ...promoDraft, title: e.target.value })} placeholder="자료 제목"
+                className="mt-1 block w-44 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            </label>
+            <label className="text-[11px] font-black text-slate-500">분류
+              <span className="mt-1 block"><PortalSelect width={140} value={promoDraft.category} onChange={(next) => setPromoDraft({ ...promoDraft, category: next })}
+                options={PROMO_CATEGORIES.map((value) => ({ value, label: value }))} /></span>
+            </label>
+            <label className="min-w-0 flex-1 text-[11px] font-black text-slate-500">설명
+              <input value={promoDraft.description} onChange={(e) => setPromoDraft({ ...promoDraft, description: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            </label>
+            <button type="button" onClick={() => promoFileRef.current?.click()}
+              className={`shrink-0 rounded-lg border border-dashed px-3.5 py-2 text-sm font-black transition ${promoFile ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 text-slate-500 hover:border-slate-400"}`}>
+              {promoFile ? promoFile.name.slice(0, 24) : "이미지·PDF 선택"}
+            </button>
+            <input ref={promoFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setPromoFile(e.target.files?.[0] || null)} />
+            <button type="button" onClick={() => void addPromo()} disabled={!promoDraft.title.trim() || !promoFile || busy === "promo-add"}
+              className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40"><Plus size={15} />{busy === "promo-add" ? "등록 중…" : "홍보물 등록"}</button>
           </div>
           <div className="divide-y divide-slate-100">
             {promos.map((row) => (

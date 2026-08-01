@@ -5618,7 +5618,7 @@ export default function App() {
 
         {/* 홈 / 업무 화면 */}
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
-        {screen === "operations" && <AdminHub author={author} />}
+        {screen === "operations" && <AdminHub author={author} onOpenStock={() => setScreen("stock")} />}
         {screen === "lookup" && (
           <div className="space-y-4">
             {/* 조회 = 보기 전용. 기록 표를 그대로 훑고, 집계는 현황판 탭에서 본다. */}
