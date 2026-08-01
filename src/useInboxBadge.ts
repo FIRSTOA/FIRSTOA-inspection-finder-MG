@@ -1,24 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { selectRows } from "./supabase";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { useAuthorBook, useMembers } from "./authors";
+import { makeIsForMe } from "./audience";
 
 /**
- * 사이드바 배지용: 안 읽은 공지 + 나에게 온 대기 요청 수.
- * 어느 화면에 있든 새 소식이 온 걸 알 수 있게 App 차원에서 가볍게 폴링한다.
+ * 사이드바 배지용: 안 읽은 공지 + 나에게 온 대기 요청 + 내 요청 진행 소식.
+ * 어느 화면에 있든 새 소식이 온 걸 알 수 있게 App 차원에서 가볍게 폴링하고,
+ * 앱 안에서 공지·요청이 움직이면 pingInbox()로 즉시 다시 센다 (새로고침 불필요).
  */
+export const INBOX_EVENT = "inbox-changed";
+
+/** 공지·요청에 변화를 만든 직후 호출 — 배지·허브 숫자가 그 자리에서 갱신된다 */
+export function pingInbox() {
+  window.dispatchEvent(new Event(INBOX_EVENT));
+}
+
 export function useInboxBadge(author: string): number {
   const { book } = useAuthorBook();
+  const members = useMembers();
   const [count, setCount] = useState(0);
-  const myTeam = useMemo(() => AUTHOR_TEAMS.find((team) => book[team]?.includes(author)) || "", [book, author]);
 
   useEffect(() => {
     let alive = true;
-    const isMine = (row: { target_type?: string; target?: string }) => {
-      const type = row.target_type || "전체";
-      if (type === "전체") return true;
-      if (type === "팀") return !!myTeam && row.target === myTeam;
-      return !!author && row.target === author;
-    };
+    const isMine = makeIsForMe(author, members, book);
     const refresh = async () => {
       try {
         const [notices, myReads, waiting, updates] = await Promise.all([
@@ -37,14 +41,16 @@ export function useInboxBadge(author: string): number {
     };
     void refresh();
     const timer = window.setInterval(refresh, 120_000);
-    const onFocus = () => { void refresh(); };
-    window.addEventListener("focus", onFocus);
+    const onWake = () => { void refresh(); };
+    window.addEventListener("focus", onWake);
+    window.addEventListener(INBOX_EVENT, onWake);
     return () => {
       alive = false;
       window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener(INBOX_EVENT, onWake);
     };
-  }, [author, myTeam]);
+  }, [author, members, book]);
 
   return count;
 }

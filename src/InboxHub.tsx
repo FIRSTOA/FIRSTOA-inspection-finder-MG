@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { selectRows } from "./supabase";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { useAuthorBook, useMembers } from "./authors";
+import { makeIsForMe, myGroupLabel } from "./audience";
+import { INBOX_EVENT } from "./useInboxBadge";
 import NoticeBoard from "./NoticeBoard";
 import DeptRequests from "./DeptRequests";
 
@@ -20,7 +22,16 @@ export default function InboxHub({ author }: { author: string }) {
 
   useEffect(() => { window.localStorage.setItem("cs_inbox_tab_v1", tab); }, [tab]);
 
-  const myTeam = useMemo(() => AUTHOR_TEAMS.find((team) => book[team]?.includes(author)) || "", [book, author]);
+  const members = useMembers();
+  const groupLabel = useMemo(() => myGroupLabel(author, members), [author, members]);
+
+  // 앱 안에서 공지·요청이 움직이면 즉시 다시 센다
+  const [bump, setBump] = useState(0);
+  useEffect(() => {
+    const onPing = () => setBump((n) => n + 1);
+    window.addEventListener(INBOX_EVENT, onPing);
+    return () => window.removeEventListener(INBOX_EVENT, onPing);
+  }, []);
 
   // 요청 대기 수 (내 것 기준) — 상태줄용 가벼운 집계
   useEffect(() => {
@@ -30,12 +41,7 @@ export default function InboxHub({ author }: { author: string }) {
         const rows = await selectRows<{ status: string; target_type?: string; target?: string }>(
           "dept_requests", "select=status,target_type,target&status=eq.%EB%8C%80%EA%B8%B0&limit=500");
         if (!alive) return;
-        const mine = rows.filter((row) => {
-          const type = row.target_type || "전체";
-          if (type === "전체") return true;
-          if (type === "팀") return !!myTeam && row.target === myTeam;
-          return !!author && row.target === author;
-        });
+        const mine = rows.filter(makeIsForMe(author, members, book));
         setMyWaiting(mine.length);
         if (author) {
           const updates = await selectRows<{ id: number }>("dept_requests", `select=id&requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}&limit=100`);
@@ -44,7 +50,7 @@ export default function InboxHub({ author }: { author: string }) {
       } catch { /* 집계 실패해도 화면은 동작 */ }
     })();
     return () => { alive = false; };
-  }, [tab, myTeam, author]);
+  }, [tab, author, members, book, bump]);
 
   const chip = (label: string, value: number | null, warn: boolean, go: Tab) => (
     <button type="button" onClick={() => setTab(go)}
@@ -60,7 +66,7 @@ export default function InboxHub({ author }: { author: string }) {
           {chip("안 읽은 공지", unreadNotices, (unreadNotices ?? 0) > 0, "notice")}
           {chip("내 대기 요청", myWaiting, (myWaiting ?? 0) > 0, "request")}
           {myUpdates > 0 && chip("내 요청 진행 소식", myUpdates, true, "request")}
-          <span className="ml-auto text-[11px] font-semibold text-slate-500">{author ? `${author}${myTeam ? ` · ${myTeam}팀` : ""} 기준` : "작성자를 선택하면 내 것만 골라 보여줍니다"}</span>
+          <span className="ml-auto text-[11px] font-semibold text-slate-500">{author ? `${author}${groupLabel ? ` · ${groupLabel}` : ""} 기준` : "작성자를 선택하면 내 것만 골라 보여줍니다"}</span>
         </div>
         <div className="flex overflow-x-auto">
           {([["notice", "공지사항"], ["request", "부서 요청"]] as Array<[Tab, string]>).map(([key, label]) => (

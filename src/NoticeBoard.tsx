@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Megaphone, Pin, Plus, Trash2 } from "lucide-react";
 import FormModal from "./FormModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { audienceNames, makeIsForMe, teamTargetLabel, teamTargetOptions } from "./audience";
+import { pingInbox } from "./useInboxBadge";
 import PortalSelect from "./PortalSelect";
 import { notify } from "./toast";
 
@@ -37,8 +39,13 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ title: "", body: "", target_type: "전체" as Notice["target_type"], target: "", pinned: false });
 
-  const myTeam = useMemo(() => AUTHOR_TEAMS.find((team) => book[team]?.includes(author)) || "", [book, author]);
-  const activeMembers = useMemo(() => AUTHOR_TEAMS.flatMap((team) => book[team] || []), [book]);
+  const members = useMembers();
+  const teamOptions = useMemo(() => teamTargetOptions(members), [members]);
+  const personOptions = useMemo(() => {
+    const active = members.filter((member) => member.active);
+    if (active.length) return active.map((member) => ({ value: member.name, label: member.name, group: member.team ? `${member.dept} · ${member.team}` : member.dept, hint: displayTitle(member) }));
+    return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })));
+  }, [members, book]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,18 +65,10 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const isForMe = useCallback((row: Notice) => {
-    if (row.target_type === "전체") return true;
-    if (row.target_type === "팀") return !!myTeam && row.target === myTeam;
-    return !!author && row.target === author;
-  }, [myTeam, author]);
+  const isForMe = useMemo(() => makeIsForMe(author, members, book), [author, members, book]);
 
-  /** 공지의 대상 인원 명단 (읽음 분모) */
-  const audienceOf = useCallback((row: Notice): string[] => {
-    if (row.target_type === "전체") return activeMembers;
-    if (row.target_type === "팀") return book[row.target as typeof AUTHOR_TEAMS[number]] || [];
-    return [row.target];
-  }, [activeMembers, book]);
+  /** 공지의 대상 인원 명단 (읽음 분모) — 전사 인원 DB 기준 */
+  const audienceOf = useCallback((row: Notice): string[] => audienceNames(row, members, book), [members, book]);
 
   const readSet = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -93,6 +92,7 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
     setReads((current) => [...current, { notice_id: row.id, reader: author }]);
     try {
       await insertRow("notice_reads", { notice_id: row.id, reader: author });
+      pingInbox();
     } catch { /* PK 충돌(이미 읽음)은 무시 */ }
   };
 
@@ -108,6 +108,7 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
       setDraft({ title: "", body: "", target_type: "전체", target: "", pinned: false });
       setFormOpen(false);
       await load();
+      pingInbox();
     } catch (e) {
       notify(`등록 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -128,12 +129,13 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
     try {
       await deleteRows("notices", `id=eq.${row.id}`);
       setRows((current) => current.filter((item) => item.id !== row.id));
+      pingInbox();
     } catch (e) { notify(`삭제 실패: ${(e as Error).message}`, "error"); }
   };
 
   const targetBadge = (row: Notice) => {
     if (row.target_type === "전체") return <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">전체</span>;
-    if (row.target_type === "팀") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{row.target}팀</span>;
+    if (row.target_type === "팀") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{teamTargetLabel(row.target)}</span>;
     return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">{row.target}</span>;
   };
 
@@ -258,12 +260,12 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
                     ))}
                   </div>
                   {draft.target_type === "팀" && (
-                    <PortalSelect width={110} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="팀 선택"
-                      options={AUTHOR_TEAMS.filter((team) => team !== "팀장").map((team) => ({ value: team, label: `${team}팀` }))} />
+                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
+                      options={teamOptions} />
                   )}
                   {draft.target_type === "개인" && (
-                    <PortalSelect width={160} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
-                      options={AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })))} />
+                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
+                      options={personOptions} />
                   )}
                 </div>
               </div>

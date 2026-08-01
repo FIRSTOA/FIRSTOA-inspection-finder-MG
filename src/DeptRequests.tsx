@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { makeIsForMe, myGroupLabel, teamTargetLabel, teamTargetOptions } from "./audience";
+import { pingInbox } from "./useInboxBadge";
 import FormModal from "./FormModal";
 import { Send } from "lucide-react";
-import { COMPANY_MEMBERS, memberGroup, memberValue } from "./companyDirectory";  // DB를 못 읽을 때 폴백
 import PortalSelect from "./PortalSelect";
 import { notify } from "./toast";
 
 /**
- * 부서 요청 — 타부서가 CS팀에 올리는 요청함.
+ * 부서 요청 — 부서 사이에 오가는 요청함 (요청자는 로그인 작성자 본인으로 자동 기록).
  * (미수·초과료 현황 보드는 성격이 "조회"라 조회 탭으로 이동, 2026-08-01)
  *
- * 대상 지정: 전체 공지 / 특정 팀 / 특정 개인.
+ * 대상 지정: 전체 공지 / 특정 부서·팀 / 특정 개인 — 전사 인원 DB 기준.
  * 기본 보기는 "내 것"(전체공지 + 우리 팀 + 나에게 온 것) — 다른 팀 앞으로 온
  * 요청까지 다 보이면 정작 내가 처리할 일이 묻힌다.
  */
@@ -48,17 +49,15 @@ function stamp(iso: string | null) {
 export default function DeptRequests({ author, embedded = false }: { author: string; embedded?: boolean }) {
   const { book } = useAuthorBook();
   const members = useMembers();
-  // 요청자 선택지: 관리 > 인원(DB)이 원본, 비어 있으면 정적 명단 폴백
-  const requesterOptions = useMemo(() => {
-    const fromDb = members.filter((member) => member.active).map((member) => ({
-      value: [member.dept, member.name, displayTitle(member)].join(" "),
-      label: member.name,
-      group: member.team ? `${member.dept} · ${member.team}` : member.dept,
-      hint: displayTitle(member),
-    }));
-    const base = fromDb.length ? fromDb : COMPANY_MEMBERS.map((member) => ({ value: memberValue(member), label: member.name, group: memberGroup(member), hint: member.title }));
-    return [...base, { value: "__custom", label: "직접 입력…" }];
-  }, [members]);
+  const teamOptions = useMemo(() => teamTargetOptions(members), [members]);
+  const personOptions = useMemo(() => {
+    const active = members.filter((member) => member.active);
+    if (active.length) return active.map((member) => ({ value: member.name, label: member.name, group: member.team ? `${member.dept} · ${member.team}` : member.dept, hint: displayTitle(member) }));
+    return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })));
+  }, [members, book]);
+  // 요청자 = 로그인 작성자 본인 — 인원 DB에서 부서·호칭을 붙여 기록한다
+  const me = useMemo(() => members.find((member) => member.active && member.name === author), [members, author]);
+  const requesterValue = me ? [me.dept, me.name, displayTitle(me)].join(" ") : author;
   const [rows, setRows] = useState<DeptRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -67,20 +66,12 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({
-    requester: "", kind: "카운터확인" as string, kindCustom: "", vendor: "", content: "", due_date: "",
+    kind: "카운터확인" as string, kindCustom: "", vendor: "", content: "", due_date: "",
     target_type: "전체" as DeptRequest["target_type"], target: "",
   });
   const [busy, setBusy] = useState(false);
 
-  const myTeam = useMemo(() => AUTHOR_TEAMS.find((team) => book[team]?.includes(author)) || "", [book, author]);
-
-  // 폼을 열면 요청자에 본인을 자동으로 — 어차피 내 계정으로 올리니까. (대리 등록 시 바꾸면 됨)
-  useEffect(() => {
-    if (!formOpen || draft.requester || !author) return;
-    const me = members.find((member) => member.active && member.name === author);
-    if (me) setDraft((current) => ({ ...current, requester: [me.dept, me.name, displayTitle(me)].join(" ") }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formOpen, author, members]);
+  const groupLabel = useMemo(() => myGroupLabel(author, members), [author, members]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,12 +91,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
-  const isMine = useCallback((row: DeptRequest) => {
-    const type = row.target_type || "전체";
-    if (type === "전체") return true;
-    if (type === "팀") return !!myTeam && row.target === myTeam;
-    return !!author && row.target === author;
-  }, [myTeam, author]);
+  const isMine = useMemo(() => makeIsForMe(author, members, book), [author, members, book]);
 
   // 내가 올린 요청의 상태가 바뀌었는데 아직 못 본 것 — 파란 링으로 강조하고, 이 화면을 본 순간 확인 처리
   const [freshUpdates, setFreshUpdates] = useState<Set<number>>(new Set());
@@ -114,7 +100,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     const mine = rows.filter((row) => !row.requester_ack && (row.requester || "").split(/\s+/).includes(author));
     if (!mine.length) return;
     setFreshUpdates((current) => new Set([...current, ...mine.map((row) => row.id)]));
-    void updateRows("dept_requests", `requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}`, { requester_ack: true }).catch(() => {});
+    void updateRows("dept_requests", `requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}`, { requester_ack: true }).then(() => pingInbox()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, author]);
 
@@ -129,9 +115,10 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   }), [visible, kindFilter, statusFilter]);
 
   const submit = async () => {
-    const requester = draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim();
-    if (busy || !draft.content.trim() || !requester) return;
+    if (busy || !draft.content.trim()) return;
+    if (!author) { notify("우측 상단에서 작성자(본인)를 먼저 선택하세요.", "error"); return; }
     if (draft.target_type !== "전체" && !draft.target) { notify("대상 팀/직원을 선택하세요.", "error"); return; }
+    const requester = requesterValue;
     setBusy(true);
     try {
       const kind = draft.kind === "기타" && draft.kindCustom.trim() ? `기타(${draft.kindCustom.trim()})` : draft.kind;
@@ -143,6 +130,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
       setDraft({ ...draft, vendor: "", content: "", due_date: "", kindCustom: "" });
       setFormOpen(false);
       await load();
+      pingInbox();
     } catch (e) {
       notify(`등록 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -161,6 +149,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     setRows((current) => current.map((r) => r.id === row.id ? { ...r, ...patch } as DeptRequest : r));
     try {
       await updateRows("dept_requests", `id=eq.${row.id}`, patch);
+      pingInbox();
     } catch (e) {
       notify(`상태 변경 실패: ${(e as Error).message}`, "error");
       void load();
@@ -172,6 +161,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     try {
       await deleteRows("dept_requests", `id=eq.${row.id}`);
       setRows((current) => current.filter((r) => r.id !== row.id));
+      pingInbox();
     } catch (e) {
       notify(`삭제 실패: ${(e as Error).message}`, "error");
     }
@@ -180,7 +170,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const targetBadge = (row: DeptRequest) => {
     const type = row.target_type || "전체";
     if (type === "전체") return <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">전체</span>;
-    if (type === "팀") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{row.target}팀</span>;
+    if (type === "팀") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{teamTargetLabel(row.target)}</span>;
     return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">{row.target}</span>;
   };
 
@@ -192,7 +182,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
           <span className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400">
             내 대기 요청 <b className={`tabular-nums ${waiting > 0 ? "text-rose-300" : "text-white"}`}>{waiting}건</b>
           </span>
-          {myTeam && <span className="rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400">{author} · {myTeam}팀 기준</span>}
+          {author && <span className="rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400">{author}{groupLabel ? ` · ${groupLabel}` : ""} 기준</span>}
         </div>}
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="flex rounded-full bg-slate-100 p-1">
@@ -250,24 +240,13 @@ export default function DeptRequests({ author, embedded = false }: { author: str
       </div>
 
       {formOpen && (
-        <FormModal title="새 요청" subtitle="CS팀에 처리해 달라고 보내는 요청입니다" icon={<Send size={17} />} onClose={() => setFormOpen(false)}
+        <FormModal title="새 요청" subtitle={author ? `${requesterValue} 이름으로 접수됩니다 — 처리 상황이 알림으로 돌아와요` : "우측 상단에서 작성자를 먼저 선택하세요"} icon={<Send size={17} />} onClose={() => setFormOpen(false)}
           footer={<>
             <button type="button" onClick={() => setFormOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
-            <button type="button" disabled={busy || !draft.content.trim() || !(draft.requester.startsWith("__") ? draft.requester.slice(2).trim() : draft.requester.trim())} onClick={() => void submit()}
+            <button type="button" disabled={busy || !draft.content.trim() || !author} onClick={() => void submit()}
               className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "보내는 중…" : "요청 보내기"}</button>
           </>}>
           <div className="space-y-4">
-              <div className="text-xs font-bold text-slate-500">요청 부서/이름 <b className="text-rose-500">*</b>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <PortalSelect width={200} value={draft.requester.startsWith("__") ? "__custom" : draft.requester} placeholder="명단에서 선택"
-                    onChange={(next) => setDraft({ ...draft, requester: next === "__custom" ? "__" : next })}
-                    options={requesterOptions} />
-                  {draft.requester.startsWith("__") && (
-                    <input autoFocus value={draft.requester.slice(2)} onChange={(e) => setDraft({ ...draft, requester: "__" + e.target.value })}
-                      placeholder="부서 이름 직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                  )}
-                </div>
-              </div>
               <div className="text-xs font-bold text-slate-500">누구에게 <b className="text-rose-500">*</b>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <div className="flex rounded-full bg-slate-100 p-1">
@@ -279,12 +258,12 @@ export default function DeptRequests({ author, embedded = false }: { author: str
                     ))}
                   </div>
                   {draft.target_type === "팀" && (
-                    <PortalSelect width={110} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="팀 선택"
-                      options={AUTHOR_TEAMS.filter((team) => team !== "팀장").map((team) => ({ value: team, label: `${team}팀` }))} />
+                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
+                      options={teamOptions} />
                   )}
                   {draft.target_type === "개인" && (
-                    <PortalSelect width={160} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
-                      options={AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })))} />
+                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
+                      options={personOptions} />
                   )}
                 </div>
               </div>
