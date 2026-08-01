@@ -154,6 +154,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guideEditOpen, setGuideEditOpen] = useState(false);
   const [guideBusy, setGuideBusy] = useState(false);
   const [guidePhotoBusy, setGuidePhotoBusy] = useState(false);
+  const [guidePreview, setGuidePreview] = useState(false);
   const guidePhotoRef = useRef<HTMLInputElement>(null);
   const guideBodyRef = useRef<HTMLTextAreaElement>(null);
   // 커서 위치에 스니펫 삽입 — 서식 버튼·사진·붙여넣기가 모두 이 길로
@@ -174,6 +175,7 @@ export default function CopierNotes({ author }: { author: string }) {
       summary: doc.summary, modelsText: (doc.models || []).join(", "),
       content: (!doc.content_clean ? doc.content : doc.content_clean),
     } : { ...emptyGuideDraft, brand: guideBrand === "전체" ? "" : guideBrand, category: guideCategory === "전체" ? "" : guideCategory });
+    setGuidePreview(false);
     setGuideEditOpen(true);
   };
   const saveGuide = async () => {
@@ -453,7 +455,14 @@ export default function CopierNotes({ author }: { author: string }) {
                   </label>
                   <div className="text-xs font-bold text-slate-500">
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <span>본문 <b className="text-rose-500">*</b></span>
+                      <span className="flex items-center gap-2">본문 <b className="text-rose-500">*</b>
+                        <span className="flex rounded-full bg-slate-100 p-0.5">
+                          {([[false, "✏️ 작성"], [true, "👁 미리보기"]] as [boolean, string][]).map(([mode, label]) => (
+                            <button key={label} type="button" onClick={() => setGuidePreview(mode)}
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guidePreview === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                          ))}
+                        </span>
+                      </span>
                       <span className="flex flex-wrap gap-1">
                         {([["H 제목", "## 제목\n"], ["h 소제목", "### 소제목\n"], ["• 목록", "- 항목\n"], ["1. 번호", "1. 첫 단계\n"], ["— 구분선", "---\n"], ["▸ 토글", "::: 눌러서 펼치기\n내용을 여기에\n:::\n"]] as [string, string][]).map(([label, snippet]) => (
                           <button key={label} type="button" onClick={() => insertAtCursor(snippet)}
@@ -464,7 +473,12 @@ export default function CopierNotes({ author }: { author: string }) {
                       </span>
                       <input ref={guidePhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachGuidePhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
                     </div>
-                    <textarea ref={guideBodyRef} value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
+                    {guidePreview && (
+                      <div className="mt-1 max-h-[420px] min-h-[200px] overflow-y-auto rounded-lg border border-slate-200 bg-white px-4 py-3">
+                        {guideDraft.content.trim() ? <MdView text={guideDraft.content} /> : <p className="text-xs font-bold text-slate-300">아직 내용이 없어요 — 작성 탭에서 입력하면 여기서 완성본이 보입니다.</p>}
+                      </div>
+                    )}
+                    <textarea ref={guideBodyRef} hidden={guidePreview} value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
                       onPaste={(e) => {
                         const pasted = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
                         if (pasted) { e.preventDefault(); void attachGuidePhoto(pasted); }
