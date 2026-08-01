@@ -41,6 +41,9 @@ export default function SystemAdmin() {
   const [draft, setDraft] = useState<RoomRow>({ category: "점검", region: "A", room: "" });
   const [gas, setGas] = useState<GasStatus | null>(null);
   const [gasError, setGasError] = useState("");
+  const [ingestResult, setIngestResult] = useState("");
+  const [collectRooms, setCollectRooms] = useState<Array<{ roomName: string; category: string; team: string }> | null>(null);
+  const [collectDraft, setCollectDraft] = useState({ room: "", category: "점검", team: "A" });
 
   const load = async () => {
     setLoading(true);
@@ -61,14 +64,22 @@ export default function SystemAdmin() {
     }
   };
   useEffect(() => { void load(); }, []);
-  useEffect(() => {
-    let alive = true;
-    fetch(`${GAS_GET_URL}?action=adminstatus`)
-      .then((res) => res.json())
-      .then((data: GasStatus) => { if (alive) setGas(data); })
-      .catch((e) => { if (alive) setGasError((e as Error).message); });
-    return () => { alive = false; };
-  }, []);
+  const loadGas = () => fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json()).then(setGas).catch((e) => setGasError((e as Error).message));
+  const loadCollectRooms = () => fetch(`${GAS_GET_URL}?action=roommap`).then((res) => res.json())
+    .then((data) => setCollectRooms(data.rows || [])).catch((e) => setGasError((e as Error).message));
+  useEffect(() => { void loadGas(); void loadCollectRooms(); }, []);
+
+  const runIngestNow = () => {
+    setBusy("ingestnow");
+    setIngestResult("");
+    fetch(`${GAS_GET_URL}?action=ingestnow`).then((res) => res.json())
+      .then((r) => {
+        setIngestResult(r.ok ? `파일 ${r.files} · 처리 ${r.done} · 신규 ${r.added} · 확인필요 ${r.held} · 실패 ${r.failed}` : String(r.error || "실패"));
+        void loadGas();
+      })
+      .catch((e) => setIngestResult(`실행 실패: ${(e as Error).message}`))
+      .finally(() => setBusy(""));
+  };
 
   const valueOf = (key: string) => config.find((row) => row.key === key)?.value || "";
   const isOn = (key: string) => /^(true|1|on|y)$/i.test(valueOf(key));
@@ -238,7 +249,14 @@ export default function SystemAdmin() {
         {gas && (
           <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
             <div className="bg-white p-4">
-              <div className="text-xs font-black text-slate-700">드라이브 수집함 (카톡 TXT 자동 적재)</div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-black text-slate-700">드라이브 수집함 (카톡 TXT 자동 적재)</div>
+                <button type="button" disabled={busy === "ingestnow"} onClick={runIngestNow}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-[10px] font-black text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">
+                  {busy === "ingestnow" ? "수집 중… (몇 분 걸릴 수 있음)" : "지금 수집 실행"}
+                </button>
+              </div>
+              {ingestResult && <div className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">{ingestResult}</div>}
               {gas.drive?.enabled ? (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                   <span className={`rounded-full px-2.5 py-1 ${gas.drive.hasTrigger ? "bg-emerald-50 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>트리거 {gas.drive.hasTrigger ? "동작 중" : "없음"}</span>
@@ -283,6 +301,59 @@ export default function SystemAdmin() {
             </div>
           </div>
         )}
+      </section>
+
+      {/* 카톡 수집 방 매핑 (받는 방향) — 옛 콘솔의 _room_map 시트를 웹앱에서 관리 */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+          <h3 className="text-base font-black text-slate-950 lg:text-lg">카톡 수집 방 매핑 <span className="text-[11px] font-bold text-slate-400">받는 방향</span></h3>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-4">
+          <label className="min-w-0 flex-1 text-[11px] font-black text-slate-500">방이름 (정확히)
+            <input value={collectDraft.room} onChange={(e) => setCollectDraft({ ...collectDraft, room: e.target.value })}
+              placeholder="예: 강북A 미수 보증금미입금 보고방" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </label>
+          <label className="text-[11px] font-black text-slate-500">분류
+            <span className="mt-1 block"><PortalSelect width={120} value={collectDraft.category} onChange={(next) => setCollectDraft({ ...collectDraft, category: next })}
+              options={["점검", "AS", "미수", "불만", "재계약"].map((value) => ({ value, label: value }))} /></span>
+          </label>
+          <label className="text-[11px] font-black text-slate-500">팀
+            <input value={collectDraft.team} onChange={(e) => setCollectDraft({ ...collectDraft, team: e.target.value })}
+              placeholder="A / AB / CD" className="mt-1 w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </label>
+          <button type="button" disabled={!collectDraft.room.trim() || busy === "collect-add"}
+            onClick={() => {
+              setBusy("collect-add");
+              fetch(`${GAS_GET_URL}?action=roommapset&room=${encodeURIComponent(collectDraft.room.trim())}&category=${encodeURIComponent(collectDraft.category)}&team=${encodeURIComponent(collectDraft.team.trim())}`)
+                .then((res) => res.json())
+                .then((r) => { if (r.ok) { setCollectDraft({ ...collectDraft, room: "" }); void loadCollectRooms(); } else setGasError(String(r.error || "저장 실패")); })
+                .catch((e) => setGasError((e as Error).message))
+                .finally(() => setBusy(""));
+            }}
+            className="rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">저장</button>
+        </div>
+        <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+          {collectRooms === null && <div className="p-6 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+          {collectRooms?.map((row) => (
+            <div key={row.roomName} className="flex items-center gap-2 px-4 py-2.5">
+              <span className="w-16 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.category}</span>
+              <span className="w-10 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.team || "-"}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800" title={row.roomName}>{row.roomName}</span>
+              <button type="button" disabled={busy === `collect-del-${row.roomName}`}
+                onClick={() => {
+                  if (!window.confirm(`"${row.roomName}" 수집 매핑을 삭제할까요?`)) return;
+                  setBusy(`collect-del-${row.roomName}`);
+                  fetch(`${GAS_GET_URL}?action=roommapdel&room=${encodeURIComponent(row.roomName)}`)
+                    .then((res) => res.json())
+                    .then(() => void loadCollectRooms())
+                    .catch((e) => setGasError((e as Error).message))
+                    .finally(() => setBusy(""));
+                }}
+                className="shrink-0 rounded-full p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* 시트 동기화 최근 상태 */}

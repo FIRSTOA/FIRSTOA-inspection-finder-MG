@@ -22,6 +22,10 @@ function doGet(e) {
     else if (action === 'ping') result = { ok: true, time: new Date().toISOString(), indexInfo: getIndexMeta() };
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
     else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
+    else if (action === 'ingestnow') result = ingestFromDriveFolder();  // 드라이브 수집 즉시 실행 (CS 웹앱 관리 탭)
+    else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
+    else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
+    else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
@@ -110,6 +114,39 @@ function getRoomMap() {
       .map(function (r) { return { roomName: String(r[0]).trim(), category: String(r[1]).trim(), team: String(r[2]).trim() }; });
     return { ok: true, rows: rows };
   } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+// 수집 방 매핑 추가/수정 — CS 웹앱 관리 탭에서 호출. 방이름은 카톡 내보내기의
+// "○○ 님과 카카오톡 대화" 줄과 정확히 일치해야 라우팅된다.
+function setRoomMapRow_(room, category, team) {
+  const name = String(room || '').trim();
+  const cat = String(category || '').trim();
+  if (!name || !cat) return { ok: false, error: '방이름과 카테고리는 필수입니다.' };
+  if (!CONFIG[cat]) return { ok: false, error: '알 수 없는 카테고리: ' + cat };
+  const sh = ensureRoomMap_();
+  const last = sh.getLastRow();
+  for (let r = 2; r <= last; r++) {
+    if (String(sh.getRange(r, 1).getValue()).trim() === name) {
+      sh.getRange(r, 2, 1, 2).setValues([[cat, String(team || '').trim()]]);
+      return { ok: true, updated: true };
+    }
+  }
+  sh.appendRow([name, cat, String(team || '').trim()]);
+  return { ok: true, added: true };
+}
+
+function delRoomMapRow_(room) {
+  const name = String(room || '').trim();
+  if (!name) return { ok: false, error: '방이름이 필요합니다.' };
+  const sh = ensureRoomMap_();
+  const last = sh.getLastRow();
+  for (let r = 2; r <= last; r++) {
+    if (String(sh.getRange(r, 1).getValue()).trim() === name) {
+      sh.deleteRow(r);
+      return { ok: true, removed: true };
+    }
+  }
+  return { ok: false, error: '해당 방이 없습니다: ' + name };
 }
 
 // 업로드 화면에서 호출 (google.script.run). TXT 내용을 받아 적재.
