@@ -3,9 +3,7 @@
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
-import { kstDate } from "./visits";
-import { GAS_GET_URL } from "./api";
+import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import FormModal from "./FormModal";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
 import { notify } from "./toast";
@@ -80,9 +78,6 @@ const SYMPTOM_FILTERS: Record<string, string[]> = {
   "네트워크·드라이버": ["네트워크", "드라이버", "IP", "무선", "포트", "공유"],
 };
 
-type PlayQuestion = { brand: string; model: string; question: string; options: string[]; answerIndex: number; explain?: string; source?: CopierNote };
-type AiQuizItem = { question: string; brand?: string; model?: string; options: string[]; answer_index: number; explain?: string };
-type BankRow = { brand: string; model: string; question: string; options: string[]; answer_index: number; explain: string };
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
 
@@ -160,55 +155,6 @@ function NoteBody({ note }: { note: CopierNote }) {
   );
 }
 
-const fixTextOf = (note: CopierNote) => (parseNoteContent(note.content)?.["처리"] || note.content).replace(/\s+/g, " ").trim();
-
-/** 문제로 쓸 만한 기록인지 — 인사말·"정기점검" 같은 무의미 기록을 거른다 */
-function quizUsable(note: CopierNote): boolean {
-  const symptom = note.title.trim();
-  const fix = fixTextOf(note);
-  if (!symptom || !fix) return false;
-  if (symptom.length < 6 || symptom.length > 90) return false;
-  if (fix.length < 15 || fix.length > 400) return false;
-  if (/(안녕하세요|부탁드|방문해\s*주|감사합니다|문의드|요청드|와주실|해주실|바랍니다)/.test(symptom)) return false;
-  if (/^(정기\s*점검|기본\s*점검|점검|방문|납품|설치)\s*$/.test(symptom)) return false;
-  if (/^(1\.?\s*)?(정기\s*)?점검(\s*완료)?\s*$/.test(fix)) return false;
-  return true;
-}
-
-/** 기록 → 문제 변환 — 같은 브랜드 오답 우선, 첫머리가 같은 비슷한 로그는 제외 */
-function recordToPlay(note: CopierNote, usable: CopierNote[]): PlayQuestion {
-  const answerFix = fixTextOf(note);
-  const others = usable.filter((item) => item.id !== note.id);
-  const distinct = others.filter((item) => fixTextOf(item).slice(0, 18) !== answerFix.slice(0, 18));
-  const pickFrom = distinct.length >= 3 ? distinct : others;
-  const sameBrand = pickFrom.filter((item) => item.brand === note.brand).sort(() => Math.random() - 0.5);
-  const crossBrand = pickFrom.filter((item) => item.brand !== note.brand).sort(() => Math.random() - 0.5);
-  const chosen = [note, ...[...sameBrand, ...crossBrand].slice(0, 3)].sort(() => Math.random() - 0.5);
-  const clamp = (text: string) => (text.length > 200 ? `${text.slice(0, 200)}…` : text);
-  return {
-    brand: note.brand, model: note.model, question: `증상: ${note.title}`,
-    options: chosen.map((item) => clamp(fixTextOf(item))),
-    answerIndex: chosen.findIndex((item) => item.id === note.id),
-    source: note,
-  };
-}
-
-const DAILY_TRACKS = ["삼성", "신도", "제록스", "교세라", "오키", "브라더", "기타"];
-const DAILY_MAIN = DAILY_TRACKS.filter((name) => name !== "기타");
-
-/** 날짜 시드 셔플 — 같은 날엔 모두 같은 문제를 받는다 (데일리 공정성) */
-function seededShuffle<T>(items: T[], seed: number): T[] {
-  const list = [...items];
-  let state = seed || 1;
-  const random = () => { state = (state * 1664525 + 1013904223) % 4294967296; return state / 4294967296; };
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [list[i], list[j]] = [list[j], list[i]];
-  }
-  return list;
-}
-
-type QuizResultRow = { author: string; quiz_date: string; brand?: string; score: number; total: number };
 
 export default function CopierNotes({ author }: { author: string }) {
   const [notes, setNotes] = useState<CopierNote[]>([]);
@@ -236,7 +182,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try { const parsed = JSON.parse(localStorage.getItem("copier_recent_q_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 6) : []; } catch { return []; }
   });
-  const [view, setView] = useState<"notes" | "guide" | "quiz">("notes");
+  const [view, setView] = useState<"notes" | "guide">("notes");
   // 노션에서 이관한 지식 가이드 (탈거·조립·에러 처리 등 실무 문서)
   const [guides, setGuides] = useState<KnowledgeDoc[] | null>(null);
   const [guideBrand, setGuideBrand] = useState("전체");
@@ -321,142 +267,6 @@ export default function CopierNotes({ author }: { author: string }) {
       .then(setGuides)
       .catch(() => setGuides([]));
   }, [view, guides]);
-  // 퀴즈: 처리이력·학습 기록을 문제 은행으로 쓰는 4지선다 (IT 기술퀴즈와 같은 흐름)
-  const [quizBrand, setQuizBrand] = useState("전체");
-  const [quizCount, setQuizCount] = useState(5);
-  const [quizCounts, setQuizCounts] = useState<Record<string, number> | null>(null);
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [quizMode, setQuizMode] = useState<"daily" | "free">("free");
-  const [dailyBrand, setDailyBrand] = useState("");
-  const [dailyGenNote, setDailyGenNote] = useState("");
-  const [dailyRows, setDailyRows] = useState<QuizResultRow[] | null>(null);
-  const [resultSaved, setResultSaved] = useState(false);
-  const kstToday = kstDate();
-  // 브랜드별 문제은행 크기 — 화면에 로드된 페이지가 아니라 전체 기록 기준
-  useEffect(() => {
-    if (view !== "quiz" || quizCounts !== null) return;
-    void Promise.all(["전체", ...BRAND_NAMES].map(async (name) => {
-      const filter = `title=neq.&content=neq.${name === "전체" ? "" : `&brand=eq.${encodeURIComponent(name)}`}`;
-      return [name, await countRows("copier_notes", filter).catch(() => 0)] as const;
-    })).then((entries) => setQuizCounts(Object.fromEntries(entries)));
-  }, [view, quizCounts]);
-  const [quiz, setQuiz] = useState<PlayQuestion[]>([]);
-  const [quizIndex, setQuizIndex] = useState(-1);
-  const [quizPick, setQuizPick] = useState(-1);
-  const [quizScore, setQuizScore] = useState(0);
-  const [wrongNotes, setWrongNotes] = useState<PlayQuestion[]>([]);
-
-  // 이번 달 데일리 결과 (랭킹·내 응시 여부)
-  useEffect(() => {
-    if (view !== "quiz" || dailyRows !== null) return;
-    const monthStart = `${kstToday.slice(0, 7)}-01`;
-    selectRows<QuizResultRow>("copier_quiz_results", `select=author,quiz_date,brand,score,total&quiz_date=gte.${monthStart}&limit=2000`)
-      .then(setDailyRows)
-      .catch(() => setDailyRows([]));
-  }, [view, dailyRows, kstToday]);
-  // 데일리 완주 시 점수 저장 (하루 1회, upsert)
-  useEffect(() => {
-    if (quizMode !== "daily" || resultSaved || !quiz.length || quizIndex < quiz.length || !author) return;
-    setResultSaved(true);
-    void upsertRow("copier_quiz_results", { author, quiz_date: kstToday, brand: dailyBrand, score: quizScore, total: quiz.length }, "author,quiz_date,brand")
-      .then(() => setDailyRows(null))
-      .catch((e) => notify(`점수 저장 실패: ${(e as Error).message}`, "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quizIndex, quizMode, resultSaved, quiz.length, quizScore, author]);
-
-  // 문제은행을 서버에서 새로 뽑는다 — 화면 필터·페이지에 갇히지 않게 (최근 400건)
-  const fetchQuizPool = async (brandName: string) => {
-    const parts = ["select=*", "title=neq.", "content=neq.", "order=created_at.desc", "limit=400"];
-    if (brandName !== "전체") parts.push(`brand=eq.${encodeURIComponent(brandName)}`);
-    return selectRows<CopierNote>("copier_notes", parts.join("&"));
-  };
-  const startQuiz = async () => {
-    if (quizLoading) return;
-    setQuizLoading(true);
-    try {
-      // 1) AI 문제은행에서 뽑기
-      const bankFilter = quizBrand === "전체" ? ""
-        : DAILY_MAIN.includes(quizBrand) ? `&brand=eq.${encodeURIComponent(quizBrand)}`
-        : `&brand=not.in.(${DAILY_MAIN.map((name) => encodeURIComponent(name)).join(",")})`;
-      const bankQuery = `select=brand,model,question,options,answer_index,explain&order=created_at.desc&limit=300${bankFilter}`;
-      let bank = await selectRows<BankRow>("copier_quiz_bank", bankQuery).catch(() => [] as BankRow[]);
-      // 2) 은행이 얇으면 즉석에서 5문제 적립 (10~30초)
-      if (bank.length < quizCount) {
-        setDailyGenNote("AI가 연습 문제를 만드는 중… (10~30초)");
-        try { await fetch(`${GAS_GET_URL}?action=quizbank&brand=${encodeURIComponent(quizBrand)}`).then((res) => res.json()); } catch { /* 폴백 */ }
-        bank = await selectRows<BankRow>("copier_quiz_bank", bankQuery).catch(() => bank);
-      }
-      let questions: PlayQuestion[];
-      if (bank.length >= 4) {
-        questions = [...bank].sort(() => Math.random() - 0.5).slice(0, Math.min(quizCount, bank.length))
-          .map((row) => ({ brand: row.brand || quizBrand, model: row.model, question: row.question, options: row.options, answerIndex: row.answer_index, explain: row.explain }));
-      } else {
-        // 3) 최후 폴백: 원본 기록 출제
-        const pool = await fetchQuizPool(quizBrand);
-        const usable = pool.filter(quizUsable);
-        if (usable.length < 4) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
-        questions = [...usable].sort(() => Math.random() - 0.5).slice(0, Math.min(quizCount, usable.length)).map((note) => recordToPlay(note, usable));
-      }
-      setQuizMode("free"); setResultSaved(true); // 자유 연습은 저장 안 함
-      setQuiz(questions); setQuizIndex(0); setQuizPick(-1); setQuizScore(0); setWrongNotes([]);
-    } catch (e) {
-      notify((e as Error).message, "error");
-    } finally {
-      setQuizLoading(false);
-      setDailyGenNote("");
-    }
-  };
-  // 오늘의 데일리(브랜드별 5문제) — AI 정제 문제(공유 캐시) 우선, 실패 시 원본 기록 폴백
-  const startDaily = async (trackBrand: string) => {
-    if (quizLoading) return;
-    setQuizLoading(true);
-    setDailyBrand(trackBrand);
-    try {
-      let aiItems: AiQuizItem[] = [];
-      try {
-        const rows = await selectRows<{ items: AiQuizItem[] }>("copier_quiz_daily", `select=items&quiz_date=eq.${kstToday}&brand=eq.${encodeURIComponent(trackBrand)}&limit=1`);
-        aiItems = rows[0]?.items || [];
-      } catch { /* 생성 경로로 */ }
-      if (!aiItems.length) {
-        setDailyGenNote(`AI가 오늘의 ${trackBrand} 문제를 만드는 중… (브랜드별 최초 1회, 10~30초)`);
-        try {
-          const res = await fetch(`${GAS_GET_URL}?action=quizgen&date=${kstToday}&brand=${encodeURIComponent(trackBrand)}`);
-          const data = await res.json() as { items?: AiQuizItem[]; error?: string };
-          aiItems = data.items || [];
-        } catch { /* 폴백 */ }
-      }
-      let questions: PlayQuestion[];
-      if (aiItems.length) {
-        questions = aiItems.map((item) => ({ brand: trackBrand, model: item.model || "", question: item.question, options: item.options, answerIndex: item.answer_index, explain: item.explain }));
-      } else {
-        const pool = await fetchQuizPool(trackBrand === "기타" ? "전체" : trackBrand);
-        const scoped = trackBrand === "기타" ? pool.filter((note) => !DAILY_MAIN.includes(note.brand)) : pool;
-        const usable = scoped.filter(quizUsable);
-        if (usable.length < 8) { notify("이 브랜드는 문제로 쓸 기록이 아직 부족해요.", "error"); return; }
-        const seed = Number(kstToday.replace(/-/g, "")) + trackBrand.length * 97;
-        questions = seededShuffle(usable, seed).slice(0, 5).map((note) => recordToPlay(note, usable));
-      }
-      setQuizMode("daily"); setResultSaved(false);
-      setQuiz(questions); setQuizIndex(0); setQuizPick(-1); setQuizScore(0); setWrongNotes([]);
-    } catch (e) {
-      notify((e as Error).message, "error");
-    } finally {
-      setQuizLoading(false);
-      setDailyGenNote("");
-    }
-  };
-  // 오답만 다시: 틀린 문제를 그대로 재도전 (점수 미집계)
-  const retryWrong = () => {
-    setQuizMode("free"); setResultSaved(true);
-    setQuiz([...wrongNotes]); setQuizIndex(0); setQuizPick(-1); setQuizScore(0); setWrongNotes([]);
-  };
-  const answerQuiz = (index: number) => {
-    if (quizPick >= 0 || quizIndex < 0 || quizIndex >= quiz.length) return;
-    setQuizPick(index);
-    if (index === quiz[quizIndex].answerIndex) setQuizScore((score) => score + 1);
-    else setWrongNotes((wrong) => [...wrong, quiz[quizIndex]]);
-  };
-  const nextQuiz = () => { setQuizPick(-1); setQuizIndex((index) => index + 1); };
   const [draft, setDraft] = useState({ brand: "삼성", model: "", kind: "학습" as "학습" | "처리이력", title: "", content: "" });
   const [busy, setBusy] = useState(false);
 
@@ -555,17 +365,16 @@ export default function CopierNotes({ author }: { author: string }) {
     }
   };
 
-  const currentQuiz = quizIndex >= 0 && quizIndex < quiz.length ? quiz[quizIndex] : null;
 
   return (
     <div className="space-y-4 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[#1E252F] px-5 py-4">
           <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 가이드를 쌓고, 퀴즈로 복합기 기술을 점검합니다.</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 실전 가이드를 쌓아 팀의 복합기 기술을 지킵니다.</p>
         </div>
         <div className="flex overflow-x-auto">
-          {([["notes", "기록"], ["guide", "가이드"], ["quiz", "복합기 퀴즈"]] as const).map(([key, label]) => (
+          {([["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setView(key)}
               className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}
@@ -744,165 +553,6 @@ export default function CopierNotes({ author }: { author: string }) {
           </div>
         );
       })()}
-
-      {view === "quiz" && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        {quizIndex < 0 && (() => {
-          const bankOf = (name: string) => quizCounts ? (quizCounts[name] ?? 0) : -1;
-          const total = bankOf("전체");
-          const weekday = new Date(`${kstToday}T12:00:00+09:00`).getDay();
-          const isWeekday = weekday >= 1 && weekday <= 5;
-          const trackToday = (name: string) => (dailyRows || []).find((row) => row.author === author && row.quiz_date === kstToday && row.brand === name);
-          const monthAgg = (() => {
-            const map = new Map<string, { score: number; dates: Set<string> }>();
-            (dailyRows || []).forEach((row) => {
-              const entry = map.get(row.author) || { score: 0, dates: new Set<string>() };
-              entry.score += row.score;
-              entry.dates.add(row.quiz_date);
-              map.set(row.author, entry);
-            });
-            return [...map.entries()].map(([name, v]) => [name, { score: v.score, days: v.dates.size }] as const).sort((a, b) => b[1].score - a[1].score || b[1].days - a[1].days);
-          })();
-          const myMonth = monthAgg.find(([name]) => name === author)?.[1];
-          return <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="space-y-4">
-              {/* 오늘의 데일리 — 브랜드별 5문제, AI 출제, 월간 점수로 누적 */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-5">
-                <div className="text-center text-[11px] font-black tracking-wide text-blue-600">📅 오늘의 데일리 <span className="font-bold text-blue-400">— 브랜드별 5문제 · AI 출제 · 평일</span></div>
-                {!author ? (
-                  <p className="mt-3 text-center text-sm font-bold text-slate-500">우측 상단에서 작성자를 선택하면 참여할 수 있어요.</p>
-                ) : !isWeekday ? (
-                  <p className="mt-3 text-center text-sm font-bold text-slate-500">주말엔 쉬어요 🌿 월요일에 새 문제가 나옵니다.</p>
-                ) : (
-                  <>
-                    <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                      {DAILY_TRACKS.map((name) => {
-                        const done = trackToday(name);
-                        return (
-                          <button key={name} type="button" disabled={!!done || quizLoading} onClick={() => void startDaily(name)}
-                            className={`rounded-xl px-2 py-2.5 text-center transition ${done ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-white shadow-sm ring-1 ring-blue-100 hover:-translate-y-0.5 hover:shadow-md"} disabled:cursor-default`}>
-                            <div className={`text-xs font-black ${done ? "text-emerald-700" : "text-slate-800"}`}>{name}</div>
-                            <div className={`mt-0.5 text-[11px] font-black tabular-nums ${done ? "text-emerald-600" : "text-blue-500"}`}>{done ? `✓ ${done.score}/${done.total}` : "5문제 →"}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {dailyGenNote && <p className="mt-3 animate-pulse text-center text-xs font-black text-blue-600">🤖 {dailyGenNote}</p>}
-                    {myMonth && <p className="mt-3 text-center text-[11px] font-black text-blue-600">이번 달 누적 {myMonth.score}점 · {myMonth.days}일 참여</p>}
-                  </>
-                )}
-              </div>
-
-              {/* 자유 연습 — 브랜드 골라서, 점수 미집계 */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 text-center">
-                <h3 className="text-sm font-black text-slate-950">🎓 자유 연습 <span className="text-[11px] font-bold text-slate-400">— 점수 미집계 · {total >= 0 ? `${total.toLocaleString()}건` : "…"} 사례 기반</span></h3>
-                <div className="mt-3.5 flex flex-wrap justify-center gap-1.5">
-                  {["전체", ...BRAND_NAMES].map((name) => {
-                    const count = bankOf(name);
-                    const short = count >= 0 && count < 4;
-                    return (
-                      <button key={name} type="button" disabled={short} onClick={() => setQuizBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${quizBrand === name ? "bg-slate-900 text-white" : short ? "bg-slate-50 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-                        {name} <span className={`tabular-nums ${quizBrand === name ? "text-slate-300" : "text-slate-400"}`}>{count >= 0 ? count.toLocaleString() : "…"}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex justify-center gap-2">
-                  {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-4 py-2 text-xs font-black transition ${quizCount === count ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{count}문제</button>)}
-                  <button type="button" onClick={() => void startQuiz()} disabled={quizLoading} className="rounded-full border border-slate-300 bg-white px-5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">{quizLoading ? "…" : "연습 시작"}</button>
-                </div>
-                {dailyGenNote && <p className="mt-3 animate-pulse text-[11px] font-black text-blue-600">🤖 {dailyGenNote}</p>}
-                <p className="mt-3 text-[11px] font-bold text-slate-400">AI 문제은행에서 출제됩니다 — 풀수록 은행에 새 문제가 쌓여요</p>
-              </div>
-            </div>
-
-            {/* 이번 달 랭킹 */}
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-black text-slate-950">🏆 이번 달 랭킹</h3>
-              <p className="mt-0.5 text-[10px] font-bold text-slate-400">평일 데일리 5문제 누적 점수</p>
-              <div className="mt-3 space-y-1.5">
-                {!monthAgg.length && <div className="py-6 text-center text-xs font-bold text-slate-400">아직 참여자가 없어요 — 1호 도전자가 되어보세요!</div>}
-                {monthAgg.slice(0, 10).map(([name, stat], index) => (
-                  <div key={name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${name === author ? "bg-blue-50 ring-1 ring-blue-200" : "bg-slate-50"}`}>
-                    <span className="text-xs font-black text-slate-700">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`} {name}{name === author ? " (나)" : ""}</span>
-                    <span className="text-xs font-black tabular-nums text-blue-600">{stat.score}점 <span className="font-bold text-slate-400">· {stat.days}일</span></span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>;
-        })()}
-        {currentQuiz && <div className="mx-auto max-w-4xl">
-          <div className="flex items-center justify-between text-xs font-black tabular-nums text-slate-400">
-            <span>{quizMode === "daily" ? `📅 ${dailyBrand} 데일리` : "🎓 자유 연습"} · 문제 {quizIndex + 1} / {quiz.length}</span>
-            <span className="text-blue-600">✓ {quizScore}</span>
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${((quizIndex + (quizPick >= 0 ? 1 : 0)) / quiz.length) * 100}%` }} />
-          </div>
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-            <div className="bg-[#1E252F] px-5 py-4">
-              <div className="flex flex-wrap gap-1.5">
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-300">{currentQuiz.brand}</span>
-                {currentQuiz.model && <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-black text-blue-300">{currentQuiz.model}</span>}
-              </div>
-              <div className="mt-2 text-lg font-black leading-7 text-white">{currentQuiz.question}</div>
-              <div className="mt-1 text-[11px] font-semibold text-slate-400">올바른 처리를 고르세요</div>
-            </div>
-            <div className="space-y-2 bg-slate-50/70 p-4">
-              {currentQuiz.options.map((option, optionIndex) => {
-                const picked = quizPick === optionIndex;
-                const isAnswer = optionIndex === currentQuiz.answerIndex;
-                const tone = quizPick < 0 ? "border-slate-200 bg-white hover:-translate-y-px hover:border-blue-300 hover:shadow-md"
-                  : isAnswer ? "border-emerald-400 bg-emerald-50"
-                  : picked ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white opacity-50";
-                return (
-                  <button key={optionIndex} type="button" onClick={() => answerQuiz(optionIndex)}
-                    className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left text-sm font-semibold leading-6 text-slate-700 shadow-sm transition ${tone}`}>
-                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${quizPick >= 0 && isAnswer ? "bg-emerald-500 text-white" : quizPick >= 0 && picked ? "bg-rose-400 text-white" : "bg-slate-100 text-slate-500"}`}>{["①", "②", "③", "④"][optionIndex]}</span>
-                    <span className="min-w-0 flex-1">{option}{quizPick >= 0 && isAnswer && <b className="ml-2 text-xs text-emerald-600">✓ 정답</b>}</span>
-                  </button>
-                );
-              })}
-              {quizPick >= 0 && (currentQuiz.explain
-                ? <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm font-semibold leading-6 text-blue-900">💡 {currentQuiz.explain}</div>
-                : currentQuiz.source && <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
-                    <div className="text-[10px] font-black text-blue-500">정답 사례 자세히</div>
-                    <NoteBody note={currentQuiz.source} />
-                    <div className="mt-1 text-[10px] font-bold text-slate-400">{currentQuiz.source.author || "익명"} · {currentQuiz.source.created_at.slice(0, 10)}</div>
-                  </div>)}
-              {quizPick >= 0 && <div className="flex justify-end pt-1">
-                <button type="button" onClick={nextQuiz} className="rounded-full bg-blue-600 px-7 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
-              </div>}
-            </div>
-          </div>
-        </div>}
-        {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-3xl py-4 text-center">
-          <div className="text-4xl">{quizScore === quiz.length ? "🏆" : quizScore >= quiz.length * 0.7 ? "👏" : quizScore >= quiz.length / 2 ? "🙂" : "💪"}</div>
-          <h3 className="mt-2 text-2xl font-black text-slate-950">{quizScore} / {quiz.length}</h3>
-          <p className="mt-1 text-sm font-bold text-slate-500">정답률 {Math.round((quizScore / quiz.length) * 100)}%{quizScore === quiz.length ? " — 완벽합니다!" : ""}</p>
-          {quizMode === "daily" && <p className="mt-1.5 text-xs font-black text-blue-600">오늘 점수가 저장됐어요 — 이번 달 랭킹에 반영됩니다 🏆</p>}
-          {wrongNotes.length > 0 && <div className="mt-5 space-y-2 text-left">
-            <div className="text-xs font-black text-slate-400">오답 노트 {wrongNotes.length}건 — 정답과 이유로 복습하세요</div>
-            {wrongNotes.map((item, wrongIndex) => <div key={wrongIndex} className="rounded-xl border border-rose-200 bg-white p-3.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{item.brand}</span>
-                {item.model && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{item.model}</span>}
-                <span className="text-sm font-black text-slate-900">{item.question}</span>
-              </div>
-              <div className="mt-2 rounded-lg bg-emerald-50/60 px-3 py-2">
-                <span className="text-[10px] font-black text-emerald-600">정답</span>
-                <p className="mt-0.5 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{item.options[item.answerIndex]}</p>
-              </div>
-              {item.explain && <p className="mt-1.5 text-xs font-semibold leading-5 text-blue-800">💡 {item.explain}</p>}
-              {!item.explain && item.source && <NoteBody note={item.source} />}
-            </div>)}
-          </div>}
-          <div className="mt-6 flex justify-center gap-2">
-            {wrongNotes.length > 0 && <button type="button" onClick={retryWrong} className="rounded-full border border-rose-300 bg-rose-50 px-6 py-3 text-sm font-black text-rose-700 transition hover:bg-rose-100">오답만 다시 풀기</button>}
-            <button type="button" onClick={() => { setQuizIndex(-1); setQuiz([]); }} className="rounded-full bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">{quizMode === "daily" ? "완료 — 홈으로" : "새 퀴즈"}</button>
-          </div>
-        </div>}
-      </section>}
 
       {view === "notes" && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

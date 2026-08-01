@@ -466,6 +466,23 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
   const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
+  // 일정 유형 필터 (중복 선택) — AS는 익일AS 포함, 비우기는 허용하지 않는다
+  const LIST_TYPE_OPTIONS = ["AS", "물류", "휴가", "매월점검"] as const;
+  const [listTypes, setListTypes] = useState<string[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("cs_list_types_v1") || "null");
+      if (Array.isArray(parsed)) { const valid = parsed.filter((item) => (LIST_TYPE_OPTIONS as readonly string[]).includes(item)); if (valid.length) return valid; }
+    } catch { /* 기본값 */ }
+    return [...LIST_TYPE_OPTIONS];
+  });
+  const setListTypesPersist = (next: string[]) => {
+    setListTypes(next);
+    try { localStorage.setItem("cs_list_types_v1", JSON.stringify(next)); } catch { /* 무시 */ }
+  };
+  const toggleListType = (name: string) => {
+    const next = listTypes.includes(name) ? listTypes.filter((item) => item !== name) : [...listTypes, name];
+    if (next.length) setListTypesPersist(next); // 전부 끄면 아무것도 안 보여서 마지막 하나는 유지
+  };
   const [editId, setEditId] = useState("");
   const [newTicket, setNewTicket] = useState<AsTicket | null>(null);
   const [deferId, setDeferId] = useState("");
@@ -662,6 +679,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   const scheduleRows = tickets.filter((ticket) => {
     if (team !== "ALL" && ticket.team !== team) return false;
+    const kind = ticket.scheduleType === "익일AS" ? "AS" : ticket.scheduleType;
+    if (!listTypes.includes(kind)) return false;
     if (dayFilter === "today") return ticket.date === todayYmd;
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
@@ -886,6 +905,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
               ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
+                className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
+              {LIST_TYPE_OPTIONS.map((name) => {
+                const on = listTypes.includes(name) && listTypes.length !== LIST_TYPE_OPTIONS.length;
+                const included = listTypes.includes(name);
+                return (
+                  <button key={name} type="button" onClick={() => toggleListType(name)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-slate-900 text-white" : included ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name}</button>
+                );
+              })}
             </div>
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
