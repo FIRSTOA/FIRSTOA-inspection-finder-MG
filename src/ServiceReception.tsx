@@ -1009,7 +1009,15 @@ export default function ServiceReception({ author }: { author: string }) {
                           <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
                             <input type="checkbox" checked={meta.linked === "연동완료"} onChange={(e) => patchHandling(row, { linked: e.target.checked ? "연동완료" : "" })} className="h-4 w-4 accent-blue-600" />연동완료
                           </label>
-                          <button type="button" disabled={handlingBusyId === row.id} onClick={() => void saveHandling(row)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{handlingBusyId === row.id ? "저장 중…" : "처리 저장 · 시트 반영"}</button>
+                          <button type="button" disabled={handlingBusyId === row.id} onClick={() => {
+                            // 원격이관은 시작·끝 시각이 시트의 시작·종료 열 — 안 찍고 저장하면 빈 열로 반영된다
+                            if (row.type === "원격이관") {
+                              const meta = handlingOf(row);
+                              const missing = [!meta.start && "▶ 시작", !meta.end && "■ 끝"].filter(Boolean).join("과 ");
+                              if (missing) { window.alert(`${missing}을 먼저 눌러 시각을 기록해 주세요.\n시작·종료 시각이 있어야 처리 저장·시트 반영이 됩니다.`); return; }
+                            }
+                            void saveHandling(row);
+                          }} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{handlingBusyId === row.id ? "저장 중…" : "처리 저장 · 시트 반영"}</button>
                         </div>
                         {!row.lease_no && <div className="mt-1 text-[10px] font-bold text-amber-600">순번이 없어 시트 반영은 생략됩니다 (DB에는 저장)</div>}
                       </div>
