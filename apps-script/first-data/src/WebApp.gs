@@ -27,6 +27,7 @@ function doGet(e) {
     else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
     else if (action === 'booksearch') result = bookSearchProxy_(q);   // CS 웹앱 독서탭 책 검색 (리디 프록시, 키 불필요)
+    else if (action === 'bookresolve') result = bookResolveBatch_(e.parameter.titles);   // 추천 도서 표지 일괄 해석 (서버 캐시 6시간)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
@@ -372,4 +373,65 @@ function bookSearchProxy_(q) {
   } catch (err) {
     return { books: [], error: String(err) };
   }
+}
+
+
+/**
+ * 추천 도서 표지 일괄 해석 — "제목1||제목2||..."를 받아 리디 검색을 병렬(fetchAll)로
+ * 돌리고 결과를 6시간 서버 캐시. 프론트가 책마다 왕복하던 것을 1회로 줄인다.
+ */
+function bookResolveBatch_(titlesParam) {
+  var titles = String(titlesParam || '').split('||').map(function (t) { return t.trim(); }).filter(String).slice(0, 12);
+  if (!titles.length) return { books: {} };
+  var cache = CacheService.getScriptCache();
+  var out = {};
+  var need = [];
+  titles.forEach(function (entry) {
+    var t = entry.split('@@')[0];
+    var hit = cache.get('bookr3:' + t);
+    if (hit) { try { out[t] = JSON.parse(hit); return; } catch (err) { } }
+    need.push(entry);
+  });
+  if (need.length) {
+    var requests = need.map(function (entry) {
+      var t = entry.split('@@')[0];
+      return {
+        url: 'https://search-api.ridibooks.com/search?keyword=' + encodeURIComponent(t) + '&what=base&where=book&site=ridi-store&start=0&limits=8',
+        muteHttpExceptions: true,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      };
+    });
+    var responses = UrlFetchApp.fetchAll(requests);
+    responses.forEach(function (res, i) {
+      var entry = need[i];
+      var parts = entry.split('@@');
+      var t = parts[0];
+      var authorHint = (parts[1] || '').split(/[\s,]+/)[0];
+      var v = { cover: '', authors: '' };
+      try {
+        if (res.getResponseCode() === 200) {
+          var books = (JSON.parse(res.getContentText()).books) || [];
+          var compact = t.replace(/\s/g, '');
+          // 저자 힌트가 맞는 책 > 제목 정확 일치 > 제목 시작 일치 > 첫 결과
+          var byAuthor = null, exact = null, starts = null;
+          for (var k = 0; k < books.length; k++) {
+            var bt = String(books[k].title || '').replace(/\s/g, '');
+            var authors = (books[k].authors_info || []).map(function (a) { return a && a.name; }).join(',');
+            if (!byAuthor && authorHint && authors.indexOf(authorHint) !== -1 && bt.indexOf(compact.slice(0, 4)) !== -1) byAuthor = books[k];
+            if (!exact && (bt === compact || bt.indexOf(compact + '(') === 0 || bt.indexOf(compact + ':') === 0)) exact = books[k];
+            if (!starts && bt.indexOf(compact) === 0) starts = books[k];
+          }
+          // 저자 힌트가 있는데 저자가 안 맞으면 정확 일치만 인정 — 엉뚱한 표지보다 빈 표지가 낫다
+          var best = byAuthor || exact || (authorHint ? null : (starts || books[0]));
+          if (best) {
+            v.cover = best.b_id ? 'https://img.ridicdn.net/cover/' + best.b_id + '/large' : '';
+            v.authors = (best.authors_info || []).map(function (a) { return a && a.name; }).filter(String).join(', ');
+          }
+        }
+      } catch (err) { }
+      out[t] = v;
+      try { cache.put('bookr3:' + t, JSON.stringify(v), 21600); } catch (err) { }
+    });
+  }
+  return { books: out };
 }

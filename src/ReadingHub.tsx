@@ -2,11 +2,11 @@
  * 독서 탭 — 익명으로 좋은 글(책 구절·배운 점)을 공유하고, 추천으로 포인트를 쌓는다.
  * 글은 익명으로 노출되고 author는 저장만 하여 포인트(받은 추천 합계) 집계에 쓴다.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { deleteRows, insertRow, selectRows } from "./supabase";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { deleteRows, insertRow, selectRows, uploadPublicFile } from "./supabase";
 import { GAS_GET_URL } from "./api";
 
-type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string };
+type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string; photo_url?: string };
 type BookHit = { title: string; authors: string; thumbnail: string };
 
 /**
@@ -95,21 +95,30 @@ function dailyRecPicks(genre: string): Array<{ t: string; a: string }> {
   return [0, 1, 2].map((offset) => pool[(start + offset) % pool.length]);
 }
 
-async function resolveRecBook(title: string): Promise<{ cover: string; authors: string }> {
-  const cacheKey = `book_rec_v1:${title}`;
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (raw) { const parsed = JSON.parse(raw); if (Date.now() - parsed.t < 7 * 86_400_000) return parsed.v; }
-  } catch { /* 캐시 실패 무시 */ }
-  let value = { cover: "", authors: "" };
-  try {
-    const hits = await searchRidiBooks(title);
-    const compact = title.replace(/\s/g, "");
-    const hit = hits.find((h) => h.title.replace(/\s/g, "").includes(compact.slice(0, 6))) || hits[0];
-    if (hit) value = { cover: hit.thumbnail, authors: hit.authors };
-  } catch { /* 표지 없으면 그라데이션으로 */ }
-  if (value.cover) { try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), v: value })); } catch { /* 무시 */ } }
-  return value;
+/** 여러 권을 GAS 한 번 호출로 해석 (저자 힌트 포함) — 기기 7일 캐시 + 서버 6시간 캐시 */
+async function resolveRecBatch(picks: Array<{ t: string; a: string }>): Promise<Record<string, { cover: string; authors: string }>> {
+  const out: Record<string, { cover: string; authors: string }> = {};
+  const fresh: Array<{ t: string; a: string }> = [];
+  for (const pick of picks) {
+    try {
+      const raw = localStorage.getItem(`book_rec_v2:${pick.t}`);
+      if (raw) { const parsed = JSON.parse(raw); if (Date.now() - parsed.t < 7 * 86_400_000) { out[pick.t] = parsed.v; continue; } }
+    } catch { /* 캐시 실패 무시 */ }
+    fresh.push(pick);
+  }
+  if (fresh.length) {
+    const param = fresh.map((pick) => `${pick.t}@@${pick.a}`).join("||");
+    const res = await fetch(`${GAS_GET_URL}?action=bookresolve&titles=${encodeURIComponent(param)}`);
+    if (res.ok) {
+      const data = await res.json() as { books?: Record<string, { cover: string; authors: string }> };
+      for (const pick of fresh) {
+        const value = data.books?.[pick.t] || { cover: "", authors: "" };
+        out[pick.t] = value;
+        try { localStorage.setItem(`book_rec_v2:${pick.t}`, JSON.stringify({ t: Date.now(), v: value })); } catch { /* 무시 */ }
+      }
+    }
+  }
+  return out;
 }
 
 function BookRecsCard({ onPick }: { onPick: (title: string, cover: string) => void }) {
@@ -118,11 +127,20 @@ function BookRecsCard({ onPick }: { onPick: (title: string, cover: string) => vo
   const picks = useMemo(() => dailyRecPicks(genre), [genre]);
   useEffect(() => {
     let alive = true;
-    void Promise.all(picks.map(async (pick) => [pick.t, await resolveRecBook(pick.t)] as const)).then((entries) => {
-      if (alive) setResolved((current) => ({ ...current, ...Object.fromEntries(entries) }));
-    });
+    void resolveRecBatch(picks).then((entries) => { if (alive) setResolved((current) => ({ ...current, ...entries })); });
     return () => { alive = false; };
   }, [picks]);
+  // 나머지 장르를 뒤에서 미리 해석해 둔다 — 장르를 바꿔도 즉시 뜨게
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        for (const other of REC_GENRES) {
+          try { await resolveRecBatch(dailyRecPicks(other)); } catch { /* 다음 장르 */ }
+        }
+      })();
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-4 py-3">
@@ -173,12 +191,12 @@ export type BoardLabels = {
 const READING_LABELS: BoardLabels = {
   heading: "📚 독서", sub: "책에서 만난 좋은 글을 익명으로 나눕니다. 추천 1개 = 0.2P.",
   titlePlaceholder: "책 제목·출처 (선택)", contentPlaceholder: "마음에 남은 구절이나 생각을 적어주세요.",
-  pickLabel: "📖 오늘의 구절", submitLabel: "익명으로 올리기", writeHint: "좋은 글 남기기",
+  pickLabel: "🏆 베스트 구절", submitLabel: "익명으로 올리기", writeHint: "좋은 글 남기기",
 };
 const TIP_LABELS: BoardLabels = {
   heading: "💡 배움·팁 공유", sub: "업무 팁, 유용한 강의·아티클 링크를 익명으로 나눕니다. 추천 1개 = 0.2P.",
   titlePlaceholder: "주제·출처 (선택)", contentPlaceholder: "배운 것, 꿀팁, 링크(자동으로 클릭 가능)를 공유해주세요.",
-  pickLabel: "💡 오늘의 팁", submitLabel: "익명으로 공유", writeHint: "배움·팁 남기기",
+  pickLabel: "🏆 베스트 팁", submitLabel: "익명으로 공유", writeHint: "배움·팁 남기기",
 };
 
 // 본문 속 URL을 클릭 가능한 링크로
@@ -208,6 +226,9 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const [bookSearching, setBookSearching] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
   const [bookNote, setBookNote] = useState("");
+  const [photo, setPhoto] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [query, setQuery] = useState("");
@@ -262,12 +283,10 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   }, [posts, votes, pointsMonthly]);
   const myPoints = useMemo(() => points.find(([name]) => name === author)?.[1] || 0, [points, author]);
 
-  // 오늘의 구절 — 날짜로 정해지는 하루 한 편(추천 많은 글 위주). 새로고침해도 같은 글이 유지된다.
+  // 베스트 구절 — 추천을 가장 많이 받은 글 (동률이면 최신)
   const todaysPick = useMemo(() => {
     if (!posts.length) return null;
-    const pool = [...posts].sort((a, b) => (voteCount.get(b.id) || 0) - (voteCount.get(a.id) || 0)).slice(0, Math.min(10, posts.length));
-    const seed = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
-    return pool[seed % pool.length];
+    return [...posts].sort((a, b) => (voteCount.get(b.id) || 0) - (voteCount.get(a.id) || 0) || b.created_at.localeCompare(a.created_at))[0];
   }, [posts, voteCount]);
 
   const visiblePosts = useMemo(() => {
@@ -309,10 +328,11 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
     setBusy(true);
     setError("");
     try {
-      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim(), cover_url: kind === "reading" ? cover : "", ...(kind !== "reading" ? { kind } : {}) });
+      await insertRow("reading_posts", { author, title: title.trim(), content: content.trim(), cover_url: kind === "reading" ? cover : "", photo_url: photo, ...(kind !== "reading" ? { kind } : {}) });
       setTitle("");
       setContent("");
       setCover("");
+      setPhoto("");
       setBookResults([]);
       setBookOpen(false);
       await load();
@@ -321,6 +341,18 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
     } finally {
       setBusy(false);
     }
+  };
+
+  const attachPhoto = async (file: File | null) => {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { setError("이미지 파일만 첨부할 수 있어요."); return; }
+    setPhotoBusy(true);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      setPhoto(await uploadPublicFile("photos", `reading/${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, file, file.type));
+      setError("");
+    } catch (e) { setError((e as Error).message); }
+    finally { setPhotoBusy(false); }
   };
 
   const toggleVote = async (post: ReadingPost) => {
@@ -415,6 +447,10 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
             : <span className="select-none font-serif text-3xl leading-none text-amber-300">“</span>}
           <p className="min-w-0 flex-1 whitespace-pre-wrap text-[15px] font-medium leading-7 text-slate-800"><Linkified text={body} /></p>
         </div>
+        {post.photo_url && <div className="mt-2 sm:pl-8">
+          <img src={post.photo_url} alt="첨부 사진" loading="lazy" onClick={() => window.open(post.photo_url, "_blank", "noopener")}
+            className="max-h-72 cursor-zoom-in rounded-xl border border-slate-100 object-contain shadow-sm" />
+        </div>}
         <div className="mt-3 flex items-center gap-2 pl-8">
           <button type="button" disabled={pendingVotes.has(post.id)} onClick={() => void toggleVote(post)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition disabled:opacity-50 ${voted ? "bg-amber-400 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-600"}`}>
             👍 추천{count > 0 ? ` ${count}` : ""}
@@ -486,8 +522,17 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
               </div>
             )}
             <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => photoRef.current?.click()} disabled={photoBusy}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">{photoBusy ? "올리는 중…" : "📷 사진 첨부"}</button>
+                <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachPhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
+                {photo && <span className="relative">
+                  <img src={photo} alt="첨부한 사진" className="h-9 w-9 rounded-lg object-cover shadow-sm" />
+                  <button type="button" onClick={() => setPhoto("")} aria-label="사진 제거" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">×</button>
+                </span>}
+                <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>
+              </span>
               <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "올리는 중…" : labels.submitLabel}</button>
             </div>
           </section>

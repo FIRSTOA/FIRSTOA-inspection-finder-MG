@@ -8,6 +8,7 @@ import ReadingHub from "./ReadingHub";
 import { kstDate } from "./visits";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import { teamTargetLabel } from "./audience";
+import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
 
 type Tab = "home" | "reading" | "tips" | "goals" | "praise";
@@ -49,6 +50,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
   const [goals, setGoals] = useState<SelfGoal[]>([]);
   const [praises, setPraises] = useState<PraisePost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bookView, setBookView] = useState<AnyPost | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -105,15 +107,12 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
   const myGoals = goals.filter((g) => g.author === author);
   const myGoalsDone = myGoals.filter((g) => g.done).length;
 
-  const dailyPick = (kind: string) => {
-    const pool = posts.filter((p) => (p.kind || "reading") === kind)
-      .sort((a, b) => (voteCount.get(b.id) || 0) - (voteCount.get(a.id) || 0))
-      .slice(0, 10);
+  // 베스트 구절 — 추천을 가장 많이 받은 글 (동률이면 최신)
+  const readingPick = useMemo(() => {
+    const pool = posts.filter((p) => (p.kind || "reading") === "reading");
     if (!pool.length) return null;
-    const seed = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
-    return pool[seed % pool.length];
-  };
-  const readingPick = useMemo(() => dailyPick("reading"), [posts, voteCount]); // eslint-disable-line react-hooks/exhaustive-deps
+    return [...pool].sort((a, b) => (voteCount.get(b.id) || 0) - (voteCount.get(a.id) || 0) || b.created_at.localeCompare(a.created_at))[0];
+  }, [posts, voteCount]);
 
   const myPraiseCount = praises.filter((p) => p.to_name === author).length;
   const myRecentPraises = praises.filter((p) => p.to_name === author).slice(0, 3);
@@ -193,7 +192,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           {books.length ? (
             <div className="grid grid-cols-4 gap-3 p-4">
               {books.map((book) => (
-                <button key={book.id} type="button" onClick={() => onGo("reading")} className="group text-left">
+                <button key={book.id} type="button" onClick={() => setBookView(book)} className="group text-left">
                   {book.cover_url ? (
                     <img src={book.cover_url} alt={book.title} loading="lazy" className="aspect-[3/4] w-full rounded-lg object-cover shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-lg" />
                   ) : (
@@ -210,7 +209,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
             </div>
           ) : <div className="p-8 text-center text-xs font-bold text-slate-400">책 제목이 담긴 글이 아직 없어요 — 첫 구절을 남겨보세요.</div>}
           {readingPick && <button type="button" onClick={() => onGo("reading")} className="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50">
-            <span className="text-[10px] font-black tracking-wide text-amber-600">📖 오늘의 구절{readingPick.title ? ` · 《${readingPick.title}》` : ""}</span>
+            <span className="text-[10px] font-black tracking-wide text-amber-600">🏆 베스트 구절{readingPick.title ? ` · 《${readingPick.title}》` : ""}</span>
             <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">{readingPick.content}</p>
           </button>}
         </section>
@@ -282,6 +281,24 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
           </div>
         </section>
       </div>
+
+      {/* 책장 상세 — 표지 + 구절을 그 자리에서 */}
+      {bookView && (
+        <FormModal icon={<span className="text-base">📖</span>} onClose={() => setBookView(null)}
+          title={<span className="text-base leading-snug">《{bookView.title}》</span>}
+          subtitle={`익명 · ${bookView.created_at.slice(0, 10)} · 👍 추천 ${voteCount.get(bookView.id) || 0}`}
+          footer={<>
+            <button type="button" onClick={() => { setBookView(null); onGo("reading"); }}
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">독서 탭에서 보기</button>
+            <button type="button" onClick={() => setBookView(null)}
+              className="rounded-full bg-slate-900 px-6 py-2 text-xs font-black text-white transition hover:bg-slate-800">확인</button>
+          </>}>
+          <div className="flex gap-4">
+            {bookView.cover_url && <img src={bookView.cover_url} alt={bookView.title} className="h-44 w-32 shrink-0 rounded-lg object-cover shadow-md" />}
+            <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm font-medium leading-7 text-slate-800">{bookView.content}</p>
+          </div>
+        </FormModal>
+      )}
     </div>
   );
 }
