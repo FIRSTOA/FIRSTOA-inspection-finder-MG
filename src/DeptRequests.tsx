@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
-import { COMPANY_DIRECTORY } from "./companyDirectory";
+import { COMPANY_MEMBERS, memberGroup, memberValue } from "./companyDirectory";
 import PortalSelect from "./PortalSelect";
 import { notify } from "./toast";
 
@@ -209,7 +209,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
                   <PortalSelect width={200} value={draft.requester.startsWith("__") ? "__custom" : draft.requester} placeholder="명단에서 선택"
                     onChange={(next) => setDraft({ ...draft, requester: next === "__custom" ? "__" : next })}
                     options={[
-                      ...COMPANY_DIRECTORY.flatMap((group) => group.members.map((name) => ({ value: `${group.dept} ${name}`, label: name, group: group.dept }))),
+                      ...COMPANY_MEMBERS.map((member) => ({ value: memberValue(member), label: member.name, group: memberGroup(member), hint: member.title })),
                       { value: "__custom", label: "직접 입력…" },
                     ]} />
                   {draft.requester.startsWith("__") && (
