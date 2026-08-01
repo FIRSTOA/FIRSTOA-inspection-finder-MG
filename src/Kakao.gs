@@ -593,8 +593,10 @@ function extractASFields_(content) {
 
 function extractASField_(content, label, multiline) {
   const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼켜서
+  // 빈 칸("자산기번:")일 때 다음 줄("내용: …")이 값으로 들어갔다.
   const pattern = new RegExp(
-    '(?:^|[\\r\\n])' + escLabel + '\\s*:?\\s*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?:|-{5,}|※|\\d+\\.\\s*[가-힣]+:))',
+    '(?:^|[\\r\\n])' + escLabel + '[ \\t]*:?[ \\t]*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?:|-{5,}|※|\\d+\\.\\s*[가-힣]+:))',
     ''
   );
   const match = content.match(pattern);
@@ -602,6 +604,8 @@ function extractASField_(content, label, multiline) {
   const val = match[1].trim();
   if (!val) return '';
   if (/^(부서명|지역|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|특이사항)\s*:?\s*$/.test(val)) return '';
+  // 이중 방어: 값이 다른 라벨로 시작하면 잘못 삼킨 것
+  if (/^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|특이사항)\s*[:：]/.test(val)) return '';
   return multiline ? val : val.split('\n')[0].trim();
 }
 
@@ -720,8 +724,9 @@ function extractInspectFields_(content) {
 // 점검 양식의 블록 구분선이 값에 섞이지 않게 한다.
 function extractInspectField_(content, label, multiline) {
   const escLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 라벨 뒤 공백은 같은 줄에서만([ \t]*) 허용 — \s*는 줄바꿈까지 삼킨다 (AS 파서와 동일 수정)
   const pattern = new RegExp(
-    '(?:^|[\\r\\n])' + escLabel + '\\s*[:：]?\\s*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?[:：]|[-=]{2,}|※|＊|\\*)|$)',
+    '(?:^|[\\r\\n])' + escLabel + '[ \\t]*[:：]?[ \\t]*([\\s\\S]*?)(?=[\\r\\n](?:[^\\r\\n]*?[:：]|[-=]{2,}|※|＊|\\*)|$)',
     ''
   );
   const match = content.match(pattern);
@@ -730,6 +735,7 @@ function extractInspectField_(content, label, multiline) {
   val = val.replace(/[\r\n]+\s*[-=*※＊].*$/, '').trim(); // 끝에 붙은 구분선 제거
   if (!val) return '';
   if (/^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항)\s*[:：]?\s*$/.test(val)) return '';
+  if (/^(작성자|구분|레벨|등급|업체명|부서명|지역|키맨\/접수자|모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항)\s*[:：]/.test(val)) return '';
   return multiline ? val : val.split(/[\r\n]/)[0].trim();
 }
 
