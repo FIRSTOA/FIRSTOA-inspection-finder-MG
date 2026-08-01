@@ -19,22 +19,23 @@ type CategoryDef = {
   sheetNote?: string;      // 원본 시트/방 설명
   timeField?: string;      // 최신 시각 컬럼 (기본 created_at — 업서트 표는 _등록시각이 진실)
   staleDays?: number;      // 이 일수 넘게 조용하면 빨간 표시 (기본 7)
+  kakaoTeams?: boolean;    // 카톡 수집을 팀(A~D)별로 나눠 표시 — 어느 방 txt를 올렸는지 보이게
 };
 
 const ENC = (v: string) => encodeURIComponent(v);
 const CATEGORIES: CategoryDef[] = [
   // "웹앱" = FIELD 저장이 직접 기록한 행 (출처 라벨이 관례상 "카톡:웹앱").
   // "카톡 (중단)" = 카톡방 메시지 수집 — 현재 봇 수집이 멈춰 있어(사용자 확인) 회색으로 둔다.
-  { label: "점검", table: "jeomgeom", sheetNote: "FIELD 전송 + 팀별 점검방", routes: [
+  { label: "점검", kakaoTeams: true, table: "jeomgeom", sheetNote: "FIELD 전송 + 팀별 점검방", routes: [
     { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
     { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡:점검")}*`, quiet: true },
   ] },
-  { label: "AS", table: "as_records", sheetNote: "FIELD 전송 + 팀별 AS방 (시트분은 초기 이관)", routes: [
+  { label: "AS", kakaoTeams: true, table: "as_records", sheetNote: "FIELD 전송 + 팀별 AS방 (시트분은 초기 이관)", routes: [
     { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
     { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡:AS")}*`, quiet: true },
   ] },
   { label: "물류", table: "logistics_records", sheetNote: "FIELD 물류 양식", staleDays: 30, routes: [{ label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }] },
-  { label: "불만", table: "bulman", sheetNote: "불만 시트 + FIELD", routes: [
+  { label: "불만", kakaoTeams: true, table: "bulman", sheetNote: "불만 시트 + FIELD", routes: [
     { label: "시트", filter: `_출처=like.${ENC("시트")}*`, },
     { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*`, quiet: true },
     { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
@@ -48,7 +49,7 @@ const CATEGORIES: CategoryDef[] = [
     { label: "웹앱", filter: `_출처=not.like.${ENC("카톡")}*`, quiet: true },
   ] },
   // 재계약은 카톡방 수집이 유일한 경로였는데 그 수집이 중단됨 — 새 기록이 못 들어오는 상태
-  { label: "재계약", table: "recontract", sheetNote: "계약종료체크 방 — 수집 중단으로 새 기록 없음", routes: [
+  { label: "재계약", kakaoTeams: true, table: "recontract", sheetNote: "계약종료체크 방 — 수집 중단으로 새 기록 없음", routes: [
     { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
   ] },
   { label: "해지방어", table: "churn_defense", sheetNote: "FIELD 해지방어 양식", routes: [{ label: "웹앱", filter: "" }] },
@@ -66,8 +67,33 @@ type RowState = {
   total: number | null;
   latest: string;              // 전체 최신
   routes: Array<{ label: string; latest: string }>;
+  teams?: Record<string, string>;   // 팀 → 카톡 수집 최신 시각
   error?: string;
 };
+
+const TEAM_KEYS = ["A", "B", "C", "D"] as const;
+
+/** "카톡:미수(A)" / "카톡:불만(C,D)" / "카톡:불만(AB)" → 팀 글자들 */
+function teamsOfSource(source: string): string[] {
+  if (source.includes("웹앱")) return [];
+  const inside = source.match(/\(([^)]+)\)/)?.[1] || "";
+  return inside.split(",").flatMap((part) => part.trim().split("")).filter((ch) => (TEAM_KEYS as readonly string[]).includes(ch));
+}
+
+async function kakaoTeamLatest(table: string): Promise<Record<string, string>> {
+  const q = `select=${encodeURIComponent("_출처")},created_at&${encodeURIComponent("_출처")}=like.${encodeURIComponent("카톡")}*&order=created_at.desc&limit=300`;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, { headers: HEADERS });
+  if (!res.ok) return {};
+  const rows = (await res.json()) as Array<{ ["_출처"]?: string; created_at?: string }>;
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    for (const team of teamsOfSource(String(row["_출처"] || ""))) {
+      if (!map[team]) map[team] = row.created_at || "";   // desc 정렬이라 처음 본 게 최신
+    }
+    if (Object.keys(map).length === TEAM_KEYS.length) break;
+  }
+  return map;
+}
 
 const HEADERS = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
 
@@ -118,14 +144,15 @@ export default function SyncStatus() {
     setLoading(true);
     await Promise.all(CATEGORIES.map(async (category) => {
       try {
-        const [total, latest, ...routeLatest] = await Promise.all([
+        const [total, latest, teams, ...routeLatest] = await Promise.all([
           countOf(category.table),
           latestOf(category.table, "", category.timeField),
+          category.kakaoTeams ? kakaoTeamLatest(category.table) : Promise.resolve(undefined),
           ...category.routes.map((route) => latestOf(category.table, route.filter, category.timeField)),
         ]);
         setRows((current) => ({
           ...current,
-          [category.table]: { total, latest, routes: category.routes.map((route, index) => ({ label: route.label, latest: routeLatest[index] })) },
+          [category.table]: { total, latest, teams, routes: category.routes.map((route, index) => ({ label: route.label, latest: routeLatest[index] })) },
         }));
       } catch (e) {
         setRows((current) => ({ ...current, [category.table]: { total: null, latest: "", routes: [], error: (e as Error).message } }));
@@ -171,6 +198,24 @@ export default function SyncStatus() {
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-400">아직 기록 없음</span>
                   ) : state ? state.routes.map((route, index) => {
                     const def = category.routes[index];
+                    // 카톡 경로 + 팀별 분해: "어느 팀 방 txt까지 올라왔는지"를 팀 단위로 보여준다
+                    if (category.kakaoTeams && route.label.startsWith("카톡")) {
+                      return (
+                        <span key={route.label} className="inline-flex items-center gap-1 rounded-full bg-slate-50 py-0.5 pl-2 pr-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
+                          카톡
+                          {TEAM_KEYS.map((team) => {
+                            const iso = state.teams?.[team] || "";
+                            const meta = ago(iso, 3);   // 사흘 넘으면 회색 — 재개 여부 확인용
+                            return (
+                              <span key={team} title={iso ? `${team}팀 마지막 ${stamp(iso)}` : `${team}팀 기록 없음`}
+                                className={`rounded-full px-1.5 py-0.5 tabular-nums ${!iso ? "bg-slate-100 text-slate-300" : meta.stale ? "bg-slate-100 text-slate-400" : "bg-amber-100 text-amber-800"}`}>
+                                {team} {iso ? meta.text : "없음"}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      );
+                    }
                     const meta = ago(route.latest, category.staleDays);
                     const tone = def?.quiet
                       ? "bg-slate-100 text-slate-400"                             // 휴면 경로 — 조용해도 정상

@@ -29,13 +29,14 @@ export type LookupCategory = {
   columns: LookupColumn[];
   filterQuery?: string;         // 항상 붙는 추가 조건 (예: 시트 원본만)
   note?: string;                // 화면에 띄우는 한 줄 안내
+  teamField?: string;           // 팀(A~D) 필터에 쓸 컬럼 — 값에 팀 글자가 포함되면 매칭 (수도권C 등)
 };
 
 const VENDOR: LookupColumn = { key: "_업체명", label: "업체명", width: "minmax(0,1.4fr)", strong: true };
 
 export const LOOKUP_CATEGORIES: LookupCategory[] = [
   {
-    key: "jeomgeom", label: "점검", group: "현장 기록", table: "jeomgeom",
+    key: "jeomgeom", label: "점검", group: "현장 기록", teamField: "지역", table: "jeomgeom",
     dateField: "작성일", orderField: "작성일", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "모델명", "시리얼넘버", "자산기번"],
     columns: [
@@ -49,7 +50,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "as", label: "AS", group: "현장 기록", table: "as_records",
+    key: "as", label: "AS", group: "현장 기록", teamField: "지역", table: "as_records",
     dateField: "작성일", orderField: "작성일", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "처리내용", "모델명", "시리얼넘버", "자산기번"],
     columns: [
@@ -77,7 +78,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "bulman", label: "불만", group: "현장 기록", table: "bulman",
+    key: "bulman", label: "불만", group: "현장 기록", teamField: "지역", table: "bulman",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "불만내용", "불편내용", "조치내용"],
     columns: [
@@ -91,7 +92,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "misu", label: "미수", group: "영업·관리", table: "misu",
+    key: "misu", label: "미수", group: "영업·관리", teamField: "지역", table: "misu",
     dateField: "입력일", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "관리담당자", "업체담당자", "지역"],
     note: "시트 동기화 표입니다. 입력일 칸에 값이 없는 행도 있어 최신 등록순으로 보여줍니다.",
@@ -122,7 +123,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "overage_adjust", label: "초과조정", group: "영업·관리", table: "overage_adjust",
+    key: "overage_adjust", label: "초과조정", group: "영업·관리", teamField: "지역", table: "overage_adjust",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "제안", "고객반응"],
     columns: [
@@ -136,7 +137,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "recontract", label: "재계약", group: "영업·관리", table: "recontract",
+    key: "recontract", label: "재계약", group: "영업·관리", teamField: "지역", table: "recontract",
     dateField: "날짜", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "갱신상태"],
     columns: [
@@ -150,7 +151,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "churn", label: "해지방어", group: "영업·관리", table: "churn_defense",
+    key: "churn", label: "해지방어", group: "영업·관리", teamField: "담당팀", table: "churn_defense",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "해지사유", "방어전략", "내용"],
     columns: [
@@ -164,7 +165,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "mgmt", label: "관리지원", group: "영업·관리", table: "mgmt_support",
+    key: "mgmt", label: "관리지원", group: "영업·관리", teamField: "담당팀", table: "mgmt_support",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "요청유형", "내용", "처리결과"],
     columns: [
@@ -177,7 +178,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "pc", label: "PC 확장성", group: "영업·관리", table: "pc_expansion",
+    key: "pc", label: "PC 확장성", group: "영업·관리", teamField: "지역", table: "pc_expansion",
     dateField: "날짜", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "작성자", "세부사양", "업체담당자", "IT담당자"],
     columns: [
@@ -192,7 +193,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "mfp", label: "복합기 확장성", group: "영업·관리", table: "mfp_expansion",
+    key: "mfp", label: "복합기 확장성", group: "영업·관리", teamField: "미팅지역", table: "mfp_expansion",
     dateField: "등록일", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "상호", "등록자", "전략영업담당자", "프로젝트", "관심품목(세분화)"],
     columns: [
@@ -207,7 +208,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "reception", label: "서비스접수", group: "접수·자산", table: "service_receptions",
+    key: "reception", label: "서비스접수", group: "접수·자산", teamField: "region", table: "service_receptions",
     dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
     searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
     filterQuery: "deleted=is.false",
@@ -222,7 +223,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "contact", label: "담당자·주소 변경", group: "접수·자산", table: "contact_changes",
+    key: "contact", label: "담당자·주소 변경", group: "접수·자산", teamField: "region", table: "contact_changes",
     dateField: "change_date", orderField: "created_at", vendorField: "company",
     searchFields: ["company", "author", "before_text", "after_text", "reason"],
     columns: [

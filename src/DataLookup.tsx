@@ -41,6 +41,7 @@ function csvCell(value: string) {
 export default function DataLookup() {
   const [categoryKey, setCategoryKey] = useState<string>(() => window.localStorage.getItem("cs_lookup_category_v1") || "jeomgeom");
   const [period, setPeriod] = useState<PeriodKey>("3m");
+  const [team, setTeam] = useState("전체");
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -55,7 +56,7 @@ export default function DataLookup() {
   );
 
   useEffect(() => { window.localStorage.setItem("cs_lookup_category_v1", categoryKey); }, [categoryKey]);
-  useEffect(() => { setRows([]); setReachedEnd(false); }, [categoryKey]);
+  useEffect(() => { setRows([]); setReachedEnd(false); }, [categoryKey, team]);
 
   // 조회 한 번에 필요한 쿼리를 만든다. offset만 바꿔 "더 보기"에 재사용.
   const buildQuery = useCallback((offset: number) => {
@@ -72,10 +73,14 @@ export default function DataLookup() {
       const needle = query.trim().replace(/[(),*"]/g, " ").trim();
       parts.push(`or=(${category.searchFields.map((field) => `"${field}".ilike.*${needle}*`).join(",")})`);
     }
+    if (team !== "전체" && category.teamField) {
+      // '수도권C' / 'C' / 'C,D' 모두 팀 글자를 포함하므로 부분일치로 거른다
+      parts.push(`${encodeURIComponent(category.teamField)}=ilike.*${encodeURIComponent(team)}*`);
+    }
     parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query]);
+  }, [category, period, query, team]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -168,6 +173,16 @@ export default function DataLookup() {
             </div>
             <button type="button" onClick={() => setQuery(queryDraft)} className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">검색</button>
           </div>
+          {category.teamField && (
+            <div className="flex shrink-0 rounded-full bg-slate-100 p-1">
+              {["전체", "A", "B", "C", "D"].map((value) => (
+                <button key={value} type="button" onClick={() => setTeam(value)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-black transition ${team === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                  {value === "전체" ? "전체" : `${value}팀`}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex shrink-0 items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-500">{rows.length}{reachedEnd ? "" : "+"}건</span>
             <button type="button" onClick={exportCsv} disabled={!rows.length}
