@@ -4,14 +4,21 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows } from "./supabase";
+import { GAS_GET_URL } from "./api";
 
 type ReadingPost = { id: string; created_at: string; author: string; title: string; content: string; kind?: string; cover_url?: string };
 type BookHit = { title: string; authors: string; thumbnail: string };
 
 /**
- * 책 검색 — 카카오(app_config의 KAKAO_BOOK_KEY, 한국 책 최강) → 구글 도서(무키,
- * 공용 쿼터라 자주 마름) → 오픈라이브러리(무키, 한국 책 빈약) 순서로 시도한다.
+ * 책 검색 — ① GAS 프록시(리디북스 공개 검색, 키 불필요·기본) → ② 카카오(키 등록 시)
+ * → ③ 구글 도서(무키, 공용 쿼터라 자주 마름) → ④ 오픈라이브러리 순서로 시도한다.
  */
+async function searchRidiBooks(query: string): Promise<BookHit[]> {
+  const res = await fetch(`${GAS_GET_URL}?action=booksearch&q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error(`프록시 ${res.status}`);
+  const data = await res.json() as { books?: BookHit[] };
+  return (data.books || []).filter((book) => book.title && typeof book.title === "string");
+}
 let kakaoKeyCache: string | null = null;
 async function getKakaoBookKey(): Promise<string> {
   if (kakaoKeyCache !== null) return kakaoKeyCache;
@@ -175,12 +182,15 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
     setBookOpen(true);
     setBookNote("");
     let hits: BookHit[] = [];
-    const kakaoKey = await getKakaoBookKey();
-    if (kakaoKey) { try { hits = await searchKakaoBooks(query, kakaoKey); } catch { /* 다음 제공자로 */ } }
+    try { hits = await searchRidiBooks(query); } catch { /* 다음 제공자로 */ }
+    if (!hits.length) {
+      const kakaoKey = await getKakaoBookKey();
+      if (kakaoKey) { try { hits = await searchKakaoBooks(query, kakaoKey); } catch { /* 다음 제공자로 */ } }
+    }
     if (!hits.length) { try { hits = await searchGoogleBooks(query); } catch { /* 다음 제공자로 */ } }
     if (!hits.length) { try { hits = await searchOpenLibrary(query); } catch { /* 아래 안내로 */ } }
     setBookResults(hits);
-    if (!hits.length && !kakaoKey) setBookNote("공용 검색(구글)이 쿼터를 소진했을 수 있어요 — 관리자가 카카오 책검색 키를 등록하면 안정적으로 검색됩니다.");
+    if (!hits.length) setBookNote("검색 서버가 잠시 응답하지 않았을 수 있어요 — 잠시 후 다시 시도해 보세요.");
     setBookSearching(false);
   };
 

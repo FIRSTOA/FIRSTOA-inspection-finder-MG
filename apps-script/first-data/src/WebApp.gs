@@ -26,6 +26,7 @@ function doGet(e) {
     else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
     else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
+    else if (action === 'booksearch') result = bookSearchProxy_(q);   // CS 웹앱 독서탭 책 검색 (리디 프록시, 키 불필요)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
@@ -341,5 +342,34 @@ function getIndexMeta() {
     return meta;
   } catch (e) {
     return { error: e.toString() };
+  }
+}
+
+
+/**
+ * 독서탭 책 검색 프록시 — 리디북스 공개 검색 API를 서버에서 대신 호출한다.
+ * (브라우저 직접 호출은 CORS로 막히고, 구글 도서 무키 호출은 공용 쿼터가 자주 마름)
+ */
+function bookSearchProxy_(q) {
+  var query = String(q || '').trim();
+  if (!query) return { books: [] };
+  try {
+    var res = UrlFetchApp.fetch('https://search-api.ridibooks.com/search?keyword=' + encodeURIComponent(query) + '&what=base&where=book&site=ridi-store&start=0&limits=8', {
+      muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (res.getResponseCode() !== 200) return { books: [], error: 'ridi ' + res.getResponseCode() };
+    var data = JSON.parse(res.getContentText());
+    var books = (data.books || []).slice(0, 8).map(function (b) {
+      var authors = (b.authors_info || []).map(function (a) { return a && a.name; }).filter(String).join(', ');
+      return {
+        title: String(b.title || '').replace(/^개정판\s*\|\s*/, '').trim(),
+        authors: authors,
+        thumbnail: b.b_id ? 'https://img.ridicdn.net/cover/' + b.b_id + '/large' : '',
+      };
+    }).filter(function (b) { return b.title; });
+    return { books: books };
+  } catch (err) {
+    return { books: [], error: String(err) };
   }
 }
