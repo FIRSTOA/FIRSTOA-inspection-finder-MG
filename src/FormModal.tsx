@@ -15,11 +15,11 @@ export default function FormModal({
   onClose: () => void;
   children: ReactNode;
   footer: ReactNode;
-  wide?: boolean;
+  wide?: boolean | "xl";
 }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-end bg-black/45 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide ? "sm:max-w-xl" : "sm:max-w-lg"}`} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide === "xl" ? "sm:max-w-4xl" : wide ? "sm:max-w-xl" : "sm:max-w-lg"}`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3 bg-[#1E252F] px-5 py-4">
           {icon && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">{icon}</span>}
           <div className="min-w-0 flex-1">

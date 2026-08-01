@@ -139,6 +139,10 @@ export default function CopierNotes({ author }: { author: string }) {
     ]).then(([total, learn, cases, month]) => setStats({ total, learn, cases, month })).catch(() => setStats(null));
   }, []);
   const [writeOpen, setWriteOpen] = useState(false);
+  const [noteDetail, setNoteDetail] = useState<CopierNote | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try { const parsed = JSON.parse(localStorage.getItem("copier_recent_q_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 6) : []; } catch { return []; }
+  });
   const [view, setView] = useState<"notes" | "guide" | "quiz">("notes");
   // 노션에서 이관한 지식 가이드 (탈거·조립·에러 처리 등 실무 문서)
   const [guides, setGuides] = useState<KnowledgeDoc[] | null>(null);
@@ -154,7 +158,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guideEditOpen, setGuideEditOpen] = useState(false);
   const [guideBusy, setGuideBusy] = useState(false);
   const [guidePhotoBusy, setGuidePhotoBusy] = useState(false);
-  const [guidePreview, setGuidePreview] = useState(false);
+
   const guidePhotoRef = useRef<HTMLInputElement>(null);
   const guideBodyRef = useRef<HTMLTextAreaElement>(null);
   // 커서 위치에 스니펫 삽입 — 서식 버튼·사진·붙여넣기가 모두 이 길로
@@ -175,7 +179,6 @@ export default function CopierNotes({ author }: { author: string }) {
       summary: doc.summary, modelsText: (doc.models || []).join(", "),
       content: (!doc.content_clean ? doc.content : doc.content_clean),
     } : { ...emptyGuideDraft, brand: guideBrand === "전체" ? "" : guideBrand, category: guideCategory === "전체" ? "" : guideCategory });
-    setGuidePreview(false);
     setGuideEditOpen(true);
   };
   const saveGuide = async () => {
@@ -289,6 +292,18 @@ export default function CopierNotes({ author }: { author: string }) {
   }, [buildListQuery]);
   // 검색어 타이핑은 250ms 디바운스 후 서버 조회
   useEffect(() => { const timer = window.setTimeout(() => { void load(0); }, 250); return () => window.clearTimeout(timer); }, [load]);
+  // 결과가 있는 검색어는 최근 검색으로 기억 (기기 저장, 6개)
+  useEffect(() => {
+    if (loading) return;
+    const keyword = query.trim();
+    if (!keyword || !notes.length) return;
+    setRecentSearches((current) => {
+      const next = [keyword, ...current.filter((item) => item !== keyword)].slice(0, 6);
+      try { localStorage.setItem("copier_recent_q_v1", JSON.stringify(next)); } catch { /* 무시 */ }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const filtered = notes; // 필터·검색은 서버에서 이미 적용됨
 
@@ -314,6 +329,7 @@ export default function CopierNotes({ author }: { author: string }) {
     try {
       await deleteRows("copier_notes", `id=eq.${note.id}`);
       setNotes((current) => current.filter((n) => n.id !== note.id));
+      setNoteDetail(null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -414,7 +430,7 @@ export default function CopierNotes({ author }: { author: string }) {
               </FormModal>
             )}
             {guideEditOpen && (
-              <FormModal wide title={guideDraft.id ? "가이드 수정" : "새 가이드 작성"} subtitle="저장하면 모든 직원의 가이드 목록에 바로 반영됩니다" icon={<span className="text-base">📘</span>} onClose={() => setGuideEditOpen(false)}
+              <FormModal wide="xl" title={guideDraft.id ? "가이드 수정" : "새 가이드 작성"} subtitle="저장하면 모든 직원의 가이드 목록에 바로 반영됩니다" icon={<span className="text-base">📘</span>} onClose={() => setGuideEditOpen(false)}
                 footer={<>
                   <button type="button" onClick={() => setGuideEditOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
                   <button type="button" disabled={guideBusy || !guideDraft.title.trim() || !guideDraft.content.trim()} onClick={() => void saveGuide()}
@@ -455,14 +471,7 @@ export default function CopierNotes({ author }: { author: string }) {
                   </label>
                   <div className="text-xs font-bold text-slate-500">
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <span className="flex items-center gap-2">본문 <b className="text-rose-500">*</b>
-                        <span className="flex rounded-full bg-slate-100 p-0.5">
-                          {([[false, "✏️ 작성"], [true, "👁 미리보기"]] as [boolean, string][]).map(([mode, label]) => (
-                            <button key={label} type="button" onClick={() => setGuidePreview(mode)}
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guidePreview === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-                          ))}
-                        </span>
-                      </span>
+                      <span>본문 <b className="text-rose-500">*</b></span>
                       <span className="flex flex-wrap gap-1">
                         {([["H 제목", "## 제목\n"], ["h 소제목", "### 소제목\n"], ["• 목록", "- 항목\n"], ["1. 번호", "1. 첫 단계\n"], ["— 구분선", "---\n"], ["▸ 토글", "::: 눌러서 펼치기\n내용을 여기에\n:::\n"]] as [string, string][]).map(([label, snippet]) => (
                           <button key={label} type="button" onClick={() => insertAtCursor(snippet)}
@@ -473,18 +482,19 @@ export default function CopierNotes({ author }: { author: string }) {
                       </span>
                       <input ref={guidePhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachGuidePhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
                     </div>
-                    {guidePreview && (
-                      <div className="mt-1 max-h-[420px] min-h-[200px] overflow-y-auto rounded-lg border border-slate-200 bg-white px-4 py-3">
-                        {guideDraft.content.trim() ? <MdView text={guideDraft.content} /> : <p className="text-xs font-bold text-slate-300">아직 내용이 없어요 — 작성 탭에서 입력하면 여기서 완성본이 보입니다.</p>}
+                    <div className="mt-1 grid items-stretch gap-2 lg:grid-cols-2">
+                      <textarea ref={guideBodyRef} value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={14}
+                        onPaste={(e) => {
+                          const pasted = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
+                          if (pasted) { e.preventDefault(); void attachGuidePhoto(pasted); }
+                        }}
+                        placeholder={"위 버튼으로 서식을 넣거나, 캡처한 사진을 Ctrl+V로 바로 붙여넣으세요.\n\n## 준비물\n- 십자드라이버\n\n::: 자세한 순서 (누르면 펼쳐짐)\n1. 전원 차단\n2. 커버 탈거\n:::"}
+                        className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 font-mono text-[13px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                      <div className="max-h-[240px] overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/60 px-4 py-3 lg:max-h-[380px]">
+                        <div className="mb-1.5 text-[10px] font-black tracking-wide text-slate-300">미리보기 — 쓰는 대로 바로 적용됩니다</div>
+                        {guideDraft.content.trim() ? <MdView text={guideDraft.content} /> : <p className="text-xs font-bold text-slate-300">왼쪽에 쓰기 시작하면 완성본이 여기 나타나요.</p>}
                       </div>
-                    )}
-                    <textarea ref={guideBodyRef} hidden={guidePreview} value={guideDraft.content} onChange={(e) => setGuideDraft({ ...guideDraft, content: e.target.value })} rows={12}
-                      onPaste={(e) => {
-                        const pasted = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
-                        if (pasted) { e.preventDefault(); void attachGuidePhoto(pasted); }
-                      }}
-                      placeholder={"위 버튼으로 서식을 넣거나, 캡처한 사진을 Ctrl+V로 바로 붙여넣으세요.\n\n## 준비물\n- 십자드라이버\n\n::: 자세한 순서 (누르면 펼쳐짐)\n1. 전원 차단\n2. 커버 탈거\n:::"}
-                      className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 font-mono text-[13px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                    </div>
                     <div className="mt-1 text-[10px] font-semibold text-slate-400">💡 사진은 Ctrl+V 붙여넣기 지원 — 커서 위치에 바로 들어갑니다</div>
                   </div>
                 </div>
@@ -582,84 +592,106 @@ export default function CopierNotes({ author }: { author: string }) {
       </section>}
 
       {view === "notes" && <>
-      {stats && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
-          {([
-            [`${stats.total.toLocaleString()}건`, "전체 기록"],
-            [`${stats.learn.toLocaleString()}건`, "학습"],
-            [`${stats.cases.toLocaleString()}건`, "처리이력"],
-            [`+${stats.month.toLocaleString()}건`, "이번 달 신규"],
-          ] as [string, string][]).map(([value, label]) => (
-            <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
-              <div className="text-lg font-black text-slate-950">{value}</div>
-              <div className="mt-0.5 text-[10px] font-bold text-slate-400">{label}</div>
-            </div>
-          ))}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {/* 다크 히어로 — 검색이 주인공 */}
+        <div className="bg-[#151A23] px-5 pb-5 pt-5 text-center">
+          {stats && <div className="mb-3.5 flex flex-wrap justify-center gap-1.5">
+            {([["전체", stats.total.toLocaleString()], ["학습", stats.learn.toLocaleString()], ["처리이력", stats.cases.toLocaleString()], ["이번 달", `+${stats.month.toLocaleString()}`]] as [string, string][]).map(([label, value]) => (
+              <span key={label} className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">{label} <b className="tabular-nums text-white">{value}</b></span>
+            ))}
+          </div>}
+          <label className="mx-auto flex max-w-xl items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16]">
+            <span className="shrink-0 text-slate-500">🔍</span>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 에러코드 · 기종 · 처리법 검색"
+              className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
+            {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기" className="shrink-0 text-xs font-black text-slate-500 transition hover:text-slate-300">✕</button>}
+          </label>
+          {recentSearches.length > 0 && <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+            <span className="text-[10px] font-black text-slate-600">최근</span>
+            {recentSearches.map((item) => (
+              <button key={item} type="button" onClick={() => setQuery(item)} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14] hover:text-slate-200">{item}</button>
+            ))}
+          </div>}
         </div>
-      )}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-semibold text-slate-500">브랜드·기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스입니다.</p>
-          <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">+ 기록 추가</button>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1">
+
+        {/* 브랜드 바 + 구분·정렬 + 기록 추가 */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2.5">
           {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }} className={`rounded-full px-3 py-2 text-xs font-black ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-              {name}
-            </button>
+            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }}
+              className={`rounded-full px-3 py-1.5 text-xs font-black transition ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
           ))}
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <div className="flex rounded-full bg-slate-100 p-0.5">
+              {(["전체", "학습", "처리이력"] as const).map((value) => (
+                <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
+              ))}
+            </div>
+            <div className="flex rounded-full bg-slate-100 p-0.5">
+              {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }}
+              className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 기록 추가</button>
+          </div>
         </div>
         {brand !== "전체" && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50/50 px-4 py-2">
             {["전체", ...(BRANDS[brand] || [])].map((name) => (
-              <button key={name} type="button" onClick={() => setModel(name)} className={`rounded px-2.5 py-1.5 text-[11px] font-black ${model === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-                {name}
-              </button>
+              <button key={name} type="button" onClick={() => setModel(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${model === name ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{name}</button>
             ))}
           </div>
         )}
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 해결 방법 · 작성자 검색" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <div className="flex rounded-full bg-slate-100 p-1">
-            {(["전체", "학습", "처리이력"] as const).map((value) => (
-              <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
-            ))}
-          </div>
-          <div className="flex rounded-full bg-slate-100 p-1">
-            {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-            ))}
-          </div>
+
+        {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
+        {loading && !notes.length && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+        {!loading && !filtered.length && <div className="p-12 text-center text-sm font-bold text-slate-400">{notes.length || query.trim() ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}
+
+        {/* 증상 → 처리 행 리스트 */}
+        <div className="divide-y divide-slate-50">
+          {filtered.map((note) => {
+            const parsed = parseNoteContent(note.content);
+            const fix = (parsed?.["처리"] || (note.title ? note.content : "")).replace(/\n/g, " ").trim();
+            const titleText = note.title || note.content.split("\n")[0];
+            return (
+              <button key={note.id} type="button" onClick={() => setNoteDetail(note)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition hover:bg-slate-50">
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${note.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-700"}`}>{note.kind}</span>
+                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{note.brand}{note.model ? ` ${note.model}` : ""}</span>
+                <span className="max-w-[45%] shrink-0 truncate text-[13.5px] font-black text-slate-900 sm:max-w-[32%]">{titleText}</span>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-400">{fix ? `→ ${fix}` : ""}</span>
+                <span className="hidden shrink-0 text-[11px] font-bold tabular-nums text-slate-400 sm:inline">{note.author || "익명"} · {note.created_at.slice(5, 10)}</span>
+              </button>
+            );
+          })}
         </div>
+        {hasMore && <button type="button" onClick={() => void load(notes.length)} disabled={loading}
+          className="w-full border-t border-slate-100 py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50 disabled:text-slate-300">{loading ? "불러오는 중…" : `더 보기 (현재 ${notes.length}건 표시)`}</button>}
       </section>
 
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading && !notes.length && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{notes.length ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        {filtered.map((note) => (
-          <article key={note.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black bg-slate-100 text-slate-600`}>{note.brand}</span>
-                {note.model && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-black text-slate-600">{note.model}</span>}
-                <span className={`rounded px-2 py-0.5 text-[10px] font-black ${note.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{note.kind}</span>
-              </div>
-              <span className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => { void navigator.clipboard.writeText(`[${note.brand}${note.model ? ` ${note.model}` : ""}] ${note.title}\n${note.content}`); }} title="내용 복사" className="text-[11px] font-black text-slate-300 hover:text-blue-600">복사</button>
-                {note.author === author && <button type="button" onClick={() => void removeNote(note)} className="text-[11px] font-black text-slate-300 hover:text-rose-500">삭제</button>}
+      {/* 기록 상세 모달 */}
+      {noteDetail && (
+        <FormModal icon={<span className="text-base">🔧</span>} onClose={() => setNoteDetail(null)}
+          title={
+            <span className="flex flex-col gap-1.5">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${noteDetail.kind === "학습" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-700"}`}>{noteDetail.kind}</span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-300">{noteDetail.brand}{noteDetail.model ? ` ${noteDetail.model}` : ""}</span>
               </span>
-            </div>
-            {note.title && <div className="mt-2 text-sm font-black text-slate-900">{note.title}</div>}
-            <NoteBody note={note} />
-            <div className="mt-2 text-[11px] font-bold text-slate-400">{note.author || "익명"} · {note.created_at.slice(0, 10)}</div>
-          </article>
-        ))}
-      </div>
-      {hasMore && <button type="button" onClick={() => void load(notes.length)} disabled={loading} className="w-full rounded-xl border border-slate-200 bg-white py-3 text-sm font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:text-slate-300">{loading ? "불러오는 중…" : `더 보기 (현재 ${notes.length}건 표시)`}</button>}
-
-      </>}
+              <span className="text-base leading-snug">{noteDetail.title || "기록 상세"}</span>
+            </span>
+          }
+          subtitle={`${noteDetail.author || "익명"} · ${noteDetail.created_at.slice(0, 10)}`}
+          footer={<>
+            {noteDetail.author === author && <button type="button" onClick={() => void removeNote(noteDetail)}
+              className="mr-auto rounded-full px-3 py-2 text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-500">삭제</button>}
+            <button type="button" onClick={() => { void navigator.clipboard.writeText(`[${noteDetail.brand}${noteDetail.model ? ` ${noteDetail.model}` : ""}] ${noteDetail.title}\n${noteDetail.content}`); notify("내용을 복사했습니다."); }}
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">📋 복사</button>
+            <button type="button" onClick={() => setNoteDetail(null)} className="rounded-full bg-slate-900 px-6 py-2 text-xs font-black text-white transition hover:bg-slate-800">확인</button>
+          </>}>
+          <NoteBody note={noteDetail} />
+        </FormModal>
+      )}
+            </>}
 
       {writeOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setWriteOpen(false)}>
