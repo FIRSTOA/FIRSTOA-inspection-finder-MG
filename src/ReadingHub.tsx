@@ -257,21 +257,6 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
 
   return (
     <div className="space-y-4 pb-16">
-      {/* 헤더 배너 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-5 text-white shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black">{labels.heading}</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-300">{labels.sub}</p>
-          </div>
-          <div className="flex gap-4 text-center">
-            <div><div className="text-lg font-black">{posts.length}</div><div className="text-[10px] font-bold text-slate-300">전체 글</div></div>
-            <div><div className="text-lg font-black">{weeklyNew}</div><div className="text-[10px] font-bold text-slate-300">이번 주</div></div>
-            <div><div className="text-lg font-black text-amber-300">{fmtP(myPoints)}P</div><div className="text-[10px] font-bold text-slate-300">내 포인트</div></div>
-          </div>
-        </div>
-      </section>
-
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -286,18 +271,21 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
             <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder={labels.contentPlaceholder} className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>
-              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">{busy ? "올리는 중…" : labels.submitLabel}</button>
+              <button type="button" onClick={() => void submit()} disabled={busy || !content.trim()} className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "올리는 중…" : labels.submitLabel}</button>
             </div>
           </section>
 
-          {/* 정렬·검색 */}
+          {/* 정렬·통계·검색 */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="rounded-full bg-slate-100 p-1">
-              {([["latest", "최신순"], ["top", "추천순"]] as [SortMode, string][]).map(([mode, label]) => (
-                <button key={mode} type="button" onClick={() => setSortMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${sortMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-full bg-slate-100 p-1">
+                {([["latest", "최신순"], ["top", "추천순"]] as [SortMode, string][]).map(([mode, label]) => (
+                  <button key={mode} type="button" onClick={() => setSortMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${sortMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
+                ))}
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-500">전체 {posts.length} · 이번 주 {weeklyNew} · 내 포인트 {fmtP(myPoints)}P</span>
             </div>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="제목·내용 검색" className="w-44 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="제목·내용 검색" className="w-44 rounded-full border border-slate-300 px-3.5 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
 
           {/* 글 목록 */}
