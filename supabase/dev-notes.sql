@@ -26,3 +26,6 @@ create policy "copier_notes anon all" on public.copier_notes for all to anon usi
 grant select, insert, update, delete on public.copier_notes to anon;
 
 notify pgrst, 'reload schema';
+
+-- 2026-08-01: 복합기 데일리 퀴즈 결과 (평일 5문제, 월간 랭킹)
+-- create table copier_quiz_results (id uuid pk, author text, quiz_date date, score int, total int, created_at, unique(author, quiz_date));
