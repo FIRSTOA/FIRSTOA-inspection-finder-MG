@@ -119,13 +119,36 @@ function NoteBody({ note }: { note: CopierNote }) {
   );
 }
 
+const fixTextOf = (note: CopierNote) => (parseNoteContent(note.content)?.["처리"] || note.content).replace(/\s+/g, " ").trim();
+
+/** 문제로 쓸 만한 기록인지 — 인사말·"정기점검" 같은 무의미 기록을 거른다 */
+function quizUsable(note: CopierNote): boolean {
+  const symptom = note.title.trim();
+  const fix = fixTextOf(note);
+  if (!symptom || !fix) return false;
+  if (symptom.length < 6 || symptom.length > 90) return false;
+  if (fix.length < 15 || fix.length > 400) return false;
+  if (/(안녕하세요|부탁드|방문해\s*주|감사합니다|문의드|요청드|와주실|해주실|바랍니다)/.test(symptom)) return false;
+  if (/^(정기\s*점검|기본\s*점검|점검|방문|납품|설치)\s*$/.test(symptom)) return false;
+  if (/^(1\.?\s*)?(정기\s*)?점검(\s*완료)?\s*$/.test(fix)) return false;
+  return true;
+}
+
 function buildQuiz(pool: CopierNote[], count: number): QuizItem[] {
-  const usable = pool.filter((note) => note.title.trim() && note.content.trim());
+  const usable = pool.filter(quizUsable);
   if (usable.length < 4) return [];
   const shuffled = [...usable].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, shuffled.length)).map((note) => {
-    const others = usable.filter((item) => item.id !== note.id).sort(() => Math.random() - 0.5).slice(0, 3);
-    return { note, options: [note, ...others].sort(() => Math.random() - 0.5) };
+    const answerFix = fixTextOf(note);
+    const others = usable.filter((item) => item.id !== note.id);
+    // 보기끼리 첫머리가 같으면(비슷한 로그) 문제가 성립 안 됨 — 다른 처리 내용만
+    const distinct = others.filter((item) => fixTextOf(item).slice(0, 18) !== answerFix.slice(0, 18));
+    const pickFrom = distinct.length >= 3 ? distinct : others;
+    // 같은 브랜드 오답을 우선 — 남의 브랜드 처리법은 티가 나서 너무 쉽다
+    const sameBrand = pickFrom.filter((item) => item.brand === note.brand).sort(() => Math.random() - 0.5);
+    const crossBrand = pickFrom.filter((item) => item.brand !== note.brand).sort(() => Math.random() - 0.5);
+    const options = [note, ...[...sameBrand, ...crossBrand].slice(0, 3)].sort(() => Math.random() - 0.5);
+    return { note, options };
   });
 }
 
@@ -313,8 +336,9 @@ export default function CopierNotes({ author }: { author: string }) {
       groups.push(`or(title.ilike.${pattern},content.ilike.${pattern},model.ilike.${pattern},author.ilike.${pattern})`);
     }
     if (symptomFilter !== "전체") {
+      // 제목(증상)만 매칭 — 처리 내용까지 보면 "정기점검인데 처리 중 에러 언급" 같은 게 섞인다
       const words = SYMPTOM_FILTERS[symptomFilter] || [];
-      const clause = words.flatMap((word) => [`title.ilike."*${word}*"`, `content.ilike."*${word}*"`]).join(",");
+      const clause = words.map((word) => `title.ilike."*${word}*"`).join(",");
       if (clause) groups.push(`or(${clause})`);
     }
     if (groups.length) parts.push(`and=${encodeURIComponent(`(${groups.join(",")})`)}`);
@@ -398,7 +422,9 @@ export default function CopierNotes({ author }: { author: string }) {
         const list = guides || [];
         const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
         const categories = ["전체", ...Array.from(new Set(list.map((d) => d.category).filter(Boolean)))];
-        const keyword = guideQuery.trim().toLowerCase();
+        // 대략 매칭: 공백·하이픈·점 무시 + 띄어 쓴 토큰은 전부 포함되면 통과 ("신도 n501", "SL K3250" OK)
+        const normalize = (value: string) => value.toLowerCase().replace(/[\s\-_./·]/g, "");
+        const tokens = guideQuery.trim().split(/\s+/).map(normalize).filter(Boolean);
         const partCounts = new Map<string, number>();
         list.forEach((d) => (d.parts || []).forEach((part) => partCounts.set(part, (partCounts.get(part) || 0) + 1)));
         const topParts = ["전체", ...Array.from(partCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([name]) => name)];
@@ -407,7 +433,7 @@ export default function CopierNotes({ author }: { author: string }) {
           (guideCategory === "전체" || d.category === guideCategory) &&
           (guidePart === "전체" || (d.parts || []).includes(guidePart)) &&
           (guideDiff === "전체" || d.difficulty === guideDiff) &&
-          (!keyword || `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.content}`.toLowerCase().includes(keyword)));
+          (!tokens.length || (() => { const hay = normalize(`${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.brand} ${d.content}`); return tokens.every((token) => hay.includes(token)); })()));
         const brandCount = (name: string) => name === "전체" ? list.length : list.filter((d) => d.brand === name).length;
         return (
           <div className="space-y-3">
@@ -589,10 +615,10 @@ export default function CopierNotes({ author }: { author: string }) {
               {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-5 py-2.5 text-sm font-black transition ${quizCount === count ? "bg-blue-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{count}문제</button>)}
             </div>
             <button type="button" onClick={() => void startQuiz()} disabled={quizLoading} className="mt-6 h-12 rounded-full bg-blue-600 px-10 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:bg-slate-300 disabled:shadow-none">{quizLoading ? "문제 만드는 중…" : "퀴즈 시작 →"}</button>
-            <p className="mt-3 text-[11px] font-bold text-slate-400">브랜드는 문제가 4건 이상일 때 선택할 수 있어요 · FIELD AS 전송이 쌓일수록 문제가 늘어납니다</p>
+            <p className="mt-3 text-[11px] font-bold text-slate-400">인사말·단순 점검 기록은 자동으로 걸러지고, 증상·처리가 뚜렷한 사례만 출제됩니다</p>
           </div>;
         })()}
-        {currentQuiz && <div className="mx-auto max-w-2xl">
+        {currentQuiz && <div className="mx-auto max-w-3xl">
           <div className="flex items-center justify-between text-xs font-black text-slate-400">
             <span>문제 {quizIndex + 1} / {quiz.length}</span><span className="text-blue-600">✓ {quizScore}</span>
           </div>
@@ -632,7 +658,7 @@ export default function CopierNotes({ author }: { author: string }) {
             <button type="button" onClick={nextQuiz} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-7 py-3 text-sm font-black text-white">{quizIndex + 1 >= quiz.length ? "결과 보기 →" : "다음 문제 →"}</button>
           </div>}
         </div>}
-        {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-2xl py-4 text-center">
+        {quizIndex >= quiz.length && quiz.length > 0 && <div className="mx-auto max-w-3xl py-4 text-center">
           <div className="text-4xl">{quizScore === quiz.length ? "🏆" : quizScore >= quiz.length * 0.7 ? "👏" : quizScore >= quiz.length / 2 ? "🙂" : "💪"}</div>
           <h3 className="mt-2 text-2xl font-black text-slate-950">{quizScore} / {quiz.length}</h3>
           <p className="mt-1 text-sm font-bold text-slate-500">정답률 {Math.round((quizScore / quiz.length) * 100)}%{quizScore === quiz.length ? " — 완벽합니다!" : ""}</p>
