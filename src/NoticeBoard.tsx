@@ -325,8 +325,8 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
                     <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
                       options={teamOptions} />
                   )}
-                  {draft.target_type === "개인" && <PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} />}
                 </div>
+                {draft.target_type === "개인" && <div className="mt-2 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5"><PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} /></div>}
               </div>
               <label className="block text-xs font-bold text-slate-500">내용
                 <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={5}

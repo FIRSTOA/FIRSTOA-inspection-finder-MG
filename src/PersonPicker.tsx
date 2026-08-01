@@ -4,9 +4,8 @@ import { teamTargetLabel } from "./audience";
 import PortalSelect from "./PortalSelect";
 
 /**
- * 직원 선택 공용 픽커 — 부서 → 팀 → 이름으로 좁혀간다.
- * 52명을 한 목록으로 스크롤하지 않게. (공지 대상·부서요청 대상·칭찬 받는 사람 공용)
- * 겸임(A·B)은 어느 팀을 골라도 나온다. 인원 DB가 비면 CS 명단 폴백.
+ * 직원 선택 공용 픽커 — 부서·팀을 고르면 이름이 칩으로 바로 나온다 (클릭 1번).
+ * (공지 대상·부서요청 대상·칭찬 받는 사람 공용) 겸임(A·B)은 어느 팀을 골라도 나온다.
  */
 export default function PersonPicker({ value, onChange, exclude = "" }: {
   value: string;
@@ -29,20 +28,28 @@ export default function PersonPicker({ value, onChange, exclude = "" }: {
     return [...set].sort();
   }, [members, dept]);
 
-  const names = useMemo(() => {
+  const people = useMemo(() => {
     const active = members.filter((m) => m.active && m.name !== exclude && m.dept === dept
       && (team === "전체" || m.team === team || m.team.split("·").includes(team)));
-    if (active.length) return active.map((m) => ({ value: m.name, label: m.name, group: m.team || undefined, hint: displayTitle(m) }));
-    return AUTHOR_TEAMS.flatMap((authorTeam) => (book[authorTeam] || []).filter((name) => name !== exclude).map((name) => ({ value: name, label: name, group: `${authorTeam}팀` })));
+    if (active.length) return active.map((m) => ({ name: m.name, hint: displayTitle(m) }));
+    return AUTHOR_TEAMS.flatMap((authorTeam) => (book[authorTeam] || []).filter((name) => name !== exclude).map((name) => ({ name, hint: `${authorTeam}팀` })));
   }, [members, book, exclude, dept, team]);
 
   return (
-    <>
-      {depts.length > 0 && <PortalSelect width={125} value={dept} onChange={(next) => { setDept(next); setTeam("전체"); onChange(""); }}
-        options={depts.map((name) => ({ value: name, label: name }))} />}
-      {teams.length > 0 && <PortalSelect width={110} value={team} onChange={(next) => { setTeam(next); onChange(""); }}
-        options={[{ value: "전체", label: "팀 전체" }, ...teams.map((name) => ({ value: name, label: teamTargetLabel(name) }))]} />}
-      <PortalSelect width={140} value={value} onChange={onChange} placeholder="직원 선택" options={names} />
-    </>
+    <div className="w-full space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {depts.length > 0 && <PortalSelect width={125} value={dept} onChange={(next) => { setDept(next); setTeam("전체"); onChange(""); }}
+          options={depts.map((name) => ({ value: name, label: name }))} />}
+        {teams.length > 0 && <PortalSelect width={110} value={team} onChange={(next) => { setTeam(next); onChange(""); }}
+          options={[{ value: "전체", label: "팀 전체" }, ...teams.map((name) => ({ value: name, label: teamTargetLabel(name) }))]} />}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {people.map((person) => (
+          <button key={person.name} type="button" title={person.hint} onClick={() => onChange(person.name)}
+            className={`rounded-full px-2.5 py-1.5 text-xs font-black transition ${value === person.name ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{person.name}</button>
+        ))}
+        {!people.length && <span className="py-1 text-[11px] font-bold text-slate-400">해당 팀에 선택할 인원이 없어요</span>}
+      </div>
+    </div>
   );
 }

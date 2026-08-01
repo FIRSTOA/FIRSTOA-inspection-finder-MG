@@ -59,7 +59,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [error, setError] = useState("");
   const [kindFilter, setKindFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");
-  const [scope, setScope] = useState<"received" | "sent" | "all">("received");
+  const [scope, setScope] = useState<"received" | "sent">("received");
   const [detailId, setDetailId] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({
@@ -105,7 +105,8 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const isSentByMe = useCallback((row: DeptRequest) => !!author && (row.requester || "").split(/\s+/).includes(author), [author]);
   const receivedRows = useMemo(() => rows.filter((row) => isMine(row) && !isSentByMe(row)), [rows, isMine, isSentByMe]);
   const sentRows = useMemo(() => rows.filter(isSentByMe), [rows, isSentByMe]);
-  const visible = scope === "all" ? rows : scope === "sent" ? sentRows : receivedRows;
+  // 요청은 당사자만: 받은 것(내가 수신 대상) 또는 보낸 것만 보인다 — 남의 개인 요청은 안 보임
+  const visible = scope === "sent" ? sentRows : receivedRows;
   const waiting = receivedRows.filter((row) => row.status === "대기").length;
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { 대기: 0, 처리중: 0, 완료: 0 };
@@ -196,7 +197,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
         </div>}
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="flex rounded-full bg-slate-100 p-1">
-            {([["received", `받은 요청 ${receivedRows.length}`], ["sent", `보낸 요청 ${sentRows.length}`], ["all", "전체"]] as Array<["received" | "sent" | "all", string]>).map(([key, label]) => (
+            {([["received", `받은 요청 ${receivedRows.length}`], ["sent", `보낸 요청 ${sentRows.length}`]] as Array<["received" | "sent", string]>).map(([key, label]) => (
               <button key={key} type="button" onClick={() => setScope(key)}
                 className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-black tabular-nums transition ${scope === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
             ))}
@@ -223,7 +224,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? (scope === "received" ? "내게 온 요청이 없어요 — 후련하게 처리 끝!" : scope === "sent" ? "내가 보낸 요청이 없어요." : "조건에 맞는 요청이 없어요.") : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
+      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? (scope === "received" ? "내게 온 요청이 없어요 — 후련하게 처리 끝!" : "내가 보낸 요청이 없어요.") : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
 
       {/* 슬림 카드 — 요약만. 누르면 상세 모달 */}
       <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
@@ -330,8 +331,8 @@ export default function DeptRequests({ author, embedded = false }: { author: str
                     <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
                       options={teamOptions} />
                   )}
-                  {draft.target_type === "개인" && <PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} />}
                 </div>
+                {draft.target_type === "개인" && <div className="mt-2 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5"><PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} /></div>}
               </div>
               <div className="text-xs font-bold text-slate-500">유형
                 <div className="mt-1 flex flex-wrap items-center gap-1">
