@@ -17,6 +17,8 @@ type CategoryDef = {
   table: string;
   routes: Route[];         // 이 표에 기록이 들어오는 길
   sheetNote?: string;      // 원본 시트/방 설명
+  timeField?: string;      // 최신 시각 컬럼 (기본 created_at — 업서트 표는 _등록시각이 진실)
+  staleDays?: number;      // 이 일수 넘게 조용하면 빨간 표시 (기본 7)
 };
 
 const ENC = (v: string) => encodeURIComponent(v);
@@ -33,6 +35,9 @@ const CATEGORIES: CategoryDef[] = [
   { label: "관리지원", table: "mgmt_support", routes: [{ label: "웹앱", filter: "" }], sheetNote: "FIELD 관리지원 양식" },
   { label: "PC 확장성", table: "pc_expansion", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }, { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }], sheetNote: "PC 확장성 DB 시트 + IT통합 양식" },
   { label: "복합기 확장성", table: "mfp_expansion", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }], sheetNote: "영업확장성 DB 통합추출 시트" },
+  // 임대리스트는 주 1회 전체 업서트 — 서울 이전 때 조용히 실패해 5일 묵었던 전례가 있어 감시망에 넣는다
+  { label: "임대리스트", table: "vendor_info", timeField: "_등록시각", staleDays: 9, routes: [{ label: "시트", filter: "" }], sheetNote: "임대리스트 원본시트 (주 1회 전체 동기화)" },
+  { label: "임대현황표", table: "lease_status", timeField: "_등록시각", staleDays: 9, routes: [{ label: "시트", filter: "" }], sheetNote: "임대현황표 (주 1회 전체 동기화)" },
 ];
 
 type RowState = {
@@ -44,12 +49,13 @@ type RowState = {
 
 const HEADERS = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
 
-async function latestOf(table: string, filter: string): Promise<string> {
-  const q = `select=created_at&order=created_at.desc&limit=1${filter ? `&${filter}` : ""}`;
+async function latestOf(table: string, filter: string, timeField = "created_at"): Promise<string> {
+  const field = encodeURIComponent(timeField);
+  const q = `select=${field}&order=${field}.desc.nullslast&limit=1${filter ? `&${filter}` : ""}`;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, { headers: HEADERS });
   if (!res.ok) return "";
-  const rows = (await res.json()) as Array<{ created_at?: string }>;
-  return rows[0]?.created_at || "";
+  const rows = (await res.json()) as Array<Record<string, string | undefined>>;
+  return rows[0]?.[timeField] || "";
 }
 
 async function countOf(table: string): Promise<number | null> {
@@ -62,13 +68,13 @@ async function countOf(table: string): Promise<number | null> {
   return Number.isFinite(total) ? total : null;
 }
 
-function ago(iso: string) {
+function ago(iso: string, staleDays = 7) {
   if (!iso) return { text: "기록 없음", stale: true };
   const diff = Date.now() - new Date(iso).getTime();
   const days = Math.floor(diff / 86400000);
   const text = days <= 0 ? "오늘" : days === 1 ? "어제" : `${days}일 전`;
-  // 일주일 넘게 조용하면 길이 끊겼을 수 있다 (주말·휴가는 며칠이면 정상)
-  return { text, stale: days >= 7 };
+  // 기준 일수 넘게 조용하면 길이 끊겼을 수 있다 (주 1회 동기화 표는 기준을 늘려 잡는다)
+  return { text, stale: days >= staleDays };
 }
 
 function stamp(iso: string) {
@@ -87,8 +93,8 @@ export default function SyncStatus() {
       try {
         const [total, latest, ...routeLatest] = await Promise.all([
           countOf(category.table),
-          latestOf(category.table, ""),
-          ...category.routes.map((route) => latestOf(category.table, route.filter)),
+          latestOf(category.table, "", category.timeField),
+          ...category.routes.map((route) => latestOf(category.table, route.filter, category.timeField)),
         ]);
         setRows((current) => ({
           ...current,
@@ -135,7 +141,7 @@ export default function SyncStatus() {
                 <span className="font-mono text-xs font-bold tabular-nums text-slate-700 sm:text-right">{state?.total != null ? state.total.toLocaleString() : "…"}</span>
                 <span className="flex flex-wrap items-center gap-1.5">
                   {state ? state.routes.map((route) => {
-                    const meta = ago(route.latest);
+                    const meta = ago(route.latest, category.staleDays);
                     return (
                       <span key={route.label} title={route.latest ? `마지막 기록 ${stamp(route.latest)}` : "기록 없음"}
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.stale ? "bg-rose-50 text-rose-600" : routeTone(route.label)}`}>
