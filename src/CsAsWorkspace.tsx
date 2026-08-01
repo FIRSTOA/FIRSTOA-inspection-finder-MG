@@ -559,9 +559,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (changed) persistRemote(changed);
     if (changed?.repeatMonthly && before && !before.repeatMonthly) ensureMonthlySeries(changed);
     if (changed && before?.repeatMonthly && !changed.repeatMonthly) stopMonthlySeries(changed);
-    // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 현황에도 반영 (완료/익일/접수)
+    // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 리스트에도 반영
+    // 접수 → (배정) 진행중 → (완료) 완료 — 배정 해제·완료 취소는 다시 접수로
     if (changed && before && changed.receptionId && changed.status !== before.status) {
-      const mapped = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : "접수";
+      const mapped = changed.status === "완료" ? "완료" : changed.status === "배정" ? "진행중" : "접수";
       void setServiceReceptionStatus(changed.receptionId, mapped).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
     }
   };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send, ShieldCheck } from "lucide-react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
-  saveServiceReception, getServiceReceptions, setServiceReceptionStatus, updateServiceReception, getLeaseDeviceSummary,
+  saveServiceReception, getServiceReceptions, updateServiceReception, getLeaseDeviceSummary,
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
@@ -153,14 +153,6 @@ const TYPE_TONE: Record<string, string> = {
   IT: "bg-cyan-50 text-cyan-700",
   "원격이관": "bg-violet-50 text-violet-700",
 };
-const STATUS_TONE: Record<string, string> = {
-  접수: "bg-slate-100 text-slate-600",
-  전송완료: "bg-blue-50 text-blue-700",
-  완료: "bg-emerald-50 text-emerald-700",
-  익일: "bg-purple-50 text-purple-700",
-  원격대기: "bg-amber-50 text-amber-700",
-  원격완료: "bg-emerald-50 text-emerald-700",
-};
 
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string; 주소: string };
 
@@ -287,10 +279,11 @@ export default function ServiceReception({ author }: { author: string }) {
   const [listLoading, setListLoading] = useState(false);
   const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인">("전체");
   const [openRowId, setOpenRowId] = useState("");
-  // 화면을 한 번에 하나만 보여준다: 복합기 접수 / 원격·IT 접수+처리 / 전체 접수 리스트
-  const [page, setPage] = useState<"copier" | "remote" | "list">(() => {
-    try { const saved = localStorage.getItem("reception_page_v1"); return saved === "remote" || saved === "list" ? saved : "copier"; } catch { return "copier"; }
+  // 듀얼 레이아웃: 좌측 접수폼(복합기 AS/원격/IT 탭) + 우측 접수 리스트 상시
+  const [page, setPage] = useState<"copier" | "remote" | "it">(() => {
+    try { const saved = localStorage.getItem("reception_page_v1"); return saved === "remote" || saved === "it" ? saved : "copier"; } catch { return "copier"; }
   });
+  const [statusFilter, setStatusFilter] = useState<"전체" | "접수" | "진행중" | "완료">("전체");
   useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
   const [remoteQueue, setRemoteQueue] = useState<ServiceReceptionRow[]>([]);
@@ -348,7 +341,8 @@ export default function ServiceReception({ author }: { author: string }) {
     if (Object.keys(extra).length) patchHandling(row, extra);   // 시각 기록은 즉시 화면에 반영
     if (!silent) setHandlingBusyId(row.id);
     try {
-      const nextStatus = meta.result === "처리완료" ? "원격완료" : row.status;
+      // 시작 → 진행중, 끝(또는 처리완료) → 완료 — 접수 리스트 상태가 실시간으로 따라온다
+      const nextStatus = meta.result === "처리완료" || meta.end ? "완료" : meta.start ? "진행중" : row.status;
       await updateServiceReception(row.id, { remote_meta: meta, ...(nextStatus !== row.status ? { status: nextStatus } : {}) });
       // 시트는 "처리 저장"에서 한 번만 반영한다. 시작·종료 스탬프까지 매번 보내면
       // 웹훅 지연(5~15초)이 겹쳐 서로 다른 행이 만들어지고 체감도 느려진다.
@@ -403,13 +397,17 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   }, []);
   useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
-  useEffect(() => { if (page === "remote") void loadRemoteQueue(); }, [page, loadRemoteQueue]);
-  const goPage = (next: "copier" | "remote" | "list") => {
+  useEffect(() => { void loadRemoteQueue(); }, [page, loadRemoteQueue]);
+  const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT" } as const;
+  const goPage = (next: "copier" | "remote" | "it") => {
     setPage(next);
     setActionResult("");
-    if (next === "copier" && type !== "복합기 AS") setType("복합기 AS");
-    if (next === "remote" && type === "복합기 AS") setType("원격이관");
+    setType(PAGE_TYPE[next]);
+    setListFilter(PAGE_TYPE[next]); // 우측 리스트도 탭 유형으로 (필요하면 전체로 바꿀 수 있음)
   };
+  // 저장된 탭으로 재진입 시 폼 유형·리스트 필터를 탭에 맞춘다
+  useEffect(() => { setType(PAGE_TYPE[page]); setListFilter(PAGE_TYPE[page]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     const onFocus = () => { void loadList(listDate, listPeriod); };
     window.addEventListener("focus", onFocus);
@@ -844,16 +842,6 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
-  const toggleRemoteDone = async (row: ServiceReceptionRow) => {
-    const next = row.status === "원격대기" ? "원격완료" : "원격대기";
-    try {
-      await setServiceReceptionStatus(row.id, next);
-      setListRows((current) => current.map((r) => r.id === row.id ? { ...r, status: next } : r));
-    } catch (e) {
-      notify(`상태 변경 실패: ${(e as Error).message}`, "error");
-    }
-  };
-
   // ---- 통계 ----
   const counts = useMemo(() => ({
     total: listRows.length,
@@ -876,7 +864,26 @@ export default function ServiceReception({ author }: { author: string }) {
     }
     return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
   }, [listRows]);
-  const filteredRows = useMemo(() => listFilter === "전체" ? listRows : listFilter === "주소확인" ? listRows.filter((r) => r.address_changed && !r.address_resolved_at) : listRows.filter((r) => r.type === listFilter), [listRows, listFilter]);
+  // 기간 밖이어도 미완료 원격·IT 건은 위로 이월해 보여준다 (어제 미완료가 사라지면 안 됨)
+  const mergedRows = useMemo(() => {
+    const seen = new Set(listRows.map((r) => r.id));
+    const carry = remoteQueue.filter((r) => !seen.has(r.id) && !(r.status === "원격완료" || r.status === "완료" || (r.remote_meta?.result || r.remote_meta?.end)));
+    return [...carry, ...listRows];
+  }, [listRows, remoteQueue]);
+  const filteredRows = useMemo(() => {
+    const byType = listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter);
+    if (statusFilter === "전체") return byType;
+    return byType.filter((r) => {
+      if (r.type === "IT" || r.type === "원격이관") {
+        if (r.status === "원격완료" || r.status === "완료") return statusFilter === "완료";
+        const meta = handling[r.id] ?? { ...(r.remote_meta || {}) };
+        const state = meta.result || meta.end ? "완료" : meta.start ? "진행중" : "접수";
+        return state === statusFilter;
+      }
+      const state = r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
+      return state === statusFilter;
+    });
+  }, [mergedRows, listFilter, statusFilter, handling]);
   const isToday = listDate === kstDate();
   // 필수값은 한 배열로만 정의한다 — 카운터와 아래 체크 칩이 서로 어긋나지 않게.
   // 구분별로 실제 필요한 것만: 원격이관은 방문·제목 개념이 없고, 시트 기입엔 순번이 필요하다.
@@ -895,13 +902,22 @@ export default function ServiceReception({ author }: { author: string }) {
 
   // 원격 작업 상태: 시작 전 = 대기 / 시작했고 처리여부 없음 = 진행중 / 처리여부 있음 = 완료
   const remoteStateOf = (row: ServiceReceptionRow) => {
+    if (row.status === "원격완료" || row.status === "완료") return "완료"; // 구버전 완료 표기 호환
     const meta = handlingOf(row);
-    return meta.result ? "완료" : meta.start ? "진행중" : "대기";
+    return meta.result || meta.end ? "완료" : meta.start ? "진행중" : "대기";
   };
-  const REMOTE_STATE_TONE: Record<string, string> = {
-    대기: "bg-amber-100 text-amber-800", 진행중: "bg-cyan-100 text-cyan-800", 완료: "bg-emerald-100 text-emerald-800",
+  /** 접수 리스트 공용 상태 — 복합기AS는 일정리스트 연동값, 원격·IT는 시작/끝 스탬프 기준 */
+  const displayStatusOf = (row: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
+    if (row.type === "IT" || row.type === "원격이관") {
+      const state = remoteStateOf(row);
+      return state === "대기" ? "접수" : state;
+    }
+    return row.status === "완료" ? "완료" : row.status === "진행중" ? "진행중" : "접수";
   };
-
+  const DISPLAY_STATUS_TONE: Record<string, string> = {
+    접수: "bg-rose-100 text-rose-700", 진행중: "bg-amber-100 text-amber-800", 완료: "bg-slate-200 text-slate-500",
+  };
+  
   const renderQueueRow = (row: ServiceReceptionRow) => (
               <div key={row.id}>
                 <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${openRowId === row.id ? "bg-slate-50" : ""}`}>
@@ -917,8 +933,15 @@ export default function ServiceReception({ author }: { author: string }) {
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {row.address_changed && !row.address_resolved_at && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800" title="임대리스트와 다른 주소로 접수됨">📍</span>}
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${STATUS_TONE[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
-                    {row.type === "원격이관" && <span onClick={(e) => { e.stopPropagation(); void toggleRemoteDone(row); }} className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[11px] font-black transition ${row.status === "원격대기" ? "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] hover:bg-blue-700" : "border border-slate-300 bg-white text-slate-400 hover:border-slate-400"}`}>{row.status === "원격대기" ? "완료" : "대기로"}</span>}
+                    {(() => { const state = displayStatusOf(row); return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${DISPLAY_STATUS_TONE[state]}`}>{state}</span>; })()}
+                    {(row.type === "원격이관" || row.type === "IT") && (() => {
+                      const state = displayStatusOf(row);
+                      if (state === "완료") return null;
+                      const started = state === "진행중";
+                      return <span onClick={(e) => { e.stopPropagation(); void saveHandling(row, started ? { end: kstNowHM() } : { start: kstNowHM() }, true); }}
+                        title={started ? "종료 시각 기록 — 완료 처리" : "시작 시각 기록 — 진행중 처리"}
+                        className={`flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full px-3 text-[11px] font-black transition ${started ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] hover:bg-blue-700"}`}>{started ? "■ 끝" : "▶ 시작"}</span>;
+                    })()}
                   </span>
                 </button>
                 {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
@@ -999,21 +1022,6 @@ export default function ServiceReception({ author }: { author: string }) {
   );
 
   // 리스트 탭은 기간·필터 결과를, 원격 탭은 최근 30일 원격·IT를 대기/진행중/완료로 묶어 보여준다
-  const queueBody = page === "remote"
-    ? (["대기", "진행중", "완료"] as const).map((state) => {
-        const groupRows = remoteQueue.filter((row) => remoteStateOf(row) === state);
-        if (!groupRows.length) return null;
-        return (
-          <div key={state}>
-            <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#151A23]/95 px-4 py-2 backdrop-blur">
-              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${REMOTE_STATE_TONE[state]}`}>{state}</span>
-              <span className="text-[11px] font-bold text-slate-400">{groupRows.length}건</span>
-            </div>
-            {groupRows.map(renderQueueRow)}
-          </div>
-        );
-      })
-    : filteredRows.map(renderQueueRow);
 
 
   return (
@@ -1027,13 +1035,13 @@ export default function ServiceReception({ author }: { author: string }) {
           </span>
           <span className="text-[11px] font-bold text-slate-400">
             {isToday ? "오늘" : listDate.slice(5)} 접수 <b className="text-white">{counts.total}</b>건
-            {page === "remote" ? <> · 원격 처리중 <b className="text-white">{remoteQueue.filter((row) => remoteStateOf(row) === "진행중").length}</b></> : null}
+            {remoteQueue.some((row) => remoteStateOf(row) === "진행중") ? <> · 원격 처리중 <b className="text-white">{remoteQueue.filter((row) => remoteStateOf(row) === "진행중").length}</b></> : null}
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
           <span className="ml-auto text-xs font-bold tabular-nums text-slate-300">{clock}</span>
         </div>
         <div className="flex border-b border-slate-200">
-          {([["copier", "복합기 AS", counts.copier], ["remote", "원격 · IT", remoteQueue.filter((row) => remoteStateOf(row) !== "완료").length], ["list", "접수 리스트", counts.total]] as ["copier" | "remote" | "list", string, number][]).map(([key, label, count]) => (
+          {([["copier", "복합기 AS", counts.copier], ["remote", "원격", counts.remote], ["it", "IT", counts.it]] as ["copier" | "remote" | "it", string, number][]).map(([key, label, count]) => (
             <button key={key} type="button" onClick={() => goPage(key)}
               className={`relative flex-1 px-3 py-3.5 text-[13px] font-black transition sm:text-[15px] ${page === key ? "text-slate-950 after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
               {label}
@@ -1043,9 +1051,9 @@ export default function ServiceReception({ author }: { author: string }) {
         </div>
       </section>
 
-      <div className={`space-y-4 ${page === "remote" ? "2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(420px,560px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0" : ""}`}>
-        {/* ==== 접수 작성 (리스트 탭에서는 감춘다) ==== */}
-        <div className={page === "list" ? "hidden" : "space-y-4"}>
+      <div className="space-y-4 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,600px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0">
+        {/* ==== 좌: 접수 작성 ==== */}
+        <div className="space-y-4">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
               <div className="flex items-center gap-2.5">
@@ -1333,16 +1341,16 @@ export default function ServiceReception({ author }: { author: string }) {
 
         </div>
 
-        {/* ==== 목록: 원격 탭은 작업 보드, 리스트 탭은 기간별 접수 기록 ==== */}
-        {page !== "copier" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+        {/* ==== 우: 접수 리스트 (상시) ==== */}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
             <div>
-              <h3 className="text-sm font-black text-white lg:text-[15px]">{page === "remote" ? "원격 · IT 작업" : "접수 리스트"}</h3>
-              <p className="text-[11px] font-semibold text-slate-400">{page === "remote" ? "최근 30일 · 카드를 열어 시작·종료와 처리 결과를 남깁니다" : "행을 열어 상세·일정 등록·주소 확인을 처리합니다"}</p>
+              <h3 className="text-sm font-black text-white lg:text-[15px]">접수 리스트</h3>
+              <p className="text-[11px] font-semibold text-slate-400">행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 — 미완료 원격·IT는 날짜와 무관하게 위로 이월</p>
             </div>
-            {page === "remote" && <button type="button" onClick={() => void loadRemoteQueue()} className="rounded-full bg-white/10 px-3.5 py-1.5 text-[11px] font-black text-slate-200 transition hover:bg-white/20">새로고침</button>}
+            <button type="button" onClick={() => { void loadList(listDate, listPeriod); void loadRemoteQueue(); }} className="rounded-full bg-white/10 px-3.5 py-1.5 text-[11px] font-black text-slate-200 transition hover:bg-white/20">새로고침</button>
           </div>
-          {page === "list" && <div className="border-b border-slate-200 p-4">
+          <div className="border-b border-slate-200 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1">
                 <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"><ChevronLeft size={16} /></button>
@@ -1363,14 +1371,21 @@ export default function ServiceReception({ author }: { author: string }) {
                   {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
+              <span className="mx-0.5 self-center text-slate-200">|</span>
+              {(["전체", "접수", "진행중", "완료"] as const).map((state) => (
+                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(state)}
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                  {state !== "전체" && <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />}
+                  {state === "전체" ? "상태 전체" : state}
+                </button>
+              ))}
             </div>
-          </div>}
+          </div>
 
-          <div className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
-            {listLoading && page === "list" && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-            {page === "remote" && !remoteQueue.length && <div className="p-8 text-center text-xs font-bold text-slate-400">최근 30일 원격·IT 접수가 없습니다.</div>}
-            {page === "list" && !listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listPeriod === "day" ? `${listDate.slice(5)} 접수 기록이 없습니다.` : `${PERIOD_LABEL[listPeriod]} 접수 기록이 없습니다.`}</div>}
-            {queueBody}
+          <div className="max-h-[74vh] divide-y divide-slate-100 overflow-y-auto">
+            {listLoading && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
+            {!listLoading && !filteredRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{listPeriod === "day" ? `${listDate.slice(5)} 조건에 맞는 접수가 없습니다.` : `${PERIOD_LABEL[listPeriod]} 조건에 맞는 접수가 없습니다.`}</div>}
+            {filteredRows.map(renderQueueRow)}
           </div>
 
           {previewRow && (
@@ -1392,7 +1407,7 @@ export default function ServiceReception({ author }: { author: string }) {
             </div>
           )}
 
-          {page === "list" && byAuthor.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4">
+          {byAuthor.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4">
             <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]})</div>
             <div className="mt-2 space-y-1">
               {byAuthor.map(([name, stat]) => (
@@ -1403,7 +1418,7 @@ export default function ServiceReception({ author }: { author: string }) {
               ))}
             </div>
           </div>}
-        </section>}
+        </section>
       </div>
     </div>
   );
