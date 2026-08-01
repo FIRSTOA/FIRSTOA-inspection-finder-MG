@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Megaphone, Pin, Plus, Search, Trash2 } from "lucide-react";
 import FormModal from "./FormModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
-import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { useAuthorBook, useMembers } from "./authors";
+import PersonPicker from "./PersonPicker";
 import { audienceNames, makeIsForMe, teamTargetLabel, teamTargetOptions } from "./audience";
 import { pingInbox } from "./useInboxBadge";
 import PortalSelect from "./PortalSelect";
@@ -55,11 +56,6 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
   const [draft, setDraft] = useState({ title: "", body: "", category: "일반" as string, target_type: "전체" as Notice["target_type"], target: "", pinned: false });
 
   const teamOptions = useMemo(() => teamTargetOptions(members), [members]);
-  const personOptions = useMemo(() => {
-    const active = members.filter((member) => member.active);
-    if (active.length) return active.map((member) => ({ value: member.name, label: member.name, group: member.team ? `${member.dept} · ${member.team}` : member.dept, hint: displayTitle(member) }));
-    return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })));
-  }, [members, book]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,8 +161,9 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
   );
   const targetBadge = (row: Notice) => {
     if (row.target_type === "전체") return <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">전체</span>;
-    if (row.target_type === "팀") return <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{teamTargetLabel(row.target)}</span>;
-    return <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">{row.target}</span>;
+    if (row.target_type === "팀") return <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">팀 · {teamTargetLabel(row.target)}</span>;
+    if (author && row.target === author) return <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 ring-1 ring-emerald-300">👤 나에게</span>;
+    return <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">👤 {row.target}</span>;
   };
 
   const detailRow = detailId ? rows.find((row) => row.id === detailId) : undefined;
@@ -328,10 +325,7 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
                     <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
                       options={teamOptions} />
                   )}
-                  {draft.target_type === "개인" && (
-                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
-                      options={personOptions} />
-                  )}
+                  {draft.target_type === "개인" && <PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} />}
                 </div>
               </div>
               <label className="block text-xs font-bold text-slate-500">내용

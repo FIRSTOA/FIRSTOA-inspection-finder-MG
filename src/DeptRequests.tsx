@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
-import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { displayTitle, useAuthorBook, useMembers } from "./authors";
+import PersonPicker from "./PersonPicker";
 import { makeIsForMe, myGroupLabel, teamTargetLabel, teamTargetOptions } from "./audience";
 import { pingInbox } from "./useInboxBadge";
 import FormModal from "./FormModal";
@@ -50,11 +51,6 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const { book } = useAuthorBook();
   const members = useMembers();
   const teamOptions = useMemo(() => teamTargetOptions(members), [members]);
-  const personOptions = useMemo(() => {
-    const active = members.filter((member) => member.active);
-    if (active.length) return active.map((member) => ({ value: member.name, label: member.name, group: member.team ? `${member.dept} · ${member.team}` : member.dept, hint: displayTitle(member) }));
-    return AUTHOR_TEAMS.flatMap((team) => (book[team] || []).map((name) => ({ value: name, label: name, group: `${team}팀` })));
-  }, [members, book]);
   // 요청자 = 로그인 작성자 본인 — 인원 DB에서 부서·호칭을 붙여 기록한다
   const me = useMemo(() => members.find((member) => member.active && member.name === author), [members, author]);
   const requesterValue = me ? [me.dept, me.name, displayTitle(me)].join(" ") : author;
@@ -63,7 +59,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [error, setError] = useState("");
   const [kindFilter, setKindFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");
-  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [scope, setScope] = useState<"received" | "sent" | "all">("received");
   const [detailId, setDetailId] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({
@@ -105,9 +101,12 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, author]);
 
-  const visible = useMemo(() => rows.filter((row) => scope === "all" || isMine(row)), [rows, scope, isMine]);
-  const waiting = visible.filter((row) => row.status === "대기").length;
-  const hiddenCount = rows.length - visible.length;
+  // 받은 = 내가 수신 대상이면서 내가 올린 게 아닌 것 / 보낸 = 내가 올린 것
+  const isSentByMe = useCallback((row: DeptRequest) => !!author && (row.requester || "").split(/\s+/).includes(author), [author]);
+  const receivedRows = useMemo(() => rows.filter((row) => isMine(row) && !isSentByMe(row)), [rows, isMine, isSentByMe]);
+  const sentRows = useMemo(() => rows.filter(isSentByMe), [rows, isSentByMe]);
+  const visible = scope === "all" ? rows : scope === "sent" ? sentRows : receivedRows;
+  const waiting = receivedRows.filter((row) => row.status === "대기").length;
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { 대기: 0, 처리중: 0, 완료: 0 };
     visible.forEach((row) => { counts[row.status] = (counts[row.status] || 0) + 1; });
@@ -177,8 +176,9 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const targetBadge = (row: DeptRequest) => {
     const type = row.target_type || "전체";
     if (type === "전체") return <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">전체</span>;
-    if (type === "팀") return <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">{teamTargetLabel(row.target)}</span>;
-    return <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">{row.target}</span>;
+    if (type === "팀") return <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">팀 · {teamTargetLabel(row.target)}</span>;
+    if (author && row.target === author) return <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 ring-1 ring-emerald-300">👤 나에게</span>;
+    return <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">👤 {row.target}</span>;
   };
 
   const overdue = (row: DeptRequest) => !!row.due_date && row.status !== "완료" && row.due_date < new Date().toISOString().slice(0, 10);
@@ -196,11 +196,9 @@ export default function DeptRequests({ author, embedded = false }: { author: str
         </div>}
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="flex rounded-full bg-slate-100 p-1">
-            {([["mine", "내 것"], ["all", "모든 요청"]] as const).map(([key, label]) => (
+            {([["received", `받은 요청 ${receivedRows.length}`], ["sent", `보낸 요청 ${sentRows.length}`], ["all", "전체"]] as Array<["received" | "sent" | "all", string]>).map(([key, label]) => (
               <button key={key} type="button" onClick={() => setScope(key)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${scope === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-                {label}{key === "all" && hiddenCount > 0 && scope === "mine" ? ` +${hiddenCount}` : ""}
-              </button>
+                className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-black tabular-nums transition ${scope === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
             ))}
           </div>
           {/* 상태 카운트 칩 — "지금 몇 건이 밀려 있나"가 필터를 겸한다 */}
@@ -225,7 +223,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? (scope === "mine" && hiddenCount > 0 ? "내게 온 요청이 없어요 — 다른 팀 앞 요청은 \"모든 요청\"에서 볼 수 있어요." : "조건에 맞는 요청이 없어요.") : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
+      {!loading && !filtered.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">{rows.length ? (scope === "received" ? "내게 온 요청이 없어요 — 후련하게 처리 끝!" : scope === "sent" ? "내가 보낸 요청이 없어요." : "조건에 맞는 요청이 없어요.") : "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요."}</div>}
 
       {/* 슬림 카드 — 요약만. 누르면 상세 모달 */}
       <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
@@ -332,10 +330,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
                     <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="부서·팀 선택"
                       options={teamOptions} />
                   )}
-                  {draft.target_type === "개인" && (
-                    <PortalSelect width={185} value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} placeholder="직원 선택"
-                      options={personOptions} />
-                  )}
+                  {draft.target_type === "개인" && <PersonPicker value={draft.target} onChange={(next) => setDraft({ ...draft, target: next })} />}
                 </div>
               </div>
               <div className="text-xs font-bold text-slate-500">유형

@@ -28,14 +28,14 @@ export function useInboxBadge(author: string): number {
         const [notices, myReads, waiting, updates] = await Promise.all([
           selectRows<{ id: string; target_type?: string; target?: string }>("notices", "select=id,target_type,target&order=created_at.desc&limit=300"),
           author ? selectRows<{ notice_id: string }>("notice_reads", `select=notice_id&reader=eq.${encodeURIComponent(author)}&limit=1000`) : Promise.resolve([]),
-          selectRows<{ target_type?: string; target?: string }>("dept_requests", `select=target_type,target&status=eq.${encodeURIComponent("대기")}&limit=500`),
+          selectRows<{ target_type?: string; target?: string; requester?: string }>("dept_requests", `select=target_type,target,requester&status=eq.${encodeURIComponent("대기")}&limit=500`),
           // 내가 올린 요청의 상태 변화(처리중·완료)를 아직 못 봄
           author ? selectRows<{ id: number }>("dept_requests", `select=id&requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}&limit=100`) : Promise.resolve([]),
         ]);
         if (!alive) return;
         const readSet = new Set(myReads.map((read) => read.notice_id));
         const unread = author ? notices.filter((notice) => isMine(notice) && !readSet.has(notice.id)).length : 0;
-        const mineWaiting = waiting.filter(isMine).length;
+        const mineWaiting = waiting.filter((row) => isMine(row) && !(author && (row.requester || "").split(/\s+/).includes(author))).length;
         setCount(unread + mineWaiting + updates.length);
       } catch { /* 배지는 실패해도 조용히 */ }
     };

@@ -38,10 +38,11 @@ export default function InboxHub({ author }: { author: string }) {
     let alive = true;
     void (async () => {
       try {
-        const rows = await selectRows<{ status: string; target_type?: string; target?: string }>(
-          "dept_requests", "select=status,target_type,target&status=eq.%EB%8C%80%EA%B8%B0&limit=500");
+        const rows = await selectRows<{ status: string; target_type?: string; target?: string; requester?: string }>(
+          "dept_requests", "select=status,target_type,target,requester&status=eq.%EB%8C%80%EA%B8%B0&limit=500");
         if (!alive) return;
-        const mine = rows.filter(makeIsForMe(author, members, book));
+        const isForMe = makeIsForMe(author, members, book);
+        const mine = rows.filter((row) => isForMe(row) && !(author && (row.requester || "").split(/\s+/).includes(author)));
         setMyWaiting(mine.length);
         if (author) {
           const updates = await selectRows<{ id: number }>("dept_requests", `select=id&requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}&limit=100`);
