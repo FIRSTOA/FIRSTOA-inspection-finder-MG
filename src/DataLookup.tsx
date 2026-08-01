@@ -73,9 +73,13 @@ export default function DataLookup() {
       const needle = query.trim().replace(/[(),*"]/g, " ").trim();
       parts.push(`or=(${category.searchFields.map((field) => `"${field}".ilike.*${needle}*`).join(",")})`);
     }
-    if (team !== "전체" && category.teamField) {
-      // '수도권C' / 'C' / 'C,D' 모두 팀 글자를 포함하므로 부분일치로 거른다
-      parts.push(`${encodeURIComponent(category.teamField)}=ilike.*${encodeURIComponent(team)}*`);
+    if (team !== "전체" && (category.teamField || category.teamSourceParen)) {
+      // 팀 컬럼('수도권C'·'C'·'C,D')과 출처 라벨의 괄호("카톡:재계약(A)")를 함께 본다 —
+      // 시트 동기화분은 지역 칸이 빈 경우가 많아(재계약은 100%) 컬럼만으로는 다 빠진다.
+      const conds: string[] = [];
+      if (category.teamField) conds.push(`"${category.teamField}".ilike."*${team}*"`);
+      if (category.teamSourceParen) conds.push(`"_출처".ilike."*(*${team}*)*"`);
+      parts.push(`or=(${conds.map((cond) => encodeURIComponent(cond)).join(",")})`);
     }
     parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);

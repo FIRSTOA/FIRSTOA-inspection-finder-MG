@@ -30,13 +30,14 @@ export type LookupCategory = {
   filterQuery?: string;         // 항상 붙는 추가 조건 (예: 시트 원본만)
   note?: string;                // 화면에 띄우는 한 줄 안내
   teamField?: string;           // 팀(A~D) 필터에 쓸 컬럼 — 값에 팀 글자가 포함되면 매칭 (수도권C 등)
+  teamSourceParen?: boolean;    // 출처 라벨의 괄호에서도 팀 매칭 ("카톡:재계약(A)") — 지역 칸이 빈 시트분 보완
 };
 
 const VENDOR: LookupColumn = { key: "_업체명", label: "업체명", width: "minmax(0,1.4fr)", strong: true };
 
 export const LOOKUP_CATEGORIES: LookupCategory[] = [
   {
-    key: "jeomgeom", label: "점검", group: "현장 기록", teamField: "지역", table: "jeomgeom",
+    key: "jeomgeom", label: "점검", group: "현장 기록", teamSourceParen: true, teamField: "지역", table: "jeomgeom",
     dateField: "작성일", orderField: "작성일", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "모델명", "시리얼넘버", "자산기번"],
     columns: [
@@ -50,7 +51,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "as", label: "AS", group: "현장 기록", teamField: "지역", table: "as_records",
+    key: "as", label: "AS", group: "현장 기록", teamSourceParen: true, teamField: "지역", table: "as_records",
     dateField: "작성일", orderField: "작성일", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "처리내용", "모델명", "시리얼넘버", "자산기번"],
     columns: [
@@ -78,7 +79,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "bulman", label: "불만", group: "현장 기록", teamField: "지역", table: "bulman",
+    key: "bulman", label: "불만", group: "현장 기록", teamSourceParen: true, teamField: "지역", table: "bulman",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "불만내용", "불편내용", "조치내용"],
     columns: [
@@ -92,7 +93,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "misu", label: "미수", group: "영업·관리", teamField: "지역", table: "misu",
+    key: "misu", label: "미수", group: "영업·관리", teamSourceParen: true, teamField: "지역", table: "misu",
     dateField: "입력일", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "관리담당자", "업체담당자", "지역"],
     note: "시트 동기화 표입니다. 입력일 칸에 값이 없는 행도 있어 최신 등록순으로 보여줍니다.",
@@ -123,7 +124,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "overage_adjust", label: "초과조정", group: "영업·관리", teamField: "지역", table: "overage_adjust",
+    key: "overage_adjust", label: "초과조정", group: "영업·관리", teamSourceParen: true, teamField: "지역", table: "overage_adjust",
     dateField: "created_at", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "제안", "고객반응"],
     columns: [
@@ -137,7 +138,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "recontract", label: "재계약", group: "영업·관리", teamField: "지역", table: "recontract",
+    key: "recontract", label: "재계약", group: "영업·관리", teamSourceParen: true, teamField: "지역", table: "recontract",
     dateField: "날짜", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "작성자", "내용", "갱신상태"],
     columns: [
