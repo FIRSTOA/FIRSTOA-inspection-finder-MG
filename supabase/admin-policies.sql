@@ -23,3 +23,8 @@ create policy "contact_changes anon delete" on public.contact_changes for delete
 grant insert, update, delete on public.app_config to anon;
 grant insert, update, delete on public.room_map to anon;
 grant update, delete on public.contact_changes to anon;
+
+-- 시트 미러(전체교체) 복구: supabaseReplaceAll_(GAS)이 anon 키로 delete+insert 하는데
+-- 서울 이전 때 pc_expansion·mfp_expansion에 DELETE/UPDATE GRANT가 빠져 미러가 조용히 멈췄었다 (2026-08-01 발견)
+grant delete, update on public.pc_expansion to anon;
+grant delete, update on public.mfp_expansion to anon;
