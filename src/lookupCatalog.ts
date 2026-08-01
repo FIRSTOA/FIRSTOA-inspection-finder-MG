@@ -20,7 +20,7 @@ export type LookupColumn = {
 export type LookupCategory = {
   key: string;
   label: string;
-  group: "현장 기록" | "영업·관리" | "접수·일정" | "자산·기타";
+  group: "현장 기록" | "영업·관리" | "접수·자산";
   table: string;
   dateField: string;            // 기간 필터에 쓰는 필드
   orderField: string;           // 정렬 필드 (날짜 칸이 지저분한 표는 created_at)
@@ -207,7 +207,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "reception", label: "서비스접수", group: "접수·일정", table: "service_receptions",
+    key: "reception", label: "서비스접수", group: "접수·자산", table: "service_receptions",
     dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
     searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
     filterQuery: "deleted=is.false",
@@ -222,36 +222,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "tickets", label: "일정", group: "접수·일정", table: "as_tickets",
-    dateField: "date", orderField: "date", vendorField: "vendor",
-    searchFields: ["vendor", "assignee", "issue", "address", "model"],
-    columns: [
-      { key: "date", label: "일자", width: "96px", mono: true },
-      { key: "time", label: "시각", width: "70px", mono: true, hideBelow: "sm" },
-      { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
-      { key: "team", label: "팀", width: "60px" },
-      { key: "scheduleType", label: "종류", width: "90px" },
-      { key: "assignee", label: "담당", width: "80px" },
-      { key: "status", label: "상태", width: "80px" },
-      { key: "issue", label: "내용", width: "minmax(0,1.4fr)" },
-    ],
-  },
-  {
-    key: "visits", label: "방문일지", group: "접수·일정", table: "visit_logs",
-    dateField: "work_date", orderField: "work_date", vendorField: "vendor",
-    searchFields: ["vendor", "author", "note"],
-    columns: [
-      { key: "work_date", label: "근무일", width: "96px", mono: true },
-      { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
-      { key: "author", label: "작성자", width: "80px" },
-      { key: "work_kinds", label: "업무", width: "minmax(0,1fr)" },
-      { key: "machine_count", label: "기기", width: "70px", align: "right", mono: true },
-      { key: "minutes", label: "소요(분)", width: "80px", align: "right", mono: true, hideBelow: "sm" },
-      { key: "note", label: "메모", width: "minmax(0,1.2fr)", hideBelow: "lg" },
-    ],
-  },
-  {
-    key: "contact", label: "담당자·주소 변경", group: "접수·일정", table: "contact_changes",
+    key: "contact", label: "담당자·주소 변경", group: "접수·자산", table: "contact_changes",
     dateField: "change_date", orderField: "created_at", vendorField: "company",
     searchFields: ["company", "author", "before_text", "after_text", "reason"],
     columns: [
@@ -265,7 +236,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "stock", label: "기기·부품 재고", group: "자산·기타", table: "stock_items",
+    key: "stock", label: "기기·부품 재고", group: "접수·자산", table: "stock_items",
     dateField: "updated_at", orderField: "updated_at", vendorField: "name",
     searchFields: ["name", "brand", "note", "condition"],
     columns: [
@@ -278,20 +249,6 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
       { key: "updated_at", label: "수정시각", width: "150px", mono: true, hideBelow: "lg" },
     ],
   },
-  {
-    key: "copier_notes", label: "복합기 학습", group: "자산·기타", table: "copier_notes",
-    dateField: "created_at", orderField: "created_at", vendorField: "title",
-    searchFields: ["title", "content", "model", "brand", "author"],
-    columns: [
-      { key: "created_at", label: "등록", width: "150px", mono: true },
-      { key: "brand", label: "브랜드", width: "110px" },
-      { key: "model", label: "기종", width: "130px", hideBelow: "sm" },
-      { key: "kind", label: "구분", width: "90px", hideBelow: "sm" },
-      { key: "title", label: "제목", width: "minmax(0,1.4fr)", strong: true },
-      { key: "content", label: "내용", width: "minmax(0,1.8fr)" },
-      { key: "author", label: "작성자", width: "80px", hideBelow: "lg" },
-    ],
-  },
 ];
 
-export const LOOKUP_GROUPS = ["현장 기록", "영업·관리", "접수·일정", "자산·기타"] as const;
+export const LOOKUP_GROUPS = ["현장 기록", "영업·관리", "접수·자산"] as const;

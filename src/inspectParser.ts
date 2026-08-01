@@ -49,8 +49,10 @@ export function isASForm(content: string): boolean {
 
 function extractField(content: string, label: string, multiline: boolean): string {
   const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // 라벨 뒤 공백은 같은 줄 안에서만([ \t]*) 허용한다. \s*를 쓰면 줄바꿈까지 삼켜서
+  // "자산기번:"이 빈 칸일 때 다음 줄("내용: 정기점검")이 값으로 들어간다.
   const pattern = new RegExp(
-    "(?:^|[\\r\\n])" + esc + "\\s*[:：]?\\s*([\\s\\S]*?)(?=[\\r\\n](?:(?:" + FIELD_LABEL_PATTERN + ")\\s*[:：]|[-=]{2,}|※|＊|\\*)|$)"
+    "(?:^|[\\r\\n])" + esc + "[ \\t]*[:：]?[ \\t]*([\\s\\S]*?)(?=[\\r\\n](?:(?:" + FIELD_LABEL_PATTERN + ")\\s*[:：]|[-=]{2,}|※|＊|\\*)|$)"
   );
   const match = content.match(pattern);
   if (!match) return "";
@@ -58,6 +60,8 @@ function extractField(content: string, label: string, multiline: boolean): strin
   val = val.replace(/[\r\n]+\s*[-=*※＊].*$/, "").trim();
   if (!val) return "";
   if (EMPTY_LABEL_RE.test(val)) return "";
+  // 이중 방어: 값이 다른 라벨로 시작하면(내용: …) 잘못 삼킨 것
+  if (new RegExp("^(?:" + FIELD_LABEL_PATTERN + ")\\s*[:：]").test(val)) return "";
   return multiline ? val : val.split(/[\r\n]/)[0].trim();
 }
 
