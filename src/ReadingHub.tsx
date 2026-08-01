@@ -47,6 +47,115 @@ async function searchGoogleBooks(query: string): Promise<BookHit[]> {
     thumbnail: String(item.volumeInfo?.imageLinks?.thumbnail || item.volumeInfo?.imageLinks?.smallThumbnail || "").replace("http://", "https://"),
   })).filter((book) => book.title);
 }
+/**
+ * 장르별 추천 도서 — 검증된 책만 큐레이션해 두고, 날짜 기준으로 3권씩 돌아가며 보여준다.
+ * 표지·저자는 리디 프록시로 해석해 기기에 7일 캐시. (베스트셀러 API는 전부 키 장벽,
+ * 스크레이핑은 웹소설 잡음이 섞여서 큐레이션이 품질·유지비 모두 낫다)
+ */
+const BOOK_RECS: Record<string, Array<{ t: string; a: string }>> = {
+  "자기계발": [
+    { t: "미움받을 용기", a: "기시미 이치로" }, { t: "아주 작은 습관의 힘", a: "제임스 클리어" },
+    { t: "데일 카네기 인간관계론", a: "데일 카네기" }, { t: "그릿", a: "앤절라 더크워스" },
+    { t: "원씽", a: "게리 켈러" }, { t: "역행자", a: "자청" },
+  ],
+  "경영·리더십": [
+    { t: "초격차", a: "권오현" }, { t: "일을 잘한다는 것", a: "야마구치 슈" },
+    { t: "하드씽", a: "벤 호로위츠" }, { t: "좋은 기업을 넘어 위대한 기업으로", a: "짐 콜린스" },
+    { t: "규칙 없음", a: "리드 헤이스팅스" }, { t: "최고의 팀은 무엇이 다른가", a: "대니얼 코일" },
+  ],
+  "경제·재테크": [
+    { t: "돈의 심리학", a: "모건 하우절" }, { t: "부자 아빠 가난한 아빠", a: "로버트 기요사키" },
+    { t: "부의 추월차선", a: "엠제이 드마코" }, { t: "존리의 부자되기 습관", a: "존리" },
+    { t: "새로운 종의 부자들", a: "" },
+  ],
+  "인문·교양": [
+    { t: "사피엔스", a: "유발 하라리" }, { t: "총 균 쇠", a: "재레드 다이아몬드" },
+    { t: "팩트풀니스", a: "한스 로슬링" }, { t: "정의란 무엇인가", a: "마이클 샌델" },
+    { t: "코스모스", a: "칼 세이건" }, { t: "넛지", a: "리처드 탈러" },
+  ],
+  "소설·에세이": [
+    { t: "불편한 편의점", a: "김호연" }, { t: "달러구트 꿈 백화점", a: "이미예" },
+    { t: "아몬드", a: "손원평" }, { t: "미드나잇 라이브러리", a: "매트 헤이그" },
+    { t: "나미야 잡화점의 기적", a: "히가시노 게이고" }, { t: "어서 오세요, 휴남동 서점입니다", a: "황보름" },
+  ],
+  "IT·기술": [
+    { t: "클린 코드", a: "로버트 C. 마틴" }, { t: "IT 좀 아는 사람", a: "닐 메타" },
+    { t: "비전공자를 위한 이해할 수 있는 IT 지식", a: "최원영" }, { t: "프로그래머의 뇌", a: "펠리너 헤르만스" },
+    { t: "소프트웨어 장인", a: "산드로 만쿠소" },
+  ],
+};
+const REC_GENRES = Object.keys(BOOK_RECS);
+
+/** 날짜로 정해지는 3권 — 매일 자연스럽게 돌아간다 */
+function dailyRecPicks(genre: string): Array<{ t: string; a: string }> {
+  const pool = BOOK_RECS[genre] || [];
+  if (pool.length <= 3) return pool;
+  const seed = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
+  const start = seed % pool.length;
+  return [0, 1, 2].map((offset) => pool[(start + offset) % pool.length]);
+}
+
+async function resolveRecBook(title: string): Promise<{ cover: string; authors: string }> {
+  const cacheKey = `book_rec_v1:${title}`;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) { const parsed = JSON.parse(raw); if (Date.now() - parsed.t < 7 * 86_400_000) return parsed.v; }
+  } catch { /* 캐시 실패 무시 */ }
+  let value = { cover: "", authors: "" };
+  try {
+    const hits = await searchRidiBooks(title);
+    const compact = title.replace(/\s/g, "");
+    const hit = hits.find((h) => h.title.replace(/\s/g, "").includes(compact.slice(0, 6))) || hits[0];
+    if (hit) value = { cover: hit.thumbnail, authors: hit.authors };
+  } catch { /* 표지 없으면 그라데이션으로 */ }
+  if (value.cover) { try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), v: value })); } catch { /* 무시 */ } }
+  return value;
+}
+
+function BookRecsCard({ onPick }: { onPick: (title: string, cover: string) => void }) {
+  const [genre, setGenre] = useState(REC_GENRES[0]);
+  const [resolved, setResolved] = useState<Record<string, { cover: string; authors: string }>>({});
+  const picks = useMemo(() => dailyRecPicks(genre), [genre]);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all(picks.map(async (pick) => [pick.t, await resolveRecBook(pick.t)] as const)).then((entries) => {
+      if (alive) setResolved((current) => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+    return () => { alive = false; };
+  }, [picks]);
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <h3 className="text-sm font-black text-slate-950">📚 이런 책 어때요</h3>
+        <p className="mt-0.5 text-[10px] font-bold text-slate-400">매일 바뀌어요 — 누르면 제목·표지가 작성칸에 담깁니다</p>
+      </div>
+      <div className="flex gap-1 overflow-x-auto px-3 pt-2.5">
+        {REC_GENRES.map((name) => (
+          <button key={name} type="button" onClick={() => setGenre(name)}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black transition ${genre === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+        ))}
+      </div>
+      <div className="space-y-1 p-2.5">
+        {picks.map((pick) => {
+          const info = resolved[pick.t];
+          return (
+            <button key={pick.t} type="button" onClick={() => onPick(pick.t, info?.cover || "")}
+              className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition hover:bg-slate-50">
+              {info?.cover
+                ? <img src={info.cover} alt="" loading="lazy" className="h-14 w-10 shrink-0 rounded object-cover shadow-sm" />
+                : <span className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-gradient-to-br from-slate-600 to-slate-800 p-1 text-center text-[8px] font-black leading-3 text-white">{pick.t.slice(0, 8)}</span>}
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-black text-slate-800">{pick.t}</span>
+                <span className="block truncate text-[10px] font-bold text-slate-400">{info?.authors || pick.a}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 async function searchOpenLibrary(query: string): Promise<BookHit[]> {
   const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=title,author_name,cover_i`);
   if (!res.ok) throw new Error(`openlibrary ${res.status}`);
@@ -402,8 +511,10 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
           {visiblePosts.map((post) => renderPost(post))}
         </div>
 
-        {/* 포인트 현황 */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
+        {/* 사이드바 — 추천 도서 + 포인트 현황 */}
+        <div className="space-y-4 xl:sticky xl:top-6">
+        {kind === "reading" && <BookRecsCard onPick={(pickTitle, pickCover) => { setTitle(pickTitle); setCover(pickCover); setBookOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-black text-slate-950">🏆 포인트 현황</h3>
             <div className="rounded-full bg-slate-100 p-1">
@@ -423,6 +534,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
             ))}
           </div>
         </section>
+        </div>
       </div>
     </div>
   );
