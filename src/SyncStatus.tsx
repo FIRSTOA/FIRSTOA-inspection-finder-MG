@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
-import { GAS_GET_URL } from "./api";
 
 /**
  * 동기화 현황 — 조회 화면이 읽는 표들이 "어디서, 언제까지" 채워졌는지 보여준다.
@@ -24,34 +23,33 @@ type CategoryDef = {
 
 const ENC = (v: string) => encodeURIComponent(v);
 const CATEGORIES: CategoryDef[] = [
-  // "웹앱" = FIELD에서 전송한 것 (카톡방을 거쳐 봇이 기록하므로 출처는 카톡:웹앱).
-  // "카톡 수기" = 팀원이 카톡방에 직접 쓴 양식 — 6월 말 웹앱 전환 후 자연히 줄어든 경로라 quiet.
+  // "웹앱" = FIELD 저장이 직접 기록한 행 (출처 라벨이 관례상 "카톡:웹앱").
+  // "카톡 (중단)" = 카톡방 메시지 수집 — 현재 봇 수집이 멈춰 있어(사용자 확인) 회색으로 둔다.
   { label: "점검", table: "jeomgeom", sheetNote: "FIELD 전송 + 팀별 점검방", routes: [
     { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
-    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡:점검")}*`, quiet: true },
+    { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡:점검")}*`, quiet: true },
   ] },
   { label: "AS", table: "as_records", sheetNote: "FIELD 전송 + 팀별 AS방 (시트분은 초기 이관)", routes: [
     { label: "웹앱", filter: `_출처=like.${ENC("카톡:웹앱")}*` },
-    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡:AS")}*`, quiet: true },
+    { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡:AS")}*`, quiet: true },
   ] },
   { label: "물류", table: "logistics_records", sheetNote: "FIELD 물류 양식", staleDays: 30, routes: [{ label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*` }] },
-  { label: "불만", table: "bulman", sheetNote: "불만 시트 + FIELD (카톡 수기는 예전 경로)", routes: [
+  { label: "불만", table: "bulman", sheetNote: "불만 시트 + FIELD", routes: [
     { label: "시트", filter: `_출처=like.${ENC("시트")}*`, },
     { label: "웹앱", filter: `_출처=like.${ENC("웹앱")}*`, quiet: true },
-    { label: "카톡 수기", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
+    { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
   ] },
-  { label: "미수", table: "misu", sheetNote: "미수현황 시트(수도권A~E) + 미수 보고방", routes: [
-    { label: "시트", filter: `_출처=like.${ENC("시트")}*` },
-    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` },
+  { label: "미수", table: "misu", sheetNote: "미수현황 시트(수도권A~E) — 매시간 전체 재적재", routes: [
+    { label: "시트", filter: "" },
   ] },
   { label: "초과료", table: "overage", sheetNote: "초과 시트", routes: [{ label: "시트", filter: `_출처=like.${ENC("시트")}*` }] },
   { label: "초과조정", table: "overage_adjust", sheetNote: "초과업체조정 방 + FIELD (드문 업무)", staleDays: 90, routes: [
-    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
+    { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
     { label: "웹앱", filter: `_출처=not.like.${ENC("카톡")}*`, quiet: true },
   ] },
-  // 재계약은 카톡방 수집이 유일한 경로인데 6/20 이후 0건 — 진짜 끊겼을 수 있어 빨강 유지
-  { label: "재계약", table: "recontract", sheetNote: "팀별 계약종료체크 방 (유일한 경로)", routes: [
-    { label: "카톡", filter: `_출처=like.${ENC("카톡")}*` },
+  // 재계약은 카톡방 수집이 유일한 경로였는데 그 수집이 중단됨 — 새 기록이 못 들어오는 상태
+  { label: "재계약", table: "recontract", sheetNote: "계약종료체크 방 — 수집 중단으로 새 기록 없음", routes: [
+    { label: "카톡 (중단)", filter: `_출처=like.${ENC("카톡")}*`, quiet: true },
   ] },
   { label: "해지방어", table: "churn_defense", sheetNote: "FIELD 해지방어 양식", routes: [{ label: "웹앱", filter: "" }] },
   { label: "관리지원", table: "mgmt_support", sheetNote: "FIELD 관리지원 양식", routes: [{ label: "웹앱", filter: "" }] },
@@ -147,15 +145,9 @@ export default function SyncStatus() {
             <h3 className="text-base font-black text-slate-950 lg:text-lg">동기화 현황</h3>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">표마다 기록이 들어오는 길별 마지막 기록 시각. 빨강 = 끊긴 것으로 의심, 회색 = 예전 경로라 조용해도 정상.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <a href={GAS_GET_URL} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
-              <ExternalLink size={13} />First-DATA 웹 콘솔
-            </a>
-            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />새로고침
-            </button>
-          </div>
+          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />새로고침
+          </button>
         </div>
 
         {/* 표 머리 */}

@@ -874,8 +874,11 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
   const cols = cfg.displayCols;
 
   // 레코드 스키마: 업체명(필수) + 표시컬럼(선택은 nullable). strict 모드는 모든 키를 required에 둬야 함.
+  // 주의: displayCols에 '업체명'이 이미 있는 카테고리(재계약 등)에서 required에 중복이 생기면
+  // OpenAI가 400으로 거절한다 — 재계약 수집이 이 이유로 전부 실패했었음. 반드시 중복 제거.
   const props = { '업체명': { type: 'string' } };
-  for (const c of cols) props[c] = { type: ['string', 'null'] };
+  for (const c of cols) { if (c !== '업체명') props[c] = { type: ['string', 'null'] }; }
+  const requiredKeys = ['업체명'].concat(cols.filter(function (c) { return c !== '업체명'; }));
   const schema = {
     type: 'object',
     properties: {
@@ -884,7 +887,7 @@ function callOpenAIExtract_(apiKey, cat, messages, hint) {
         items: {
           type: 'object',
           properties: props,
-          required: ['업체명'].concat(cols),
+          required: requiredKeys,
           additionalProperties: false
         }
       }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { GAS_GET_URL } from "./api";
 import PortalSelect from "./PortalSelect";
 
 /**
@@ -12,6 +13,12 @@ import PortalSelect from "./PortalSelect";
 type ConfigRow = { key: string; value: string };
 type RoomRow = { category: string; region: string; room: string };
 type SheetJob = { id: string; category?: string; status?: string; created_at?: string; error?: string; message?: string };
+// First-DATA GAS(action=adminstatus)가 주는 큐·수집함 상태 — 옛 웹 콘솔에서 이식
+type GasStatus = {
+  ok?: boolean;
+  queue?: { jobs?: Array<{ roomType?: string; teamLabel?: string; status?: string; lastError?: string }>; active?: boolean };
+  drive?: { enabled?: boolean; hasTrigger?: boolean; pending?: number; folderUrl?: string; interval?: string };
+};
 
 const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean }> = [
   { key: "FIELD_KAKAO_SEND_ENABLED", label: "카톡 전송", desc: "끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다." },
@@ -32,6 +39,8 @@ export default function SystemAdmin() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<RoomRow>({ category: "점검", region: "A", room: "" });
+  const [gas, setGas] = useState<GasStatus | null>(null);
+  const [gasError, setGasError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -52,6 +61,14 @@ export default function SystemAdmin() {
     }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${GAS_GET_URL}?action=adminstatus`)
+      .then((res) => res.json())
+      .then((data: GasStatus) => { if (alive) setGas(data); })
+      .catch((e) => { if (alive) setGasError((e as Error).message); });
+    return () => { alive = false; };
+  }, []);
 
   const valueOf = (key: string) => config.find((row) => row.key === key)?.value || "";
   const isOn = (key: string) => /^(true|1|on|y)$/i.test(valueOf(key));
@@ -208,6 +225,49 @@ export default function SystemAdmin() {
           ))}
           {!grouped.length && !loading && <div className="bg-white p-8 text-center text-sm font-bold text-slate-400">등록된 방 매핑이 없습니다.</div>}
         </div>
+      </section>
+
+      {/* First-DATA GAS 상태 — 옛 웹 콘솔에서 이식한 항목 */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+          <h3 className="text-base font-black text-slate-950 lg:text-lg">카톡 수집 상태 (First-DATA)</h3>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</p>
+        </div>
+        {gasError && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">GAS 상태 조회 실패: {gasError}</div>}
+        {!gas && !gasError && <div className="p-6 text-center text-sm font-bold text-slate-400">First-DATA에서 상태를 불러오는 중…</div>}
+        {gas && (
+          <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
+            <div className="bg-white p-4">
+              <div className="text-xs font-black text-slate-700">드라이브 수집함 (카톡 TXT 자동 적재)</div>
+              {gas.drive?.enabled ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                  <span className={`rounded-full px-2.5 py-1 ${gas.drive.hasTrigger ? "bg-emerald-50 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>트리거 {gas.drive.hasTrigger ? "동작 중" : "없음"}</span>
+                  <span className={`rounded-full px-2.5 py-1 tabular-nums ${(gas.drive.pending || 0) > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>대기 파일 {gas.drive.pending ?? 0}개</span>
+                  {gas.drive.interval && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">주기 {gas.drive.interval}</span>}
+                  {gas.drive.folderUrl && <a href={gas.drive.folderUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600 transition hover:bg-slate-50">폴더 열기</a>}
+                </div>
+              ) : (
+                <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">수집함이 꺼져 있습니다 — 카톡 대화가 DB로 들어오지 않는 상태입니다.</div>
+              )}
+            </div>
+            <div className="bg-white p-4">
+              <div className="text-xs font-black text-slate-700">일괄 수집 작업 큐</div>
+              {gas.queue?.jobs?.length ? (
+                <div className="mt-2 space-y-1">
+                  {gas.queue.jobs.slice(0, 5).map((job, index) => (
+                    <div key={index} className="flex items-center gap-2 text-[11px] font-bold">
+                      <span className={`rounded-full px-2 py-0.5 ${job.status === "done" ? "bg-emerald-50 text-emerald-700" : job.status === "error" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>{job.status || "-"}</span>
+                      <span className="truncate text-slate-600">{[job.roomType, job.teamLabel].filter(Boolean).join(" · ") || "-"}</span>
+                      {job.lastError && <span className="truncate text-rose-500" title={job.lastError}>{job.lastError.slice(0, 40)}</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-[11px] font-bold text-slate-400">대기 중인 수집 작업이 없습니다.</div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 시트 동기화 최근 상태 */}
