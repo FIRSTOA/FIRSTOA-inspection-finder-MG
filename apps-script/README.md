@@ -5,10 +5,11 @@
 
 | 폴더/파일 | GAS 프로젝트 | 하는 일 | 배포 방법 |
 |---|---|---|---|
-| `first-data/` | First 통합DB (DB통합시트 부착) | 시트↔Supabase 동기화(미수·초과·재계약 등), 카톡 메시지 파싱 기록, CS체크 | **clasp push** (아래) |
+| `first-data/` | First-DATA (독립 프로젝트) | 시트↔Supabase 동기화(임대·미수·초과·재계약·CS체크), 카톡 메시지 파싱 기록 | **clasp push** (아래) |
 | `field-sheet-sync.gs` | FIELD 시트 동기화 (웹앱) | FIELD·서비스접수 → 구글시트 기입 (4종 + 접수 3종) | GAS 편집기에 붙여넣기 → 새 버전 배포 |
 | `customer-message-webhook.gs` | 고객 메시지 웹훅 (웹앱) | 메신저봇 → 카톡 메시지 수신 | GAS 편집기에 붙여넣기 → 새 버전 배포 |
 | `it-tech-api-adapter.gs` | 퍼스트전산 PC_DB (독립 웹앱) | IT 학습·처리이력 API 어댑터 | GAS 편집기에 붙여넣기 → 새 버전 배포 |
+| (소스 미보관) | 퍼스트전산 DB통합시트 GAS | 시트 부착 스크립트 — 웹앱 GAS_GET_URL(api.ts)이 호출 | 시트 → 확장 프로그램 → Apps Script |
 
 ## first-data 배포 (clasp)
 
