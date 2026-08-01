@@ -1194,8 +1194,12 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 </div>}
               </div>
-              {custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
-                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸){isRemoteType ? " · 원격·IT는 임대리스트 자동값이 없으니 여기 값이 그대로 쓰입니다" : ""}</div>
+              {isRemoteType && custKind === "신규" && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2.5 text-[11px] font-bold leading-5 text-amber-800">
+                원격 시트는 임대리스트 순번으로 업체 정보를 자동 계산하는 구조라, <b>신규 업체는 시트에 업체 정보가 채워지지 않습니다.</b><br />
+                업체명·연락처·증상은 아래에 입력하면 접수 기록(DB)과 접수 리스트에는 정상 저장됩니다.
+              </div>}
+              {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
+                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
                 {NEW_LEASE_SECTIONS.map((sec) => {
                   const filled = sec.fields.filter(([key]) => (newLease[key] || "").trim()).length;
                   return (
@@ -1225,7 +1229,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   );
                 })}
               </div>}
-              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
                   <label key={key} className="text-[11px] font-black text-slate-500">{label}
                     <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -1238,7 +1242,7 @@ export default function ServiceReception({ author }: { author: string }) {
                   <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
                   {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
                 </label>
-                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3 2xl:col-span-4">증상 사진 (최대 6장)
+                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
                   <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => (
                       <span key={photo.url} className="relative">
