@@ -16,6 +16,7 @@ export default function InboxHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>(() => (window.localStorage.getItem("cs_inbox_tab_v1") as Tab) === "request" ? "request" : "notice");
   const [unreadNotices, setUnreadNotices] = useState<number | null>(null);
   const [myWaiting, setMyWaiting] = useState<number | null>(null);
+  const [myUpdates, setMyUpdates] = useState<number>(0);
 
   useEffect(() => { window.localStorage.setItem("cs_inbox_tab_v1", tab); }, [tab]);
 
@@ -36,6 +37,10 @@ export default function InboxHub({ author }: { author: string }) {
           return !!author && row.target === author;
         });
         setMyWaiting(mine.length);
+        if (author) {
+          const updates = await selectRows<{ id: number }>("dept_requests", `select=id&requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}&limit=100`);
+          if (alive) setMyUpdates(updates.length);
+        }
       } catch { /* 집계 실패해도 화면은 동작 */ }
     })();
     return () => { alive = false; };
@@ -54,6 +59,7 @@ export default function InboxHub({ author }: { author: string }) {
         <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
           {chip("안 읽은 공지", unreadNotices, (unreadNotices ?? 0) > 0, "notice")}
           {chip("내 대기 요청", myWaiting, (myWaiting ?? 0) > 0, "request")}
+          {myUpdates > 0 && chip("내 요청 진행 소식", myUpdates, true, "request")}
           <span className="ml-auto text-[11px] font-semibold text-slate-500">{author ? `${author}${myTeam ? ` · ${myTeam}팀` : ""} 기준` : "작성자를 선택하면 내 것만 골라 보여줍니다"}</span>
         </div>
         <div className="flex overflow-x-auto">

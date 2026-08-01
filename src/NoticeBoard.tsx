@@ -159,31 +159,45 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && !visible.length && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">아직 공지가 없습니다. 첫 공지를 작성해 보세요.</div>}
 
-      <div className="space-y-2">
-        {visible.map((row) => {
+      {(() => {
+        const pinnedRows = visible.filter((row) => row.pinned);
+        const normalRows = visible.filter((row) => !row.pinned);
+
+        const noticeCard = (row: Notice) => {
           const readers = readSet.get(row.id) || new Set<string>();
           const audience = audienceOf(row);
           const unreadPeople = audience.filter((name) => !readers.has(name));
+          const readCount = audience.length - unreadPeople.length;
+          const percent = audience.length ? Math.round((readCount / audience.length) * 100) : 0;
           const iRead = !author || readers.has(author);
           const open = openId === row.id;
           return (
-            <article key={row.id} className={`overflow-hidden rounded-xl border shadow-sm transition ${row.pinned ? "border-blue-200 bg-blue-50/30" : "border-slate-200 bg-white"}`}>
+            <article key={row.id} className={`overflow-hidden rounded-xl border shadow-sm transition ${open ? "border-blue-200 ring-2 ring-blue-100" : "border-slate-200 hover:border-slate-300"} bg-white`}>
               <button type="button" className="block w-full px-4 py-3 text-left"
                 onClick={() => { setOpenId(open ? "" : row.id); if (!open) void markRead(row); }}>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {row.pinned && <Pin size={13} className="shrink-0 text-blue-600" />}
-                  {!iRead && <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" title="안 읽음" />}
-                  <span className={`min-w-0 truncate text-[14px] leading-snug ${iRead ? "font-bold text-slate-700" : "font-black text-slate-950"}`}>{row.title}</span>
-                  {targetBadge(row)}
-                  <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] font-bold text-slate-400">
-                    <span className={`tabular-nums ${unreadPeople.length ? "" : "text-emerald-600"}`}>읽음 {audience.length - unreadPeople.length}/{audience.length}</span>
-                    <span>{row.author} · {row.created_at.slice(5, 10)}</span>
+                <div className="flex items-center gap-2.5">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${iRead ? "bg-transparent" : "bg-rose-500"}`} title={iRead ? "" : "안 읽음"} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      {row.pinned && <Pin size={12} className="shrink-0 text-blue-600" />}
+                      <span className={`min-w-0 truncate text-[14px] leading-snug ${iRead ? "font-bold text-slate-700" : "font-black text-slate-950"}`}>{row.title}</span>
+                      {targetBadge(row)}
+                    </span>
+                    {row.body && !open && <span className="mt-0.5 block truncate text-xs font-semibold text-slate-400">{row.body.split("\n")[0]}</span>}
+                    <span className="mt-0.5 block text-[11px] font-bold text-slate-400">{row.author} · {row.created_at.slice(5, 10)}</span>
+                  </span>
+                  {/* 읽음 진행 — 숫자보다 바가 먼저 읽힌다 */}
+                  <span className="shrink-0 text-right">
+                    <span className={`block text-[11px] font-black tabular-nums ${percent === 100 ? "text-emerald-600" : "text-slate-500"}`}>{readCount}/{audience.length}</span>
+                    <span className="mt-1 block h-1 w-14 overflow-hidden rounded-full bg-slate-100">
+                      <span className={`block h-full rounded-full transition-all ${percent === 100 ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${percent}%` }} />
+                    </span>
                   </span>
                 </div>
               </button>
               {open && (
-                <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-                  <p className="whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{row.body || "(내용 없음)"}</p>
+                <div className="border-t border-slate-100 px-4 py-3">
+                  <p className="whitespace-pre-wrap rounded-lg bg-slate-50 px-3.5 py-3 text-sm font-semibold leading-6 text-slate-700">{row.body || "(내용 없음)"}</p>
                   <div className="mt-3 flex flex-wrap items-start gap-2">
                     {unreadPeople.length > 0 ? (
                       <div className="flex min-w-0 flex-wrap items-center gap-1">
@@ -206,8 +220,20 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
               )}
             </article>
           );
-        })}
-      </div>
+        };
+
+        return (
+          <>
+            {pinnedRows.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 px-1 text-[11px] font-black text-blue-600"><Pin size={12} />고정된 공지</div>
+                {pinnedRows.map(noticeCard)}
+              </div>
+            )}
+            <div className="space-y-2">{normalRows.map(noticeCard)}</div>
+          </>
+        );
+      })()}
 
       {formOpen && (
         <FormModal title="새 공지" subtitle={`${author || "작성자 미선택"} 이름으로 올라갑니다 — 읽음 여부가 모두에게 보여요`} icon={<Megaphone size={17} />} onClose={() => setFormOpen(false)}

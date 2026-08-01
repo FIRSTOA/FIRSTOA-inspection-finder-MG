@@ -24,8 +24,11 @@ type DeptRequest = {
   content: string;
   due_date: string | null;
   status: "대기" | "처리중" | "완료";
+  started_at: string | null;
+  started_by: string;
   handled_by: string;
   handled_at: string | null;
+  requester_ack: boolean;
   target_type: "전체" | "팀" | "개인";
   target: string;
 };
@@ -35,6 +38,12 @@ const STATUS_TONE: Record<string, string> = {
   대기: "bg-rose-100 text-rose-700", 처리중: "bg-amber-100 text-amber-800", 완료: "bg-slate-100 text-slate-500",
 };
 const STATUS_BAR: Record<string, string> = { 대기: "bg-rose-500", 처리중: "bg-amber-400", 완료: "bg-slate-200" };
+
+function stamp(iso: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 export default function DeptRequests({ author, embedded = false }: { author: string; embedded?: boolean }) {
   const { book } = useAuthorBook();
@@ -54,7 +63,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [kindFilter, setKindFilter] = useState("전체");
-  const [statusFilter, setStatusFilter] = useState("진행");
+  const [statusFilter, setStatusFilter] = useState("전체");
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({
@@ -98,13 +107,23 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     return !!author && row.target === author;
   }, [myTeam, author]);
 
+  // 내가 올린 요청의 상태가 바뀌었는데 아직 못 본 것 — 파란 링으로 강조하고, 이 화면을 본 순간 확인 처리
+  const [freshUpdates, setFreshUpdates] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (!author || !rows.length) return;
+    const mine = rows.filter((row) => !row.requester_ack && (row.requester || "").split(/\s+/).includes(author));
+    if (!mine.length) return;
+    setFreshUpdates((current) => new Set([...current, ...mine.map((row) => row.id)]));
+    void updateRows("dept_requests", `requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}`, { requester_ack: true }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, author]);
+
   const visible = useMemo(() => rows.filter((row) => scope === "all" || isMine(row)), [rows, scope, isMine]);
   const waiting = visible.filter((row) => row.status === "대기").length;
   const hiddenCount = rows.length - visible.length;
 
   const filtered = useMemo(() => visible.filter((row) => {
     if (kindFilter !== "전체" && !(row.kind === kindFilter || (kindFilter === "기타" && row.kind.startsWith("기타")))) return false;
-    if (statusFilter === "진행") return row.status !== "완료";
     if (statusFilter !== "전체" && row.status !== statusFilter) return false;
     return true;
   }), [visible, kindFilter, statusFilter]);
@@ -132,9 +151,13 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   };
 
   const setStatus = async (row: DeptRequest, status: DeptRequest["status"]) => {
+    const now = new Date().toISOString();
+    // 상태가 움직이면 요청자에게 알림 (requester_ack=false → 배지·하이라이트)
     const patch = status === "완료"
-      ? { status, handled_by: author || "미지정", handled_at: new Date().toISOString() }
-      : { status, handled_by: status === "처리중" ? (author || "미지정") : "", handled_at: null };
+      ? { status, handled_by: author || "미지정", handled_at: now, started_at: row.started_at || now, started_by: row.started_by || author || "미지정", requester_ack: false }
+      : status === "처리중"
+      ? { status, handled_by: author || "미지정", handled_at: null, started_at: now, started_by: author || "미지정", requester_ack: false }
+      : { status, handled_by: "", handled_at: null, started_at: null, started_by: "", requester_ack: false };
     setRows((current) => current.map((r) => r.id === row.id ? { ...r, ...patch } as DeptRequest : r));
     try {
       await updateRows("dept_requests", `id=eq.${row.id}`, patch);
@@ -185,7 +208,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="flex rounded-full bg-slate-100 p-1">
-              {["진행", "완료", "전체"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
+              {["전체", "대기", "처리중", "완료"].map((name) => <button key={name} type="button" onClick={() => setStatusFilter(name)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}</button>)}
             </div>
             <button type="button" onClick={() => setFormOpen(true)}
               className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 요청 등록</button>
@@ -199,7 +222,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
 
       <div className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
         {filtered.map((row) => (
-          <article key={row.id} className={`relative overflow-hidden rounded-xl border border-slate-200 p-4 pl-5 shadow-sm ${row.status === "완료" ? "bg-slate-50/60" : "bg-white"}`}>
+          <article key={row.id} className={`relative overflow-hidden rounded-xl border p-4 pl-5 shadow-sm transition ${freshUpdates.has(row.id) ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"} ${row.status === "완료" ? "bg-slate-50/60" : "bg-white"}`}>
             <span className={`absolute inset-y-0 left-0 w-1 ${STATUS_BAR[row.status] || "bg-slate-200"}`} />
             <div className="flex flex-wrap items-center gap-1.5">
               <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${STATUS_TONE[row.status]}`}>{row.status}</span>
@@ -210,7 +233,12 @@ export default function DeptRequests({ author, embedded = false }: { author: str
               <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">{row.requester} · {row.created_at.slice(5, 10)}</span>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{row.content}</p>
-            {row.status === "완료" && row.handled_by && <div className="mt-1.5 text-[11px] font-bold text-slate-500">✓ {row.handled_by} 처리 · {String(row.handled_at || "").slice(0, 10)}</div>}
+            {(row.started_at || row.handled_at) && (
+              <div className="mt-2 space-y-0.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-500">
+                {row.started_at && <div>🕐 처리 시작 <span className="tabular-nums">{stamp(row.started_at)}</span> · {row.started_by || "-"}</div>}
+                {row.status === "완료" && row.handled_at && <div className="text-emerald-600">✓ 완료 <span className="tabular-nums">{stamp(row.handled_at)}</span> · {row.handled_by || "-"}</div>}
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               {row.status !== "처리중" && row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "처리중")} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-600 transition hover:bg-slate-50">처리 시작</button>}
               {row.status !== "완료" && <button type="button" onClick={() => void setStatus(row, "완료")} className="rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">완료 처리</button>}
