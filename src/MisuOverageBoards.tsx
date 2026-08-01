@@ -21,7 +21,12 @@ const TEAM_NAMES = ["A", "B", "C", "D", "E"];
 function teamOfSource(source: string) {
   return String(source || "").match(/수도권([A-E])/)?.[1] || "";
 }
-function str(row: SheetRecord, key: string) { return String(row[key] ?? "").trim(); }
+const SHEET_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|ERROR!?)$/i;
+function str(row: SheetRecord, key: string) {
+  const value = String(row[key] ?? "").trim();
+  // 시트의 VLOOKUP 실패값(#N/A 등)이 그대로 동기화된 것 — 값이 아니라 빈칸으로 취급
+  return SHEET_ERROR.test(value) ? "" : value;
+}
 function won(value: string | number) {
   const digits = Number(String(value).replace(/[^\d]/g, "")) || 0;
   return digits ? `₩${digits.toLocaleString()}` : "-";
@@ -75,7 +80,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
       <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 text-lg font-black leading-6 text-slate-950">{valueOf("_업체명") || title}</div>
+            <div className="min-w-0 text-lg font-black leading-6 text-slate-950">{valueOf("_업체명") || title || "업체명 없음 (단기건 등)"}</div>
             <button type="button" onClick={onClose} className="h-8 w-8 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
           </div>
           {badges.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">

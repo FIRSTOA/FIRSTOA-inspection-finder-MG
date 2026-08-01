@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, Search, X } from "lucide-react";
-import { selectRows } from "./supabase";
+import { selectRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
-import PortalSelect from "./PortalSelect";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
 import { kstDate } from "./visits";
@@ -21,11 +20,13 @@ function shiftMonths(date: string, months: number) {
   return base.toISOString().slice(0, 10);
 }
 
+const SHEET_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|ERROR!?)$/i;
 function text(row: Row, key: string) {
   const value = row[key];
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  const out = String(value);
+  return SHEET_ERROR.test(out.trim()) ? "" : out;   // 시트 수식 에러값은 빈칸 취급
 }
 
 /** 1,234 형태로 보이는 값이면 숫자로 취급해 오른쪽 정렬·등폭이 자연스럽게 */
@@ -51,6 +52,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
   const [reachedEnd, setReachedEnd] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   const category = useMemo<LookupCategory>(
     () => LOOKUP_CATEGORIES.find((item) => item.key === categoryKey) || LOOKUP_CATEGORIES[0],
@@ -92,9 +94,22 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     setLoading(true);
     setError("");
     try {
-      const next = await selectRows<Row>(category.table, buildQuery(offset));
-      setReachedEnd(next.length < PAGE);
-      setRows((current) => (offset > 0 ? [...current, ...next] : next));
+      if (offset === 0) {
+        // 첫 페이지는 직접 fetch — content-range 헤더에서 필터 반영 총 건수를 같이 받는다
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${category.table}?${buildQuery(0)}`, {
+          headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, Prefer: "count=exact" },
+        });
+        if (!res.ok) throw new Error(`조회 실패 (${res.status})`);
+        const next = (await res.json()) as Row[];
+        const exact = Number((res.headers.get("content-range") || "").split("/")[1]);
+        setTotalCount(Number.isFinite(exact) ? exact : null);
+        setReachedEnd(next.length < PAGE);
+        setRows(next);
+      } else {
+        const next = await selectRows<Row>(category.table, buildQuery(offset));
+        setReachedEnd(next.length < PAGE);
+        setRows((current) => [...current, ...next]);
+      }
     } catch (e) {
       setError((e as Error).message || "조회에 실패했습니다.");
       if (!offset) setRows([]);
@@ -138,8 +153,6 @@ export default function DataLookup({ author = "" }: { author?: string }) {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <p className="text-[11px] font-semibold text-slate-400">기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다.</p>
           <div className="ml-auto flex items-center gap-2">
-            <PortalSelect width={150} value={period} onChange={(next) => setPeriod(next as PeriodKey)}
-              options={PERIODS.map(([value, label]) => ({ value, label }))} />
             <button type="button" onClick={() => void fetchPage(0)} title="새로고침"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -170,36 +183,59 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {category.custom === "overage" && <OverageBoard />}
       {category.custom === "stock" && <StockBoard author={author} />}
 
+      {/* KPI — 미수 보드와 같은 요약 카드 (필터가 그대로 반영된 정확한 수) */}
+      {!category.custom && (
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            [totalCount != null ? totalCount.toLocaleString() + "건" : "…", `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+            [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
+            [team === "전체" ? "전 팀" : `${team}팀`, query ? `"${query}" 검색 중` : "보는 범위"],
+          ] as [string, string][]).map(([value, label]) => (
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
+              <div className="truncate text-lg font-black tabular-nums text-slate-950 sm:text-xl">{value}</div>
+              <div className="mt-1 text-[11px] font-bold text-slate-400">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 검색 + 결과 (범용) */}
       {!category.custom && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="relative min-w-0 flex-1 sm:max-w-md">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") setQuery(queryDraft); }}
-                placeholder={`${category.label} 검색 — 업체명 · 작성자 · 내용`}
-                className="h-9 w-full rounded-lg border border-slate-300 pl-9 pr-8 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              {queryDraft && <button type="button" onClick={() => { setQueryDraft(""); setQuery(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
+        <div className="space-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">기간</span>
+            {PERIODS.map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setPeriod(value)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label.replace("최근 ", "")}</button>
+            ))}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <button type="button" onClick={exportCsv} disabled={!rows.length}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+                <Download size={13} />CSV
+              </button>
             </div>
-            <button type="button" onClick={() => setQuery(queryDraft)} className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">검색</button>
           </div>
           {category.teamField && (
-            <div className="flex shrink-0 rounded-full bg-slate-100 p-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
               {["전체", "A", "B", "C", "D"].map((value) => (
                 <button key={value} type="button" onClick={() => setTeam(value)}
-                  className={`rounded-full px-3 py-1 text-[11px] font-black transition ${team === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
                   {value === "전체" ? "전체" : `${value}팀`}
                 </button>
               ))}
             </div>
           )}
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-500">{rows.length}{reachedEnd ? "" : "+"}건</span>
-            <button type="button" onClick={exportCsv} disabled={!rows.length}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
-              <Download size={13} />CSV
-            </button>
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") setQuery(queryDraft); }}
+                placeholder={`${category.label} 검색 — 업체명 · 작성자 · 내용`}
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-8 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              {queryDraft && <button type="button" onClick={() => { setQueryDraft(""); setQuery(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
+            </div>
+            <button type="button" onClick={() => setQuery(queryDraft)} className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">검색</button>
           </div>
         </div>
 
@@ -265,19 +301,24 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               </div>
               <button type="button" onClick={() => setDetail(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100"><X size={18} /></button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                {detailFields.filter(([key]) => key !== "_원문" && key !== "원문" && key !== "source_text" && key !== "report_text" && key !== "_raw").map(([key, value]) => (
-                  <div key={key} className="min-w-0 rounded-lg bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-black text-slate-400">{key.replace(/^_/, "")}</div>
-                    <div className="mt-0.5 whitespace-pre-wrap break-words text-[13px] font-bold text-slate-800">{value}</div>
-                  </div>
-                ))}
+            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
+              {/* 미수 상세와 같은 라벨-값 줄 — 전화번호가 보이면 바로 걸 수 있게 */}
+              <div className="rounded-lg border border-slate-200 p-3">
+                {detailFields.filter(([key]) => !["_원문", "원문", "source_text", "report_text", "_raw", "photos", "remote_meta"].includes(key)).map(([key, value]) => {
+                  const phone = value.match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+                  return (
+                    <div key={key} className="flex items-start justify-between gap-3 border-b border-slate-50 py-1.5 last:border-0">
+                      <span className="w-24 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</span>
+                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>
+                      {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white transition hover:bg-emerald-700">📞</a>}
+                    </div>
+                  );
+                })}
               </div>
-              {detailFields.filter(([key]) => key === "_원문" || key === "원문" || key === "source_text" || key === "report_text").map(([key, value]) => (
-                <div key={key} className="mt-4">
-                  <div className="text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</div>
-                  <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{value}</pre>
+              {detailFields.filter(([key]) => ["_원문", "원문", "source_text", "report_text"].includes(key)).map(([key, value]) => (
+                <div key={key} className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-1 text-[10px] font-black tracking-wide text-slate-400">{key.replace(/^_/, "")}</div>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{value}</pre>
                 </div>
               ))}
             </div>
