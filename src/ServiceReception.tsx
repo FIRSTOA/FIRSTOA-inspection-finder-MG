@@ -530,7 +530,7 @@ export default function ServiceReception({ author }: { author: string }) {
       `한조/틴텍코드${T}${코드} / ${틴텍코드}`,
       `주소${T}${주소}${T}확장성${T}${확장성}`,
       `기종${T}${모델명}${T}기기상태${T}${기기상태}`,
-      `유상/무상${T}${manual.유상무상}`,
+      `유상/무상${T}${paidFinal}`,
       `제목${T}${manual.제목}`,
       `상태${T}${manual.증상}`,
       `참고사항${T}${manual.참고사항}`,
@@ -545,7 +545,7 @@ export default function ServiceReception({ author }: { author: string }) {
       usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region]);
+  }, [lease, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -951,6 +951,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     <span>순 {row.lease_no || "-"}</span><span>자산기번 {row.asset_no || "-"}</span>
                     <span>접수자 {row.receiver_name || "-"}</span><span>연락처 {row.receiver_phone || "-"}</span>
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
+                    {row.completed_at && <span className="text-blue-700">완료 {kstTime(row.completed_at)}{row.completed_by ? ` · ${row.completed_by}` : ""}</span>}
                   </div>
                   {row.address && <div className="mt-1.5">
                     <div><b className="text-slate-500">주소</b> {row.address}</div>
@@ -1133,6 +1134,18 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 ))}
               </div>
+              {/* 자동 입력값 — 임대리스트에서 채워진 값. 틀렸으면 여기서 바로 고치면 보고양식·시트에 반영 */}
+              <details className="border-t border-slate-100 bg-slate-50/60">
+                <summary className="cursor-pointer select-none px-4 py-2.5 text-[11px] font-black text-slate-500 transition hover:text-slate-700">⚙️ 자동 입력값 수정 <span className="font-bold text-slate-400">— 임대리스트에서 채워짐 · 틀리면 펼쳐서 바로 고치세요</span></summary>
+                <div className="grid grid-cols-2 gap-1.5 px-4 pb-3 sm:grid-cols-3 2xl:grid-cols-4">
+                  {([["거래처명", "거래처명"], ["모델명", "모델명"], ["시리얼번호(기번)", "시리얼(기번)"], ["자산번호", "자산번호"], ["등급", "등급"], ["담당지역", "담당지역"], ["종료일", "종료일"], ["일반전화", "일반전화"], ["키맨", "키맨"], ["미수개월수", "미수개월"], ["주소(실납품주소,도로명주소)", "임대리스트 주소"], ["코드", "한조코드"]] as [string, string][]).map(([col, label]) => (
+                    <label key={col} className="text-[10px] font-bold text-slate-500">{label}
+                      <input value={String(lease[col] ?? "")} onChange={(e) => setLease({ ...lease, [col]: e.target.value })}
+                        className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                    </label>
+                  ))}
+                </div>
+              </details>
             </div>}
             </div>
           </section>
@@ -1181,8 +1194,8 @@ export default function ServiceReception({ author }: { author: string }) {
                   </div>
                 </div>}
               </div>
-              {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
-                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
+              {custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
+                <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸){isRemoteType ? " · 원격·IT는 임대리스트 자동값이 없으니 여기 값이 그대로 쓰입니다" : ""}</div>
                 {NEW_LEASE_SECTIONS.map((sec) => {
                   const filled = sec.fields.filter(([key]) => (newLease[key] || "").trim()).length;
                   return (
@@ -1221,11 +1234,11 @@ export default function ServiceReception({ author }: { author: string }) {
                 <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
                   <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">방문 주소 <span className="font-bold text-slate-400">기사가 실제로 가는 주소 — 임대리스트와 다르면 꼭 수정</span>
+                <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
                   <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
                   {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
                 </label>
-                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
+                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3 2xl:col-span-4">증상 사진 (최대 6장)
                   <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => (
                       <span key={photo.url} className="relative">
@@ -1286,7 +1299,7 @@ export default function ServiceReception({ author }: { author: string }) {
 
             {confirmAction && (() => {
               // 신규 거래처는 임대리스트 정보가 없다 — 직접 기재값을 보고, 필수로 강제하지 않는다.
-              const isNewVendor = type === "복합기 AS" && custKind === "신규";
+              const isNewVendor = custKind === "신규";
               const checkItems: Array<[string, string, boolean]> = [
                 ["접수유형", route, true],
                 ["구분", type + (isNewVendor ? " · 신규" : ""), true],
@@ -1309,7 +1322,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     </div>
                     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
                       <div className={`rounded-lg border-2 p-3 ${manual.주소.trim() ? "border-amber-300 bg-amber-50" : "border-rose-300 bg-rose-50"}`}>
-                        <div className="text-[11px] font-black text-slate-500">🚗 기사가 가는 방문 주소</div>
+                        <div className="text-[11px] font-black text-slate-500">🚗 실제 방문 주소</div>
                         <div className={`mt-1 text-sm font-black ${manual.주소.trim() ? "text-slate-900" : "text-rose-600"}`}>{manual.주소.trim() || "미기재 — 주소를 확인하세요!"}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -1372,11 +1385,11 @@ export default function ServiceReception({ author }: { author: string }) {
                 </button>
               ))}
               <span className="mx-0.5 self-center text-slate-200">|</span>
-              {(["전체", "접수", "진행중", "완료"] as const).map((state) => (
-                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(state)}
+              {(["접수", "진행중", "완료"] as const).map((state) => (
+                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(statusFilter === state ? "전체" : state)}
                   className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  {state !== "전체" && <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />}
-                  {state === "전체" ? "상태 전체" : state}
+                  <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />
+                  {state}
                 </button>
               ))}
             </div>

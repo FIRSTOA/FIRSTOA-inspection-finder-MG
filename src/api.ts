@@ -322,6 +322,8 @@ export type ServiceReceptionRow = {
   lease_no: string; address: string; deleted?: boolean; photos?: string[] | null; address_changed?: boolean;
   address_resolved_at?: string | null; address_resolved_by?: string;
   field?: string; first_no?: string; cust_kind?: string; remote_meta?: Record<string, string>; sheet_row?: number | null;
+  completed_at?: string | null;
+  completed_by?: string;
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
@@ -340,8 +342,8 @@ export async function getServiceReceptionById(id: string): Promise<ServiceRecept
   return rows[0] || null;
 }
 
-export async function setServiceReceptionStatus(id: string, status: string): Promise<void> {
-  await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status });
+export async function setServiceReceptionStatus(id: string, status: string, done?: { at: string | null; by: string }): Promise<void> {
+  await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, { status, ...(done ? { completed_at: done.at, completed_by: done.by } : {}) });
 }
 export async function updateServiceReception(id: string, patch: Partial<Pick<ServiceReceptionRow, "status" | "sent_room" | "deleted" | "address_changed" | "address_resolved_at" | "address_resolved_by" | "type" | "remote_meta" | "sheet_row">>): Promise<void> {
   await updateRows("service_receptions", `id=eq.${encodeURIComponent(id)}`, patch);

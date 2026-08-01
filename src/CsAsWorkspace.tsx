@@ -563,7 +563,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     // 접수 → (배정) 진행중 → (완료) 완료 — 배정 해제·완료 취소는 다시 접수로
     if (changed && before && changed.receptionId && changed.status !== before.status) {
       const mapped = changed.status === "완료" ? "완료" : changed.status === "배정" ? "진행중" : "접수";
-      void setServiceReceptionStatus(changed.receptionId, mapped).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
+      // 완료면 처리 시각·처리자(배정 담당)도 접수 리스트에 남긴다 — 원격의 처리완료 열과 대칭
+      const done = mapped === "완료"
+        ? { at: new Date().toISOString(), by: changed.assignee || author || "" }
+        : { at: null, by: "" };
+      void setServiceReceptionStatus(changed.receptionId, mapped, done).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
     }
   };
 
