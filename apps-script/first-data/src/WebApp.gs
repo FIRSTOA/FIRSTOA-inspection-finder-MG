@@ -28,6 +28,7 @@ function doGet(e) {
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
     else if (action === 'booksearch') result = bookSearchProxy_(q);   // CS 웹앱 독서탭 책 검색 (리디 프록시, 키 불필요)
     else if (action === 'bookresolve') result = bookResolveBatch_(e.parameter.titles);   // 추천 도서 표지 일괄 해석 (서버 캐시 6시간)
+    else if (action === 'quizgen') result = copierQuizGen_(e.parameter.date, e.parameter.brand);   // 복합기 데일리 퀴즈 AI 생성 (일·브랜드별 1회 캐시)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
