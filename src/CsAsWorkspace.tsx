@@ -568,15 +568,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         ? { at: new Date().toISOString(), by: changed.assignee || author || "" }
         : { at: null, by: "" };
       void setServiceReceptionStatus(changed.receptionId, mapped, done).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
-      // 완료면 접수 시트 BD열(처리완료)에도 기입 — 접수 때 저장한 행번호 기준(퍼스트순 검증)
-      if (mapped === "완료") {
+      // 접수 시트 BD열(처리완료) 기입 — 완료/익일은 표기, 완료·익일에서 되돌리면 "-"
+      // 행번호가 있으면 그 행, 없으면(과거 접수) 퍼스트순으로 최신 행을 찾아 갱신
+      const bdText = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : (before.status === "완료" || before.status === "익일") ? "-" : "";
+      if (bdText) {
         void (async () => {
           try {
             const reception = await getServiceReceptionById(changed.receptionId!);
-            if (reception && reception.type === "복합기 AS" && reception.sheet_row && reception.lease_no) {
+            if (reception && reception.type === "복합기 AS" && reception.lease_no) {
               const now = new Date();
               const stamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-              await sendReceptionCopierCompleteJob({ author: reception.author, vendor: reception.vendor, firstNo: reception.lease_no, sheetRow: reception.sheet_row, doneText: `완료 ${stamp}${done.by ? ` ${done.by}` : ""}` });
+              const doneText = bdText === "-" ? "-" : `${bdText} ${stamp}${bdText === "완료" && done.by ? ` ${done.by}` : ""}`;
+              await sendReceptionCopierCompleteJob({ author: reception.author, vendor: reception.vendor, firstNo: reception.lease_no, sheetRow: reception.sheet_row ?? null, doneText });
             }
           } catch { /* 시트 반영 실패는 DB 상태에 영향 없음 */ }
         })();

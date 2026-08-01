@@ -82,6 +82,29 @@ function appendFieldSheetRow_(request) {
     }
   }
 
+  // 찾기 갱신 모드: 행 번호를 모르는 과거 접수도 키 값(예: 퍼스트순)으로
+  // 아래에서 위로 검색해 가장 최근 행을 갱신한다. 못 찾으면 실패로 끝낸다(새 행 추가 금지).
+  var findValue = String(data["_findKeyValue"] || "").trim();
+  if (findValue) {
+    var findHeader = String(data["_findKeyHeader"] || "");
+    var findCol = Number(data["_findKeyColumn"] || 0) || (findHeader ? headers.indexOf(findHeader) + 1 : 0);
+    if (findCol > 0 && sheet.getLastRow() > headerRow) {
+      var colValues = sheet.getRange(headerRow + 1, findCol, sheet.getLastRow() - headerRow, 1).getDisplayValues();
+      for (var fr = colValues.length - 1; fr >= 0; fr--) {
+        if (String(colValues[fr][0]).trim() === findValue) {
+          var foundRow = headerRow + 1 + fr;
+          headers.forEach(function (header, index) {
+            var value = fieldValue_(request.category, header, index + 1, data, request, labelValues);
+            if (value !== undefined && value !== "") sheet.getRange(foundRow, index + 1).setValue(value);
+          });
+          SpreadsheetApp.flush();
+          return { row: foundRow, sheet: sheet.getName(), updated: true };
+        }
+      }
+    }
+    throw new Error("찾기 갱신 실패: " + (findHeader || findCol) + "=" + findValue + " 행 없음");
+  }
+
   const previousRow = Math.max(headerRow + 1, sheet.getLastRow());
   sheet.insertRowAfter(previousRow);
   const row = previousRow + 1;

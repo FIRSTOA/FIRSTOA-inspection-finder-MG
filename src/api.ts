@@ -989,11 +989,15 @@ export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, ex
 }
 
 // 복합기 AS 완료 → 접수 시트 BD열(처리완료)에 행 갱신으로 기입. 퍼스트순으로 행 검증.
-export async function sendReceptionCopierCompleteJob(input: { author: string; vendor: string; firstNo: string; sheetRow: number; doneText: string }): Promise<void> {
+export async function sendReceptionCopierCompleteJob(input: { author: string; vendor: string; firstNo: string; sheetRow: number | null; doneText: string }): Promise<void> {
   const id = crypto.randomUUID();
+  // 행번호가 있으면 그 행(퍼스트순 검증), 없으면(과거 접수) 퍼스트순으로 최신 행을 찾아 갱신
+  const target = input.sheetRow
+    ? { _updateRow: String(input.sheetRow), _updateKeyHeader: "퍼스트순", _updateKeyValue: input.firstNo }
+    : { _findKeyHeader: "퍼스트순", _findKeyValue: input.firstNo };
   await enqueueFieldSheetSyncJob({
     id, category: "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(), sourceText: "",
-    payload: { data: { firstNo: input.firstNo, complete: input.doneText, _updateRow: String(input.sheetRow), _updateKeyHeader: "퍼스트순", _updateKeyValue: input.firstNo } },
+    payload: { data: { firstNo: input.firstNo, complete: input.doneText, ...target } },
     dupKey: id,
   });
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
