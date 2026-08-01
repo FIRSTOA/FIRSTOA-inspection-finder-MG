@@ -5378,7 +5378,7 @@ export default function App() {
     operations: Settings2, lookup: Database,
   };
   const navGroups = [
-    { title: "자재·요청", items: [["stock", "기기/부품 재고"], ["deptRequests", "부서 요청·현황"]] },
+    { title: "요청", items: [["deptRequests", "부서 요청"]] },
     { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
     { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "고객·홍보", items: [["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },

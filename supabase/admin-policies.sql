@@ -28,3 +28,6 @@ grant update, delete on public.contact_changes to anon;
 -- 서울 이전 때 pc_expansion·mfp_expansion에 DELETE/UPDATE GRANT가 빠져 미러가 조용히 멈췄었다 (2026-08-01 발견)
 grant delete, update on public.pc_expansion to anon;
 grant delete, update on public.mfp_expansion to anon;
+
+-- 부서 요청 대상 지정 (2026-08-01): 전체 / 팀 / 개인
+-- alter table dept_requests add column target_type text default '전체', target text default '';

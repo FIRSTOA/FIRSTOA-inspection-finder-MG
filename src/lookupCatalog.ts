@@ -31,6 +31,7 @@ export type LookupCategory = {
   note?: string;                // 화면에 띄우는 한 줄 안내
   teamField?: string;           // 팀(A~D) 필터에 쓸 컬럼 — 값에 팀 글자가 포함되면 매칭 (수도권C 등)
   teamSourceParen?: boolean;    // 출처 라벨의 괄호에서도 팀 매칭 ("카톡:재계약(A)") — 지역 칸이 빈 시트분 보완
+  custom?: "misu" | "overage" | "stock";  // 범용 표 대신 전용 보드를 렌더 (CS체크·정렬·수량조절 등 기능이 더 풍부)
 };
 
 const VENDOR: LookupColumn = { key: "_업체명", label: "업체명", width: "minmax(0,1.4fr)", strong: true };
@@ -93,7 +94,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "misu", label: "미수", group: "영업·관리", teamSourceParen: true, teamField: "지역", table: "misu",
+    key: "misu", label: "미수", group: "영업·관리", teamSourceParen: true, teamField: "지역", custom: "misu", table: "misu",
     dateField: "입력일", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "업체명", "관리담당자", "업체담당자", "지역"],
     note: "시트 동기화 표입니다. 입력일 칸에 값이 없는 행도 있어 최신 등록순으로 보여줍니다.",
@@ -109,7 +110,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "overage", label: "초과료", group: "영업·관리", table: "overage",
+    key: "overage", label: "초과료", group: "영업·관리", custom: "overage", table: "overage",
     dateField: "날짜", orderField: "created_at", vendorField: "_업체명",
     searchFields: ["_업체명", "접수내용", "모델명", "자산번호"],
     columns: [
@@ -238,7 +239,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "stock", label: "기기·부품 재고", group: "접수·자산", table: "stock_items",
+    key: "stock", label: "기기·부품 재고", group: "접수·자산", custom: "stock", table: "stock_items",
     dateField: "updated_at", orderField: "updated_at", vendorField: "name",
     searchFields: ["name", "brand", "note", "condition"],
     columns: [

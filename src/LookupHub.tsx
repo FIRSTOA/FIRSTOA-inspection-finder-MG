@@ -68,7 +68,7 @@ export default function LookupHub({ author }: { author: string }) {
         </div>
       </section>
 
-      {tab === "records" ? <DataLookup /> : <OperationsDashboard author={author} />}
+      {tab === "records" ? <DataLookup author={author} /> : <OperationsDashboard author={author} />}
     </div>
   );
 }

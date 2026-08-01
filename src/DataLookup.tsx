@@ -3,6 +3,8 @@ import { Download, RefreshCw, Search, X } from "lucide-react";
 import { selectRows } from "./supabase";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import PortalSelect from "./PortalSelect";
+import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
+import StockBoard from "./StockBoard";
 import { kstDate } from "./visits";
 
 type Row = Record<string, unknown>;
@@ -38,7 +40,7 @@ function csvCell(value: string) {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-export default function DataLookup() {
+export default function DataLookup({ author = "" }: { author?: string }) {
   const [categoryKey, setCategoryKey] = useState<string>(() => window.localStorage.getItem("cs_lookup_category_v1") || "jeomgeom");
   const [period, setPeriod] = useState<PeriodKey>("3m");
   const [team, setTeam] = useState("전체");
@@ -163,8 +165,13 @@ export default function DataLookup() {
         </div>
       </section>
 
-      {/* 검색 + 결과 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* 전용 보드가 있는 카테고리: CS체크·정렬·수량조절 등 기능이 범용 표보다 풍부해 그대로 흡수 */}
+      {category.custom === "misu" && <MisuBoard />}
+      {category.custom === "overage" && <OverageBoard />}
+      {category.custom === "stock" && <StockBoard author={author} />}
+
+      {/* 검색 + 결과 (범용) */}
+      {!category.custom && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="relative min-w-0 flex-1 sm:max-w-md">
@@ -246,7 +253,7 @@ export default function DataLookup() {
             </button>
           </div>
         )}
-      </section>
+      </section>}
 
       {detail && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetail(null)}>
