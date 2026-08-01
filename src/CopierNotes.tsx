@@ -81,7 +81,8 @@ const SYMPTOM_FILTERS: Record<string, string[]> = {
 };
 
 type PlayQuestion = { brand: string; model: string; question: string; options: string[]; answerIndex: number; explain?: string; source?: CopierNote };
-type AiQuizItem = { question: string; model?: string; options: string[]; answer_index: number; explain?: string };
+type AiQuizItem = { question: string; brand?: string; model?: string; options: string[]; answer_index: number; explain?: string };
+type BankRow = { brand: string; model: string; question: string; options: string[]; answer_index: number; explain: string };
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
 
@@ -373,16 +374,36 @@ export default function CopierNotes({ author }: { author: string }) {
     if (quizLoading) return;
     setQuizLoading(true);
     try {
-      const pool = await fetchQuizPool(quizBrand);
-      const usable = pool.filter(quizUsable);
-      if (usable.length < 4) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
-      const questions = [...usable].sort(() => Math.random() - 0.5).slice(0, Math.min(quizCount, usable.length)).map((note) => recordToPlay(note, usable));
+      // 1) AI 문제은행에서 뽑기
+      const bankFilter = quizBrand === "전체" ? ""
+        : DAILY_MAIN.includes(quizBrand) ? `&brand=eq.${encodeURIComponent(quizBrand)}`
+        : `&brand=not.in.(${DAILY_MAIN.map((name) => encodeURIComponent(name)).join(",")})`;
+      const bankQuery = `select=brand,model,question,options,answer_index,explain&order=created_at.desc&limit=300${bankFilter}`;
+      let bank = await selectRows<BankRow>("copier_quiz_bank", bankQuery).catch(() => [] as BankRow[]);
+      // 2) 은행이 얇으면 즉석에서 5문제 적립 (10~30초)
+      if (bank.length < quizCount) {
+        setDailyGenNote("AI가 연습 문제를 만드는 중… (10~30초)");
+        try { await fetch(`${GAS_GET_URL}?action=quizbank&brand=${encodeURIComponent(quizBrand)}`).then((res) => res.json()); } catch { /* 폴백 */ }
+        bank = await selectRows<BankRow>("copier_quiz_bank", bankQuery).catch(() => bank);
+      }
+      let questions: PlayQuestion[];
+      if (bank.length >= 4) {
+        questions = [...bank].sort(() => Math.random() - 0.5).slice(0, Math.min(quizCount, bank.length))
+          .map((row) => ({ brand: row.brand || quizBrand, model: row.model, question: row.question, options: row.options, answerIndex: row.answer_index, explain: row.explain }));
+      } else {
+        // 3) 최후 폴백: 원본 기록 출제
+        const pool = await fetchQuizPool(quizBrand);
+        const usable = pool.filter(quizUsable);
+        if (usable.length < 4) { notify("제목·내용이 있는 기록이 4건 이상 쌓여야 퀴즈를 만들 수 있어요.", "error"); return; }
+        questions = [...usable].sort(() => Math.random() - 0.5).slice(0, Math.min(quizCount, usable.length)).map((note) => recordToPlay(note, usable));
+      }
       setQuizMode("free"); setResultSaved(true); // 자유 연습은 저장 안 함
       setQuiz(questions); setQuizIndex(0); setQuizPick(-1); setQuizScore(0); setWrongNotes([]);
     } catch (e) {
       notify((e as Error).message, "error");
     } finally {
       setQuizLoading(false);
+      setDailyGenNote("");
     }
   };
   // 오늘의 데일리(브랜드별 5문제) — AI 정제 문제(공유 캐시) 우선, 실패 시 원본 기록 폴백
@@ -789,7 +810,8 @@ export default function CopierNotes({ author }: { author: string }) {
                   {[5, 10].map((count) => <button key={count} type="button" onClick={() => setQuizCount(count)} className={`rounded-full px-4 py-2 text-xs font-black transition ${quizCount === count ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{count}문제</button>)}
                   <button type="button" onClick={() => void startQuiz()} disabled={quizLoading} className="rounded-full border border-slate-300 bg-white px-5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">{quizLoading ? "…" : "연습 시작"}</button>
                 </div>
-                <p className="mt-3 text-[11px] font-bold text-slate-400">인사말·단순 점검 기록은 자동으로 걸러지고, 증상·처리가 뚜렷한 사례만 출제됩니다</p>
+                {dailyGenNote && <p className="mt-3 animate-pulse text-[11px] font-black text-blue-600">🤖 {dailyGenNote}</p>}
+                <p className="mt-3 text-[11px] font-bold text-slate-400">AI 문제은행에서 출제됩니다 — 풀수록 은행에 새 문제가 쌓여요</p>
               </div>
             </div>
 

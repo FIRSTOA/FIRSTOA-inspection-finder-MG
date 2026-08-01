@@ -30,7 +30,8 @@ function copierQuizGen_(dateStr, brand) {
 
 function quizFetchNotes_(brand) {
   var url = SUPABASE_URL + '/rest/v1/copier_notes?select=brand,model,title,content&title=neq.&content=neq.&order=created_at.desc&limit=300';
-  if (QUIZ_MAIN_BRANDS.indexOf(brand) >= 0) url += '&brand=eq.' + encodeURIComponent(brand);
+  if (!brand) { /* 전체 */ }
+  else if (QUIZ_MAIN_BRANDS.indexOf(brand) >= 0) url += '&brand=eq.' + encodeURIComponent(brand);
   else url += '&brand=not.in.(' + QUIZ_MAIN_BRANDS.map(encodeURIComponent).join(',') + ')'; // "기타" 묶음
   var res = UrlFetchApp.fetch(url, { headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('copier_notes 조회 ' + res.getResponseCode());
@@ -73,12 +74,13 @@ function quizGenerateWithAI_(notes, brand) {
           type: 'object',
           properties: {
             question: { type: 'string' },
+            brand: { type: 'string' },
             model: { type: 'string' },
             options: { type: 'array', items: { type: 'string' } },
             answer_index: { type: 'integer' },
             explain: { type: 'string' }
           },
-          required: ['question', 'model', 'options', 'answer_index', 'explain'],
+          required: ['question', 'brand', 'model', 'options', 'answer_index', 'explain'],
           additionalProperties: false
         }
       }
@@ -91,14 +93,14 @@ function quizGenerateWithAI_(notes, brand) {
     messages: [
       {
         role: 'system',
-        content: '너는 복합기(사무기기) 수리 기술 교육 퀴즈 출제자다. 실제 현장 처리 기록을 바탕으로 4지선다 문제 5개를 만들어라.\n규칙:\n- question: 증상을 고객 말투·인사말 없이 기술 용어의 한 문장으로 다듬고 "~할 때 올바른 조치는?" 형태로 끝낸다. 기종명을 문장에 넣지 말 것(별도 model 필드).\n- 정답 보기: 해당 기록의 실제 처리를 "1. ~ 2. ~" 번호 단계 2~4개로 요약.\n- 오답 보기 3개: 같은 브랜드 장비에서 그럴듯하지만 이 증상에는 틀린 조치를 창작(다른 기록의 처리를 변형해도 좋다). 길이는 정답과 비슷하게, 명백히 우스꽝스러운 보기는 금지.\n- options는 정확히 4개, answer_index는 0~3에서 무작위 위치.\n- explain: 왜 그 처리가 정답인지 한 문장.\n- 기록 중 품질이 낮은 것은 건너뛰고 서로 다른 기록 5개로 문제 5개를 만들어라.\n- 모든 텍스트는 한국어.'
+        content: '너는 복합기(사무기기) 수리 기술 교육 퀴즈 출제자다. 실제 현장 처리 기록을 바탕으로 4지선다 문제 5개를 만들어라.\n규칙:\n- brand: 해당 기록의 브랜드를 그대로 적는다.\n- question: 증상을 고객 말투·인사말 없이 기술 용어의 한 문장으로 다듬고 "~할 때 올바른 조치는?" 형태로 끝낸다. 기종명을 문장에 넣지 말 것(별도 model 필드).\n- 정답 보기: 해당 기록의 실제 처리를 "1. ~ 2. ~" 번호 단계 2~4개로 요약.\n- 오답 보기 3개: 같은 브랜드 장비에서 그럴듯하지만 이 증상에는 틀린 조치를 창작(다른 기록의 처리를 변형해도 좋다). 길이는 정답과 비슷하게, 명백히 우스꽝스러운 보기는 금지.\n- options는 정확히 4개, answer_index는 0~3에서 무작위 위치.\n- explain: 왜 그 처리가 정답인지 한 문장.\n- 기록 중 품질이 낮은 것은 건너뛰고 서로 다른 기록 5개로 문제 5개를 만들어라.\n- 모든 텍스트는 한국어.'
       },
       { role: 'user', content: '브랜드: ' + brand + '\n\n' + source }
     ],
     response_format: { type: 'json_schema', json_schema: { name: 'copier_quiz', strict: true, schema: schema } }
   };
-  if (/^(gpt-5|o\d)/.test(KAKAO_AI_MODEL)) payload.max_completion_tokens = 5000;
-  else { payload.max_tokens = 5000; payload.temperature = 0.4; }
+  if (/^(gpt-5|o\d)/.test(KAKAO_AI_MODEL)) payload.max_completion_tokens = 9000;
+  else { payload.max_tokens = 9000; payload.temperature = 0.4; }
 
   var res = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post', contentType: 'application/json',
@@ -115,7 +117,7 @@ function quizGenerateWithAI_(notes, brand) {
     var idx = Number(q.answer_index);
     if (!(idx >= 0 && idx <= 3)) return;
     out.push({
-      question: String(q.question), model: String(q.model || ''),
+      question: String(q.question), brand: String(q.brand || ''), model: String(q.model || ''),
       options: q.options.map(String), answer_index: idx, explain: String(q.explain || '')
     });
   });
@@ -137,4 +139,37 @@ function quizDailyPut_(date, brand, items) {
     payload: JSON.stringify([{ quiz_date: date, brand: brand, items: items }]),
     muteHttpExceptions: true
   });
+}
+
+
+/**
+ * AI 문제은행 적립 — action=quizbank&brand=삼성|전체|기타
+ * 무작위 기록 12건으로 5문제를 만들어 copier_quiz_bank에 쌓는다(질문 중복 무시).
+ * 자유 연습이 은행에서 뽑아 쓰므로, 은행이 얇으면 프론트가 이걸 호출해 채운다.
+ */
+function copierQuizBank_(brand) {
+  var b = String(brand || '전체').trim();
+  var notes = quizFetchNotes_(b === '전체' ? '' : b);
+  var usable = notes.filter(quizNoteUsable_);
+  if (usable.length < 6) return { error: '문제로 쓸 기록 부족 (' + usable.length + '건)' };
+  usable.sort(function () { return Math.random() - 0.5; });
+  var items = quizGenerateWithAI_(usable.slice(0, 12), b);
+  if (!items.length) return { error: 'AI 생성 실패' };
+  var rows = items.map(function (q) {
+    return {
+      brand: q.brand || (b === '전체' ? '' : b), model: q.model || '', question: q.question,
+      options: q.options, answer_index: q.answer_index, explain: q.explain || '', qhash: quizMd5_(q.question)
+    };
+  });
+  var res = UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/copier_quiz_bank?on_conflict=brand,qhash', {
+    method: 'post', contentType: 'application/json',
+    headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON, Prefer: 'resolution=merge-duplicates' },
+    payload: JSON.stringify(rows), muteHttpExceptions: true
+  });
+  return { added: rows.length, status: res.getResponseCode() };
+}
+
+function quizMd5_(text) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text, Utilities.Charset.UTF_8);
+  return raw.map(function (byte) { var v = (byte + 256) % 256; return (v < 16 ? '0' : '') + v.toString(16); }).join('');
 }
