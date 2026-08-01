@@ -13,15 +13,15 @@ type CopierNote = {
   kind: "학습" | "처리이력"; title: string; content: string;
 };
 
-// 기종 필터 칩: 팀 관용 시리즈명 (기록의 model 값과 일치하는 것들)
+// 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
 const BRANDS: Record<string, string[]> = {
   삼성: ["MX3", "MX4", "MX7", "흑백기"],
-  신도: ["320", "410", "420", "450", "N501"],
-  제록스: ["키슈/세이토", "마블", "베니/보탄", "헤라", "세레스", "305", "5005"],
+  신도: ["320", "410", "420", "450", "N501", "600", "bizhub"],
+  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "SC2022", "305", "5005"],
   교세라: ["2100", "2101", "5521", "5526"],
   브라더: ["5700", "8900"],
   오키: ["5473"],
-  HP: [],
+  HP: ["8710", "8730", "9010"],
   리코: [],
   캐논: [],
   코니카미놀타: [],
@@ -29,6 +29,43 @@ const BRANDS: Record<string, string[]> = {
   기타: [],
 };
 const BRAND_NAMES = Object.keys(BRANDS);
+
+/**
+ * 기종 칩 → 실제 모델명 매칭 규칙.
+ * 기록의 model엔 관용명("MX3")과 실기기명("SL-X3220NR")이 섞여 있어서
+ * 칩 선택 시 [관용명 일치 OR 포함 패턴 OR 정규식]으로 다 잡는다.
+ * 삼성 K+숫자(SL-K…)는 흑백기로 분류 — MX 칩에서는 제외.
+ */
+type ModelRule = { include: string[]; regex?: string; excludeRegex?: string };
+const MODEL_RULES: Record<string, Record<string, ModelRule>> = {
+  삼성: {
+    MX3: { include: ["3220", "3250", "3255", "3280"], excludeRegex: "k[0-9]" },
+    MX4: { include: ["4220", "4225", "4250", "4255", "4300", "4305", "4350", "4355"], excludeRegex: "k[0-9]" },
+    MX7: { include: ["7400", "7500", "7600"], excludeRegex: "k[0-9]" },
+    흑백기: { include: [], regex: "k[0-9]{3}" },
+  },
+  신도: {
+    "320": { include: ["320", "321"] }, "410": { include: ["410", "411"] }, "420": { include: ["420", "422"] },
+    "450": { include: ["450", "451", "452"] }, N501: { include: ["501"] }, "600": { include: ["600"] }, bizhub: { include: ["bizhub"] },
+  },
+  제록스: {
+    키슈: { include: ["키슈", "port-iv c"] },
+    세이토: { include: ["세이토", "port-v c", "centre-v c2276", "centre-v c3375"] },
+    마블: { include: ["마블", "centre-v c226"] },
+    베니: { include: ["베니", "port-vi c"] },
+    보탄: { include: ["보탄", "port-vii c"] },
+    헤라: { include: ["헤라", "5580", "5585", "6680"] },
+    APEOS: { include: ["apeos-c", "apeos-3"] },
+    SC2022: { include: ["sc2022", "sc-2022", "2022"] },
+    "305": { include: ["305"] },
+    "5005": { include: ["5005"] },
+  },
+  교세라: { "2100": { include: ["2100"] }, "2101": { include: ["2101"] }, "5521": { include: ["5521"] }, "5526": { include: ["5526"] } },
+  브라더: { "5700": { include: ["5700"] }, "8900": { include: ["8900"] } },
+  오키: { "5473": { include: ["5473"] } },
+  HP: { "8710": { include: ["8710"] }, "8730": { include: ["8730"] }, "9010": { include: ["9010"] } },
+  렉스마크: { MX410: { include: ["410"] } },
+};
 
 // 증상 유형 필터 — 제목·내용 키워드로 서버에서 거른다 (기종 × 증상으로 범위 축소)
 const SYMPTOM_FILTERS: Record<string, string[]> = {
@@ -326,10 +363,23 @@ export default function CopierNotes({ author }: { author: string }) {
   const [hasMore, setHasMore] = useState(false);
   const buildListQuery = useCallback((offset: number) => {
     const parts = ["select=*", `order=created_at.${order}`, `limit=${PAGE_SIZE}`, `offset=${offset}`];
-    if (brand !== "전체") parts.push(`brand=eq.${encodeURIComponent(brand)}`);
-    if (model !== "전체") parts.push(`model=eq.${encodeURIComponent(model)}`);
-    if (kindFilter !== "전체") parts.push(`kind=eq.${encodeURIComponent(kindFilter)}`);
     const groups: string[] = [];
+    if (brand !== "전체") parts.push(`brand=eq.${encodeURIComponent(brand)}`);
+    if (model !== "전체") {
+      const rule = (MODEL_RULES[brand] || {})[model];
+      if (rule) {
+        const clause = [
+          `model.eq."${model}"`,
+          ...rule.include.map((pattern) => `model.ilike."*${pattern}*"`),
+          ...(rule.regex ? [`model.imatch.${rule.regex}`] : []),
+        ].join(",");
+        groups.push(`or(${clause})`);
+        if (rule.excludeRegex) parts.push(`model=not.imatch.${encodeURIComponent(rule.excludeRegex)}`);
+      } else {
+        parts.push(`model=eq.${encodeURIComponent(model)}`);
+      }
+    }
+    if (kindFilter !== "전체") parts.push(`kind=eq.${encodeURIComponent(kindFilter)}`);
     const keyword = query.trim().replace(/["\\%,()]/g, "");
     if (keyword) {
       const pattern = `"*${keyword}*"`;
