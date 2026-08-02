@@ -1017,8 +1017,8 @@ export default function ServiceReception({ author }: { author: string }) {
                             <input type="checkbox" checked={meta.linked === "연동완료"} onChange={(e) => patchHandling(row, { linked: e.target.checked ? "연동완료" : "" })} className="h-4 w-4 accent-blue-600" />연동완료
                           </label>
                           <button type="button" disabled={handlingBusyId === row.id} onClick={() => {
-                            // 원격이관은 시작·끝 시각이 시트의 시작·종료 열 — 안 찍고 저장하면 빈 열로 반영된다
-                            if (row.type === "원격이관") {
+                            // 원격·IT는 시작·끝 시각이 시트의 시작·종료 열 — 안 찍고 저장하면 빈 열로 반영된다
+                            if (row.type === "원격이관" || row.type === "IT") {
                               const meta = handlingOf(row);
                               const missing = [!meta.start && "▶ 시작", !meta.end && "■ 끝"].filter(Boolean).join("과 ");
                               if (missing) { window.alert(`${missing}을 먼저 눌러 시각을 기록해 주세요.\n시작·종료 시각이 있어야 처리 저장·시트 반영이 됩니다.`); return; }
