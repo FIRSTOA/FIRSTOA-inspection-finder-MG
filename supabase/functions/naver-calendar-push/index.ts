@@ -39,7 +39,7 @@ function buildIcal(input: { title: string; date: string; time: string; location:
     "END:VTIMEZONE",
     "BEGIN:VEVENT",
     `UID:${uid}`,
-    `DTSTAMP;TZID=Asia/Seoul:${stamp(hh, mm)}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
     `DTSTART;TZID=Asia/Seoul:${stamp(hh, mm)}`,
     `DTEND;TZID=Asia/Seoul:${stamp(hh + Math.floor(endMin / 60), endMin % 60)}`,
     `SUMMARY:${icalEscape(input.title)}`,
@@ -140,8 +140,11 @@ Deno.serve(async (req) => {
       body: `calendarId=${encodeURIComponent(calendarId)}&scheduleIcalString=${encodeURIComponent(ical)}`,
     });
     const created = await createRes.text();
-    if (!createRes.ok) throw new Error(`네이버 캘린더 등록 실패(${createRes.status}): ${created.slice(0, 200)}`);
-    return Response.json({ ok: true, status: "created" }, { headers: jsonHeaders });
+    let naverResult: Record<string, unknown> = {};
+    try { naverResult = JSON.parse(created); } catch { /* 비JSON 응답 */ }
+    const failed = !createRes.ok || String(naverResult.result || "") === "fail" || Number(naverResult.code || 0) >= 400;
+    if (failed) throw new Error(`네이버 캘린더 등록 실패: ${String(naverResult.errorMessage || created).slice(0, 300)}`);
+    return Response.json({ ok: true, status: "created", requestedCalendarId: calendarId, naver: naverResult }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }
