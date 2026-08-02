@@ -424,7 +424,9 @@ function fillCopierLeaseValues_(sheet, row, data) {
  * 수식 계산 결과 값으로 고정한다. 신규 직접 기입(이미 값)·빈 셀은 건드리지 않는다.
  */
 function freezeRemoteLeaseValues_(sheet, row, headers) {
-  var FREEZE = ["등급", "미수", "특이사항", "지역", "상호", "마감일", "기종", "브랜드", "자산번호", "시리얼번호"];
+  // 실제 수식 열(사용자 확인): N등급 O미수 P특이사항 Q지역 R상호 S마감일 T한조 V기종
+  // R(두 열 합치기)·S(마감일+mid(AD)) 같은 특수형도 "계산 결과"를 고정하므로 자동으로 맞다.
+  var FREEZE = ["등급", "미수", "특이사항", "지역", "상호", "마감일", "한조", "기종", "브랜드", "자산번호", "시리얼번호"];
   SpreadsheetApp.flush(); // 방금 쓴 순(M)으로 VLOOKUP이 계산되도록 먼저 반영
   headers.forEach(function (header, index) {
     var name = String(header).replace(/\s+/g, "");
