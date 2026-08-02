@@ -200,6 +200,20 @@ export default function SystemAdmin() {
             <input defaultValue={valueOf("NAVER_CALENDAR_ID")} placeholder="defaultCalendarId" onBlur={(e) => { if (e.target.value !== valueOf("NAVER_CALENDAR_ID")) void saveConfig("NAVER_CALENDAR_ID", e.target.value.trim()); }}
               className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div>
+              <div className="text-sm font-black text-slate-900">팀별 완료 캘린더 ID</div>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">일정 완료 시 익일통합에서 이 캘린더로 이동합니다. 비운 팀은 이동 안 함. (예: C = 강남C as)</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(["A", "B", "C", "D"] as const).map((t) => (
+                <label key={t} className="flex items-center gap-1 text-xs font-black text-slate-500">{t}
+                  <input defaultValue={valueOf(`NAVER_TEAM_CALENDAR_${t}`)} onBlur={(e) => { if (e.target.value !== valueOf(`NAVER_TEAM_CALENDAR_${t}`)) void saveConfig(`NAVER_TEAM_CALENDAR_${t}`, e.target.value.trim()); }}
+                    className="w-32 rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 

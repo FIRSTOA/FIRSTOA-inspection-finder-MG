@@ -934,6 +934,7 @@ export default function ServiceReception({ author }: { author: string }) {
       address: row.address || "", department: deptFromAddress(row.address || ""),
       model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
       issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
+      note: String(row.report_text || ""), // 카톡 보고양식 전문 — 일정에서도 원문 확인 가능
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
     }, "id");
     // 네이버 캘린더 미러 등록 (토글 ON + Secrets 설정 시에만 — 실패해도 일정엔 영향 없음)

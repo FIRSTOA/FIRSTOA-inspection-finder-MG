@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // CalDAV: 네이버 일정 조회/수정/삭제 (uid 필요 — 웹앱이 등록 때 저장해 둔 값)
-    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete") {
+    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move") {
       const auth = caldavAuth();
       if (!auth) return Response.json({ error: "CalDAV 미설정 — NAVER_CALDAV_ID/NAVER_CALDAV_APP_PASSWORD Secrets가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const uid = String(body.uid || "").trim();
@@ -129,19 +129,57 @@ Deno.serve(async (req) => {
         if (del.status >= 400 && del.status !== 404) throw new Error(`네이버 일정 삭제 실패(${del.status})`);
         return Response.json({ ok: true, status: "deleted" }, { headers: jsonHeaders });
       }
-      // caldav_update: 시간·UID는 보존하고 제목/내용/장소만 교체
+      // caldav_move: 팀 완료 캘린더로 이동 (예: 완료된 C팀 일정 → 강남C as) — 복사 후 원본 삭제
+      if (body.action === "caldav_move") {
+        const team = String(body.team || "").toUpperCase();
+        const sUrl2 = Deno.env.get("SUPABASE_URL") || "";
+        const sKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        let targetCal = "";
+        if (sUrl2 && sKey2 && team) {
+          const r = await fetch(`${sUrl2}/rest/v1/app_config?key=eq.NAVER_TEAM_CALENDAR_${team}&select=value`, { headers: { apikey: sKey2, Authorization: `Bearer ${sKey2}` } });
+          const rows = await r.json().catch(() => []);
+          targetCal = String(rows?.[0]?.value || "").trim();
+        }
+        if (!targetCal) return Response.json({ ok: true, status: "no_target_calendar" }, { headers: jsonHeaders }); // 매핑 없으면 조용히 통과
+        const putMove = await fetch(caldavEventUrl(auth.id, targetCal, uid), {
+          method: "PUT",
+          headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" },
+          body: ics,
+        });
+        if (putMove.status >= 400) throw new Error(`완료 캘린더 이동 실패(${putMove.status}) — 대상 캘린더 ID를 확인하세요`);
+        await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } }).catch(() => {});
+        return Response.json({ ok: true, status: "moved", toCalendarId: targetCal }, { headers: jsonHeaders });
+      }
+      // caldav_update: 넘어온 필드만 교체(부분 수정) — date/time이 오면 일정 시간도 이동 (익일 연기 등)
       const unfolded = eventBlockOf(ics).replace(/\r?\n[ \t]/g, "");
       const keep = (name: string) => (unfolded.match(new RegExp(`^(${name}[^:]*:.*)$`, "mi")) || [])[1] || "";
       const esc = (v: string) => String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+      const title2 = body.title !== undefined ? String(body.title) : icsProp(ics, "SUMMARY");
+      const location2 = body.location !== undefined ? String(body.location) : icsProp(ics, "LOCATION");
+      const description2 = body.description !== undefined ? String(body.description) : icsProp(ics, "DESCRIPTION");
+      let dtstartLine = keep("DTSTART");
+      let dtendLine = keep("DTEND");
+      if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
+        const [yy, mm, dd] = body.date.split("-").map(Number);
+        const oldTime = dtstartLine.match(/T(\d{2})(\d{2})/) || [];
+        const hasTime = typeof body.time === "string" && /^\d{2}:\d{2}$/.test(body.time);
+        const hh = hasTime ? Number(String(body.time).slice(0, 2)) : Number(oldTime[1] ?? 9);
+        const mi = hasTime ? Number(String(body.time).slice(3, 5)) : Number(oldTime[2] ?? 0);
+        const pad2 = (n: number) => String(n).padStart(2, "0");
+        const stamp2 = (h: number, m: number) => `${yy}${pad2(mm)}${pad2(dd)}T${pad2(h)}${pad2(m)}00`;
+        const endMin = mi + 60;
+        dtstartLine = `DTSTART;TZID=Asia/Seoul:${stamp2(hh, mi)}`;
+        dtendLine = `DTEND;TZID=Asia/Seoul:${stamp2(hh + Math.floor(endMin / 60), endMin % 60)}`;
+      }
       const newIcs = [
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:FirstOA CS Webapp", "CALSCALE:GREGORIAN",
         "BEGIN:VEVENT",
         `UID:${uid}`,
         `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
-        keep("DTSTART"), keep("DTEND"),
-        `SUMMARY:${esc(String(body.title || ""))}`,
-        String(body.location || "").trim() ? `LOCATION:${esc(String(body.location))}` : "",
-        String(body.description || "").trim() ? `DESCRIPTION:${esc(String(body.description))}` : "",
+        dtstartLine, dtendLine,
+        `SUMMARY:${esc(title2)}`,
+        location2.trim() ? `LOCATION:${esc(location2)}` : "",
+        description2.trim() ? `DESCRIPTION:${esc(description2)}` : "",
         "END:VEVENT", "END:VCALENDAR",
       ].filter(Boolean).join("\r\n");
       const put = await fetch(url, { method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: newIcs });
