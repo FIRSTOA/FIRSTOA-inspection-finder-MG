@@ -23,7 +23,7 @@ type GasStatus = {
 const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean }> = [
   { key: "FIELD_KAKAO_SEND_ENABLED", label: "카톡 전송", desc: "끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다." },
   { key: "FIELD_SHEET_SYNC_ENABLED", label: "시트 동기화", desc: "끄면 FIELD 기록이 구글시트에 기입되지 않습니다." },
-  { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 전송이 아래 테스트 방으로만 갑니다.", danger: true },
+  { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 카카오톡 전송이 실제 방 대신 아래 테스트 카톡방으로만 갑니다.", danger: true },
   { key: "FIELD_SHEET_TEST_MODE", label: "시트 테스트 모드", desc: "켜면 시트 기입이 테스트 탭으로만 갑니다.", danger: true },
   { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
 ];
@@ -186,8 +186,8 @@ export default function SystemAdmin() {
           })}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
-              <div className="text-sm font-black text-slate-900">테스트 방 이름</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">테스트 모드에서 모든 전송이 이 방으로 갑니다.</p>
+              <div className="text-sm font-black text-slate-900">테스트 카톡방 이름</div>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">카카오톡 방 이름입니다. 테스트 모드가 켜지면 모든 전송이 실제 방 대신 이 카톡방으로만 갑니다.</p>
             </div>
             <input defaultValue={valueOf("TEST_ROOM")} onBlur={(e) => { if (e.target.value !== valueOf("TEST_ROOM")) void saveConfig("TEST_ROOM", e.target.value); }}
               className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
