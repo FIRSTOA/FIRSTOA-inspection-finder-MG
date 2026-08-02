@@ -751,7 +751,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
-  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address">, confirmDup: boolean) => {
+  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null }, confirmDup: boolean) => {
     const today = kstDate();
     const vendor = cleanVendorName(row.vendor);
     // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지)
@@ -774,16 +774,21 @@ export default function ServiceReception({ author }: { author: string }) {
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
     }, "id");
     // 네이버 캘린더 미러 등록 (NAVER_CALENDAR_ENABLED=true + Secrets 설정 시에만 동작 — 실패해도 일정엔 영향 없음)
+    // 팀 구분이 캘린더에 없어 시간대로 팀을 표기하는 관행을 따른다: A 09시 / B 12시 / C 15시 / D 18시
     void (async () => {
       try {
         const cfg = await getConfig();
         if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
+        const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
+        const reportText = String(row.report_text || "").replace(/\t/g, " ");
+        // 보고양식 첫 줄 = 수기 캘린더 제목과 같은 형식 (구분 등급 모델 업체명 종료일 … 지역 … 접수일 …)
+        const firstLine = reportText.split("\n")[0]?.trim() || "";
         await invokeEdgeFunction("naver-calendar-push", {
-          title: `[AS] ${vendor}`,
+          title: firstLine ? `${row.title ? `${row.title} - ` : ""}${firstLine}` : `[AS] ${vendor}`,
           date: today,
-          time: kstNowHM(),
+          time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",
           location: row.address || "",
-          description: [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : "", "웹앱 일정리스트가 원본입니다 — 변경·취소는 웹앱에서"].filter(Boolean).join("\n"),
+          description: reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n"),
         });
       } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
     })();
@@ -816,6 +821,7 @@ export default function ServiceReception({ author }: { author: string }) {
     receiver_name: manual.접수자성함.trim(), receiver_phone: manual.접수자연락처.trim(),
     title: manual.제목, symptom: manual.증상,
     address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+    report_text: report, // 네이버 캘린더 제목·설명은 보고양식(수기 등록과 동일 형식)을 그대로 쓴다
   });
 
   // 새 주소를 앱 데이터(워킨맵 + Supabase 임대리스트)에 자동 반영.
