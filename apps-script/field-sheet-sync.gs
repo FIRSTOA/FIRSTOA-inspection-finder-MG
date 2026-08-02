@@ -196,7 +196,11 @@ function findHeaderRow_(sheet, category) {
   const required = signatures[category] || [];
   const rows = Math.min(20, Math.max(1, sheet.getLastRow()));
   const values = sheet.getRange(1, 1, rows, sheet.getLastColumn()).getDisplayValues();
-  const index = values.findIndex((row) => required.every((header) => row.includes(header)));
+  const squeeze = (v) => String(v).replace(/\s+/g, "");
+  const index = values.findIndex((row) => {
+    const cells = row.map(squeeze);
+    return required.every((header) => cells.includes(squeeze(header)));
+  });
   return index >= 0 ? index + 1 : 1;
 }
 
@@ -226,6 +230,8 @@ function fieldValue_(category, header, column, data, request, labels) {
   // "순" 헤더가 A열과 M열에 중복되므로 임대리스트 순번은 M열(13)에만 기입한다.
   if (category === "reception_remote") {
     if (column === 1 || column === 3) return undefined;
+    if (column >= 34) return undefined; // AH 비용·AI 등급 — 시트 수식/수동 영역, "등급" 헤더가 N열과 중복이라 보호
+    if (String(header).replace(/\s+/g, "") === "등급" && column !== 14) return undefined;
     if (String(header).replace(/\s+/g, "") === "순") return column === 13 ? (data["leaseNo"] || undefined) : undefined;
   }
   // 접수(복합기 신규): A~AT까지 직접 기재 (AU 위탁/유지보수 이후는 보호)
@@ -343,6 +349,13 @@ function fieldValue_(category, header, column, data, request, labels) {
   };
   let key = maps[category] && maps[category][header];
   if (!key && maps[category]) key = maps[category][String(header).trim()];
+  if (!key && maps[category]) {
+    // 시트 헤더가 셀 안 줄바꿈을 품는 경우("한조⏎처리", "추가⏎대수") — 공백류 전부 무시하고 매칭
+    var squeezedHeader = String(header).replace(/\s+/g, "");
+    for (var mapKey in maps[category]) {
+      if (mapKey.replace(/\s+/g, "") === squeezedHeader) { key = maps[category][mapKey]; break; }
+    }
+  }
   if (!key) return undefined;
   if (key === "_author") return request.author;
   if (key === "_webInput") return "웹앱 직접입력";
