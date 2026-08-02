@@ -40,7 +40,7 @@ import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus } from "./api";
-import { uploadPhoto, createAlbum, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
+import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -5115,7 +5115,7 @@ export default function App() {
     setSending(false);
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
-      pendingAsTicketRef.current = null;
+      // 연결은 유지 — 팝업을 닫아도 [네이버 캘린더] 버튼으로 다시 정리할 수 있다 (새 작업 시작 시 해제)
     }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
@@ -5293,6 +5293,28 @@ export default function App() {
         : patch;
       await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, finalPatch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
+      // 네이버 미러 정리: 완료면 접수양식 밑에 처리내용을 잇고 팀 완료 캘린더로 이동, 미루기면 날짜만 변경
+      const naverUid = String(rows[0]?.["naverUid"] || "");
+      const naverTeam = String(rows[0]?.["team"] || "");
+      if (naverUid) {
+        void (async () => {
+          try {
+            if (receptionStatus === "완료") {
+              if (ticket.sentText) {
+                const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: naverUid });
+                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, description: `${cur.description || ""}\n\n${ticket.sentText}` });
+              }
+              const moved = await invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: naverUid, team: naverTeam });
+              if (moved.status === "moved") showToast(`네이버: ${naverTeam}팀 완료 캘린더로 이동 ✓`, "success");
+            } else if (patch.date) {
+              await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date) });
+              showToast(`네이버 일정도 ${String(patch.date)}로 이동 ✓`, "success");
+            }
+          } catch (e) {
+            showToast(`네이버 캘린더 정리 실패: ${(e as Error).message}`, "error");
+          }
+        })();
+      }
       // 매월 반복 일정이면 완료 시 다음 달 일정 자동 생성 (일정리스트의 완료 처리와 동일 규칙)
       if (receptionStatus === "완료" && rows[0]?.["repeatMonthly"]) {
         try { await spawnMonthlyCloneIfMissing(rows[0]); } catch { /* 반복 생성 실패는 완료 처리에 영향 없음 */ }
@@ -6008,6 +6030,7 @@ export default function App() {
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
                   <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
                   <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
+                  <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="col-span-2 rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버 캘린더 (완료/익일 정리)</button>
                 </>
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
@@ -6114,6 +6137,7 @@ export default function App() {
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
+              <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>
             </> : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
