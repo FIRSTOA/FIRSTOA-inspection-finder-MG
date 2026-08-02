@@ -5115,7 +5115,7 @@ export default function App() {
       }
     }
     setSending(false);
-    if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
+    if (FIELD_NAVER_BUTTON && res.ok && kind === "normal" && pendingAsTicketRef.current) {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — 팝업을 닫아도 [네이버 캘린더] 버튼으로 다시 정리할 수 있다 (새 작업 시작 시 해제)
     }
