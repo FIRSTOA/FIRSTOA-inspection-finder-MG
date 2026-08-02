@@ -289,10 +289,12 @@ export default function ServiceReception({ author }: { author: string }) {
   useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
   const [remoteQueue, setRemoteQueue] = useState<ServiceReceptionRow[]>([]);
+  // 이 세션에서 삭제한 건 — 삭제 직전에 출발한 재조회 응답이 늦게 도착해 행을 되살리는 경쟁 방지
+  const deletedIdsRef = useRef<Set<string>>(new Set());
   const loadRemoteQueue = useCallback(async () => {
     const end = kstDate();
     const rows = await getServiceReceptions(shiftDate(end, -30), end).catch(() => [] as ServiceReceptionRow[]);
-    setRemoteQueue(rows.filter((row) => row.type === "IT" || row.type === "원격이관"));
+    setRemoteQueue(rows.filter((row) => (row.type === "IT" || row.type === "원격이관") && !deletedIdsRef.current.has(row.id)));
   }, []);
   // 처리(원격·IT) 입력 초안 — 접수 후 나중에 채우는 값들. 행별로 보관하고 저장 시 DB+시트에 반영.
   const [handling, setHandling] = useState<Record<string, Record<string, string>>>({});
@@ -392,7 +394,8 @@ export default function ServiceReception({ author }: { author: string }) {
     setListLoading(true);
     try {
       const { start, end } = periodRangeOf(period, date);
-      setListRows(await getServiceReceptions(start, end));
+      const rows = await getServiceReceptions(start, end);
+      setListRows(rows.filter((row) => !deletedIdsRef.current.has(row.id)));
     } catch {
       setListRows([]);
     } finally {
@@ -849,9 +852,10 @@ export default function ServiceReception({ author }: { author: string }) {
   const removeReception = async (row: ServiceReceptionRow) => {
     if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)`)) return;
     try {
+      deletedIdsRef.current.add(row.id); // 진행 중인 재조회 응답이 이 행을 다시 실어와도 걸러진다
       await updateServiceReception(row.id, { deleted: true });
       setListRows((current) => current.filter((r) => r.id !== row.id));
-      setRemoteQueue((current) => current.filter((r) => r.id !== row.id)); // 이월분에서도 즉시 제거
+      setRemoteQueue((current) => current.filter((r) => r.id !== row.id));
     } catch (e) {
       notify(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`, "error");
     }
