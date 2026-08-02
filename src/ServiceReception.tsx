@@ -853,13 +853,27 @@ export default function ServiceReception({ author }: { author: string }) {
       setBusy(false);
     }
   };
-  const stepSave = () => runStep("접수 저장", async () => { await ensureSaved(); });
-  const stepSheet = () => runStep("시트 기입", async () => { await ensureSaved(); return (await writeReceptionSheet()).replace(/^ · /, ""); });
-  const stepTicket = () => runStep("일정 등록", async () => {
-    const id = await ensureSaved();
-    const ok = await createTicketFromReception(formSnapshotForTicket(id), true, false); // 네이버는 별도 버튼
-    return ok ? "" : "(취소됨)";
-  });
+  // [접수] = 저장 + 시트 기입 + 웹앱 일정리스트·캘린더 등록 (네이버·카톡은 별도 버튼)
+  const stepReception = async () => {
+    if (busy) return;
+    if (!vendorName) { setActionResult("업체를 선택(또는 입력)하세요."); return; }
+    if (type === "원격이관") { void handleSave(); return; } // 원격: 저장+시트, 폼 초기화까지 (기존 플로우)
+    setBusy(true);
+    try {
+      const rowId = await ensureSaved();
+      let scheduled = false;
+      try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false, false); }
+      catch (e) { notify(`일정 등록 실패 — 접수는 저장됨.\n(${(e as Error).message})`, "error"); }
+      const sheetPending = custKind === "신규" || !!firstNo.trim();
+      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
+      setActionResult(`접수 완료 ✓${scheduled ? " + 일정 등록" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""} — 폼 유지 중 (네이버·카톡은 옆 버튼)`);
+      await loadList(listDate, listPeriod);
+    } catch (e) {
+      setActionResult(`접수 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   const stepNaver = () => runStep("네이버 캘린더", async () => {
     const cfg = await getConfig();
     if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) throw new Error("관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다");
@@ -1526,12 +1540,10 @@ export default function ServiceReception({ author }: { author: string }) {
                 <span className="ml-auto flex flex-wrap items-center gap-1.5">
                   {/* 단계별 실행 — 어떤 순서로 눌러도 접수는 한 번만 저장되고(ensureSaved) 그 위에 단계가 쌓인다 */}
                   <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-500 transition hover:border-slate-400 hover:bg-slate-50"><ExternalLink size={13} />{type === "복합기 AS" ? "시트 열기" : "원격 시트"}</button>
-                  <button type="button" onClick={() => void stepSave()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">접수 저장</button>
-                  <button type="button" onClick={() => void stepSheet()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">시트 기입</button>
-                  {type !== "원격이관" && <button type="button" onClick={() => void stepTicket()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">일정 등록</button>}
+                  <button type="button" onClick={() => void stepReception()} disabled={busy} className={`rounded-full px-4 py-2 text-xs font-black transition disabled:opacity-40 ${type === "원격이관" ? "bg-blue-600 text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-blue-700" : "border border-slate-400 bg-white text-slate-800 hover:bg-slate-50"}`}>{busy ? "처리중…" : type === "원격이관" ? "접수 (저장+시트)" : "접수"}</button>
                   {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
                   {type !== "원격이관" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
-                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("send")} disabled={busy || (type !== "원격이관" && (!report || !isReady))} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체 실행"}</button>
+                  {type !== "원격이관" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button>}
                 </span>
               </div>
               {actionResult && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}
