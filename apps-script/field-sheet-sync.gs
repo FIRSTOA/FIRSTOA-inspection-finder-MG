@@ -152,6 +152,12 @@ function appendFieldSheetRow_(request) {
     const orderCell = sheet.getRange(row, 13);
     if (!orderCell.getFormula()) orderCell.setFormula('=LET(v, INDEX($G:$G, ROW()), IF(v="","", COUNTIF($G$3:INDEX($G:$G, ROW()), v) & "차"))');
   }
+  // 복합기 접수(기존 거래처): 순번 VLOOKUP 열들을 접수 시점 "값"으로 교체.
+  // 임대리스트가 나중에 바뀌어도 접수 당시 스냅샷이 보존되고, #N/A·재계산 부하가 사라진다.
+  // 실패하면 위에서 복사된 수식이 그대로 살아있어 오늘과 동일하게 동작(무회귀).
+  if (request.category === "reception_copier" && data["firstNo"]) {
+    try { fillCopierLeaseValues_(sheet, row, data); } catch (fillError) { /* 수식 폴백 */ }
+  }
   SpreadsheetApp.flush();
 
   return { row, sheet: sheet.getName() };
@@ -351,4 +357,58 @@ function parseLabeledText_(text) {
 
 function json_(value) {
   return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+/**
+ * 복합기 접수 새 행의 VLOOKUP 열(G,H,M,N,O,Q,U~AU)을 값으로 채운다.
+ * 6행에 적힌 "임대리스트 원본 열 번호" 규칙을 그대로 읽는다 (시트 기존 설계 재사용).
+ * K(이관 판정)·AZ~BC(집계)는 임대리스트 조회가 아니므로 수식 유지.
+ * data.leaseFix(JSON: 임대리스트 헤더명→값)가 있으면 그 값 우선 — 웹앱 "자동 입력값 수정" 반영.
+ */
+function fillCopierLeaseValues_(sheet, row, data) {
+  var firstNo = String(data["firstNo"] || "").trim();
+  if (!firstNo) return;
+  var lease = sheet.getParent().getSheetByName("임대리스트");
+  if (!lease || lease.getLastRow() < 2) return;
+
+  // 순번(A열)으로 임대리스트 행 찾기 — 아래쪽이 최신이므로 아래→위
+  var colA = lease.getRange(2, 1, lease.getLastRow() - 1, 1).getDisplayValues();
+  var leaseRow = 0;
+  for (var i = colA.length - 1; i >= 0; i--) {
+    if (String(colA[i][0]).trim() === firstNo) { leaseRow = i + 2; break; }
+  }
+  if (!leaseRow) return; // 못 찾으면 수식 폴백
+
+  var lastCol = lease.getLastColumn();
+  var leaseHeaders = lease.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  var leaseValues = lease.getRange(leaseRow, 1, 1, lastCol).getDisplayValues()[0];
+
+  var overrides = {};
+  try { overrides = JSON.parse(String(data["leaseFix"] || "{}")) || {}; } catch (parseError) { overrides = {}; }
+  var srcValue = function (srcCol) { // 임대리스트 열 번호(1-base) → 값 (웹앱 수정값 우선)
+    if (srcCol < 1 || srcCol > leaseValues.length) return "";
+    var headerName = String(leaseHeaders[srcCol - 1] || "").trim();
+    if (headerName && Object.prototype.hasOwnProperty.call(overrides, headerName) && String(overrides[headerName]) !== "") {
+      return String(overrides[headerName]);
+    }
+    return String(leaseValues[srcCol - 1]);
+  };
+
+  // 대상 열: G(7) H(8) M(13) N(14) O(15) Q(17) U(21)~AU(47) — 순번 VLOOKUP 열 전부
+  var targets = [7, 8, 13, 14, 15, 17];
+  for (var col = 21; col <= 47; col++) targets.push(col);
+
+  var idxRow = sheet.getRange(6, 1, 1, 47).getValues()[0]; // 6행 = 임대리스트 원본 열 번호
+  targets.forEach(function (col) {
+    var srcCol = Number(idxRow[col - 1] || 0);
+    if (!srcCol) return;
+    var value;
+    if (col === 24) { // X열: 원본열 & " / " & 다음열 (시트 수식과 동일 형식)
+      value = srcValue(srcCol) + " / " + (srcValue(srcCol + 1) || " ");
+    } else {
+      value = srcValue(srcCol);
+    }
+    sheet.getRange(row, col).setValue(value); // 복사된 수식을 값으로 교체
+  });
 }
