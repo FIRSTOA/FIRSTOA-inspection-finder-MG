@@ -882,7 +882,11 @@ export default function ServiceReception({ author }: { author: string }) {
     const cfg = await getConfig();
     if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) throw new Error("관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다");
     const id = await ensureSaved();
-    await pushNaverCalendar(formSnapshotForTicket(id));
+    const pushed = await pushNaverCalendar(formSnapshotForTicket(id));
+    if (pushed?.uid) {
+      const linked = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${id}&order=id.desc&limit=1`).catch(() => []);
+      if (linked.length) await updateRows("as_tickets", `id=eq.${encodeURIComponent(linked[0].id)}`, { naverUid: pushed.uid, naverPushedAt: new Date().toISOString() }).catch(() => {});
+    }
   });
   const stepKakao = () => runStep("카톡 전송", async () => {
     if (!report) throw new Error("보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요");
@@ -900,7 +904,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
     const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
-    await invokeEdgeFunction("naver-calendar-push", {
+    return await invokeEdgeFunction<{ uid?: string; status?: string }>("naver-calendar-push", {
       title: firstLine || `[AS] ${cleanVendorName(row.vendor)}`,
       date: kstDate(),
       time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",
@@ -922,8 +926,9 @@ export default function ServiceReception({ author }: { author: string }) {
       const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
       if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
     }
+    const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     await upsertRow("as_tickets", {
-      id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: ticketId,
       team: teamFromRegion(row.region), date: today, time: kstNowHM(),
       vendor, contact: (row.receiver_name || row.receiver_phone) ? `접수자 ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
       address: row.address || "", department: deptFromAddress(row.address || ""),
@@ -937,7 +942,9 @@ export default function ServiceReception({ author }: { author: string }) {
         try {
           const cfg = await getConfig();
           if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
-          await pushNaverCalendar(row);
+          const pushed = await pushNaverCalendar(row);
+          // uid를 티켓에 저장 — 일정리스트에서 [네이버 일정] 조회·수정·삭제할 열쇠
+          if (pushed?.uid) await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticketId)}`, { naverUid: pushed.uid, naverPushedAt: new Date().toISOString() }).catch(() => {});
         } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
       })();
     }

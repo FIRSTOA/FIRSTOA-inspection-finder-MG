@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { deleteRows, selectAllRows, upsertRow, upsertRows } from "./supabase";
+import { deleteRows, invokeEdgeFunction, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
@@ -27,6 +27,7 @@ export type AsTicket = {
   grade: string;
   keyman: string;
   receptionId: string;
+  naverUid?: string; // 네이버 캘린더 미러 일정의 UID — 있으면 CalDAV로 조회·수정·삭제 가능
   repeatMonthly?: boolean; // 매월 반복 — 완료하면 다음 달 같은 날로 자동 생성
   issue: string;
   note?: string; // 내용 — 처리 결과·점검/AS 양식이 쌓이는 칸
@@ -230,10 +231,10 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverPushedAt";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverUid";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", naverUid: t.naverUid || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -510,6 +511,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const [customDate, setCustomDate] = useState(tomorrowYmd);
 
   const editTicket = tickets.find((ticket) => ticket.id === editId);
+  const [naverEditTicket, setNaverEditTicket] = useState<AsTicket | null>(null); // 네이버 미러 일정 조회·수정 모달
   const detailTicket = tickets.find((ticket) => ticket.id === detailId);
   useEffect(() => {
     setDetailReception(null);
@@ -670,9 +672,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const removeTicket = (ticket: AsTicket) => {
-    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?`)) return false;
+    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?${ticket.naverUid ? "\n(네이버 캘린더 미러 일정도 함께 삭제 시도)" : ""}`)) return false;
     setTickets(tickets.filter((item) => item.id !== ticket.id));
     removeRemote(ticket.id);
+    if (ticket.naverUid) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_delete", uid: ticket.naverUid }).catch(() => { /* CalDAV 미설정·실패 시 네이버에서 직접 삭제 */ });
     setEditId("");
     return true;
   };
@@ -1134,7 +1137,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         );
       })()}
 
-      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => {
+      {naverEditTicket && <NaverEventModal ticket={naverEditTicket} onClose={() => setNaverEditTicket(null)} />}
+      {editTicket && <TicketEditModal ticket={editTicket} onNaver={editTicket.naverUid ? () => setNaverEditTicket(editTicket) : undefined} onClose={() => setEditId("")} onSave={(patch) => {
         const newDate = patch.date;
         if (editTicket.repeatMonthly && patch.repeatMonthly !== false && newDate && newDate !== editTicket.date && seriesOthers(editTicket).length) {
           update(editTicket.id, { ...patch, date: editTicket.date });
@@ -1201,7 +1205,65 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   );
 }
 
-function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void }) {
+// 네이버 캘린더 미러 일정 조회·수정 — CalDAV 경유 (실험적: 네이버 비공식 통로)
+function NaverEventModal({ ticket, onClose }: { ticket: AsTicket; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({ title: "", location: "", description: "" });
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await invokeEdgeFunction<{ title?: string; description?: string; location?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
+        setForm({ title: data.title || "", location: data.location || "", description: data.description || "" });
+        setError("");
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [ticket.naverUid]);
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, ...form });
+      window.alert("네이버 캘린더 일정이 수정됐습니다 ✓");
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const field = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+      <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <b>네이버 캘린더 일정 수정 <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">실험적</span></b>
+          <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
+        </div>
+        <div className="min-h-0 space-y-3 overflow-y-auto p-5">
+          {loading && <div className="py-8 text-center text-sm font-bold text-slate-400">네이버에서 일정을 불러오는 중…</div>}
+          {!loading && error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-700">{error}</div>}
+          {!loading && !error && <>
+            <label className="block text-xs font-bold text-slate-500">제목<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} /></label>
+            <label className="block text-xs font-bold text-slate-500">장소<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className={field} /></label>
+            <label className="block text-xs font-bold text-slate-500">내용<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={10} className={`${field} resize-y font-mono text-xs leading-5`} /></label>
+          </>}
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3.5">
+          <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
+          {!loading && !error && <button type="button" disabled={saving} onClick={() => void save()} className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-40">{saving ? "저장 중…" : "네이버에 저장"}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete, onNaver }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void; onNaver?: () => void }) {
   const [draft, setDraft] = useState(ticket);
   const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -1260,7 +1322,10 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
-          <div>{onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}</div>
+          <div className="flex items-center gap-2">
+            {onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}
+            {onNaver && <button type="button" onClick={onNaver} className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">네이버 일정</button>}
+          </div>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
             {onDefer && <button type="button" onClick={onDefer} className="rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}

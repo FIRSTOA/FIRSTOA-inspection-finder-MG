@@ -44,3 +44,23 @@ npx supabase functions deploy naver-calendar-push --project-ref kkdiihazgzesbqxj
 - **재연동이 필요할 때** (연동 계정 비밀번호 변경, 토큰 만료 ~1년, "네이버만 안 올라감" 증상):
   아래 주소로 브라우저에서 로그인·동의 한 번이면 끝 — "연동 완료 ✓" 알림 확인.
   https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=V_m8cXZT2YjdGqAJyssK&redirect_uri=https%3A%2F%2Ffirstoa-inspection-finder-mg.vercel.app%2F&state=firstoa
+
+---
+
+## CalDAV — 네이버 일정 조회·수정·삭제 (실험적, 2026-08-02 추가)
+
+등록 후의 일정 수정·삭제는 공식 API가 없어 CalDAV(캘린더 동기화 통로)로 처리합니다.
+일정리스트 → 일정 수정 모달 → [네이버 일정] 버튼에서 조회·수정, 일정 삭제 시 미러도 함께 삭제 시도.
+
+### 설정 (1회)
+1. 연동 네이버 계정에 **2단계 인증**을 켠다 (네이버 내정보 → 보안설정)
+2. 보안설정 → **애플리케이션 비밀번호** → "캘린더/기타"용으로 새로 발급
+3. Secrets 등록:
+```
+npx supabase secrets set NAVER_CALDAV_ID={네이버아이디} NAVER_CALDAV_APP_PASSWORD={발급비밀번호} --project-ref kkdiihazgzesbqxjytqv
+```
+
+### 주의
+- 비공식 통로라 네이버 정책 변경 시 끊길 수 있음 — 끊겨도 등록(미러)은 영향 없음
+- CalDAV 미설정 상태에서는 [네이버 일정] 버튼이 명확한 안내 오류를 띄움 (무해)
+- 수정 대상 식별은 등록 때 저장한 UID(as_tickets.naverUid) — CalDAV 도입 전에 등록된 일정은 수정 불가
