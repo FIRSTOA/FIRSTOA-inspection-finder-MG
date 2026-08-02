@@ -6,7 +6,7 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
-import { getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
 import { getServiceReceptionById } from "./api";
@@ -380,14 +380,59 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   // 구분 전환 — 복합기 AS ↔ 원격이관 ↔ IT. 시트 탭이 바뀌면 기존 행 연결을 끊는다.
+  // 구분 변경 — 유형만 바꾸는 게 아니라 대상 양식·시트로 실제 전환한다:
+  //  · 탭이 바뀌면(복합기 ↔ 원격·IT) 새 탭에 접수 행을 자동 기입하고 행번호를 다시 연결
+  //  · 원격 탭 안에서 IT ↔ 원격이관은 행을 유지하고 한조처리(L열)만 갱신
+  //  · 원격이관으로 바꾸면 방문이 없으니 연결된 미완료 방문 일정을 정리
   const changeType = async (row: ServiceReceptionRow, next: string) => {
     if (row.type === next) return;
     const groupOf = (t: string) => (t === "복합기 AS" ? "copier" : "remote");
     const crossTab = groupOf(row.type) !== groupOf(next);
-    if (!window.confirm(`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?${crossTab ? "\n시트 탭이 달라 기존 기입 행과의 연결은 해제됩니다." : ""}`)) return;
+    const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
+    if (crossTab) {
+      lines.push(row.lease_no
+        ? `· ${next === "복합기 AS" ? "복합기 접수 탭" : "원격 탭"}에 접수 행을 새로 기입합니다.`
+        : "· 신규 거래처(순번 없음)라 새 탭 시트 기입은 생략됩니다 — 필요하면 수동 기입.");
+      lines.push(`· 기존 ${row.type === "복합기 AS" ? "복합기" : "원격"} 탭의 행은 남아 있으니 필요 없으면 직접 지워주세요.`);
+    }
+    if (next === "원격이관") lines.push("· 연결된 방문 일정(미완료)은 삭제됩니다.");
+    if (!window.confirm(lines.join("\n"))) return;
     setTypeBusyId(row.id);
     try {
-      await updateServiceReception(row.id, { type: next, ...(crossTab ? { sheet_row: null } : {}) });
+      const keepStatus = ["완료", "원격완료"].includes(row.status);
+      await updateServiceReception(row.id, { type: next, ...(crossTab ? { sheet_row: null } : {}), ...(!keepStatus && row.status !== "접수" ? { status: "접수" } : {}) });
+      // 한조처리 동기화: IT면 "IT", 원격이관이면 공백 (처리 화면·시트 표기 기준값)
+      if (next === "IT" || next === "원격이관") void mergeReceptionHandling(row.id, { hanjo: next === "IT" ? "IT" : "" }).catch(() => {});
+      if (crossTab && row.lease_no) {
+        // 새 탭에 접수 행 기입 — 접수 당시 값(작성자·시각·내용)을 그대로 옮긴다
+        const parts = receiptParts(row.created_at);
+        void runSheetWrite(row.id, async () => {
+          if (next === "복합기 AS") {
+            const { row: sheetRow } = await sendReceptionCopierSheetJob({
+              author: row.author, vendor: row.vendor, firstNo: row.lease_no, route: row.route,
+              field: row.field || "A/S", paid: row.paid || "", receiverName: row.receiver_name || "",
+              receiverPhone: row.receiver_phone || "", title: row.title || "", symptom: row.symptom || "",
+            });
+            if (sheetRow) await updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+            return sheetRow ?? null;
+          }
+          const { row: sheetRow } = await sendReceptionRemoteSheetJob({
+            author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
+            hanjo: next === "IT" ? "IT" : "", start: "", end: "", result: "", handler: "",
+            contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
+            symptom: row.symptom || "", extraCount: "", handled: "", linked: "",
+            receiptDate: parts.date, receiptTime: parts.time, receiptAuthor: row.author,
+          });
+          if (sheetRow) await updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
+          return sheetRow ?? null;
+        });
+      } else if (!crossTab) {
+        // 원격 탭 안의 IT ↔ 원격이관: 행 유지, 한조처리(L열)만 갱신
+        if (next === "IT") syncRemoteSheet(row, { ...(row.remote_meta || {}), hanjo: "IT" });
+        else notify("원격이관으로 변경됨 — 시트 L열의 'IT' 표기는 직접 지워주세요 (빈 값으로는 덮어쓸 수 없어요)");
+      }
+      // 원격이관은 방문이 없다 — 완료되지 않은 방문 일정을 정리해 상태 뒤집힘을 막는다
+      if (next === "원격이관") void deleteRows("as_tickets", `receptionId=eq.${row.id}&status=neq.완료`).catch(() => {});
       await loadList(listDate, listPeriod);
       void loadRemoteQueue();
     } catch (e) {
