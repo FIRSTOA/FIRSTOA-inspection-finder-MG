@@ -31,7 +31,9 @@ export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise
     const t = await res.text().catch(() => "");
     throw new Error(`RPC ${fn} 실패(${res.status}): ${t.slice(0, 200)}`);
   }
-  return (await res.json()) as T;
+  // void 함수는 204(빈 본문)를 준다 — 무조건 json()을 부르면 파싱 오류가 난다
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 // 테이블 직접 조회 (select + 필터). 점검/AS 원문 재사용(getInspForms) 용.
