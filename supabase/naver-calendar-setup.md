@@ -34,3 +34,13 @@ npx supabase functions deploy naver-calendar-push --project-ref kkdiihazgzesbqxj
 ```
 관리 탭(app_config)에서 `NAVER_CALENDAR_ENABLED` = `true` 로 설정하면 그때부터 동작.
 (키가 없거나 토글이 꺼져 있으면 조용히 건너뛰므로 언제 켜도 안전)
+
+---
+
+## 운영 메모 (2026-08-02 연동 완료 후)
+
+- 연동 완료: 토큰은 서버 테이블(naver_oauth)에 보관, 대상 캘린더 "익일통합as".
+- 캘린더 변경: 관리 탭 → "네이버 캘린더 ID"에 그 캘린더의 공개 설정 URL(naver.me/…)을 붙여넣으면 자동 변환.
+- **재연동이 필요할 때** (연동 계정 비밀번호 변경, 토큰 만료 ~1년, "네이버만 안 올라감" 증상):
+  아래 주소로 브라우저에서 로그인·동의 한 번이면 끝 — "연동 완료 ✓" 알림 확인.
+  https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=V_m8cXZT2YjdGqAJyssK&redirect_uri=https%3A%2F%2Ffirstoa-inspection-finder-mg.vercel.app%2F&state=firstoa
