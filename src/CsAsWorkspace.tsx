@@ -562,10 +562,16 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     // 서비스접수에서 넘어온 일정이면 처리 상태를 접수 리스트에도 반영
     // 접수 → (배정) 진행중 → (완료) 완료 — 배정 해제·완료 취소는 다시 접수로
     if (changed && before && changed.receptionId && changed.status !== before.status) {
-      const mapped = changed.status === "완료" ? "완료" : changed.status === "배정" ? "진행중" : "접수";
-      // 완료면 처리 시각·처리자(배정 담당)도 접수 리스트에 남긴다 — 원격의 처리완료 열과 대칭
+      // 같은 접수에 티켓이 여러 개면(재방문 등) 최고 단계로 집계 —
+      // B 티켓의 배정 해제가 A 티켓의 완료를 "접수"로 되돌리는 사고 방지
+      const mappedOf = (st: string) => (st === "완료" ? "완료" : st === "배정" ? "진행중" : "접수");
+      const rank: Record<string, number> = { 완료: 2, 진행중: 1, 접수: 0 };
+      const siblings = next.filter((t) => t.receptionId === changed.receptionId);
+      const mapped = siblings.map((t) => mappedOf(t.status)).reduce((a, b) => (rank[a] >= rank[b] ? a : b), "접수");
+      // 완료면 처리 시각·처리자(완료시킨 티켓의 담당)도 접수 리스트에 남긴다 — 원격의 처리완료 열과 대칭
+      const doneTicket = siblings.find((t) => t.status === "완료") || changed;
       const done = mapped === "완료"
-        ? { at: new Date().toISOString(), by: changed.assignee || author || "" }
+        ? { at: new Date().toISOString(), by: doneTicket.assignee || author || "" }
         : { at: null, by: "" };
       void setServiceReceptionStatus(changed.receptionId, mapped, done).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
       // 접수 시트 BD열(처리완료) 기입 — 완료/익일은 표기, 완료·익일에서 되돌리면 "-"

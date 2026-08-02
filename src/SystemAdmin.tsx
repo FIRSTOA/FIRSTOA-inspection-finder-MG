@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { GAS_GET_URL } from "./api";
 import PortalSelect from "./PortalSelect";
 
@@ -12,7 +12,7 @@ import PortalSelect from "./PortalSelect";
  */
 type ConfigRow = { key: string; value: string };
 type RoomRow = { category: string; region: string; room: string };
-type SheetJob = { id: string; category?: string; status?: string; created_at?: string; error?: string; message?: string };
+type SheetJob = { id: string; category?: string; sheet_status?: string; created_at?: string; last_error?: string; attempts?: number; sheet_row?: number | null };
 // First-DATA GAS(action=adminstatus)가 주는 큐·수집함 상태 — 옛 웹 콘솔에서 이식
 type GasStatus = {
   ok?: boolean;
@@ -364,12 +364,20 @@ export default function SystemAdmin() {
         </div>
         <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
           {jobs.map((job) => {
-            const failed = /fail|error/i.test(String(job.status || "")) || !!job.error;
+            const state = job.sheet_status === "synced" ? "완료" : job.sheet_status === "failed" ? "실패" : "대기";
+            const tone = state === "완료" ? "bg-emerald-50 text-emerald-700" : state === "실패" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800";
             return (
               <div key={job.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${failed ? "bg-rose-100 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{job.status || (failed ? "실패" : "완료")}</span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${tone}`}>{state}{job.attempts ? ` ${job.attempts}회` : ""}</span>
                 <span className="w-32 shrink-0 truncate text-xs font-bold text-slate-600">{job.category || "-"}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-500" title={job.error || job.message || ""}>{job.error || job.message || "-"}</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-500" title={job.last_error || ""}>{job.last_error || (state === "완료" ? `행 ${job.sheet_row ?? "-"}` : "-")}</span>
+                {state !== "완료" && (
+                  <button type="button" disabled={busy === `retry-${job.id}`}
+                    onClick={() => { void (async () => { setBusy(`retry-${job.id}`); try { await invokeEdgeFunction("field-sheet-sync", { jobId: job.id }); await load(); } catch { /* 결과는 목록 갱신으로 확인 */ } finally { setBusy(""); } })(); }}
+                    className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40">
+                    {busy === `retry-${job.id}` ? "실행 중…" : "다시 실행"}
+                  </button>
+                )}
                 <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-slate-400">{String(job.created_at || "").slice(5, 16).replace("T", " ")}</span>
               </div>
             );

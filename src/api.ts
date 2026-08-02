@@ -990,12 +990,21 @@ export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, ex
 }
 
 // 복합기 AS 완료 → 접수 시트 BD열(처리완료)에 행 갱신으로 기입. 퍼스트순으로 행 검증.
+/** 처리값 원자 병합 — 동시 저장 시 상대 필드를 지우지 않는다 (reception-handling-merge.sql) */
+export async function mergeReceptionHandling(id: string, meta: Record<string, string>, status?: string): Promise<void> {
+  await rpc<null>("merge_reception_handling", { p_id: id, p_meta: meta, ...(status ? { p_status: status } : {}) });
+}
+
 export async function sendReceptionCopierCompleteJob(input: { author: string; vendor: string; firstNo: string; sheetRow: number | null; doneText: string }): Promise<void> {
   const id = crypto.randomUUID();
-  // 행번호가 있으면 그 행(퍼스트순 검증), 없으면(과거 접수) 퍼스트순으로 최신 행을 찾아 갱신
-  const target = input.sheetRow
-    ? { _updateRow: String(input.sheetRow), _updateKeyHeader: "퍼스트순", _updateKeyValue: input.firstNo }
-    : { _findKeyHeader: "퍼스트순", _findKeyValue: input.firstNo };
+  if (!input.sheetRow && !input.firstNo.trim()) return; // 갱신 대상 특정 불가 — 잡을 만들어봤자 실패만 쌓인다
+  // 갱신 전용: 행번호 검증이 실패하면 퍼스트순으로 아래→위 검색해 갱신하고,
+  // 그래도 못 찾으면 실패로 끝낸다 — 어떤 경우에도 새 행(유령 행)을 만들지 않는다
+  const target = {
+    ...(input.sheetRow ? { _updateRow: String(input.sheetRow), _updateKeyHeader: "퍼스트순", _updateKeyValue: input.firstNo } : {}),
+    _updateOnly: "1",
+    ...(input.firstNo.trim() ? { _findKeyHeader: "퍼스트순", _findKeyValue: input.firstNo } : {}),
+  };
   await enqueueFieldSheetSyncJob({
     id, category: "reception_copier", author: input.author.trim(), vendor: input.vendor.trim(), sourceText: "",
     payload: { data: { firstNo: input.firstNo, complete: input.doneText, ...target } },

@@ -6,8 +6,8 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
-import { selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
-import { sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
+import { getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
 import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
@@ -312,7 +312,11 @@ export default function ServiceReception({ author }: { author: string }) {
   const sheetChainRef = useRef<Record<string, Promise<number | null>>>({});
   const runSheetWrite = (id: string, task: (target: number | null) => Promise<number | null>) => {
     const previous = sheetChainRef.current[id] ?? Promise.resolve<number | null>(null);
-    const next = previous.then((target) => task(target)).catch(() => null);
+    const next = previous.then((target) => task(target)).catch((e) => {
+      // 체인은 계속 살리되 실패는 반드시 알린다 — 잡은 큐에 남아 10분 주기 자동 재시도 대상
+      notify(`접수시트 반영 실패: ${(e as Error).message}\n(10분 내 자동 재시도 · 관리 탭에서 즉시 재실행 가능)`, "error");
+      return null;
+    });
     sheetChainRef.current[id] = next;
     return next;
   };
@@ -340,27 +344,34 @@ export default function ServiceReception({ author }: { author: string }) {
     });
   };
 
+  const stampBusyRef = useRef<Set<string>>(new Set()); // 빠른 스탬프(▶시작/■끝) 중복 클릭 방지
   const saveHandling = async (row: ServiceReceptionRow, extra: Record<string, string> = {}, silent = false) => {
+    if (stampBusyRef.current.has(row.id) || handlingBusyId === row.id) return; // 같은 건 저장이 진행 중이면 무시
     const meta = { ...handlingOf(row), ...extra };
     if (Object.keys(extra).length) patchHandling(row, extra);   // 시각 기록은 즉시 화면에 반영
-    if (!silent) setHandlingBusyId(row.id);
+    if (silent) stampBusyRef.current.add(row.id);
+    else setHandlingBusyId(row.id);
     try {
       // 시작 → 진행중, 끝(또는 처리완료) → 완료 — 접수 리스트 상태가 실시간으로 따라온다
       const nextStatus = meta.result === "처리완료" || meta.end ? "완료" : meta.start ? "진행중" : row.status;
-      await updateServiceReception(row.id, { remote_meta: meta, ...(nextStatus !== row.status ? { status: nextStatus } : {}) });
-      // 시트는 "처리 저장"에서 한 번만 반영한다. 시작·종료 스탬프까지 매번 보내면
-      // 웹훅 지연(5~15초)이 겹쳐 서로 다른 행이 만들어지고 체감도 느려진다.
-      if (!silent) syncRemoteSheet(row, meta);
+      // 여러 명이 같은 건을 만질 수 있으므로 통째 덮어쓰기 대신 원자 병합(RPC) —
+      // 빈 값(안 건드린 칸)은 보내지 않아 상대가 저장한 필드를 지우지 않는다
+      const metaPatch = Object.fromEntries(Object.entries(meta).filter(([, v]) => String(v ?? "").trim() !== ""));
+      await mergeReceptionHandling(row.id, metaPatch, nextStatus !== row.status ? nextStatus : undefined);
+      // 빠른 스탬프도 시트에 즉시 반영 — 같은 접수의 시트 작업은 runSheetWrite가 한 줄로 세우고,
+      // 갱신 전용(updateOnly)이라 행이 겹쳐도 새 행이 생기지 않는다 (앱 완료·시트 공백 사고 방지)
+      syncRemoteSheet(row, meta);
       if (!silent) {
         setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
-        notify("처리 저장 완료 — 시트에는 몇 초 내 반영됩니다 ✓");
+        notify("처리 저장 완료 — 시트 반영은 백그라운드 진행 (실패 시 알림) ✓");
         await loadList(listDate, listPeriod);
         void loadRemoteQueue();
       }
     } catch (e) {
       notify(`처리 저장 실패: ${(e as Error).message}`, "error");
     } finally {
-      if (!silent) setHandlingBusyId("");
+      if (silent) stampBusyRef.current.delete(row.id);
+      else setHandlingBusyId("");
     }
   };
 
@@ -633,7 +644,7 @@ export default function ServiceReception({ author }: { author: string }) {
           }
           return result.row ?? null;
         });
-        return ` · ${message}`;
+        return message ? ` · ${message}` : " · 접수시트 반영 대기 (자동 재시도)";
       } catch (e) {
         return ` · 시트 기입 실패(${(e as Error).message})`;
       }
@@ -687,7 +698,8 @@ export default function ServiceReception({ author }: { author: string }) {
       sheetRowTargetRef.current = rowId;
       let scheduled = false;
       if (scheduleToo && type !== "원격이관") {
-        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 접수 저장은 유효 */ }
+        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); }
+        catch (e) { notify(`일정 등록 실패 — 접수는 저장됨. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
       const sheetPending = isRemoteType ? (custKind === "기존" && !!firstNo.trim()) : (custKind === "신규" || !!firstNo.trim());
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
@@ -722,7 +734,8 @@ export default function ServiceReception({ author }: { author: string }) {
       if (rowId) await updateServiceReception(rowId, { status: "전송완료", sent_room: room });
       let scheduled = false;
       if (scheduleToo && rowId) {
-        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); } catch { /* 일정 등록 실패해도 전송은 유효 */ }
+        try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); }
+        catch (e) { notify(`일정 등록 실패 — 전송·저장은 완료. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
       const sheetPending = type === "복합기 AS" && (custKind === "신규" || !!firstNo.trim());  // 전송 경로는 복합기 AS 전용
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
@@ -741,7 +754,13 @@ export default function ServiceReception({ author }: { author: string }) {
   const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address">, confirmDup: boolean) => {
     const today = kstDate();
     const vendor = cleanVendorName(row.vendor);
-    if (confirmDup) {
+    // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지)
+    const existing = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}&limit=1`).catch(() => []);
+    if (existing.length) {
+      if (!confirmDup) return true; // 자동 등록: 이미 있으니 그대로 성공 처리
+      if (!window.confirm("이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)")) return false;
+    }
+    if (confirmDup && !existing.length) {
       const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
       if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
     }
@@ -754,6 +773,20 @@ export default function ServiceReception({ author }: { author: string }) {
       issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
     }, "id");
+    // 네이버 캘린더 미러 등록 (NAVER_CALENDAR_ENABLED=true + Secrets 설정 시에만 동작 — 실패해도 일정엔 영향 없음)
+    void (async () => {
+      try {
+        const cfg = await getConfig();
+        if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
+        await invokeEdgeFunction("naver-calendar-push", {
+          title: `[AS] ${vendor}`,
+          date: today,
+          time: kstNowHM(),
+          location: row.address || "",
+          description: [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : "", "웹앱 일정리스트가 원본입니다 — 변경·취소는 웹앱에서"].filter(Boolean).join("\n"),
+        });
+      } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
+    })();
     return true;
   };
 

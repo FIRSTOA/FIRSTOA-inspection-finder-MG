@@ -47,13 +47,13 @@ export default function AdminHub({ author }: { author: string }) {
         const [members, config, jobs] = await Promise.all([
           selectRows<{ id: string }>("cs_members", "select=id&active=eq.true"),
           selectRows<{ key: string; value: string }>("app_config", "select=key,value"),
-          selectRows<{ status?: string; error?: string }>("field_sheet_sync_jobs", "select=status,error&order=created_at.desc&limit=20").catch(() => []),
+          selectRows<{ sheet_status?: string; last_error?: string }>("field_sheet_sync_jobs", "select=sheet_status,last_error&order=created_at.desc&limit=20").catch(() => []),
         ]);
         if (!alive) return;
         const on = (key: string) => /^(true|1|on|y)$/i.test(config.find((row) => row.key === key)?.value || "");
         setSummary({
           members: members.length,
-          sheetFails: jobs.filter((job) => /fail|error/i.test(String(job.status || "")) || !!job.error).length,
+          sheetFails: jobs.filter((job) => job.sheet_status === "failed" || (job.sheet_status === "pending" && !!job.last_error)).length,
           kakaoOn: on("FIELD_KAKAO_SEND_ENABLED"),
           sheetOn: on("FIELD_SHEET_SYNC_ENABLED"),
           testMode: on("TEST_MODE") || on("FIELD_SHEET_TEST_MODE"),

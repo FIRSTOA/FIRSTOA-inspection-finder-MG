@@ -128,49 +128,103 @@ async function enrichComplaintPayload(input: { sourceText: string; data: Record<
   }
 }
 
+const MAX_ATTEMPTS = 5; // 이 횟수 도달 시 sheet_status='failed' — "처리 중"과 "영구 실패"를 구분한다
+
+type JobRow = Record<string, unknown> & { id: string; category: string; attempts?: number; source_text?: string; author?: string; _dupKey?: string };
+
+function makeEnv() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceKey) throw new Error("Supabase 서비스 키 설정이 없습니다.");
+  return {
+    rest: `${supabaseUrl}/rest/v1`,
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+    webhookUrl: Deno.env.get("FIELD_SHEETS_WEBHOOK_URL") || "",
+    webhookSecret: Deno.env.get("FIELD_SHEETS_WEBHOOK_SECRET") || "",
+    openAiKey: Deno.env.get("OPENAI_API_KEY") || "",
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
 
   try {
-    const { jobId } = await req.json();
+    const { jobId, action } = await req.json().catch(() => ({}));
+
+    // 배치 재시도 모드 (크론/관리자): 3분 이상 지난 pending 잡을 오래된 순으로 처리.
+    // 3분 유예는 접수 직후의 직접 호출과 겹쳐 이중 기입되는 것을 막는다.
+    if (!jobId && action === "retry_pending") {
+      const env = makeEnv();
+      const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+      const listRes = await fetch(
+        `${env.rest}/field_sheet_sync_jobs?sheet_status=eq.pending&attempts=lt.${MAX_ATTEMPTS}&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&limit=10&select=*`,
+        { headers: env.headers },
+      );
+      const pending: JobRow[] = await listRes.json().catch(() => []);
+      const results: Array<{ id: string; status: string; error?: string }> = [];
+      for (const job of pending) {
+        // 클레임: attempts가 그대로일 때만 +1 — 동시에 도는 다른 배치·직접 호출이 잡으면 0행 갱신되어 건너뛴다
+        const claimRes = await fetch(
+          `${env.rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}&attempts=eq.${Number(job.attempts || 0)}&sheet_status=eq.pending`,
+          { method: "PATCH", headers: { ...env.headers, Prefer: "return=representation" }, body: JSON.stringify({ attempts: Number(job.attempts || 0) + 1 }) },
+        );
+        const claimed = await claimRes.json().catch(() => []);
+        if (!Array.isArray(claimed) || !claimed.length) { results.push({ id: job.id, status: "skipped_claimed" }); continue; }
+        try {
+          const outcome = await processJob_(claimed[0] as JobRow, env);
+          results.push({ id: job.id, status: outcome.status });
+        } catch (jobError) {
+          results.push({ id: job.id, status: "failed", error: jobError instanceof Error ? jobError.message : String(jobError) });
+        }
+      }
+      return Response.json({ ok: true, processed: results.length, results }, { headers: jsonHeaders });
+    }
+
     if (!jobId) return Response.json({ error: "jobId가 필요합니다." }, { status: 400, headers: jsonHeaders });
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const webhookUrl = Deno.env.get("FIELD_SHEETS_WEBHOOK_URL") || "";
-    const webhookSecret = Deno.env.get("FIELD_SHEETS_WEBHOOK_SECRET") || "";
-    const openAiKey = Deno.env.get("OPENAI_API_KEY") || "";
-    if (!supabaseUrl || !serviceKey) throw new Error("Supabase 서비스 키 설정이 없습니다.");
-
-    const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
-    const rest = `${supabaseUrl}/rest/v1`;
-    const jobRes = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(jobId)}&select=*`, { headers });
+    const env = makeEnv();
+    const jobRes = await fetch(`${env.rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(jobId)}&select=*`, { headers: env.headers });
     const jobs = await jobRes.json();
     const job = jobs[0];
     if (!job) return Response.json({ error: "동기화 작업을 찾지 못했습니다." }, { status: 404, headers: jsonHeaders });
     if (job.sheet_status === "synced") return Response.json({ ok: true, status: "already_synced", row: job.sheet_row }, { headers: jsonHeaders });
 
-    // 실패 시 last_error/attempts를 job에 남긴다 — 예전엔 실패가 어디에도 기록되지 않아 영구 pending으로 방치됐다.
-    const recordFailure = async (message: string) => {
-      await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
-        method: "PATCH",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({ last_error: message.slice(0, 500), attempts: Number(job.attempts || 0) + 1 }),
-      }).catch(() => {});
-    };
+    const outcome = await processJob_(job, env);
+    return Response.json({ ok: true, ...outcome }, { headers: jsonHeaders });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
+  }
+});
 
-    try {
+// 단일 잡 처리 — 성공 시 synced 마킹, 실패 시 last_error/attempts 기록(+한도 도달 시 failed 마킹) 후 throw
+async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promise<{ status: string; row?: number | null; sheet?: string }> {
+  const { rest, headers, webhookUrl, webhookSecret, openAiKey } = env;
+  // 실패 시 last_error/attempts를 job에 남긴다 — 예전엔 실패가 어디에도 기록되지 않아 영구 pending으로 방치됐다.
+  const recordFailure = async (message: string) => {
+    const nextAttempts = Number(job.attempts || 0) + 1;
+    await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+      method: "PATCH",
+      headers: { ...headers, Prefer: "return=minimal" },
+      body: JSON.stringify({
+        last_error: message.slice(0, 500),
+        attempts: nextAttempts,
+        ...(nextAttempts >= MAX_ATTEMPTS ? { sheet_status: "failed" } : {}),
+      }),
+    }).catch(() => {});
+  };
+
+  try {
 
     const configRes = await fetch(`${rest}/app_config?select=key,value`, { headers });
     const configRows = await configRes.json();
     const config = Object.fromEntries((configRows || []).map((row: { key: string; value: string }) => [row.key, row.value]));
     if (!enabled(config.FIELD_SHEET_SYNC_ENABLED)) {
-      return Response.json({ ok: true, status: "held" }, { headers: jsonHeaders });
+      return { status: "held" };
     }
     if (!webhookUrl || !webhookSecret) throw new Error("시트 웹훅 Secret 설정이 없습니다.");
 
-    const sourcePayload = job.payload && typeof job.payload === "object" ? job.payload : {};
+    const sourcePayload = (job.payload && typeof job.payload === "object" ? job.payload : {}) as Record<string, unknown> & { data?: Record<string, unknown> };
     const sourceData = sourcePayload.data && typeof sourcePayload.data === "object" ? sourcePayload.data : {};
     const sheetValues = job.category === "expansion_copier"
       ? await enrichCopierPayload({ sourceText: job.source_text || "", data: sourceData, author: job.author || "", apiKey: openAiKey })
@@ -211,20 +265,17 @@ Deno.serve(async (req) => {
     if (job.category === "complaint" && Object.keys(sheetValues).length && job._dupKey) {
       const dbPatch: Record<string, unknown> = { ...sheetValues };
       if (String(sourceData["재발방지"] || "").trim()) delete dbPatch["재발방지"];
-      const backfillRes = await fetch(`${rest}/bulman?_dupKey=eq.${encodeURIComponent(job._dupKey)}`, {
+      const backfillRes = await fetch(`${rest}/bulman?_dupKey=eq.${encodeURIComponent(String(job._dupKey))}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify(dbPatch),
       }).catch(() => null);
       if (backfillRes && !backfillRes.ok) console.error(`bulman AI 역기입 실패(${backfillRes.status}) job=${job.id}`);
     }
-    return Response.json({ ok: true, status: "synced", row: sheetData.row || null, sheet: sheetData.sheet || "" }, { headers: jsonHeaders });
-    } catch (innerError) {
-      const message = innerError instanceof Error ? innerError.message : String(innerError);
-      await recordFailure(message);
-      throw innerError;
-    }
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
+    return { status: "synced", row: sheetData.row || null, sheet: sheetData.sheet || "" };
+  } catch (innerError) {
+    const message = innerError instanceof Error ? innerError.message : String(innerError);
+    await recordFailure(message);
+    throw innerError;
   }
-});
+}
