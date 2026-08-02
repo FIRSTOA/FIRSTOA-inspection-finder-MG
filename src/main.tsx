@@ -4,6 +4,19 @@ import './index.css'
 import App from './App.tsx'
 import AlbumView from './AlbumView.tsx'
 
+// 네이버 캘린더 최초 연동: 네이버 로그인 동의 후 ?code=..&state=firstoa 로 돌아오면
+// 코드를 서버(엣지 함수)로 넘겨 토큰 교환·보관까지 자동 처리 — 주소창 복사 불필요
+const naverAuthParams = new URLSearchParams(window.location.search)
+if (naverAuthParams.get('state') === 'firstoa' && naverAuthParams.get('code')) {
+  const naverCode = naverAuthParams.get('code') || ''
+  window.history.replaceState({}, '', window.location.pathname)
+  void import('./supabase').then(({ invokeEdgeFunction }) =>
+    invokeEdgeFunction('naver-calendar-push', { action: 'exchange', code: naverCode })
+      .then(() => window.alert('네이버 캘린더 연동 완료 ✓\n이제 일정 등록 시 네이버 캘린더에도 자동으로 올라갑니다.'))
+      .catch((e) => window.alert(`네이버 캘린더 연동 실패: ${(e as Error).message}`)),
+  )
+}
+
 const checkForNewBuild = async () => {
   if (document.visibilityState !== 'visible') return
   try {

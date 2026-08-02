@@ -57,6 +57,31 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+
+    // 최초 연동: 웹앱이 네이버 로그인 후 받은 code를 넘기면 토큰 교환 → refresh token을
+    // service_role 전용 테이블(naver_oauth)에 저장. 사용자가 주소창을 복사할 필요가 없다.
+    if (body.action === "exchange") {
+      const clientId = Deno.env.get("NAVER_CLIENT_ID") || "";
+      const clientSecret = Deno.env.get("NAVER_CLIENT_SECRET") || "";
+      if (!clientId || !clientSecret) return Response.json({ error: "NAVER_CLIENT_ID/SECRET 미설정" }, { status: 400, headers: jsonHeaders });
+      const code = String(body.code || "").trim();
+      if (!code) return Response.json({ error: "code가 필요합니다." }, { status: 400, headers: jsonHeaders });
+      const tokenRes = await fetch(
+        `https://nid.naver.com/oauth2.0/token?grant_type=authorization_code&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&code=${encodeURIComponent(code)}&state=firstoa`,
+      );
+      const token = await tokenRes.json().catch(() => ({}));
+      if (!token.refresh_token) return Response.json({ error: `토큰 교환 실패: ${token.error_description || token.error || tokenRes.status}` }, { status: 400, headers: jsonHeaders });
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      const saveRes = await fetch(`${supabaseUrl}/rest/v1/naver_oauth?on_conflict=id`, {
+        method: "POST",
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify([{ id: 1, refresh_token: token.refresh_token, updated_at: new Date().toISOString() }]),
+      });
+      if (!saveRes.ok) return Response.json({ error: `토큰 저장 실패(${saveRes.status})` }, { status: 500, headers: jsonHeaders });
+      return Response.json({ ok: true, status: "linked" }, { headers: jsonHeaders });
+    }
+
     const title = String(body.title || "").trim();
     const date = String(body.date || "").trim(); // YYYY-MM-DD
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -65,14 +90,21 @@ Deno.serve(async (req) => {
 
     const clientId = Deno.env.get("NAVER_CLIENT_ID") || "";
     const clientSecret = Deno.env.get("NAVER_CLIENT_SECRET") || "";
-    const refreshToken = Deno.env.get("NAVER_REFRESH_TOKEN") || "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+    // refresh token: 연동 테이블(naver_oauth) 우선, 없으면 Secrets 폴백
+    let refreshToken = Deno.env.get("NAVER_REFRESH_TOKEN") || "";
+    if (supabaseUrl && serviceKey) {
+      const tokRes = await fetch(`${supabaseUrl}/rest/v1/naver_oauth?id=eq.1&select=refresh_token`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      const tokRows = await tokRes.json().catch(() => []);
+      if (tokRows?.[0]?.refresh_token) refreshToken = tokRows[0].refresh_token;
+    }
     if (!clientId || !clientSecret || !refreshToken) {
       return Response.json({ ok: true, status: "not_configured" }, { headers: jsonHeaders }); // 미설정 시 조용히 통과
     }
-
-    // 서버측 토글 확인 (app_config)
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     if (supabaseUrl && serviceKey) {
       const cfgRes = await fetch(`${supabaseUrl}/rest/v1/app_config?key=eq.NAVER_CALENDAR_ENABLED&select=value`, {
         headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
