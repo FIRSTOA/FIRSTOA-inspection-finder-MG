@@ -65,13 +65,15 @@ function appendFieldSheetRow_(request) {
 
   // 갱신 모드: 접수 때 만든 행에 처리 결과(시작·종료·처리여부 등)를 나중에 채운다.
   // 행 번호가 밀렸을 수 있으니 키 열(순)이 일치할 때만 갱신하고, 다르면 새 행으로 추가한다.
+  var norm_ = function (v) { return String(v == null ? "" : v).replace(/[\s,]/g, ""); }; // 천단위 콤마·공백 무시
+  var updateOnly = String(data["_updateOnly"] || "") === "1"; // 갱신 전용 — 무슨 일이 있어도 새 행 추가 금지
   var updateRow = Number(data["_updateRow"] || 0);
   if (updateRow > headerRow && updateRow <= sheet.getLastRow()) {
     var keyHeader = String(data["_updateKeyHeader"] || "");
     var keyValue = String(data["_updateKeyValue"] || "");
     // "순"처럼 헤더가 중복된 시트가 있어 열 번호를 직접 받는 쪽을 우선한다 (원격 탭은 M열=13)
     var keyCol = Number(data["_updateKeyColumn"] || 0) || (keyHeader ? headers.indexOf(keyHeader) + 1 : 0);
-    var keyOk = !keyHeader || (keyCol > 0 && String(sheet.getRange(updateRow, keyCol).getDisplayValue()).trim() === keyValue.trim());
+    var keyOk = !keyHeader || (keyCol > 0 && norm_(sheet.getRange(updateRow, keyCol).getDisplayValue()) === norm_(keyValue));
     if (keyOk) {
       headers.forEach(function (header, index) {
         var value = fieldValue_(request.category, header, index + 1, data, request, labelValues);
@@ -91,7 +93,7 @@ function appendFieldSheetRow_(request) {
     if (findCol > 0 && sheet.getLastRow() > headerRow) {
       var colValues = sheet.getRange(headerRow + 1, findCol, sheet.getLastRow() - headerRow, 1).getDisplayValues();
       for (var fr = colValues.length - 1; fr >= 0; fr--) {
-        if (String(colValues[fr][0]).trim() === findValue) {
+        if (norm_(colValues[fr][0]) === norm_(findValue)) {
           var foundRow = headerRow + 1 + fr;
           headers.forEach(function (header, index) {
             var value = fieldValue_(request.category, header, index + 1, data, request, labelValues);
@@ -104,6 +106,8 @@ function appendFieldSheetRow_(request) {
     }
     throw new Error("찾기 갱신 실패: " + (findHeader || findCol) + "=" + findValue + " 행 없음");
   }
+  // 갱신 전용인데 여기까지 왔다 = 대상 행을 못 찾음 — 새 행을 만들면 중복 행 사고가 나므로 실패 처리
+  if (updateOnly) throw new Error("갱신 대상 행을 찾지 못했습니다 (새 행 추가 금지)");
 
   const previousRow = Math.max(headerRow + 1, sheet.getLastRow());
   sheet.insertRowAfter(previousRow);

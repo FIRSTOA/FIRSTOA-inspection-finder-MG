@@ -1018,7 +1018,7 @@ export type RemoteReceptionSheetInput = {
 };
 
 // updateRow를 주면 접수 때 만든 그 행을 갱신한다 (처리 결과 보완). 없으면 새 행 추가.
-export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInput, updateRow?: number | null): Promise<{ message: string; row: number | null }> {
+export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInput, updateRow?: number | null, opts?: { updateOnly?: boolean }): Promise<{ message: string; row: number | null }> {
   const id = crypto.randomUUID();
   const data: Record<string, string> = { ...input };
   if (updateRow) {
@@ -1031,6 +1031,13 @@ export async function sendReceptionRemoteSheetJob(input: RemoteReceptionSheetInp
       data["_updateKeyHeader"] = "상호";        // 신규(순번 없음)는 상호로 검증
       data["_updateKeyValue"] = input.vendor;
     }
+  }
+  if (opts?.updateOnly) {
+    // 처리 갱신: 행번호가 없거나 검증에 실패해도 절대 새 행을 만들지 않는다.
+    // 순번(없으면 상호)으로 아래→위 검색해 가장 최근 행을 갱신 — 못 찾으면 실패(재시도 대기).
+    data["_updateOnly"] = "1";
+    if (input.leaseNo) { data["_findKeyHeader"] = "순"; data["_findKeyColumn"] = "13"; data["_findKeyValue"] = input.leaseNo; }
+    else { data["_findKeyHeader"] = "상호"; data["_findKeyValue"] = input.vendor; }
   }
   await enqueueFieldSheetSyncJob({
     id, category: "reception_remote", author: input.author.trim(), vendor: input.vendor.trim(),

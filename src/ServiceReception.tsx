@@ -316,7 +316,7 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const syncRemoteSheet = (row: ServiceReceptionRow, meta: Record<string, string>) => {
-    if (!row.lease_no && !row.sheet_row) return; // 신규는 접수 때 만든 행번호로 갱신(상호 검증)
+    if (!row.lease_no && !row.sheet_row && !row.vendor) return;
     void runSheetWrite(row.id, async (chained) => {
       // 앞 작업이 알려준 행 → 화면에 있는 행 → DB에 저장된 행 순으로 대상을 찾는다
       let target = chained ?? row.sheet_row ?? null;
@@ -329,7 +329,7 @@ export default function ServiceReception({ author }: { author: string }) {
         symptom: row.symptom || "", extraCount: meta.extraCount || "", handled: meta.handled || "",
         linked: meta.linked || "",
         ...(() => { const parts = receiptParts(row.created_at); return { receiptDate: parts.date, receiptTime: parts.time, receiptAuthor: row.author }; })(),
-      }, target);
+      }, target, { updateOnly: true });
       if (sheetRow && sheetRow !== target) {
         void updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
         setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, sheet_row: sheetRow } : item)));
@@ -351,6 +351,7 @@ export default function ServiceReception({ author }: { author: string }) {
       if (!silent) syncRemoteSheet(row, meta);
       if (!silent) {
         setHandling((current) => { const next = { ...current }; delete next[row.id]; return next; });
+        notify("처리 저장 완료 — 시트에는 몇 초 내 반영됩니다 ✓");
         await loadList(listDate, listPeriod);
         void loadRemoteQueue();
       }
@@ -850,6 +851,7 @@ export default function ServiceReception({ author }: { author: string }) {
     try {
       await updateServiceReception(row.id, { deleted: true });
       setListRows((current) => current.filter((r) => r.id !== row.id));
+      setRemoteQueue((current) => current.filter((r) => r.id !== row.id)); // 이월분에서도 즉시 제거
     } catch (e) {
       notify(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`, "error");
     }
@@ -890,7 +892,7 @@ export default function ServiceReception({ author }: { author: string }) {
       if (r.type === "IT" || r.type === "원격이관") {
         if (r.status === "원격완료" || r.status === "완료") return statusFilter === "완료";
         const meta = handling[r.id] ?? { ...(r.remote_meta || {}) };
-        const state = meta.result || meta.end ? "완료" : meta.start ? "진행중" : "접수";
+        const state = meta.result || meta.end ? "완료" : meta.start || r.status === "진행중" ? "진행중" : "접수";
         return state === statusFilter;
       }
       const state = r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
@@ -923,7 +925,8 @@ export default function ServiceReception({ author }: { author: string }) {
   const displayStatusOf = (row: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
     if (row.type === "IT" || row.type === "원격이관") {
       const state = remoteStateOf(row);
-      return state === "대기" ? "접수" : state;
+      if (state === "대기") return row.status === "진행중" ? "진행중" : "접수"; // IT 방문(일정 배정) 경로 반영
+      return state;
     }
     return row.status === "완료" ? "완료" : row.status === "진행중" ? "진행중" : "접수";
   };
@@ -1027,17 +1030,18 @@ export default function ServiceReception({ author }: { author: string }) {
                       </div>
                     );
                   })()}
+                  {/* 한 줄: 액션(좌) + 구분 변경(우) — 두 줄로 갈라져 여백이 남던 배치 정리 */}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-black text-slate-400">구분 변경</span>
-                    {(["복합기 AS", "원격이관", "IT"] as const).map((t) => (
-                      <button key={t} type="button" disabled={typeBusyId === row.id || row.type === t} onClick={() => void changeType(row, t)}
-                        className={`rounded-full border px-3 py-1 text-[10px] font-black transition ${row.type === t ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t}</button>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">원본 미리보기</button>}
                     {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-full border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-[11px] font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
                     <button type="button" onClick={() => void removeReception(row)} className="rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-[11px] font-black text-rose-600 transition hover:bg-rose-100">삭제</button>
+                    <span className="ml-auto flex flex-wrap items-center gap-1">
+                      <span className="text-[10px] font-black text-slate-400">구분</span>
+                      {(["복합기 AS", "원격이관", "IT"] as const).map((t) => (
+                        <button key={t} type="button" disabled={typeBusyId === row.id || row.type === t} onClick={() => void changeType(row, t)}
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black transition ${row.type === t ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t === "복합기 AS" ? "복합기" : t === "원격이관" ? "원격" : "IT"}</button>
+                      ))}
+                    </span>
                   </div>
                 </div>}
               </div>
