@@ -25,6 +25,7 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "FIELD_SHEET_SYNC_ENABLED", label: "시트 동기화", desc: "끄면 FIELD 기록이 구글시트에 기입되지 않습니다." },
   { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 전송이 아래 테스트 방으로만 갑니다.", danger: true },
   { key: "FIELD_SHEET_TEST_MODE", label: "시트 테스트 모드", desc: "켜면 시트 기입이 테스트 탭으로만 갑니다.", danger: true },
+  { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
 ];
 
 const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기"];
@@ -189,6 +190,14 @@ export default function SystemAdmin() {
               <p className="mt-0.5 text-[11px] font-semibold text-slate-400">테스트 모드에서 모든 전송이 이 방으로 갑니다.</p>
             </div>
             <input defaultValue={valueOf("TEST_ROOM")} onBlur={(e) => { if (e.target.value !== valueOf("TEST_ROOM")) void saveConfig("TEST_ROOM", e.target.value); }}
+              className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div>
+              <div className="text-sm font-black text-slate-900">네이버 캘린더 ID</div>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">비워두면 연동 계정의 기본 캘린더. 특정 캘린더에 넣으려면 숫자 ID를 입력하세요.</p>
+            </div>
+            <input defaultValue={valueOf("NAVER_CALENDAR_ID")} placeholder="defaultCalendarId" onBlur={(e) => { if (e.target.value !== valueOf("NAVER_CALENDAR_ID")) void saveConfig("NAVER_CALENDAR_ID", e.target.value.trim()); }}
               className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
         </div>
