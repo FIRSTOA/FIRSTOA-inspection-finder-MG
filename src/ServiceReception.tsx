@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send, ShieldCheck } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send } from "lucide-react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
   saveServiceReception, getServiceReceptions, updateServiceReception, getLeaseDeviceSummary,
@@ -117,8 +117,12 @@ function deptFromAddress(text: string): string {
   return ho ? ho[1] : "";
 }
 function teamFromRegion(region: string) {
-  const m = String(region || "").match(/수도권([A-D])/);
-  return (m ? m[1] : "A") as "A" | "B" | "C" | "D";
+  // "수도권C" 외에 "수도권 C" · "C지역" · "C팀" · "c" 표기도 인식.
+  // E는 일정리스트에 팀 열이 없어 A로 취급(네이버 캘린더도 9시) — E팀 규칙이 정해지면 여기서 바꾼다.
+  const a = String(region || "").toUpperCase().replace(/\s+/g, "");
+  const m = a.match(/(?:수도권)?([A-E])(?:지역|팀)?/);
+  const letter = m ? m[1] : "A";
+  return (letter === "E" ? "A" : letter) as "A" | "B" | "C" | "D";
 }
 // 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
 // 접수 당시의 시트 표기값 (접수일 "7월 31일" / 접수시각 "20:22") — 처리 단계 갱신에도 그대로 보낸다
@@ -484,7 +488,7 @@ export default function ServiceReception({ author }: { author: string }) {
       } as LeaseHit;
     }
     return {
-      거래처명: vendorName, 순: newLease.firstNo || "", 등급: newLease.grade || "", 일반전화: newLease.tel || "",
+      거래처명: vendorName, 담당지역: newLease.region || "", 순: newLease.firstNo || "", 등급: newLease.grade || "", 일반전화: newLease.tel || "",
       키맨: newLease.keyman || "", 미수개월수: newLease.misuMonths || "",
       모델명: newLease.model || "", 기종: newLease.series || "", 제조사: newLease.maker || "",
       자산번호: newLease.assetNo || "", "시리얼번호(기번)": newLease.serialNo || "", 기기상태: newLease.deviceState || "",
@@ -775,8 +779,71 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
 
+  // ---- 단계별 접수 버튼: 같은 접수를 한 번만 저장(ensureSaved)하고 각 단계를 따로 실행 ----
+  // 거래처·순번·구분이 바뀌면 새 접수로 다시 저장한다 (signature 비교)
+  const savedSigRef = useRef("");
+  const ensureSaved = async (): Promise<string> => {
+    const sig = `${vendorName}|${firstNo}|${type}|${custKind}`;
+    if (savedRowId && savedSigRef.current === sig) return savedRowId;
+    const rowId = await persist(type === "원격이관" ? "원격대기" : "접수");
+    setSavedRowId(rowId);
+    savedSigRef.current = sig;
+    sheetRowTargetRef.current = rowId;
+    void loadList(listDate, listPeriod);
+    return rowId;
+  };
+  const runStep = async (label: string, step: () => Promise<string | void>) => {
+    if (busy) return;
+    if (!vendorName) { setActionResult("업체를 선택(또는 입력)하세요."); return; }
+    setBusy(true);
+    try {
+      const note = await step();
+      setActionResult(`${label} 완료 ✓${note ? ` ${note}` : ""} — 폼 유지 중, 다음 단계를 이어서 누르거나 [전체 실행]을 쓰세요.`);
+    } catch (e) {
+      setActionResult(`${label} 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const stepSave = () => runStep("접수 저장", async () => { await ensureSaved(); });
+  const stepSheet = () => runStep("시트 기입", async () => { await ensureSaved(); return (await writeReceptionSheet()).replace(/^ · /, ""); });
+  const stepTicket = () => runStep("일정 등록", async () => {
+    const id = await ensureSaved();
+    const ok = await createTicketFromReception(formSnapshotForTicket(id), true, false); // 네이버는 별도 버튼
+    return ok ? "" : "(취소됨)";
+  });
+  const stepNaver = () => runStep("네이버 캘린더", async () => {
+    const cfg = await getConfig();
+    if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) throw new Error("관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다");
+    const id = await ensureSaved();
+    await pushNaverCalendar(formSnapshotForTicket(id));
+  });
+  const stepKakao = () => runStep("카톡 전송", async () => {
+    if (!report) throw new Error("보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요");
+    const id = await ensureSaved();
+    const res = await sendServiceReception("AS", region, report);
+    if (!res.ok) throw new Error(res.error || "전송 실패");
+    const room = String(res.message || "").replace("게시 대기: ", "");
+    await updateServiceReception(id, { status: "전송완료", sent_room: room });
+    return `— ${room}${res.testMode ? " (테스트 모드)" : ""}`;
+  });
+
   // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
-  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null }, confirmDup: boolean) => {
+  // 네이버 캘린더 등록 (단독 실행용 — 실패 시 throw). 팀 시간: A 09시 / B 12시 / C 15시 / D 18시
+  const pushNaverCalendar = async (row: Pick<ServiceReceptionRow, "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null }) => {
+    const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
+    const reportText = String(row.report_text || "").replace(/\t/g, " ");
+    const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
+    await invokeEdgeFunction("naver-calendar-push", {
+      title: firstLine || `[AS] ${cleanVendorName(row.vendor)}`,
+      date: kstDate(),
+      time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",
+      location: row.address || "",
+      description: reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n"),
+    });
+  };
+
+  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null }, confirmDup: boolean, pushNaver = true) => {
     const today = kstDate();
     const vendor = cleanVendorName(row.vendor);
     // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지)
@@ -798,25 +865,16 @@ export default function ServiceReception({ author }: { author: string }) {
       issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
     }, "id");
-    // 네이버 캘린더 미러 등록 (NAVER_CALENDAR_ENABLED=true + Secrets 설정 시에만 동작 — 실패해도 일정엔 영향 없음)
-    // 팀 구분이 캘린더에 없어 시간대로 팀을 표기하는 관행을 따른다: A 09시 / B 12시 / C 15시 / D 18시
-    void (async () => {
-      try {
-        const cfg = await getConfig();
-        if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
-        const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
-        const reportText = String(row.report_text || "").replace(/\t/g, " ");
-        // 보고양식 첫 줄 = 수기 캘린더 제목과 같은 형식 (구분 등급 모델 업체명 종료일 … 지역 … 접수일 …)
-        const firstLine = reportText.split("\n")[0]?.trim() || "";
-        await invokeEdgeFunction("naver-calendar-push", {
-          title: firstLine ? `${row.title ? `${row.title} - ` : ""}${firstLine}` : `[AS] ${vendor}`,
-          date: today,
-          time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",
-          location: row.address || "",
-          description: reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n"),
-        });
-      } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
-    })();
+    // 네이버 캘린더 미러 등록 (토글 ON + Secrets 설정 시에만 — 실패해도 일정엔 영향 없음)
+    if (pushNaver) {
+      void (async () => {
+        try {
+          const cfg = await getConfig();
+          if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
+          await pushNaverCalendar(row);
+        } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
+      })();
+    }
     return true;
   };
 
@@ -1306,6 +1364,14 @@ export default function ServiceReception({ author }: { author: string }) {
               </div>}
               {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-black text-slate-500">지역(팀)</span>
+                  {["A", "B", "C", "D", "E"].map((t) => (
+                    <button key={t} type="button" onClick={() => setNewLease({ ...newLease, region: newLease.region === `수도권${t}` ? "" : `수도권${t}` })}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-black transition ${newLease.region === `수도권${t}` ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t}</button>
+                  ))}
+                  <span className="text-[10px] font-bold text-slate-400">보고양식 지역·네이버 캘린더 시간(A09/B12/C15/D18)에 반영</span>
+                </div>
                 {NEW_LEASE_SECTIONS.map((sec) => {
                   const filled = sec.fields.filter(([key]) => (newLease[key] || "").trim()).length;
                   return (
@@ -1396,10 +1462,15 @@ export default function ServiceReception({ author }: { author: string }) {
                 {requiredItems.map(([label, ok]) => (
                   <span key={label} className={`rounded-full px-2.5 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
                 ))}
-                <span className="ml-auto flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"><ExternalLink size={15} />{type === "복합기 AS" ? "AS접수 시트" : "원격 시트"}</button>
-                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("save")} disabled={busy} className={`inline-flex items-center gap-1.5 rounded-full px-5 py-3 text-sm font-black transition disabled:opacity-40 ${type === "복합기 AS" ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "bg-blue-600 text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-blue-700"}`}><ShieldCheck size={15} />{busy ? "처리중…" : type === "원격이관" ? "원격 접수 저장" : "접수 저장"}</button>
-                  {type === "복합기 AS" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={15} />{busy ? "처리중…" : "저장 + AS방 전송"}</button>}
+                <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                  {/* 단계별 실행 — 어떤 순서로 눌러도 접수는 한 번만 저장되고(ensureSaved) 그 위에 단계가 쌓인다 */}
+                  <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-500 transition hover:border-slate-400 hover:bg-slate-50"><ExternalLink size={13} />{type === "복합기 AS" ? "시트 열기" : "원격 시트"}</button>
+                  <button type="button" onClick={() => void stepSave()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">접수 저장</button>
+                  <button type="button" onClick={() => void stepSheet()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">시트 기입</button>
+                  {type !== "원격이관" && <button type="button" onClick={() => void stepTicket()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">일정 등록</button>}
+                  {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
+                  {type === "복합기 AS" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
+                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction(type === "복합기 AS" ? "send" : "save")} disabled={busy || (type === "복합기 AS" && (!report || !isReady))} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체 실행"}</button>
                 </span>
               </div>
               {actionResult && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}
