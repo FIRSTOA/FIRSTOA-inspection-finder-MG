@@ -163,6 +163,16 @@ function appendFieldSheetRow_(request) {
   if (request.category === "reception_remote" && data["leaseNo"]) {
     try { fillRemoteLeaseValues_(sheet, row, data); } catch (fillError) { /* 수식 폴백 */ }
   }
+  // 원격 탭 A열(접수 순번): 주변 행에 복사할 수식이 없으면 비어버려서 직접 센다.
+  // 원 수식(COUNTIF B>0)은 텍스트 날짜를 못 세는 문제도 있어 "접수일이 있는 행 수"로 확정 기입.
+  if (request.category === "reception_remote") {
+    try {
+      var bValues = sheet.getRange(5, 2, row - 4, 1).getDisplayValues();
+      var seq = 0;
+      for (var bi = 0; bi < bValues.length; bi++) { if (String(bValues[bi][0]).trim() !== "") seq++; }
+      sheet.getRange(row, 1).setValue(seq);
+    } catch (seqError) { /* 순번은 보조 정보 — 실패해도 접수 기입엔 영향 없음 */ }
+  }
   SpreadsheetApp.flush();
 
   return { row, sheet: sheet.getName() };
@@ -405,17 +415,35 @@ function fillCopierLeaseValues_(sheet, row, data) {
   for (var col = 21; col <= 47; col++) targets.push(col);
 
   var idxRow = sheet.getRange(6, 1, 1, 47).getValues()[0]; // 6행 = 임대리스트 원본 열 번호
+  var out = {}; // 열 번호 → 값 (구간 일괄 기입 — 셀 단위보다 훨씬 빠름)
   targets.forEach(function (col) {
     var srcCol = Number(idxRow[col - 1] || 0);
     if (!srcCol) return;
-    var value;
     if (col === 24) { // X열: 원본열 & " / " & 다음열 (시트 수식과 동일 형식)
-      value = srcValue(srcCol) + " / " + (srcValue(srcCol + 1) || " ");
+      out[col] = srcValue(srcCol) + " / " + (srcValue(srcCol + 1) || " ");
     } else {
-      value = srcValue(srcCol);
+      out[col] = srcValue(srcCol);
     }
-    sheet.getRange(row, col).setValue(value); // 복사된 수식을 값으로 교체
   });
+  writeRowValues_(sheet, row, out);
+}
+
+/** 열번호→값 맵을 연속 구간으로 묶어 한 번에 기입 (호출 수 최소화) */
+function writeRowValues_(sheet, row, valueByCol) {
+  var cols = Object.keys(valueByCol).map(Number).sort(function (a, b) { return a - b; });
+  var start = -1, prev = -1, buffer = [];
+  var flushSegment = function () {
+    if (start < 0) return;
+    sheet.getRange(row, start, 1, buffer.length).setValues([buffer]);
+    start = -1; buffer = [];
+  };
+  cols.forEach(function (col) {
+    if (start >= 0 && col !== prev + 1) flushSegment();
+    if (start < 0) start = col;
+    buffer.push(valueByCol[col]);
+    prev = col;
+  });
+  flushSegment();
 }
 
 
@@ -425,7 +453,10 @@ function fillCopierLeaseValues_(sheet, row, data) {
  */
 function fillRemoteLeaseValues_(sheet, row, data) {
   // 원격 탭 수식(사용자 제공) 재현 — 4행 = 임대리스트 원본 열 번호:
-  //   N,O,P,Q,T,V = VLOOKUP(순)   R = 원본열 & " " & 다음열   S = VLOOKUP & " " & MID(AD행,7,3)
+  //   N O P Q T V Z AA AD AF = VLOOKUP(순)
+  //   R = 원본열 & " " & 다음열
+  //   S = VLOOKUP & " " & MID(AD값, 7, 3)   ← AD도 조회값이라 임대리스트에서 직접 계산
+  //   AC(주차)는 접수일 계산식이라 수식 유지, A(순번)는 아래에서 직접 센다
   var leaseNo = String(data["leaseNo"] || "").trim();
   if (!leaseNo) return;
   var lease = sheet.getParent().getSheetByName("임대리스트");
@@ -445,23 +476,19 @@ function fillRemoteLeaseValues_(sheet, row, data) {
     return (srcCol >= 1 && srcCol <= leaseValues.length) ? String(leaseValues[srcCol - 1]) : "";
   };
 
-  var idxRow = sheet.getRange(4, 1, 1, 22).getValues()[0]; // 4행 = 임대리스트 원본 열 번호
-  var TARGETS = [14, 15, 16, 17, 18, 19, 20, 22];          // N O P Q R S T V
-  var adText = String(sheet.getRange(row, 30).getDisplayValue() || ""); // AD열 — S 수식의 MID 원본
+  var idxRow = sheet.getRange(4, 1, 1, 32).getValues()[0]; // 4행 = 임대리스트 원본 열 번호
+  var srcOf = function (col) { return Number(idxRow[col - 1] || 0); };
+  var adText = srcOf(30) ? srcValue(srcOf(30)) : ""; // AD — S의 MID 재료이기도 하다
 
-  TARGETS.forEach(function (col) {
-    var srcCol = Number(idxRow[col - 1] || 0);
-    if (!srcCol) return;
-    var value;
-    if (col === 18) {          // R: 원본열 & " " & 다음열
-      value = srcValue(srcCol) + " " + srcValue(srcCol + 1);
-    } else if (col === 19) {   // S: VLOOKUP & " " & MID(AD,7,3)
-      value = srcValue(srcCol) + " " + adText.substring(6, 9);
-    } else {
-      value = srcValue(srcCol);
-    }
-    sheet.getRange(row, col).setValue(value); // 복사된 수식을 값으로 교체
+  var out = {}; // 열 번호 → 값 (한 번에 기입)
+  [14, 15, 16, 17, 20, 22, 26, 27, 32].forEach(function (col) { // N O P Q T V Z AA AF
+    if (srcOf(col)) out[col] = srcValue(srcOf(col));
   });
+  if (srcOf(18)) out[18] = srcValue(srcOf(18)) + " " + srcValue(srcOf(18) + 1); // R
+  if (srcOf(19)) out[19] = srcValue(srcOf(19)) + " " + adText.substring(6, 9); // S
+  if (srcOf(30)) out[30] = adText;                                              // AD
+  writeRowValues_(sheet, row, out);
 }
+
 
 
