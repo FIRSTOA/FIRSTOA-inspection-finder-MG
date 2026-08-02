@@ -1073,20 +1073,28 @@ export default function ServiceReception({ author }: { author: string }) {
     const carry = remoteQueue.filter((r) => !seen.has(r.id) && !(r.status === "원격완료" || r.status === "완료" || (r.remote_meta?.result || r.remote_meta?.end)));
     return [...carry, ...listRows];
   }, [listRows, remoteQueue]);
-  const filteredRows = useMemo(() => {
-    const byType = listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter);
-    if (statusFilter === "전체") return byType;
-    return byType.filter((r) => {
-      if (r.type === "IT" || r.type === "원격이관") {
-        if (r.status === "원격완료" || r.status === "완료") return statusFilter === "완료";
-        const meta = handling[r.id] ?? { ...(r.remote_meta || {}) };
-        const state = meta.result || meta.end ? "완료" : meta.start || r.status === "진행중" ? "진행중" : "접수";
-        return state === statusFilter;
-      }
-      const state = r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
-      return state === statusFilter;
-    });
-  }, [mergedRows, listFilter, statusFilter, handling]);
+  // 리스트 표시용 상태 (필터·카운트 공용)
+  const listStateOf = useCallback((r: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
+    if (r.type === "IT" || r.type === "원격이관") {
+      if (r.status === "원격완료" || r.status === "완료") return "완료";
+      const meta = handling[r.id] ?? { ...(r.remote_meta || {}) };
+      return meta.result || meta.end ? "완료" : meta.start || r.status === "진행중" ? "진행중" : "접수";
+    }
+    return r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
+  }, [handling]);
+  const typeFilteredRows = useMemo(
+    () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter)),
+    [mergedRows, listFilter],
+  );
+  const statusCounts = useMemo(() => {
+    const acc: Record<"접수" | "진행중" | "완료", number> = { 접수: 0, 진행중: 0, 완료: 0 };
+    typeFilteredRows.forEach((r) => { acc[listStateOf(r)] += 1; });
+    return acc;
+  }, [typeFilteredRows, listStateOf]);
+  const filteredRows = useMemo(
+    () => (statusFilter === "전체" ? typeFilteredRows : typeFilteredRows.filter((r) => listStateOf(r) === statusFilter)),
+    [typeFilteredRows, statusFilter, listStateOf],
+  );
   const isToday = listDate === kstDate();
   // 필수값은 한 배열로만 정의한다 — 카운터와 아래 체크 칩이 서로 어긋나지 않게.
   // 구분별로 실제 필요한 것만: 원격이관은 방문·제목 개념이 없고, 시트 기입엔 순번이 필요하다.
@@ -1643,7 +1651,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(state === "전체" ? "전체" : statusFilter === state ? "전체" : state)}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                   {state !== "전체" && <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />}
-                  {state}
+                  {state} {state === "전체" ? typeFilteredRows.length : statusCounts[state]}
                 </button>
               ))}
             </div>
