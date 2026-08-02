@@ -730,7 +730,7 @@ export default function ServiceReception({ author }: { author: string }) {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); }
         catch (e) { notify(`일정 등록 실패 — 접수는 저장됨. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
-      const sheetPending = isRemoteType ? (custKind === "기존" && !!firstNo.trim()) : (custKind === "신규" || !!firstNo.trim());
+      const sheetPending = custKind === "신규" || !!firstNo.trim(); // 신규는 직접 기입, 기존은 순번 필요 (전 유형 공통)
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
       setActionResult(`${type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       resetForm();
@@ -766,7 +766,7 @@ export default function ServiceReception({ author }: { author: string }) {
         try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false); }
         catch (e) { notify(`일정 등록 실패 — 전송·저장은 완료. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
-      const sheetPending = type === "복합기 AS" && (custKind === "신규" || !!firstNo.trim());  // 전송 경로는 복합기 AS 전용
+      const sheetPending = custKind === "신규" || !!firstNo.trim(); // 복합기·IT 공통 (IT는 원격 탭에 기입)
       if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
       setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
       setSavedRowId(null);
@@ -1347,8 +1347,15 @@ export default function ServiceReception({ author }: { author: string }) {
               </div>
               {isRemoteType && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 순번 함수가 못 채우는 열이라 여기 값이 원격 시트에 그대로 기입됩니다 (아는 것만)</div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-black text-slate-500">지역(팀)</span>
+                  {["A", "B", "C", "D", "E"].map((t) => (
+                    <button key={t} type="button" onClick={() => setNewRemote({ ...newRemote, region: newRemote.region === `수도권${t}` ? "" : `수도권${t}` })}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-black transition ${newRemote.region === `수도권${t}` ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t}</button>
+                  ))}
+                </div>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                  {([["grade", "등급"], ["misuMonths", "미수(개월)"], ["region", "지역"], ["dueDate", "마감일"], ["series", "기종"], ["brand", "브랜드"], ["assetNo", "자산번호"], ["serialNo", "시리얼번호"],
+                  {([["grade", "등급"], ["misuMonths", "미수(개월)"], ["dueDate", "마감일"], ["series", "기종"], ["brand", "브랜드"], ["assetNo", "자산번호"], ["serialNo", "시리얼번호"],
                     // 원격이관은 시작·끝/처리 저장에서 채워지는 값이라 접수 양식에선 뺀다 — IT만 접수 때 기입
                     ...(type === "IT" ? [["extraCount", "추가대수"], ["handled", "처리내용"], ["linked", "연동완료"]] : [])] as [string, string][]).map(([key, label]) => (
                     <label key={key} className="text-[10px] font-bold text-slate-500">{label}
@@ -1469,8 +1476,8 @@ export default function ServiceReception({ author }: { author: string }) {
                   <button type="button" onClick={() => void stepSheet()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">시트 기입</button>
                   {type !== "원격이관" && <button type="button" onClick={() => void stepTicket()} disabled={busy} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">일정 등록</button>}
                   {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
-                  {type === "복합기 AS" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
-                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction(type === "복합기 AS" ? "send" : "save")} disabled={busy || (type === "복합기 AS" && (!report || !isReady))} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체 실행"}</button>
+                  {type !== "원격이관" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
+                  <button type="button" onClick={() => type === "원격이관" ? void handleSave() : setConfirmAction("send")} disabled={busy || (type !== "원격이관" && (!report || !isReady))} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체 실행"}</button>
                 </span>
               </div>
               {actionResult && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}
