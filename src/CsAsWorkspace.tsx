@@ -630,7 +630,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
-  // 네이버 캘린더로 보내기 — 네이버 API는 '등록'만 지원해 단방향이다.
+  // 네이버 캘린더로 보내기 — 접수 자동 미러와 같은 엣지 함수(naver-calendar-push) 사용.
+  // CalDAV 등록이라 uid가 저장되고, 이후 [네이버 캘린더] 수정·삭제가 이 일정에도 동작한다.
   // 반복 일정이 수백 건이라 자동 전량 전송은 하지 않고, 이 버튼으로 고른 건만 보낸다.
   const [naverBusyId, setNaverBusyId] = useState("");
   const sendToNaver = async (ticket: AsTicket) => {
@@ -638,32 +639,28 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (ticket.naverPushedAt && !window.confirm("이미 네이버 캘린더에 등록한 일정입니다. 한 번 더 등록할까요?")) return;
     setNaverBusyId(ticket.id);
     try {
-      const [hour, minute] = (ticket.time || "09:00").split(":").map(Number);
-      const endHour = Math.min(23, (Number.isFinite(hour) ? hour : 9) + 1);
-      const response = await fetch("/api/naver-add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `[${ticket.scheduleType}] ${ticket.vendor || "일정"}`,
-          date: ticket.date,
-          location: ticket.address || "",
-          description: [
-            ticket.issue && `내용: ${ticket.issue}`,
-            ticket.model && `기기: ${ticket.model}${ticket.serial ? ` / ${ticket.serial}` : ""}`,
-            `팀/담당: ${ticket.team}팀 ${ticket.assignee || "미배정"}`,
-            ticket.contact && `연락처: ${ticket.contact}`,
-            ticket.note,
-          ].filter(Boolean).join("\n"),
-          startTime: ticket.time || "",
-          endTime: ticket.time ? `${String(endHour).padStart(2, "0")}:${String(Number.isFinite(minute) ? minute : 0).padStart(2, "0")}` : "",
-        }),
+      const result = await invokeEdgeFunction<{ uid?: string; status?: string }>("naver-calendar-push", {
+        title: `[${ticket.scheduleType}] ${ticket.vendor || "일정"}`,
+        date: ticket.date,
+        time: ticket.time || "09:00",
+        location: ticket.address || "",
+        description: [
+          ticket.issue && `내용: ${ticket.issue}`,
+          ticket.model && `기기: ${ticket.model}${ticket.serial ? ` / ${ticket.serial}` : ""}`,
+          `팀/담당: ${ticket.team}팀 ${ticket.assignee || "미배정"}`,
+          ticket.contact && `연락처: ${ticket.contact}`,
+          ticket.note,
+        ].filter(Boolean).join("\n"),
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) { notify(`네이버 캘린더 등록 실패: ${result.error || response.status}${result.detail ? `\n${result.detail}` : ""}`, "error"); return; }
+      if (result.status === "disabled" || result.status === "not_configured") {
+        notify("네이버 캘린더 미러가 꺼져 있거나 미설정입니다 (관리 탭 확인)", "error");
+        return;
+      }
       const pushedAt = new Date().toISOString();
-      setTicketsState((current) => current.map((item) => (item.id === ticket.id ? { ...item, naverPushedAt: pushedAt } : item)));
-      void upsertRow("as_tickets", { id: ticket.id, naverPushedAt: pushedAt }, "id").catch(() => {});
-      notify("네이버 캘린더에 등록했습니다.", "success");
+      const patch = { naverPushedAt: pushedAt, ...(result.uid ? { naverUid: result.uid } : {}) };
+      setTicketsState((current) => current.map((item) => (item.id === ticket.id ? { ...item, ...patch } : item)));
+      void upsertRow("as_tickets", { id: ticket.id, ...patch }, "id").catch(() => {});
+      notify("네이버 캘린더에 등록했습니다 ✓ (수정은 일정 수정 → [네이버 캘린더])", "success");
     } catch (e) {
       notify(`네이버 캘린더 등록 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -1324,7 +1321,7 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
           <div className="flex items-center gap-2">
             {onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}
-            {onNaver && <button type="button" onClick={onNaver} className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">네이버 일정</button>}
+            {onNaver && <button type="button" onClick={onNaver} className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">네이버 캘린더</button>}
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
