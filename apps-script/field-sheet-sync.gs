@@ -425,14 +425,31 @@ function fillCopierLeaseValues_(sheet, row, data) {
  */
 function freezeRemoteLeaseValues_(sheet, row, headers) {
   // 실제 수식 열(사용자 확인): N등급 O미수 P특이사항 Q지역 R상호 S마감일 T한조 V기종
-  // R(두 열 합치기)·S(마감일+mid(AD)) 같은 특수형도 "계산 결과"를 고정하므로 자동으로 맞다.
   var FREEZE = ["등급", "미수", "특이사항", "지역", "상호", "마감일", "한조", "기종", "브랜드", "자산번호", "시리얼번호"];
-  SpreadsheetApp.flush(); // 방금 쓴 순(M)으로 VLOOKUP이 계산되도록 먼저 반영
+  var cols = [];
   headers.forEach(function (header, index) {
-    var name = String(header).replace(/\s+/g, "");
-    if (FREEZE.indexOf(name) === -1) return;
-    var cell = sheet.getRange(row, index + 1);
-    if (!cell.getFormula()) return;            // 이미 값이면(신규 직접 기입 등) 그대로
-    cell.setValue(cell.getDisplayValue());     // 계산 결과를 값으로 교체
+    if (FREEZE.indexOf(String(header).replace(/\s+/g, "")) >= 0) cols.push(index + 1);
+  });
+  if (!cols.length) return;
+
+  // 방금 쓴 순(M)으로 VLOOKUP이 계산될 때까지 대기 — 임대리스트 2.5만 행 조회라 재계산이 늦을 수 있다.
+  // 계산 전에 읽으면 빈 값을 고정해버리므로(수식까지 소실) 반드시 값이 보인 뒤에만 고정한다.
+  for (var attempt = 0; attempt < 5; attempt++) {
+    SpreadsheetApp.flush();
+    var computed = cols.some(function (col) {
+      var cell = sheet.getRange(row, col);
+      return cell.getFormula() && cell.getDisplayValue() !== "";
+    });
+    if (computed) break;
+    Utilities.sleep(800);
+  }
+
+  cols.forEach(function (col) {
+    var cell = sheet.getRange(row, col);
+    if (!cell.getFormula()) return;          // 이미 값(신규 직접 기입 등)이면 그대로
+    var text = cell.getDisplayValue();
+    if (text === "") return;                 // 계산 전이거나 원래 빈값 — 수식 유지 (빈값 고정 금지)
+    cell.setValue(text);
   });
 }
+
