@@ -637,10 +637,14 @@ export default function ServiceReception({ author }: { author: string }) {
     if (type !== "복합기 AS") return "";
     if (custKind === "기존" && !firstNo.trim()) return " · 퍼스트순 미입력 — 시트 기입 생략";
     try {
+      // 자동 입력값(수정 패널에서 고친 값 포함)을 시트에 "값"으로 기입 — GAS가 임대리스트 조회 시 이 값 우선
+      const LEASE_FIX_KEYS = ["거래처명", "모델명", "시리얼번호(기번)", "자산번호", "등급", "담당지역", "종료일", "일반전화", "키맨", "미수개월수", "주소(실납품주소,도로명주소)", "코드"];
+      const leaseFix = lease ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, String(lease[key] ?? "")]))) : "";
       const base = {
         author, vendor: vendorName, firstNo: firstNo.trim(), route, field: fieldFinal,
         paid: paidFinal, receiverName: manual.접수자성함.trim(), receiverPhone: manual.접수자연락처.trim(),
         title: manual.제목.trim(), symptom: manual.증상.trim(),
+        ...(custKind === "기존" && leaseFix ? { leaseFix } : {}),
       };
       const receptionId = sheetRowTargetRef.current;
       const result = custKind === "기존"

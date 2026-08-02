@@ -969,6 +969,7 @@ export async function sendPraiseForm(form: PraiseFormState, author: string): Pro
 export type ReceptionSheetInput = {
   author: string; vendor: string; firstNo: string; route: string; field: string;
   paid: string; receiverName: string; receiverPhone: string; title: string; symptom: string;
+  leaseFix?: string;   // 임대리스트 헤더명→값 JSON — 자동 입력값(수정 포함)을 시트에 값으로 기입
 };
 
 export async function sendReceptionCopierSheetJob(input: ReceptionSheetInput, extra?: Record<string, string>): Promise<{ message: string; row: number | null }> {
