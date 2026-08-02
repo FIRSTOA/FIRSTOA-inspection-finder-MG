@@ -1422,15 +1422,15 @@ export default function ServiceReception({ author }: { author: string }) {
             {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {(["전체", "복합기 AS", "IT", "원격이관", "주소확인"] as const).map((f) => (
-                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                   {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
               <span className="mx-0.5 self-center text-slate-200">|</span>
-              {(["접수", "진행중", "완료"] as const).map((state) => (
-                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(statusFilter === state ? "전체" : state)}
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />
+              {(["전체", "접수", "진행중", "완료"] as const).map((state) => (
+                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(state === "전체" ? "전체" : statusFilter === state ? "전체" : state)}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                  {state !== "전체" && <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />}
                   {state}
                 </button>
               ))}
