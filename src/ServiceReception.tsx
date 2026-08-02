@@ -364,6 +364,10 @@ export default function ServiceReception({ author }: { author: string }) {
       const storedMeta = row.remote_meta || {};
       const metaPatch = Object.fromEntries(Object.entries(meta).filter(([k, v]) => String(v ?? "").trim() !== "" || String(storedMeta[k] ?? "").trim() !== ""));
       await mergeReceptionHandling(row.id, metaPatch, nextStatus !== row.status ? nextStatus : undefined);
+      // 저장 성공분을 화면 행에도 즉시 반영 (표시 상태는 저장값 기준이므로 여기서 갱신)
+      const applySaved = (item: ServiceReceptionRow) => (item.id === row.id ? { ...item, remote_meta: { ...(item.remote_meta || {}), ...metaPatch }, status: nextStatus } : item);
+      setListRows((current) => current.map(applySaved));
+      setRemoteQueue((current) => current.map(applySaved));
       // 빠른 스탬프도 시트에 즉시 반영 — 같은 접수의 시트 작업은 runSheetWrite가 한 줄로 세우고,
       // 갱신 전용(updateOnly)이라 행이 겹쳐도 새 행이 생기지 않는다 (앱 완료·시트 공백 사고 방지)
       syncRemoteSheet(row, meta);
@@ -1077,11 +1081,11 @@ export default function ServiceReception({ author }: { author: string }) {
   const listStateOf = useCallback((r: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
     if (r.type === "IT" || r.type === "원격이관") {
       if (r.status === "원격완료" || r.status === "완료") return "완료";
-      const meta = handling[r.id] ?? { ...(r.remote_meta || {}) };
+      const meta = r.remote_meta || {}; // 저장된 값만 — 초안으로 상태가 미리 바뀌지 않게
       return meta.result || meta.end ? "완료" : meta.start || r.status === "진행중" ? "진행중" : "접수";
     }
     return r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
-  }, [handling]);
+  }, []);
   const typeFilteredRows = useMemo(
     () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter)),
     [mergedRows, listFilter],
@@ -1114,7 +1118,8 @@ export default function ServiceReception({ author }: { author: string }) {
   // 원격 작업 상태: 시작 전 = 대기 / 시작했고 처리여부 없음 = 진행중 / 처리여부 있음 = 완료
   const remoteStateOf = (row: ServiceReceptionRow) => {
     if (row.status === "원격완료" || row.status === "완료") return "완료"; // 구버전 완료 표기 호환
-    const meta = handlingOf(row);
+    // 저장된 값만 본다 — 입력 중인 초안(처리여부 선택 등)으로 상태가 미리 바뀌면 안 된다 (처리 저장을 눌러야 완료)
+    const meta = row.remote_meta || {};
     return meta.result || meta.end ? "완료" : meta.start ? "진행중" : "대기";
   };
   /** 접수 리스트 공용 상태 — 복합기AS는 일정리스트 연동값, 원격·IT는 시작/끝 스탬프 기준 */
