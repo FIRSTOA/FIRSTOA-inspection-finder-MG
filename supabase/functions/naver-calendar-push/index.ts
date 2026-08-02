@@ -51,8 +51,10 @@ function buildIcal(input: { title: string; date: string; time: string; location:
   ].filter(Boolean).join("\r\n");
 }
 
-// ---- CalDAV (비공식): 기존 일정 조회·수정·삭제 ----------------------------
-// 네이버 OpenAPI는 등록 전용이라, 수정·삭제는 캘린더 동기화 통로(CalDAV)를 쓴다.
+// ---- CalDAV (비공식): 일정 생성·조회·수정·삭제 ------------------------------
+// 네이버 OpenAPI는 등록 전용 + CalDAV REPORT는 UID 필터를 무시(실측)하므로,
+// 등록 자체를 CalDAV PUT({uid}.ics)으로 해서 리소스 주소를 우리가 정한다.
+// 이후 조회(GET)·수정(PUT)·삭제(DELETE)는 그 주소로 직접 접근 — 검색 불필요.
 // 연동 계정의 "애플리케이션 비밀번호"(2단계 인증 필요)가 Secrets에 있어야 동작.
 const CALDAV_BASE = "https://caldav.calendar.naver.com";
 
@@ -60,65 +62,30 @@ function caldavAuth() {
   const id = Deno.env.get("NAVER_CALDAV_ID") || "";
   const pw = Deno.env.get("NAVER_CALDAV_APP_PASSWORD") || "";
   if (!id || !pw) return null;
-  return "Basic " + btoa(`${id}:${pw}`);
+  return { id, header: "Basic " + btoa(`${id}:${pw}`) };
 }
 
-async function davRequest(method: string, url: string, auth: string, body?: string, depth?: string) {
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: auth,
-      ...(body ? { "Content-Type": method === "PUT" ? "text/calendar; charset=utf-8" : "application/xml; charset=utf-8" } : {}),
-      ...(depth ? { Depth: depth } : {}),
-    },
-    body,
-  });
-  const text = await res.text().catch(() => "");
-  return { status: res.status, text };
+async function configCalendarIdOf(): Promise<string> {
+  const sUrl = Deno.env.get("SUPABASE_URL") || "";
+  const sKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!sUrl || !sKey) return "";
+  const r = await fetch(`${sUrl}/rest/v1/app_config?key=eq.NAVER_CALENDAR_ID&select=value`, { headers: { apikey: sKey, Authorization: `Bearer ${sKey}` } });
+  const rows = await r.json().catch(() => []);
+  return String(rows?.[0]?.value || "").trim();
 }
 
-function hrefsOf(xml: string): string[] {
-  return [...xml.matchAll(/<[^>]*href[^>]*>([^<]+)<\/[^>]*href[^>]*>/gi)].map((m) => m[1].trim());
+function caldavEventUrl(authId: string, calendarId: string, uid: string) {
+  return `${CALDAV_BASE}/caldav/${encodeURIComponent(authId)}/calendar/${encodeURIComponent(calendarId)}/${encodeURIComponent(uid)}.ics`;
 }
 
-// 캘린더 컬렉션 URL 찾기: 루트 → principal → calendar-home → 대상 캘린더(설정된 calendarId 포함 href 우선)
-async function caldavFindCalendar(auth: string, calendarId: string): Promise<string> {
-  const principalRes = await davRequest("PROPFIND", `${CALDAV_BASE}/`, auth,
-    `<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`, "0");
-  if (principalRes.status === 401) throw new Error("CalDAV 인증 실패 — 애플리케이션 비밀번호를 확인하세요");
-  const principal = hrefsOf(principalRes.text).find((h) => h.includes("principal")) || hrefsOf(principalRes.text)[0];
-  if (!principal) throw new Error(`CalDAV principal 탐색 실패(${principalRes.status})`);
-  const homeRes = await davRequest("PROPFIND", new URL(principal, CALDAV_BASE).href, auth,
-    `<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-home-set/></d:prop></d:propfind>`, "0");
-  const home = hrefsOf(homeRes.text).find((h) => h !== principal) || principal;
-  const listRes = await davRequest("PROPFIND", new URL(home, CALDAV_BASE).href, auth,
-    `<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:displayname/></d:prop></d:propfind>`, "1");
-  const candidates = hrefsOf(listRes.text).filter((h) => h !== home);
-  const target = (calendarId && candidates.find((h) => h.includes(calendarId))) || candidates[0];
-  if (!target) throw new Error(`CalDAV 캘린더 목록 탐색 실패(${listRes.status})`);
-  return new URL(target, CALDAV_BASE).href;
-}
-
-// UID로 일정 리소스(href + ics 원문) 찾기
-async function caldavFindEvent(auth: string, calendarUrl: string, uid: string): Promise<{ href: string; ics: string }> {
-  const query = `<?xml version="1.0"?>
-<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-  <d:prop><d:getetag/><c:calendar-data/></d:prop>
-  <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
-    <c:prop-filter name="UID"><c:text-match collation="i;octet">${uid}</c:text-match></c:prop-filter>
-  </c:comp-filter></c:comp-filter></c:filter>
-</c:calendar-query>`;
-  const res = await davRequest("REPORT", calendarUrl, auth, query, "1");
-  if (res.status >= 400) throw new Error(`CalDAV 일정 검색 실패(${res.status})`);
-  const href = hrefsOf(res.text).find((h) => h.endsWith(".ics")) || hrefsOf(res.text).find((h) => h !== calendarUrl);
-  if (!href || !res.text.includes(uid)) throw new Error("네이버에서 해당 일정을 찾지 못했습니다 (이미 삭제됐을 수 있음)");
-  const dataMatch = res.text.match(/<[^>]*calendar-data[^>]*>([\s\S]*?)<\/[^>]*calendar-data[^>]*>/i);
-  const ics = (dataMatch ? dataMatch[1] : "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#13;/g, "\r");
-  return { href: new URL(href, CALDAV_BASE).href, ics };
+// VEVENT 구간만 잘라낸다 — VTIMEZONE 블록에도 DTSTART가 있어 통째로 찾으면 1970년을 집는다
+function eventBlockOf(ics: string): string {
+  const m = ics.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/);
+  return m ? m[0] : ics;
 }
 
 function icsProp(ics: string, name: string): string {
-  const unfolded = ics.replace(/\r?\n[ \t]/g, "");
+  const unfolded = eventBlockOf(ics).replace(/\r?\n[ \t]/g, "");
   const m = unfolded.match(new RegExp(`^${name}[^:]*:(.*)$`, "mi"));
   return m ? m[1].trim().replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";") : "";
 }
@@ -136,48 +103,49 @@ Deno.serve(async (req) => {
       if (!auth) return Response.json({ error: "CalDAV 미설정 — NAVER_CALDAV_ID/NAVER_CALDAV_APP_PASSWORD Secrets가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const uid = String(body.uid || "").trim();
       if (!uid) return Response.json({ error: "uid가 필요합니다" }, { status: 400, headers: jsonHeaders });
-      // 대상 캘린더: app_config의 NAVER_CALENDAR_ID를 재사용
-      let cfgCalendarId = "";
-      const sUrl = Deno.env.get("SUPABASE_URL") || "";
-      const sKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-      if (sUrl && sKey) {
-        const r = await fetch(`${sUrl}/rest/v1/app_config?key=eq.NAVER_CALENDAR_ID&select=value`, { headers: { apikey: sKey, Authorization: `Bearer ${sKey}` } });
-        const rows = await r.json().catch(() => []);
-        cfgCalendarId = String(rows?.[0]?.value || "").trim();
+      const calId = await configCalendarIdOf();
+      if (!calId) return Response.json({ error: "NAVER_CALENDAR_ID 설정이 비어 있습니다 (관리 탭)" }, { status: 400, headers: jsonHeaders });
+      const url = caldavEventUrl(auth.id, calId, uid);
+
+      const getRes = await fetch(url, { headers: { Authorization: auth.header } });
+      if (getRes.status === 404) {
+        return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다 — CalDAV 도입 전에 등록됐거나 이미 삭제된 일정입니다" }, { status: 404, headers: jsonHeaders });
       }
-      const calendarUrl = await caldavFindCalendar(auth, cfgCalendarId);
-      const found = await caldavFindEvent(auth, calendarUrl, uid);
+      if (getRes.status === 401) return Response.json({ error: "CalDAV 인증 실패 — 애플리케이션 비밀번호를 확인하세요" }, { status: 401, headers: jsonHeaders });
+      const ics = await getRes.text();
+      if (!getRes.ok) return Response.json({ error: `네이버 일정 조회 실패(${getRes.status})` }, { status: 500, headers: jsonHeaders });
+
       if (body.action === "caldav_get") {
         return Response.json({
           ok: true,
-          title: icsProp(found.ics, "SUMMARY"),
-          description: icsProp(found.ics, "DESCRIPTION"),
-          location: icsProp(found.ics, "LOCATION"),
-          dtstart: icsProp(found.ics, "DTSTART"),
+          title: icsProp(ics, "SUMMARY"),
+          description: icsProp(ics, "DESCRIPTION"),
+          location: icsProp(ics, "LOCATION"),
+          dtstart: icsProp(ics, "DTSTART"),
         }, { headers: jsonHeaders });
       }
       if (body.action === "caldav_delete") {
-        const del = await davRequest("DELETE", found.href, auth);
-        if (del.status >= 400) throw new Error(`네이버 일정 삭제 실패(${del.status})`);
+        const del = await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } });
+        if (del.status >= 400 && del.status !== 404) throw new Error(`네이버 일정 삭제 실패(${del.status})`);
         return Response.json({ ok: true, status: "deleted" }, { headers: jsonHeaders });
       }
       // caldav_update: 시간·UID는 보존하고 제목/내용/장소만 교체
-      const unfolded = found.ics.replace(/\r?\n[ \t]/g, "");
+      const unfolded = eventBlockOf(ics).replace(/\r?\n[ \t]/g, "");
       const keep = (name: string) => (unfolded.match(new RegExp(`^(${name}[^:]*:.*)$`, "mi")) || [])[1] || "";
       const esc = (v: string) => String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
       const newIcs = [
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:FirstOA CS Webapp", "CALSCALE:GREGORIAN",
         "BEGIN:VEVENT",
         `UID:${uid}`,
-        keep("DTSTAMP") || `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
+        `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
         keep("DTSTART"), keep("DTEND"),
         `SUMMARY:${esc(String(body.title || ""))}`,
         String(body.location || "").trim() ? `LOCATION:${esc(String(body.location))}` : "",
         String(body.description || "").trim() ? `DESCRIPTION:${esc(String(body.description))}` : "",
         "END:VEVENT", "END:VCALENDAR",
       ].filter(Boolean).join("\r\n");
-      const put = await davRequest("PUT", found.href, auth, newIcs);
-      if (put.status >= 400) throw new Error(`네이버 일정 수정 실패(${put.status}): ${put.text.slice(0, 150)}`);
+      const put = await fetch(url, { method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: newIcs });
+      if (put.status >= 400) throw new Error(`네이버 일정 수정 실패(${put.status})`);
       return Response.json({ ok: true, status: "updated" }, { headers: jsonHeaders });
     }
 
@@ -255,6 +223,29 @@ Deno.serve(async (req) => {
           return Response.json({ error: "캘린더 공유 URL에서 ID를 찾지 못했습니다. 캘린더의 '공개 설정'이 켜져 있어야 합니다." }, { status: 400, headers: jsonHeaders });
         }
       }
+    }
+
+    // 등록: CalDAV가 설정돼 있으면 PUT({uid}.ics)으로 — 나중에 조회·수정·삭제가 가능해진다.
+    const caldav = caldavAuth();
+    const calIdForCreate = configCalendarId || Deno.env.get("NAVER_CALDAV_DEFAULT_CALENDAR") || "";
+    if (caldav && calIdForCreate) {
+      const eventUidC = `firstoa-${crypto.randomUUID()}`;
+      const icalC = buildIcal({
+        title, date,
+        time: String(body.time || "09:00"),
+        location: String(body.location || ""),
+        description: String(body.description || ""),
+        uid: eventUidC,
+      });
+      const putRes = await fetch(caldavEventUrl(caldav.id, calIdForCreate, eventUidC), {
+        method: "PUT",
+        headers: { Authorization: caldav.header, "Content-Type": "text/calendar; charset=utf-8" },
+        body: icalC.replace(/\n/g, "\r\n").replace(/\r\r/g, "\r"),
+      });
+      if (putRes.status < 400) {
+        return Response.json({ ok: true, status: "created", uid: eventUidC, via: "caldav", requestedCalendarId: calIdForCreate }, { headers: jsonHeaders });
+      }
+      // CalDAV 등록 실패 시 OpenAPI로 폴백 (등록은 되지만 나중에 수정 불가)
     }
 
     // 1) refresh token → access token
