@@ -472,7 +472,29 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (custKind === "신규" ? manualVendor.trim() : "");
-  const region = regionLabel(pick(lease, "담당지역"));
+  // 신규 거래처: 임대리스트가 없어도 신규 양식 입력으로 같은 보고양식을 만든다 (복합기·IT 공통)
+  const pseudoLease = useMemo<LeaseHit | null>(() => {
+    if (custKind !== "신규" || type === "원격이관") return null;
+    if (type === "IT") {
+      return {
+        거래처명: vendorName, 등급: newRemote.grade || "", 미수개월수: newRemote.misuMonths || "",
+        담당지역: newRemote.region || "", 발행: (newRemote.dueDate || "").replace(/일$/, ""),
+        기종: newRemote.series || "", 모델명: newRemote.series || "", 제조사: newRemote.brand || "",
+        자산번호: newRemote.assetNo || "", "시리얼번호(기번)": newRemote.serialNo || "",
+      } as LeaseHit;
+    }
+    return {
+      거래처명: vendorName, 순: newLease.firstNo || "", 등급: newLease.grade || "", 일반전화: newLease.tel || "",
+      키맨: newLease.keyman || "", 미수개월수: newLease.misuMonths || "",
+      모델명: newLease.model || "", 기종: newLease.series || "", 제조사: newLease.maker || "",
+      자산번호: newLease.assetNo || "", "시리얼번호(기번)": newLease.serialNo || "", 기기상태: newLease.deviceState || "",
+      코드: newLease.hanjoCode || "", 기본금액: newLease.baseRent || "", 연평균: newLease.avgRent || "",
+      계약일: newLease.contractStart || "", 종료일: newLease.contractEnd || "", 남은개월: newLease.monthsLeft || "",
+      방문주기: newLease.visitCycle || "", 장비소유주: newLease.owner || "", 특이사항: newLease.notes || "",
+    } as LeaseHit;
+  }, [custKind, type, vendorName, newLease, newRemote]);
+  const reportSource = lease ?? pseudoLease;
+  const region = regionLabel(pick(reportSource, "담당지역")) || (custKind === "신규" ? regionLabel(manual.주소) : "");
   // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
   const resultVendorCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -484,33 +506,33 @@ export default function ServiceReception({ author }: { author: string }) {
   }, [results]);
 
   const report = useMemo(() => {
-    if (!lease) return "";
-    const 업체명 = workinName || pick(lease, "거래처명", "_업체명", "업체명");
-    const 등급 = pick(lease, "등급");
-    const 모델명 = pick(lease, "모델명", "기종");
-    const 기번 = pick(lease, "시리얼번호(기번)", "기번");
-    const 자산번호 = pick(lease, "자산번호");
-    const 순 = pick(lease, "순");
-    const 장비소유주 = pick(lease, "장비소유주") || "퍼스트전산";
-    const 계약일 = pick(lease, "계약일", "첫계약일");
-    const 종료일 = pick(lease, "종료일");
-    const 남은개월 = pick(lease, "남은개월");
-    const 교체일 = pick(lease, "납품/교체일");
-    const 방문주기 = pick(lease, "방문주기");
-    const 기본임대료 = pick(lease, "기본금액");
-    const 평균임대료 = pick(lease, "연평균");
-    const 유지보수 = pick(lease, "위탁/유지보수및기타사항") || "없음";
-    const 일반전화 = pick(lease, "일반전화");
-    const 미수개월Raw = pick(lease, "미수개월수");
+    if (!reportSource) return "";
+    const 업체명 = workinName || pick(reportSource, "거래처명", "_업체명", "업체명");
+    const 등급 = pick(reportSource, "등급");
+    const 모델명 = pick(reportSource, "모델명", "기종");
+    const 기번 = pick(reportSource, "시리얼번호(기번)", "기번");
+    const 자산번호 = pick(reportSource, "자산번호");
+    const 순 = pick(reportSource, "순");
+    const 장비소유주 = pick(reportSource, "장비소유주") || "퍼스트전산";
+    const 계약일 = pick(reportSource, "계약일", "첫계약일");
+    const 종료일 = pick(reportSource, "종료일");
+    const 남은개월 = pick(reportSource, "남은개월");
+    const 교체일 = pick(reportSource, "납품/교체일");
+    const 방문주기 = pick(reportSource, "방문주기");
+    const 기본임대료 = pick(reportSource, "기본금액");
+    const 평균임대료 = pick(reportSource, "연평균");
+    const 유지보수 = pick(reportSource, "위탁/유지보수및기타사항") || "없음";
+    const 일반전화 = pick(reportSource, "일반전화");
+    const 미수개월Raw = pick(reportSource, "미수개월수");
     const 미수개월 = 미수개월Raw === "0" ? "" : 미수개월Raw;
-    const 키맨 = pick(lease, "키맨");
-    const 코드 = pick(lease, "코드");
-    const 틴텍코드 = pick(lease, "틴텍코드");
-    const 주소 = manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소");
-    const 확장성 = pick(lease, "확장성");
-    const 기기상태 = pick(lease, "기기상태");
-    const 마감일 = pick(lease, "발행"); // 매월 며칠 마감인지 (옛 양식의 "29S㈜환희…" 앞 숫자)
-    const 마감구분Raw = pick(lease, "누적방식 (월/분/반/년)"); // 매월/분기/반기 — 옛 양식의 "분기마감"
+    const 키맨 = pick(reportSource, "키맨");
+    const 코드 = pick(reportSource, "코드");
+    const 틴텍코드 = pick(reportSource, "틴텍코드");
+    const 주소 = manual.주소.trim() || pick(reportSource, "주소(실납품주소,도로명주소)", "주소");
+    const 확장성 = pick(reportSource, "확장성");
+    const 기기상태 = pick(reportSource, "기기상태");
+    const 마감일 = pick(reportSource, "발행"); // 매월 며칠 마감인지 (옛 양식의 "29S㈜환희…" 앞 숫자)
+    const 마감구분Raw = pick(reportSource, "누적방식 (월/분/반/년)"); // 매월/분기/반기 — 옛 양식의 "분기마감"
     const 마감구분 = 마감구분Raw ? (마감구분Raw.endsWith("마감") ? 마감구분Raw : `${마감구분Raw}마감`) : "";
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
     const 교체일로부터 = /\d{4}[.\-/]/.test(교체일) ? `${monthsBetween(교체일, kstDate())}사용중` : "";
@@ -526,7 +548,7 @@ export default function ServiceReception({ author }: { author: string }) {
     const snapDevice = (s: InspectionSnapshot) => [s.model, s.asset && `자산 ${s.asset}`, s.serial && `기번 ${s.serial}`].filter(Boolean).join(" · ");
     if (snap0) usage.push(`■ 전방문 ${snap0.date}${snapDevice(snap0) ? ` · 기기 ${snapDevice(snap0)}` : ""} · 매수 ${snap0.counts || "-"} · 여분 ${snap0.spare || "-"}${snap0.waste ? ` · 폐통 ${snap0.waste}` : ""}`);
     if (snap1) usage.push(`■ 전전방문 ${snap1.date}${snapDevice(snap1) ? ` · 기기 ${snapDevice(snap1)}` : ""} · 매수 ${snap1.counts || "-"} · 여분 ${snap1.spare || "-"}${snap1.waste ? ` · 폐통 ${snap1.waste}` : ""}`);
-    const advice = usageSpareAdvice(snap0, snap1, `${모델명} ${pick(lease, "기종")}`);
+    const advice = usageSpareAdvice(snap0, snap1, `${모델명} ${pick(reportSource, "기종")}`);
     if (advice?.warning) usage.push(`■ 주의: ${advice.warning}`);
     if (advice?.usageLine) usage.push(`■ 사용량: ${advice.usageLine}`);
     if (advice) usage.push(`■ 여분 분석: ${advice.adviceLine}`);
@@ -565,7 +587,7 @@ export default function ServiceReception({ author }: { author: string }) {
       usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [lease, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal]);
+  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -815,15 +837,15 @@ export default function ServiceReception({ author }: { author: string }) {
   // 저장 직후 자동 일정 등록에 쓸 현재 폼 스냅샷
   const formSnapshotForTicket = (id: string) => ({
     id, vendor: vendorName, region,
-    model: pick(lease, "모델명", "기종"), serial: pick(lease, "시리얼번호(기번)", "기번"),
-    asset_no: pick(lease, "자산번호"), grade: pick(lease, "등급"),
+    model: pick(reportSource, "모델명", "기종"), serial: pick(reportSource, "시리얼번호(기번)", "기번"),
+    asset_no: pick(reportSource, "자산번호"), grade: pick(reportSource, "등급"),
     keyman_info: [
-      pick(lease, "일반전화") ? `일반전화 ${pick(lease, "일반전화")}` : "",
-      pick(lease, "키맨") ? `★키맨성함/번호 ${pick(lease, "키맨")}` : "",
+      pick(reportSource, "일반전화") ? `일반전화 ${pick(reportSource, "일반전화")}` : "",
+      pick(reportSource, "키맨") ? `★키맨성함/번호 ${pick(reportSource, "키맨")}` : "",
     ].filter(Boolean).join("\n"),
     receiver_name: manual.접수자성함.trim(), receiver_phone: manual.접수자연락처.trim(),
     title: manual.제목, symptom: manual.증상,
-    address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
+    address: manual.주소.trim() || pick(reportSource, "주소(실납품주소,도로명주소)", "주소"),
     report_text: report, // 네이버 캘린더 제목·설명은 보고양식(수기 등록과 동일 형식)을 그대로 쓴다
   });
 
