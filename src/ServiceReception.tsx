@@ -622,7 +622,8 @@ export default function ServiceReception({ author }: { author: string }) {
       lease_no: pick(lease, "순"),
       address: manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소"),
       // 임대리스트 주소와 다르게 접수된 건 표시 — 시트 원본 주소 정비 대상 목록이 된다
-      ...(manual.주소.trim() && manual.주소.trim() !== pick(lease, "주소(실납품주소,도로명주소)", "주소") ? { address_changed: true } : {}),
+      // (기존 거래처만 — 신규는 임대리스트에 주소가 원래 없으니 정비 대상이 아니다)
+      ...(lease && manual.주소.trim() && manual.주소.trim() !== pick(lease, "주소(실납품주소,도로명주소)", "주소") ? { address_changed: true } : {}),
       // photos 컬럼 SQL 실행 전에도 일반 저장은 되도록, 사진이 있을 때만 포함
       ...(photos.length ? { photos: photos.map((photo) => photo.url) } : {}),
       title: manual.제목,
