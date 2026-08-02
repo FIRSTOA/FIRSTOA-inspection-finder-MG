@@ -6023,24 +6023,24 @@ export default function App() {
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
                 <>
-                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
-                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
-                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
-                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className="rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
-                  <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="col-span-2 rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버 캘린더 (완료/익일 정리)</button>
+                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
+                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
+                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className="col-span-2 whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
+                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className="col-span-2 whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
+                  <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>
                 </>
               ) : mode === "replacement" ? (
-                <button type="button" disabled className="col-span-2 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
+                <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
                 <>
-                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
-                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
+                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
+                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="col-span-3 flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
                 </>
               ) : (
-                <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-2 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
+                <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-6 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
               )}
             </div>
           </div>
