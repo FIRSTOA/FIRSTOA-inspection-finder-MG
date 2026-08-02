@@ -202,6 +202,14 @@ export default function SystemAdmin() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
+              <div className="text-sm font-black text-slate-900">네이버 재연동 (토큰 갱신)</div>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">네이버 캘린더에 등록이 안 되기 시작하면(토큰 만료·비밀번호 변경) 연동 계정으로 로그인 한 번이면 됩니다. "연동 완료 ✓" 알림까지 확인하세요.</p>
+            </div>
+            <a href="https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=V_m8cXZT2YjdGqAJyssK&redirect_uri=https%3A%2F%2Ffirstoa-inspection-finder-mg.vercel.app%2F&state=firstoa"
+              className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100">재연동 열기</a>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div>
               <div className="text-sm font-black text-slate-900">팀별 완료 캘린더 ID</div>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-400">일정 완료 시 익일통합에서 이 캘린더로 이동합니다. 비운 팀은 이동 안 함. (예: C = 강남C as)</p>
             </div>
