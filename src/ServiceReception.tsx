@@ -357,10 +357,12 @@ export default function ServiceReception({ author }: { author: string }) {
     else setHandlingBusyId(row.id);
     try {
       // 시작 → 진행중, 끝(또는 처리완료) → 완료 — 접수 리스트 상태가 실시간으로 따라온다
-      const nextStatus = meta.result === "처리완료" || meta.end ? "완료" : meta.start ? "진행중" : row.status;
+      const nextStatus = meta.result === "처리완료" || meta.end ? "완료" : meta.start ? "진행중" : (row.status === "완료" || row.status === "원격완료" ? "접수" : row.status);
       // 여러 명이 같은 건을 만질 수 있으므로 통째 덮어쓰기 대신 원자 병합(RPC) —
-      // 빈 값(안 건드린 칸)은 보내지 않아 상대가 저장한 필드를 지우지 않는다
-      const metaPatch = Object.fromEntries(Object.entries(meta).filter(([, v]) => String(v ?? "").trim() !== ""));
+      // 빈 값(안 건드린 칸)은 보내지 않아 상대가 저장한 필드를 지우지 않는다.
+      // 단, 저장돼 있던 값을 지우고 저장한 경우는 의도적 삭제로 보고 빈 값을 보낸다 (잘못 찍은 끝 시각 되돌리기)
+      const storedMeta = row.remote_meta || {};
+      const metaPatch = Object.fromEntries(Object.entries(meta).filter(([k, v]) => String(v ?? "").trim() !== "" || String(storedMeta[k] ?? "").trim() !== ""));
       await mergeReceptionHandling(row.id, metaPatch, nextStatus !== row.status ? nextStatus : undefined);
       // 빠른 스탬프도 시트에 즉시 반영 — 같은 접수의 시트 작업은 runSheetWrite가 한 줄로 세우고,
       // 갱신 전용(updateOnly)이라 행이 겹쳐도 새 행이 생기지 않는다 (앱 완료·시트 공백 사고 방지)
@@ -1126,9 +1128,15 @@ export default function ServiceReception({ author }: { author: string }) {
                       const state = displayStatusOf(row);
                       if (state === "완료") return null;
                       const started = state === "진행중";
-                      return <span onClick={(e) => { e.stopPropagation(); void saveHandling(row, started ? { end: kstNowHM() } : { start: kstNowHM() }, true); }}
-                        title={started ? "종료 시각 기록 — 완료 처리" : "시작 시각 기록 — 진행중 처리"}
-                        className={`flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full px-3 text-[11px] font-black transition ${started ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] hover:bg-blue-700"}`}>{started ? "■ 끝" : "▶ 시작"}</span>;
+                      // 시작·끝을 별도 버튼으로 — 토글 방식은 재클릭(재시도)이 곧바로 완료로 이어지는 사고가 났다
+                      return <>
+                        {!started && <span onClick={(e) => { e.stopPropagation(); void saveHandling(row, { start: kstNowHM() }, true); }}
+                          title="시작 시각 기록 — 진행중 처리"
+                          className="flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-blue-600 px-3 text-[11px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">▶ 시작</span>}
+                        {started && <span onClick={(e) => { e.stopPropagation(); if (!window.confirm(`${row.vendor || "이 건"} 처리를 끝낼까요? (종료 시각 기록 → 완료)`)) return; void saveHandling(row, { end: kstNowHM() }, true); }}
+                          title="종료 시각 기록 — 완료 처리"
+                          className="flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-900 px-3 text-[11px] font-black text-white transition hover:bg-slate-800">■ 끝</span>}
+                      </>;
                     })()}
                   </span>
                 </button>
