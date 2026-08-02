@@ -158,6 +158,11 @@ function appendFieldSheetRow_(request) {
   if (request.category === "reception_copier" && data["firstNo"]) {
     try { fillCopierLeaseValues_(sheet, row, data); } catch (fillError) { /* 수식 폴백 */ }
   }
+  // 원격·IT 접수(기존 거래처): 순 VLOOKUP 열들을 "계산 결과 값"으로 고정.
+  // 복합기와 같은 취지(접수 시점 스냅샷) — 수식을 한 번 계산시킨 뒤 그 값으로 바꾼다.
+  if (request.category === "reception_remote" && data["leaseNo"]) {
+    try { freezeRemoteLeaseValues_(sheet, row, headers); } catch (freezeError) { /* 수식 유지 폴백 */ }
+  }
   SpreadsheetApp.flush();
 
   return { row, sheet: sheet.getName() };
@@ -410,5 +415,22 @@ function fillCopierLeaseValues_(sheet, row, data) {
       value = srcValue(srcCol);
     }
     sheet.getRange(row, col).setValue(value); // 복사된 수식을 값으로 교체
+  });
+}
+
+
+/**
+ * 원격 탭 새 행의 순 조회 열(등급·미수·특이사항·지역·상호·마감일·기종·브랜드·자산번호·시리얼번호)을
+ * 수식 계산 결과 값으로 고정한다. 신규 직접 기입(이미 값)·빈 셀은 건드리지 않는다.
+ */
+function freezeRemoteLeaseValues_(sheet, row, headers) {
+  var FREEZE = ["등급", "미수", "특이사항", "지역", "상호", "마감일", "기종", "브랜드", "자산번호", "시리얼번호"];
+  SpreadsheetApp.flush(); // 방금 쓴 순(M)으로 VLOOKUP이 계산되도록 먼저 반영
+  headers.forEach(function (header, index) {
+    var name = String(header).replace(/\s+/g, "");
+    if (FREEZE.indexOf(name) === -1) return;
+    var cell = sheet.getRange(row, index + 1);
+    if (!cell.getFormula()) return;            // 이미 값이면(신규 직접 기입 등) 그대로
+    cell.setValue(cell.getDisplayValue());     // 계산 결과를 값으로 교체
   });
 }
