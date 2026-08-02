@@ -509,6 +509,9 @@ export default function ServiceReception({ author }: { author: string }) {
     const 주소 = manual.주소.trim() || pick(lease, "주소(실납품주소,도로명주소)", "주소");
     const 확장성 = pick(lease, "확장성");
     const 기기상태 = pick(lease, "기기상태");
+    const 마감일 = pick(lease, "발행"); // 매월 며칠 마감인지 (옛 양식의 "29S㈜환희…" 앞 숫자)
+    const 마감구분Raw = pick(lease, "누적방식 (월/분/반/년)"); // 매월/분기/반기 — 옛 양식의 "분기마감"
+    const 마감구분 = 마감구분Raw ? (마감구분Raw.endsWith("마감") ? 마감구분Raw : `${마감구분Raw}마감`) : "";
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
     const 교체일로부터 = /\d{4}[.\-/]/.test(교체일) ? `${monthsBetween(교체일, kstDate())}사용중` : "";
     const 구분 = type === "IT" ? "IT A/S" : fieldFinal;
@@ -529,7 +532,7 @@ export default function ServiceReception({ author }: { author: string }) {
     if (advice) usage.push(`■ 여분 분석: ${advice.adviceLine}`);
     const T = "\t";
     const lines = [
-      `${구분}${T}${등급}${T}${모델명}${T}${업체명}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,
+      `${구분}${T}${등급}${T}${모델명}${T}${마감일 ? `${마감일}${등급}` : ""}${업체명}${마감구분 ? `${T}${마감구분}` : ""}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,
       `기번${T}${기번}${T}자산번호${T}${자산번호}`,
       `접수유형${T}${route}${T}접수분야${T}${구분}`,
       `임대리스트순번${T}${순}${T}장비소유주${T}${장비소유주}`,
