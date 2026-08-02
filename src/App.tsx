@@ -4589,6 +4589,8 @@ export default function App() {
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
+  // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
+  const FIELD_NAVER_BUTTON = false;
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
   const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string } | null>(null);
   const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -6028,9 +6030,9 @@ export default function App() {
                 <>
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
-                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className="col-span-2 whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
-                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className="col-span-2 whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40" style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
-                  <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>
+                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40`} style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
+                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40`} style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
+                  {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>}
                 </>
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
@@ -6137,7 +6139,7 @@ export default function App() {
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
-              <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>
+              {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>}
             </> : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
