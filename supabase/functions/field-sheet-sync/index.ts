@@ -129,6 +129,7 @@ async function enrichComplaintPayload(input: { sourceText: string; data: Record<
 }
 
 const MAX_ATTEMPTS = 5; // 이 횟수 도달 시 sheet_status='failed' — "처리 중"과 "영구 실패"를 구분한다
+const MAX_AGE_HOURS = 24; // 이보다 오래된 pending은 재시도하지 않고 만료 처리 — 옛 테스트·폐기 접수가 되살아나 시트에 다시 기입되는 사고 방지
 
 type JobRow = Record<string, unknown> & { id: string; category: string; attempts?: number; source_text?: string; author?: string; _dupKey?: string };
 
@@ -150,12 +151,33 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
 
   try {
-    const { jobId, action } = await req.json().catch(() => ({}));
+    const { jobId, action, maxAgeHours } = await req.json().catch(() => ({}));
+
+    // 만료 정리 (관리자): 지정 시간보다 오래된 pending 잡을 failed로 마킹 — 재시도 대상에서 제외
+    if (!jobId && action === "expire_stale") {
+      const env = makeEnv();
+      const hours = Number.isFinite(Number(maxAgeHours)) ? Number(maxAgeHours) : MAX_AGE_HOURS;
+      const cutoffIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+      const res = await fetch(`${env.rest}/field_sheet_sync_jobs?sheet_status=eq.pending&created_at=lt.${encodeURIComponent(cutoffIso)}`, {
+        method: "PATCH",
+        headers: { ...env.headers, Prefer: "return=representation" },
+        body: JSON.stringify({ sheet_status: "failed", last_error: "만료 — 수동 정리 (필요 시 관리 탭에서 개별 재실행)" }),
+      });
+      const expired = await res.json().catch(() => []);
+      return Response.json({ ok: true, expired: Array.isArray(expired) ? expired.length : 0 }, { headers: jsonHeaders });
+    }
 
     // 배치 재시도 모드 (크론/관리자): 3분 이상 지난 pending 잡을 오래된 순으로 처리.
     // 3분 유예는 접수 직후의 직접 호출과 겹쳐 이중 기입되는 것을 막는다.
     if (!jobId && action === "retry_pending") {
       const env = makeEnv();
+      // 24시간 넘은 pending은 먼저 만료 처리 — 옛 접수를 다시 기입하면 중복 행이 된다
+      const expireCutoff = new Date(Date.now() - MAX_AGE_HOURS * 60 * 60 * 1000).toISOString();
+      await fetch(`${env.rest}/field_sheet_sync_jobs?sheet_status=eq.pending&created_at=lt.${encodeURIComponent(expireCutoff)}`, {
+        method: "PATCH",
+        headers: { ...env.headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ sheet_status: "failed", last_error: `만료 — ${MAX_AGE_HOURS}시간 초과 (필요 시 관리 탭에서 개별 재실행)` }),
+      }).catch(() => {});
       const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       const listRes = await fetch(
         `${env.rest}/field_sheet_sync_jobs?sheet_status=eq.pending&attempts=lt.${MAX_ATTEMPTS}&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&limit=10&select=*`,
