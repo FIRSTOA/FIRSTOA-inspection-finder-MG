@@ -105,14 +105,17 @@ Deno.serve(async (req) => {
     if (!clientId || !clientSecret || !refreshToken) {
       return Response.json({ ok: true, status: "not_configured" }, { headers: jsonHeaders }); // 미설정 시 조용히 통과
     }
+    let configCalendarId = "";
     if (supabaseUrl && serviceKey) {
-      const cfgRes = await fetch(`${supabaseUrl}/rest/v1/app_config?key=eq.NAVER_CALENDAR_ENABLED&select=value`, {
+      const cfgRes = await fetch(`${supabaseUrl}/rest/v1/app_config?key=in.(NAVER_CALENDAR_ENABLED,NAVER_CALENDAR_ID)&select=key,value`, {
         headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
       });
-      const cfg = await cfgRes.json().catch(() => []);
-      if (String(cfg?.[0]?.value || "").toLowerCase() !== "true") {
+      const cfg: Array<{ key: string; value: string }> = await cfgRes.json().catch(() => []);
+      const cfgMap = Object.fromEntries((cfg || []).map((row) => [row.key, row.value]));
+      if (String(cfgMap.NAVER_CALENDAR_ENABLED || "").toLowerCase() !== "true") {
         return Response.json({ ok: true, status: "disabled" }, { headers: jsonHeaders });
       }
+      configCalendarId = String(cfgMap.NAVER_CALENDAR_ID || "").trim(); // 관리 탭에서 지정한 대상 캘린더
     }
 
     // 1) refresh token → access token
@@ -130,7 +133,7 @@ Deno.serve(async (req) => {
       location: String(body.location || ""),
       description: String(body.description || ""),
     });
-    const calendarId = Deno.env.get("NAVER_CALENDAR_ID") || "defaultCalendarId";
+    const calendarId = configCalendarId || Deno.env.get("NAVER_CALENDAR_ID") || "defaultCalendarId";
     const createRes = await fetch("https://openapi.naver.com/calendar/createSchedule.json", {
       method: "POST",
       headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/x-www-form-urlencoded" },
