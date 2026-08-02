@@ -195,7 +195,7 @@ export default function SystemAdmin() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">네이버 캘린더 ID</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">비워두면 연동 계정의 기본 캘린더. 특정 캘린더에 넣으려면 숫자 ID를 입력하세요.</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">비워두면 연동 계정의 기본 캘린더. 특정 캘린더로 보내려면 그 캘린더의 공유 URL(naver.me/…)을 그대로 붙여넣으세요 — 자동으로 ID로 바뀝니다. (캘린더 설정 → 공개 설정 → URL 복사)</p>
             </div>
             <input defaultValue={valueOf("NAVER_CALENDAR_ID")} placeholder="defaultCalendarId" onBlur={(e) => { if (e.target.value !== valueOf("NAVER_CALENDAR_ID")) void saveConfig("NAVER_CALENDAR_ID", e.target.value.trim()); }}
               className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />

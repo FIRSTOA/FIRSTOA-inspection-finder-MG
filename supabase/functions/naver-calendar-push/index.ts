@@ -116,6 +116,22 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, status: "disabled" }, { headers: jsonHeaders });
       }
       configCalendarId = String(cfgMap.NAVER_CALENDAR_ID || "").trim(); // 관리 탭에서 지정한 대상 캘린더
+      // 편의: 캘린더 공유 URL(naver.me/… 등)을 붙여넣으면 페이지에서 실제 ID를 뽑아 쓰고,
+      // 다음 호출부터 바로 쓰도록 설정값도 ID로 바꿔 저장한다
+      if (/^https?:\/\//.test(configCalendarId)) {
+        const page = await fetch(configCalendarId, { redirect: "follow" }).then((r) => r.text()).catch(() => "");
+        const found = page.match(/calendarId"\s*:\s*"([^"]+)"/);
+        if (found) {
+          configCalendarId = found[1];
+          await fetch(`${supabaseUrl}/rest/v1/app_config?key=eq.NAVER_CALENDAR_ID`, {
+            method: "PATCH",
+            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ value: configCalendarId }),
+          }).catch(() => {});
+        } else {
+          return Response.json({ error: "캘린더 공유 URL에서 ID를 찾지 못했습니다. 캘린더의 '공개 설정'이 켜져 있어야 합니다." }, { status: 400, headers: jsonHeaders });
+        }
+      }
     }
 
     // 1) refresh token → access token
