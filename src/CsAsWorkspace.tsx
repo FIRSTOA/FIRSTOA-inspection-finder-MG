@@ -8,7 +8,6 @@ import { notify } from "./toast";
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 type ScheduleType = "AS" | "익일AS" | "물류" | "휴가" | "매월점검";
-type ScheduleFilter = ScheduleType;
 type ViewMode = "list" | "calendar";
 type DayFilter = "today" | "tomorrow" | "scheduled";
 
@@ -39,7 +38,6 @@ export type AsTicket = {
 };
 
 const teams: Team[] = ["A", "B", "C", "D"];
-const scheduleFilters: ScheduleFilter[] = ["AS", "익일AS", "물류", "휴가", "매월점검"];
 // 캘린더 표시 유형 — AS 계열은 날짜가 아니라 처리 여부로 구분한다 (금일·익일·예정 어디든 미처리는 미처리)
 const displayFilters = ["AS[미처리]", "AS[완료]", "물류", "휴가", "매월점검"] as const;
 type DisplayFilter = typeof displayFilters[number];
