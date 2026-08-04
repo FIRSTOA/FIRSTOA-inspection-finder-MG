@@ -32,19 +32,19 @@ function doGet(e) {
         if (h === 'syncBizThenIndex' || h === 'bizInfoStep' || h === 'indexStep') ScriptApp.deleteTrigger(t);
       }
       ScriptApp.newTrigger('bizInfoStep').timeBased().after(1000).create();
-      ScriptApp.newTrigger('indexStep').timeBased().after(22 * 60 * 1000).create();
-      result = { ok: true, scheduled: 'bizInfoStep(즉시) → indexStep(+22분)', trigger: ensureIndexTrigger_() };
+      ScriptApp.newTrigger('indexChunkStart').timeBased().after(15 * 60 * 1000).create();
+      result = { ok: true, scheduled: 'bizInfoStep(즉시) → indexChunkStart(+15분, 조각 체인)', trigger: ensureIndexTrigger_() };
     }
-    else if (action === 'indexonly') {  // 인덱스만 바로 (마스터가 이미 최신일 때)
-      ScriptApp.newTrigger('indexStep').timeBased().after(1000).create();
-      result = { ok: true, scheduled: 'indexStep(즉시)' };
+    else if (action === 'indexonly') {  // 인덱스만 바로 (마스터가 이미 최신일 때) — 조각 체인 시작
+      result = indexChunkStart();
     }
     else if (action === 'lastruns') {  // 복구 단계 실행 결과 확인
       const props = PropertiesService.getScriptProperties();
       result = {
         ok: true,
         bizInfoStep: JSON.parse(props.getProperty('run_bizInfoStep') || 'null'),
-        indexStep: JSON.parse(props.getProperty('run_indexStep') || 'null'),
+        indexChunk: JSON.parse(props.getProperty('run_indexChunk') || 'null'),
+        cursor: JSON.parse(props.getProperty('idx_cursor') || 'null'),
         indexInfo: getIndexMeta(),
       };
     }
