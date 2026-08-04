@@ -5398,7 +5398,9 @@ export default function App() {
     if (mode !== "inspection" && mode !== "blank-report") return false;
     const text = textOutput || listOutput.map((l) => l.content).join("\n");
     if (!text.trim()) return false;
-    return !/지역\s*[:：\t ]\s*\S/.test(text);
+    // 값 캡처는 탭 하나까지만 — "지역⏎⏎접수일"처럼 값이 지워진 경우 다음 라벨을 값으로 오인하지 않게
+    const m = text.match(/지역\s*[:： ]?\t?([^\t\n]*)/);
+    return !(m?.[1] || "").trim();
   }, [mode, textOutput, listOutput]);
 
   const fieldSheetUrl = mode === "pc"

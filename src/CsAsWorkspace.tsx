@@ -597,7 +597,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           .then((r) => { if (r.status === "restored") notify("네이버: 일정이 원래 캘린더로 복귀 (완료 체크 해제) ✓", "success"); })
           .catch((e) => notify(`네이버 복귀 실패: ${(e as Error).message}`, "error"));
       } else if (rescheduled) {
-        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, date: changed.date, ...(changed.time ? { time: changed.time } : {}) })
+        // 날짜만 보낸다 — 네이버 일정의 "시간"은 팀 표기(A09/B12/C15/D18)라 절대 바꾸지 않는다
+        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, date: changed.date })
           .catch((e) => notify(`네이버 일정 날짜 변경 실패: ${(e as Error).message}`, "error"));
       }
     }
