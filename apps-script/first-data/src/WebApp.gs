@@ -26,6 +26,10 @@ function doGet(e) {
     else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
     else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
+    else if (action === 'rebuildindex') {  // 통합이력 인덱스 원격 복구: 업체정보 동기화+인덱스 재생성을 1회성 트리거로 예약
+      ScriptApp.newTrigger('syncBizThenIndex').timeBased().after(1000).create();
+      result = { ok: true, scheduled: 'syncBizThenIndex (1~15분 내 실행)', trigger: ensureIndexTrigger_() };
+    }
     else if (action === 'booksearch') result = bookSearchProxy_(q);   // CS 웹앱 독서탭 책 검색 (리디 프록시, 키 불필요)
     else if (action === 'bookresolve') result = bookResolveBatch_(e.parameter.titles);   // 추천 도서 표지 일괄 해석 (서버 캐시 6시간)
     else if (action === 'quizgen') result = copierQuizGen_(e.parameter.date, e.parameter.brand);   // 복합기 데일리 퀴즈 AI 생성 (일·브랜드별 1회 캐시)

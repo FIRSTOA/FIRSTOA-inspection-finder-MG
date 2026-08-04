@@ -27,7 +27,8 @@ var SUPABASE_SHEET_TABLE = {
   'PC확장성': 'pc_expansion',
   '초과': 'overage',
   '복합기확장성': 'mfp_expansion',
-  '업체정보': 'vendor_info',
+  // 업체정보(vendor_info)는 여기서 빼둔다 — syncLeaseToSupabase가 증분 upsert로 따로 관리하고,
+  // 여기서 replace-all(전체삭제+2.2만행 재삽입)까지 하면 30분 타임아웃 + 죽으면 테이블 반쪽 위험.
   '임대현황표': 'lease_status',
   '미수': 'misu'
   // '불만'은 카톡 증분(SUPABASE_TABLE)으로 이동 — 미러 delete-all 로 301행 날아가는 것 방지.

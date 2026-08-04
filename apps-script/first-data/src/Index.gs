@@ -32,6 +32,18 @@ function syncBizInfoOnly() { return { 업체정보: syncCategoryToMaster('업체
 function syncLeaseStatusOnly() { return { 임대현황표: syncCategoryToMaster('임대현황표') }; } // 27k행
 function syncNonLeaseOnly() { return syncAllToMaster(LEASE_CATEGORIES); }                  // 임대 제외 전체(가벼움)
 function refreshIndexOnly() { return rebuildIndex(); }                                      // 인덱스만 단독
+// 원격 복구용: 업체정보 마스터 갱신 → 인덱스 재생성 한 번에 (웹앱 admin 액션이 1회성 트리거로 예약)
+function syncBizThenIndex() {
+  const sync = { 업체정보: syncCategoryToMaster('업체정보') };
+  const index = rebuildIndex();
+  return { sync: sync, index: index };
+}
+// 매일 인덱스 재생성 트리거 보장 (없으면 오전 6시로 추가) — admin 액션에서 호출
+function ensureIndexTrigger_() {
+  const exists = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'refreshIndexOnly'; });
+  if (!exists) ScriptApp.newTrigger('refreshIndexOnly').timeBased().everyDays(1).atHour(6).create();
+  return { ensured: true, existed: exists };
+}
 
 // [진단] 불만 원본시트 헤더 덤프 — Supabase displayCols 정합용. 실행 후 로그 확인.
 function _dumpBulmanHeaders() {
