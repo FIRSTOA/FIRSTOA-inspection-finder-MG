@@ -725,8 +725,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
+  const [assigneeFilter, setAssigneeFilter] = useState(""); // "" = 전체, "__none__" = 미배정만
   const scheduleRows = tickets.filter((ticket) => {
     if (team !== "ALL" && ticket.team !== team) return false;
+    if (assigneeFilter === "__none__") { if (ticket.assignee) return false; }
+    else if (assigneeFilter && ticket.assignee !== assigneeFilter) return false;
     const kind = ticket.scheduleType === "익일AS" ? "AS" : ticket.scheduleType;
     if (!listTypes.includes(kind)) return false;
     if (dayFilter === "today") return ticket.date === todayYmd;
@@ -793,10 +796,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
           <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
           {teams.map((item) => (
-            <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
+            <button key={item} type="button" onClick={() => { setTeam(item); setAssigneeFilter(""); }} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
           ))}
         </div>
       </section>}
+      {view === "as" && <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-black text-slate-400">직원</span>
+        <button type="button" onClick={() => setAssigneeFilter("")} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${!assigneeFilter ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
+        <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${assigneeFilter === "__none__" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>미배정</button>
+        {[...new Set((team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]))].map((name) => (
+          <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${assigneeFilter === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
+        ))}
+      </div>}
 
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -983,29 +994,22 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
           <div className="space-y-3 md:hidden">
             {scheduleRows.map((ticket) => (
-              <article key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-4 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 text-left">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
-                      <span className="text-xs font-black text-slate-500">{ticket.date} {ticket.time}</span>
-                    </div>
-                    <div className={`mt-2 text-base font-black leading-snug ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{displayTitleOf(ticket)}</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-600">{ticket.issue}</div>
-                    <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.model} · {ticket.serial || "시리얼 미입력"}{shortAddress(ticket.address) ? ` · 📍 ${shortAddress(ticket.address)}` : ""}</div>
-                    <div className="mt-2"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
-                  </div>
-                  {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
+              <article key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
+                <div className="flex items-center gap-1.5 text-[11px] font-black">
+                  <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
+                  <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
+                  <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
+                  {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-sm font-bold" onClick={(event) => event.stopPropagation()}>
-                  <span className={`rounded-full px-3 py-1.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
-                </div>
-                <div className="mt-3 flex gap-2" onClick={(event) => event.stopPropagation()}>
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-full bg-slate-900 transition hover:bg-slate-800 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-2.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
-                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-2.5 text-xs font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-2.5 text-xs font-black text-rose-600">삭제</button>
+                <div className={`mt-1.5 truncate text-sm font-black leading-snug ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div>
+                {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
+                <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
+                <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
+                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
+                  <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
+                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
                 </div>
               </article>
             ))}
