@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
-import { setActivityEventsCancelledBySource } from "./operations";
+import { setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -362,6 +362,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                           // 원문이 조금 달라진 중복 전송분까지 — 업체+작성자+날짜 기준으로 한 번 더
                           if (rowVendor.trim() && rowAuthor && rowDate) {
                             void setVisitsCancelledByVendor(rowVendor, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
+                            void setActivityEventsCancelledByVendor(rowVendor, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
                           }
                         }
                         setRows((current) => current.filter((r) => r.id !== detail.id));

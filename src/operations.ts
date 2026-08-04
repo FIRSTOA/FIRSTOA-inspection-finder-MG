@@ -169,6 +169,17 @@ export async function setActivityEventCancelled(id: string, cancelled: boolean, 
   });
 }
 
+// 업체+작성자+날짜 기준 취소 — 중복 전송분(원문 끝 사진링크가 달라 완전일치를 벗어남)까지 잡는다
+export async function setActivityEventsCancelledByVendor(vendor: string, author: string, activityDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
+  if (!vendor.trim()) return;
+  const query = `vendor=eq.${encodeURIComponent(vendor.trim())}&author=eq.${encodeURIComponent(author)}&activity_date=eq.${activityDate}`;
+  await updateRows("activity_events", query, {
+    status: cancelled ? "cancelled" : "active",
+    cancelled_at: cancelled ? new Date().toISOString() : null,
+    cancelled_by: cancelled ? cancelledBy : null,
+  });
+}
+
 export async function setActivityEventsCancelledBySource(sourceText: string, author: string, activityDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
   if (!sourceText.trim()) return;
   const query = `source_text=eq.${encodeURIComponent(sourceText)}&author=eq.${encodeURIComponent(author)}&activity_date=eq.${activityDate}`;
