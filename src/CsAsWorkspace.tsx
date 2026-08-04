@@ -671,13 +671,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const shareActionReason = async (ticket: AsTicket, label: string, reason: string) => {
     const text = reason.trim();
     if (!text) return;
-    void sendServiceReception("AS", `수도권${ticket.team}`, `${ticket.vendor} - ${label}\n${text}`)
+    // 봇이 대신 보내므로 누가 처리했는지 보이게: "업체명 배정자(없으면 작성자)" + 줄바꿈 + 사유
+    const who = ticket.assignee || author || "";
+    void sendServiceReception("AS", `수도권${ticket.team}`, `${ticket.vendor}${who ? ` ${who}` : ""}\n${label ? `${text} (${label})` : text}`)
       .then((r) => { if (!r.ok) notify(`카톡 전송 실패: ${r.error}`, "error"); })
       .catch((e) => notify(`카톡 전송 실패: ${(e as Error).message}`, "error"));
     if (ticket.naverUid) {
       try {
         const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
-        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: `${cur.description || ""}\n\n[${label}] ${text}` });
+        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: `${cur.description || ""}\n\n[${label || "완료"}${who ? ` · ${who}` : ""}] ${text}` });
       } catch (e) {
         notify(`네이버 일정 기록 실패: ${(e as Error).message}`, "error");
       }
@@ -690,7 +692,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     const ticket = doneTicket;
     setDoneTicket(null);
     if (!ticket) return;
-    await shareActionReason(ticket, "완료", reason); // 내용 기록을 먼저 — 완료 이동 후엔 캘린더가 바뀐다
+    await shareActionReason(ticket, "", reason); // 완료는 라벨 없이 "업체명 배정자⏎사유" — 기록을 먼저 남기고 이동
     toggleDone(ticket);
   };
 
@@ -1401,11 +1403,11 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
         <div className="text-lg font-black text-slate-950">✓ 완료 처리</div>
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
-          placeholder="처리 내용 (선택) — 적으면 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
+          placeholder="처리 내용 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
           className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
         <div className="mt-3 flex gap-2">
           <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">취소</button>
-          <button type="button" onClick={() => onApply(reason)} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700">완료</button>
+          <button type="button" disabled={!reason.trim()} onClick={() => onApply(reason)} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">완료</button>
         </div>
       </div>
     </div>
@@ -1429,18 +1431,18 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         <div className="mt-5 grid grid-cols-2 gap-2">
           {options.map(([label, date]) => (
-            <button key={label} type="button" onClick={() => onApply(date, reason)} className="rounded-full border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+            <button key={label} type="button" disabled={!reason.trim()} onClick={() => onApply(date, reason)} className="rounded-full border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40">
               {label}
               <div className="mt-1 text-xs text-slate-400">{date}</div>
             </button>
           ))}
         </div>
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2}
-          placeholder="미루는 사유 (선택) — 적으면 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} autoFocus
+          placeholder="미루는 사유 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
           className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
         <div className="mt-3 flex gap-2">
           <input type="date" value={customDate} onChange={(event) => onCustomDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <button type="button" onClick={() => onApply(customDate, reason)} className="rounded-full bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+          <button type="button" disabled={!reason.trim()} onClick={() => onApply(customDate, reason)} className="rounded-full bg-purple-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">직접선택</button>
         </div>
       </div>
     </div>
