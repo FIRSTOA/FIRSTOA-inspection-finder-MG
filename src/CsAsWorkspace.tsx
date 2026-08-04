@@ -1191,18 +1191,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <div className="border-t border-slate-100 p-2 text-right"><button type="button" onClick={() => void navigator.clipboard.writeText(reception.report_text)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-[11px] font-black text-white">복사</button></div>
                 </details>}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-3">
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">수정</button>
-                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="rounded-full border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">복제</button>
-                  {ticket.naverUid && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-700" title="네이버 캘린더에 등록된 일정 — 수정은 일정 수정 → [네이버 캘린더]">네이버 ✓</span>}
+              {/* 하단 액션: 모바일에서 글자가 세로로 꺾이지 않게 균등 분할 + 줄바꿈 금지 */}
+              <div className="space-y-1.5 border-t border-slate-100 px-4 py-3 sm:px-5">
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>
+                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
+                  <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
-                <div className="flex gap-2">
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-black text-white">FIELD AS</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => { toggleDone(ticket); setDetailId(""); }} className={`rounded-full border px-4 py-2 text-sm font-black ${ticket.status === "완료" ? "border-slate-300 text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "완료"}</button>
-                  <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>
+                <div className="flex gap-1.5">
+                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="flex-1 whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD AS</button>}
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-black text-emerald-700">배정</button>
+                  <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`flex-[1.4] whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
                 </div>
               </div>
             </div>
