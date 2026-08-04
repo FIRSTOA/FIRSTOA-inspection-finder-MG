@@ -6039,8 +6039,8 @@ export default function App() {
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
                 <>
-                  {mode !== "praise" && <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>}
-                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className={`${mode === "praise" ? "col-span-6" : "col-span-3"} flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700`}>📄 시트 열기</a>
+                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
+                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="col-span-3 flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
                 </>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-6 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, invokeEdgeFunction, selectAllRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
@@ -735,6 +735,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (dayFilter === "today") return ticket.date === todayYmd;
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
+  }).sort((a, b) => {
+    // 이름별로 묶어서 표시 — 미배정 먼저, 그 다음 이름순 (여러 직원 일정이 섞여 뒤죽박죽되지 않게)
+    const ka = a.assignee || "";
+    const kb = b.assignee || "";
+    if (ka !== kb) return ka === "" ? -1 : kb === "" ? 1 : ka.localeCompare(kb, "ko");
+    return a.date === b.date ? (a.time || "").localeCompare(b.time || "") : a.date.localeCompare(b.date);
   });
 
   // 기본 조회 범위(6개월) 이전 달을 캘린더에서 열면 그 달 일정만 추가 로드
@@ -793,21 +799,23 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
       {view === "as" && <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <p className="text-[11px] font-semibold text-slate-400">팀별 AS·물류·휴가·매월점검 일정을 확인하고 담당자 배정·완료·일정 변경을 처리합니다.</p>
-        <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
-          <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
-          {teams.map((item) => (
-            <button key={item} type="button" onClick={() => { setTeam(item); setAssigneeFilter(""); }} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
-          ))}
+        <div className="flex min-w-0 flex-col gap-2 lg:items-end">
+          <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
+            <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
+            {teams.map((item) => (
+              <button key={item} type="button" onClick={() => { setTeam(item); setAssigneeFilter(""); }} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
+            ))}
+          </div>
+          {/* 직원별 필터 — 모바일은 가로 스크롤로 줄바꿈 없이 */}
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-white/10 p-1 [scrollbar-width:none]">
+            <button type="button" onClick={() => setAssigneeFilter("")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${!assigneeFilter ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
+            <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === "__none__" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>미배정</button>
+            {[...new Set((team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]))].map((name) => (
+              <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === name ? "bg-emerald-400 text-slate-950" : "text-slate-400 hover:text-white"}`}>{name}</button>
+            ))}
+          </div>
         </div>
       </section>}
-      {view === "as" && <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-black text-slate-400">직원</span>
-        <button type="button" onClick={() => setAssigneeFilter("")} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${!assigneeFilter ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
-        <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${assigneeFilter === "__none__" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>미배정</button>
-        {[...new Set((team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]))].map((name) => (
-          <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${assigneeFilter === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
-        ))}
-      </div>}
 
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -993,8 +1001,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
           </div>
 
           <div className="space-y-3 md:hidden">
-            {scheduleRows.map((ticket) => (
-              <article key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
+            {scheduleRows.map((ticket, ti) => (
+              <div key={ticket.id}>
+                {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
+                  <div className="mb-1.5 mt-3 flex items-center gap-2 text-xs font-black text-slate-500 first:mt-0">
+                    <span className={`rounded-full px-2.5 py-1 ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
+                    <span className="text-slate-300">{scheduleRows.filter((r) => (r.assignee || "") === (ticket.assignee || "")).length}건</span>
+                  </div>
+                )}
+              <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
@@ -1012,6 +1027,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
                 </div>
               </article>
+              </div>
             ))}
             {!scheduleRows.length && <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
           </div>
@@ -1030,8 +1046,16 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 </tr>
               </thead>
               <tbody>
-                {scheduleRows.map((ticket) => (
-                  <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
+                {scheduleRows.map((ticket, ti) => (<Fragment key={ticket.id}>
+                  {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
+                    <tr className="border-b border-slate-100 bg-slate-50/80">
+                      <td colSpan={7} className="px-3 py-1.5 text-[11px] font-black text-slate-500">
+                        <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
+                        <span className="ml-2 text-slate-400">{scheduleRows.filter((r) => (r.assignee || "") === (ticket.assignee || "")).length}건</span>
+                      </td>
+                    </tr>
+                  )}
+                  <tr onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
                     <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
@@ -1054,7 +1078,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       </div>
                     </td>
                   </tr>
-                ))}
+                </Fragment>))}
                 {!scheduleRows.length && (
                   <tr><td colSpan={7} className="px-3 py-10 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</td></tr>
                 )}
