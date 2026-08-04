@@ -1,3 +1,29 @@
+// ---- 솔라피(SOLAPI) 문자 발송 — Secrets: SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER ----
+async function solapiSend(to: string, text: string): Promise<void> {
+  const apiKey = Deno.env.get("SOLAPI_API_KEY") || "";
+  const apiSecret = Deno.env.get("SOLAPI_API_SECRET") || "";
+  const sender = (Deno.env.get("SOLAPI_SENDER") || "").replace(/[^\d]/g, "");
+  if (!apiKey || !apiSecret || !sender) throw new Error("솔라피 설정 누락 (SOLAPI_API_KEY/SECRET/SENDER)");
+  const date = new Date().toISOString();
+  const salt = crypto.randomUUID().replace(/-/g, "");
+  const keyData = new TextEncoder().encode(apiSecret);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(date + salt));
+  const signature = [...new Uint8Array(sigBuf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
+    method: "POST",
+    headers: {
+      Authorization: `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ messages: [{ to, from: sender, text }] }), // 90바이트 초과 시 LMS 자동 전환(autoTypeDetect 기본)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`솔라피 발송 실패(${res.status}): ${JSON.stringify(data).slice(0, 200)}`);
+  const failed = (data.failedMessageList || []) as Array<{ statusMessage?: string }>;
+  if (failed.length) throw new Error(`솔라피 발송 실패: ${failed[0]?.statusMessage || "알 수 없는 오류"}`);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -29,15 +55,19 @@ Deno.serve(async (req) => {
         const claimed = await claim.json().catch(() => []) as unknown[];
         if (!claim.ok || !claimed.length) continue;
         try {
-          const provider = await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(job.payload as object || {}), channel: job.channel, to: job.recipient, text: job.message, source: "FIRSTOA_CS_SYSTEM" }) });
-          const providerBody = await provider.text().catch(() => "");
-          if (!provider.ok) throw new Error(`발송 웹훅 실패(${provider.status}): ${providerBody.slice(0, 200)}`);
-          // GAS 웹훅은 항상 HTTP 200 — 본문 ok=false를 실패로 처리 (예약발송이 실패인데 sent로 남지 않게)
-          try {
-            const parsedBody = JSON.parse(providerBody);
-            if (parsedBody && parsedBody.ok === false) throw new Error(`발송 실패: ${String(parsedBody.error || "").slice(0, 200)}`);
-          } catch (parseError) {
-            if (parseError instanceof Error && parseError.message.startsWith("발송 실패")) throw parseError;
+          if (String(job.channel) === "sms") {
+            await solapiSend(String(job.recipient || "").replace(/[^\d]/g, ""), String(job.message || ""));
+          } else {
+            const provider = await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(job.payload as object || {}), channel: job.channel, to: job.recipient, text: job.message, source: "FIRSTOA_CS_SYSTEM" }) });
+            const providerBody = await provider.text().catch(() => "");
+            if (!provider.ok) throw new Error(`발송 웹훅 실패(${provider.status}): ${providerBody.slice(0, 200)}`);
+            // GAS 웹훅은 항상 HTTP 200 — 본문 ok=false를 실패로 처리 (예약발송이 실패인데 sent로 남지 않게)
+            try {
+              const parsedBody = JSON.parse(providerBody);
+              if (parsedBody && parsedBody.ok === false) throw new Error(`발송 실패: ${String(parsedBody.error || "").slice(0, 200)}`);
+            } catch (parseError) {
+              if (parseError instanceof Error && parseError.message.startsWith("발송 실패")) throw parseError;
+            }
           }
           await fetch(`${supabaseUrl}/rest/v1/message_jobs?id=eq.${id}`, { method: "PATCH", headers: restHeaders, body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString(), error: "" }) });
           const sourceId = String(job.source_id || "");
@@ -65,6 +95,10 @@ Deno.serve(async (req) => {
     const validTarget = channel === "email" ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) : /^01\d{8,9}$/.test(to);
     if (!validTarget || !text) return Response.json({ error: "수신처 또는 메시지가 올바르지 않습니다." }, { status: 400, headers: corsHeaders });
 
+    if (channel === "sms") {
+      await solapiSend(to, text); // 실패 시 throw → 아래 catch가 오류로 응답
+      return Response.json({ ok: true, provider: "solapi" }, { headers: corsHeaders });
+    }
     const response = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
