@@ -5393,20 +5393,21 @@ export default function App() {
 
 
   // 시트 기입 4종이면 대상 시트 링크 (전송 버튼 옆 '시트 열기')
-  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨)
-  const fieldRegionMissing = useMemo(() => {
-    if (mode !== "inspection" && mode !== "blank-report") return false;
-    const text = textOutput || listOutput.map((l) => l.content).join("\n");
-    if (!text.trim()) return false;
-    // 값 캡처는 탭 하나까지만 — "지역⏎⏎접수일"처럼 값이 지워진 경우 다음 라벨을 값으로 오인하지 않게
-    const m = text.match(/지역\s*[:： ]?\t?([^\t\n]*)/);
-    return !(m?.[1] || "").trim();
-  }, [mode, textOutput, listOutput]);
-
   const fieldSheetUrl = mode === "pc"
     ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
     : FIELD_SHEET_LINKS[mode] || "";
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
+  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨)
+  // 검사 대상은 실제 전송에 쓰는 완성 양식(buildResultText)과 동일해야 한다 — 원문/중간 상태를 보면 오탐
+  const fieldRegionMissing = (() => {
+    if (mode !== "inspection" && mode !== "blank-report") return false;
+    if (!hasOutput) return false;
+    const text = buildResultText();
+    if (!text.trim()) return false;
+    const m = text.match(/지역\s*[:： ]?\t?([^\t\n]*)/);
+    return !(m?.[1] || "").trim();
+  })();
+
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
     home: HomeIcon, serviceReception: ClipboardList, asReception: ListChecks, calendar: CalendarDays,

@@ -110,8 +110,14 @@ function ContactsEditor({ contacts, onChange, email = false }: { contacts: Conta
 
 function useMessageTemplates(context: "happycall" | "promotion", author: string) {
   const defaults = context === "happycall" ? happycallDefaults : promotionDefaults;
-  const [custom, setCustom] = useState<MessageTemplate[]>([]);
-  const reload = useCallback(() => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`).then(setCustom).catch(() => setCustom([])), [context]);
+  // 마지막으로 본 공용 문구를 로컬에 캐시 — 서버 응답 전에 옛 기본문구가 번쩍이지 않고 즉시 최신으로 뜬다
+  const cacheKey = `msg_templates_${context}_v1`;
+  const readCache = (): MessageTemplate[] => { try { const parsed = JSON.parse(localStorage.getItem(cacheKey) || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } };
+  const [custom, setCustom] = useState<MessageTemplate[]>(readCache);
+  const [loaded, setLoaded] = useState(() => readCache().length > 0);
+  const reload = useCallback(() => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`)
+    .then((rows) => { setCustom(rows); setLoaded(true); try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch { /* 캐시 실패 무시 */ } })
+    .catch(() => setLoaded(true)), [cacheKey, context]);
   useEffect(() => {
     void reload();
     const refresh = () => { if (document.visibilityState === "visible") void reload(); };
@@ -146,23 +152,24 @@ function useMessageTemplates(context: "happycall" | "promotion", author: string)
     await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { active: false });
     await reload();
   };
-  return { templates: custom.length ? custom : defaults, save, update, remove, editableIds: new Set(custom.map((item) => item.id)) };
+  return { templates: custom.length ? custom : defaults, loaded, save, update, remove, editableIds: new Set(custom.map((item) => item.id)) };
 }
 
 function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
-  const { templates, save, update, remove, editableIds } = useMessageTemplates(context, author);
+  const { templates, loaded, save, update, remove, editableIds } = useMessageTemplates(context, author);
   const [selected, setSelected] = useState(templates[0]?.id || "");
   const appliedRevision = useRef("");
   const selectedId = templates.some((item) => item.id === selected) ? selected : templates[0]?.id || "";
   useEffect(() => {
-    if (!applyRevision || appliedRevision.current === applyRevision || !templates.length) return;
+    // 서버(또는 캐시) 문구가 준비되기 전엔 자동 적용하지 않는다 — 옛 기본문구가 먼저 채워지던 원인
+    if (!loaded || !applyRevision || appliedRevision.current === applyRevision || !templates.length) return;
     const preferred = templates.find((item) => item.title === preferredTitle) || templates[0];
     appliedRevision.current = applyRevision;
     setSelected(preferred.id);
     onApply(preferred.body);
   }, [applyRevision, onApply, preferredTitle, templates]);
   return <div className="grid grid-cols-3 gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
-    <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
+    <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구{!loaded && <span className="ml-1.5 text-[10px] font-bold text-amber-500">불러오는 중…</span>}</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
     <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
