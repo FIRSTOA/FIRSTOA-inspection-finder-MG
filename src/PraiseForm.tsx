@@ -77,13 +77,9 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
           <input value={form.short} onChange={(e) => set("short", e.target.value)} className={field} />
         </label>
       </div>
-      <div className="mt-5 flex gap-2">
-        <button type="button" onClick={() => window.open("https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=0", "_blank", "noopener,noreferrer")}
-          className="h-12 shrink-0 rounded-full border border-slate-300 bg-white px-5 text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">시트 열기</button>
-        <button type="button" onClick={() => void submit()} disabled={busy} className="h-12 flex-1 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">
-          {busy ? "보내는 중…" : "보내기"}
-        </button>
-      </div>
+      <button type="button" onClick={() => void submit()} disabled={busy} className="mt-5 h-12 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">
+        {busy ? "보내는 중…" : "보내기"}
+      </button>
     </section>
   );
 }

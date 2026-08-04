@@ -2126,6 +2126,7 @@ function matchVendor(value: string) {
 }
 // 시트 자동 기입 4종의 대상 시트 링크 — 전송 후 직원이 바로 열어 확인하는 용도
 const FIELD_SHEET_LINKS: Record<string, string> = {
+  praise: "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=0",
   bulman: "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=419415178",
   "contact-change": "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=1289086745",
   "pc-it": "https://docs.google.com/spreadsheets/d/1Q0u_ok6s3o7_qnSFyDW632zkspV_MqttRnFQ4uurmpg/edit#gid=1571265600",
@@ -6038,8 +6039,8 @@ export default function App() {
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
                 <>
-                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
-                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="col-span-3 flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
+                  {mode !== "praise" && <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>}
+                  <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className={`${mode === "praise" ? "col-span-6" : "col-span-3"} flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700`}>📄 시트 열기</a>
                 </>
               ) : (
                 <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-6 rounded-lg bg-slate-800 py-3 text-sm font-black text-white disabled:bg-slate-200">보내기</button>
