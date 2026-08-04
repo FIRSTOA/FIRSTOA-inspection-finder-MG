@@ -241,8 +241,7 @@ const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,mode
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 /** 리스트·캘린더 표시 제목 — 캘린더 제목(보고양식 첫 줄)에 배정자 이름 접두사. 없으면 업체명 */
 function displayTitleOf(t: AsTicket) {
-  const base = (t.calendarTitle || "").trim();
-  if (!base) return t.vendor || "일정";
+  const base = (t.calendarTitle || "").trim() || t.vendor || "일정";
   return `${t.assignee ? `${t.assignee}-` : ""}${base}`;
 }
 
@@ -976,8 +975,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                             <button type="button" className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black tabular-nums transition ${isToday ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]" : `${dayNumberColor(dayIndex, inMonth)}${inMonth ? " hover:bg-slate-100" : ""}`}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 5).map((ticket) => (
-                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={(event) => { event.stopPropagation(); setDetailId(ticket.id); }} className={`block w-full cursor-grab truncate rounded-md px-2 py-1 text-left text-[11px] font-bold shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:brightness-95 active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                                  {ticket.vendor || "새 일정"}
+                                <button key={ticket.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/calendar-ticket", ticket.id); event.dataTransfer.effectAllowed = "move"; }} onClick={(event) => { event.stopPropagation(); setDetailId(ticket.id); }} className={`block w-full cursor-grab truncate rounded-md px-2 py-1 text-left text-[11px] font-bold shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:brightness-95 active:cursor-grabbing ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`} title={displayTitleOf(ticket)}>
+                                  {displayTitleOf(ticket)}
                                 </button>
                               ))}
                               {rows.length > 5 && <div onClick={(event) => event.stopPropagation()} className="px-1 pt-0.5 text-[10px] font-black text-slate-400">+{rows.length - 5}개 더</div>}
@@ -1120,17 +1119,28 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
         );
         return (
           <div className="fixed inset-0 z-[115] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetailId("")}>
-            <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-                <div className="min-w-0">
+            <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="bg-[#1E252F] px-5 py-4">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{ticket.team}팀</span>
-                    <span className={`rounded border px-2 py-0.5 text-[10px] font-black ${statusClass(ticket.status)}`}>{ticket.status}</span>
-                    <span className="text-[11px] font-black text-slate-400">{ticket.date} {ticket.time}</span>
+                    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${ticket.status === "완료" ? "bg-blue-500 text-white" : ticket.status === "배정" ? "bg-emerald-500/90 text-white" : "bg-white/15 text-slate-200"}`}>{ticket.status}</span>
+                    <span className="text-[11px] font-bold text-slate-400">{ticket.date} {ticket.time}</span>
+                    {ticket.repeatMonthly && <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-black text-blue-200">🔁 매월</span>}
+                    {ticket.naverUid && <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-black text-emerald-300">네이버 ✓</span>}
                   </div>
-                  <div className="mt-1 flex items-center gap-2"><span className="truncate text-lg font-black text-slate-950">{ticket.vendor || "업체 미기재"}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁 매월</span>}</div>
+                  <button type="button" onClick={() => setDetailId("")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-black text-slate-400 transition hover:bg-white/10 hover:text-white">×</button>
                 </div>
-                <button type="button" onClick={() => setDetailId("")} className="h-9 w-9 shrink-0 rounded-lg text-xl font-black text-slate-400">×</button>
+                {/* 제목 바로 수정 — 저장하면 리스트·캘린더·네이버 제목이 함께 바뀐다 (배정자 이름은 자동) */}
+                <div className="mt-2 flex items-center gap-2">
+                  {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{ticket.assignee}</span>}
+                  <input
+                    key={ticket.id}
+                    defaultValue={(ticket.calendarTitle || "").trim() || ticket.vendor}
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== ((ticket.calendarTitle || "").trim() || ticket.vendor)) update(ticket.id, { calendarTitle: v }); }}
+                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-base font-black text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15"
+                    placeholder="제목 (수정하면 네이버 캘린더도 바뀜)" />
+                </div>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
                 {!!ticket.issue && <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3"><div className="text-[10px] font-black text-blue-500">접수 내용</div><div className="mt-1 whitespace-pre-wrap text-sm font-bold leading-6 text-slate-800">{ticket.issue}</div></div>}
