@@ -686,6 +686,8 @@ function regionRoom(schemaKey: string, region: string, fallback: string): string
 async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+  // 지역 검증은 테스트 모드보다 먼저 — 테스트 모드여도 지역 없는 양식은 애초에 전송 금지
+  if (kind === "normal" && !region.trim()) throw new Error("지역이 비어 있습니다 — 양식의 '지역' 값을 채워주세요 (전송 안 됨)");
   if (isTestModeValue(cfg.TEST_MODE)) return [testRoom];
 
   const map = await getRoomMap();
@@ -703,6 +705,7 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
 async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";
+  if (!region.trim()) throw new Error("지역이 비어 있습니다 — 양식의 '지역' 값을 채워주세요 (전송 안 됨)");
   if (isTestModeValue(cfg.TEST_MODE)) return [testRoom];
   const map = await getRoomMap();
   const key = normRegion(region);

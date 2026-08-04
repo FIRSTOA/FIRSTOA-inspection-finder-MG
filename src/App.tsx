@@ -4994,6 +4994,10 @@ export default function App() {
       showToast(`${config.label}은 복사 전용입니다. 복사한 내용을 지정 채널에 붙여넣어 주세요.`, "error");
       return;
     }
+    if (kind === "normal" && fieldRegionMissing) {
+      window.alert("지역을 넣어주세요.\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다 — 지금은 전송되지 않습니다.");
+      return;
+    }
     if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
       setPhotoPrompt({ kind, destination });
       return;
