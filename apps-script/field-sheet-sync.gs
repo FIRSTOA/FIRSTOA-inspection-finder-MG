@@ -112,13 +112,15 @@ function appendFieldSheetRow_(request) {
   // 접수 탭들: 시트가 미리 깔아둔 빈 행(수식·서식 포함)을 재사용한다.
   // 행 삽입은 열 전체 배열수식·VLOOKUP 재계산을 유발해 느리고, 서식 끝 맨 밑에
   // 뚝 떨어져 "중간 빈칸" 위 마지막 데이터와 안 이어진다. 마지막 데이터 다음 행에 쌓는다.
-  var DATA_START = { reception_remote: 5, reception_copier: 8, reception_copier_new: 8 };
+  var DATA_START = { reception_remote: 5, reception_copier: 8, reception_copier_new: 8, praise: headerRow + 1 };
   var dataStart = DATA_START[request.category] || 0;
   var row = 0;
   var reusedRow = false;
   if (dataStart && sheet.getLastRow() >= dataStart) {
     // 직접 입력 열들(수식 아님)만 보고 마지막 데이터 행을 찾는다 — 수식 잔여물(" / " 등) 오탐 방지
-    var markerHeaders = request.category === "reception_remote" ? ["접수일", "접수자", "유입경로"] : ["날짜", "접수자", "퍼스트순"];
+    var markerHeaders = request.category === "reception_remote" ? ["접수일", "접수자", "유입경로"]
+      : request.category === "praise" ? ["날짜", "직원", "거래처명"]
+      : ["날짜", "접수자", "퍼스트순"];
     var lastFilled = 0;
     for (var mh = 0; mh < markerHeaders.length; mh++) {
       var markerCol = headers.indexOf(markerHeaders[mh]) + 1;
