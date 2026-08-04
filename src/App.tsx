@@ -4594,6 +4594,8 @@ export default function App() {
   const FIELD_NAVER_BUTTON = false;
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
   const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string } | null>(null);
+  const praiseSubmitRef = useRef<(() => void) | null>(null); // 칭찬 폼 제출 — 미리보기 버튼줄 [보내기]가 호출
+  const [praiseReady, setPraiseReady] = useState(false);
   const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
   const [ticketDeferDate, setTicketDeferDate] = useState("");
   const [menuOpen, setMenuOpen] = useState(false); // 좌측 ☰ 메뉴
@@ -5960,7 +5962,7 @@ export default function App() {
 
         {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
         {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} onLoad={loadSharedFromInspect} onError={(message) => showToast(message, "error")} />}
-        {mode === "praise" && <PraiseForm author={author} onToast={showToast} />}
+        {mode === "praise" && <PraiseForm author={author} onToast={showToast} bindSubmit={(fn) => { praiseSubmitRef.current = fn; }} onReadyChange={setPraiseReady} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
@@ -6039,7 +6041,7 @@ export default function App() {
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
                 <>
-                  <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
+                  <button onClick={() => mode === "praise" ? praiseSubmitRef.current?.() : handleSendAll("normal")} disabled={mode === "praise" ? !praiseReady : (!hasOutput || sending)} className="col-span-3 rounded-lg bg-slate-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "보내기"}</button>
                   <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="col-span-3 flex items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트 열기</a>
                 </>
               ) : (
@@ -6144,7 +6146,7 @@ export default function App() {
             </> : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
-              <button onClick={() => handleSendAll("normal")} disabled={!hasOutput || sending} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>
+              <button onClick={() => mode === "praise" ? praiseSubmitRef.current?.() : handleSendAll("normal")} disabled={mode === "praise" ? !praiseReady : (!hasOutput || sending)} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>
               {fieldSheetUrl && <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트</a>}
             </>}
             {(mode === "inspection" || mode === "blank-report") && (

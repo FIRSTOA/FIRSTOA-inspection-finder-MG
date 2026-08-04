@@ -3,7 +3,7 @@
  * 저장하면 퍼스트전산 DB통합시트 '칭찬' 탭에 자동 기입된다 (카톡 전송 없음).
  * 분기·월·분류(칭찬)는 날짜와 작성자로 자동 채워지므로 입력받지 않는다.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendPraiseForm, type PraiseFormState } from "./api";
 import { kstDate } from "./visits";
 
@@ -12,7 +12,7 @@ const GRADES = ["", "N", "NN", "S", "SS", "V"];
 
 const emptyForm = (): PraiseFormState => ({ date: kstDate(), grade: "", company: "", manager: "", contact: "", phone: "", reason: "", short: "" });
 
-export default function PraiseForm({ author, onToast }: { author: string; onToast: (message: string, kind?: "success" | "error") => void }) {
+export default function PraiseForm({ author, onToast, bindSubmit, onReadyChange }: { author: string; onToast: (message: string, kind?: "success" | "error") => void; bindSubmit?: (fn: () => void) => void; onReadyChange?: (ready: boolean) => void }) {
   const [form, setForm] = useState<PraiseFormState>(emptyForm);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof PraiseFormState, value: string) => setForm((current) => ({ ...current, [key]: value }));
@@ -32,6 +32,9 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
       setBusy(false);
     }
   };
+  // 제출은 우측 미리보기 버튼줄의 [보내기]가 담당 — 여기서 함수와 활성화 조건을 넘겨준다
+  useEffect(() => { bindSubmit?.(() => void submit()); });
+  useEffect(() => { onReadyChange?.(!busy && !!form.company.trim() && !!form.reason.trim()); }, [busy, form.company, form.reason, onReadyChange]);
 
   const field = "h-10 w-full rounded-lg border border-slate-300 px-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
   return (
@@ -77,9 +80,7 @@ export default function PraiseForm({ author, onToast }: { author: string; onToas
           <input value={form.short} onChange={(e) => set("short", e.target.value)} className={field} />
         </label>
       </div>
-      <button type="button" onClick={() => void submit()} disabled={busy} className="mt-5 h-12 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">
-        {busy ? "보내는 중…" : "보내기"}
-      </button>
+
     </section>
   );
 }
