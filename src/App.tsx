@@ -5393,6 +5393,14 @@ export default function App() {
 
 
   // 시트 기입 4종이면 대상 시트 링크 (전송 버튼 옆 '시트 열기')
+  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨)
+  const fieldRegionMissing = useMemo(() => {
+    if (mode !== "inspection" && mode !== "blank-report") return false;
+    const text = textOutput || listOutput.map((l) => l.content).join("\n");
+    if (!text.trim()) return false;
+    return !/지역\s*[:：\t ]\s*\S/.test(text);
+  }, [mode, textOutput, listOutput]);
+
   const fieldSheetUrl = mode === "pc"
     ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
     : FIELD_SHEET_LINKS[mode] || "";
@@ -6028,6 +6036,7 @@ export default function App() {
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
               </label>
             </div>
+            {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)</div>}
             <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
                 <>
@@ -6138,6 +6147,7 @@ export default function App() {
               <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>
           </div>
+          {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요</div>}
           <div className="flex flex-wrap gap-2">
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>

@@ -695,7 +695,9 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   // normal: AS는 AS방만, 그 외는 점검방만.
   const key = normRegion(region);
   const room = map[`${hasAS ? "AS" : "점검"}|${key}`];
-  return [room || testRoom];                      // 미지원 지역(E·빈값 등)
+  // 지역이 비었거나 방 매핑이 없으면 전송 중단 — 예전엔 테스트방으로 폴백해 실양식이 테스트방에 쌓였다
+  if (!room) throw new Error(`지역(${region.trim() || "미기재"})에 매핑된 ${hasAS ? "AS" : "점검"}방이 없습니다 — 양식의 '지역' 값을 채워주세요 (전송 안 됨)`);
+  return [room];
 }
 
 async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
@@ -705,7 +707,8 @@ async function resolveForcedRoom(destination: SendDestination, region: string): 
   const map = await getRoomMap();
   const key = normRegion(region);
   const room = map[`${destination === "inspection" ? "점검" : "AS"}|${key}`];
-  return [room || testRoom];
+  if (!room) throw new Error(`지역(${region.trim() || "미기재"})에 매핑된 ${destination === "inspection" ? "점검" : "AS"}방이 없습니다 — 양식의 '지역' 값을 채워주세요 (전송 안 됨)`);
+  return [room];
 }
 
 // 완성 양식 → Supabase 점검/AS 탭 직접 적재 + 발신큐(outbox) 적재 (GAS 미경유).

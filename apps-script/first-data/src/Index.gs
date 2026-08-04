@@ -32,7 +32,22 @@ function syncBizInfoOnly() { return { 업체정보: syncCategoryToMaster('업체
 function syncLeaseStatusOnly() { return { 임대현황표: syncCategoryToMaster('임대현황표') }; } // 27k행
 function syncNonLeaseOnly() { return syncAllToMaster(LEASE_CATEGORIES); }                  // 임대 제외 전체(가벼움)
 function refreshIndexOnly() { return rebuildIndex(); }                                      // 인덱스만 단독
-// 원격 복구용: 업체정보 마스터 갱신 → 인덱스 재생성 한 번에 (웹앱 admin 액션이 1회성 트리거로 예약)
+// 원격 복구용 — 한 실행에 묶으면 30분 한도를 넘겨서 두 단계로 분리, 결과는 Script Properties에 기록
+function recordRun_(name, fn) {
+  const p = PropertiesService.getScriptProperties();
+  const started = new Date().toISOString();
+  try {
+    const out = fn();
+    p.setProperty('run_' + name, JSON.stringify({ ok: true, started: started, ended: new Date().toISOString(), out: JSON.stringify(out).slice(0, 300) }));
+    return out;
+  } catch (e) {
+    p.setProperty('run_' + name, JSON.stringify({ ok: false, started: started, ended: new Date().toISOString(), error: String(e).slice(0, 300) }));
+    throw e;
+  }
+}
+function bizInfoStep() { return recordRun_('bizInfoStep', function () { return syncCategoryToMaster('업체정보'); }); }
+function indexStep() { return recordRun_('indexStep', function () { return rebuildIndex(); }); }
+// (구) 한 방에 처리 — 타임아웃 이력 있어 사용하지 않음
 function syncBizThenIndex() {
   const sync = { 업체정보: syncCategoryToMaster('업체정보') };
   const index = rebuildIndex();

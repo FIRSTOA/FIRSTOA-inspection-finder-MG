@@ -26,9 +26,27 @@ function doGet(e) {
     else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
     else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
-    else if (action === 'rebuildindex') {  // 통합이력 인덱스 원격 복구: 업체정보 동기화+인덱스 재생성을 1회성 트리거로 예약
-      ScriptApp.newTrigger('syncBizThenIndex').timeBased().after(1000).create();
-      result = { ok: true, scheduled: 'syncBizThenIndex (1~15분 내 실행)', trigger: ensureIndexTrigger_() };
+    else if (action === 'rebuildindex') {  // 통합이력 인덱스 원격 복구: 업체정보 동기화(즉시) → 인덱스(22분 뒤) 2단계 예약
+      for (const t of ScriptApp.getProjectTriggers()) {  // 이전 1회성 잔재 정리
+        const h = t.getHandlerFunction();
+        if (h === 'syncBizThenIndex' || h === 'bizInfoStep' || h === 'indexStep') ScriptApp.deleteTrigger(t);
+      }
+      ScriptApp.newTrigger('bizInfoStep').timeBased().after(1000).create();
+      ScriptApp.newTrigger('indexStep').timeBased().after(22 * 60 * 1000).create();
+      result = { ok: true, scheduled: 'bizInfoStep(즉시) → indexStep(+22분)', trigger: ensureIndexTrigger_() };
+    }
+    else if (action === 'indexonly') {  // 인덱스만 바로 (마스터가 이미 최신일 때)
+      ScriptApp.newTrigger('indexStep').timeBased().after(1000).create();
+      result = { ok: true, scheduled: 'indexStep(즉시)' };
+    }
+    else if (action === 'lastruns') {  // 복구 단계 실행 결과 확인
+      const props = PropertiesService.getScriptProperties();
+      result = {
+        ok: true,
+        bizInfoStep: JSON.parse(props.getProperty('run_bizInfoStep') || 'null'),
+        indexStep: JSON.parse(props.getProperty('run_indexStep') || 'null'),
+        indexInfo: getIndexMeta(),
+      };
     }
     else if (action === 'booksearch') result = bookSearchProxy_(q);   // CS 웹앱 독서탭 책 검색 (리디 프록시, 키 불필요)
     else if (action === 'bookresolve') result = bookResolveBatch_(e.parameter.titles);   // 추천 도서 표지 일괄 해석 (서버 캐시 6시간)
