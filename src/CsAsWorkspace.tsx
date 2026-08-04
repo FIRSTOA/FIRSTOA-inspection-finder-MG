@@ -495,8 +495,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     try { localStorage.setItem("cs_list_types_v1", JSON.stringify(next)); } catch { /* 무시 */ }
   };
   const toggleListType = (name: string) => {
+    // 전체 상태에서 하나를 누르면 "그것만" 선택 — 이후 다른 유형을 누르면 추가(중복 선택),
+    // 켜진 걸 다시 누르면 해제, 전부 꺼지면 전체로 복귀
+    if (listTypes.length === LIST_TYPE_OPTIONS.length) { setListTypesPersist([name]); return; }
     const next = listTypes.includes(name) ? listTypes.filter((item) => item !== name) : [...listTypes, name];
-    if (next.length) setListTypesPersist(next); // 전부 끄면 아무것도 안 보여서 마지막 하나는 유지
+    setListTypesPersist(next.length ? next : [...LIST_TYPE_OPTIONS]);
   };
   const [editId, setEditId] = useState("");
   const [newTicket, setNewTicket] = useState<AsTicket | null>(null);
