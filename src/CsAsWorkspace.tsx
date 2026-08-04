@@ -741,15 +741,20 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   const [assigneeFilter, setAssigneeFilter] = useState(""); // "" = 전체, "__none__" = 미배정만
-  const scheduleRows = tickets.filter((ticket) => {
+  // 팀·유형·날짜만 거른 기준 행 — 직원 칩의 건수 배지와 목록이 같은 범위를 본다
+  const baseRows = tickets.filter((ticket) => {
     if (team !== "ALL" && ticket.team !== team) return false;
-    if (assigneeFilter === "__none__") { if (ticket.assignee) return false; }
-    else if (assigneeFilter && ticket.assignee !== assigneeFilter) return false;
     const kind = ticket.scheduleType === "익일AS" ? "AS" : ticket.scheduleType;
     if (!listTypes.includes(kind)) return false;
     if (dayFilter === "today") return ticket.date === todayYmd;
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
+  });
+  const assigneeCounts = baseRows.reduce<Record<string, number>>((acc, t) => { const k = t.assignee || ""; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+  const scheduleRows = baseRows.filter((ticket) => {
+    if (assigneeFilter === "__none__") return !ticket.assignee;
+    if (assigneeFilter) return ticket.assignee === assigneeFilter;
+    return true;
   }).sort((a, b) => {
     // 이름별로 묶어서 표시 — 미배정 먼저, 그 다음 이름순 (여러 직원 일정이 섞여 뒤죽박죽되지 않게)
     const ka = a.assignee || "";
@@ -821,13 +826,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
               <button key={item} type="button" onClick={() => { setTeam(item); setAssigneeFilter(""); }} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
             ))}
           </div>
-          {/* 직원별 필터 — 모바일은 가로 스크롤로 줄바꿈 없이 */}
-          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-white/10 p-1 [scrollbar-width:none]">
-            <button type="button" onClick={() => setAssigneeFilter("")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${!assigneeFilter ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
-            <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === "__none__" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>미배정</button>
-            {[...new Set((team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]))].map((name) => (
-              <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === name ? "bg-emerald-400 text-slate-950" : "text-slate-400 hover:text-white"}`}>{name}</button>
-            ))}
+          {/* 직원별 필터 = 현황판: 칩에 건수 배지, 일정 없는 직원은 숨겨 칩 수를 줄인다 (드래그 불필요) */}
+          <div className="flex max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white/10 p-1">
+            <button type="button" onClick={() => setAssigneeFilter("")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${!assigneeFilter ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체 <span className="opacity-60">{baseRows.length}</span></button>
+            {(assigneeCounts[""] || 0) > 0 && <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === "__none__" ? "bg-amber-300 text-slate-950" : "text-amber-300/90 hover:text-amber-200"}`}>미배정 <span className="opacity-70">{assigneeCounts[""]}</span></button>}
+            {[...new Set([...(team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]), ...Object.keys(assigneeCounts).filter(Boolean)])]
+              .filter((name) => (assigneeCounts[name] || 0) > 0)
+              .map((name) => (
+                <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === name ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:text-white"}`}>{name} <span className="opacity-60">{assigneeCounts[name]}</span></button>
+              ))}
           </div>
         </div>
       </section>}
@@ -1019,9 +1026,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             {scheduleRows.map((ticket, ti) => (
               <div key={ticket.id}>
                 {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
-                  <div className="mb-1.5 mt-3 flex items-center gap-2 text-xs font-black text-slate-500 first:mt-0">
-                    <span className={`rounded-full px-2.5 py-1 ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
-                    <span className="text-slate-300">{scheduleRows.filter((r) => (r.assignee || "") === (ticket.assignee || "")).length}건</span>
+                  <div className="mb-1 mt-2.5 first:mt-0">
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
                   </div>
                 )}
               <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
@@ -1064,9 +1070,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                 {scheduleRows.map((ticket, ti) => (<Fragment key={ticket.id}>
                   {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
                     <tr className="border-b border-slate-100 bg-slate-50/80">
-                      <td colSpan={7} className="px-3 py-1.5 text-[11px] font-black text-slate-500">
+                      <td colSpan={7} className="px-3 py-1 text-[11px] font-black text-slate-500">
                         <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
-                        <span className="ml-2 text-slate-400">{scheduleRows.filter((r) => (r.assignee || "") === (ticket.assignee || "")).length}건</span>
                       </td>
                     </tr>
                   )}
