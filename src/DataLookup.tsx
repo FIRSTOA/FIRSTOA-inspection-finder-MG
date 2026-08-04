@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { setActivityEventsCancelledBySource } from "./operations";
-import { setVisitsCancelledBySource } from "./visits";
+import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
@@ -354,9 +354,14 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                           const sourceText = String(detail["_원문"] ?? detail["원문"] ?? detail["source_text"] ?? "");
                           const rowAuthor = String(detail["작성자"] ?? detail["author"] ?? "");
                           const rowDate = String(detail[category.dateField] ?? "").slice(0, 10);
+                          const rowVendor = String(detail["_업체명"] ?? detail["업체명"] ?? "");
                           if (sourceText.trim() && rowAuthor && rowDate) {
                             void setActivityEventsCancelledBySource(sourceText, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
                             void setVisitsCancelledBySource(sourceText, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
+                          }
+                          // 원문이 조금 달라진 중복 전송분까지 — 업체+작성자+날짜 기준으로 한 번 더
+                          if (rowVendor.trim() && rowAuthor && rowDate) {
+                            void setVisitsCancelledByVendor(rowVendor, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
                           }
                         }
                         setRows((current) => current.filter((r) => r.id !== detail.id));

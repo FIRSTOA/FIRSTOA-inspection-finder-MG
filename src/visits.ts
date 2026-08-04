@@ -67,6 +67,18 @@ export async function saveVisit(draft: VisitDraft, sourceText: string): Promise<
   }
 }
 
+// 업체+작성자+날짜 기준 취소 — 같은 건을 여러 번 전송하면 원문(사진 링크 등)이 달라
+// 원문 완전일치가 일부를 놓친다. 숨김 연동은 이 넓은 기준을 함께 쓴다.
+export async function setVisitsCancelledByVendor(vendor: string, author: string, workDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
+  if (!vendor.trim()) return;
+  const query = `vendor=eq.${encodeURIComponent(vendor.trim())}&author=eq.${encodeURIComponent(author)}&work_date=eq.${workDate}`;
+  await updateRows("visit_logs", query, {
+    status: cancelled ? "cancelled" : "active",
+    cancelled_at: cancelled ? new Date().toISOString() : null,
+    cancelled_by: cancelled ? cancelledBy : null,
+  });
+}
+
 export async function setVisitsCancelledBySource(sourceText: string, author: string, workDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
   if (!sourceText.trim()) return;
   const query = `source_text=eq.${encodeURIComponent(sourceText)}&author=eq.${encodeURIComponent(author)}&work_date=eq.${workDate}`;
