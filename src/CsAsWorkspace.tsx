@@ -1299,6 +1299,16 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
             <input value={draft.calendarTitle || ""} onChange={(event) => set("calendarTitle", event.target.value)} placeholder="비우면 업체명으로 표시"
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </label>
+          <Field label="업체명" value={draft.vendor} onChange={(value) => set("vendor", value)} />
+          <label className="text-xs font-bold text-slate-500">
+            담당자
+            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+              <option value="">미배정</option>
+              {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </label>
+          <Field label="날짜" value={draft.date} type="date" onChange={(value) => set("date", value)} />
+          <Field label="시간" value={draft.time} type="time" onChange={(value) => set("time", value)} />
           <label className="text-xs font-bold text-slate-500">
             팀
             <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
@@ -1311,23 +1321,19 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
               {(["AS", "물류", "휴가", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
             </select>
           </label>
-          <label className="text-xs font-bold text-slate-500">
-            담당자
-            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-              <option value="">미배정</option>
-              {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
-            </select>
-          </label>
-          <Field label="업체명" value={draft.vendor} onChange={(value) => set("vendor", value)} />
-          <Field label="부서명" value={draft.department} onChange={(value) => set("department", value)} />
-          <Field label="날짜" value={draft.date} type="date" onChange={(value) => set("date", value)} />
-          <Field label="시간" value={draft.time} type="time" onChange={(value) => set("time", value)} />
-          <Field label="연락처" value={draft.contact} onChange={(value) => set("contact", value)} />
-          <Field label="주소" value={draft.address} onChange={(value) => set("address", value)} />
-          <Field label="기종" value={draft.model} onChange={(value) => set("model", value)} />
-          <Field label="시리얼" value={draft.serial} onChange={(value) => set("serial", value)} />
-          <Field label="자산기번" value={draft.asset || ""} onChange={(value) => set("asset", value)} />
-          <Field label="등급" value={draft.grade || ""} onChange={(value) => set("grade", value)} />
+          {/* 자주 안 만지는 정보는 접어서 모달을 가볍게 — 필요할 때만 펼친다 */}
+          <details className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-black text-slate-500">상세 정보 (부서·연락처·주소·기기) {[draft.department, draft.contact, draft.address, draft.model].filter(Boolean).length ? `— ${[draft.department, draft.contact, draft.address, draft.model].filter(Boolean).length}칸 입력됨` : ""}</summary>
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <Field label="부서명" value={draft.department} onChange={(value) => set("department", value)} />
+              <Field label="연락처" value={draft.contact} onChange={(value) => set("contact", value)} />
+              <Field label="주소" value={draft.address} onChange={(value) => set("address", value)} />
+              <Field label="기종" value={draft.model} onChange={(value) => set("model", value)} />
+              <Field label="시리얼" value={draft.serial} onChange={(value) => set("serial", value)} />
+              <Field label="자산기번" value={draft.asset || ""} onChange={(value) => set("asset", value)} />
+              <Field label="등급" value={draft.grade || ""} onChange={(value) => set("grade", value)} />
+            </div>
+          </details>
           <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-700 md:col-span-2">
             <input type="checkbox" checked={!!draft.repeatMonthly} onChange={(event) => set("repeatMonthly", event.target.checked)} className="h-4 w-4 accent-blue-600" />
             🔁 매월 반복 — 완료 처리하면 다음 달 같은 날로 일정이 자동 생성됩니다 (매월방문 업체용)
