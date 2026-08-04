@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
+import { setActivityEventsCancelledBySource } from "./operations";
+import { setVisitsCancelledBySource } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
@@ -346,7 +348,20 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                     if (!window.confirm(hiding ? "이 기록을 숨길까요?\n목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)" : "이 기록을 복원할까요?")) return;
                     setHideBusy(true);
                     void updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, hiding ? { _hidden: true, _hidden_by: author || "미지정", _hidden_at: new Date().toISOString() } : { _hidden: false })
-                      .then(() => { setRows((current) => current.filter((r) => r.id !== detail.id)); setDetail(null); })
+                      .then(() => {
+                        // 현장 기록(점검·AS·물류)은 업무현황판 집계에서도 같이 제외/복원 — 오발송 기능 일원화
+                        if (["jeomgeom", "as_records", "logistics_records"].includes(category.table)) {
+                          const sourceText = String(detail["_원문"] ?? detail["원문"] ?? detail["source_text"] ?? "");
+                          const rowAuthor = String(detail["작성자"] ?? detail["author"] ?? "");
+                          const rowDate = String(detail[category.dateField] ?? "").slice(0, 10);
+                          if (sourceText.trim() && rowAuthor && rowDate) {
+                            void setActivityEventsCancelledBySource(sourceText, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
+                            void setVisitsCancelledBySource(sourceText, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
+                          }
+                        }
+                        setRows((current) => current.filter((r) => r.id !== detail.id));
+                        setDetail(null);
+                      })
                       .catch((e: unknown) => window.alert(`처리 실패: ${(e as Error).message}`))
                       .finally(() => setHideBusy(false));
                   }}
