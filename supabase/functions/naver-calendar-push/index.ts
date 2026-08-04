@@ -105,6 +105,41 @@ Deno.serve(async (req) => {
       if (!uid) return Response.json({ error: "uid가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const calId = await configCalendarIdOf();
       if (!calId) return Response.json({ error: "NAVER_CALENDAR_ID 설정이 비어 있습니다 (관리 탭)" }, { status: 400, headers: jsonHeaders });
+
+      // caldav_move: 완료 → 팀 완료 캘린더로 이동 + X-NAVER-COMPLETED:TRUE(네이버 완료 체크)
+      //              완료 취소(direction:"back") → 원래 캘린더로 복귀 + 완료 체크 해제
+      if (body.action === "caldav_move") {
+        const team = String(body.team || "").toUpperCase();
+        const back = String(body.direction || "") === "back";
+        const sUrl2 = Deno.env.get("SUPABASE_URL") || "";
+        const sKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        let teamCal = "";
+        if (sUrl2 && sKey2 && team) {
+          const r = await fetch(`${sUrl2}/rest/v1/app_config?key=eq.NAVER_TEAM_CALENDAR_${team}&select=value`, { headers: { apikey: sKey2, Authorization: `Bearer ${sKey2}` } });
+          const rows = await r.json().catch(() => []);
+          teamCal = String(rows?.[0]?.value || "").trim();
+        }
+        // 일정 위치 탐색: 방향에 맞는 캘린더부터, 없으면 반대쪽도 (이동 전·후 상태 모두 대응)
+        let srcCal = "";
+        let srcIcs = "";
+        for (const cal of [back ? teamCal : calId, back ? calId : teamCal].filter(Boolean)) {
+          const r = await fetch(caldavEventUrl(auth.id, cal, uid), { headers: { Authorization: auth.header } });
+          if (r.ok) { srcCal = cal; srcIcs = await r.text(); break; }
+        }
+        if (!srcCal) return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다" }, { status: 404, headers: jsonHeaders });
+        let outIcs = srcIcs.replace(/^X-NAVER-COMPLETED:.*\r?\n?/gm, "");
+        if (!back) outIcs = outIcs.replace(/BEGIN:VEVENT\r?\n/, (m) => `${m}X-NAVER-COMPLETED:TRUE\r\n`);
+        const destCal = back ? calId : (teamCal || srcCal); // 팀 캘린더 미설정이면 제자리에서 완료 체크만
+        const put = await fetch(caldavEventUrl(auth.id, destCal, uid), {
+          method: "PUT",
+          headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" },
+          body: outIcs,
+        });
+        if (put.status >= 400) throw new Error(`네이버 일정 ${back ? "복귀" : "완료 이동"} 실패(${put.status})`);
+        if (destCal !== srcCal) await fetch(caldavEventUrl(auth.id, srcCal, uid), { method: "DELETE", headers: { Authorization: auth.header } }).catch(() => {});
+        return Response.json({ ok: true, status: back ? "restored" : "moved", toCalendarId: destCal }, { headers: jsonHeaders });
+      }
+
       const url = caldavEventUrl(auth.id, calId, uid);
 
       const getRes = await fetch(url, { headers: { Authorization: auth.header } });
@@ -128,27 +163,6 @@ Deno.serve(async (req) => {
         const del = await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } });
         if (del.status >= 400 && del.status !== 404) throw new Error(`네이버 일정 삭제 실패(${del.status})`);
         return Response.json({ ok: true, status: "deleted" }, { headers: jsonHeaders });
-      }
-      // caldav_move: 팀 완료 캘린더로 이동 (예: 완료된 C팀 일정 → 강남C as) — 복사 후 원본 삭제
-      if (body.action === "caldav_move") {
-        const team = String(body.team || "").toUpperCase();
-        const sUrl2 = Deno.env.get("SUPABASE_URL") || "";
-        const sKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-        let targetCal = "";
-        if (sUrl2 && sKey2 && team) {
-          const r = await fetch(`${sUrl2}/rest/v1/app_config?key=eq.NAVER_TEAM_CALENDAR_${team}&select=value`, { headers: { apikey: sKey2, Authorization: `Bearer ${sKey2}` } });
-          const rows = await r.json().catch(() => []);
-          targetCal = String(rows?.[0]?.value || "").trim();
-        }
-        if (!targetCal) return Response.json({ ok: true, status: "no_target_calendar" }, { headers: jsonHeaders }); // 매핑 없으면 조용히 통과
-        const putMove = await fetch(caldavEventUrl(auth.id, targetCal, uid), {
-          method: "PUT",
-          headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" },
-          body: ics,
-        });
-        if (putMove.status >= 400) throw new Error(`완료 캘린더 이동 실패(${putMove.status}) — 대상 캘린더 ID를 확인하세요`);
-        await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } }).catch(() => {});
-        return Response.json({ ok: true, status: "moved", toCalendarId: targetCal }, { headers: jsonHeaders });
       }
       // caldav_update: 넘어온 필드만 교체(부분 수정) — date/time이 오면 일정 시간도 이동 (익일 연기 등)
       const unfolded = eventBlockOf(ics).replace(/\r?\n[ \t]/g, "");

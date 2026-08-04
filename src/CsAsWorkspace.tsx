@@ -40,6 +40,13 @@ export type AsTicket = {
 
 const teams: Team[] = ["A", "B", "C", "D"];
 const scheduleFilters: ScheduleFilter[] = ["AS", "익일AS", "물류", "휴가", "매월점검"];
+// 캘린더 표시 유형 — AS 계열은 날짜가 아니라 처리 여부로 구분한다 (금일·익일·예정 어디든 미처리는 미처리)
+const displayFilters = ["AS[미처리]", "AS[완료]", "물류", "휴가", "매월점검"] as const;
+type DisplayFilter = typeof displayFilters[number];
+function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilter {
+  if (t.scheduleType === "AS" || t.scheduleType === "익일AS") return t.status === "완료" ? "AS[완료]" : "AS[미처리]";
+  return t.scheduleType as DisplayFilter;
+}
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -306,8 +313,9 @@ function statusClass(status: AsStatus) {
 }
 
 function scheduleColor(type: ScheduleType, completed = false) {
+  // AS 계열은 날짜가 아니라 처리 여부가 기준: 미처리=보라, 완료=파랑(취소선)
+  if (type === "AS" || type === "익일AS") return completed ? "bg-blue-100 text-blue-700 line-through" : "bg-purple-100 text-purple-700";
   if (completed) return "bg-slate-100 text-slate-400 line-through";
-  if (type === "익일AS") return "bg-purple-100 text-purple-700";
   if (type === "물류") return "bg-rose-100 text-rose-700";
   if (type === "휴가") return "bg-emerald-100 text-emerald-700";
   if (type === "매월점검") return "bg-amber-100 text-amber-700";
@@ -465,10 +473,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     void trackWrite(deleteRows("as_tickets", `id=eq.${encodeURIComponent(id)}`), "일정 서버 삭제에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요.");
   };
   const [team, setTeam] = useState<Team | "ALL">(() => loadStoredFilter<Team | "ALL">("cs_as_team_filter_v1", [...teams, "ALL"], ["ALL"])[0] || "ALL");
-  const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<ScheduleFilter[]>(() => loadStoredFilter("cs_calendar_types_v1", scheduleFilters, scheduleFilters));
+  const [visibleScheduleTypes, setVisibleScheduleTypes] = useState<DisplayFilter[]>(() => loadStoredFilter("cs_calendar_types_v2", [...displayFilters], [...displayFilters]));
   const [visibleTeams, setVisibleTeams] = useState<Team[]>(() => loadStoredFilter("cs_calendar_teams_v1", teams, teams));
   useEffect(() => { try { localStorage.setItem("cs_as_team_filter_v1", JSON.stringify([team])); } catch { /* 저장 실패 무시 */ } }, [team]);
-  useEffect(() => { try { localStorage.setItem("cs_calendar_types_v1", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
+  useEffect(() => { try { localStorage.setItem("cs_calendar_types_v2", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
@@ -579,10 +587,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (changed && before && changed.naverUid) {
       const completedNow = changed.status === "완료" && before.status !== "완료";
       const rescheduled = changed.date !== before.date || changed.time !== before.time;
+      const uncompletedNow = before.status === "완료" && changed.status !== "완료";
       if (completedNow) {
         void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
-          .then((r) => { if (r.status === "moved") notify(`네이버: ${changed.team}팀 완료 캘린더로 이동 ✓`, "success"); })
+          .then((r) => { if (r.status === "moved") notify(`네이버: ${changed.team}팀 완료 캘린더로 이동 + 완료 체크 ✓`, "success"); })
           .catch((e) => notify(`네이버 완료 이동 실패: ${(e as Error).message}`, "error"));
+      } else if (uncompletedNow) {
+        void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team, direction: "back" })
+          .then((r) => { if (r.status === "restored") notify("네이버: 일정이 원래 캘린더로 복귀 (완료 체크 해제) ✓", "success"); })
+          .catch((e) => notify(`네이버 복귀 실패: ${(e as Error).message}`, "error"));
       } else if (rescheduled) {
         void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, date: changed.date, ...(changed.time ? { time: changed.time } : {}) })
           .catch((e) => notify(`네이버 일정 날짜 변경 실패: ${(e as Error).message}`, "error"));
@@ -762,7 +775,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => {
-      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(ticket.scheduleType);
+      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(displayTypeOf(ticket));
     }),
     [tickets, visibleScheduleTypes, visibleTeams],
   );
@@ -771,10 +784,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   // 일정 추가 기본값: 캘린더에서 체크된 팀·업무종류 중 첫 값 (예: B팀+매월점검만 켜두면 그대로 미리 채움)
   const newTicketDefaults = (): Partial<AsTicket> => ({
     team: teams.find((item) => visibleTeams.includes(item)) || "A",
-    scheduleType: scheduleFilters.find((item) => visibleScheduleTypes.includes(item)) || "AS",
+    scheduleType: ((): ScheduleType => { const first = displayFilters.find((item) => visibleScheduleTypes.includes(item)); return !first || first.startsWith("AS") ? "AS" : (first as ScheduleType); })(),
   });
 
-  const toggleScheduleFilter = (filter: ScheduleFilter) => {
+  const toggleScheduleFilter = (filter: DisplayFilter) => {
     setVisibleScheduleTypes((current) => current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]);
   };
 
@@ -834,10 +847,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <div>
                     <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 종류</div>
                     <div className="space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5">
-                      {scheduleFilters.map((filter) => (
+                      {displayFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일AS" ? "bg-purple-500" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : filter === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "AS[미처리]" ? "bg-purple-500" : filter === "AS[완료]" ? "bg-blue-600" : filter === "물류" ? "bg-rose-500" : filter === "휴가" ? "bg-emerald-500" : "bg-amber-500"}`} />
                           {filter}
                         </label>
                       ))}
@@ -860,7 +873,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     const hidden = monthAll - monthTickets.length;
                     if (hidden <= 0) return null;
                     return (
-                      <button type="button" onClick={() => { setVisibleScheduleTypes(scheduleFilters); setVisibleTeams([...teams]); }}
+                      <button type="button" onClick={() => { setVisibleScheduleTypes([...displayFilters]); setVisibleTeams([...teams]); }}
                         className="w-full rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] font-black text-amber-700 transition hover:bg-amber-100">
                         ⚠ 필터로 이번 달 {hidden}건 숨김 — 모두 표시
                       </button>
@@ -925,7 +938,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? (dayIndex === 0 ? "bg-rose-50/30" : dayIndex === 6 ? "bg-blue-50/25" : "bg-white") : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : dayNumberColor(dayIndex, inMonth)}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
-                            {rows.slice(0, 4).map((ticket) => <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${ticket.scheduleType === "익일AS" ? "bg-purple-500" : ticket.scheduleType === "물류" ? "bg-rose-500" : ticket.scheduleType === "휴가" ? "bg-emerald-500" : ticket.scheduleType === "매월점검" ? "bg-amber-500" : "bg-blue-600"}`} />)}
+                            {rows.slice(0, 4).map((ticket) => { const dt = displayTypeOf(ticket); return <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${dt === "AS[미처리]" ? "bg-purple-500" : dt === "AS[완료]" ? "bg-blue-600" : dt === "물류" ? "bg-rose-500" : dt === "휴가" ? "bg-emerald-500" : "bg-amber-500"}`} />; })}
                           </span>
                         </button>
                       );
