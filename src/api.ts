@@ -109,7 +109,7 @@ async function fetchHistoryRows(value: string): Promise<HistoryRows[]> {
   const key = term.toLowerCase();
   const cached = historySearchCache.get(key);
   if (cached && Date.now() - cached.at < 15_000) return cached.promise;
-  const filter = `${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(term)}*&limit=500`;
+  const filter = `${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(term)}*&_hidden=not.is.true&limit=500`;
   const promise = Promise.all(HISTORY_SEARCH_TABLES.map(async (config) => ({
     config,
     rows: await selectRows<Record<string, unknown>>(config.table, `select=*&${filter}`).catch(() => []),
@@ -168,7 +168,7 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   const encoded = encodeURIComponent(query);
   const serial = encodeURIComponent("시리얼넘버");
   const asset = encodeURIComponent("자산기번");
-  const filter = `select=*&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
+  const filter = `select=*&_hidden=not.is.true&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
   const sources = await Promise.all([
     selectRows<Record<string, unknown>>("jeomgeom", filter).then((rows) => ({ category: "점검", rows })).catch(() => ({ category: "점검", rows: [] })),
     selectRows<Record<string, unknown>>("as_records", filter).then((rows) => ({ category: "AS", rows })).catch(() => ({ category: "AS", rows: [] })),
@@ -384,7 +384,7 @@ export async function getAsHistory(vendor: string, serial: string, assetNo = "")
   const run = async (col: string, val: string) => {
     if (!val.trim()) return [] as Record<string, unknown>[];
     try {
-      return await selectRows<Record<string, unknown>>("as_records", `select=*&${encodeURIComponent(col)}=ilike.*${encodeURIComponent(val.trim())}*&order=${dateCol}.desc&limit=60`);
+      return await selectRows<Record<string, unknown>>("as_records", `select=*&_hidden=not.is.true&${encodeURIComponent(col)}=ilike.*${encodeURIComponent(val.trim())}*&order=${dateCol}.desc&limit=60`);
     } catch {
       return [] as Record<string, unknown>[];
     }
@@ -433,7 +433,7 @@ export async function getRecentInspections(vendor: string, serial = "", assetNo 
   if (probe.length < 2) return { snapshots: [], deviceMatch: false };
   const dateCol = encodeURIComponent("작성일");
   try {
-    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통,시리얼넘버,자산기번,모델명")}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=60`);
+    const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,업체명,매수,토너잔량,여분,폐통,시리얼넘버,자산기번,모델명")}&_hidden=not.is.true&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${dateCol}.desc&limit=60`);
     const vendorRows = rows.filter((r) => {
       const key = coreVendorKey(String(r["_업체명"] || r["업체명"] || ""));
       return key.includes(core) || core.includes(key);
@@ -593,7 +593,7 @@ export type AirForm = { date: string; model: string; region: string; author: str
 export async function getAirForms(vendor: string): Promise<AirForm[]> {
   const v = String(vendor || "").trim();
   if (!v) return [];
-  const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&${vendorEq(v)}&order=id.desc&limit=30`);
+  const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=30`);
   return rows
     .filter((r) => AIR_RX.test(String(r["모델명"] ?? "")) || AIR_RX.test(String(r["_원문"] ?? "")))
     .slice(0, 6)
@@ -608,8 +608,8 @@ export async function getInspForms(vendor: string): Promise<InspFormsResp> {
   if (!v) return { vendor: "", forms: [] };
   try {
     const [insp, as] = await Promise.all([
-      selectRows<Record<string, unknown>>("jeomgeom", `select=*&${vendorEq(v)}&order=id.desc&limit=6`),
-      selectRows<Record<string, unknown>>("as_records", `select=*&${vendorEq(v)}&order=id.desc&limit=4`),
+      selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=6`),
+      selectRows<Record<string, unknown>>("as_records", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=4`),
     ]);
     const forms: InspForm[] = [
       ...insp.map((r) => toForm(r, "점검")),

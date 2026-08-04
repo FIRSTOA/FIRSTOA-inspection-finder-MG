@@ -94,12 +94,6 @@ function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">)
   return filter === "inspection" ? inspectionMachineSum(matched) : matched.length;
 }
 
-function eventDisplayLabel(event: ActivityEvent) {
-  if (isLogisticsEtc(event)) return "기타(여분,마감)";
-  if (event.category === "logistics") return "물류";
-  if (event.category === "expansion_it" || event.category === "expansion_copier") return "확장성(IT,복합기)";
-  return ACTIVITY_LABELS[event.category];
-}
 
 export default function OperationsDashboard({ author }: Props) {
   const today = kstDate();
@@ -116,7 +110,6 @@ export default function OperationsDashboard({ author }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loadedRange, setLoadedRange] = useState("");
   const [loadError, setLoadError] = useState<{ range: string; message: string } | null>(null);
-  const [updatingId, setUpdatingId] = useState("");
   const [notice, setNotice] = useState("");
   const range = useMemo(() => rangeFor(period, year, month, quarter, anchor), [period, year, month, quarter, anchor]);
   const rangeKey = `${range.start}:${range.end}`;
@@ -153,14 +146,6 @@ export default function OperationsDashboard({ author }: Props) {
     [events],
   );
   const activeEvents = useMemo(() => nonManagerEvents.filter((event) => event.status !== "cancelled"), [nonManagerEvents]);
-  const cancelledEvents = useMemo(() => nonManagerEvents.filter((event) => event.status === "cancelled"), [nonManagerEvents]);
-  const cancelledFiltered = useMemo(
-    () => cancelledEvents.filter((event) =>
-      (team === "전체" || event.team === team)
-      && (member === "전체" || event.author === member)
-      && matchesFilter(event, category)),
-    [cancelledEvents, team, member, category],
-  );
   const categoryScoped = useMemo(
     () => activeEvents.filter((event) => matchesFilter(event, category)),
     [activeEvents, category],
@@ -216,42 +201,6 @@ export default function OperationsDashboard({ author }: Props) {
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "ko"));
   }, [filtered]);
 
-  const changeCancelled = async (event: ActivityEvent, cancelled: boolean) => {
-    const sourceText = event.sourceText || "";
-    const grouped = Boolean(sourceText.trim());
-    const prompt = grouped
-      ? (cancelled
-        ? "이 전송을 오전송으로 처리할까요?\n업무현황, 주간현황판, 일일방문일지에서 함께 제외됩니다. 카톡 메시지와 원본 DB는 삭제되지 않습니다."
-        : "이 전송의 오전송 처리를 복원할까요?\n업무현황, 주간현황판, 일일방문일지에 다시 반영됩니다.")
-      : (cancelled ? "이 기록을 업무현황 집계에서 제외할까요?" : "이 기록을 다시 집계에 반영할까요?");
-    if (!window.confirm(prompt)) return;
-    setUpdatingId(event.id);
-    setNotice("");
-    try {
-      if (grouped) {
-        await Promise.all([
-          setActivityEventsCancelledBySource(sourceText, event.author, event.activityDate, cancelled, author),
-          setVisitsCancelledBySource(sourceText, event.author, event.activityDate, cancelled, author),
-        ]);
-        setEvents((current) => current.map((row) => (
-          row.sourceText === sourceText && row.author === event.author && row.activityDate === event.activityDate
-            ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
-            : row
-        )));
-        setNotice(cancelled ? "오전송 처리했습니다. 모든 업무 집계에서 제외됩니다." : "오전송 처리를 복원했습니다.");
-      } else {
-        await setActivityEventCancelled(event.id, cancelled, author);
-        setEvents((current) => current.map((row) => row.id === event.id
-          ? { ...row, status: cancelled ? "cancelled" : "active", cancelledBy: cancelled ? author : "" }
-          : row));
-        setNotice(cancelled ? "업무현황 집계에서 제외했습니다." : "집계 기록으로 복원했습니다.");
-      }
-    } catch (reason) {
-      setNotice(`처리하지 못했습니다: ${(reason as Error).message}`);
-    } finally {
-      setUpdatingId("");
-    }
-  };
 
 
   return (
@@ -365,20 +314,6 @@ export default function OperationsDashboard({ author }: Props) {
           </section>
 
 
-          {cancelledFiltered.length > 0 && (
-            <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-600"><span>집계 제외 기록</span><span>{cancelledFiltered.length}건</span></summary>
-              <div className="divide-y divide-slate-100 border-t border-slate-200">
-                {cancelledFiltered.slice(0, 50).map((event) => (
-                  <div key={event.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className={`rounded px-2 py-1 text-[10px] font-black ${CATEGORY_TONES[event.category]}`}>{eventDisplayLabel(event)}</span>
-                    <div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-500 line-through">{event.vendor || "거래처 미기재"}</b><span className="text-[11px] text-slate-400">{event.activityDate} · {event.author}</span></div>
-                    <button type="button" disabled={updatingId === event.id} onClick={() => void changeCancelled(event, false)} className="rounded-full border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-50">복원</button>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
         </>
       )}
     </div>
