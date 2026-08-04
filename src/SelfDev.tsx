@@ -407,7 +407,6 @@ function PraiseBoard({ author }: { author: string }) {
               <PersonPicker value={toName} onChange={setToName} exclude={author} />
               <div className="flex flex-wrap items-center gap-2">
                 <input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} placeholder="어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)" className="min-w-[200px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <button type="button" onClick={() => window.open("https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=0", "_blank", "noopener,noreferrer")} className="shrink-0 rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">칭찬 시트</button>
                 <button type="button" onClick={() => void submit()} disabled={busy || !toName || !content.trim()} className="shrink-0 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busy ? "보내는 중…" : "보내기"}</button>
               </div>
             </div>
