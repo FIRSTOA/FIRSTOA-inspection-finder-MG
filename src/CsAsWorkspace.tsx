@@ -681,18 +681,27 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
 
   // 완료·연기 사유 공유: 팀 AS방으로 "업체명 - 라벨 / 줄바꿈 / 내용" 전송 + 네이버 일정 내용에 기록.
   // 사유를 비우면 아무 것도 보내지 않는다 (조용한 완료/연기 — 기존 동작 유지)
+  // 처리 양식(완료·연기 공통) — 카톡방·네이버 일정 내용·웹앱 일정 메모가 전부 같은 블록으로 동기화된다
+  const buildActionBlock = (ticket: AsTicket, reason: string, deferLabel?: string) => [
+    `업체명: ${ticket.vendor || "-"}`,
+    `배정자: ${ticket.assignee || author || "-"}`,
+    `기종: ${ticket.model || "-"}`,
+    `자산기번: ${ticket.asset || "-"}`,
+    `시리얼번호: ${ticket.serial || "-"}`,
+    `접수내용: ${ticket.issue || "-"}`,
+    `처리내용: ${reason.trim()}${deferLabel ? ` (${deferLabel})` : ""}`,
+  ].join("\n");
   const shareActionReason = async (ticket: AsTicket, label: string, reason: string) => {
     const text = reason.trim();
     if (!text) return;
-    // 봇이 대신 보내므로 누가 처리했는지 보이게: "업체명 배정자(없으면 작성자)" + 줄바꿈 + 사유
-    const who = ticket.assignee || author || "";
-    void sendServiceReception("AS", `수도권${ticket.team}`, `${ticket.vendor}${who ? ` ${who}` : ""}\n${label ? `${text} (${label})` : text}`)
+    const block = buildActionBlock(ticket, reason, label || undefined);
+    void sendServiceReception("AS", `수도권${ticket.team}`, block)
       .then((r) => { if (!r.ok) notify(`카톡 전송 실패: ${r.error}`, "error"); })
       .catch((e) => notify(`카톡 전송 실패: ${(e as Error).message}`, "error"));
     if (ticket.naverUid) {
       try {
         const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
-        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: `${cur.description || ""}\n\n[${label || "완료"}${who ? ` · ${who}` : ""}] ${text}` });
+        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: `${cur.description || ""}\n\n${block}` });
       } catch (e) {
         notify(`네이버 일정 기록 실패: ${(e as Error).message}`, "error");
       }
@@ -705,13 +714,14 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     const ticket = doneTicket;
     setDoneTicket(null);
     if (!ticket) return;
-    await shareActionReason(ticket, "", reason); // 완료는 라벨 없이 "업체명 배정자⏎사유" — 기록을 먼저 남기고 이동
-    toggleDone(ticket);
+    await shareActionReason(ticket, "", reason); // 기록을 먼저 남기고 이동 (이동 후엔 캘린더가 바뀜)
+    const block = buildActionBlock(ticket, reason);
+    toggleDone(ticket, { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${block}` }); // 웹앱 일정 메모에도 동일 기록
   };
 
-  const toggleDone = (ticket: AsTicket) => {
+  const toggleDone = (ticket: AsTicket, extraPatch: Partial<AsTicket> = {}) => {
     const completing = ticket.status !== "완료";
-    update(ticket.id, { status: completing ? "완료" : (ticket.assignee ? "배정" : "접수") });
+    update(ticket.id, { status: completing ? "완료" : (ticket.assignee ? "배정" : "접수"), ...extraPatch });
     // 매월 반복: 다음 달 일정이 아직 없으면 만들어 시리즈 말단을 연장한다 (있으면 건너뜀)
     if (completing && ticket.repeatMonthly) {
       const clone = buildMonthlyCloneRow(ticket as unknown as Record<string, unknown>);
@@ -734,8 +744,10 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     const isAsSchedule = ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS";
     setDeferId("");
     void (async () => {
-      await shareActionReason(ticket, `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`, reason);
-      update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType });
+      const deferLabel = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`;
+      await shareActionReason(ticket, deferLabel, reason);
+      const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel)}` } : {};
+      update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch });
     })();
   };
 
@@ -1143,7 +1155,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     key={ticket.id}
                     defaultValue={(ticket.calendarTitle || "").trim() || ticket.vendor}
                     onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== ((ticket.calendarTitle || "").trim() || ticket.vendor)) update(ticket.id, { calendarTitle: v }); }}
-                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-base font-black text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15"
+                    style={{ fontWeight: 700 }}
+                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-[15px] text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15"
                     placeholder="제목 (수정하면 네이버 캘린더도 바뀜)" />
                 </div>
               </div>

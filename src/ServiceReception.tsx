@@ -798,6 +798,7 @@ export default function ServiceReception({ author }: { author: string }) {
   // 전송 실패 시 저장된 행을 기억해 재시도에서 중복 저장·중복 카톡을 막는다.
   const handleSaveAndSend = async () => {
     if (busy || !report) return;
+    if (!region) { setActionResult("전송 불가 — 지역이 비어 있습니다. 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요."); return; }
     setBusy(true);
     setActionResult("");
     try {
@@ -890,6 +891,7 @@ export default function ServiceReception({ author }: { author: string }) {
   });
   const stepKakao = () => runStep("카톡 전송", async () => {
     if (!report) throw new Error("보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요");
+    if (!region) throw new Error("지역이 비어 있어 보낼 팀 방을 정할 수 없습니다 — 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요");
     const id = await ensureSaved();
     const res = await sendServiceReception("AS", region, report);
     if (!res.ok) throw new Error(res.error || "전송 실패");
@@ -1547,6 +1549,7 @@ export default function ServiceReception({ author }: { author: string }) {
                 </label>}
               </div>
               {type !== "원격이관" && !!report && <div className="mt-3 border-t border-slate-100 pt-3">
+                {!region && <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 지역이 비어 있습니다 — 지역이 있어야 팀 AS방으로 전송됩니다. 자동 입력값 수정(신규는 지역 칩)에서 입력하세요.</div>}
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-black text-slate-400">카톡 보고용 양식</div>
                   <button type="button" onClick={() => void copyReport()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700"><Copy size={13} />{copied ? "복사됨 ✓" : "복사"}</button>
