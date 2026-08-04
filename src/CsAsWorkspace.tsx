@@ -951,10 +951,9 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                   {ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-2.5 py-1.5 text-xs font-black text-white">✓ 완료</span>}
                 </div>
-                <select onClick={(event) => event.stopPropagation()} value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-                  <option value="">미배정</option>
-                  {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
-                </select>
+                <div className="mt-3 flex items-center gap-2 text-sm font-bold" onClick={(event) => event.stopPropagation()}>
+                  <span className={`rounded-full px-3 py-1.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
+                </div>
                 <div className="mt-3 flex gap-2" onClick={(event) => event.stopPropagation()}>
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-full bg-slate-900 transition hover:bg-slate-800 px-2 py-2.5 text-xs font-black text-white">FIELD AS</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-xs font-black text-emerald-700">배정</button>
@@ -993,10 +992,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
                     <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
-                      <select value={ticket.assignee} onChange={(event) => update(ticket.id, { assignee: event.target.value, status: event.target.value && ticket.status === "접수" ? "배정" : ticket.status })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-                        <option value="">미배정</option>
-                        {teamAssignees[ticket.team].map((name) => <option key={name}>{name}</option>)}
-                      </select>
+                      <span className={`rounded-full px-3 py-1.5 text-sm font-black ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
                     </td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
