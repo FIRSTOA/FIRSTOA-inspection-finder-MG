@@ -28,6 +28,7 @@ export type AsTicket = {
   keyman: string;
   receptionId: string;
   naverUid?: string; // 네이버 캘린더 미러 일정의 UID — 있으면 CalDAV로 조회·수정·삭제 가능
+  calendarTitle?: string; // 캘린더 표시 제목(보고양식 첫 줄) — 배정 시 "이름-" 접두사가 붙어 네이버와 동기화
   repeatMonthly?: boolean; // 매월 반복 — 완료하면 다음 달 같은 날로 자동 생성
   issue: string;
   note?: string; // 내용 — 처리 결과·점검/AS 양식이 쌓이는 칸
@@ -231,10 +232,17 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverUid";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverUid,calendarTitle";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
+/** 리스트·캘린더 표시 제목 — 캘린더 제목(보고양식 첫 줄)에 배정자 이름 접두사. 없으면 업체명 */
+function displayTitleOf(t: AsTicket) {
+  const base = (t.calendarTitle || "").trim();
+  if (!base) return t.vendor || "일정";
+  return `${t.assignee ? `${t.assignee}-` : ""}${base}`;
+}
+
 function toDbRow(t: AsTicket) {
-  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", naverUid: t.naverUid || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
+  return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", naverUid: t.naverUid || "", calendarTitle: t.calendarTitle || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
 }
 
 // 이 기기에만 있던 일정을 1회 서버로 올린다(성공해야 플래그 기록 → 실패 시 다음 진입에서 재시도).
@@ -561,6 +569,12 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
     if (changed) persistRemote(changed);
     if (changed?.repeatMonthly && before && !before.repeatMonthly) ensureMonthlySeries(changed);
     if (changed && before?.repeatMonthly && !changed.repeatMonthly) stopMonthlySeries(changed);
+    // 배정자·제목이 바뀌면 네이버 일정 제목도 "이름-제목"으로 동기화 (수기로 캘린더에 이름 적던 작업 대체)
+    if (changed && before && changed.naverUid && (changed.calendarTitle || "").trim()
+      && (changed.assignee !== before.assignee || (changed.calendarTitle || "") !== (before.calendarTitle || ""))) {
+      void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, title: displayTitleOf(changed) })
+        .catch((e) => notify(`네이버 제목 동기화 실패: ${(e as Error).message}`, "error"));
+    }
     // 네이버 미러 동기화: 완료되면 팀 완료 캘린더(예: C→강남C as)로 이동, 날짜·시간이 바뀌면(익일 연기 등) 일정 시간 이동
     if (changed && before && changed.naverUid) {
       const completedNow = changed.status === "완료" && before.status !== "완료";
@@ -976,7 +990,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                       <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
                       <span className="text-xs font-black text-slate-500">{ticket.date} {ticket.time}</span>
                     </div>
-                    <div className={`mt-2 text-base font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{ticket.vendor}</div>
+                    <div className={`mt-2 text-base font-black leading-snug ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{displayTitleOf(ticket)}</div>
                     <div className="mt-1 text-sm font-semibold text-slate-600">{ticket.issue}</div>
                     <div className="mt-2 text-xs font-semibold text-slate-400">{ticket.model} · {ticket.serial || "시리얼 미입력"}{shortAddress(ticket.address) ? ` · 📍 ${shortAddress(ticket.address)}` : ""}</div>
                     <div className="mt-2"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
@@ -1017,7 +1031,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                     <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[220px] truncate">{ticket.vendor}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
+                      <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[340px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                       {shortAddress(ticket.address) && <div className="mt-0.5 text-[10px] font-bold text-slate-400">📍 {shortAddress(ticket.address)}</div>}
                       <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                     </td>
@@ -1276,6 +1290,11 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
           <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
         </div>
         <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
+          <label className="text-xs font-bold text-slate-500 md:col-span-2">
+            캘린더 제목 {ticket.naverUid ? <span className="font-black text-emerald-600">— 저장하면 네이버 일정 제목도 바뀝니다 (배정자 이름은 자동으로 앞에 붙음)</span> : ""}
+            <input value={draft.calendarTitle || ""} onChange={(event) => set("calendarTitle", event.target.value)} placeholder="비우면 업체명으로 표시"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </label>
           <label className="text-xs font-bold text-slate-500">
             팀
             <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
