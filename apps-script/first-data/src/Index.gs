@@ -359,15 +359,45 @@ function indexChunkStep_() {
     scheduleIndexChunk_();
     return { progress: { cat: SEARCH_CATEGORIES[cur.cat], offset: cur.offset, processedThisRun: processed } };
   }
-  const summary = finalizeIndexFromTmp_(idxSs);
   p.deleteProperty('idx_cursor');
-  return { done: true, summary: summary };
+  ScriptApp.newTrigger('indexFinalizeStep').timeBased().after(1000).create();
+  return { done: true, note: '조각 완료 — 병합 단계 예약' };
+}
+
+// 병합 단계 — 별도 실행 + 실패 시 2회까지 자동 재시도 (대형 호출은 슬라이스)
+function indexFinalizeStep() {
+  return recordRun_('indexFinalize', function () {
+    for (const tr of ScriptApp.getProjectTriggers()) {
+      if (tr.getHandlerFunction() === 'indexFinalizeStep') ScriptApp.deleteTrigger(tr);
+    }
+    const p = PropertiesService.getScriptProperties();
+    try {
+      const out = finalizeIndexFromTmp_(SpreadsheetApp.openById(INDEX_SS_ID));
+      p.deleteProperty('idx_finalize_retry');
+      return out;
+    } catch (e) {
+      const tries = Number(p.getProperty('idx_finalize_retry') || 0);
+      if (tries < 2) {
+        p.setProperty('idx_finalize_retry', String(tries + 1));
+        ScriptApp.newTrigger('indexFinalizeStep').timeBased().after(60 * 1000).create();
+      }
+      throw e;
+    }
+  });
 }
 
 function finalizeIndexFromTmp_(idxSs) {
   const tSheet = idxSs.getSheetByName(IDX_TMP_TAB);
   const n = tSheet.getLastRow();
-  const rows = n > 1 ? tSheet.getRange(2, 1, n - 1, 4).getValues() : [];
+  // 대형 단일 getValues가 서비스 타임아웃을 유발 — 1만 행씩 슬라이스로 읽는다
+  const rows = [];
+  const SLICE = 10000;
+  for (let start = 2; start <= n; start += SLICE) {
+    const take = Math.min(SLICE, n - start + 1);
+    if (take <= 0) break;
+    const part = tSheet.getRange(start, 1, take, 4).getValues();
+    for (const r of part) rows.push(r);
+  }
   const vendorCounts = {};
   const vendorMeta = {};
   const catCounts = {};
@@ -401,7 +431,11 @@ function finalizeIndexFromTmp_(idxSs) {
       r.push(JSON.stringify(vendorMeta[v] || {}));
       return r;
     });
-    vSheet.getRange(2, 1, out.length, headerRow.length).setValues(out);
+    const WSLICE = 5000;
+    for (let i = 0; i < out.length; i += WSLICE) {
+      const part = out.slice(i, i + WSLICE);
+      vSheet.getRange(2 + i, 1, part.length, headerRow.length).setValues(part);
+    }
     vSheet.getRange(2, headerRow.length, out.length, 1).setNumberFormat('@');
   }
   let mSheet = idxSs.getSheetByName(INDEX_META);

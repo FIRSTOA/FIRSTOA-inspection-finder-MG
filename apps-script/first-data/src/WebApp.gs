@@ -35,6 +35,10 @@ function doGet(e) {
       ScriptApp.newTrigger('indexChunkStart').timeBased().after(15 * 60 * 1000).create();
       result = { ok: true, scheduled: 'bizInfoStep(즉시) → indexChunkStart(+15분, 조각 체인)', trigger: ensureIndexTrigger_() };
     }
+    else if (action === 'indexfinalize') {  // 조각 재료가 이미 완성된 경우 병합만 재시도
+      ScriptApp.newTrigger('indexFinalizeStep').timeBased().after(1000).create();
+      result = { ok: true, scheduled: 'indexFinalizeStep(즉시)' };
+    }
     else if (action === 'indexonly') {  // 인덱스만 바로 (마스터가 이미 최신일 때) — 조각 체인 시작
       result = indexChunkStart();
     }
@@ -44,6 +48,7 @@ function doGet(e) {
         ok: true,
         bizInfoStep: JSON.parse(props.getProperty('run_bizInfoStep') || 'null'),
         indexChunk: JSON.parse(props.getProperty('run_indexChunk') || 'null'),
+        indexFinalize: JSON.parse(props.getProperty('run_indexFinalize') || 'null'),
         cursor: JSON.parse(props.getProperty('idx_cursor') || 'null'),
         indexInfo: getIndexMeta(),
       };
