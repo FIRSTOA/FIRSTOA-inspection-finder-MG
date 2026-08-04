@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, Search, X } from "lucide-react";
-import { selectRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
+import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
@@ -49,6 +49,10 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  // 잘못된 기록 숨김(soft delete) — 원문 보존, 누가·언제 숨겼는지 기록. 지원 테이블에만 노출
+  const HIDEABLE = useMemo(() => new Set(["jeomgeom", "as_records", "logistics_records", "bulman", "misu", "overage", "overage_adjust", "recontract", "churn_defense", "mgmt_support", "pc_expansion", "mfp_expansion", "contact_changes", "stock_items"]), []);
+  const [showHidden, setShowHidden] = useState(false);
+  const [hideBusy, setHideBusy] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
   const [reachedEnd, setReachedEnd] = useState(false);
@@ -65,6 +69,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   // 조회 한 번에 필요한 쿼리를 만든다. offset만 바꿔 "더 보기"에 재사용.
   const buildQuery = useCallback((offset: number) => {
     const parts = ["select=*"];
+    if (HIDEABLE.has(category.table)) parts.push(`_hidden=${showHidden ? "is.true" : "not.is.true"}`);
     if (category.filterQuery) parts.push(category.filterQuery);
     if (period !== "all") {
       const months = period === "1m" ? -1 : period === "3m" ? -3 : period === "6m" ? -6 : -12;
@@ -88,7 +93,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query, team]);
+  }, [category, period, query, team, HIDEABLE, showHidden]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -249,6 +254,15 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           ))}
         </div>
 
+        {HIDEABLE.has(category.table) && (
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-1.5">
+            <span className="text-[10px] font-bold text-slate-400">{showHidden ? "숨긴 기록만 보는 중 — 잘못 숨긴 건 상세에서 복원" : "잘못된 기록은 상세에서 숨길 수 있습니다 (원문 보존)"}</span>
+            <button type="button" onClick={() => { setShowHidden((v) => !v); setRows([]); }}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-black transition ${showHidden ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+              {showHidden ? "일반 기록 보기" : "숨긴 기록 보기"}
+            </button>
+          </div>
+        )}
         <div className="max-h-[68vh] divide-y divide-slate-100 overflow-y-auto">
           {loading && !rows.length && <div className="p-12 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
           {!loading && !rows.length && !error && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 기록이 없습니다.</div>}
@@ -325,6 +339,21 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
               <button type="button" onClick={() => { void navigator.clipboard.writeText(detailFields.map(([key, value]) => `${key}: ${value}`).join("\n")); }}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50">전체 복사</button>
+              {HIDEABLE.has(category.table) && detail.id != null && (
+                <button type="button" disabled={hideBusy}
+                  onClick={() => {
+                    const hiding = !showHidden;
+                    if (!window.confirm(hiding ? "이 기록을 숨길까요?\n목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)" : "이 기록을 복원할까요?")) return;
+                    setHideBusy(true);
+                    void updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, hiding ? { _hidden: true, _hidden_by: author || "미지정", _hidden_at: new Date().toISOString() } : { _hidden: false })
+                      .then(() => { setRows((current) => current.filter((r) => r.id !== detail.id)); setDetail(null); })
+                      .catch((e: unknown) => window.alert(`처리 실패: ${(e as Error).message}`))
+                      .finally(() => setHideBusy(false));
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-black transition disabled:opacity-40 ${showHidden ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"}`}>
+                  {hideBusy ? "처리 중…" : showHidden ? "복원" : "숨김 (오발송·오기록)"}
+                </button>
+              )}
               <button type="button" onClick={() => setDetail(null)} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-800">닫기</button>
             </div>
           </div>
