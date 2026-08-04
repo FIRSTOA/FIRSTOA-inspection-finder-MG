@@ -5,13 +5,10 @@ import {
   OPERATIONS_TEAMS,
   getActivityEvents,
   logisticsKindForEvent,
-  setActivityEventCancelled,
-  setActivityEventsCancelledBySource,
   teamForAuthor,
   type ActivityEvent,
   type ActivityKind,
 } from "./operations";
-import { setVisitsCancelledBySource } from "./visits";
 import { kstDate, weekRange } from "./visits";
 
 type Period = "week" | "month" | "quarter" | "year";
@@ -95,7 +92,7 @@ function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">)
 }
 
 
-export default function OperationsDashboard({ author }: Props) {
+export default function OperationsDashboard({ author: _author }: Props) {
   const today = kstDate();
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
@@ -110,7 +107,6 @@ export default function OperationsDashboard({ author }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loadedRange, setLoadedRange] = useState("");
   const [loadError, setLoadError] = useState<{ range: string; message: string } | null>(null);
-  const [notice, setNotice] = useState("");
   const range = useMemo(() => rangeFor(period, year, month, quarter, anchor), [period, year, month, quarter, anchor]);
   const rangeKey = `${range.start}:${range.end}`;
   const error = loadError?.range === rangeKey ? loadError.message : "";
@@ -237,7 +233,6 @@ export default function OperationsDashboard({ author }: Props) {
 
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요.</span></div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
-      {notice && <div className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 py-2 text-sm font-bold text-white">{notice}</div>}
 
       {!loading && !error && (
         <>
