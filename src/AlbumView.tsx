@@ -25,18 +25,21 @@ export default function AlbumView({ id }: { id: string }) {
   const next = () => setIdx((i) => (i == null ? i : Math.min(urls.length - 1, i + 1)));
 
   const safeVendor = (vendor || "현장사진").replace(/[\\/:*?"<>|]/g, "_");
+  // 카카오톡 인앱 브라우저는 blob 다운로드를 무시한다 — 스토리지의 네이티브 다운로드
+  // 파라미터(?download=파일명)로 넘기면 브라우저가 진짜 다운로드로 처리해 갤러리에 잡힌다.
+  const isKakaoInApp = /KAKAOTALK/i.test(navigator.userAgent);
+  const openExternal = () => { window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`; };
   const downloadPhoto = async (url: string, photoIndex: number) => {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("사진을 불러오지 못했습니다.");
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
+    const ext = (url.match(/\.(jpe?g|png|gif|webp|heic)(\?|$)/i) || [])[1] || "jpg";
+    const filename = `${safeVendor}_${String(photoIndex + 1).padStart(2, "0")}.${ext}`;
+    const href = `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(filename)}`;
     const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = `${safeVendor}_${String(photoIndex + 1).padStart(2, "0")}.jpg`;
+    anchor.href = href;
+    anchor.download = filename; // 서버가 attachment 헤더를 줘서 크로스오리진이어도 다운로드로 처리됨
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+    await new Promise((resolve) => window.setTimeout(resolve, 350)); // 연속 저장 시 브라우저가 큐잉할 틈
   };
 
   const handleDownload = async (url: string, photoIndex: number) => {
@@ -99,6 +102,11 @@ export default function AlbumView({ id }: { id: string }) {
       {loading && <div className="p-8 text-center text-slate-400">불러오는 중…</div>}
       {err && <div className="p-8 text-center text-rose-300">{err}</div>}
       {downloadErr && <div className="px-4 py-2 text-center text-sm text-rose-300">{downloadErr}</div>}
+      {isKakaoInApp && (
+        <button type="button" onClick={openExternal} className="mx-4 my-2 block w-[calc(100%-2rem)] rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-2.5 text-center text-xs font-bold leading-5 text-amber-200">
+          카카오톡 브라우저에서는 사진 저장이 제한될 수 있어요<br /><span className="font-black underline">여기를 눌러 크롬·삼성브라우저로 열기</span> — 거기서 저장하면 갤러리에 들어갑니다
+        </button>
+      )}
 
       <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4">
         {urls.map((u, i) => (
