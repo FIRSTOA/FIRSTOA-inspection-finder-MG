@@ -86,7 +86,7 @@ const workGroups: Array<{ title: string; items: MenuItem[] }> = [
       { key: "operations", title: "업무관리", desc: "팀 운영 현황·담당자/주소 변경이력", icon: UsersRound, tone: "bg-slate-100 text-slate-700" },
       { key: "happycall", title: "해피콜", desc: "방문 후 문자·예약 발송", icon: PhoneCall, tone: "bg-rose-50 text-rose-700" },
       { key: "promoSend", title: "홍보물 발송·인쇄", desc: "홍보자료 문자·메일·인쇄", icon: Megaphone, tone: "bg-amber-50 text-amber-700" },
-      { key: "counterSms", title: "카운터 문자전송", desc: "복합기 사용량 요청 자동화", icon: MessageSquareText, tone: "bg-slate-100 text-slate-400", pending: true },
+      { key: "counterSms", title: "카운터 문자전송", desc: "카톡 목록 → 업체별 카운터 요청 문자", icon: MessageSquareText, tone: "bg-emerald-50 text-emerald-600" },
     ],
   },
 ];

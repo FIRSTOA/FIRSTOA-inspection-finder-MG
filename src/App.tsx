@@ -33,6 +33,7 @@ import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ContactChangeForm from "./ContactChangeForm";
 import PraiseForm from "./PraiseForm";
+import CounterSms from "./CounterSms";
 import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut } from "./photoStore";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
@@ -5717,15 +5718,7 @@ export default function App() {
         {screen === "happycall" && <HappyCallWorkspace author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
-        {screen === "counterSms" && (
-          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-            <div className="text-3xl">🚧</div>
-            <div className="mt-2 text-base font-bold text-slate-700">{screenTitle}</div>
-            <div className="mt-1 text-sm text-slate-400">
-              복합기 사용량 카운터 요청 문자 자동전송 기능을 준비 중입니다.
-            </div>
-          </div>
-        )}
+        {screen === "counterSms" && <CounterSms author={author} />}
 
         {screen === "field" && (<>
         {/* ===== FIELD 화면 ===== */}
