@@ -155,10 +155,30 @@ export default function CounterSms({ author }: { author: string }) {
           {blocks && (
             <>
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-                  <div className="text-sm font-black text-slate-900">인식 결과 — 잘못된 값은 여기서 고치면 문구에 바로 반영됩니다</div>
-                  <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{blocks.length}개 블록 · 같은 번호는 한 통으로 합쳐서 보냅니다</div>
+                <div className="flex gap-1 border-b border-slate-100 bg-slate-50/70 px-3 pt-2">
+                  {([["s_group", `🟢 S·NN·N급 ${targets.filter((t) => t.gradeGroup === "s_group").length}`], ["v_group", `💎 V·SS급 ${targets.filter((t) => t.gradeGroup === "v_group").length}`]] as const).map(([key, label]) => (
+                    <button key={key} type="button" onClick={() => setGradeTab(key)}
+                      className={`rounded-t-lg px-4 py-2 text-xs font-black transition ${gradeTab === key ? "border-b-2 border-blue-600 bg-white text-blue-700" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>
+                  ))}
                 </div>
+                <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {shown.map((t) => (
+                    <button key={t.key} type="button" onClick={() => openSend(t)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
+                      <div className="truncate text-[13px] font-black text-slate-900">{t.gradeGroup === "v_group" ? "💎" : "✉️"} {t.vendor}</div>
+                      <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
+                        {t.machines.length}대 · {t.phones.length ? t.phones.map(formatPhone).join(", ") : "번호 없음"}
+                      </div>
+                      {t.vendorNames.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {t.vendorNames.length}곳 통합</div>}
+                    </button>
+                  ))}
+                  {!shown.length && <div className="col-span-full py-8 text-center text-xs font-bold text-slate-400">이 등급군에 인식된 업체가 없습니다.</div>}
+                </div>
+              </section>
+              <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <summary className="cursor-pointer border-b border-slate-100 bg-slate-50/70 px-4 py-2.5 text-[11px] font-black text-slate-500">
+                  🔧 인식 결과 수정 ({blocks.length}건) — 업체명·기종·번호가 틀렸을 때만 열면 됩니다
+                </summary>
                 <div className="max-h-[40vh] divide-y divide-slate-100 overflow-y-auto">
                   {blocks.map((b) => (
                     <div key={b.index} className="grid gap-2 px-4 py-3 md:grid-cols-[1.4fr_1fr_1fr]">
@@ -182,29 +202,8 @@ export default function CounterSms({ author }: { author: string }) {
                     </div>
                   ))}
                 </div>
-              </section>
+              </details>
 
-              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex gap-1 border-b border-slate-100 bg-slate-50/70 px-3 pt-2">
-                  {([["s_group", `🟢 S·NN·N급 ${targets.filter((t) => t.gradeGroup === "s_group").length}`], ["v_group", `💎 V·SS급 ${targets.filter((t) => t.gradeGroup === "v_group").length}`]] as const).map(([key, label]) => (
-                    <button key={key} type="button" onClick={() => setGradeTab(key)}
-                      className={`rounded-t-lg px-4 py-2 text-xs font-black transition ${gradeTab === key ? "border-b-2 border-blue-600 bg-white text-blue-700" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>
-                  ))}
-                </div>
-                <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {shown.map((t) => (
-                    <button key={t.key} type="button" onClick={() => openSend(t)}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
-                      <div className="truncate text-[13px] font-black text-slate-900">{t.gradeGroup === "v_group" ? "💎" : "✉️"} {t.vendor}</div>
-                      <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
-                        {t.machines.length}대 · {t.phones.length ? t.phones.map(formatPhone).join(", ") : "번호 없음"}
-                      </div>
-                      {t.vendorNames.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {t.vendorNames.length}곳 통합</div>}
-                    </button>
-                  ))}
-                  {!shown.length && <div className="col-span-full py-8 text-center text-xs font-bold text-slate-400">이 등급군에 인식된 업체가 없습니다.</div>}
-                </div>
-              </section>
             </>
           )}
         </>

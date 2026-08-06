@@ -754,6 +754,10 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     // 목적지 버튼은 카톡방만 고른다. 사용자가 작성한 구분은 그대로 전송한다.
     const sendText = text;
     let built = buildRecords(sendText, toKstDate(payload.ts), payload.author || "", "");
+    // 지역이 없으면 저장도 하지 않는다 — 예전엔 저장만 되고 카톡은 실패해 "보낸 줄 알았는데 안 감"이 됐다
+    if (kind === "normal" && (built.hasInspect || built.hasAS) && !String(built.region || "").trim()) {
+      return { ok: false, error: "지역이 비어 있어 전송할 수 없습니다 — 양식의 '지역' 값을 채운 뒤 다시 보내주세요." };
+    }
     // 여분/마감/세팅처럼 구분에 점검·AS 문자가 없어도 사용자가 누른 방 기준으로 저장한다.
     if (!built.hasInspect && !built.hasAS && destination) {
       const storageText = sendText.match(/^구분\s*[:：]/m)

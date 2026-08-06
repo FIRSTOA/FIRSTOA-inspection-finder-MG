@@ -46,6 +46,7 @@ import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 import { prepareImageForUpload } from "./imageUpload";
+import { buildRecords } from "./inspectParser";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import type { AuthorTeam } from "./authors";
 
@@ -4667,6 +4668,7 @@ export default function App() {
     const worker = async () => {
       while (nextIdx < photos.length) {
         const i = nextIdx++;
+        if (urls[i]) { done++; continue; } // 앞선 시도에서 이미 올라간 사진은 건너뛴다 (부분 성공 이어받기)
         const f = photos[i].file;
         if (f.type.startsWith("video/")) {
           // 동영상은 원본 그대로 업로드 (다운스케일/변환 X)
@@ -4682,7 +4684,15 @@ export default function App() {
       }
     };
     if (!existingUrls || existingUrls.length !== photos.length) {
-      await Promise.all(Array.from({ length: Math.min(4, photos.length) }, worker));
+      // 모바일 회선에서 동시 4개는 끊김의 원인 — 2개로 낮춰 안정성을 택한다
+      const concurrency = Math.min(/Android|iPhone|iPad/i.test(navigator.userAgent) ? 2 : 4, photos.length);
+      try {
+        await Promise.all(Array.from({ length: concurrency }, worker));
+      } catch (e) {
+        photoUploadUrlsRef.current = urls.map((u) => u || ""); // 성공분 보존 — 재시도 시 나머지만 올린다
+        const okCount = urls.filter(Boolean).length;
+        throw new Error(`${(e as Error).message}${okCount ? ` (${okCount}/${photos.length}장은 업로드 완료 — 다시 누르면 나머지만 올립니다)` : ""}`);
+      }
       photoUploadUrlsRef.current = urls;
     }
     const albumId = await createAlbum(urls, context.vendor || currentVendor || "미기재", {
@@ -5402,16 +5412,22 @@ export default function App() {
     ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
     : FIELD_SHEET_LINKS[mode] || "";
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
-  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨)
-  // 검사 대상은 실제 전송에 쓰는 완성 양식(buildResultText)과 동일해야 한다 — 원문/중간 상태를 보면 오탐
-  const fieldRegionMissing = (() => {
+  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨).
+  // 판정은 전송이 쓰는 파서(buildRecords)와 같은 함수로 — 자체 정규식은 탭 구분 양식에서 오탐했다.
+  const fieldRegionMissing = useMemo(() => {
     if (mode !== "inspection" && mode !== "blank-report") return false;
     if (!hasOutput) return false;
     const text = buildResultText();
     if (!text.trim()) return false;
-    const m = text.match(/지역\s*[:： ]?\t?([^\t\n]*)/);
-    return !(m?.[1] || "").trim();
-  })();
+    try {
+      const built = buildRecords(text, kstDate(), author, "");
+      if (!built.hasInspect && !built.hasAS) return false; // 점검·AS 양식이 아니면 판정 대상 아님
+      return !String(built.region || "").trim();
+    } catch {
+      return false;
+    }
+    // buildResultText는 아래 상태들로 결정되므로 같은 deps를 쓴다
+  }, [mode, hasOutput, textOutput, listOutput, itemForms, sharedForm, editedBlocks, author]);
 
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {

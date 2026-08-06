@@ -125,18 +125,33 @@ export async function getRoomMap(): Promise<Record<string, string>> {
 
 // 사진 → Supabase Storage(photos 버킷) 업로드 후 공개 URL 반환. (버킷/정책은 SQL로 1회 생성)
 export async function uploadPhoto(path: string, file: Blob, contentType = "image/jpeg"): Promise<string> {
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/photos/${path}`, {
-    method: "POST",
-    // 새 앨범 UUID 아래에만 저장하므로 덮어쓰기는 필요 없다.
-    // x-upsert를 쓰면 Storage가 기존 객체 조회 권한까지 요구해 RLS 오류가 날 수 있다.
-    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType },
-    body: file,
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`사진 업로드 실패(${res.status}): ${t.slice(0, 160)}`);
+  // 현장 LTE에서 "Failed to fetch"(연결 끊김·타임아웃)가 잦아 3회까지 자동 재시도한다.
+  // 실패해도 매번 새 경로를 쓰지 않고 같은 경로로 재시도 — 중복 업로드가 쌓이지 않는다.
+  const url = `${SUPABASE_URL}/storage/v1/object/photos/${path}`;
+  let lastError = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000); // 대용량 사진도 넉넉히
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        // 재시도 시 같은 경로에 다시 쓰므로 덮어쓰기를 허용한다 (photos 버킷은 public select 정책 있음)
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": contentType, "x-upsert": "true" },
+        body: file,
+        signal: controller.signal,
+      });
+      if (res.ok) return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
+      const t = await res.text().catch(() => "");
+      lastError = `${res.status}: ${t.slice(0, 120)}`;
+      if (res.status < 500 && res.status !== 429) break; // 권한·용량 등은 재시도해도 같다
+    } catch (e) {
+      lastError = (e as Error).name === "AbortError" ? "시간 초과(60초)" : (e as Error).message || "네트워크 오류";
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
   }
-  return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
+  throw new Error(`사진 업로드 실패 — ${lastError} (전파 상태를 확인하고 다시 시도해 주세요)`);
 }
 
 // PostgREST의 기본 1,000행 제한을 넘는 공용 목록을 끝까지 조회한다.
