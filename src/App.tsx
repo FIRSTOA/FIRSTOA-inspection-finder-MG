@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import {
-  Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText,
+  Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2,
   Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
   TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown,
 } from "lucide-react";
@@ -34,6 +34,7 @@ import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState
 import ContactChangeForm from "./ContactChangeForm";
 import PraiseForm from "./PraiseForm";
 import CounterSms from "./CounterSms";
+import AutoSchedule from "./AutoSchedule";
 import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut } from "./photoStore";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
@@ -4589,7 +4590,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -5432,7 +5433,7 @@ export default function App() {
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
     home: HomeIcon, serviceReception: ClipboardList, asReception: ListChecks, calendar: CalendarDays,
-    walkingMap: MapIcon, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
+    walkingMap: MapIcon, autoSchedule: Wand2, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
     itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
     growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
     operations: Settings2, lookup: Database, inbox: Inbox,
@@ -5444,7 +5445,7 @@ export default function App() {
     { title: "고객·홍보", items: [["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["lookup", "조회"], ["operations", "관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
@@ -5735,6 +5736,7 @@ export default function App() {
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
         {screen === "counterSms" && <CounterSms author={author} />}
+        {screen === "autoSchedule" && <AutoSchedule author={author} />}
 
         {screen === "field" && (<>
         {/* ===== FIELD 화면 ===== */}
