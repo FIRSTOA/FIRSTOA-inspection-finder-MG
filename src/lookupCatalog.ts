@@ -145,11 +145,13 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     columns: [
       { key: "날짜", label: "날짜", width: "96px", mono: true },
       VENDOR,
+      { key: "등급", label: "등급", width: "56px" },
       { key: "작성자", label: "작성자", width: "80px" },
       { key: "계약종료일", label: "종료일", width: "100px", mono: true, hideBelow: "sm" },
-      { key: "갱신상태", label: "갱신상태", width: "100px" },
-      { key: "갱신위험도", label: "위험도", width: "80px", hideBelow: "lg" },
-      { key: "내용", label: "내용", width: "minmax(0,1.6fr)" },
+      { key: "갱신상태", label: "갱신상태", width: "90px" },
+      { key: "갱신위험도", label: "위험도", width: "64px", hideBelow: "lg" },
+      { key: "다음확인일", label: "다음확인일", width: "100px", mono: true, hideBelow: "lg" },
+      { key: "최종상태", label: "최종상태", width: "90px", hideBelow: "sm" },
     ],
   },
   {

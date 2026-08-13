@@ -4177,24 +4177,41 @@ export default function App() {
   // 중요한 안내("지역을 넣어주세요" 등)를 처음 보는 사람이 놓친다. 성공·진행만 토스트.
   const [alertBox, setAlertBox] = useState<{ title: string; body: string; kind: "warning" | "error" } | null>(null);
   // 배포 후에도 오래 열린 탭은 옛 번들로 돈다("내 PC엔 보이는데 다른 PC엔 안 보여요"의 원인).
-  // 10분마다·탭 복귀 때 서버의 index.html과 지금 로드된 번들을 비교해 다르면 새로고침을 권한다.
-  const [updateReady, setUpdateReady] = useState(false);
+  // 10분마다·탭 복귀 때 서버 번들과 비교해 다르면 조용히 자동 새로고침한다.
+  // 입력(타이핑) 중이거나 전송 중이면 끊지 않고, 입력이 끝나거나 탭에 복귀할 때 갱신한다.
+  // FIELD 작성 내용은 세션 스냅샷으로 복원되므로 새로고침해도 초안이 유지된다.
   useEffect(() => {
     const current = document.querySelector('script[src*="/assets/index-"]')?.getAttribute("src") || "";
     if (!current) return;
     let stop = false;
+    let pending = false;
+    const busyNow = () => {
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+      return typing || document.querySelector('[data-busy="true"]') !== null;
+    };
+    const tryReload = () => {
+      if (stop) return;
+      if (busyNow()) { pending = true; return; }
+      window.location.reload();
+    };
     const check = async () => {
       try {
         const html = await fetch("/", { cache: "no-store" }).then((r) => r.text());
         const latest = html.match(/\/assets\/index-[^"']+\.js/)?.[0] || "";
-        if (!stop && latest && !current.endsWith(latest)) setUpdateReady(true);
+        if (!stop && latest && !current.endsWith(latest)) tryReload();
       } catch { /* 오프라인 등은 무시 — 다음 주기에 재시도 */ }
     };
     const timer = window.setInterval(check, 10 * 60 * 1000);
-    const onVisible = () => { if (document.visibilityState === "visible") void check(); };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (pending) tryReload(); else void check();
+    };
+    const onFocusOut = () => { if (pending) window.setTimeout(tryReload, 1200); };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
-    return () => { stop = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
+    document.addEventListener("focusout", onFocusOut);
+    return () => { stop = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); document.removeEventListener("focusout", onFocusOut); };
   }, []);
   // 성공 토스트는 하단 고정 패널(자가·부품·복사 버튼줄) "바로 위"에 — 버튼을 가리지 않게
   const [toastBottom, setToastBottom] = useState(20);
@@ -6579,12 +6596,7 @@ export default function App() {
       />
 
       {/* Toast */}
-      {updateReady && (
-        <button type="button" onClick={() => window.location.reload()}
-          className="fixed left-1/2 top-3 z-[2600] flex -translate-x-1/2 items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_6px_20px_rgba(37,99,235,0.45)] transition hover:bg-blue-700">
-          ⬆ 새 버전이 배포되었습니다 — 눌러서 새로고침
-        </button>
-      )}
+      {sending && <span data-busy="true" className="hidden" />}
       {alertBox && (
         <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/45 p-6" onMouseDown={() => setAlertBox(null)}>
           <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
