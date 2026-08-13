@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
+import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -881,12 +882,256 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
   );
 });
 
+// ── 카카오맵 캔버스 — MapCanvas(Leaflet)와 같은 인터페이스·기능 ──────────────
+// 뷰포트 가상화(화면 안 핀만 생성) / 같은 주소 그룹핑(숫자 뱃지+목록 팝업) /
+// 같은 좌표 원형 분산 / 팀별 뷰 저장 / 선택 하이라이트·이동 / GPS 점 / 주소핀 다리
+function kakaoViewKey(key: string, team: Team) { return `${key}_kakao_${team}`; }
+function loadKakaoView(key: string, team: Team): { lat: number; lng: number; level: number } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(kakaoViewKey(key, team)) || "null");
+    if (raw && Number.isFinite(raw.lat)) return raw;
+  } catch { /* 아래 변환 */ }
+  const legacy = loadTeamMapView(key, team); // 기존 Leaflet 저장값을 카카오 레벨로 근사 변환
+  return { lat: legacy.center[0], lng: legacy.center[1], level: Math.min(14, Math.max(1, 20 - legacy.zoom)) };
+}
+
+const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId, team, viewStorageKey, onSelect, currentPosition }: { kakao: KakaoNS; places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void; currentPosition: CurrentPosition | null }) {
+  const elementRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<KakaoNS | null>(null);
+  const overlaysRef = useRef(new Map<number, KakaoNS>());     // placeId → 핀 CustomOverlay
+  const signaturesRef = useRef(new Map<number, string>());
+  const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
+  const popupRef = useRef<KakaoNS | null>(null);              // 열려 있는 그룹 팝업
+  const gpsRef = useRef<KakaoNS[]>([]);
+  const addressPinRef = useRef<KakaoNS | null>(null);
+  const [ready, setReady] = useState(false);
+  const [viewportRevision, setViewportRevision] = useState(0);
+
+  useEffect(() => {
+    if (!elementRef.current || mapRef.current) return;
+    const view = loadKakaoView(viewStorageKey, team);
+    const map = new kakao.maps.Map(elementRef.current, { center: new kakao.maps.LatLng(view.lat, view.lng), level: view.level });
+    mapRef.current = map;
+    kakao.maps.event.addListener(map, "tilesloaded", () => setReady(true));
+    window.setTimeout(() => setReady(true), 2500); // 이벤트가 안 와도 로딩막은 걷는다
+    // 주소 검색 다리
+    addressClearBridge = () => { if (addressPinRef.current) { addressPinRef.current.setMap(null); addressPinRef.current = null; } };
+    addressFlyBridge = (lat, lng, label, sub) => {
+      if (addressPinRef.current) { addressPinRef.current.setMap(null); addressPinRef.current = null; }
+      const el = document.createElement("div");
+      el.style.cssText = "transform:translateY(-6px);text-align:center";
+      el.innerHTML = `<div style="font-size:30px;line-height:30px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">📍</div><div style="margin-top:2px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15)">${label}<br/><span style="color:#64748b;font-weight:500">${sub}</span></div>`;
+      const overlay = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(lat, lng), content: el, yAnchor: 0.4, zIndex: 500 });
+      overlay.setMap(map);
+      addressPinRef.current = overlay;
+      if (map.getLevel() > 4) map.setLevel(4);
+      map.panTo(new kakao.maps.LatLng(lat, lng));
+    };
+    const observer = new ResizeObserver(() => map.relayout());
+    observer.observe(elementRef.current);
+    return () => {
+      observer.disconnect();
+      addressFlyBridge = null;
+      addressClearBridge = null;
+      overlaysRef.current.forEach((o) => o.setMap(null));
+      overlaysRef.current.clear();
+      signaturesRef.current.clear();
+      labelByIdRef.current.clear();
+      if (popupRef.current) popupRef.current.setMap(null);
+      gpsRef.current.forEach((o) => o.setMap(null));
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 팀 전환·이동 시 뷰 저장 + 가시 마커 재계산
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const view = loadKakaoView(viewStorageKey, team);
+    map.setCenter(new kakao.maps.LatLng(view.lat, view.lng));
+    map.setLevel(view.level);
+    let timer = 0;
+    const persist = () => {
+      const c = map.getCenter();
+      try { localStorage.setItem(kakaoViewKey(viewStorageKey, team), JSON.stringify({ lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })); } catch { /* 무시 */ }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setViewportRevision((cur) => cur + 1), 160);
+    };
+    kakao.maps.event.addListener(map, "idle", persist);
+    return () => { window.clearTimeout(timer); kakao.maps.event.removeListener(map, "idle", persist); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team, viewStorageKey]);
+
+  // 핀 렌더 — 화면(+여유) 안만 생성, 시그니처 같으면 재사용
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+    const latPad = (ne.getLat() - sw.getLat()) * 0.12, lngPad = (ne.getLng() - sw.getLng()) * 0.12;
+    const contains = (lat: number, lng: number) =>
+      lat >= sw.getLat() - latPad && lat <= ne.getLat() + latPad && lng >= sw.getLng() - lngPad && lng <= ne.getLng() + lngPad;
+    const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && contains(place.latitude, place.longitude));
+    const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
+      const key = addressGroupKey(place);
+      groups.set(key, [...(groups.get(key) || []), place]);
+      return groups;
+    }, new Map<string, MapPlace[]>()).values());
+    const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
+    const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
+    overlaysRef.current.forEach((overlay, id) => {
+      if (visibleIds.has(id)) return;
+      overlay.setMap(null);
+      overlaysRef.current.delete(id);
+      signaturesRef.current.delete(id);
+    });
+    labelByIdRef.current.forEach((_, id) => { if (!visiblePlaceIds.has(id)) labelByIdRef.current.delete(id); });
+
+    const projection = map.getProjection();
+    const counts = new Map<string, number>();
+    groupedPlaces.forEach(([place]) => {
+      const key = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const indexes = new Map<string, number>();
+    groupedPlaces.forEach((group) => {
+      const place = group[0];
+      const coordKey = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
+      const dupIndex = indexes.get(coordKey) || 0;
+      indexes.set(coordKey, dupIndex + 1);
+      const dupCount = counts.get(coordKey) || 1;
+      const spreadIndex = Math.max(0, dupIndex - 1);
+      const ring = Math.floor(spreadIndex / 8) + 1;
+      const angle = ((spreadIndex % 8) / 8) * Math.PI * 2;
+      let displayPos = new kakao.maps.LatLng(place.latitude, place.longitude);
+      if (dupCount > 1 && dupIndex > 0) {
+        const pt = projection.containerPointFromCoords(displayPos);
+        displayPos = projection.coordsFromContainerPoint(new kakao.maps.Point(pt.x + Math.cos(angle) * 38 * ring, pt.y + Math.sin(angle) * 38 * ring));
+      }
+      const meta = labelMeta(place.label);
+      const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
+      const groupSelected = group.some((item) => item.id === selectedId);
+      const permanentLabel = !mobile || map.getLevel() <= 5 || groupSelected;
+      const signature = [displayPos.getLat().toFixed(7), displayPos.getLng().toFixed(7), meta.color, groupLabel, permanentLabel ? "label" : "dot", group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
+      if (overlaysRef.current.has(place.id) && signaturesRef.current.get(place.id) === signature) {
+        const currentLabel = labelByIdRef.current.get(place.id);
+        if (currentLabel) styleMapLabel(currentLabel, groupSelected);
+        return;
+      }
+      const existing = overlaysRef.current.get(place.id);
+      if (existing) { existing.setMap(null); group.forEach((item) => labelByIdRef.current.delete(item.id)); }
+
+      const container = document.createElement("div");
+      container.style.cssText = "position:relative;cursor:pointer;text-align:center";
+      const openGroupPopup = () => {
+        if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
+        const popup = document.createElement("div");
+        popup.className = "min-w-[220px] max-w-[280px] space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl";
+        const heading = document.createElement("div");
+        heading.className = "flex items-center justify-between border-b border-slate-200 px-2 pb-2 text-xs font-black text-slate-500";
+        heading.innerHTML = `<span>같은 주소 · ${group.length}곳</span>`;
+        const close = document.createElement("button");
+        close.type = "button"; close.textContent = "✕"; close.className = "px-1 text-slate-400";
+        close.addEventListener("click", () => { popupRef.current?.setMap(null); popupRef.current = null; });
+        heading.appendChild(close);
+        popup.appendChild(heading);
+        const list = document.createElement("div");
+        list.style.cssText = "max-height:240px;overflow-y:auto";
+        group.forEach((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "block w-full rounded px-2 py-2 text-left text-xs font-bold hover:bg-slate-100";
+          button.textContent = item.name;
+          button.addEventListener("click", () => { onSelect(item.id); popupRef.current?.setMap(null); popupRef.current = null; });
+          list.appendChild(button);
+        });
+        popup.appendChild(list);
+        const overlay = new kakao.maps.CustomOverlay({ position: displayPos, content: popup, yAnchor: 1.15, zIndex: 600 });
+        overlay.setMap(map);
+        popupRef.current = overlay;
+      };
+      const handleClick = () => { if (group.length === 1) onSelect(place.id); else openGroupPopup(); };
+
+      if (permanentLabel) {
+        const tooltip = document.createElement("div");
+        tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
+        tooltip.textContent = groupLabel;
+        tooltip.title = group.map((item) => item.name).join("\n");
+        styleMapLabel(tooltip, groupSelected);
+        tooltip.style.marginBottom = "3px";
+        tooltip.addEventListener("click", (event) => { event.stopPropagation(); handleClick(); });
+        container.appendChild(tooltip);
+      }
+      const pin = document.createElement("div");
+      pin.style.cssText = "display:inline-block";
+      pin.innerHTML = permanentLabel
+        ? `<span style="position:relative;display:block;width:21px;height:21px;margin:0 auto;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style=\"position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)\">${group.length}</b>` : ""}</span>`
+        : `<span style="display:block;width:${group.length > 1 ? 16 : 12}px;height:${group.length > 1 ? 16 : 12}px;background:${meta.color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(15,23,42,.4)"></span>`;
+      pin.addEventListener("click", (event) => { event.stopPropagation(); handleClick(); });
+      container.appendChild(pin);
+
+      const overlay = new kakao.maps.CustomOverlay({ position: displayPos, content: container, yAnchor: permanentLabel ? 0.95 : 0.5, zIndex: groupSelected ? 200 : 100 });
+      overlay.setMap(map);
+      overlaysRef.current.set(place.id, overlay);
+      signaturesRef.current.set(place.id, signature);
+      if (permanentLabel) group.forEach((item) => labelByIdRef.current.set(item.id, container.firstChild as HTMLDivElement));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [places, onSelect, selectedId, viewportRevision]);
+
+  // 선택 변경: 라벨 하이라이트 + 지도 이동
+  useEffect(() => {
+    new Set(labelByIdRef.current.values()).forEach((element) => styleMapLabel(element, false));
+    if (selectedId !== null) {
+      const selectedLabel = labelByIdRef.current.get(selectedId);
+      if (selectedLabel) styleMapLabel(selectedLabel, true);
+    }
+    const map = mapRef.current;
+    const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
+    if (map && place && Number.isFinite(place.latitude)) map.panTo(new kakao.maps.LatLng(place.latitude, place.longitude));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, places]);
+
+  // 현재 위치(GPS)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !currentPosition) return;
+    gpsRef.current.forEach((o) => o.setMap(null));
+    gpsRef.current = [];
+    const pos = new kakao.maps.LatLng(currentPosition.latitude, currentPosition.longitude);
+    const circle = new kakao.maps.Circle({ center: pos, radius: Math.max(15, currentPosition.accuracy), strokeWeight: 1, strokeColor: "#2563eb", strokeOpacity: 0.7, fillColor: "#60a5fa", fillOpacity: 0.14 });
+    circle.setMap(map);
+    const dot = document.createElement("div");
+    dot.style.cssText = "width:14px;height:14px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.35)";
+    const dotOverlay = new kakao.maps.CustomOverlay({ position: pos, content: dot, yAnchor: 0.5, zIndex: 400 });
+    dotOverlay.setMap(map);
+    gpsRef.current = [circle, dotOverlay];
+    map.panTo(pos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPosition]);
+
+  return (
+    <div className="relative h-full min-h-[500px] w-full bg-[#eef3f6]">
+      <div ref={elementRef} className="h-full w-full" aria-label="전국 거래처 지도 (카카오)" />
+      {!ready && <div className="pointer-events-none absolute inset-0 z-[800] flex items-center justify-center bg-slate-100/75 text-sm font-black text-slate-500">지도 불러오는 중</div>}
+    </div>
+  );
+});
+
 export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userKey?: string; onSelfRequest?: (text: string) => void }) {
   const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
   const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
   const [sharedReady, setSharedReady] = useState(false);
   const [syncState, setSyncState] = useState<"loading" | "saved" | "error">("loading");
   const [query, setQuery] = useState("");
+  // 지도 엔진: 카카오 SDK가 열리면 카카오, 아니면 기존 Leaflet (도메인 미등록 미리보기 등)
+  const [kakaoNs, setKakaoNs] = useState<KakaoNS | null>(null);
+  const [engineReady, setEngineReady] = useState(false);
+  useEffect(() => {
+    void loadKakaoMaps().then((ns) => { setKakaoNs(ns); setEngineReady(true); });
+  }, []);
   // 주소 지오코딩(OSM) — 분기점검에 없는 AS 방문지도 주소만 치면 지도에서 위치 확인
   const [geocoding, setGeocoding] = useState(false);
   const [addressPinLabel, setAddressPinLabel] = useState("");
@@ -1991,7 +2236,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   const mapPanel = (
     <div className="relative h-full min-h-0 overflow-hidden bg-slate-100 lg:min-h-[540px]">
-      <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
+      {!engineReady
+        ? <div className="flex h-full min-h-[500px] w-full items-center justify-center bg-slate-100 text-sm font-black text-slate-500">지도 준비 중…</div>
+        : kakaoNs
+          ? <MapCanvasKakao kakao={kakaoNs} places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
+          : <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />}
       <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
         <div className="relative">
           <input
