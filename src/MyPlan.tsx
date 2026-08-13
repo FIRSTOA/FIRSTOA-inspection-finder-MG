@@ -12,7 +12,8 @@ import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getRecentInspections, type InspectionSnapshot } from "./api";
+import { getInspForms, getRecentInspections, type InspectionSnapshot, type InspForm } from "./api";
+import { selectRows } from "./supabase";
 import VendorSearch from "./VendorSearch";
 import { notify } from "./toast";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
@@ -312,8 +313,72 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
   };
 
-  // FIELD 양식 불러오기 — 필드탭의 거래처·양식 검색과 동일 (직접 검색해서 불러오기)
-  const [fieldPick, setFieldPick] = useState<MyPlanTicket | null>(null);
+  // FIELD 양식 불러오기 — ①시리얼·자산기번 ②업체명(정확→토큰 축소)으로 자동 목록,
+  // 그래도 없으면 같은 모달에서 직접 검색(필드탭과 동일)으로 전환
+  const [fieldPick, setFieldPick] = useState<{ ticket: MyPlanTicket; forms: InspForm[] | null; mode: "auto" | "search" } | null>(null);
+  const openFieldPick = (t: MyPlanTicket) => {
+    setFieldPick({ ticket: t, forms: null, mode: "auto" });
+    void (async () => {
+      try {
+        const rawForms: Array<Record<string, unknown> & { __gubun: string }> = [];
+        const fetchRaw = async (filter: string) => {
+          const [insp, as] = await Promise.all([
+            selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
+            selectRows<Record<string, unknown>>("as_records", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
+          ]);
+          rawForms.push(...insp.map((r) => ({ ...r, __gubun: "점검" })), ...as.map((r) => ({ ...r, __gubun: "AS" })));
+        };
+        // ① 기기 번호 매칭 — 표기가 어떻든 기기는 못 속인다
+        const idCond: string[] = [];
+        if (t.serial?.trim()) idCond.push(`${encodeURIComponent("시리얼넘버")}.ilike.*${encodeURIComponent(t.serial.trim())}*`);
+        if (t.asset?.trim()) idCond.push(`${encodeURIComponent("자산기번")}.ilike.*${encodeURIComponent(t.asset.trim())}*`);
+        if (idCond.length) await fetchRaw(`or=(${idCond.join(",")})`);
+        // ② 업체명 정확 일치
+        if (!rawForms.length) {
+          const exact = (await getInspForms(t.vendor)).forms.filter((f) => f.text);
+          if (exact.length) { setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: exact } : cur)); return; }
+        }
+        // ③ 핵심 토큰 8→5→3자 축소 검색 (워킨맵 이력 팝업과 같은 방식)
+        if (!rawForms.length) {
+          const core = t.vendor
+            .replace(/㈜|\(주\)/g, "")
+            .replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인/g, "").trim()
+            .match(/[가-힣a-zA-Z0-9]+/)?.[0] || t.vendor;
+          const key = vendorMatchKey(t.vendor);
+          for (const len of [8, 5, 3]) {
+            const probe = core.slice(0, len);
+            if (probe.length < 2) break;
+            await fetchRaw(`${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*`);
+            const filtered = rawForms.filter((r) => {
+              const rk = vendorMatchKey(String(r["_업체명"] || ""));
+              return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
+            });
+            rawForms.length = 0;
+            if (filtered.length) { rawForms.push(...filtered as typeof rawForms); break; }
+          }
+        }
+        const forms: InspForm[] = rawForms
+          .filter((r) => String(r["_원문"] || "").trim())
+          .sort((a, b) => String(b["작성일"] || "").localeCompare(String(a["작성일"] || "")))
+          .slice(0, 8)
+          .map((r) => ({
+            gubun: r.__gubun as InspForm["gubun"],
+            date: String(r["작성일"] || "").slice(0, 10),
+            model: String(r["모델명"] || ""),
+            serial: String(r["시리얼넘버"] || ""),
+            asset: String(r["자산기번"] || ""),
+            content: String(r["내용"] || ""),
+            handled: String(r["처리내용"] || ""),
+            text: String(r["_원문"] || ""),
+            source: "myplan",
+          }));
+        // 자동으로 못 찾으면 바로 검색 모드로 (직접 검색)
+        setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms, mode: forms.length ? "auto" : "search" } : cur));
+      } catch {
+        setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: [], mode: "search" } : cur));
+      }
+    })();
+  };
 
   // 상세 모달 — 워킨맵 정보 + AS 접수내용 + 최근 점검을 한 화면에 (워킨맵 안 봐도 되게)
   const [detail, setDetail] = useState<MyPlanTicket | null>(null);
@@ -377,7 +442,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
               {/* 모바일: 버튼줄이 내용 아래 한 줄로 — 내용 칸이 눌려 업체명이 안 보이던 것 방지 */}
               <span className="flex w-full items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
-                {onUseField && <button type="button" onClick={() => setFieldPick(t)} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
+                {onUseField && <button type="button" onClick={() => openFieldPick(t)} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
                 <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">길찾기</a>
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
@@ -389,27 +454,48 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
         })}
         {!ordered.length && <div className="p-10 text-center text-xs font-bold text-slate-400">{date}에 {author}에게 배정된 일정이 없습니다.</div>}
       </div>
-      {fieldPick && (
-        <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFieldPick(null)}>
-          <div className="flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-[82vh] sm:max-w-2xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
-              <div className="min-w-0">
-                <div className="text-[11px] font-black text-slate-400">거래처·양식 검색 — 불러오면 FIELD로 변환됩니다</div>
-                <div className="truncate text-[15px] font-black text-white">{fieldPick.vendor}</div>
+      {fieldPick && (() => {
+        const t = fieldPick.ticket;
+        const load = (text: string) => { setFieldPick(null); onUseField?.(text, { id: t.id, receptionId: t.receptionId, vendor: t.vendor }); };
+        return (
+          <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFieldPick(null)}>
+            <div className="flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-[82vh] sm:max-w-2xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-black text-slate-400">{fieldPick.mode === "auto" ? "최근 양식 — 불러오면 FIELD로 변환됩니다" : "거래처·양식 검색 — 자동으로 못 찾아 직접 검색"}</div>
+                  <div className="truncate text-[15px] font-black text-white">{t.vendor}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {fieldPick.mode === "auto" && <button type="button" onClick={() => setFieldPick({ ...fieldPick, mode: "search" })} className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-white/20">직접 검색</button>}
+                  <button type="button" onClick={() => setFieldPick(null)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+                </div>
               </div>
-              <button type="button" onClick={() => setFieldPick(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <VendorSearch
-                accent="#2563eb"
-                onLoadForm={(text) => { const t = fieldPick; setFieldPick(null); onUseField?.(text, { id: t.id, receptionId: t.receptionId, vendor: t.vendor }); }}
-                onVendor={() => {}}
-                onError={(m) => notify(m, "error")}
-              />
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {fieldPick.mode === "search" ? (
+                  <VendorSearch accent="#2563eb" onLoadForm={load} onVendor={() => {}} onError={(m) => notify(m, "error")} />
+                ) : fieldPick.forms === null ? (
+                  <div className="py-10 text-center text-xs font-bold text-slate-400">시리얼·자산기번·업체명으로 최근 양식을 찾는 중…</div>
+                ) : (
+                  <div className="space-y-2">
+                    {fieldPick.forms.map((form, i) => (
+                      <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${String(form.gubun).includes("AS") ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>{form.gubun}</span>
+                          <span className="text-[12px] font-black text-slate-800">{form.date}</span>
+                          {form.model && <span className="truncate text-[11px] font-bold text-slate-400">{form.model}</span>}
+                          <button type="button" onClick={() => load(form.text)} className="ml-auto shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-blue-700">불러오기</button>
+                        </div>
+                        {(form.serial || form.asset) && <div className="px-3 pt-1.5 text-[10px] font-bold text-slate-400">{[form.serial && `S/N ${form.serial}`, form.asset && `자산 ${form.asset}`].filter(Boolean).join(" · ")}</div>}
+                        {(form.content || form.handled) && <div className="px-3 py-2 text-[11px] font-semibold leading-4 text-slate-500">{String(form.content || form.handled).slice(0, 90)}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {detail && (() => {
         const f = flags.get(detail.vendor.trim());
         const meta = lookupMeta(detail.vendor);
