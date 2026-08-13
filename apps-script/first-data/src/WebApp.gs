@@ -57,6 +57,7 @@ function doGet(e) {
     else if (action === 'bookresolve') result = bookResolveBatch_(e.parameter.titles);   // 추천 도서 표지 일괄 해석 (서버 캐시 6시간)
     else if (action === 'quizgen') result = copierQuizGen_(e.parameter.date, e.parameter.brand);   // 복합기 데일리 퀴즈 AI 생성 (일·브랜드별 1회 캐시)
     else if (action === 'quizbank') result = copierQuizBank_(e.parameter.brand);   // 복합기 자유연습 문제은행 적립
+    else if (action === 'photoarchive') result = photoArchiveRun_(e.parameter.limit, e.parameter.days);   // 오래된 사진 → 이 계정 드라이브 이관 (엣지/크론 경유)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
