@@ -11,6 +11,7 @@ import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { geocodeKR } from "./geocode";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
@@ -53,6 +54,8 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     }).catch(() => {});
   }, []);
 
+  // 워킨맵에 없는 업체(AS 일정 등)는 일정의 주소를 지오코딩해 좌표를 채운다 (카카오)
+  const [geoFallback, setGeoFallback] = useState<Map<string, Geo>>(new Map());
   const lookupGeo = useCallback((vendor: string): Geo | null => {
     const key = vendorMatchKey(vendor);
     if (!key) return null;
@@ -80,17 +83,41 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     && (t.assignee === author || (includeUnassigned && !t.assignee))
   ), [tickets, date, author, includeUnassigned]);
 
+  const getGeo = useCallback((t: MyPlanTicket): Geo | null => {
+    const fromMap = lookupGeo(t.vendor);
+    if (fromMap) return fromMap;
+    const fb = geoFallback.get(t.id);
+    return fb && Number.isFinite(fb.lat) ? fb : null;
+  }, [lookupGeo, geoFallback]);
+
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      for (const t of myTickets) {
+        if (stop) return;
+        if (lookupGeo(t.vendor) || geoFallback.has(t.id) || !t.address?.trim()) continue;
+        const hit = await geocodeKR(t.address);
+        if (stop) return;
+        if (hit) setGeoFallback((cur) => new Map(cur).set(t.id, { lat: hit.lat, lng: hit.lng }));
+        else setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); // 재시도 방지 표식
+      }
+    })();
+    return () => { stop = true; };
+    // geoFallback을 deps에 넣으면 무한 루프 — has() 체크로 중복 호출을 막는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTickets, lookupGeo]);
+
   // 순서: 고정(클릭 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃
   const ordered = useMemo(() => {
     const byId = new Map(myTickets.map((t) => [t.id, t]));
     const head = pinned.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
     const rest = myTickets.filter((t) => !pinned.includes(t.id));
-    const withGeo = rest.filter((t) => lookupGeo(t.vendor));
-    const noGeo = rest.filter((t) => !lookupGeo(t.vendor));
+    const withGeo = rest.filter((t) => getGeo(t));
+    const noGeo = rest.filter((t) => !getGeo(t));
     const route: MyPlanTicket[] = [...head];
     let cursor: Geo | null = null;
     for (let i = head.length - 1; i >= 0; i--) {
-      const g = lookupGeo(head[i].vendor);
+      const g = getGeo(head[i]);
       if (g) { cursor = g; break; }
     }
     const pool = [...withGeo];
@@ -99,16 +126,16 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
       if (cursor) {
         let best = Infinity;
         pool.forEach((t, i) => {
-          const d = distKm(cursor!, lookupGeo(t.vendor)!);
+          const d = distKm(cursor!, getGeo(t)!);
           if (d < best) { best = d; bestIdx = i; }
         });
       }
       const next = pool.splice(bestIdx, 1)[0];
       route.push(next);
-      cursor = lookupGeo(next.vendor);
+      cursor = getGeo(next);
     }
     return [...route, ...noGeo];
-  }, [myTickets, pinned, lookupGeo]);
+  }, [myTickets, pinned, getGeo]);
 
   // ── 지도 ──
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -128,7 +155,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
   const displayGeo = useMemo(() => {
     const byCoord = new Map<string, MyPlanTicket[]>();
     for (const t of ordered) {
-      const g = lookupGeo(t.vendor);
+      const g = getGeo(t);
       if (!g) continue;
       const key = `${g.lat.toFixed(5)},${g.lng.toFixed(5)}`;
       byCoord.set(key, [...(byCoord.get(key) || []), t]);
@@ -136,14 +163,14 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     const out = new Map<string, Geo>();
     for (const group of byCoord.values()) {
       group.forEach((t, i) => {
-        const g = lookupGeo(t.vendor)!;
+        const g = getGeo(t)!;
         if (group.length === 1 || i === 0) { out.set(t.id, g); return; }
         const angle = (2 * Math.PI * i) / group.length;
         out.set(t.id, { lat: g.lat + 0.00022 * Math.sin(angle), lng: g.lng + 0.00028 * Math.cos(angle) });
       });
     }
     return out;
-  }, [ordered, lookupGeo]);
+  }, [ordered, getGeo]);
 
   useEffect(() => {
     const map = mapRef.current, layer = layerRef.current;
@@ -197,7 +224,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
 
       <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {ordered.map((t, i) => {
-          const g = lookupGeo(t.vendor);
+          const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
           const f = flags.get(t.vendor.trim());
