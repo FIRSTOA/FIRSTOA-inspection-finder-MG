@@ -6,6 +6,7 @@ import {
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
 import { kstDate } from "./visits";
+import { normRegion } from "./region";
 import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
@@ -118,12 +119,12 @@ function deptFromAddress(text: string): string {
   return ho ? ho[1] : "";
 }
 function teamFromRegion(region: string) {
-  // "수도권C" 외에 "수도권 C" · "C지역" · "C팀" · "c" 표기도 인식.
+  // 판정은 공용 normRegion 하나로: 수도권A~E는 그 글자, 지방(충청·경상·전라 등)은 E.
+  // (예전엔 문자열 아무 데서나 A~E 글자를 주워 오판했다)
   // E는 일정리스트에 팀 열이 없어 A로 취급(네이버 캘린더도 9시) — E팀 규칙이 정해지면 여기서 바꾼다.
-  const a = String(region || "").toUpperCase().replace(/\s+/g, "");
-  const m = a.match(/(?:수도권)?([A-E])(?:지역|팀)?/);
-  const letter = m ? m[1] : "A";
-  return (letter === "E" ? "A" : letter) as "A" | "B" | "C" | "D";
+  const letter = normRegion(region);
+  if (letter === "E") return "A";
+  return (["A", "B", "C", "D"].includes(letter) ? letter : "A") as "A" | "B" | "C" | "D";
 }
 // 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
 // 접수 당시의 시트 표기값 (접수일 "7월 31일" / 접수시각 "20:22") — 처리 단계 갱신에도 그대로 보낸다

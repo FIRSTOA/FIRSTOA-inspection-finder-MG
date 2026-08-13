@@ -6,14 +6,19 @@ import type { VendorHit } from "./api";
 export const REGIONS = ["A", "B", "C", "D", "E"];
 export const REGION_LABEL: Record<string, string> = { A: "강북", B: "강서", C: "강남", D: "경기", E: "지방" };
 
-// "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 없으면 원문.
+// 지방(도·광역시) 판별 토큰 — "광주"는 경기 광주와 겹쳐 광역시 표기만 인정
+const PROVINCE_TOKENS = ["충청", "충남", "충북", "대전", "세종", "전라", "전남", "전북", "경상", "경남", "경북", "대구", "부산", "울산", "강원", "제주", "광주광역", "지방"];
+
+// "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 지방(도 단위)은 "E", 그 외 원문.
 export function normRegion(r: string): string {
   const s = String(r || "").trim();
   const upper = s.toUpperCase();
   const suffix = upper.match(/([A-E])\s*$/);
   if (suffix) return suffix[1];
   const prefix = upper.match(/^([A-E])(?:\s|$)/);
-  return prefix ? prefix[1] : s;
+  if (prefix) return prefix[1];
+  if (PROVINCE_TOKENS.some((token) => s.includes(token))) return "E";
+  return s;
 }
 
 // 대표 지역 (점검 > AS > 그 외 순) — 뱃지·정렬용.
