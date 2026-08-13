@@ -12,7 +12,8 @@ import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getInspForms, getRecentInspections, searchVendors, type InspectionSnapshot, type InspForm } from "./api";
+import { getInspForms, getRecentInspections, type InspectionSnapshot, type InspForm } from "./api";
+import { selectRows } from "./supabase";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -316,19 +317,58 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
     setFieldPick({ ticket: t, forms: null });
     void (async () => {
       try {
-        // 1차: 일정의 업체명 그대로 (기록의 _업체명과 정확 일치해야 나온다)
-        let forms = (await getInspForms(t.vendor)).forms.filter((f) => f.text);
-        if (!forms.length) {
-          // 2차: 표기가 다르면(괄호·법인 등) 검색으로 기록상의 실제 업체명을 찾아 재시도
-          const core = t.vendor.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || t.vendor;
-          const found = await searchVendors(core.slice(0, 8));
-          const key = vendorMatchKey(t.vendor);
-          const best = (found.results || [])
-            .map((r) => ({ r, k: vendorMatchKey(r.vendor) }))
-            .filter((x) => x.k && (x.k === key || key.startsWith(x.k) || x.k.startsWith(key)))
-            .sort((a, b) => b.k.length - a.k.length)[0];
-          if (best) forms = (await getInspForms(best.r.vendor)).forms.filter((f) => f.text);
+        // 1차: 시리얼·자산기번 매칭 — 표기가 어떻든 기기는 못 속인다 (가장 정확)
+        const rawForms: Array<Record<string, unknown> & { __gubun: string }> = [];
+        const idCond: string[] = [];
+        if (t.serial?.trim()) idCond.push(`${encodeURIComponent("시리얼넘버")}.ilike.*${encodeURIComponent(t.serial.trim())}*`);
+        if (t.asset?.trim()) idCond.push(`${encodeURIComponent("자산기번")}.ilike.*${encodeURIComponent(t.asset.trim())}*`);
+        const fetchRaw = async (filter: string) => {
+          const [insp, as] = await Promise.all([
+            selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
+            selectRows<Record<string, unknown>>("as_records", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
+          ]);
+          rawForms.push(...insp.map((r) => ({ ...r, __gubun: "점검" })), ...as.map((r) => ({ ...r, __gubun: "AS" })));
+        };
+        if (idCond.length) await fetchRaw(`or=(${idCond.join(",")})`);
+        // 2차: 업체명 정확 일치 (기존 getInspForms)
+        if (!rawForms.length) {
+          const exact = (await getInspForms(t.vendor)).forms.filter((f) => f.text);
+          if (exact.length) { setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: exact } : cur)); return; }
         }
+        // 3차: 업체명 핵심 토큰을 8→5→3자로 줄여가며 직접 검색 (이력 팝업과 같은 방식)
+        if (!rawForms.length) {
+          const core = t.vendor
+            .replace(/㈜|\(주\)/g, "")
+            .replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인/g, "").trim()
+            .match(/[가-힣a-zA-Z0-9]+/)?.[0] || t.vendor;
+          const key = vendorMatchKey(t.vendor);
+          for (const len of [8, 5, 3]) {
+            const probe = core.slice(0, len);
+            if (probe.length < 2) break;
+            await fetchRaw(`${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*`);
+            const filtered = rawForms.filter((r) => {
+              const rk = vendorMatchKey(String(r["_업체명"] || ""));
+              return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
+            });
+            if (filtered.length) { rawForms.length = 0; rawForms.push(...filtered as typeof rawForms); break; }
+            rawForms.length = 0;
+          }
+        }
+        const forms: InspForm[] = rawForms
+          .filter((r) => String(r["_원문"] || "").trim())
+          .sort((a, b) => String(b["작성일"] || "").localeCompare(String(a["작성일"] || "")))
+          .slice(0, 8)
+          .map((r) => ({
+            gubun: r.__gubun as InspForm["gubun"],
+            date: String(r["작성일"] || "").slice(0, 10),
+            model: String(r["모델명"] || ""),
+            serial: String(r["시리얼넘버"] || ""),
+            asset: String(r["자산기번"] || ""),
+            content: String(r["내용"] || ""),
+            handled: String(r["처리내용"] || ""),
+            text: String(r["_원문"] || ""),
+            source: "myplan",
+          }));
         setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms } : cur));
       } catch {
         setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: [] } : cur));
