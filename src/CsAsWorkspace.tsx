@@ -1023,9 +1023,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest }: { view:
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="grid w-full grid-cols-4 rounded-full bg-slate-100 p-1 sm:w-auto">
               {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
+                <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`whitespace-nowrap rounded-full px-1 py-1.5 text-[12.5px] font-black transition sm:px-4 sm:text-sm ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
               ))}
-              <button type="button" onClick={() => setMyPlanOpen(true)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${myPlanOpen ? "bg-blue-600 text-white shadow-sm" : "text-blue-600 hover:text-blue-700"}`}>내 일정</button>
+              <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-1 py-1.5 text-[12.5px] font-black transition sm:px-4 sm:text-sm ${myPlanOpen ? "bg-blue-600 text-white shadow-sm" : "text-blue-600 hover:text-blue-700"}`}>내 일정</button>
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}

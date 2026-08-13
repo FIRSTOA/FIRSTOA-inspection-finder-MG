@@ -351,10 +351,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
           const f = flags.get(t.vendor.trim());
           return (
-            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex flex-wrap items-center gap-2.5 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
+            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex flex-wrap items-center gap-2 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className="min-w-0 flex-1 basis-[55%]">
                 <span className="flex items-center gap-1.5">
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
                   <span className="truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
@@ -375,7 +375,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
                 )}
               </span>
               {/* 모바일: 버튼줄이 내용 아래 한 줄로 — 내용 칸이 눌려 업체명이 안 보이던 것 방지 */}
-              <span className="flex w-full items-center gap-1.5 pl-9 sm:w-auto sm:pl-0" onClick={(e) => e.stopPropagation()}>
+              <span className="flex w-full items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
                 {onUseField && <button type="button" onClick={() => setFieldPick(t)} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
                 <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">길찾기</a>
