@@ -834,15 +834,19 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
+  // 중복 접수 확인 — 브라우저 confirm 대신 디자인 모달
+  const [dupeConfirm, setDupeConfirm] = useState<{ vendor: string; type: string; time: string; proceed: () => void } | null>(null);
   const findRecentDupe = () =>
     [...listRows, ...remoteQueue].find((r) => r.vendor === vendorName && r.type === type
       && !deletedIdsRef.current.has(r.id) && Date.now() - new Date(r.created_at).getTime() < 10 * 60 * 1000);
 
-  const handleSave = async () => {
+  const handleSave = async (force = false) => {
     if (busy) return;
     if (!vendorName) { setActionResult("업체를 선택(또는 입력)하세요."); return; }
-    const dupe = findRecentDupe();
-    if (dupe && !window.confirm(`${vendorName} ${type} 접수가 방금(${kstTime(dupe.created_at)}) 이미 저장돼 있어요.\n시트 반영은 잠시 걸릴 수 있습니다 — 그래도 한 건 더 접수할까요?`)) return;
+    if (!force) {
+      const dupe = findRecentDupe();
+      if (dupe) { setDupeConfirm({ vendor: vendorName, type, time: kstTime(dupe.created_at), proceed: () => void handleSave(true) }); return; }
+    }
     setBusy(true);
     setActionResult("");
     try {
@@ -867,11 +871,13 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   // 복합기 AS: 저장 + AS방 전송 — 선저장(접수) 후 전송, 성공 시 전송완료로 갱신.
   // 전송 실패 시 저장된 행을 기억해 재시도에서 중복 저장·중복 카톡을 막는다.
-  const handleSaveAndSend = async () => {
+  const handleSaveAndSend = async (forceSend = false) => {
     if (busy || !report) return;
     if (!region) { setActionResult("전송 불가 — 지역이 비어 있습니다. 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요."); return; }
-    const dupe = findRecentDupe();
-    if (dupe && !savedRowId && !window.confirm(`${vendorName} ${type} 접수가 방금(${kstTime(dupe.created_at)}) 이미 저장돼 있어요.\n그래도 한 건 더 접수할까요?`)) return;
+    if (!forceSend) {
+      const dupe = findRecentDupe();
+      if (dupe && !savedRowId) { setDupeConfirm({ vendor: vendorName, type, time: kstTime(dupe.created_at), proceed: () => void handleSaveAndSend(true) }); return; }
+    }
     setBusy(true);
     setActionResult("");
     try {
@@ -1781,6 +1787,31 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </div>}
         </section>
       </div>
+      {dupeConfirm && (
+        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setDupeConfirm(null)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 bg-[#1E252F] px-5 py-4">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-black text-white">!</span>
+              <div className="min-w-0">
+                <div className="text-[11px] font-black text-slate-400">중복 접수 확인</div>
+                <div className="truncate text-[15px] font-black text-white">{dupeConfirm.vendor}</div>
+              </div>
+            </div>
+            <div className="space-y-2 px-5 py-4">
+              <div className="flex items-start gap-2 text-[12.5px] font-bold leading-5 text-slate-600">
+                <span className="shrink-0">🕐</span><span>같은 업체의 {dupeConfirm.type} 접수가 방금 <b className="text-slate-900">{dupeConfirm.time}</b>에 이미 저장돼 있어요.</span>
+              </div>
+              <div className="flex items-start gap-2 text-[12.5px] font-bold leading-5 text-slate-600">
+                <span className="shrink-0">📄</span><span>시트 반영은 몇 초 걸릴 수 있어요 — 방금 접수가 시트에 아직 안 보여도 곧 자동 기입됩니다.</span>
+              </div>
+            </div>
+            <div className="flex gap-2 px-4 pb-4">
+              <button type="button" onClick={() => setDupeConfirm(null)} className="flex-[2] rounded-full bg-slate-900 py-2.5 text-sm font-black text-white transition hover:bg-slate-800">중복이면 취소</button>
+              <button type="button" onClick={() => { const p = dupeConfirm.proceed; setDupeConfirm(null); p(); }} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">한 건 더 접수</button>
+            </div>
+          </div>
+        </div>
+      )}
       {handoffConfirm && (() => {
         const { row, next } = handoffConfirm;
         const toCopier = next === "복합기 AS";
