@@ -257,23 +257,29 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
       ? { ...sourcePayload, data: { ...sourceData, _sheetValues: sheetValues } }
       : sourcePayload;
 
-    const sheetRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "append_field_sheet_row",
-        secret: webhookSecret,
-        jobId: job.id,
-        category: job.category,
-        testMode: enabled(config.FIELD_SHEET_TEST_MODE),
-        author: job.author,
-        submittedAt: job.created_at,
-        sourceText: job.source_text,
-        payload,
-      }),
+    // 잠금 경합("다른 동기화가 진행 중")은 몇 초 뒤 대부분 풀린다 — 2분 크론까지 미루지 않고
+    // 같은 호출 안에서 5초 간격 3회까지 즉시 재시도한다 (접수 후 시트에 1~2분 걸리던 원인).
+    const body = JSON.stringify({
+      action: "append_field_sheet_row",
+      secret: webhookSecret,
+      jobId: job.id,
+      category: job.category,
+      testMode: enabled(config.FIELD_SHEET_TEST_MODE),
+      author: job.author,
+      submittedAt: job.created_at,
+      sourceText: job.source_text,
+      payload,
     });
-    const sheetData = await sheetRes.json().catch(() => ({}));
-    if (!sheetRes.ok || !sheetData.ok) throw new Error(sheetData.error || `시트 응답 오류(${sheetRes.status})`);
+    let sheetData: { ok?: boolean; error?: string; row?: number; sheet?: string } = {};
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const sheetRes = await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      sheetData = await sheetRes.json().catch(() => ({}));
+      if (sheetRes.ok && sheetData.ok) break;
+      const message = sheetData.error || `시트 응답 오류(${sheetRes.status})`;
+      const lockBusy = message.includes("다른 동기화");
+      if (!lockBusy || attempt === 3) throw new Error(message);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
 
     // synced 마킹은 응답을 검증한다 — 실패하면 job이 pending인데 성공으로 응답하던 문제 방지.
     const markRes = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {

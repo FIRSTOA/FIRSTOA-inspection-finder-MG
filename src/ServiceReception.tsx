@@ -782,9 +782,15 @@ export default function ServiceReception({ author }: { author: string }) {
   };
 
   // 저장만 (복합기/IT) 또는 원격 접수 저장(대기)
+  const findRecentDupe = () =>
+    [...listRows, ...remoteQueue].find((r) => r.vendor === vendorName && r.type === type
+      && !deletedIdsRef.current.has(r.id) && Date.now() - new Date(r.created_at).getTime() < 10 * 60 * 1000);
+
   const handleSave = async () => {
     if (busy) return;
     if (!vendorName) { setActionResult("업체를 선택(또는 입력)하세요."); return; }
+    const dupe = findRecentDupe();
+    if (dupe && !window.confirm(`${vendorName} ${type} 접수가 방금(${kstTime(dupe.created_at)}) 이미 저장돼 있어요.\n시트 반영은 잠시 걸릴 수 있습니다 — 그래도 한 건 더 접수할까요?`)) return;
     setBusy(true);
     setActionResult("");
     try {
@@ -812,6 +818,8 @@ export default function ServiceReception({ author }: { author: string }) {
   const handleSaveAndSend = async () => {
     if (busy || !report) return;
     if (!region) { setActionResult("전송 불가 — 지역이 비어 있습니다. 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요."); return; }
+    const dupe = findRecentDupe();
+    if (dupe && !savedRowId && !window.confirm(`${vendorName} ${type} 접수가 방금(${kstTime(dupe.created_at)}) 이미 저장돼 있어요.\n그래도 한 건 더 접수할까요?`)) return;
     setBusy(true);
     setActionResult("");
     try {
