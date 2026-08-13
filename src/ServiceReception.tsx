@@ -451,24 +451,31 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     notify(`${row.vendor || "접수"} 내용을 ${next} 접수 폼으로 불러왔어요 — [접수]를 눌러야 접수·시트 기입이 됩니다.`);
   };
 
+  const [handoffConfirm, setHandoffConfirm] = useState<{ row: ServiceReceptionRow; next: string } | null>(null);
+  const runHandoff = async ({ row, next }: { row: ServiceReceptionRow; next: string }) => {
+    setHandoffConfirm(null);
+    if (next === "복합기 AS") {
+      // 원격 건 자동 마무리: 처리여부 AS이관 + 처리자(상단 작성자) → 리스트 완료 + 원격 시트 기입
+      const meta = { ...(row.remote_meta || {}), result: "AS이관", handler: (row.remote_meta || {}).handler || author };
+      void mergeReceptionHandling(row.id, { result: "AS이관", handler: meta.handler }, "완료").catch(() => {});
+      syncRemoteSheet(row, meta);
+      setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, status: "완료", remote_meta: meta } : item)));
+      setRemoteQueue((current) => current.map((item) => (item.id === row.id ? { ...item, status: "완료", remote_meta: meta } : item)));
+      void prefillCopierForm(row);
+    } else {
+      void prefillRemoteForm(row, next as "원격이관" | "IT");
+    }
+  };
+
   const changeType = async (row: ServiceReceptionRow, next: string) => {
     if (row.type === next) return;
     const groupOf = (t: string) => (t === "복합기 AS" ? "copier" : "remote");
     const crossTab = groupOf(row.type) !== groupOf(next);
     // 탭을 건너는 변경(원격↔복합기)은 "전환"이 아니라 "내용 넘기기"다:
-    // 기존 접수는 그대로 남고(한 일은 실적로 인정), 시트 기입도 없다.
-    // 폼에 내용만 채워주고, 사람이 확인 후 [접수]를 눌러야 새 접수·시트 기입이 된다.
+    // 새 접수·시트 기입은 사람이 [접수]를 눌러야 하고, 원격→복합기는 원격 건을
+    // 'AS이관'으로 자동 마무리해 원격 시트·리스트가 정리된다.
     if (crossTab) {
-      const target = next === "복합기 AS" ? "복합기 AS" : next;
-      if (!window.confirm([
-        `${row.vendor || "이 접수"}의 내용을 ${target} 접수 폼으로 불러올까요?`,
-        `· 기존 ${row.type} 접수는 그대로 남습니다 (실적 유지)`,
-        `· 시트에는 아직 아무것도 기입되지 않습니다`,
-        `· 내용 확인 후 [접수]를 눌러야 ${target} 접수·시트 기입이 됩니다`,
-        ...(row.type !== "복합기 AS" ? ["· 원격 건 마무리는 처리 저장에서 '처리여부: AS이관'을 선택하세요"] : []),
-      ].join("\n"))) return;
-      if (next === "복합기 AS") void prefillCopierForm(row);
-      else void prefillRemoteForm(row, next as "원격이관" | "IT");
+      setHandoffConfirm({ row, next });
       return;
     }
     const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
@@ -1774,6 +1781,40 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </div>}
         </section>
       </div>
+      {handoffConfirm && (() => {
+        const { row, next } = handoffConfirm;
+        const toCopier = next === "복합기 AS";
+        return (
+          <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setHandoffConfirm(null)}>
+            <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="bg-[#1E252F] px-5 py-4">
+                <div className="text-[11px] font-black text-slate-400">{row.type} → {next}</div>
+                <div className="mt-0.5 truncate text-[15px] font-black text-white">{row.vendor || "이 접수"} 내용 넘기기</div>
+              </div>
+              <div className="space-y-2 px-5 py-4">
+                {(toCopier ? [
+                  ["✅", `원격 접수는 'AS이관'으로 완료 처리됩니다 (처리자: ${(row.remote_meta || {}).handler || author})`],
+                  ["📄", "원격 시트에도 처리여부가 기입돼 정리됩니다"],
+                  ["📋", "접수 내용이 복합기 AS 폼으로 넘어옵니다"],
+                  ["👆", "확인 후 [접수]를 눌러야 복합기 접수·시트 기입이 됩니다"],
+                ] : [
+                  ["📋", `접수 내용이 ${next} 폼으로 넘어옵니다`],
+                  ["✅", `기존 ${row.type} 접수는 그대로 남습니다`],
+                  ["👆", `확인 후 [접수]를 눌러야 ${next} 접수·시트 기입이 됩니다`],
+                ]).map(([icon, text], i) => (
+                  <div key={i} className="flex items-start gap-2 text-[12.5px] font-bold leading-5 text-slate-600">
+                    <span className="shrink-0">{icon}</span><span>{text}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 px-4 pb-4">
+                <button type="button" onClick={() => setHandoffConfirm(null)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
+                <button type="button" onClick={() => void runHandoff(handoffConfirm)} className="flex-[2] rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">내용 넘기기</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
