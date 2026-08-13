@@ -456,20 +456,33 @@ export default function ServiceReception({ author }: { author: string }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  const loadList = useCallback(async (date: string, period: ListPeriod = "day") => {
-    setListLoading(true);
+  const loadList = useCallback(async (date: string, period: ListPeriod = "day", silent = false) => {
+    if (!silent) setListLoading(true);
     try {
       const { start, end } = periodRangeOf(period, date);
       const rows = await getServiceReceptions(start, end);
       setListRows(rows.filter((row) => !deletedIdsRef.current.has(row.id)));
     } catch {
-      setListRows([]);
+      if (!silent) setListRows([]);
     } finally {
-      setListLoading(false);
+      if (!silent) setListLoading(false);
     }
   }, []);
   useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
   useEffect(() => { void loadRemoteQueue(); }, [page, loadRemoteQueue]);
+  // 여러 명이 동시에 접수·처리하므로 다른 사람의 변경이 화면에 따라오게 60초마다·탭 복귀 때 조용히 갱신
+  // (처리 입력 초안은 행별 로컬 보관이라 갱신에 지워지지 않는다)
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadList(listDate, listPeriod, true);
+      void loadRemoteQueue();
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [listDate, listPeriod, loadList, loadRemoteQueue]);
   const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT" } as const;
   const goPage = (next: "copier" | "remote" | "it") => {
     setPage(next);
@@ -1494,11 +1507,11 @@ export default function ServiceReception({ author }: { author: string }) {
                 <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
                   <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
+                {type !== "원격이관" && <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
                   <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
                   {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
-                </label>
-                <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
+                </label>}
+                {type !== "원격이관" && <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
                   <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => (
                       <span key={photo.url} className="relative">
@@ -1512,7 +1525,7 @@ export default function ServiceReception({ author }: { author: string }) {
                     </label>}
                     {!photos.length && <span className="text-[10px] font-bold text-slate-400">클릭 후 Ctrl+V로 붙여넣기 가능</span>}
                   </div>
-                </div>
+                </div>}
                 {type === "복합기 AS" && <>
                   <label className="text-[11px] font-black text-slate-500">유상/무상
                     {manual.유상무상 === "직접기재"
