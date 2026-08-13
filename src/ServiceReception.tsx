@@ -277,6 +277,17 @@ export default function ServiceReception({ author }: { author: string }) {
     }
   };
   const [actionResult, setActionResult] = useState("");
+  // 시트 반영 상태 — 결과 문구와 분리해 관리한다. 20초 넘게 응답이 없으면
+  // "백그라운드 반영"으로 전환 (기입 자체는 재시도 크론이 보장하므로 기다릴 필요 없음)
+  const [sheetNote, setSheetNote] = useState("");
+  const runSheetNote = (write: () => Promise<string>) => {
+    setSheetNote("접수시트 기입 중…");
+    let settled = false;
+    const timer = window.setTimeout(() => { if (!settled) setSheetNote("시트 백그라운드 반영 중 (자동 재시도 — 기다리지 않아도 됩니다)"); }, 20_000);
+    void write()
+      .then((note) => { settled = true; window.clearTimeout(timer); setSheetNote(note.replace(/^ · /, "")); })
+      .catch(() => { settled = true; window.clearTimeout(timer); setSheetNote("시트 반영 대기 (자동 재시도)"); });
+  };
 
   // 접수 현황 리스트
   const [listDate, setListDate] = useState(kstDate());
@@ -802,8 +813,8 @@ export default function ServiceReception({ author }: { author: string }) {
         catch (e) { notify(`일정 등록 실패 — 접수는 저장됨. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
       const sheetPending = custKind === "신규" || !!firstNo.trim(); // 신규는 직접 기입, 기존은 순번 필요 (전 유형 공통)
-      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
-      setActionResult(`${type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
+      if (sheetPending) runSheetNote(writeReceptionSheet); else setSheetNote("");
+      setActionResult(`${type === "원격이관" ? "원격 접수 저장됨 (대기)" : `접수 저장됨${scheduled ? " + 일정 등록됨" : ""}`}`);
       resetForm();
       await loadList(listDate, listPeriod);
     } catch (e) {
@@ -841,8 +852,8 @@ export default function ServiceReception({ author }: { author: string }) {
         catch (e) { notify(`일정 등록 실패 — 전송·저장은 완료. 리스트의 [일정 등록]으로 다시 시도하세요.\n(${(e as Error).message})`, "error"); }
       }
       const sheetPending = custKind === "신규" || !!firstNo.trim(); // 복합기·IT 공통 (IT는 원격 탭에 기입)
-      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
-      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""}`);
+      if (sheetPending) runSheetNote(writeReceptionSheet); else setSheetNote("");
+      setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}`);
       setSavedRowId(null);
       resetForm();
       await loadList(listDate, listPeriod);
@@ -891,8 +902,8 @@ export default function ServiceReception({ author }: { author: string }) {
       try { scheduled = await createTicketFromReception(formSnapshotForTicket(rowId), false, false); }
       catch (e) { notify(`일정 등록 실패 — 접수는 저장됨.\n(${(e as Error).message})`, "error"); }
       const sheetPending = custKind === "신규" || !!firstNo.trim();
-      if (sheetPending) void writeReceptionSheet().then((note) => setActionResult((current) => current.replace(" · 접수시트 기입 중…", "") + note));
-      setActionResult(`접수 완료 ✓${scheduled ? " + 일정 등록" : ""}${sheetPending ? " · 접수시트 기입 중…" : ""} — 폼 유지 중 (네이버·카톡은 옆 버튼)`);
+      if (sheetPending) runSheetNote(writeReceptionSheet); else setSheetNote("");
+      setActionResult(`접수 완료 ✓${scheduled ? " + 일정 등록" : ""} — 폼 유지 중 (네이버·카톡은 옆 버튼)`);
       await loadList(listDate, listPeriod);
     } catch (e) {
       setActionResult(`접수 실패: ${(e as Error).message}`);
@@ -1578,7 +1589,10 @@ export default function ServiceReception({ author }: { author: string }) {
                   }}><button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button></span>}
                 </span>
               </div>
-              {actionResult && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}
+              {(actionResult || sheetNote) && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${(actionResult + sheetNote).includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                {actionResult}
+                {sheetNote && <span className={sheetNote.includes("기입 중") || sheetNote.includes("반영 중") ? "text-amber-600" : sheetNote.includes("행") ? "text-emerald-700" : "text-slate-500"}> · {sheetNote}</span>}
+              </div>}
               </div>
             </div>
             </section>
