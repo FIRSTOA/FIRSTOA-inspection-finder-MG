@@ -4,11 +4,12 @@ import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { notify } from "./toast";
+import MyPlan from "./MyPlan";
 
 type Team = "A" | "B" | "C" | "D";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 type ScheduleType = "AS" | "익일AS" | "물류" | "휴가" | "매월점검";
-type ViewMode = "list" | "calendar";
+type ViewMode = "list" | "calendar" | "mine";
 type DayFilter = "today" | "tomorrow" | "scheduled";
 
 export type AsTicket = {
@@ -914,12 +915,15 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   <h2 className="ml-1 text-lg font-black text-slate-950 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
                 </div>
                 <div className="rounded-full bg-slate-100 p-1">
-                  {(["calendar", "list"] as ViewMode[]).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : "목록"}</button>
+                  {(["calendar", "list", "mine"] as ViewMode[]).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : mode === "list" ? "목록" : "내 일정"}</button>
                   ))}
                 </div>
               </div>
 
+              {viewMode === "mine" && (
+                <div className="p-3 sm:p-4"><MyPlan tickets={tickets} author={author} /></div>
+              )}
               {viewMode === "list" ? (
                 <div className="space-y-4 p-3 sm:p-4">
                   {Array.from(
@@ -944,7 +948,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   ))}
                   {!monthTickets.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
                 </div>
-              ) : (
+              ) : viewMode === "calendar" ? (
                 <>
                 <div className="md:hidden">
                   <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
@@ -1010,7 +1014,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                   </div>
                 </div>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
         </section>

@@ -9,6 +9,7 @@ import { kstDate } from "./visits";
 import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
+import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
@@ -216,7 +217,12 @@ export function splitCityDistrict(address: string): { city: string; district: st
   return { city, district: district === cityToken ? "" : district };
 }
 
-export default function ServiceReception({ author }: { author: string }) {
+export default function ServiceReception({ author: globalAuthor }: { author: string }) {
+  // 접수 화면 전용 작성자 선택 — 원격팀 등 다른 직원이 사이드바 이름을 안 바꾸고도
+  // 자기 이름으로 접수할 수 있게 한다 (기본값은 전역 작성자, 조직도 로그인 전 임시)
+  const { book } = useAuthorBook();
+  const [author, setAuthor] = useState(globalAuthor);
+  useEffect(() => { setAuthor(globalAuthor); }, [globalAuthor]);
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
   const [type, setType] = useState<ReceiveType>("복합기 AS");
   const [query, setQuery] = useState("");
@@ -1325,7 +1331,18 @@ export default function ServiceReception({ author }: { author: string }) {
             {remoteQueue.some((row) => remoteStateOf(row) === "진행중") ? <> · 원격 처리중 <b className="text-white">{remoteQueue.filter((row) => remoteStateOf(row) === "진행중").length}</b></> : null}
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
-          <span className="ml-auto text-xs font-bold tabular-nums text-slate-300">{clock}</span>
+          <span className="ml-auto flex items-center gap-2">
+            <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자"
+              className="rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-black text-white outline-none">
+              {!Object.values(book).some((names) => names.includes(author)) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
+              {AUTHOR_TEAMS.map((team) => (
+                <optgroup key={team} label={`${team}팀`}>
+                  {(book[team] || []).map((name) => <option key={name} value={name} className="text-slate-900">{name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <span className="text-xs font-bold tabular-nums text-slate-300">{clock}</span>
+          </span>
         </div>
         <div className="flex border-b border-slate-200">
           {([["copier", "복합기 AS", counts.copier], ["remote", "원격", counts.remote], ["it", "IT", counts.it]] as ["copier" | "remote" | "it", string, number][]).map(([key, label, count]) => (
