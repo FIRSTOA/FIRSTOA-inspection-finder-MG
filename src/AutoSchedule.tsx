@@ -14,7 +14,7 @@ import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
-type Place = { id: number; place_name: string; vendor: string; grade: string; label: string; addr: string; lat: number | null; lng: number | null; last_date: string | null; days_since: number; distance_km: number | null; quarter_ok: boolean; never_visited: boolean };
+type Place = { id: number; place_name: string; vendor: string; grade: string; label: string; addr: string; lat: number | null; lng: number | null; comment: string; last_date: string | null; days_since: number; distance_km: number | null; quarter_ok: boolean; never_visited: boolean };
 
 const TEAMS = ["A", "B", "C", "D"] as const;
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
@@ -100,6 +100,15 @@ export default function AutoSchedule({ author }: { author: string }) {
   const toggle = (id: number) => setPicked((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const [registerConfirm, setRegisterConfirm] = useState(false);
+  // 워킨맵 comment는 "모델 / 시리얼" 표기 — 첫 슬래시가 구분자(공백 유무 혼재)
+  const parseComment = (c: string): { model: string; serial: string } => {
+    const t = (c || "").replace(/\s+/g, " ").trim();
+    if (!t) return { model: "", serial: "" };
+    const i = t.indexOf("/");
+    if (i < 0) return { model: t, serial: "" };
+    return { model: t.slice(0, i).trim(), serial: t.slice(i + 1).trim() };
+  };
+
   const register = async () => {
     setRegisterConfirm(false);
     const chosen = rows.filter((r) => picked.has(r.id));
@@ -107,10 +116,11 @@ export default function AutoSchedule({ author }: { author: string }) {
     setLoading(true);
     try {
       for (const c of chosen) {
+        const eq = parseComment(c.comment);
         await upsertRow("as_tickets", {
           id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           team, date, time: "", vendor: c.vendor, contact: "", address: c.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
-          model: "", serial: "", asset: "", grade: c.grade, keyman: "",
+          model: eq.model, serial: eq.serial, asset: "", grade: c.grade, keyman: "",
           issue: kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${c.last_date || "기록 없음"}${c.days_since < 9999 ? ` · ${c.days_since}일 경과` : ""})`,
           note: "", assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
           receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${c.vendor}`, source: "autoplan",
@@ -129,7 +139,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   const anchorLabel = anchorTicket?.vendor || anchorQuery.trim();
 
   return (
-    <div className="space-y-3 overflow-x-hidden">
+    <div className="max-w-full space-y-3 overflow-x-hidden">
       <section className="overflow-hidden rounded-xl bg-[#1E252F] shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
@@ -137,10 +147,10 @@ export default function AutoSchedule({ author }: { author: string }) {
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검·재계약을 추천합니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1">
+            <div className="flex max-w-full flex-wrap items-center gap-1">
               <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>오늘</button>
               <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>내일</button>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white outline-none" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-w-0 rounded-lg border border-white/15 bg-white/10 px-2 py-2 text-xs font-black text-white outline-none" />
             </div>
             <div className="flex gap-1 rounded-full bg-white/10 p-1">
               {TEAMS.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`${chip} ${team === t ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{t}팀</button>)}
@@ -152,10 +162,10 @@ export default function AutoSchedule({ author }: { author: string }) {
         </div>
       </section>
 
-      {notice && <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700">{notice}</div>}
+      {notice && <div className="break-words rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700">{notice}</div>}
 
-      <div className="grid gap-3 lg:grid-cols-[340px_1fr]">
-        <section className="space-y-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[340px_1fr]">
+        <section className="min-w-0 space-y-3">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-sm font-black text-slate-900">① 필수 스케줄 <span className="text-slate-400">{tickets.length}건</span>
@@ -208,7 +218,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
             <div>
               <div className="text-sm font-black text-slate-900">③ {kind === "renewal" ? "재계약" : "점검"} 후보 <span className="text-slate-400">{rows.length}곳</span></div>

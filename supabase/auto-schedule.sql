@@ -37,14 +37,15 @@ create or replace function suggest_workin_candidates(
   p_limit int default 100
 ) returns table (
   id bigint, place_name text, vendor text, grade text, label text, addr text,
-  lat double precision, lng double precision,
+  lat double precision, lng double precision, comment text,
   last_date text, days_since int, distance_km numeric, quarter_ok boolean, never_visited boolean
 ) language sql stable as $$
   with places as (
     select w.id, w.name as place_name, workin_vendor_(w.name) as vendor, workin_grade_(w.name) as grade,
            coalesce(w.label, '') as label,
            coalesce(nullif(w.address, ''), '') || case when coalesce(w.address_detail,'') <> '' then ' ' || w.address_detail else '' end as addr,
-           w.latitude as lat, w.longitude as lng
+           w.latitude as lat, w.longitude as lng,
+           coalesce(w.comment, '') as comment  -- "모델 / 시리얼" — 등록 시 기번·시리얼로 파싱
     from workin_map_places w
     where w.visible is not false
       and (p_team = '' or w.team = p_team)
@@ -71,7 +72,7 @@ create or replace function suggest_workin_candidates(
     from places p
     left join insp i on i.k = vendor_key_(p.vendor) and length(vendor_key_(p.vendor)) >= 3
   )
-  select id, place_name, vendor, grade, label, addr, lat, lng, last_date, days_since, distance_km, quarter_ok,
+  select id, place_name, vendor, grade, label, addr, lat, lng, comment, last_date, days_since, distance_km, quarter_ok,
          (last_date is null) as never_visited
   from scored
   where (p_kind <> 'quarter' or days_since >= p_min_days)             -- 경과일 기준은 점검에만 적용

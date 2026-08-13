@@ -39,7 +39,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -426,7 +426,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
-                {(t.model || t.serial || t.asset || t.team) && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{[t.team && `${t.team}지역`, t.model, t.serial && `S/N ${t.serial}`, t.asset && `자산 ${t.asset}`].filter(Boolean).join(" · ")}</span>}
+                {(() => {
+                  // 티켓에 기종 정보가 없으면 워킨맵 comment("모델 / 시리얼")로 대신 보여준다
+                  const eq = t.model || t.serial || t.asset ? "" : (lookupMeta(t.vendor)?.comment || "").replace(/\s+/g, " ").trim();
+                  const parts = [t.team && `${t.team}지역`, t.model, t.serial && `S/N ${t.serial}`, t.asset && `자산 ${t.asset}`, eq].filter(Boolean);
+                  return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
+                })()}
                 <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
                 {f && (
                   <span className="mt-1 flex flex-wrap gap-1">
@@ -456,7 +461,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
       </div>
       {fieldPick && (() => {
         const t = fieldPick.ticket;
-        const load = (text: string) => { setFieldPick(null); onUseField?.(text, { id: t.id, receptionId: t.receptionId, vendor: t.vendor }); };
+        // 필드탭과 동일한 변환(모드 자동 감지) — 분기점검 원문이 AS로 바뀌던 문제의 수정점
+        const load = (text: string) => { setFieldPick(null); (onLoadForm || onUseField)?.(text, { id: t.id, receptionId: t.receptionId, vendor: t.vendor }); };
         return (
           <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFieldPick(null)}>
             <div className="flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-[82vh] sm:max-w-2xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>

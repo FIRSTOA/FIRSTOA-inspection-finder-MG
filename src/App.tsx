@@ -5338,6 +5338,15 @@ export default function App() {
     showToast("기기를 삭제했어요");
   };
 
+  // 내 일정 [FIELD] 불러오기 — 필드탭 거래처검색과 완전히 동일한 변환(모드 자동 감지)을
+  // 쓰되 일정 연결만 유지한다. openAsTicketInField는 AS 전용이라 분기점검 원문이 AS로 변환됐다.
+  const openFormInField = (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
+    setScreen("field");
+    handleLoadForm(rawText);
+    // handleLoadForm 내부의 초기화가 연결을 지우므로 그 뒤에 건다
+    pendingAsTicketRef.current = ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null;
+  };
+
   const openAsTicketInField = (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
     pendingAsTicketRef.current = ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null;
     if (mode !== "blank-report") {
@@ -5780,7 +5789,7 @@ export default function App() {
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
-        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} />}
+        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
 
         {ticketDonePrompt && (
