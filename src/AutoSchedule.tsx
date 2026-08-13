@@ -98,10 +98,11 @@ export default function AutoSchedule({ author }: { author: string }) {
   const toggleGrade = (g: string) => setGrades((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]));
   const toggle = (id: number) => setPicked((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
+  const [registerConfirm, setRegisterConfirm] = useState(false);
   const register = async () => {
+    setRegisterConfirm(false);
     const chosen = rows.filter((r) => picked.has(r.id));
     if (!chosen.length) return;
-    if (!window.confirm(`${chosen.length}곳을 ${date} ${team}팀 일정으로 등록할까요?`)) return;
     setLoading(true);
     try {
       for (const c of chosen) {
@@ -110,7 +111,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           team, date, time: "09:00", vendor: c.vendor, contact: "", address: c.addr, department: "",
           model: "", serial: "", asset: "", grade: c.grade, keyman: "",
           issue: kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${c.last_date || "기록 없음"}${c.days_since < 9999 ? ` · ${c.days_since}일 경과` : ""})`,
-          note: "", assignee: "", status: "접수", scheduleType: kind === "renewal" ? "AS" : "매월점검",
+          note: "", assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
           receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${c.vendor}`,
         }, "id");
       }
@@ -208,7 +209,7 @@ export default function AutoSchedule({ author }: { author: string }) {
               <div className="text-sm font-black text-slate-900">③ {kind === "renewal" ? "재계약" : "점검"} 후보 <span className="text-slate-400">{rows.length}곳</span></div>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-400">가까운 순 · 선택 {picked.size}곳</p>
             </div>
-            <button type="button" disabled={loading || !picked.size} onClick={() => void register()}
+            <button type="button" disabled={loading || !picked.size} onClick={() => setRegisterConfirm(true)}
               className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-40">
               <CalendarPlus size={14} />선택 {picked.size}곳 일정 등록
             </button>
@@ -240,6 +241,33 @@ export default function AutoSchedule({ author }: { author: string }) {
           </div>
         </section>
       </div>
+      {registerConfirm && (() => {
+        const chosen = rows.filter((r) => picked.has(r.id));
+        return (
+          <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setRegisterConfirm(false)}>
+            <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="bg-[#1E252F] px-5 py-4">
+                <div className="text-[11px] font-black text-slate-400">{date} · {team}팀 · {kind === "renewal" ? "재계약" : "점검"}</div>
+                <div className="mt-0.5 text-[15px] font-black text-white">{chosen.length}곳 일정 등록</div>
+              </div>
+              <div className="max-h-[38vh] space-y-1 overflow-y-auto px-5 py-3">
+                {chosen.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2 text-[12px] font-bold text-slate-700">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                    <span className="truncate">{c.vendor || c.place_name}</span>
+                    {c.distance_km != null && <span className="shrink-0 text-[10px] font-black text-slate-400">{c.distance_km < 1 ? `${Math.round(c.distance_km * 1000)}m` : `${c.distance_km}km`}</span>}
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 pb-2 text-[11px] font-bold text-slate-400">✅ {author}에게 배정되어 일정리스트의 [내 일정]에 바로 나타납니다.</div>
+              <div className="flex gap-2 px-4 pb-4">
+                <button type="button" onClick={() => setRegisterConfirm(false)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
+                <button type="button" onClick={() => void register()} className="flex-[2] rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">등록</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

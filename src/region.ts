@@ -6,21 +6,14 @@ import type { VendorHit } from "./api";
 export const REGIONS = ["A", "B", "C", "D", "E"];
 export const REGION_LABEL: Record<string, string> = { A: "강북", B: "강서", C: "강남", D: "경기", E: "지방" };
 
-// 지방(도·광역시) 판별 토큰 — "광주"는 경기 광주와 겹쳐 광역시 표기만 인정
-const PROVINCE_TOKENS = ["충청", "충남", "충북", "대전", "세종", "전라", "전남", "전북", "경상", "경남", "경북", "대구", "부산", "울산", "강원", "제주", "광주광역", "지방"];
-
-// "수도권A"·"A" → "A". A~E 글자 있으면 그 글자, 지방(도 단위)은 "E", 그 외 원문.
+// "수도권A"·"C지역"·"c" 등 A~E 글자가 있으면 그 글자.
+// 그 외(충청도·경상도 등 지방 표기 전부)는 값이 있으면 E — 현장 규칙:
+// "A~E가 들어가면 그 글자, 나머지는 전부 E지역으로 본다".
 export function normRegion(r: string): string {
   const s = String(r || "").trim();
-  const upper = s.toUpperCase();
-  const suffix = upper.match(/([A-E])\s*$/);
-  if (suffix) return suffix[1];
-  const prefix = upper.match(/^([A-E])(?:\s|$)/);
-  if (prefix) return prefix[1];
-  const tagged = upper.match(/^([A-E])(?:지역|팀)$/); // "C지역"·"B팀" 표기
-  if (tagged) return tagged[1];
-  if (PROVINCE_TOKENS.some((token) => s.includes(token))) return "E";
-  return s;
+  if (!s) return "";
+  const letter = s.toUpperCase().match(/[A-E]/);
+  return letter ? letter[0] : "E";
 }
 
 // 대표 지역 (점검 > AS > 그 외 순) — 뱃지·정렬용.
