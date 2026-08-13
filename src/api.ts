@@ -754,9 +754,18 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     // 목적지 버튼은 카톡방만 고른다. 사용자가 작성한 구분은 그대로 전송한다.
     const sendText = text;
     let built = buildRecords(sendText, toKstDate(payload.ts), payload.author || "", "");
-    // 지역이 없으면 저장도 하지 않는다 — 예전엔 저장만 되고 카톡은 실패해 "보낸 줄 알았는데 안 감"이 됐다
-    if (kind === "normal" && (built.hasInspect || built.hasAS) && !String(built.region || "").trim()) {
-      return { ok: false, error: "지역이 비어 있어 전송할 수 없습니다 — 양식의 '지역' 값을 채운 뒤 다시 보내주세요." };
+    // 지역·업체명이 없으면 저장도 하지 않는다 — 예전엔 저장만 되고 카톡은 실패해 "보낸 줄 알았는데 안 감"이 됐다
+    if (kind === "normal" && (built.hasInspect || built.hasAS)) {
+      const vendorLines = (sendText.match(/^[ \t]*업체명[ \t]*[:：]/gm) || []).length;
+      const filledVendors = (sendText.match(/^[ \t]*업체명[ \t]*[:：][ \t]*\S/gm) || []).length;
+      if ((!built.inspect && !built.as) || filledVendors < vendorLines) {
+        return { ok: false, error: "업체명을 읽지 못했습니다 — 양식의 '업체명' 값을 확인해 주세요 (전송 안 됨)." };
+      }
+      // 여러 업체를 한 번에 보낼 때 일부 항목만 지역이 비어도 막는다 (파서는 첫 지역만 본다)
+      const filledRegions = (sendText.match(/^[ \t]*지역[ \t]*[:：][ \t]*\S/gm) || []).length;
+      if ((vendorLines > 0 && filledRegions < vendorLines) || !String(built.region || "").trim()) {
+        return { ok: false, error: "지역이 비어 있어 전송할 수 없습니다 — 양식의 '지역' 값을 채운 뒤 다시 보내주세요." };
+      }
     }
     // 여분/마감/세팅처럼 구분에 점검·AS 문자가 없어도 사용자가 누른 방 기준으로 저장한다.
     if (!built.hasInspect && !built.hasAS && destination) {

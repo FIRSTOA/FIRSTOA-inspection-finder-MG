@@ -5006,8 +5006,10 @@ export default function App() {
       showToast(`${config.label}은 복사 전용입니다. 복사한 내용을 지정 채널에 붙여넣어 주세요.`, "error");
       return;
     }
-    if (kind === "normal" && fieldRegionMissing) {
-      window.alert("지역을 넣어주세요.\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다 — 지금은 전송되지 않습니다.");
+    if (kind === "normal" && fieldFormIssue) {
+      window.alert(fieldFormIssue === "vendor"
+        ? "업체명을 확인해주세요.\n양식에서 업체명을 읽지 못해 전송할 수 없습니다."
+        : "지역을 넣어주세요.\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다 — 지금은 전송되지 않습니다.");
       return;
     }
     if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
@@ -5413,22 +5415,30 @@ export default function App() {
     ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
     : FIELD_SHEET_LINKS[mode] || "";
   const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
-  // 점검·AS 양식에 지역이 비어 있으면 전송이 차단되므로 미리 경고한다 (테스트방 폴백 제거됨).
-  // 판정은 전송이 쓰는 파서(buildRecords)와 같은 함수로 — 자체 정규식은 탭 구분 양식에서 오탐했다.
-  const fieldRegionMissing = useMemo(() => {
-    if (mode !== "inspection" && mode !== "blank-report") return false;
-    if (!hasOutput) return false;
+  // 점검·AS 양식 검증 — 전송과 같은 파서(buildRecords)로 판정한다.
+  // "vendor": 업체명을 못 읽어 파스 실패(예전엔 이걸 지역 탓으로 잘못 안내했다)
+  // "region": 지역 없음 — 여러 업체를 한 번에 보낼 때 일부 항목만 비어도 잡는다
+  const fieldFormIssue = useMemo((): "" | "region" | "vendor" => {
+    if (mode !== "inspection" && mode !== "blank-report") return "";
+    if (!hasOutput) return "";
     const text = buildResultText();
-    if (!text.trim()) return false;
+    if (!text.trim()) return "";
     try {
       const built = buildRecords(text, kstDate(), author, "");
-      if (!built.hasInspect && !built.hasAS) return false; // 점검·AS 양식이 아니면 판정 대상 아님
-      return !String(built.region || "").trim();
+      if (!built.hasInspect && !built.hasAS) return ""; // 점검·AS 양식이 아니면 판정 대상 아님
+      if (!built.inspect && !built.as) return "vendor";
+      const vendorLines = (text.match(/^[ \t]*업체명[ \t]*[:：]/gm) || []).length;
+      const filledVendors = (text.match(/^[ \t]*업체명[ \t]*[:：][ \t]*\S/gm) || []).length;
+      if (filledVendors < vendorLines) return "vendor"; // 여러 항목 중 하나라도 업체명이 비면
+      const filledRegions = (text.match(/^[ \t]*지역[ \t]*[:：][ \t]*\S/gm) || []).length;
+      if (vendorLines > 0 && filledRegions < vendorLines) return "region";
+      return String(built.region || "").trim() ? "" : "region";
     } catch {
-      return false;
+      return "";
     }
     // buildResultText는 아래 상태들로 결정되므로 같은 deps를 쓴다
   }, [mode, hasOutput, textOutput, listOutput, itemForms, sharedForm, editedBlocks, author]);
+  const fieldRegionMissing = fieldFormIssue !== "";
 
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
@@ -6054,7 +6064,7 @@ export default function App() {
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
               </label>
             </div>
-            {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)</div>}
+            {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요 (전송 안 됨)" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)"}</div>}
             <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
                 <>
@@ -6165,7 +6175,7 @@ export default function App() {
               <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
             </label>
           </div>
-          {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요</div>}
+          {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요"}</div>}
           <div className="flex flex-wrap gap-2">
             {(mode === "inspection" || mode === "blank-report") ? <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
@@ -6510,17 +6520,24 @@ export default function App() {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed left-1/2 top-4 z-[2400] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-sm font-bold leading-6 shadow-2xl sm:text-base"
-          style={{
-            background: toast.kind === "success" ? "#065F46" : toast.kind === "warning" ? "#92400E" : "#991B1B",
-            color: "white",
+          role="status"
+          onClick={() => {
+            if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = null;
+            setToast(null);
           }}
+          className="fixed bottom-5 left-1/2 z-[2400] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 cursor-pointer items-start gap-2.5 rounded-xl bg-[#1E252F] px-4 py-3 text-left text-sm font-bold leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
         >
-          <div>{toast.text}</div>
+          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${toast.kind === "success" ? "bg-emerald-500/90" : toast.kind === "warning" ? "bg-amber-500/90" : "bg-rose-500/90"}`}>
+            {toast.kind === "success" ? "✓" : toast.kind === "warning" ? "!" : "✕"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div>{toast.text}</div>
           {toast.action === "workin-details" && workinSyncResult && (
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
                 toastTimerRef.current = null;
                 setToast(null);
@@ -6531,6 +6548,8 @@ export default function App() {
               상세보기
             </button>
           )}
+          </div>
+          <span className="mt-0.5 shrink-0 text-[10px] font-bold text-white/40">닫기</span>
         </div>
       )}
     </div>
