@@ -11,12 +11,14 @@ import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { getRecentInspections, type InspectionSnapshot } from "./api";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
   assignee: string; status: string; scheduleType: string; issue?: string;
+  contact?: string; model?: string; serial?: string; asset?: string; grade?: string; keyman?: string; note?: string;
 };
 
 type Geo = { lat: number; lng: number };
@@ -41,19 +43,42 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
   };
 
   // 워킨맵 좌표 사전 — 업체명 정규화 키로 매칭 (팀 무관 전체, 한 번만)
+  const [workinMeta, setWorkinMeta] = useState<Map<string, { comment: string; phone: string; memos: string[] }>>(new Map());
   useEffect(() => {
-    void selectAllRows<{ name: string; latitude: number | null; longitude: number | null }>(
-      "workin_map_places", "select=name,latitude,longitude",
+    void selectAllRows<{ name: string; latitude: number | null; longitude: number | null; comment: string | null; phone: string | null; memos: unknown }>(
+      "workin_map_places", "select=name,latitude,longitude,comment,phone,memos",
     ).then((rows) => {
       const map = new Map<string, Geo>();
+      const meta = new Map<string, { comment: string; phone: string; memos: string[] }>();
       for (const row of rows) {
-        if (row.latitude == null || row.longitude == null) continue;
         const key = vendorMatchKey(row.name || "");
-        if (key && !map.has(key)) map.set(key, { lat: row.latitude, lng: row.longitude });
+        if (!key) continue;
+        if (row.latitude != null && row.longitude != null && !map.has(key)) map.set(key, { lat: row.latitude, lng: row.longitude });
+        if (!meta.has(key)) meta.set(key, {
+          comment: String(row.comment || ""),
+          phone: String(row.phone || ""),
+          memos: Array.isArray(row.memos) ? (row.memos as unknown[]).map(String) : [],
+        });
       }
       setGeoByKey(map);
+      setWorkinMeta(meta);
     }).catch(() => {});
   }, []);
+
+  const lookupMeta = useCallback((vendor: string) => {
+    const key = vendorMatchKey(vendor);
+    if (!key) return null;
+    const exact = workinMeta.get(key);
+    if (exact) return exact;
+    for (let len = key.length - 1; len >= 4; len--) {
+      const hit = workinMeta.get(key.slice(0, len));
+      if (hit) return hit;
+    }
+    for (const [candidate, meta] of workinMeta) {
+      if (candidate.length >= 4 && candidate.startsWith(key)) return meta;
+    }
+    return null;
+  }, [workinMeta]);
 
   // 워킨맵에 없는 업체(AS 일정 등)는 일정의 주소를 지오코딩해 좌표를 채운다 (카카오)
   const [geoFallback, setGeoFallback] = useState<Map<string, Geo>>(new Map());
@@ -276,6 +301,19 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
   };
 
+  // 상세 모달 — 워킨맵 정보 + AS 접수내용 + 최근 점검을 한 화면에 (워킨맵 안 봐도 되게)
+  const [detail, setDetail] = useState<MyPlanTicket | null>(null);
+  const [detailSnaps, setDetailSnaps] = useState<InspectionSnapshot[] | null>(null);
+  useEffect(() => {
+    if (!detail) { setDetailSnaps(null); return; }
+    let stop = false;
+    setDetailSnaps(null);
+    void getRecentInspections(detail.vendor, detail.serial || "", detail.asset || "")
+      .then((res) => { if (!stop) setDetailSnaps(res.snapshots.slice(0, 2)); })
+      .catch(() => { if (!stop) setDetailSnaps([]); });
+    return () => { stop = true; };
+  }, [detail]);
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -319,6 +357,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
                   </span>
                 )}
               </span>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setDetail(t); }} className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">상세</button>
               <a href={kakao} onClick={(e) => e.stopPropagation()} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="shrink-0 rounded-lg bg-[#FEE500] px-2 py-1.5 text-[11px] font-black text-slate-900">길찾기</a>
               <button type="button" onClick={(e) => { e.stopPropagation(); togglePin(t.id); }}
                 className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
@@ -329,6 +368,84 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
         })}
         {!ordered.length && <div className="p-10 text-center text-xs font-bold text-slate-400">{date}에 {author}에게 배정된 일정이 없습니다.</div>}
       </div>
+      {detail && (() => {
+        const f = flags.get(detail.vendor.trim());
+        const meta = lookupMeta(detail.vendor);
+        const g = getGeo(detail);
+        const phone = (detail.contact || meta?.phone || "").match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] || "";
+        const infoRows: Array<[string, string]> = [
+          ["유형", `${detail.scheduleType}${detail.time ? ` · ${detail.time}` : ""}`],
+          ["접수내용", detail.issue || ""],
+          ["기종", [detail.model, detail.serial && `S/N ${detail.serial}`, detail.asset && `자산 ${detail.asset}`].filter(Boolean).join(" · ")],
+          ["담당자", [detail.keyman, detail.contact].filter(Boolean).join(" · ")],
+          ["주소", detail.address || ""],
+          ["메모", detail.note || ""],
+        ];
+        return (
+          <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetail(null)}>
+            <div className="flex max-h-[86vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400">
+                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-white">{ordered.findIndex((x) => x.id === detail.id) + 1}번</span>
+                    <span>{detail.scheduleType}</span>
+                    {detail.grade && <span className="rounded bg-purple-400/20 px-1.5 py-0.5 text-purple-200">{detail.grade}</span>}
+                  </div>
+                  <div className="mt-1 truncate text-[16px] font-black text-white">{detail.vendor}</div>
+                </div>
+                <button type="button" onClick={() => setDetail(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="rounded-xl border border-slate-200 p-3">
+                  {infoRows.filter(([, v]) => v).map(([k, v]) => (
+                    <div key={k} className="flex items-start gap-3 border-b border-slate-50 py-1.5 last:border-0">
+                      <span className="w-14 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{k}</span>
+                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-bold leading-5 text-slate-800">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                {f && (
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-[11px] font-black text-slate-400">체크 포인트</div>
+                    <div className="mt-1.5 space-y-1 text-[12.5px] font-bold leading-5 text-slate-700">
+                      {f.inspection && <div>🔧 점검 {f.inspection.quarter}분기 {f.inspection.done ? "완료" : "대상"}</div>}
+                      {f.misu && !f.misu.cleared && <div>💰 미수 {f.misu.months ? `${f.misu.months}개월` : ""} {f.misu.balance}</div>}
+                      {f.misu?.cleared && <div className="text-slate-400">💰 미수 완납 ({f.misu.date})</div>}
+                      {f.renewal && <div>📋 재계약 {f.renewal.done ? "완료" : `진행 필요${f.renewal.due ? ` · 종료 ${f.renewal.due}` : ""}`}</div>}
+                      {f.overage && <div>📈 초과료 {f.overage.total ? `${Number(String(f.overage.total).replace(/[^\d]/g, "") || 0).toLocaleString()}원` : ""} ({f.overage.date?.slice(0, 7)})</div>}
+                      {f.bulman && <div>🚨 불만 {f.bulman.date} — {f.bulman.content || "내용 확인 필요"}</div>}
+                    </div>
+                  </div>
+                )}
+                {meta && (meta.comment || meta.memos.length > 0) && (
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-[11px] font-black text-slate-400">워킨맵 메모</div>
+                    {meta.comment && <div className="mt-1 text-[12.5px] font-bold leading-5 text-slate-700">{meta.comment}</div>}
+                    {meta.memos.length > 0 && <ul className="mt-1 space-y-0.5 text-[12px] font-semibold leading-5 text-slate-500">{meta.memos.slice(0, 6).map((m, i) => <li key={i}>· {m}</li>)}</ul>}
+                  </div>
+                )}
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="text-[11px] font-black text-slate-400">최근 점검</div>
+                  {detailSnaps === null && <div className="py-3 text-center text-[11px] font-bold text-slate-400">불러오는 중…</div>}
+                  {detailSnaps?.length === 0 && <div className="py-3 text-center text-[11px] font-bold text-slate-400">점검 기록 없음</div>}
+                  {(detailSnaps || []).map((snap, i) => (
+                    <div key={i} className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[12px] font-bold leading-5 text-slate-600">
+                      <span className="text-slate-900">{snap.date}</span>{snap.model ? ` · ${snap.model}` : ""}
+                      <br />매수 {snap.counts || "-"} · 토너 {snap.toner || "-"} · 여분 {snap.spare || "-"}{snap.waste ? ` · 폐통 ${snap.waste}` : ""}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+                {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-center text-sm font-black text-slate-700">📞 전화</a>}
+                <a href={g ? kakaoMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(detail.address || detail.vendor)}
+                  {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })}
+                  className="flex-[2] rounded-full bg-[#FEE500] py-2.5 text-center text-sm font-black text-slate-900">길찾기</a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
