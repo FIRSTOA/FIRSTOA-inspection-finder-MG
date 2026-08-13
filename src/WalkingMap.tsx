@@ -283,13 +283,6 @@ function normMisuDate(value: string) {
   return match ? `${match[1]}-${match[2].padStart(2, "0")}-${(match[3] || "1").padStart(2, "0")}` : "";
 }
 
-// 칩 표기용 금액 축약: 2,737,000 → 274만원
-function wonShort(value: string) {
-  const n = Number(String(value).replace(/[^\d]/g, ""));
-  if (!n) return "";
-  return n >= 10000 ? `${Math.round(n / 10000).toLocaleString()}만원` : `${n.toLocaleString()}원`;
-}
-
 function misuBalanceLabel(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
   return digits ? `${Number(digits).toLocaleString()}원` : String(value || "").trim();
@@ -1196,20 +1189,47 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만") => {
     setFlagHistory({ vendor, kind, rows: [], loading: true });
     const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
+    // 법인 접두어를 뗀 핵심 토큰으로 서버에서 바로 거른다 — 최근 400행 안에 없던 옛 이력까지 나온다
+    const core = vendor
+      .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
+      .replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim()
+      .match(/[가-힣a-zA-Z0-9]+/)?.[0] || vendor;
     const key = vendorMatchKey(vendor);
-    void selectRows<Record<string, unknown>>(table, `select=*&order=id.desc&limit=400`)
+    // 미수·초과는 시트 기준(_출처 시트), 불만은 카톡·시트·웹앱 전부
+    const sourceFilter = kind === "미수" ? `&${encodeURIComponent("_출처")}=like.${encodeURIComponent("시트")}*` : "";
+    void selectRows<Record<string, unknown>>(table, `select=*&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(core.slice(0, 8))}*${sourceFilter}&order=id.desc&limit=30`)
       .then((rows) => {
         const hits = rows.filter((r) => {
           const rk = vendorMatchKey(String(r["_업체명"] || ""));
           return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
-        }).slice(0, 6).map((r) => ({
-          date: String(r["입력일"] || r["방문일"] || r["날짜"] || "").slice(0, 10),
-          text: kind === "미수"
-            ? `${String(r["미수개월"] || r["실제 개월수"] || "")}개월 · ${misuBalanceLabel(String(r["미수잔액"] || r["실제 잔액"] || ""))}`
-            : kind === "초과"
-              ? `${misuBalanceLabel(String(r["합계"] || ""))} (컬러 ${String(r["컬러초과료"] || "0")} / 흑백 ${String(r["흑백초과료"] || "0")})`
-              : String(r["불만내용"] || r["불편내용"] || r["조치내용"] || "").slice(0, 120) || "내용 없음",
-        }));
+        }).slice(0, 10).map((r) => {
+          const source = String(r["_출처"] || "").split(":")[0] || "";
+          if (kind === "미수") {
+            const months = String(r["미수개월"] || r["실제 개월수"] || "").replace(/개월/g, "").trim();
+            const balance = misuBalanceLabel(String(r["미수잔액"] || r["실제 잔액"] || ""));
+            return {
+              date: normMisuDate(String(r["입력일"] || "")) || String(r["입력일"] || "").slice(0, 10),
+              text: `${months ? `${months}개월` : "개월 미상"} · ${balance || "잔액 미상"}${source ? `  (${source})` : ""}`,
+            };
+          }
+          if (kind === "초과") {
+            return {
+              date: String(r["날짜"] || "").slice(0, 10),
+              text: `합계 ${misuBalanceLabel(String(r["합계"] || "0"))}\n컬러 ${misuBalanceLabel(String(r["컬러초과료"] || "0")) || "0원"} · 흑백 ${misuBalanceLabel(String(r["흑백초과료"] || "0")) || "0원"}${String(r["등급"] || "") ? ` · ${r["등급"]}` : ""}${String(r["마감방식"] || "") ? ` · ${r["마감방식"]}` : ""}`,
+            };
+          }
+          const type = [String(r["불만유형"] || ""), String(r["불만정도"] || r["불만항목"] || "")].filter(Boolean).join(" · ");
+          const content = String(r["불만내용"] || r["불편내용"] || "").trim();
+          const action = String(r["조치내용"] || r["대안제시"] || "").trim();
+          return {
+            date: normMisuDate(String(r["방문일"] || r["날짜"] || "")) || String(r["방문일"] || r["날짜"] || "").slice(0, 10),
+            text: [
+              `${source ? `[${source}] ` : ""}${type || "유형 미분류"}`,
+              content ? `내용: ${content.slice(0, 160)}` : "",
+              action ? `조치: ${action.slice(0, 120)}` : "",
+            ].filter(Boolean).join("\n") || "내용 없음",
+          };
+        });
         setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, rows: hits, loading: false } : cur));
       })
       .catch(() => setFlagHistory((cur) => (cur && cur.vendor === vendor ? { ...cur, loading: false } : cur)));
@@ -2169,11 +2189,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   {((place.kind === "quarter" && renewalMatch) || misu || overage || bulman) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
-                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료</span>
-                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 있음{renewalMatch.dueLabel ? ` · 종료 ${renewalMatch.dueLabel}` : ""}{renewalMatch.isPrev ? " (전분기)" : ""}</span>)}
-                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수"); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">미수 있음{misuMonths ? ` · ${misuMonths}개월` : misuBal ? ` · ${misuBal}` : ""}</span>}
-                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과"); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 있음{wonShort(overage.total) ? ` · ${wonShort(overage.total)}` : ""}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 있음 · {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월</span>}
+                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
+                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
+                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수"); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과"); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
                     </span>
                   )}
                 </span>
