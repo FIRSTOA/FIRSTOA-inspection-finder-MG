@@ -707,8 +707,7 @@ export default function ServiceReception({ author }: { author: string }) {
         start: "", end: "", result: "", handler: "",
         // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
         contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
-        // 등록 폼의 "처리 내용/메모"는 시트 '처리내용' 열로 — 원격팀이 등록 때 적은 메모가 사라지지 않게
-        symptom: manual.증상.trim(), extraCount: "", handled: type === "원격이관" ? manual.참고사항.trim() : "", linked: "",
+        symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
         // 신규는 순번 함수가 못 채우는 열을 직접 기입 (기존은 보내지 않아 수식 유지)
         ...(custKind === "신규" ? { company: vendorName, ...newRemote } : {}),
       };
@@ -1206,7 +1205,6 @@ export default function ServiceReception({ author }: { author: string }) {
                           <label className="flex items-center gap-1 text-[11px] font-black text-slate-500">종료
                             <input value={meta.end || ""} placeholder="10:00" inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { end: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { end: normalizeTime(e.target.value) })} className={`w-[4.5rem] ${field} tabular-nums`} />
                           </label>
-                          <button type="button" onClick={() => patchHandling(row, meta.start ? { end: kstNowHM() } : { start: kstNowHM() })} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50" title="빈 칸에 현재 시각 채우기">지금</button>
                         </div>
                         <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                           <select value={meta.result || ""} onChange={(e) => patchHandling(row, { result: e.target.value })} className={field}>
@@ -1531,9 +1529,6 @@ export default function ServiceReception({ author }: { author: string }) {
                     <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </label>
                 </>}
-                {type === "원격이관" && <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">처리 내용/메모
-                  <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} placeholder="원격 안내 내용, 후속 필요사항 등" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                </label>}
               </div>
               {type !== "원격이관" && !!report && <div className="mt-3 border-t border-slate-100 pt-3">
                 {!region && <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 지역이 비어 있습니다 — 지역이 있어야 팀 AS방으로 전송됩니다. 자동 입력값 수정(신규는 지역 칩)에서 입력하세요.</div>}

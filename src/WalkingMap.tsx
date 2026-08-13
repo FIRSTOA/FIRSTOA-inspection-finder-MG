@@ -879,6 +879,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [renewalGradeFilter, setRenewalGradeFilter] = useState("ALL");
   const [quarterHasRenewal, setQuarterHasRenewal] = useState(false);
   const [quarterHasMisu, setQuarterHasMisu] = useState(false);
+  const [quarterHasOverage, setQuarterHasOverage] = useState(false);
   const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
   const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">("default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
@@ -1294,6 +1295,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       if (kindFilter === "quarter") {
         if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
         if (quarterHasMisu && lookupVendor(misuByVendor, place.name) === undefined) return false;
+        if (quarterHasOverage && lookupVendor(overageByVendor, place.name) === undefined) return false;
         if (quarterGrades.length && !quarterGrades.includes(renewalGrade(place))) return false;
       }
       return true;
@@ -1320,7 +1322,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, lookupVendor]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, lookupVendor]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1744,7 +1746,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           <div className="flex flex-wrap items-center gap-1">
             <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>재계약 있음</button>
             <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>미수 있음</button>
-            {(quarterHasRenewal || quarterHasMisu || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
+            <button type="button" onClick={() => setQuarterHasOverage((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasOverage ? "bg-purple-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>초과 있음</button>
+            {(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
             {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade}</button>)}
