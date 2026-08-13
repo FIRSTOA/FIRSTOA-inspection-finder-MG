@@ -130,7 +130,7 @@ async function loadSources(): Promise<Sources> {
   for (const row of bulmanRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
-    const date = String(row["방문일"] || row["날짜"] || "").slice(0, 10);
+    const date = normMisuDate(String(row["방문일"] || row["날짜"] || ""));
     if (!date || date < bulmanCutoff) continue;
     const prev = bulman.get(key);
     if (!prev || date > prev.date) bulman.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });

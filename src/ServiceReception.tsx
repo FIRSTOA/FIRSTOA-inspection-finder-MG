@@ -9,7 +9,7 @@ import { kstDate } from "./visits";
 import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { prepareImageForUpload } from "./imageUpload";
-import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
@@ -1332,14 +1332,10 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
           <span className="ml-auto flex items-center gap-2">
-            <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자"
+            <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자 (원격팀)"
               className="rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-black text-white outline-none">
-              {!Object.values(book).some((names) => names.includes(author)) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
-              {AUTHOR_TEAMS.map((team) => (
-                <optgroup key={team} label={`${team}팀`}>
-                  {(book[team] || []).map((name) => <option key={name} value={name} className="text-slate-900">{name}</option>)}
-                </optgroup>
-              ))}
+              {!(book.IT || []).includes(author) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
+              {(book.IT || []).map((name) => <option key={name} value={name} className="text-slate-900">{name}</option>)}
             </select>
             <span className="text-xs font-bold tabular-nums text-slate-300">{clock}</span>
           </span>

@@ -281,7 +281,7 @@ function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">재계약 완료</span>
         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약{flags.renewal.due ? ` · 종료 ${flags.renewal.due}` : ""}</span>)}
       {flags.overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 {flags.overage.total.replace(/[^\d]/g, "") ? `${Math.round(Number(flags.overage.total.replace(/[^\d]/g, "")) / 10000).toLocaleString()}만원` : ""}</span>}
-      {flags.bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={flags.bulman.content}>불만 {flags.bulman.date.slice(5)}</span>}
+      {flags.bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={flags.bulman.content}>불만 {flags.bulman.date.slice(2, 4)}년 {Number(flags.bulman.date.slice(5, 7))}월</span>}
     </span>
   );
 }
@@ -479,6 +479,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
   useEffect(() => { try { localStorage.setItem("cs_calendar_types_v2", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
   const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
@@ -1021,10 +1022,11 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="grid w-full grid-cols-3 rounded-full bg-slate-100 p-1 sm:w-auto">
+            <div className="grid w-full grid-cols-4 rounded-full bg-slate-100 p-1 sm:w-auto">
               {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setDayFilter(key)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
+                <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
               ))}
+              <button type="button" onClick={() => setMyPlanOpen(true)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${myPlanOpen ? "bg-blue-600 text-white shadow-sm" : "text-blue-600 hover:text-blue-700"}`}>내 일정</button>
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
@@ -1041,7 +1043,8 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
 
-          <div className="space-y-3 md:hidden">
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} />}
+          <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {scheduleRows.map((ticket, ti) => (
               <div key={ticket.id}>
                 {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
@@ -1072,7 +1075,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             {!scheduleRows.length && <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
           </div>
 
-          <div className="hidden overflow-x-auto md:block">
+          <div className={`hidden overflow-x-auto ${myPlanOpen ? "" : "md:block"}`}>
             <table className="w-full min-w-[1100px] text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">

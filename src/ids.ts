@@ -12,5 +12,7 @@ export function vendorMatchKey(value: string) {
     .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?/i, "")
     .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "")
     .replace(/[^0-9a-z가-힣]/gi, "")
-    .toLowerCase();
+    .toLowerCase()
+    // 법인 접두어는 변별력이 없는데 앞부분 일치 매칭을 오폭시킨다 ("주식회사 무암" ↔ "주식회사 무천…")
+    .replace(/^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/, "");
 }

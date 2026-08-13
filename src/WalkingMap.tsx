@@ -666,7 +666,11 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     // 주소 검색(메인 컴포넌트)에서 좌표로 지도를 움직일 수 있게 모듈 다리 등록
     addressFlyBridge = (lat, lng, label, sub) => {
       if (addressPinRef.current) { addressPinRef.current.remove(); addressPinRef.current = null; }
-      const marker = L.marker([lat, lng], { zIndexOffset: 1000 });
+      // 기본 마커 아이콘은 번들에서 이미지가 빠져 깨져 보인다 — 스타일 핀으로 대체
+      const marker = L.marker([lat, lng], {
+        zIndexOffset: 1000,
+        icon: L.divIcon({ className: "", html: '<div style="font-size:30px;line-height:30px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">📍</div>', iconSize: [30, 30], iconAnchor: [15, 28] }),
+      });
       marker.addTo(map).bindPopup(`📍 ${label}<br/><span style="font-size:11px;color:#64748b">${sub}</span>`).openPopup();
       addressPinRef.current = marker;
       map.flyTo([lat, lng], Math.max(map.getZoom(), 15));
@@ -884,10 +888,20 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     if (!q) return;
     setGeocoding(true);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(q)}`, { headers: { "Accept-Language": "ko" } });
-      const hits = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
-      if (!hits.length) { notify(`"${q}" 주소를 찾지 못했어요 — 도로명 주소로 다시 시도해 보세요.`, "error"); return; }
-      const hit = hits[0];
+      // 도로명 띄어쓰기에 민감해서("삼성로 100길" vs "삼성로100길") 변형을 차례로 시도한다
+      const variants = [...new Set([
+        q,
+        q.replace(/([가-힣]+로)\s+(\d+길)/g, "$1$2"),
+        q.replace(/([가-힣]+로)(\d+길)/g, "$1 $2"),
+        q.replace(/([가-힣]+(?:로|길))(\d)/g, "$1 $2"),
+      ])];
+      let hit: { lat: string; lon: string; display_name: string } | null = null;
+      for (const variant of variants) {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(variant)}`, { headers: { "Accept-Language": "ko" } });
+        const hits = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+        if (hits.length) { hit = hits[0]; break; }
+      }
+      if (!hit) { notify(`"${q}" 주소를 찾지 못했어요 — 도로명 주소로 다시 시도해 보세요.`, "error"); return; }
       if (addressFlyBridge) addressFlyBridge(Number(hit.lat), Number(hit.lon), q, hit.display_name.split(",").slice(0, 3).join(","));
       else notify("지도가 아직 준비되지 않았어요 — 잠시 후 다시 시도해 주세요.", "error");
     } catch (e) {
@@ -940,7 +954,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     setFlagHistory({ vendor, kind, rows: [], loading: true });
     const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
     const key = vendorMatchKey(vendor);
-    void selectAllRows<Record<string, unknown>>(table, `select=*&order=id.desc&limit=400`)
+    void selectRows<Record<string, unknown>>(table, `select=*&order=id.desc&limit=400`)
       .then((rows) => {
         const hits = rows.filter((r) => {
           const rk = vendorMatchKey(String(r["_업체명"] || ""));
@@ -1170,13 +1184,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const loadBulman = useCallback(() => {
     const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
     const select = encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용");
-    void selectAllRows<Record<string, unknown>>("bulman", `select=${select}&order=id.desc&limit=600`)
+    void selectRows<Record<string, unknown>>("bulman", `select=${select}&order=id.desc&limit=600`)
       .then((rows) => {
         const map = new Map<string, { date: string; content: string }>();
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
           if (!key) continue;
-          const date = String(row["방문일"] || row["날짜"] || "").slice(0, 10);
+          // 날짜 표기가 제각각("2025.12", "12/9")이라 yyyy-MM-dd로 정규화해 비교·표시한다
+          const date = normMisuDate(String(row["방문일"] || row["날짜"] || ""));
           if (!date || date < cutoff) continue;
           const prev = map.get(key);
           if (!prev || date > prev.date) map.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
@@ -1913,7 +1928,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 있음{renewalMatch.dueLabel ? ` · 종료 ${renewalMatch.dueLabel}` : ""}{renewalMatch.isPrev ? " (전분기)" : ""}</span>)}
                       {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수"); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">미수 있음{misuMonths ? ` · ${misuMonths}개월` : misuBal ? ` · ${misuBal}` : ""}</span>}
                       {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과"); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 있음{wonShort(overage.total) ? ` · ${wonShort(overage.total)}` : ""}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 있음 · {bulman.date.slice(5)}</span>}
+                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 있음 · {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월</span>}
                     </span>
                   )}
                 </span>
@@ -2432,7 +2447,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         </div>
       )}
       {flagHistory && (
-        <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
+        <div className="fixed inset-0 z-[2400] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
           <div className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
               <div className="min-w-0">

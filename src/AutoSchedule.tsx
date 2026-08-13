@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
+import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
@@ -41,16 +42,35 @@ export default function AutoSchedule({ author }: { author: string }) {
   }, [date, team, onlyMine, author]);
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
-  // 앵커 좌표 — 워킨맵에서 업체명으로 찾는다 (일정에는 좌표가 없다)
+  // 앵커 좌표 — 워킨맵에서 업체명으로 찾고(정규화 키 대조), 없으면 주소 지오코딩 폴백
   const resolveAnchor = useCallback(async (name: string) => {
-    const key = name.trim();
-    if (!key) { setAnchorGeo(null); return; }
+    const raw = name.trim();
+    if (!raw) { setAnchorGeo(null); return; }
+    // 법인 접두어·기호를 뺀 핵심 토큰으로 검색 — "주식회사 무암 (Mooam)" → "무암"
+    const core = raw.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || raw;
     const hits = await selectRows<{ name: string; latitude: number | null; longitude: number | null }>(
-      "workin_map_places", `select=name,latitude,longitude&name=ilike.*${encodeURIComponent(key.slice(0, 6))}*&limit=5`,
+      "workin_map_places", `select=name,latitude,longitude&name=ilike.*${encodeURIComponent(core.slice(0, 8))}*&limit=20`,
     ).catch(() => []);
-    const hit = hits.find((h) => h.latitude != null && h.longitude != null);
-    setAnchorGeo(hit ? { name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number } : null);
-    if (!hit) setNotice(`"${key}"의 좌표를 워킨맵에서 못 찾았습니다 — 거리 정렬 없이 경과일 순으로 보여줍니다.`);
+    const key = vendorMatchKey(raw);
+    const scored = hits
+      .filter((h) => h.latitude != null && h.longitude != null)
+      .map((h) => {
+        const hk = vendorMatchKey(h.name);
+        const score = hk === key ? 3 : hk.startsWith(key) || key.startsWith(hk) ? 2 : hk.includes(key.slice(0, 4)) ? 1 : 0;
+        return { h, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const hit = scored[0]?.h;
+    if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number }); return; }
+    // 업체를 못 찾으면 입력을 주소로 보고 지오코딩 (직접 지정 칸에 주소를 쳐도 되게)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(raw)}`, { headers: { "Accept-Language": "ko" } });
+      const geo = (await res.json()) as Array<{ lat: string; lon: string }>;
+      if (geo.length) { setAnchorGeo({ name: `${raw} (주소)`, lat: Number(geo[0].lat), lng: Number(geo[0].lon) }); return; }
+    } catch { /* 아래 안내로 */ }
+    setAnchorGeo(null);
+    setNotice(`"${raw}"의 좌표를 못 찾았습니다 — 업체명 또는 주소로 다시 시도해 보세요 (거리 정렬 없이 경과일 순).`);
   }, []);
 
   const anchorTicket = tickets.find((t) => t.id === anchorId);
@@ -148,8 +168,8 @@ export default function AutoSchedule({ author }: { author: string }) {
               ))}
               {!tickets.length && <div className="rounded-lg border border-dashed border-slate-200 py-5 text-center text-xs font-bold text-slate-400">이 날짜의 {team}팀 일정이 없습니다.</div>}
             </div>
-            <label className="mt-2 block text-[11px] font-black text-slate-500">직접 지정 (업체명)
-              <input value={anchorQuery} onChange={(e) => { setAnchorQuery(e.target.value); setAnchorId(""); }} placeholder="워킨맵에 있는 업체명"
+            <label className="mt-2 block text-[11px] font-black text-slate-500">직접 지정 (업체명 또는 주소)
+              <input value={anchorQuery} onChange={(e) => { setAnchorQuery(e.target.value); setAnchorId(""); }} placeholder="업체명 또는 주소 (예: 강남구 삼성로100길 8)"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             </label>
             {anchorLabel && <div className={`mt-1 text-[10px] font-black ${anchorGeo ? "text-emerald-600" : "text-amber-600"}`}>{anchorGeo ? `📍 ${anchorGeo.name.slice(0, 20)} 좌표로 거리 계산` : "좌표 미확인 — 경과일 순 정렬"}</div>}
