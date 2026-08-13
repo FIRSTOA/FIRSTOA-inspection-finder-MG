@@ -12,6 +12,7 @@ import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { geocodeKR } from "./geocode";
+import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
@@ -137,18 +138,36 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     return [...route, ...noGeo];
   }, [myTickets, pinned, getGeo]);
 
-  // ── 지도 ──
+  // ── 지도: 카카오맵 우선, SDK 로드 실패(도메인 미등록 미리보기 등) 시 Leaflet 폴백 ──
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
+  const kakaoRef = useRef<{ ns: KakaoNS; map: KakaoNS } | null>(null);
+  const kakaoObjectsRef = useRef<KakaoNS[]>([]);
+  const [engine, setEngine] = useState<"" | "kakao" | "leaflet">("");
   useEffect(() => {
-    if (!mapElRef.current || mapRef.current) return;
-    const map = L.map(mapElRef.current, { zoomControl: true }).setView([37.55, 127.0], 11);
-    // 워킨맵과 동일한 타일 — 두 화면의 지도가 같아야 헷갈리지 않는다
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
-    layerRef.current = L.layerGroup().addTo(map);
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; layerRef.current = null; };
+    if (!mapElRef.current || mapRef.current || kakaoRef.current) return;
+    let cancelled = false;
+    void loadKakaoMaps().then((kakao) => {
+      if (cancelled || !mapElRef.current) return;
+      if (kakao) {
+        const map = new kakao.maps.Map(mapElRef.current, { center: new kakao.maps.LatLng(37.55, 127.0), level: 9 });
+        kakaoRef.current = { ns: kakao, map };
+        setEngine("kakao");
+      } else {
+        const map = L.map(mapElRef.current, { zoomControl: true }).setView([37.55, 127.0], 11);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
+        layerRef.current = L.layerGroup().addTo(map);
+        mapRef.current = map;
+        setEngine("leaflet");
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; layerRef.current = null; }
+      kakaoRef.current = null;
+      kakaoObjectsRef.current = [];
+    };
   }, []);
   // 같은 건물(같은 좌표) 일정이 겹치면 안 보인다 — 작은 원형으로 흩어서 전부 보이게
   const markerRef = useRef<Map<string, L.Marker>>(new Map());
@@ -172,31 +191,80 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     return out;
   }, [ordered, getGeo]);
 
+  const markerHtml = (i: number, isPinned: boolean) =>
+    `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
+  const popupHtml = (i: number, t: MyPlanTicket) =>
+    `<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${t.scheduleType}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`;
+
   useEffect(() => {
-    const map = mapRef.current, layer = layerRef.current;
-    if (!map || !layer) return;
-    layer.clearLayers();
-    markerRef.current.clear();
-    const points: [number, number][] = [];
+    if (engine === "leaflet") {
+      const map = mapRef.current, layer = layerRef.current;
+      if (!map || !layer) return;
+      layer.clearLayers();
+      markerRef.current.clear();
+      const points: [number, number][] = [];
+      ordered.forEach((t, i) => {
+        const g = displayGeo.get(t.id);
+        if (!g) return;
+        points.push([g.lat, g.lng]);
+        const icon = L.divIcon({ className: "", html: markerHtml(i, pinned.includes(t.id)), iconSize: [26, 26], iconAnchor: [13, 13] });
+        const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(popupHtml(i, t));
+        markerRef.current.set(t.id, marker);
+      });
+      if (points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
+      if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
+      return;
+    }
+    if (engine !== "kakao" || !kakaoRef.current) return;
+    const { ns: kakao, map } = kakaoRef.current;
+    for (const obj of kakaoObjectsRef.current) obj.setMap(null);
+    kakaoObjectsRef.current = [];
+    kakaoMarkerRef.current.clear();
+    const path: KakaoNS[] = [];
+    const bounds = new kakao.maps.LatLngBounds();
+    let infoOverlay: KakaoNS | null = null;
     ordered.forEach((t, i) => {
       const g = displayGeo.get(t.id);
       if (!g) return;
-      points.push([g.lat, g.lng]);
-      const isPinned = pinned.includes(t.id);
-      const icon = L.divIcon({
-        className: "",
-        html: `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`,
-        iconSize: [26, 26], iconAnchor: [13, 13],
-      });
-      const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer)
-        .bindPopup(`<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${t.scheduleType}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`);
-      markerRef.current.set(t.id, marker);
+      const pos = new kakao.maps.LatLng(g.lat, g.lng);
+      path.push(pos);
+      bounds.extend(pos);
+      const el = document.createElement("div");
+      el.innerHTML = markerHtml(i, pinned.includes(t.id));
+      el.style.cursor = "pointer";
+      el.onclick = () => {
+        if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
+        const box = document.createElement("div");
+        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:220px";
+        box.innerHTML = popupHtml(i, t);
+        infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: 1, zIndex: 30 });
+        infoOverlay.setMap(map);
+        kakaoObjectsRef.current.push(infoOverlay);
+      };
+      const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: 0.5, zIndex: 10 + i });
+      overlay.setMap(map);
+      kakaoObjectsRef.current.push(overlay);
+      kakaoMarkerRef.current.set(t.id, { pos, open: el.onclick as () => void });
     });
-    if (points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
-    if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
-  }, [ordered, pinned, displayGeo]);
+    if (path.length >= 2) {
+      const line = new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: "#2563eb", strokeOpacity: 0.65, strokeStyle: "shortdash" });
+      line.setMap(map);
+      kakaoObjectsRef.current.push(line);
+    }
+    if (path.length) map.setBounds(bounds, 40, 40, 40, 40);
+  }, [engine, ordered, pinned, displayGeo]);
 
+  const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
   const focusTicket = (id: string) => {
+    if (engine === "kakao" && kakaoRef.current) {
+      const hit = kakaoMarkerRef.current.get(id);
+      if (!hit) return;
+      const { ns: kakao, map } = kakaoRef.current;
+      if (map.getLevel() > 4) map.setLevel(4);
+      map.panTo(new kakao.maps.LatLng(hit.pos.getLat(), hit.pos.getLng()));
+      hit.open();
+      return;
+    }
     const map = mapRef.current;
     const marker = markerRef.current.get(id);
     if (!map || !marker) return;
