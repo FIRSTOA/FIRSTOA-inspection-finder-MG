@@ -1042,7 +1042,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest }: { view:
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
 
-          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} />}
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {scheduleRows.map((ticket, ti) => (
               <div key={ticket.id}>

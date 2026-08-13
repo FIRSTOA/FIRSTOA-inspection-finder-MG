@@ -1217,29 +1217,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, records: hits.slice(0, 3), loading: false } : cur));
     })();
   };
-          }
-          if (kind === "초과") {
-            return {
-              date: String(r["날짜"] || "").slice(0, 10),
-              text: `합계 ${misuBalanceLabel(String(r["합계"] || "0"))}\n컬러 ${misuBalanceLabel(String(r["컬러초과료"] || "0")) || "0원"} · 흑백 ${misuBalanceLabel(String(r["흑백초과료"] || "0")) || "0원"}${String(r["등급"] || "") ? ` · ${r["등급"]}` : ""}${String(r["마감방식"] || "") ? ` · ${r["마감방식"]}` : ""}`,
-            };
-          }
-          const type = [String(r["불만유형"] || ""), String(r["불만정도"] || r["불만항목"] || "")].filter(Boolean).join(" · ");
-          const content = String(r["불만내용"] || r["불편내용"] || "").trim();
-          const action = String(r["조치내용"] || r["대안제시"] || "").trim();
-          return {
-            date: normMisuDate(String(r["방문일"] || r["날짜"] || "")) || String(r["방문일"] || r["날짜"] || "").slice(0, 10),
-            text: [
-              `${source ? `[${source}] ` : ""}${type || "유형 미분류"}`,
-              content ? `내용: ${content.slice(0, 160)}` : "",
-              action ? `조치: ${action.slice(0, 120)}` : "",
-            ].filter(Boolean).join("\n") || "내용 없음",
-          };
-        });
-        setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, rows: hits, loading: false } : cur));
-      })
-      .catch(() => setFlagHistory((cur) => (cur && cur.vendor === vendor ? { ...cur, loading: false } : cur)));
-  };
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);

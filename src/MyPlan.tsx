@@ -11,7 +11,7 @@ import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getRecentInspections, type InspectionSnapshot } from "./api";
+import { getInspForms, getRecentInspections, type InspectionSnapshot, type InspForm } from "./api";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -20,7 +20,7 @@ export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
   assignee: string; status: string; scheduleType: string; issue?: string;
   contact?: string; model?: string; serial?: string; asset?: string; grade?: string; keyman?: string; note?: string;
-  source?: string;
+  source?: string; receptionId?: string;
 };
 
 // 자동일정 생성 건은 분기점검 워킨맵에서 온 것 — 저장 유형(매월점검) 대신 실제 의미로 표시
@@ -35,7 +35,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
   const [date, setDate] = useState(kstDate());
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -309,6 +309,15 @@ export default function MyPlan({ tickets, author, onSelfRequest }: { tickets: My
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
   };
 
+  // FIELD 양식 불러오기 — 최근 점검·AS 원문을 골라 FIELD로 자동 변환
+  const [fieldPick, setFieldPick] = useState<{ ticket: MyPlanTicket; forms: InspForm[] | null } | null>(null);
+  const openFieldPick = (t: MyPlanTicket) => {
+    setFieldPick({ ticket: t, forms: null });
+    void getInspForms(t.vendor)
+      .then((res) => setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: res.forms.filter((f) => f.text) } : cur)))
+      .catch(() => setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: [] } : cur)));
+  };
+
   // 상세 모달 — 워킨맵 정보 + AS 접수내용 + 최근 점검을 한 화면에 (워킨맵 안 봐도 되게)
   const [detail, setDetail] = useState<MyPlanTicket | null>(null);
   const [detailSnaps, setDetailSnaps] = useState<InspectionSnapshot[] | null>(null);
@@ -366,6 +375,7 @@ export default function MyPlan({ tickets, author, onSelfRequest }: { tickets: My
                 )}
               </span>
               <button type="button" onClick={(e) => { e.stopPropagation(); setDetail(t); }} className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">상세</button>
+              {onUseField && <button type="button" onClick={(e) => { e.stopPropagation(); openFieldPick(t); }} className="shrink-0 rounded-lg bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
               <a href={kakao} onClick={(e) => e.stopPropagation()} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="shrink-0 rounded-lg bg-[#FEE500] px-2 py-1.5 text-[11px] font-black text-slate-900">길찾기</a>
               <button type="button" onClick={(e) => { e.stopPropagation(); togglePin(t.id); }}
                 className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
@@ -376,6 +386,36 @@ export default function MyPlan({ tickets, author, onSelfRequest }: { tickets: My
         })}
         {!ordered.length && <div className="p-10 text-center text-xs font-bold text-slate-400">{date}에 {author}에게 배정된 일정이 없습니다.</div>}
       </div>
+      {fieldPick && (
+        <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFieldPick(null)}>
+          <div className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-black text-slate-400">FIELD로 불러오기 — 최근 양식 선택</div>
+                <div className="truncate text-[15px] font-black text-white">{fieldPick.ticket.vendor}</div>
+              </div>
+              <button type="button" onClick={() => setFieldPick(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              {fieldPick.forms === null && <div className="py-8 text-center text-xs font-bold text-slate-400">최근 양식 불러오는 중…</div>}
+              {fieldPick.forms?.length === 0 && <div className="py-8 text-center text-xs font-bold text-slate-400">불러올 양식이 없습니다 — FIELD에서 새로 작성해 주세요.</div>}
+              {(fieldPick.forms || []).map((form, i) => (
+                <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${String(form.gubun).includes("AS") ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>{form.gubun}</span>
+                    <span className="text-[12px] font-black text-slate-800">{form.date}</span>
+                    {form.model && <span className="truncate text-[11px] font-bold text-slate-400">{form.model}</span>}
+                    {form.count && form.count > 1 && <span className="text-[10px] font-black text-slate-400">{form.count}대</span>}
+                    <button type="button" onClick={() => { const t = fieldPick.ticket; setFieldPick(null); onUseField?.(form.text, { id: t.id, receptionId: t.receptionId, vendor: t.vendor }); }}
+                      className="ml-auto shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-blue-700">불러오기</button>
+                  </div>
+                  {(form.content || form.handled) && <div className="px-3 py-2 text-[11px] font-semibold leading-4 text-slate-500">{String(form.content || form.handled).slice(0, 90)}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {detail && (() => {
         const f = flags.get(detail.vendor.trim());
         const meta = lookupMeta(detail.vendor);
