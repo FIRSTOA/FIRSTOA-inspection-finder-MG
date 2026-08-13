@@ -65,10 +65,22 @@ export async function prepareImageForUpload(file: File, maxDim = 1600): Promise<
     const context = canvas.getContext("2d");
     if (!context) return original;
     context.drawImage(source, 0, 0, targetWidth, targetHeight);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    // WebP 우선(같은 화질에서 JPEG보다 30~50% 작다) — 미지원 브라우저는 요청을 무시하고
+    // 다른 형식을 돌려주므로 blob.type을 확인해 JPEG로 폴백한다 (스토리지 용량 절감)
+    const encode = (type: string, quality: number) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+    let blob = await encode("image/webp", 0.72);
+    let contentType = "image/webp";
+    let ext = "webp";
+    if (!blob || blob.type !== "image/webp") {
+      blob = await encode("image/jpeg", 0.78);
+      contentType = "image/jpeg";
+      ext = "jpg";
+    }
     if (typeof (source as ImageBitmap).close === "function") (source as ImageBitmap).close();
     if (!blob || !blob.size) return original;
-    return { blob, contentType: "image/jpeg", ext: "jpg" };
+    // 이미 최적화된 파일을 다시 압축해 더 커지는 경우엔 원본이 낫다 (열리는 형식일 때만)
+    if (blob.size >= file.size && /^image\/(jpeg|webp|png)$/i.test(file.type)) return original;
+    return { blob, contentType, ext };
   } catch {
     return original;
   }
