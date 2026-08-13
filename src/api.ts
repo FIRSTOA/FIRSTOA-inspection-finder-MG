@@ -808,7 +808,8 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
       ok: true,
       message: isExtra
         ? `${kind} 요청 ${dest}`
-        : anyNew ? `저장 완료 — ${dest}` : `이미 저장된 내용(중복) — ${dest}`,
+        // 두 방 보내기의 두 번째 전송은 기록이 이미 저장돼 있는 게 정상 — 겁주는 "중복" 표현 대신 상황을 설명한다
+        : anyNew ? `저장 완료 — ${dest}` : `${dest} — 기록은 첫 전송 때 저장돼 있어 그대로 뒀어요`,
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
