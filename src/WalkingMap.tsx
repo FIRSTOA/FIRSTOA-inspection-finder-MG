@@ -8,6 +8,7 @@ import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { MISU_DETAIL_FIELDS, MISU_DETAIL_LAYOUT, OVERAGE_DETAIL_FIELDS, OVERAGE_DETAIL_LAYOUT, SheetDetailModal } from "./MisuOverageBoards";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
+import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
@@ -1180,6 +1181,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
+  // 거래처 코드 계층 — 지점 id→코드, 레코드 코드 맵. 코드 일치를 먼저 보고 이름 매칭은 폴백.
+  const [placeCodeById, setPlaceCodeById] = useState<Map<number, string>>(new Map());
+  const [misuByCode, setMisuByCode] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
+  const [overageByCode, setOverageByCode] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
+  const [bulmanByCode, setBulmanByCode] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 워킨맵 이름에는 층·백업/합산 같은 꼬리표가 붙어 시트 업체명과 키가 안 맞는 경우가 있다
   // ("31V(주)잡플러스4층백업/합산…" vs "(주)잡플러스"). 키를 앞에서부터 줄여가며 접두 일치로 찾는다.
   const lookupVendor = useCallback(<T,>(map: Map<string, T>, name: string): T | undefined => {
@@ -1192,6 +1198,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     }
     return undefined;
   }, []);
+  // 코드 일치 우선, 실패 시 기존 접두 축소 이름 매칭 — 코드가 없어도 오늘과 동일하게 동작한다
+  const flagFor = useCallback(<T,>(byCode: Map<string, T>, byVendor: Map<string, T>, place: MapPlace): T | undefined => {
+    const code = placeCodeById.get(place.id);
+    const hit = code ? byCode.get(code) : undefined;
+    return hit !== undefined ? hit : lookupVendor(byVendor, place.name);
+  }, [placeCodeById, lookupVendor]);
+
   // 초과료: 초과시트(overage) 거래처별 최신 1건 — 점검 동선에 초과조정을 얹을지 판단용
   const [overageByVendor, setOverageByVendor] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
@@ -1199,7 +1212,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; records: Array<Record<string, unknown>>; loading: boolean } | null>(null);
   const [flagDetail, setFlagDetail] = useState<{ record: Record<string, unknown>; kind: "미수" | "초과" | "불만" } | null>(null);
-  const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만") => {
+  const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만", placeCode?: string) => {
     setFlagHistory({ vendor, kind, records: [], loading: true });
     const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
     // 워킨맵 이름의 접두 숫자·등급·법인·꼬리표를 뗀 핵심 토큰 — 짧게 잘라가며 재시도
@@ -1211,13 +1224,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     // 미수·초과는 시트 기준(_출처 시트), 불만은 카톡·시트·웹앱 전부
     const sourceFilter = kind === "미수" ? `&${encodeURIComponent("_출처")}=like.${encodeURIComponent("시트")}*` : "";
     void (async () => {
+      const alias = await getAliasCodeMap().catch(() => new Map<string, string | null>());
+      const probes: string[] = [core.slice(0, 8), core.slice(0, 5), core.slice(0, 3)];
+      // 지점에 거래처 코드가 있으면 마스터 대표명으로도 찾는다 — 워킨맵 표기와 시트 표기가 다른 경우 구제
+      if (placeCode) {
+        const master = await selectRows<{ name: string }>("vendor_master", `select=name&code=eq.${encodeURIComponent(placeCode)}&limit=1`).catch(() => [] as Array<{ name: string }>);
+        const masterCore = String(master[0]?.name || "").replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || "";
+        if (masterCore) probes.push(masterCore.slice(0, 8), masterCore.slice(0, 5));
+      }
       let hits: Array<Record<string, unknown>> = [];
-      for (const len of [8, 5, 3]) {
-        const probe = core.slice(0, len);
-        if (probe.length < 2) break;
+      for (const probe of probes) {
+        if (probe.length < 2) continue;
         const rows = await selectRows<Record<string, unknown>>(table, `select=*&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*${sourceFilter}&order=id.desc&limit=40`).catch(() => [] as Array<Record<string, unknown>>);
         hits = rows.filter((r) => {
-          const rk = vendorMatchKey(String(r["_업체명"] || ""));
+          const recordName = String(r["_업체명"] || "");
+          if (placeCode && translateVendor(alias, recordName) === placeCode) return true; // 코드 일치 = 확실
+          const rk = vendorMatchKey(recordName);
           return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
         });
         if (hits.length) break;
@@ -1393,9 +1415,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const loadMisu = useCallback(() => {
     const select = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일,_출처");
     const sourceCol = encodeURIComponent("_출처");
-    void selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`)
-      .then((rows) => {
+    void (async () => {
+      try {
+        const [rows, alias] = await Promise.all([
+          selectAllRows<Record<string, unknown>>("misu", `select=${select}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
+          getAliasCodeMap().catch(() => new Map<string, string | null>()),
+        ]);
         const map = new Map<string, { months: string; balance: string; date: string }>();
+        const codeMap = new Map<string, { months: string; balance: string; date: string }>();
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
           if (!key) continue;
@@ -1407,19 +1434,30 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const date = normMisuDate(String(row["입력일"] || ""));
           const prev = map.get(key);
           if (!prev || date > prev.date) map.set(key, { months: monthsText, balance: balanceText, date });
+          const code = translateVendor(alias, String(row["_업체명"] || ""));
+          if (code) {
+            const prevCode = codeMap.get(code);
+            if (!prevCode || date > prevCode.date) codeMap.set(code, { months: monthsText, balance: balanceText, date });
+          }
         }
         setMisuByVendor(map);
+        setMisuByCode(codeMap);
         setMisuFailed(false);
-      })
-      .catch((error) => { console.error("Misu load failed", error); setMisuFailed(true); }); // 실패를 "미수 없음"으로 오해하지 않게 표시
+      } catch (error) { console.error("Misu load failed", error); setMisuFailed(true); } // 실패를 "미수 없음"으로 오해하지 않게 표시
+    })();
   }, []);
 
   // 초과료: 합계가 있는 행만, 거래처별 최신(날짜 기준). 미수와 같은 갱신 주기를 따른다.
   const loadOverage = useCallback(() => {
     const select = encodeURIComponent("_업체명,합계,날짜,등급");
-    void selectAllRows<Record<string, unknown>>("overage", `select=${select}&order=id.asc`)
-      .then((rows) => {
+    void (async () => {
+      try {
+        const [rows, alias] = await Promise.all([
+          selectAllRows<Record<string, unknown>>("overage", `select=${select}&order=id.asc`),
+          getAliasCodeMap().catch(() => new Map<string, string | null>()),
+        ]);
         const map = new Map<string, { total: string; date: string; grade: string }>();
+        const codeMap = new Map<string, { total: string; date: string; grade: string }>();
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
           if (!key) continue;
@@ -1427,34 +1465,54 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const digits = total.replace(/[^0-9]/g, "");
           if (!digits || Number(digits) === 0) continue; // 초과 0원은 표시 대상 아님
           const date = String(row["날짜"] || "").trim();
+          const entry = { total, date, grade: String(row["등급"] || "").trim() };
           const prev = map.get(key);
-          if (!prev || date > prev.date) map.set(key, { total, date, grade: String(row["등급"] || "").trim() });
+          if (!prev || date > prev.date) map.set(key, entry);
+          const code = translateVendor(alias, String(row["_업체명"] || ""));
+          if (code) {
+            const prevCode = codeMap.get(code);
+            if (!prevCode || date > prevCode.date) codeMap.set(code, entry);
+          }
         }
         setOverageByVendor(map);
-      })
-      .catch((error) => console.error("Overage load failed", error));
+        setOverageByCode(codeMap);
+      } catch (error) { console.error("Overage load failed", error); }
+    })();
   }, []);
 
   const loadBulman = useCallback(() => {
     const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
     const select = encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용");
-    void selectRows<Record<string, unknown>>("bulman", `select=${select}&order=id.desc&limit=600`)
-      .then((rows) => {
+    void (async () => {
+      try {
+        const [rows, alias] = await Promise.all([
+          selectRows<Record<string, unknown>>("bulman", `select=${select}&order=id.desc&limit=600`),
+          getAliasCodeMap().catch(() => new Map<string, string | null>()),
+        ]);
         const map = new Map<string, { date: string; content: string }>();
+        const codeMap = new Map<string, { date: string; content: string }>();
         for (const row of rows) {
           const key = vendorMatchKey(String(row["_업체명"] || ""));
           if (!key) continue;
           // 날짜 표기가 제각각("2025.12", "12/9")이라 yyyy-MM-dd로 정규화해 비교·표시한다
           const date = normMisuDate(String(row["방문일"] || row["날짜"] || ""));
           if (!date || date < cutoff) continue;
+          const entry = { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) };
           const prev = map.get(key);
-          if (!prev || date > prev.date) map.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
+          if (!prev || date > prev.date) map.set(key, entry);
+          const code = translateVendor(alias, String(row["_업체명"] || ""));
+          if (code) {
+            const prevCode = codeMap.get(code);
+            if (!prevCode || date > prevCode.date) codeMap.set(code, entry);
+          }
         }
         setBulmanByVendor(map);
-      })
-      .catch((error) => console.error("Bulman load failed", error));
+        setBulmanByCode(codeMap);
+      } catch (error) { console.error("Bulman load failed", error); }
+    })();
   }, []);
 
+  useEffect(() => { void getWorkinCodeMap().then(setPlaceCodeById).catch(() => undefined); }, []);
   useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
   useEffect(() => { loadMisu(); }, [loadMisu]);
   useEffect(() => { loadOverage(); }, [loadOverage]);
@@ -1592,25 +1650,34 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const startMonth = (quarterFilter - 1) * 3;
     const inspectionMonths = [startMonth + 1, startMonth + 2, startMonth + 3];
     const byKey = new Map<string, { place: MapPlace; end: ReturnType<typeof contractEnd> }[]>();
+    const byCode = new Map<string, { place: MapPlace; end: ReturnType<typeof contractEnd> }[]>();
     for (const place of places) {
       if (place.kind !== "renewal" || place.team !== teamFilter) continue;
       if (place.quarter !== quarterFilter && place.quarter !== prevQuarter) continue;
       const end = contractEnd(place, baseYear);
       if (end && !inspectionMonths.includes(end.month)) continue; // 종료월이 점검분기 밖이면 제외
       const key = vendorMatchKey(place.name);
-      if (!key) continue;
-      const list = byKey.get(key);
-      if (list) list.push({ place, end }); else byKey.set(key, [{ place, end }]);
+      if (key) {
+        const list = byKey.get(key);
+        if (list) list.push({ place, end }); else byKey.set(key, [{ place, end }]);
+      }
+      // 재계약·점검 지점 모두 워킨맵이라 양쪽 다 코드가 있다 — 표기가 달라도 코드로 잇는다
+      const code = placeCodeById.get(place.id);
+      if (code) {
+        const list = byCode.get(code);
+        if (list) list.push({ place, end }); else byCode.set(code, [{ place, end }]);
+      }
     }
     const result = new Map<number, { quarter: Quarter; isPrev: boolean; dueLabel: string; done: boolean }>();
-    if (!byKey.size) return result;
+    if (!byKey.size && !byCode.size) return result;
     // 종료월은 이번 점검분기(같은 해)로 확정되므로 연도는 올해로 투영해 표시한다.
     // (자동연장 계약이라 데이터의 최초 종료연도(예: 21년)가 아니라 현재 주기 기준이 맞다.)
     const dueYear = String(baseYear).slice(2);
     for (const place of places) {
       if (place.kind !== "quarter" || place.team !== teamFilter) continue;
+      const code = placeCodeById.get(place.id);
       const key = vendorMatchKey(place.name);
-      const matches = key ? byKey.get(key) : undefined;
+      const matches = (code ? byCode.get(code) : undefined) ?? (key ? byKey.get(key) : undefined);
       if (!matches || !matches.length) continue;
       const best = [...matches].sort((a, b) => (a.end?.month || 99) - (b.end?.month || 99))[0];
       const isPrev = best.place.quarter === prevQuarter;
@@ -1618,7 +1685,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "", done });
     }
     return result;
-  }, [places, teamFilter, quarterFilter]);
+  }, [places, teamFilter, quarterFilter, placeCodeById]);
 
   // 색상 메뉴에 표시할 G1~G12별 개수 — 라벨 필터 자신은 빼고 현재 팀·분기·업무 범위 기준
   const labelCounts = useMemo(() => {
@@ -1641,9 +1708,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       // 분기점검 필터: 재계약 유무 / 미수 유무 / 등급(다중) — 모두 AND 조합.
       if (kindFilter === "quarter") {
         if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
-        if (quarterHasMisu && lookupVendor(misuByVendor, place.name) === undefined) return false;
-        if (quarterHasOverage && lookupVendor(overageByVendor, place.name) === undefined) return false;
-        if (quarterHasBulman && lookupVendor(bulmanByVendor, place.name) === undefined) return false;
+        if (quarterHasMisu && flagFor(misuByCode, misuByVendor, place) === undefined) return false;
+        if (quarterHasOverage && flagFor(overageByCode, overageByVendor, place) === undefined) return false;
+        if (quarterHasBulman && flagFor(bulmanByCode, bulmanByVendor, place) === undefined) return false;
         if (quarterGrades.length && !quarterGrades.includes(renewalGrade(place))) return false;
       }
       return true;
@@ -1670,7 +1737,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, lookupVendor]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -2144,9 +2211,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const lastInspection = latestInspectionByPlace.get(place.id) || "";
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
-          const misu = lookupVendor(misuByVendor, place.name);
-          const overage = lookupVendor(overageByVendor, place.name);
-          const bulman = lookupVendor(bulmanByVendor, place.name);
+          const misu = flagFor(misuByCode, misuByVendor, place);
+          const overage = flagFor(overageByCode, overageByVendor, place);
+          const bulman = flagFor(bulmanByCode, bulmanByVendor, place);
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
@@ -2182,9 +2249,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
                         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
                         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
-                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수"); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
-                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과"); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
+                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
                     </span>
                   )}
                 </span>

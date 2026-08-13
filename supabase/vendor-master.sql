@@ -33,6 +33,35 @@ drop policy if exists "vendor_alias_key anon read" on vendor_alias_key;
 create policy "vendor_alias_key anon read" on vendor_alias_key for select to anon using (true);
 grant select on vendor_alias_key to anon, authenticated;
 
+
+-- TS vendorMatchKey(src/ids.ts)와 완전 동일한 매칭 키 — 프론트 번역과 어긋나면 안 되므로
+-- 규칙 변경 시 양쪽을 함께 고치고 supabase/tests/judgments.sql 동일성 케이스로 검증한다.
+create or replace function vendor_match_key_(v text) returns text language sql immutable as $$
+  select regexp_replace(
+    lower(regexp_replace(
+      regexp_replace(
+        regexp_replace(
+          regexp_replace(
+            regexp_replace(coalesce(v,''), '㈜|\(주\)|\(유\)', '', 'g'),
+            '^(\d{4}/)?\d+[#/\-\s]*(SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])', '', 'i'),
+          '^(\d{4}/)?\d+[#/\-\s]*(SS|NN|S|N|V)?', '', 'i'),
+        '(분기|매월|계약종료|재계약|점검|마감).*$', '', 'i'),
+      '[^0-9a-zA-Z가-힣]', '', 'g')),
+    '^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)', '');
+$$;
+grant execute on function vendor_match_key_(text) to anon, authenticated;
+
+-- 프론트(이름→코드 번역)용 별칭 키 — vendor_alias_key(8자, SQL 매핑용)와 별도로 유지
+create table if not exists vendor_match_alias (
+  akey text not null,
+  code text not null,
+  primary key (akey, code)
+);
+alter table vendor_match_alias enable row level security;
+drop policy if exists "vendor_match_alias anon read" on vendor_match_alias;
+create policy "vendor_match_alias anon read" on vendor_match_alias for select to anon using (true);
+grant select on vendor_match_alias to anon, authenticated;
+
 create or replace function refresh_vendor_master() returns json language plpgsql as $$
 declare n_master int; n_alias int;
 begin
@@ -60,6 +89,12 @@ begin
   where length(vendor_key_(alias)) >= 3;
   get diagnostics n_alias = row_count;
 
+  delete from vendor_match_alias;
+  insert into vendor_match_alias (akey, code)
+  select distinct vendor_match_key_(alias), code
+  from vendor_master, jsonb_array_elements_text(aliases) alias
+  where length(vendor_match_key_(alias)) >= 3;
+
   return json_build_object('vendors', n_master, 'alias_keys', n_alias);
 end $$;
 
@@ -74,12 +109,20 @@ create table if not exists workin_vendor_code (
 alter table workin_vendor_code enable row level security;
 drop policy if exists "workin_vendor_code anon read" on workin_vendor_code;
 create policy "workin_vendor_code anon read" on workin_vendor_code for select to anon using (true);
-grant select on workin_vendor_code to anon, authenticated;
+-- 미매칭 관리 화면의 수동 확정 저장 — 수동분만 쓰기 허용
+drop policy if exists "workin_vendor_code anon write" on workin_vendor_code;
+create policy "workin_vendor_code anon write" on workin_vendor_code for insert to anon with check (method = 'manual');
+drop policy if exists "workin_vendor_code anon update" on workin_vendor_code;
+create policy "workin_vendor_code anon update" on workin_vendor_code for update to anon using (true) with check (method = 'manual');
+drop policy if exists "workin_vendor_code anon delete" on workin_vendor_code;
+create policy "workin_vendor_code anon delete" on workin_vendor_code for delete to anon using (method = 'manual');
+grant select, insert, update, delete on workin_vendor_code to anon, authenticated;
 
 create or replace function map_workin_vendor_codes() returns json language plpgsql as $$
 declare n_serial int; n_asset int; n_name int; n_total int; n_unmatched int;
 begin
-  delete from workin_vendor_code;
+  -- 수동 확정(method='manual')은 재실행에도 보존한다
+  delete from workin_vendor_code where method <> 'manual';
 
   -- 기기 식별자(정규화) → 코드. 코드가 갈리는 식별자는 자동 매칭에서 제외한다.
   create temp table _lease_ids on commit drop as
@@ -105,7 +148,8 @@ begin
     select regexp_replace(lower(btrim(split_part(coalesce(w.comment,''), '/', 2))), '[^0-9a-z]', '', 'g') as ident
   ) s
   join _lease_ids l on l.ident = s.ident
-  where w.visible is not false and length(s.ident) >= 4;
+  where w.visible is not false and length(s.ident) >= 4
+    and not exists (select 1 from workin_vendor_code x where x.place_id = w.id);
   get diagnostics n_serial = row_count;
 
   -- 2순위: comment 앞부분(모델 칸)에 자산번호를 적어둔 지점 — 동일 식별자 풀로 잡는다

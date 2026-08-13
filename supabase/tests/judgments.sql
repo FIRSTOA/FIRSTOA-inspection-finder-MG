@@ -38,5 +38,13 @@ begin
   if vendor_key_('한성 알앤씨') <> vendor_key_('한성알앤씨') then raise exception 'key: 공백 차이'; end if;
   if length(vendor_key_('아주아주아주아주긴업체명입니다')) <> 8 then raise exception 'key: 8자 제한'; end if;
 
+  -- vendor_match_key_ : TS vendorMatchKey(src/ids.ts)와 동일해야 한다 (tests/judgments.test.ts와 같은 케이스)
+  if vendor_match_key_('㈜더채움자산운용') <> '더채움자산운용' then raise exception 'mkey: ㈜ 제거'; end if;
+  if vendor_match_key_('주식회사 무천디자인') <> '무천디자인' then raise exception 'mkey: 법인 접두 제거'; end if;
+  if vendor_match_key_('2109/27SS한성알앤씨매월마감') <> '한성알앤씨' then raise exception 'mkey: 재계약 접두'; end if;
+  if vendor_match_key_('20#SS한불엠앤에스㈜1층 리셉션 사무실안쪽매월마감') <> '한불엠앤에스1층리셉션사무실안쪽' then raise exception 'mkey: # 접두'; end if;
+  if vendor_match_key_('4S㈜화인브릿지학동로분기마감') <> '화인브릿지학동로' then raise exception 'mkey: 마감 꼬리'; end if;
+  if vendor_match_key_('14SS㈜이오플랜본사1매월마감') <> '이오플랜본사1' then raise exception 'mkey: 등급 접두'; end if;
+
   raise notice 'OK: SQL 판정 테스트 전부 통과';
 end $$;

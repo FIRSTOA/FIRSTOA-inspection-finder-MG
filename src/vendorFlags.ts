@@ -5,6 +5,7 @@
  */
 import { selectAllRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
+import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 
 export type VendorWorkFlags = {
   // 이번 분기 워킨맵(점검) 등재 여부 — done=G5 완료, carried=G12 이관
@@ -20,7 +21,7 @@ export type VendorWorkFlags = {
   bulman: { date: string; content: string } | null;
 };
 
-type PlaceRow = { name: string; label: string; quarter: number; kind: string; memos?: unknown };
+type PlaceRow = { id: number; name: string; label: string; quarter: number; kind: string; memos?: unknown };
 
 // WalkingMap contractEnd와 같은 규칙(간이판): "계약종료 2608" / 이름 접두 "2608/" → 종료 연·월
 function contractEndMonth(name: string, memos: string[]): { year: number; month: number } | null {
@@ -58,6 +59,13 @@ type Sources = {
   renewal: Map<string, { quarter: number; label: string; endMonth: number | null }[]>;
   overage: Map<string, { total: string; date: string }>;
   bulman: Map<string, { date: string; content: string }>;
+  // 거래처 코드 계층 — 이름 키와 병행 구축, 조회 시 코드 일치를 먼저 본다
+  alias: Map<string, string | null>;
+  misuByCode: Map<string, { months: string; balance: string; date: string; cleared: boolean }>;
+  inspectionByCode: Map<string, { quarter: number; label: string }[]>;
+  renewalByCode: Map<string, { quarter: number; label: string; endMonth: number | null }[]>;
+  overageByCode: Map<string, { total: string; date: string }>;
+  bulmanByCode: Map<string, { date: string; content: string }>;
 };
 
 let cached: { at: number; promise: Promise<Sources> } | null = null;
@@ -70,16 +78,19 @@ async function loadSources(): Promise<Sources> {
   const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
   const bulmanCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows] = await Promise.all([
+  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
     selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
-    selectAllRows<PlaceRow>("workin_map_places", `select=name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter})`),
-    selectAllRows<PlaceRow>("workin_map_places", `select=name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}`),
+    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter})`),
+    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}`),
     selectAllRows<Record<string, unknown>>("overage", `select=${encodeURIComponent("_업체명,합계,날짜")}&order=id.asc`),
     selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
+    getAliasCodeMap().catch(() => new Map<string, string | null>()),
+    getWorkinCodeMap().catch(() => new Map<number, string>()),
   ]);
 
   const misu = new Map<string, { months: string; balance: string; date: string; cleared: boolean }>();
+  const misuByCode = new Map<string, { months: string; balance: string; date: string; cleared: boolean }>();
   for (const row of misuRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
@@ -91,30 +102,38 @@ async function loadSources(): Promise<Sources> {
     const prev = misu.get(key);
     // 완납(잔액 0) 기록도 최신이면 유지 — "언제 완납됐다"를 보여줘야 이중 체크가 없다.
     if (!prev || date > prev.date) misu.set(key, { months: monthsText, balance: balanceText, date, cleared: !digits || Number(digits) === 0 });
+    const code = translateVendor(alias, String(row["_업체명"] || ""));
+    if (code) {
+      const prevCode = misuByCode.get(code);
+      if (!prevCode || date > prevCode.date) misuByCode.set(code, { months: monthsText, balance: balanceText, date, cleared: !digits || Number(digits) === 0 });
+    }
   }
 
   const inspection = new Map<string, { quarter: number; label: string }[]>();
+  const inspectionByCode = new Map<string, { quarter: number; label: string }[]>();
   for (const row of quarterRows) {
+    const entry = { quarter: row.quarter, label: String(row.label || "") };
     const key = vendorMatchKey(row.name || "");
-    if (!key) continue;
-    const list = inspection.get(key) || [];
-    list.push({ quarter: row.quarter, label: String(row.label || "") });
-    inspection.set(key, list);
+    if (key) inspection.set(key, [...(inspection.get(key) || []), entry]);
+    const code = placeCodes.get(Number(row.id));
+    if (code) inspectionByCode.set(code, [...(inspectionByCode.get(code) || []), entry]);
   }
 
   const renewal = new Map<string, { quarter: number; label: string; endMonth: number | null }[]>();
+  const renewalByCode = new Map<string, { quarter: number; label: string; endMonth: number | null }[]>();
   for (const row of renewalRows) {
     const memos = Array.isArray(row.memos) ? (row.memos as unknown[]).map((m) => String(m)) : [];
     const end = contractEndMonth(row.name || "", memos);
     if (end && !inspectionMonths.includes(end.month)) continue; // 종료월이 이번 점검분기 밖이면 제외(워킨맵과 동일)
+    const entry = { quarter: row.quarter, label: String(row.label || ""), endMonth: end?.month ?? null };
     const key = vendorMatchKey(row.name || "");
-    if (!key) continue;
-    const list = renewal.get(key) || [];
-    list.push({ quarter: row.quarter, label: String(row.label || ""), endMonth: end?.month ?? null });
-    renewal.set(key, list);
+    if (key) renewal.set(key, [...(renewal.get(key) || []), entry]);
+    const code = placeCodes.get(Number(row.id));
+    if (code) renewalByCode.set(code, [...(renewalByCode.get(code) || []), entry]);
   }
 
   const overage = new Map<string, { total: string; date: string }>();
+  const overageByCode = new Map<string, { total: string; date: string }>();
   for (const row of overageRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
@@ -124,9 +143,15 @@ async function loadSources(): Promise<Sources> {
     const date = String(row["날짜"] || "").trim();
     const prev = overage.get(key);
     if (!prev || date > prev.date) overage.set(key, { total, date });
+    const code = translateVendor(alias, String(row["_업체명"] || ""));
+    if (code) {
+      const prevCode = overageByCode.get(code);
+      if (!prevCode || date > prevCode.date) overageByCode.set(code, { total, date });
+    }
   }
 
   const bulman = new Map<string, { date: string; content: string }>();
+  const bulmanByCode = new Map<string, { date: string; content: string }>();
   for (const row of bulmanRows) {
     const key = vendorMatchKey(String(row["_업체명"] || ""));
     if (!key) continue;
@@ -134,9 +159,14 @@ async function loadSources(): Promise<Sources> {
     if (!date || date < bulmanCutoff) continue;
     const prev = bulman.get(key);
     if (!prev || date > prev.date) bulman.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
+    const code = translateVendor(alias, String(row["_업체명"] || ""));
+    if (code) {
+      const prevCode = bulmanByCode.get(code);
+      if (!prevCode || date > prevCode.date) bulmanByCode.set(code, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
+    }
   }
 
-  return { quarter, misu, inspection, renewal, overage, bulman };
+  return { quarter, misu, inspection, renewal, overage, bulman, alias, misuByCode, inspectionByCode, renewalByCode, overageByCode, bulmanByCode };
 }
 
 function getSources(): Promise<Sources> {
@@ -166,11 +196,13 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
   const dueYear = String(new Date().getFullYear()).slice(2);
   for (const vendor of unique) {
     const key = vendorMatchKey(vendor);
-    const insp = lookup(sources.inspection, key);
-    const misu = lookup(sources.misu, key);
-    const renew = lookup(sources.renewal, key);
-    const over = lookup(sources.overage, key);
-    const bul = lookup(sources.bulman, key);
+    // 거래처 코드로 번역되면 코드 일치를 먼저 본다 — 표기가 달라도 정확히 잡힌다
+    const code = translateVendor(sources.alias, vendor);
+    const insp = (code ? sources.inspectionByCode.get(code) : undefined) ?? lookup(sources.inspection, key);
+    const misu = (code ? sources.misuByCode.get(code) : undefined) ?? lookup(sources.misu, key);
+    const renew = (code ? sources.renewalByCode.get(code) : undefined) ?? lookup(sources.renewal, key);
+    const over = (code ? sources.overageByCode.get(code) : undefined) ?? lookup(sources.overage, key);
+    const bul = (code ? sources.bulmanByCode.get(code) : undefined) ?? lookup(sources.bulman, key);
     const flags: VendorWorkFlags = {
       inspection: insp?.length ? {
         quarter: insp[0].quarter,
