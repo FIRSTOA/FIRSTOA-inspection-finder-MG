@@ -898,6 +898,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
   const signaturesRef = useRef(new Map<number, string>());
   const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
   const popupRef = useRef<KakaoNS | null>(null);              // 열려 있는 그룹 팝업
+  const popupOpenedAtRef = useRef(0);                          // 핀 클릭이 지도 클릭으로도 잡혀 곧장 닫히는 것 방지
   const gpsRef = useRef<KakaoNS[]>([]);
   const addressPinRef = useRef<KakaoNS | null>(null);
   const [ready, setReady] = useState(false);
@@ -909,8 +910,12 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const map = new kakao.maps.Map(elementRef.current, { center: new kakao.maps.LatLng(view.lat, view.lng), level: view.level });
     mapRef.current = map;
     kakao.maps.event.addListener(map, "tilesloaded", () => setReady(true));
-    // 그룹 팝업은 지도 아무 데나 누르면 닫힌다 (✕만 고집하지 않게)
-    kakao.maps.event.addListener(map, "click", () => { if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; } });
+    // 그룹 팝업은 지도 아무 데나 누르면 닫힌다 (✕만 고집하지 않게).
+    // 단 핀 클릭 직후의 지도 클릭(같은 터치)은 무시 — 열리자마자 닫히는 경쟁 방지
+    kakao.maps.event.addListener(map, "click", () => {
+      if (Date.now() - popupOpenedAtRef.current < 350) return;
+      if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
+    });
     window.setTimeout(() => setReady(true), 2500); // 이벤트가 안 와도 로딩막은 걷는다
     // 주소 검색 다리
     addressClearBridge = () => { if (addressPinRef.current) { addressPinRef.current.setMap(null); addressPinRef.current = null; } };
@@ -1046,9 +1051,10 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
           list.appendChild(button);
         });
         popup.appendChild(list);
-        const overlay = new kakao.maps.CustomOverlay({ position: displayPos, content: popup, yAnchor: 1.15, zIndex: 600 });
+        const overlay = new kakao.maps.CustomOverlay({ position: displayPos, content: popup, yAnchor: 1.15, zIndex: 600, clickable: true });
         overlay.setMap(map);
         popupRef.current = overlay;
+        popupOpenedAtRef.current = Date.now();
       };
       const handleClick = () => { if (group.length === 1) onSelect(place.id); else openGroupPopup(); };
 

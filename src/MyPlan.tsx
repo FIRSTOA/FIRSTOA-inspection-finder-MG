@@ -351,9 +351,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
           const f = flags.get(t.vendor.trim());
           return (
-            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex items-center gap-2.5 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
+            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex flex-wrap items-center gap-2.5 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 basis-[55%]">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
@@ -374,13 +374,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
                   </span>
                 )}
               </span>
-              <button type="button" onClick={(e) => { e.stopPropagation(); setDetail(t); }} className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">상세</button>
-              {onUseField && <button type="button" onClick={(e) => { e.stopPropagation(); setFieldPick(t); }} className="shrink-0 rounded-lg bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
-              <a href={kakao} onClick={(e) => e.stopPropagation()} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="shrink-0 rounded-lg bg-[#FEE500] px-2 py-1.5 text-[11px] font-black text-slate-900">길찾기</a>
-              <button type="button" onClick={(e) => { e.stopPropagation(); togglePin(t.id); }}
-                className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
-              </button>
+              {/* 모바일: 버튼줄이 내용 아래 한 줄로 — 내용 칸이 눌려 업체명이 안 보이던 것 방지 */}
+              <span className="flex w-full items-center gap-1.5 pl-9 sm:w-auto sm:pl-0" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
+                {onUseField && <button type="button" onClick={() => setFieldPick(t)} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
+                <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">길찾기</a>
+                <button type="button" onClick={() => togglePin(t.id)}
+                  className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
+                  {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
+                </button>
+              </span>
             </div>
           );
         })}
@@ -388,7 +391,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
       </div>
       {fieldPick && (
         <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFieldPick(null)}>
-          <div className="flex max-h-[86vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-[82vh] sm:max-w-2xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
               <div className="min-w-0">
                 <div className="text-[11px] font-black text-slate-400">거래처·양식 검색 — 불러오면 FIELD로 변환됩니다</div>
