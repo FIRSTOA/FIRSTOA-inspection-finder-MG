@@ -279,6 +279,8 @@ function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
       {flags.renewal && (flags.renewal.done
         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">재계약 완료</span>
         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약{flags.renewal.due ? ` · 종료 ${flags.renewal.due}` : ""}</span>)}
+      {flags.overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 {flags.overage.total.replace(/[^\d]/g, "") ? `${Math.round(Number(flags.overage.total.replace(/[^\d]/g, "")) / 10000).toLocaleString()}만원` : ""}</span>}
+      {flags.bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={flags.bulman.content}>불만 {flags.bulman.date.slice(5)}</span>}
     </span>
   );
 }

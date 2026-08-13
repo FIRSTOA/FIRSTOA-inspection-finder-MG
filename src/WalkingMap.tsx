@@ -73,6 +73,9 @@ const teamMapViews: Record<Team, { center: [number, number]; zoom: number }> = {
   D: { center: [37.65, 127.2], zoom: 9 },
 };
 
+// MapCanvas(자식)의 지도 인스턴스를 메인 컴포넌트의 주소 검색이 쓸 수 있게 하는 다리
+let addressFlyBridge: ((lat: number, lng: number, label: string, sub: string) => void) | null = null;
+
 const mapLabels: MapLabel[] = [
   { code: "G1", name: "", color: "#ff8458" },
   { code: "G2", name: "", color: "#ffb51b" },
@@ -612,6 +615,7 @@ type CurrentPosition = {
 const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorageKey, onSelect, currentPosition }: { places: MapPlace[]; selectedId: number | null; team: Team; viewStorageKey: string; onSelect: (id: number) => void; currentPosition: CurrentPosition | null }) {
   const elementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const addressPinRef = useRef<L.Marker | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const canvasRendererRef = useRef<L.Canvas | null>(null);
   const markerByIdRef = useRef(new Map<number, L.Marker | L.CircleMarker>());
@@ -659,6 +663,14 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     locationLayerRef.current = L.layerGroup().addTo(map);
     canvasRendererRef.current = L.canvas({ padding: 0.18 });
     mapRef.current = map;
+    // 주소 검색(메인 컴포넌트)에서 좌표로 지도를 움직일 수 있게 모듈 다리 등록
+    addressFlyBridge = (lat, lng, label, sub) => {
+      if (addressPinRef.current) { addressPinRef.current.remove(); addressPinRef.current = null; }
+      const marker = L.marker([lat, lng], { zIndexOffset: 1000 });
+      marker.addTo(map).bindPopup(`📍 ${label}<br/><span style="font-size:11px;color:#64748b">${sub}</span>`).openPopup();
+      addressPinRef.current = marker;
+      map.flyTo([lat, lng], Math.max(map.getZoom(), 15));
+    };
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
     observer.observe(elementRef.current);
     window.setTimeout(() => map.invalidateSize({ pan: false }), 50);
@@ -666,6 +678,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
       observer.disconnect();
       map.remove();
       mapRef.current = null;
+      addressFlyBridge = null;
       markerLayerRef.current = null;
       locationLayerRef.current = null;
       canvasRendererRef.current = null;
@@ -864,6 +877,25 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [sharedReady, setSharedReady] = useState(false);
   const [syncState, setSyncState] = useState<"loading" | "saved" | "error">("loading");
   const [query, setQuery] = useState("");
+  // 주소 지오코딩(OSM) — 분기점검에 없는 AS 방문지도 주소만 치면 지도에서 위치 확인
+  const [geocoding, setGeocoding] = useState(false);
+  const locateAddress = async (raw: string) => {
+    const q = raw.trim();
+    if (!q) return;
+    setGeocoding(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(q)}`, { headers: { "Accept-Language": "ko" } });
+      const hits = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+      if (!hits.length) { notify(`"${q}" 주소를 찾지 못했어요 — 도로명 주소로 다시 시도해 보세요.`, "error"); return; }
+      const hit = hits[0];
+      if (addressFlyBridge) addressFlyBridge(Number(hit.lat), Number(hit.lon), q, hit.display_name.split(",").slice(0, 3).join(","));
+      else notify("지도가 아직 준비되지 않았어요 — 잠시 후 다시 시도해 주세요.", "error");
+    } catch (e) {
+      notify(`주소 검색 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setGeocoding(false);
+    }
+  };
   const [mapQuery, setMapQuery] = useState("");
   const [mapSearchFocused, setMapSearchFocused] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | null>(null);
@@ -880,6 +912,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [quarterHasRenewal, setQuarterHasRenewal] = useState(false);
   const [quarterHasMisu, setQuarterHasMisu] = useState(false);
   const [quarterHasOverage, setQuarterHasOverage] = useState(false);
+  const [quarterHasBulman, setQuarterHasBulman] = useState(false);
   const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
   const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">("default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
@@ -899,6 +932,31 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   }, []);
   // 초과료: 초과시트(overage) 거래처별 최신 1건 — 점검 동선에 초과조정을 얹을지 판단용
   const [overageByVendor, setOverageByVendor] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
+  // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
+  const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
+  // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
+  const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; rows: Array<{ date: string; text: string }>; loading: boolean } | null>(null);
+  const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만") => {
+    setFlagHistory({ vendor, kind, rows: [], loading: true });
+    const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
+    const key = vendorMatchKey(vendor);
+    void selectAllRows<Record<string, unknown>>(table, `select=*&order=id.desc&limit=400`)
+      .then((rows) => {
+        const hits = rows.filter((r) => {
+          const rk = vendorMatchKey(String(r["_업체명"] || ""));
+          return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
+        }).slice(0, 6).map((r) => ({
+          date: String(r["입력일"] || r["방문일"] || r["날짜"] || "").slice(0, 10),
+          text: kind === "미수"
+            ? `${String(r["미수개월"] || r["실제 개월수"] || "")}개월 · ${misuBalanceLabel(String(r["미수잔액"] || r["실제 잔액"] || ""))}`
+            : kind === "초과"
+              ? `${misuBalanceLabel(String(r["합계"] || ""))} (컬러 ${String(r["컬러초과료"] || "0")} / 흑백 ${String(r["흑백초과료"] || "0")})`
+              : String(r["불만내용"] || r["불편내용"] || r["조치내용"] || "").slice(0, 120) || "내용 없음",
+        }));
+        setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, rows: hits, loading: false } : cur));
+      })
+      .catch(() => setFlagHistory((cur) => (cur && cur.vendor === vendor ? { ...cur, loading: false } : cur)));
+  };
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -1109,13 +1167,33 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       .catch((error) => console.error("Overage load failed", error));
   }, []);
 
+  const loadBulman = useCallback(() => {
+    const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const select = encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용");
+    void selectAllRows<Record<string, unknown>>("bulman", `select=${select}&order=id.desc&limit=600`)
+      .then((rows) => {
+        const map = new Map<string, { date: string; content: string }>();
+        for (const row of rows) {
+          const key = vendorMatchKey(String(row["_업체명"] || ""));
+          if (!key) continue;
+          const date = String(row["방문일"] || row["날짜"] || "").slice(0, 10);
+          if (!date || date < cutoff) continue;
+          const prev = map.get(key);
+          if (!prev || date > prev.date) map.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
+        }
+        setBulmanByVendor(map);
+      })
+      .catch((error) => console.error("Bulman load failed", error));
+  }, []);
+
   useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
   useEffect(() => { loadMisu(); }, [loadMisu]);
   useEffect(() => { loadOverage(); }, [loadOverage]);
+  useEffect(() => { loadBulman(); }, [loadBulman]);
 
   // 점검 방문일·미수는 창 포커스/탭 복귀 시 최신으로 다시 불러온다(재계약/색칠처럼).
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); loadOverage(); } };
+    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); loadOverage(); loadBulman(); } };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
@@ -1296,6 +1374,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
         if (quarterHasMisu && lookupVendor(misuByVendor, place.name) === undefined) return false;
         if (quarterHasOverage && lookupVendor(overageByVendor, place.name) === undefined) return false;
+        if (quarterHasBulman && lookupVendor(bulmanByVendor, place.name) === undefined) return false;
         if (quarterGrades.length && !quarterGrades.includes(renewalGrade(place))) return false;
       }
       return true;
@@ -1322,7 +1401,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, lookupVendor]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, lookupVendor]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1730,7 +1809,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       </div>
       <div className="border-b border-slate-200 p-3">
         <div className="flex gap-2">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && query.trim() && !filtered.length) void locateAddress(query); }} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <button type="button" disabled={geocoding || !query.trim()} onClick={() => void locateAddress(query)} title="주소를 좌표로 찾아 지도에 표시"
+            className="shrink-0 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">{geocoding ? "…" : "📍주소"}</button>
           {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
@@ -1747,7 +1828,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>재계약 있음</button>
             <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>미수 있음</button>
             <button type="button" onClick={() => setQuarterHasOverage((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasOverage ? "bg-purple-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>초과 있음</button>
-            {(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
+            <button type="button" onClick={() => setQuarterHasBulman((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasBulman ? "bg-red-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>불만 있음</button>
+            {(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterHasBulman(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
             {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade}</button>)}
@@ -1793,6 +1875,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
           const misu = lookupVendor(misuByVendor, place.name);
           const overage = lookupVendor(overageByVendor, place.name);
+          const bulman = lookupVendor(bulmanByVendor, place.name);
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
@@ -1823,13 +1906,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {((place.kind === "quarter" && renewalMatch) || misu || overage) && (
+                  {((place.kind === "quarter" && renewalMatch) || misu || overage || bulman) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
                         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료</span>
                         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 있음{renewalMatch.dueLabel ? ` · 종료 ${renewalMatch.dueLabel}` : ""}{renewalMatch.isPrev ? " (전분기)" : ""}</span>)}
-                      {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">미수 있음{misuMonths ? ` · ${misuMonths}개월` : misuBal ? ` · ${misuBal}` : ""}</span>}
-                      {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 있음{wonShort(overage.total) ? ` · ${wonShort(overage.total)}` : ""}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수"); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">미수 있음{misuMonths ? ` · ${misuMonths}개월` : misuBal ? ` · ${misuBal}` : ""}</span>}
+                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과"); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 있음{wonShort(overage.total) ? ` · ${wonShort(overage.total)}` : ""}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만"); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 있음 · {bulman.date.slice(5)}</span>}
                     </span>
                   )}
                 </span>
@@ -2343,6 +2427,29 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 );
               })}
               <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준 · 매월점검은 G2×1·G3×2·G5×3로 환산. 과거 완료분은 완료일 기록이 없어 주차엔 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {flagHistory && (
+        <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
+          <div className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-black text-slate-400">최근 {flagHistory.kind} 이력</div>
+                <div className="truncate text-[15px] font-black text-white">{flagHistory.vendor}</div>
+              </div>
+              <button type="button" onClick={() => setFlagHistory(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+              {flagHistory.loading && <div className="py-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
+              {!flagHistory.loading && !flagHistory.rows.length && <div className="py-8 text-center text-xs font-bold text-slate-400">이력을 찾지 못했습니다.</div>}
+              {flagHistory.rows.map((r, i) => (
+                <div key={i} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="text-[10px] font-black text-slate-400">{r.date || "날짜 미상"}</div>
+                  <div className="mt-0.5 whitespace-pre-wrap text-[12px] font-bold leading-5 text-slate-700">{r.text}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -14,6 +14,10 @@ export type VendorWorkFlags = {
   misu: { months: string; balance: string; date: string; cleared: boolean } | null;
   // 재계약 워킨맵 등재 — done=매칭 전건 G5, due "26년 8월"
   renewal: { quarter: number; done: boolean; due: string } | null;
+  // 초과료(초과시트 최신 1건, 합계>0) — 방문 시 초과조정 영업 포인트
+  overage: { total: string; date: string } | null;
+  // 최근 90일 불만 — 방문 전 대응 준비
+  bulman: { date: string; content: string } | null;
 };
 
 type PlaceRow = { name: string; label: string; quarter: number; kind: string; memos?: unknown };
@@ -52,6 +56,8 @@ type Sources = {
   misu: Map<string, { months: string; balance: string; date: string; cleared: boolean }>;
   inspection: Map<string, { quarter: number; label: string }[]>;
   renewal: Map<string, { quarter: number; label: string; endMonth: number | null }[]>;
+  overage: Map<string, { total: string; date: string }>;
+  bulman: Map<string, { date: string; content: string }>;
 };
 
 let cached: { at: number; promise: Promise<Sources> } | null = null;
@@ -63,11 +69,14 @@ async function loadSources(): Promise<Sources> {
   const inspectionMonths = [startMonth + 1, startMonth + 2, startMonth + 3];
   const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
-  const [misuRows, renewalRows, quarterRows] = await Promise.all([
+  const bulmanCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
     selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
     selectAllRows<PlaceRow>("workin_map_places", `select=name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter})`),
     selectAllRows<PlaceRow>("workin_map_places", `select=name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}`),
+    selectAllRows<Record<string, unknown>>("overage", `select=${encodeURIComponent("_업체명,합계,날짜")}&order=id.asc`),
+    selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
   ]);
 
   const misu = new Map<string, { months: string; balance: string; date: string; cleared: boolean }>();
@@ -105,7 +114,29 @@ async function loadSources(): Promise<Sources> {
     renewal.set(key, list);
   }
 
-  return { quarter, misu, inspection, renewal };
+  const overage = new Map<string, { total: string; date: string }>();
+  for (const row of overageRows) {
+    const key = vendorMatchKey(String(row["_업체명"] || ""));
+    if (!key) continue;
+    const total = String(row["합계"] || "").trim();
+    const digits = total.replace(/[^\d]/g, "");
+    if (!digits || Number(digits) === 0) continue;
+    const date = String(row["날짜"] || "").trim();
+    const prev = overage.get(key);
+    if (!prev || date > prev.date) overage.set(key, { total, date });
+  }
+
+  const bulman = new Map<string, { date: string; content: string }>();
+  for (const row of bulmanRows) {
+    const key = vendorMatchKey(String(row["_업체명"] || ""));
+    if (!key) continue;
+    const date = String(row["방문일"] || row["날짜"] || "").slice(0, 10);
+    if (!date || date < bulmanCutoff) continue;
+    const prev = bulman.get(key);
+    if (!prev || date > prev.date) bulman.set(key, { date, content: String(row["불만내용"] || row["불편내용"] || "").slice(0, 60) });
+  }
+
+  return { quarter, misu, inspection, renewal, overage, bulman };
 }
 
 function getSources(): Promise<Sources> {
@@ -138,6 +169,8 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
     const insp = lookup(sources.inspection, key);
     const misu = lookup(sources.misu, key);
     const renew = lookup(sources.renewal, key);
+    const over = lookup(sources.overage, key);
+    const bul = lookup(sources.bulman, key);
     const flags: VendorWorkFlags = {
       inspection: insp?.length ? {
         quarter: insp[0].quarter,
@@ -154,8 +187,10 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
           due: best.endMonth ? `${dueYear}년 ${best.endMonth}월` : "",
         };
       })() : null,
+      overage: over || null,
+      bulman: bul || null,
     };
-    if (flags.inspection || flags.misu || flags.renewal) result.set(vendor, flags);
+    if (flags.inspection || flags.misu || flags.renewal || flags.overage || flags.bulman) result.set(vendor, flags);
   }
   return result;
 }

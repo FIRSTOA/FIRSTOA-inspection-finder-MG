@@ -49,6 +49,8 @@ create or replace function suggest_workin_candidates(
     where w.visible is not false
       and (p_team = '' or w.team = p_team)
       and (p_kind = '' or w.kind = p_kind)
+      -- G5(점검 완료)·G12(이관)는 이번 분기 방문 대상이 아니다 — 추천에서 제외
+      and coalesce(w.label, '') not in ('G5', 'G12')
       -- 현재 분기 대상만 (워킨맵은 분기마다 갱신된다)
       and (w.quarter is null or w.quarter = extract(quarter from current_date)::int)
   ),

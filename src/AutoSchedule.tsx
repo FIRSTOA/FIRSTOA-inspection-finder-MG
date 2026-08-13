@@ -20,6 +20,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [team, setTeam] = useState("C");
   const [date, setDate] = useState(kstDate());
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [onlyMine, setOnlyMine] = useState(true);
   const [anchorId, setAnchorId] = useState("");
   const [anchorQuery, setAnchorQuery] = useState("");
   const [anchorGeo, setAnchorGeo] = useState<{ name: string; lat: number; lng: number } | null>(null);
@@ -33,10 +34,11 @@ export default function AutoSchedule({ author }: { author: string }) {
 
   // ① 그날 필수 스케줄 (일정리스트)
   const loadTickets = useCallback(async () => {
-    const list = await selectRows<Ticket>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType&date=eq.${date}&team=eq.${team}&order=time.asc`).catch(() => [] as Ticket[]);
+    const mineFilter = onlyMine && author ? `&assignee=eq.${encodeURIComponent(author)}` : "";
+    const list = await selectRows<Ticket>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType&date=eq.${date}&team=eq.${team}${mineFilter}&order=time.asc`).catch(() => [] as Ticket[]);
     setTickets(list);
     setAnchorId(list.length ? list[list.length - 1].id : "");
-  }, [date, team]);
+  }, [date, team, onlyMine, author]);
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
   // 앵커 좌표 — 워킨맵에서 업체명으로 찾는다 (일정에는 좌표가 없다)
@@ -128,7 +130,9 @@ export default function AutoSchedule({ author }: { author: string }) {
         <section className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-black text-slate-900">① 필수 스케줄 <span className="text-slate-400">{tickets.length}건</span></div>
+              <div className="flex items-center gap-1.5 text-sm font-black text-slate-900">① 필수 스케줄 <span className="text-slate-400">{tickets.length}건</span>
+                <button type="button" onClick={() => setOnlyMine((v) => !v)} className={`rounded-full px-2 py-0.5 text-[10px] font-black transition ${onlyMine ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{onlyMine ? "내 배정" : "전체"}</button>
+              </div>
               <button type="button" onClick={() => void loadTickets()} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500"><RefreshCw size={12} />새로고침</button>
             </div>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">마지막에 가는 일정을 기준(앵커)으로 잡습니다.</p>
