@@ -122,6 +122,18 @@ async function getValues(spreadsheetId: string, range: string, render: "FORMATTE
   return ((data.values as string[][]) || []).map((row) => row.map((v) => String(v ?? "")));
 }
 
+async function batchGetValues(spreadsheetId: string, ranges: string[]): Promise<Map<string, string[][]>> {
+  if (!ranges.length) return new Map();
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const data = await gapi(`/${spreadsheetId}/values:batchGet?${qs}&valueRenderOption=FORMATTED_VALUE`);
+  const out = new Map<string, string[][]>();
+  const returned = (data.valueRanges as Array<{ values?: string[][] }>) || [];
+  ranges.forEach((range, i) => {
+    out.set(range, ((returned[i]?.values as string[][]) || []).map((row) => row.map((v) => String(v ?? ""))));
+  });
+  return out;
+}
+
 async function setValues(spreadsheetId: string, range: string, values: (string | number)[][]): Promise<void> {
   await gapi(`/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
     method: "PUT",
@@ -458,25 +470,55 @@ export async function appendViaSheetsApi(
   const config = FIELD_SHEETS[request.category];
   if (!config) throw new Error("지원하지 않는 동기화 종류입니다.");
 
-  const lockToken = await acquireLock(env.rest, env.headers);
-  try {
+  // 잠금 획득과 정적 읽기(문서 메타·헤더)는 서로 독립 — 병렬로 시작해 왕복을 아낀다
+  const lockPromise = acquireLock(env.rest, env.headers);
+  const staticPromise = (async () => {
     const meta = await spreadsheetMeta(config.spreadsheetId);
     const sheetMeta = meta.sheets.get(config.sheetId);
     if (!sheetMeta) throw new Error("대상 시트 탭을 찾지 못했습니다.");
+    const top = await getValues(config.spreadsheetId, `${quoteTitle(sheetMeta.title)}!1:20`);
+    return { sheetMeta, top };
+  })();
+  const [lockToken, staticData] = await Promise.all([lockPromise, staticPromise.catch((e) => e as Error)]);
+  try {
+    if (staticData instanceof Error) throw staticData;
+    const { sheetMeta, top } = staticData;
     const title = sheetMeta.title;
     const T = quoteTitle(title);
-
-    // 헤더 행 탐지 (상위 20행) + 헤더 목록
-    const top = await getValues(config.spreadsheetId, `${T}!1:20`);
     const headerRow = findHeaderRow(top, request.category);
     const headers = top[headerRow - 1] || [];
     const lastColumn = Math.max(headers.length, 1);
-
-    // 데이터 영역 스냅샷 — jobId 멱등성·마커 스캔·찾기 갱신을 한 번의 호출로 해결
     const bodyStart = headerRow + 1;
-    const body = await getValues(config.spreadsheetId, `${T}!A${bodyStart}:${colA1(lastColumn)}`);
-    const lastRow = bodyStart + body.length - 1;
-    const cellAt = (row: number, col: number) => String((body[row - bodyStart] || [])[col - 1] ?? "");
+
+    // 본문은 전체가 아니라 "판단에 필요한 열"만 한 번의 batchGet으로 읽는다
+    // (원격 탭 700행×32열 통읽기가 기입 시간의 절반을 먹던 병목)
+    const dataPre = request.payload?.data || {};
+    const neededCols = new Set<number>();
+    const jobIdColPre = headers.indexOf("웹앱 전송ID") + 1;
+    if (jobIdColPre > 0) neededCols.add(jobIdColPre);
+    const markerHeaderNames = request.category === "reception_remote" ? ["접수일", "접수자", "유입경로"]
+      : request.category === "praise" ? ["날짜", "직원", "거래처명"]
+      : ["날짜", "접수자", "퍼스트순"];
+    for (const name of markerHeaderNames) {
+      const col = headers.indexOf(name) + 1;
+      if (col > 0) neededCols.add(col);
+    }
+    const updKeyCol = Number(dataPre["_updateKeyColumn"] || 0) || (dataPre["_updateKeyHeader"] ? headers.indexOf(String(dataPre["_updateKeyHeader"])) + 1 : 0);
+    if (updKeyCol > 0) neededCols.add(updKeyCol);
+    const findKeyCol = Number(dataPre["_findKeyColumn"] || 0) || (dataPre["_findKeyHeader"] ? headers.indexOf(String(dataPre["_findKeyHeader"])) + 1 : 0);
+    if (findKeyCol > 0) neededCols.add(findKeyCol);
+    if (request.category === "reception_remote") neededCols.add(2); // B열 — 순번 계산 재료
+
+    const colList = [...neededCols].sort((a, b) => a - b);
+    const colRanges = colList.map((col) => `${T}!${colA1(col)}${bodyStart}:${colA1(col)}`);
+    const fetched = await batchGetValues(config.spreadsheetId, colRanges);
+    const colValues = new Map<number, string[]>();
+    colList.forEach((col, i) => {
+      colValues.set(col, (fetched.get(colRanges[i]) || []).map((row) => String(row[0] ?? "")));
+    });
+    let lastRow = bodyStart - 1;
+    for (const values of colValues.values()) lastRow = Math.max(lastRow, bodyStart + values.length - 1);
+    const cellAt = (row: number, col: number) => String((colValues.get(col) || [])[row - bodyStart] ?? "");
 
     const rawData = request.payload?.data || {};
     const data: Record<string, string> = {};
@@ -595,8 +637,16 @@ export async function appendViaSheetsApi(
       await batchUpdate(config.spreadsheetId, copyRequests);
     }
 
-    // 값 기입 (연속 구간 일괄)
-    await batchSetValues(config.spreadsheetId, segmentsOf(row, title, valuesForRow(row)));
+    // 값 기입 (연속 구간 일괄) — 원격 A열 순번도 같은 batch에 포함 (별도 왕복 제거)
+    const rowValues = valuesForRow(row);
+    if (request.category === "reception_remote") {
+      const bColumn = colValues.get(2) || [];
+      let seq = 0;
+      for (let r = 5; r < row; r++) { if (String(bColumn[r - bodyStart] ?? "").trim() !== "") seq++; }
+      const willWriteB = rowValues[2] !== undefined && String(rowValues[2]).trim() !== "";
+      rowValues[1] = String(seq + (willWriteB ? 1 : 0));
+    }
+    await batchSetValues(config.spreadsheetId, segmentsOf(row, title, rowValues));
 
     if (request.category === "contact_change") {
       const formula = (await getValues(config.spreadsheetId, `${T}!M${row}`, "FORMULA"))[0]?.[0] || "";
@@ -610,15 +660,6 @@ export async function appendViaSheetsApi(
     if (request.category === "reception_remote" && data["leaseNo"]) {
       try { await fillLeaseValues(config.spreadsheetId, title, row, "reception_remote", data); } catch { /* 수식 폴백 */ }
     }
-    if (request.category === "reception_remote") {
-      try {
-        const bValues = await getValues(config.spreadsheetId, `${T}!B5:B${row}`);
-        let seq = 0;
-        for (const bRow of bValues) if (String(bRow[0] || "").trim() !== "") seq++;
-        await setValues(config.spreadsheetId, `${T}!A${row}`, [[String(seq)]]);
-      } catch { /* 순번은 보조 정보 */ }
-    }
-
     return { row, sheet: title };
   } finally {
     await releaseLock(env.rest, env.headers, lockToken);
