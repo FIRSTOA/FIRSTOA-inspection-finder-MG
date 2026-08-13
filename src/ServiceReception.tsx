@@ -707,7 +707,8 @@ export default function ServiceReception({ author }: { author: string }) {
         start: "", end: "", result: "", handler: "",
         // U열: 접수자 성함 + 연락처를 줄바꿈으로 합친다
         contact: [manual.접수자성함.trim(), manual.접수자연락처.trim()].filter(Boolean).join("\n"),
-        symptom: manual.증상.trim(), extraCount: "", handled: "", linked: "",
+        // 등록 폼의 "처리 내용/메모"는 시트 '처리내용' 열로 — 원격팀이 등록 때 적은 메모가 사라지지 않게
+        symptom: manual.증상.trim(), extraCount: "", handled: type === "원격이관" ? manual.참고사항.trim() : "", linked: "",
         // 신규는 순번 함수가 못 채우는 열을 직접 기입 (기존은 보내지 않아 수식 유지)
         ...(custKind === "신규" ? { company: vendorName, ...newRemote } : {}),
       };
@@ -1162,20 +1163,6 @@ export default function ServiceReception({ author }: { author: string }) {
                   <span className="flex shrink-0 items-center gap-2">
                     {row.address_changed && !row.address_resolved_at && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800" title="임대리스트와 다른 주소로 접수됨">📍</span>}
                     {(() => { const state = displayStatusOf(row); return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${DISPLAY_STATUS_TONE[state]}`}>{state}</span>; })()}
-                    {(row.type === "원격이관" || row.type === "IT") && (() => {
-                      const state = displayStatusOf(row);
-                      if (state === "완료") return null;
-                      const started = state === "진행중";
-                      // 시작·끝을 별도 버튼으로 — 토글 방식은 재클릭(재시도)이 곧바로 완료로 이어지는 사고가 났다
-                      return <>
-                        {!started && <span onClick={(e) => { e.stopPropagation(); void saveHandling(row, { start: kstNowHM() }, true); }}
-                          title="시작 시각 기록 — 진행중 처리"
-                          className="flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-blue-600 px-3 text-[11px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">▶ 시작</span>}
-                        {started && <span onClick={(e) => { e.stopPropagation(); if (!window.confirm(`${row.vendor || "이 건"} 처리를 끝낼까요? (종료 시각 기록 → 완료)`)) return; void saveHandling(row, { end: kstNowHM() }, true); }}
-                          title="종료 시각 기록 — 완료 처리"
-                          className="flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-900 px-3 text-[11px] font-black text-white transition hover:bg-slate-800">■ 끝</span>}
-                      </>;
-                    })()}
                   </span>
                 </button>
                 {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
@@ -1211,15 +1198,15 @@ export default function ServiceReception({ author }: { author: string }) {
                           <span className="text-[11px] font-black text-blue-700">원격 처리</span>
                           <span className="text-[10px] font-bold text-slate-400">한조처리 {meta.hanjo || (row.type === "IT" ? "IT" : "공백")}</span>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {meta.start
-                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">시작 {meta.start}</span>
-                            : <button type="button" onClick={() => void saveHandling(row, { start: kstNowHM() }, true)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700">▶ 원격 시작</button>}
-                          {meta.start && (meta.end
-                            ? <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-700">종료 {meta.end}</span>
-                            : <button type="button" onClick={() => void saveHandling(row, { end: kstNowHM() }, true)} className="rounded-full bg-slate-900 px-4 py-2 text-[12px] font-black text-white transition hover:bg-slate-800">■ 종료</button>)}
-                          {meta.start && <input value={meta.start} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { start: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { start: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="시작 수정" />}
-                          {meta.end && <input value={meta.end} inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { end: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { end: normalizeTime(e.target.value) })} className={`w-16 ${field} tabular-nums`} title="종료 수정" />}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          {/* 원격팀 요청: 스탬프 버튼 대신 시간을 직접 타이핑 (0930 → 09:30 자동) */}
+                          <label className="flex items-center gap-1 text-[11px] font-black text-slate-500">시작
+                            <input value={meta.start || ""} placeholder="09:30" inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { start: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { start: normalizeTime(e.target.value) })} className={`w-[4.5rem] ${field} tabular-nums`} />
+                          </label>
+                          <label className="flex items-center gap-1 text-[11px] font-black text-slate-500">종료
+                            <input value={meta.end || ""} placeholder="10:00" inputMode="numeric" maxLength={5} onChange={(e) => patchHandling(row, { end: typeTime(e.target.value) })} onBlur={(e) => patchHandling(row, { end: normalizeTime(e.target.value) })} className={`w-[4.5rem] ${field} tabular-nums`} />
+                          </label>
+                          <button type="button" onClick={() => patchHandling(row, meta.start ? { end: kstNowHM() } : { start: kstNowHM() })} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50" title="빈 칸에 현재 시각 채우기">지금</button>
                         </div>
                         <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                           <select value={meta.result || ""} onChange={(e) => patchHandling(row, { result: e.target.value })} className={field}>
@@ -1238,8 +1225,8 @@ export default function ServiceReception({ author }: { author: string }) {
                             // 원격·IT는 시작·끝 시각이 시트의 시작·종료 열 — 안 찍고 저장하면 빈 열로 반영된다
                             if (row.type === "원격이관" || row.type === "IT") {
                               const meta = handlingOf(row);
-                              const missing = [!meta.start && "▶ 시작", !meta.end && "■ 끝"].filter(Boolean).join("과 ");
-                              if (missing) { window.alert(`${missing}을 먼저 눌러 시각을 기록해 주세요.\n시작·종료 시각이 있어야 처리 저장·시트 반영이 됩니다.`); return; }
+                              const missing = [!meta.start && "시작", !meta.end && "종료"].filter(Boolean).join("·");
+                              if (missing) { window.alert(`${missing} 시간을 입력해 주세요 (예: 09:30).\n시작·종료 시간이 있어야 처리 저장·시트 반영이 됩니다.`); return; }
                             }
                             void saveHandling(row);
                           }} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{handlingBusyId === row.id ? "저장 중…" : "처리 저장 · 시트 반영"}</button>
@@ -1568,7 +1555,11 @@ export default function ServiceReception({ author }: { author: string }) {
                   <button type="button" onClick={() => void stepReception()} disabled={busy} className={`rounded-full px-4 py-2 text-xs font-black transition disabled:opacity-40 ${type === "원격이관" ? "bg-blue-600 text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-blue-700" : "border border-slate-400 bg-white text-slate-800 hover:bg-slate-50"}`}>{busy ? "처리중…" : type === "원격이관" ? "접수 (저장+시트)" : "접수"}</button>
                   {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
                   {type !== "원격이관" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
-                  {type !== "원격이관" && <button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button>}
+                  {type !== "원격이관" && <span onClick={() => {
+                    if (busy || (report && isReady)) return;
+                    const missing = requiredItems.filter(([, ok]) => !ok).map(([name]) => name);
+                    window.alert(missing.length ? `필수 입력이 비어 있어요: ${missing.join(", ")}\n(사진은 필수가 아닙니다)` : "보고양식이 아직 생성되지 않았습니다.");
+                  }}><button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button></span>}
                 </span>
               </div>
               {actionResult && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${actionResult.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{actionResult}</div>}

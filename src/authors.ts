@@ -5,9 +5,9 @@ import { insertRow, selectRows, updateRows } from "./supabase";
 // 예전에는 브라우저 localStorage에 두어 신입·퇴사 반영이 그 PC에서만 보였다.
 // 지금은 DB가 원본이고, localStorage는 첫 화면이 비어 보이지 않게 하는 거울(캐시)로만 쓴다.
 
-export type AuthorTeam = "팀장" | "A" | "B" | "C" | "D";
+export type AuthorTeam = "팀장" | "A" | "B" | "C" | "D" | "IT";
 
-export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D"];
+export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "IT"]; // IT=원격팀 — 서비스접수·원격 처리에서 자기 이름을 고를 수 있어야 한다
 
 /** DB를 못 읽을 때 쓰는 최소 명단 (초기 시드와 동일) */
 export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
@@ -16,6 +16,7 @@ export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
   B: ["권태혁", "조윤", "윤기준"],
   C: ["이홍진", "박영현", "이민구", "한왕주"],
   D: ["양승원", "김종희", "이호준"],
+  IT: ["김광태", "김담우", "김정식", "문종주", "손영근", "신동원", "지경민"],
 };
 
 export type MemberRow = {
@@ -42,7 +43,7 @@ const CHANGE_EVENT = "firstoa-authors-change";
 type Book = Record<AuthorTeam, string[]>;
 
 function emptyBook(): Book {
-  return { "팀장": [], A: [], B: [], C: [], D: [] };
+  return { "팀장": [], A: [], B: [], C: [], D: [], IT: [] };
 }
 
 function bookOf(rows: MemberRow[]): Book {

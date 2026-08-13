@@ -277,6 +277,13 @@ function normMisuDate(value: string) {
   return match ? `${match[1]}-${match[2].padStart(2, "0")}-${(match[3] || "1").padStart(2, "0")}` : "";
 }
 
+// 칩 표기용 금액 축약: 2,737,000 → 274만원
+function wonShort(value: string) {
+  const n = Number(String(value).replace(/[^\d]/g, ""));
+  if (!n) return "";
+  return n >= 10000 ? `${Math.round(n / 10000).toLocaleString()}만원` : `${n.toLocaleString()}원`;
+}
+
 function misuBalanceLabel(value: string) {
   const digits = String(value).replace(/[^\d]/g, "");
   return digits ? `${Number(digits).toLocaleString()}원` : String(value || "").trim();
@@ -1813,11 +1820,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {place.kind === "quarter" && renewalMatch && (renewalMatch.done
-                    ? <span className="mt-1 block text-[11px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
-                    : <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
-                  {misu && <span className="mt-1 block text-[11px] font-black text-amber-600">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
-                  {overage && <span className="mt-1 block text-[11px] font-black text-purple-600">초과 {misuBalanceLabel(overage.total)}{overage.grade ? ` · ${overage.grade}` : ""}{overage.date ? ` (${overage.date.slice(0, 7)})` : ""}</span>}
+                  {((place.kind === "quarter" && renewalMatch) || misu || overage) && (
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {place.kind === "quarter" && renewalMatch && (renewalMatch.done
+                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료</span>
+                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 있음{renewalMatch.dueLabel ? ` · 종료 ${renewalMatch.dueLabel}` : ""}{renewalMatch.isPrev ? " (전분기)" : ""}</span>)}
+                      {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">미수 있음{misuMonths ? ` · ${misuMonths}개월` : misuBal ? ` · ${misuBal}` : ""}</span>}
+                      {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 있음{wonShort(overage.total) ? ` · ${wonShort(overage.total)}` : ""}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                    </span>
+                  )}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
