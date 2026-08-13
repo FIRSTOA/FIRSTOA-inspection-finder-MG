@@ -877,6 +877,18 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
+  // 워킨맵 이름에는 층·백업/합산 같은 꼬리표가 붙어 시트 업체명과 키가 안 맞는 경우가 있다
+  // ("31V(주)잡플러스4층백업/합산…" vs "(주)잡플러스"). 키를 앞에서부터 줄여가며 접두 일치로 찾는다.
+  const lookupVendor = useCallback(<T,>(map: Map<string, T>, name: string): T | undefined => {
+    const key = vendorMatchKey(name);
+    const exact = map.get(key);
+    if (exact !== undefined) return exact;
+    for (let len = key.length - 1; len >= 4; len--) {
+      const hit = map.get(key.slice(0, len));
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  }, []);
   // 초과료: 초과시트(overage) 거래처별 최신 1건 — 점검 동선에 초과조정을 얹을지 판단용
   const [overageByVendor, setOverageByVendor] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
   const [misuFailed, setMisuFailed] = useState(false);
@@ -1274,7 +1286,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       // 분기점검 필터: 재계약 유무 / 미수 유무 / 등급(다중) — 모두 AND 조합.
       if (kindFilter === "quarter") {
         if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
-        if (quarterHasMisu && !misuByVendor.has(vendorMatchKey(place.name))) return false;
+        if (quarterHasMisu && lookupVendor(misuByVendor, place.name) === undefined) return false;
         if (quarterGrades.length && !quarterGrades.includes(renewalGrade(place))) return false;
       }
       return true;
@@ -1301,7 +1313,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor]);
+  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, lookupVendor]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1760,14 +1772,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       )}
 
       <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+        {syncState === "loading" && (
+          <div className="bg-blue-50 px-4 py-2 text-center text-[11px] font-black text-blue-600">서버와 동기화 중… 핀·미수·초과 표시가 잠시 뒤 채워집니다</div>
+        )}
         {filtered.map((place) => {
           const meta = labelMeta(place.label);
           const checked = checkedIds.includes(place.id);
           const lastInspection = latestInspectionByPlace.get(place.id) || "";
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
-          const misu = misuByVendor.get(vendorMatchKey(place.name));
-          const overage = overageByVendor.get(vendorMatchKey(place.name));
+          const misu = lookupVendor(misuByVendor, place.name);
+          const overage = lookupVendor(overageByVendor, place.name);
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
