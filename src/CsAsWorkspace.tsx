@@ -14,6 +14,7 @@ type DayFilter = "today" | "tomorrow" | "scheduled";
 
 export type AsTicket = {
   source?: string; // "autoplan" = 자동일정 생성 — 캘린더(월) 표시는 생략, 내 일정·목록에는 표시
+  vendor_code?: string; // 거래처 코드 — 저장 시 DB 트리거가 자동 부착(순번>시리얼>자산기번>이름)
   id: string;
   team: Team;
   date: string;
@@ -239,7 +240,7 @@ function loadTickets(): AsTicket[] {
   }
 }
 
-const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverUid,calendarTitle,source";
+const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,model,serial,asset,grade,keyman,receptionId,repeatMonthly,issue,note,assignee,status,scheduleType,naverUid,calendarTitle,source,vendor_code";
 // 서버 저장용 — 옛 로컬 JSON에 섞인 여분 속성이 올라가지 않게 정해진 필드만 뽑는다.
 /** 리스트·캘린더 표시 제목 — 캘린더 제목(보고양식 첫 줄)에 배정자 이름 접두사. 없으면 업체명 */
 function displayTitleOf(t: AsTicket) {
