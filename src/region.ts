@@ -17,6 +17,8 @@ export function normRegion(r: string): string {
   if (suffix) return suffix[1];
   const prefix = upper.match(/^([A-E])(?:\s|$)/);
   if (prefix) return prefix[1];
+  const tagged = upper.match(/^([A-E])(?:지역|팀)$/); // "C지역"·"B팀" 표기
+  if (tagged) return tagged[1];
   if (PROVINCE_TOKENS.some((token) => s.includes(token))) return "E";
   return s;
 }
