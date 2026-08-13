@@ -10,13 +10,13 @@ end $$;
 
 -- 워킨맵 이름에서 등급과 업체명을 분리: "14SS㈜이오플랜본사1매월마감" → SS / ㈜이오플랜본사
 create or replace function workin_grade_(nm text) returns text language sql immutable as $$
-  select coalesce(upper((regexp_match(coalesce(nm,''), '^\s*[\d/\-]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])'))[1]), '');
+  select coalesce(upper((regexp_match(coalesce(nm,''), '^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])'))[1]), '');
 $$;
 -- 워킨맵 이름은 "숫자+등급+업체명+특이사항/마감구분"이 붙어 있고 줄바꿈(_x000d_)까지 섞인다.
 -- 점검 이력(jeomgeom._업체명)과 맞추려면 업체명만 남겨야 매칭된다 (카운터문자 파서와 같은 규칙).
 create or replace function workin_vendor_(nm text) returns text language sql immutable as $$
   with t as (select regexp_replace(regexp_replace(coalesce(nm,''), '_x000d_|\r|\n', ' ', 'g'), '\s+', ' ', 'g') as v),
-  a as (select btrim(regexp_replace(v, '^\s*[\d/\-]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])', '')) as v from t),
+  a as (select btrim(regexp_replace(v, '^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])', '')) as v from t),
   b as (select split_part(v, '/', 1) as v from a),  -- 특이사항은 / 뒤에 붙는다
   c as (select regexp_replace(v, '(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$', '') as v from b)
   select btrim(regexp_replace(v, '[\s\-·,()]+$', '')) from c;

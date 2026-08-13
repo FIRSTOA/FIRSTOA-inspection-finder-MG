@@ -5,6 +5,7 @@
  * 후보는 전부 **현재 분기 워킨맵**에서만 찾는다 (suggest_workin_candidates RPC).
  * 규칙: 마지막 점검 경과일 기준(조절 가능) · N·NN·S는 언제든 · SS·V는 분기 중반부터 권장.
  */
+import { parseEquipComment } from "./ids";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
@@ -100,15 +101,6 @@ export default function AutoSchedule({ author }: { author: string }) {
   const toggle = (id: number) => setPicked((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const [registerConfirm, setRegisterConfirm] = useState(false);
-  // 워킨맵 comment는 "모델 / 시리얼" 표기 — 첫 슬래시가 구분자(공백 유무 혼재)
-  const parseComment = (c: string): { model: string; serial: string } => {
-    const t = (c || "").replace(/\s+/g, " ").trim();
-    if (!t) return { model: "", serial: "" };
-    const i = t.indexOf("/");
-    if (i < 0) return { model: t, serial: "" };
-    return { model: t.slice(0, i).trim(), serial: t.slice(i + 1).trim() };
-  };
-
   const register = async () => {
     setRegisterConfirm(false);
     const chosen = rows.filter((r) => picked.has(r.id));
@@ -116,7 +108,7 @@ export default function AutoSchedule({ author }: { author: string }) {
     setLoading(true);
     try {
       for (const c of chosen) {
-        const eq = parseComment(c.comment);
+        const eq = parseEquipComment(c.comment);
         await upsertRow("as_tickets", {
           id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           team, date, time: "", vendor: c.vendor, contact: "", address: c.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다

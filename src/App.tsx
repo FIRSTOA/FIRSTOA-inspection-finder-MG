@@ -48,6 +48,7 @@ import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 import { prepareImageForUpload } from "./imageUpload";
 import { buildRecords } from "./inspectParser";
+import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import type { AuthorTeam } from "./authors";
 
@@ -2191,27 +2192,6 @@ function applyReportTypeSelection(text: string, selected: string[], other: strin
   return /^구분\s*[:：]/m.test(text) ? text.replace(/^구분\s*[:：]\s*.*$/gm, `구분: ${values}`) : `구분: ${values}\n${text}`;
 }
 
-function detectUnifiedInputMode(text: string): "inspection" | "blank-report" {
-  const raw = String(text || "");
-  const intakeMarkers = ["접수분야", "접수유형", "임대리스트순번", "방문담당자", "AS접수횟수", "자가사용내역"];
-  const markerCount = intakeMarkers.filter((marker) => raw.includes(marker)).length;
-  if (markerCount >= 2) return "blank-report";
-  const first = raw.trim().split(/\r?\n/)[0] || "";
-  if (/^(?:A\s*\/?\s*S|여분요청|샘플전달|자가요청)\b/i.test(first)) return "blank-report";
-  return "inspection";
-}
-
-function detectReportTypesFromInput(text: string): string[] {
-  const raw = String(text || "");
-  const field = raw.match(/(?:접수분야|구분)\s*[:：\t ]+\s*([^\t\r\n]+)/i)?.[1] || raw.trim().split(/\s+/)[0] || "";
-  const found: string[] = [];
-  if (/점검/.test(field)) found.push("점검");
-  if (/A\s*\/?\s*S|에이에스/i.test(field)) found.push("AS");
-  if (/마감/.test(field)) found.push("마감");
-  if (/여분/.test(field)) found.push("여분");
-  if (/세팅|셋팅/.test(field)) found.push("세팅");
-  return found;
-}
 
 // Parses an existing "매수:흑X 컬X 큰컬X 합X" line into its 4 values
 function parseMail(line: string): { black: string; color: string; largeColor: string; total: string } {
