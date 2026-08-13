@@ -2025,6 +2025,7 @@ const EMPTY_ITEM_FORM: PerItemForm = {
 
 type SharedForm = {
   level: string;
+  region: string;
   warranty: string;
   cumCount: string;
   expectedCount: string;
@@ -2040,7 +2041,7 @@ type SharedForm = {
 };
 
 const EMPTY_SHARED_FORM: SharedForm = {
-  level: "",
+  level: "", region: "",
   warranty: "", cumCount: "", expectedCount: "",
   partName: "", partQty: "", partShipped: "",
   selfItem: "", selfQty: "", selfShipped: "",
@@ -2414,6 +2415,10 @@ function applyProcessingFormV2(
     }
     if (/^레벨\s*:/.test(line)) {
       out.push(shared.level.trim() ? line.replace(/^(레벨\s*:\s*).*/, `$1${shared.level.trim()}`) : line);
+      continue;
+    }
+    if (/^지역\s*:/.test(line)) {
+      out.push(shared.region.trim() ? line.replace(/^(지역\s*:\s*).*/, `$1${shared.region.trim()}`) : line);
       continue;
     }
 
@@ -3302,6 +3307,7 @@ type ProcessingFormPanelProps = {
   onRemoveDevice: (i: number) => void;
   showLevel: boolean;
   showHantinParking: boolean;
+  regionValue: string;
 };
 
 function ProcessingFormPanel({
@@ -3312,7 +3318,7 @@ function ProcessingFormPanel({
   author, setAuthor,
   reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
   canManageDevices, allItemForms, onAddDevice, onUpdateDevice, onMoveDevice, onReorderDevice, onRemoveDevice,
-  showLevel, showHantinParking,
+  showLevel, showHantinParking, regionValue,
 }: ProcessingFormPanelProps) {
   const [partsExpanded, setPartsExpanded] = useState(false);
   const [selfExpanded, setSelfExpanded] = useState(false);
@@ -3324,12 +3330,22 @@ function ProcessingFormPanel({
       {/* ▣ 기본 입력 */}
       <div className="mb-3 rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
       {/* 작성자 / 구분 / 레벨 */}
-      <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]" : "grid-cols-2"}`} style={{ background: bgSoft }}>
+      <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)]"}`} style={{ background: bgSoft }}>
         <div>
           <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
           <AuthorPicker
             value={author}
             onChange={setAuthor}
+            accent={accent}
+          />
+        </div>
+        <div className="min-w-0">
+          <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">지역</div>
+          <NumSelect
+            value={shared.region || regionValue}
+            onChange={(v) => setSharedF("region", v)}
+            options={["A", "B", "C", "D", "E"]}
+            placeholder="-"
             accent={accent}
           />
         </div>
@@ -4160,6 +4176,14 @@ export default function App() {
   // 오류·경고는 사용자가 [확인]을 눌러야 닫히는 모달로 — 토스트는 금방 사라져서
   // 중요한 안내("지역을 넣어주세요" 등)를 처음 보는 사람이 놓친다. 성공·진행만 토스트.
   const [alertBox, setAlertBox] = useState<{ title: string; body: string; kind: "warning" | "error" } | null>(null);
+  // 성공 토스트는 하단 고정 패널(자가·부품·복사 버튼줄) "바로 위"에 — 버튼을 가리지 않게
+  const [toastBottom, setToastBottom] = useState(20);
+  useEffect(() => {
+    if (!toast) return;
+    const panel = document.getElementById("field-bottom-panel");
+    const h = panel && window.getComputedStyle(panel).display !== "none" ? panel.offsetHeight : 0;
+    setToastBottom(Math.max(20, h + 10));
+  }, [toast]);
   const showToast = (
     text: string,
     kind: "success" | "warning" | "error" = "success",
@@ -5448,6 +5472,13 @@ export default function App() {
     // buildResultText는 아래 상태들로 결정되므로 같은 deps를 쓴다
   }, [mode, hasOutput, textOutput, listOutput, itemForms, sharedForm, editedBlocks, author]);
   const fieldRegionMissing = fieldFormIssue !== "";
+  // 양식에 이미 적힌 지역(첫 항목) — 공유 폼의 지역 셀렉트 초기 표시용
+  const fieldParsedRegion = useMemo(() => {
+    if (mode !== "inspection" && mode !== "blank-report") return "";
+    if (!hasOutput) return "";
+    const m = buildResultText().match(/^[ \t]*지역[ \t]*[:：][ \t]*([^\n\t]+)/m);
+    return (m?.[1] || "").trim().toUpperCase().replace(/[^A-E]/g, "").slice(0, 1);
+  }, [mode, hasOutput, textOutput, listOutput, itemForms, sharedForm, editedBlocks, author]);
 
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
@@ -5963,6 +5994,7 @@ export default function App() {
             onRemoveDevice={removeInspectionDevice}
             showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
+            regionValue={fieldParsedRegion}
           />
         )}
 
@@ -6103,7 +6135,7 @@ export default function App() {
 
       {/* Sticky bottom: result panel + action bar (FIELD 전용) */}
       {screen === "field" && (
-      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
+      <div id="field-bottom-panel" className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
         {hasOutput && (
           <div className="mx-auto max-w-3xl px-3 pt-1 sm:px-6">
             <button
@@ -6550,7 +6582,8 @@ export default function App() {
             toastTimerRef.current = null;
             setToast(null);
           }}
-          className="fixed bottom-5 left-1/2 z-[2400] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 cursor-pointer items-start gap-2.5 rounded-full bg-[#1E252F]/95 px-4 py-2.5 text-left text-sm font-bold leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+          style={{ bottom: toastBottom }}
+          className="fixed left-1/2 z-[2400] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 cursor-pointer items-start gap-2.5 rounded-full bg-[#1E252F]/95 px-4 py-2.5 text-left text-sm font-bold leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
         >
           <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${toast.kind === "success" ? "bg-emerald-500/90" : toast.kind === "warning" ? "bg-amber-500/90" : "bg-rose-500/90"}`}>
             {toast.kind === "success" ? "✓" : toast.kind === "warning" ? "!" : "✕"}

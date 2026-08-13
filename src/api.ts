@@ -775,6 +775,13 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
       built = buildRecords(storageText, toKstDate(payload.ts), payload.author || "", "");
     }
     if (!built.hasInspect && !built.hasAS) {
+      if (kind === "자가" || kind === "부품") {
+        // 자가·부품 신청은 구분이 점검·AS가 아니어도(여분·마감·세팅 등) 신청방 게시는 되어야 한다
+        // — 점검/AS 기록 저장만 건너뛴다
+        const rooms = await resolveRoomsFor(kind, built.region, false);
+        for (const room of rooms) await enqueueOutbox(room, sendText);
+        return { ok: true, message: `${kind} 요청 게시 대기: ${rooms.join(", ")}` };
+      }
       return { ok: false, error: `구분에 점검/AS가 없어 저장 대상이 아닙니다. (mode=${payload.mode || "?"})` };
     }
     if (!built.inspect && !built.as) return { ok: false, error: "업체명을 찾지 못했습니다." };
