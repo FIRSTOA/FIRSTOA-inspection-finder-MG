@@ -40,7 +40,7 @@ type DetailLayout = {
   sections: { label: string; fields: string[] }[];          // 이름 붙은 정보 묶음들
 };
 
-function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
+export function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
   const raw = (row["_raw"] && typeof row["_raw"] === "object" ? row["_raw"] : {}) as Record<string, unknown>;
   const valueOf = (key: string) => str(row, key) || String(raw[key] ?? "").trim();
   const used = new Set<string>(["_업체명"]);
@@ -77,7 +77,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
   );
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[2500] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
       <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
@@ -109,7 +109,7 @@ function SheetDetailModal({ title, row, fields, onClose, layout }: { title: stri
   );
 }
 
-const MISU_DETAIL_LAYOUT: DetailLayout = {
+export const MISU_DETAIL_LAYOUT: DetailLayout = {
   metrics: [["미수개월", "months"], ["미수잔액", "won"], ["실제 개월수", "months"], ["실제 잔액", "won"]],
   sections: [
     { label: "연락처 · 주소", fields: ["업체담당자", "휴대폰번호", "메일주소", "주소"] },
@@ -117,7 +117,7 @@ const MISU_DETAIL_LAYOUT: DetailLayout = {
   ],
 };
 
-const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
+export const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
   metrics: [["합계", "won", "초과료 합계"], ["컬러초과료", "won", "컬러 초과료"], ["흑백초과료", "won", "흑백 초과료"], ["기본금액", "won", "기본금액"]],
   sections: [
     { label: "접수 내용", fields: ["날짜", "접수내용", "초과보고", "AS건수", "AS접수내용"] },
@@ -128,7 +128,7 @@ const OVERAGE_DETAIL_LAYOUT: DetailLayout = {
   ],
 };
 
-const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "체크여부", "월임대료", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "메일발송여부", "문자발송여부", "입력일", "입력자", "_출처", "원문"];
+export const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "입금약속일", "CS담당", "CS체크", "CS-1회", "CS-2회", "경영담당", "경영체크", "경영-1회", "경영-2회", "전략담당", "전략체크", "전략-1회", "전략-2회", "체크여부", "월임대료", "업체담당자", "관리담당자", "휴대폰번호", "메일주소", "주소", "등급", "임대여부", "거래처코드", "메일발송여부", "문자발송여부", "입력일", "입력자", "_출처", "원문"];
 
 type CsCheckRow = { key: string; team: string; vendor: string; checked: boolean; cs_manager: string; cs1: string; cs2: string; synced_at: string };
 
@@ -304,7 +304,7 @@ export function MisuBoard() {
   );
 }
 
-const OVERAGE_DETAIL_FIELDS = ["_업체명", "관리 담당자", "날짜", "접수내용", "컬러초과료", "흑백초과료", "합계", "마감방식", "기본매수", "초과장당금액", "AS건수", "초과보고", "모델명", "자산번호", "등급", "임대여부", "기본금액", "연평균", "계약일", "종료일", "남은개월", "미수개월수", "미수금액", "전화번호", "특이사항", "AS접수내용", "소모품정보", "_출처"];
+export const OVERAGE_DETAIL_FIELDS = ["_업체명", "관리 담당자", "날짜", "접수내용", "컬러초과료", "흑백초과료", "합계", "마감방식", "기본매수", "초과장당금액", "AS건수", "초과보고", "모델명", "자산번호", "등급", "임대여부", "기본금액", "연평균", "계약일", "종료일", "남은개월", "미수개월수", "미수금액", "전화번호", "특이사항", "AS접수내용", "소모품정보", "_출처"];
 
 function overageTeam(row: SheetRecord): string {
   const raw = (row["_raw"] && typeof row["_raw"] === "object" ? row["_raw"] : {}) as Record<string, unknown>;

@@ -8,6 +8,8 @@ export function normalizeId(value: string) {
 // (WalkingMap 로컬 구현을 공용으로 승격 — vendorFlags·일정리스트 배지에서도 같은 기준 사용)
 export function vendorMatchKey(value: string) {
   return String(value || "")
+    // ㈜·(주)는 기호 제거를 거치면 맨 앞 "주"만 남아 "주식회사" 제거 규칙을 빠져나간다 — 먼저 지운다
+    .replace(/㈜|\(주\)|\(유\)/g, "")
     .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
     .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?/i, "")
     .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "")

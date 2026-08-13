@@ -6,6 +6,7 @@ import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } 
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
+import { MISU_DETAIL_FIELDS, MISU_DETAIL_LAYOUT, OVERAGE_DETAIL_FIELDS, OVERAGE_DETAIL_LAYOUT, SheetDetailModal } from "./MisuOverageBoards";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -1191,6 +1192,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; records: Array<Record<string, unknown>>; loading: boolean } | null>(null);
+  const [flagDetail, setFlagDetail] = useState<{ record: Record<string, unknown>; kind: "미수" | "초과" | "불만" } | null>(null);
   const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만") => {
     setFlagHistory({ vendor, kind, records: [], loading: true });
     const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
@@ -2698,6 +2700,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           </div>
         </div>
       )}
+      {flagDetail && (
+        <SheetDetailModal
+          title={flagHistory?.vendor || ""}
+          row={flagDetail.record}
+          fields={flagDetail.kind === "미수" ? MISU_DETAIL_FIELDS : flagDetail.kind === "초과" ? OVERAGE_DETAIL_FIELDS : Object.keys(flagDetail.record).filter((k) => !k.startsWith("_") && !["id", "created_at"].includes(k))}
+          layout={flagDetail.kind === "미수" ? MISU_DETAIL_LAYOUT : flagDetail.kind === "초과" ? OVERAGE_DETAIL_LAYOUT : undefined}
+          onClose={() => setFlagDetail(null)}
+        />
+      )}
       {flagHistory && (
         <div className="fixed inset-0 z-[2400] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
           <div className="flex max-h-[78vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -2708,34 +2719,29 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               </div>
               <button type="button" onClick={() => setFlagHistory(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100">✕</button>
             </div>
-            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
               {flagHistory.loading && <div className="py-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
               {!flagHistory.loading && !flagHistory.records.length && <div className="py-8 text-center text-xs font-bold text-slate-400">이력을 찾지 못했습니다.</div>}
               {flagHistory.records.map((record, i) => {
                 const date = normMisuDate(String(record["입력일"] || record["방문일"] || record["날짜"] || "")) || String(record["입력일"] || record["방문일"] || record["날짜"] || "").slice(0, 10);
-                const source = String(record["_출처"] || "");
-                const hiddenKeys = new Set(["id", "created_at", "_dupKey", "_raw", "_원문", "원문", "_등록시각", "_hidden", "_hidden_by", "_hidden_at", "_출처", "_업체명"]);
-                const fields = Object.entries(record)
-                  .filter(([k, v]) => !hiddenKeys.has(k) && String(v ?? "").trim() !== "" && String(v ?? "").trim() !== "0")
-                  .map(([k, v]) => [k, String(v)] as [string, string]);
+                const source = String(record["_출처"] || "").split(":")[0];
+                const summary = flagHistory.kind === "미수"
+                  ? `${String(record["미수개월"] || record["실제 개월수"] || "").replace(/개월/g, "").trim() || "-"}개월 · ${misuBalanceLabel(String(record["미수잔액"] || record["실제 잔액"] || ""))}`
+                  : flagHistory.kind === "초과"
+                    ? `합계 ${misuBalanceLabel(String(record["합계"] || "0"))}`
+                    : String(record["불만내용"] || record["불편내용"] || "").slice(0, 60) || "내용 확인";
                 return (
-                  <div key={i} className="rounded-lg border border-slate-200 p-3">
-                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{flagHistory.kind}</span>
-                      <span className="text-sm font-black text-slate-950">{date || "날짜 미상"}</span>
-                      {source && <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source.split(":")[0]}</span>}
-                    </div>
-                    <div className="pt-1">
-                      {fields.map(([k, v]) => (
-                        <div key={k} className="flex items-start justify-between gap-3 border-b border-slate-50 py-1.5 last:border-0">
-                          <span className="w-24 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{k.replace(/^_/, "")}</span>
-                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <button key={i} type="button" onClick={() => setFlagDetail({ record, kind: flagHistory.kind })}
+                    className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
+                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{flagHistory.kind}</span>
+                    <span className="shrink-0 text-sm font-black text-slate-950">{date || "날짜 미상"}</span>
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-600">{summary}</span>
+                    {source && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source}</span>}
+                    <span className="shrink-0 text-slate-300">›</span>
+                  </button>
                 );
               })}
+              <div className="pt-1 text-center text-[10px] font-bold text-slate-400">건을 누르면 조회탭과 같은 상세가 열립니다</div>
             </div>
           </div>
         </div>
