@@ -877,6 +877,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
+  // 초과료: 초과시트(overage) 거래처별 최신 1건 — 점검 동선에 초과조정을 얹을지 판단용
+  const [overageByVendor, setOverageByVendor] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -1066,12 +1068,34 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       .catch((error) => { console.error("Misu load failed", error); setMisuFailed(true); }); // 실패를 "미수 없음"으로 오해하지 않게 표시
   }, []);
 
+  // 초과료: 합계가 있는 행만, 거래처별 최신(날짜 기준). 미수와 같은 갱신 주기를 따른다.
+  const loadOverage = useCallback(() => {
+    const select = encodeURIComponent("_업체명,합계,날짜,등급");
+    void selectAllRows<Record<string, unknown>>("overage", `select=${select}&order=id.asc`)
+      .then((rows) => {
+        const map = new Map<string, { total: string; date: string; grade: string }>();
+        for (const row of rows) {
+          const key = vendorMatchKey(String(row["_업체명"] || ""));
+          if (!key) continue;
+          const total = String(row["합계"] || "").trim();
+          const digits = total.replace(/[^0-9]/g, "");
+          if (!digits || Number(digits) === 0) continue; // 초과 0원은 표시 대상 아님
+          const date = String(row["날짜"] || "").trim();
+          const prev = map.get(key);
+          if (!prev || date > prev.date) map.set(key, { total, date, grade: String(row["등급"] || "").trim() });
+        }
+        setOverageByVendor(map);
+      })
+      .catch((error) => console.error("Overage load failed", error));
+  }, []);
+
   useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
   useEffect(() => { loadMisu(); }, [loadMisu]);
+  useEffect(() => { loadOverage(); }, [loadOverage]);
 
   // 점검 방문일·미수는 창 포커스/탭 복귀 시 최신으로 다시 불러온다(재계약/색칠처럼).
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); } };
+    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); loadOverage(); } };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
@@ -1743,6 +1767,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
           const misu = misuByVendor.get(vendorMatchKey(place.name));
+          const overage = overageByVendor.get(vendorMatchKey(place.name));
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
@@ -1777,6 +1802,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     ? <span className="mt-1 block text-[11px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
                     : <span className="mt-1 block text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
                   {misu && <span className="mt-1 block text-[11px] font-black text-amber-600">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                  {overage && <span className="mt-1 block text-[11px] font-black text-purple-600">초과 {misuBalanceLabel(overage.total)}{overage.grade ? ` · ${overage.grade}` : ""}{overage.date ? ` (${overage.date.slice(0, 7)})` : ""}</span>}
                 </span>
               </button>
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}

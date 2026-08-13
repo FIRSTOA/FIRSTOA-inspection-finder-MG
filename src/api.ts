@@ -864,6 +864,9 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
 
     const row: Record<string, unknown> = {};
     for (const f of fields) row[f.key] = f.fill === "author" ? author : (form[f.key] || "");
+    // 재계약 등 '날짜' 컬럼이 스키마에 없거나 비면 작성일로 채운다 — 조회탭 기간 필터가 날짜 기준이라
+    // 빈 값이면 목록에서 영영 안 보인다 (웹앱:재계약이 조회 안 되던 원인)
+    if (!String(row["날짜"] || "").trim()) row["날짜"] = toKstDate(ts);
     row["_업체명"] = vendor;
     row["_출처"] = "웹앱:" + s.category;
     row["_원문"] = text;
