@@ -421,9 +421,10 @@ async function fillLeaseValues(
   }
   if (!leaseRow) return; // 못 찾으면 수식 폴백
 
-  const [leaseHeaders = [], leaseValues = []] = await getValues(spreadsheetId, `${quoteTitle("임대리스트")}!A1:BZ1`).then(
-    async (h) => [h[0] || [], (await getValues(spreadsheetId, `${quoteTitle("임대리스트")}!A${leaseRow}:BZ${leaseRow}`))[0] || []],
-  );
+  // 행 전체를 읽는다 — 임대리스트는 300열 이상(LF열대)이라 범위를 자르면
+  // 뒤쪽 열(예: 79열 업체명)이 빈 값으로 잘려 수식을 공백으로 덮는 사고가 났다
+  const leaseHeaders = (await getValues(spreadsheetId, `${quoteTitle("임대리스트")}!1:1`))[0] || [];
+  const leaseValues = (await getValues(spreadsheetId, `${quoteTitle("임대리스트")}!${leaseRow}:${leaseRow}`))[0] || [];
 
   let overrides: Record<string, string> = {};
   try { overrides = JSON.parse(String(data["leaseFix"] || "{}")) || {}; } catch { overrides = {}; }

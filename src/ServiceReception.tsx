@@ -401,6 +401,29 @@ export default function ServiceReception({ author }: { author: string }) {
   //  · 탭이 바뀌면(복합기 ↔ 원격·IT) 새 탭에 접수 행을 자동 기입하고 행번호를 다시 연결
   //  · 원격 탭 안에서 IT ↔ 원격이관은 행을 유지하고 한조처리(L열)만 갱신
   //  · 원격이관으로 바꾸면 방문이 없으니 연결된 미완료 방문 일정을 정리
+  const prefillCopierForm = async (row: ServiceReceptionRow) => {
+    goPage("copier");
+    setCustKind(row.lease_no ? "기존" : "신규");
+    setFirstNo(row.lease_no || "");
+    setSavedRowId(row.id);           // 이미 저장된 건 — 전송 시 새로 저장하지 않는다
+    sheetRowTargetRef.current = row.id;
+    setManual({ ...EMPTY_MANUAL, 접수자성함: row.receiver_name || "", 접수자연락처: row.receiver_phone || "", 제목: row.title || "", 증상: row.symptom || "", 주소: row.address || "" });
+    if (row.lease_no) {
+      try {
+        const hits = await searchLeaseList(row.lease_no);
+        const hit = hits.find((h) => String(pick(h, "순번", "순") || "").trim() === String(row.lease_no).trim()) || hits[0];
+        if (hit) {
+          await selectLease(hit); // 주소·AS이력·기기요약 자동 채움
+          // selectLease가 주소를 임대리스트 값으로 덮으므로, 접수에 기록된 주소가 있으면 그걸 우선
+          if (row.address) setManual((cur) => ({ ...cur, 주소: row.address || cur.주소 }));
+        }
+      } catch { /* 임대 매칭 실패해도 수동 입력으로 진행 가능 */ }
+    } else if (row.vendor) {
+      setManualVendor(row.vendor);
+    }
+    notify(`${row.vendor || "접수"} 내용을 복합기 접수 폼으로 불러왔어요 — 확인 후 [⚡ 전체] 또는 [AS방 보내기]로 전송하세요.`);
+  };
+
   const changeType = async (row: ServiceReceptionRow, next: string) => {
     if (row.type === next) return;
     const groupOf = (t: string) => (t === "복합기 AS" ? "copier" : "remote");
@@ -411,6 +434,7 @@ export default function ServiceReception({ author }: { author: string }) {
         ? `· ${next === "복합기 AS" ? "복합기 접수 탭" : "원격 탭"}에 접수 행을 새로 기입합니다.`
         : "· 신규 거래처(순번 없음)라 새 탭 시트 기입은 생략됩니다 — 필요하면 수동 기입.");
       lines.push(`· 기존 ${row.type === "복합기 AS" ? "복합기" : "원격"} 탭의 행은 남아 있으니 필요 없으면 직접 지워주세요.`);
+      if (next === "복합기 AS") lines.push("· 접수 내용을 복합기 접수 폼으로 불러옵니다 (AS방 전송·일정 등록용).");
     }
     if (next === "원격이관") lines.push("· 연결된 방문 일정(미완료)은 삭제됩니다.");
     if (!window.confirm(lines.join("\n"))) return;
@@ -450,6 +474,8 @@ export default function ServiceReception({ author }: { author: string }) {
       }
       // 원격이관은 방문이 없다 — 완료되지 않은 방문 일정을 정리해 상태 뒤집힘을 막는다
       if (next === "원격이관") void deleteRows("as_tickets", `receptionId=eq.${row.id}&status=neq.완료`).catch(() => {});
+      // 원격 → 복합기: 접수 내용을 폼으로 불러와 바로 전송·일정 등록할 수 있게 한다
+      if (crossTab && next === "복합기 AS") void prefillCopierForm({ ...row, type: next });
       await loadList(listDate, listPeriod);
       void loadRemoteQueue();
     } catch (e) {
