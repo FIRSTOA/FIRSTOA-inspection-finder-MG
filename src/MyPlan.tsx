@@ -394,7 +394,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
   }, [detail]);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 overflow-x-hidden">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>오늘</button>
         <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>내일</button>
@@ -417,10 +417,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
           const f = flags.get(t.vendor.trim());
           return (
             <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex flex-wrap items-center gap-2 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
-              <span className="min-w-0 flex-1 basis-[55%]">
-                <span className="flex items-center gap-1.5">
+              <span className="min-w-0 flex-1 basis-[55%] overflow-hidden">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
-                  <span className="truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
+                  <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}

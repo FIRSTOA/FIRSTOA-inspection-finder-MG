@@ -129,7 +129,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   const anchorLabel = anchorTicket?.vendor || anchorQuery.trim();
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 overflow-x-hidden">
       <section className="overflow-hidden rounded-xl bg-[#1E252F] shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
@@ -168,7 +168,7 @@ export default function AutoSchedule({ author }: { author: string }) {
               {tickets.map((t) => (
                 <label key={t.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition ${anchorId === t.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <input type="radio" checked={anchorId === t.id} onChange={() => { setAnchorId(t.id); setAnchorQuery(""); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="block truncate text-[13px] font-black text-slate-900">{t.time} {t.vendor}</span>
                     <span className="block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
                   </span>
@@ -225,10 +225,10 @@ export default function AutoSchedule({ author }: { author: string }) {
               return (
                 <label key={r.id} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${on ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                   <input type="checkbox" checked={on} onChange={() => toggle(r.id)} className="mt-1 h-4 w-4 accent-blue-600" />
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="flex flex-wrap items-center gap-1.5">
-                      {r.distance_km != null && <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
-                      <span className="truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
+                      {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
+                      <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
                       {r.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(r.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{r.grade}</span>}
                       {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                       {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
