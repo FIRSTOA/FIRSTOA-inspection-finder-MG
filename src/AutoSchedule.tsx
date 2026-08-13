@@ -132,7 +132,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       <section className="overflow-hidden rounded-xl bg-[#1E252F] shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
-            <div className="text-[15px] font-black text-white">자동 일정 짜기 <span className="ml-1 rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] text-amber-300">1차 시안</span></div>
+            <div className="text-[15px] font-black text-white">자동 일정 짜기</div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검·재계약을 추천합니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">

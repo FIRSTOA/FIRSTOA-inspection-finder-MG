@@ -593,12 +593,14 @@ function samePlaces(current: MapPlace[], next: MapPlace[]) {
 }
 
 function styleMapLabel(element: HTMLDivElement, active: boolean) {
-  element.style.background = active ? "#0f172a" : "";
-  element.style.color = active ? "#ffffff" : "";
-  element.style.padding = active ? "5px 7px" : "";
+  // 카카오 라벨은 자체 흰 말풍선 배경을 갖는다(data-kakao) — 비활성 복귀 시 흰 배경으로 되돌린다
+  const kakaoStyle = element.style.display === "inline-block";
+  element.style.background = active ? "#0f172a" : kakaoStyle ? "rgba(255,255,255,.94)" : "";
+  element.style.color = active ? "#ffffff" : kakaoStyle ? "#0f172a" : "";
+  element.style.padding = active ? "5px 7px" : kakaoStyle ? "2px 6px" : "";
   element.style.margin = active ? "-5px -7px" : "";
-  element.style.borderRadius = active ? "4px" : "";
-  element.style.boxShadow = active ? "0 4px 12px rgba(15, 23, 42, .28)" : "";
+  element.style.borderRadius = active ? "4px" : kakaoStyle ? "5px" : "";
+  element.style.boxShadow = active ? "0 4px 12px rgba(15, 23, 42, .28)" : kakaoStyle ? "0 1px 5px rgba(15,23,42,.22)" : "";
 }
 
 type CurrentPosition = {
@@ -1052,8 +1054,9 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
         tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
         tooltip.textContent = groupLabel;
         tooltip.title = group.map((item) => item.name).join("\n");
+        // 지도 위 글자와 섞이지 않게 흰 말풍선 배경 (리플릿 tooltip CSS 대응)
+        tooltip.style.cssText = "display:inline-block;background:rgba(255,255,255,.94);border:1px solid rgba(100,116,139,.45);border-radius:5px;padding:2px 6px;margin-bottom:3px;box-shadow:0 1px 5px rgba(15,23,42,.22);color:#0f172a";
         styleMapLabel(tooltip, groupSelected);
-        tooltip.style.marginBottom = "3px";
         tooltip.addEventListener("click", (event) => { event.stopPropagation(); handleClick(); });
         container.appendChild(tooltip);
       }
