@@ -10,10 +10,11 @@ import { selectAllRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
-  assignee: string; status: string; scheduleType: string;
+  assignee: string; status: string; scheduleType: string; issue?: string;
 };
 
 type Geo = { lat: number; lng: number };
@@ -26,6 +27,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
   const [date, setDate] = useState(kstDate());
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
+  const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const storageKey = `cs_myplan_order_${date}_${author}`;
   const [pinned, setPinned] = useState<string[]>([]);
   useEffect(() => {
@@ -66,6 +68,12 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     }
     return null;
   }, [geoByKey]);
+
+  useEffect(() => {
+    const vendors = [...new Set(tickets.map((t) => t.vendor).filter(Boolean))];
+    if (!vendors.length) return;
+    void getVendorFlagsBatch(vendors).then(setFlags).catch(() => {});
+  }, [tickets]);
 
   const myTickets = useMemo(() => tickets.filter((t) =>
     t.date === date && t.status !== "완료"
@@ -115,13 +123,36 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; layerRef.current = null; };
   }, []);
+  // 같은 건물(같은 좌표) 일정이 겹치면 안 보인다 — 작은 원형으로 흩어서 전부 보이게
+  const markerRef = useRef<Map<string, L.Marker>>(new Map());
+  const displayGeo = useMemo(() => {
+    const byCoord = new Map<string, MyPlanTicket[]>();
+    for (const t of ordered) {
+      const g = lookupGeo(t.vendor);
+      if (!g) continue;
+      const key = `${g.lat.toFixed(5)},${g.lng.toFixed(5)}`;
+      byCoord.set(key, [...(byCoord.get(key) || []), t]);
+    }
+    const out = new Map<string, Geo>();
+    for (const group of byCoord.values()) {
+      group.forEach((t, i) => {
+        const g = lookupGeo(t.vendor)!;
+        if (group.length === 1 || i === 0) { out.set(t.id, g); return; }
+        const angle = (2 * Math.PI * i) / group.length;
+        out.set(t.id, { lat: g.lat + 0.00022 * Math.sin(angle), lng: g.lng + 0.00028 * Math.cos(angle) });
+      });
+    }
+    return out;
+  }, [ordered, lookupGeo]);
+
   useEffect(() => {
     const map = mapRef.current, layer = layerRef.current;
     if (!map || !layer) return;
     layer.clearLayers();
+    markerRef.current.clear();
     const points: [number, number][] = [];
     ordered.forEach((t, i) => {
-      const g = lookupGeo(t.vendor);
+      const g = displayGeo.get(t.id);
       if (!g) return;
       points.push([g.lat, g.lng]);
       const isPinned = pinned.includes(t.id);
@@ -130,11 +161,21 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
         html: `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`,
         iconSize: [26, 26], iconAnchor: [13, 13],
       });
-      L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(`<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${t.scheduleType}</span>`);
+      const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer)
+        .bindPopup(`<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${t.scheduleType}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`);
+      markerRef.current.set(t.id, marker);
     });
     if (points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
     if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
-  }, [ordered, pinned, lookupGeo]);
+  }, [ordered, pinned, displayGeo]);
+
+  const focusTicket = (id: string) => {
+    const map = mapRef.current;
+    const marker = markerRef.current.get(id);
+    if (!map || !marker) return;
+    map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+    marker.openPopup();
+  };
 
   const togglePin = (id: string) => {
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
@@ -159,8 +200,9 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
           const g = lookupGeo(t.vendor);
           const isPinned = pinned.includes(t.id);
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
+          const f = flags.get(t.vendor.trim());
           return (
-            <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5">
+            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex items-center gap-2.5 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
@@ -169,10 +211,21 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{t.scheduleType}</span>
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
+                {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
                 <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
+                {f && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {f.inspection && !f.inspection.done && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">점검 {f.inspection.quarter}분기</span>}
+                    {f.inspection?.done && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-400">점검완료</span>}
+                    {f.misu && !f.misu.cleared && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600">미수{f.misu.months ? ` ${f.misu.months}개월` : ""}</span>}
+                    {f.renewal && !f.renewal.done && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600">재계약{f.renewal.due ? ` ${f.renewal.due}` : ""}</span>}
+                    {f.overage && <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[9px] font-black text-purple-700">초과</span>}
+                    {f.bulman && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-700">불만 {f.bulman.date.slice(2, 4)}년 {Number(f.bulman.date.slice(5, 7))}월</span>}
+                  </span>
+                )}
               </span>
-              <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="shrink-0 rounded-lg bg-[#FEE500] px-2 py-1.5 text-[11px] font-black text-slate-900">길찾기</a>
-              <button type="button" onClick={() => togglePin(t.id)}
+              <a href={kakao} onClick={(e) => e.stopPropagation()} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="shrink-0 rounded-lg bg-[#FEE500] px-2 py-1.5 text-[11px] font-black text-slate-900">길찾기</a>
+              <button type="button" onClick={(e) => { e.stopPropagation(); togglePin(t.id); }}
                 className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                 {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
               </button>

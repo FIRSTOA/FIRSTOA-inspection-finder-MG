@@ -112,7 +112,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           model: "", serial: "", asset: "", grade: c.grade, keyman: "",
           issue: kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${c.last_date || "기록 없음"}${c.days_since < 9999 ? ` · ${c.days_since}일 경과` : ""})`,
           note: "", assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
-          receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${c.vendor}`,
+          receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${c.vendor}`, source: "autoplan",
         }, "id");
       }
       setPicked(new Set());
