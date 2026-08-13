@@ -4,6 +4,7 @@ import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
+import { geocodeKR } from "./geocode";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -894,22 +895,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     if (!q) return;
     setGeocoding(true);
     try {
-      // 도로명 띄어쓰기에 민감해서("삼성로 100길" vs "삼성로100길") 변형을 차례로 시도한다
-      const variants = [...new Set([
-        q,
-        q.replace(/([가-힣]+로)\s+(\d+길)/g, "$1$2"),
-        q.replace(/([가-힣]+로)(\d+길)/g, "$1 $2"),
-        q.replace(/([가-힣]+(?:로|길))(\d)/g, "$1 $2"),
-      ])];
-      let hit: { lat: string; lon: string; display_name: string } | null = null;
-      for (const variant of variants) {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(variant)}`, { headers: { "Accept-Language": "ko" } });
-        const hits = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
-        if (hits.length) { hit = hits[0]; break; }
-      }
+      const hit = await geocodeKR(q); // 띄어쓰기 변형("삼성로 100길8" 등)을 알아서 흡수
       if (!hit) { notify(`"${q}" 주소를 찾지 못했어요 — 도로명 주소로 다시 시도해 보세요.`, "error"); return; }
       if (addressFlyBridge) {
-        addressFlyBridge(Number(hit.lat), Number(hit.lon), q, hit.display_name.split(",").slice(0, 3).join(","));
+        addressFlyBridge(hit.lat, hit.lng, q, hit.label);
         setAddressPinLabel(q);
         setQuery(""); // 검색어를 비워야 업체 리스트가 다시 보인다 (핀은 유지)
       } else notify("지도가 아직 준비되지 않았어요 — 잠시 후 다시 시도해 주세요.", "error");

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
 import { vendorMatchKey } from "./ids";
+import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
@@ -43,24 +44,6 @@ export default function AutoSchedule({ author }: { author: string }) {
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
   // 앵커 좌표 — 워킨맵에서 업체명으로 찾고(정규화 키 대조), 없으면 주소 지오코딩 폴백
-  // 도로명 띄어쓰기 변형까지 시도하는 지오코딩 ("삼성로 100길" ↔ "삼성로100길")
-  const geocodeFlexible = async (q: string): Promise<{ lat: number; lng: number } | null> => {
-    const variants = [...new Set([
-      q,
-      q.replace(/([가-힣]+로)\s+(\d+길)/g, "$1$2"),
-      q.replace(/([가-힣]+로)(\d+길)/g, "$1 $2"),
-      q.replace(/\s*\d+호$/, "").replace(/\s*\d+층$/, ""),
-    ])];
-    for (const variant of variants) {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(variant)}`, { headers: { "Accept-Language": "ko" } });
-        const geo = (await res.json()) as Array<{ lat: string; lon: string }>;
-        if (geo.length) return { lat: Number(geo[0].lat), lng: Number(geo[0].lon) };
-      } catch { /* 다음 변형 */ }
-    }
-    return null;
-  };
-
   const resolveAnchor = useCallback(async (name: string, address = "") => {
     const raw = name.trim();
     if (!raw) { setAnchorGeo(null); return; }
@@ -85,7 +68,7 @@ export default function AutoSchedule({ author }: { author: string }) {
     for (const source of [address, raw]) {
       const q = String(source || "").trim();
       if (!q) continue;
-      const found = await geocodeFlexible(q);
+      const found = await geocodeKR(q);
       if (found) { setAnchorGeo({ name: `${q.slice(0, 20)} (주소)`, lat: found.lat, lng: found.lng }); return; }
     }
     setAnchorGeo(null);
