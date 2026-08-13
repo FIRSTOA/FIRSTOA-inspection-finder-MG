@@ -4157,11 +4157,20 @@ export default function App() {
     if (container && el) container.scrollTop = el.offsetTop - container.offsetTop;
   }, [selectedItem]);
 
+  // 오류·경고는 사용자가 [확인]을 눌러야 닫히는 모달로 — 토스트는 금방 사라져서
+  // 중요한 안내("지역을 넣어주세요" 등)를 처음 보는 사람이 놓친다. 성공·진행만 토스트.
+  const [alertBox, setAlertBox] = useState<{ title: string; body: string; kind: "warning" | "error" } | null>(null);
   const showToast = (
     text: string,
     kind: "success" | "warning" | "error" = "success",
     options: { duration?: number; action?: "workin-details" } = {},
   ) => {
+    if (kind !== "success" && !options.action) {
+      const lines = text.split("\n");
+      const title = lines[0].length <= 40 ? lines[0] : "";
+      setAlertBox({ title: title || (kind === "error" ? "확인이 필요합니다" : "알림"), body: title ? lines.slice(1).join("\n") : text, kind });
+      return;
+    }
     if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
     setToast({ text, kind, action: options.action });
     toastTimerRef.current = window.setTimeout(() => {
@@ -5007,9 +5016,9 @@ export default function App() {
       return;
     }
     if (kind === "normal" && fieldFormIssue) {
-      window.alert(fieldFormIssue === "vendor"
-        ? "업체명을 확인해주세요.\n양식에서 업체명을 읽지 못해 전송할 수 없습니다."
-        : "지역을 넣어주세요.\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다 — 지금은 전송되지 않습니다.");
+      showToast(fieldFormIssue === "vendor"
+        ? "업체명을 확인해주세요\n양식에서 업체명을 읽지 못해 전송할 수 없습니다.\n결과 미리보기에서 '업체명' 줄을 확인해 주세요."
+        : "지역을 넣어주세요\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다.\n결과 미리보기에서 '지역' 줄을 채우면 바로 보낼 수 있어요.", "error");
       return;
     }
     if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
@@ -6518,6 +6527,21 @@ export default function App() {
       />
 
       {/* Toast */}
+      {alertBox && (
+        <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/45 p-6" onMouseDown={() => setAlertBox(null)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 bg-[#1E252F] px-5 py-4">
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${alertBox.kind === "error" ? "bg-rose-500" : "bg-amber-500"}`}>!</span>
+              <span className="min-w-0 flex-1 text-[15px] font-black text-white">{alertBox.title}</span>
+            </div>
+            {alertBox.body && <div className="whitespace-pre-wrap px-5 py-4 text-sm font-semibold leading-6 text-slate-700">{alertBox.body}</div>}
+            <div className="px-4 pb-4">
+              <button type="button" onClick={() => setAlertBox(null)}
+                className="w-full rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">확인</button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && (
         <div
           role="status"
@@ -6526,7 +6550,7 @@ export default function App() {
             toastTimerRef.current = null;
             setToast(null);
           }}
-          className="fixed bottom-5 left-1/2 z-[2400] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 cursor-pointer items-start gap-2.5 rounded-xl bg-[#1E252F] px-4 py-3 text-left text-sm font-bold leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+          className="fixed bottom-5 left-1/2 z-[2400] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 cursor-pointer items-start gap-2.5 rounded-full bg-[#1E252F]/95 px-4 py-2.5 text-left text-sm font-bold leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
         >
           <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${toast.kind === "success" ? "bg-emerald-500/90" : toast.kind === "warning" ? "bg-amber-500/90" : "bg-rose-500/90"}`}>
             {toast.kind === "success" ? "✓" : toast.kind === "warning" ? "!" : "✕"}
