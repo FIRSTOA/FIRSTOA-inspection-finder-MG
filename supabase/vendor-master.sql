@@ -152,17 +152,9 @@ begin
     and not exists (select 1 from workin_vendor_code x where x.place_id = w.id);
   get diagnostics n_serial = row_count;
 
-  -- 2순위: comment 앞부분(모델 칸)에 자산번호를 적어둔 지점 — 동일 식별자 풀로 잡는다
-  insert into workin_vendor_code (place_id, code, method, matched)
-  select w.id, l.code, 'asset', s.ident
-  from workin_map_places w
-  cross join lateral (
-    select regexp_replace(lower(btrim(split_part(coalesce(w.comment,''), '/', 1))), '[^0-9a-z]', '', 'g') as ident
-  ) s
-  join _lease_ids l on l.ident = s.ident
-  where w.visible is not false and length(s.ident) >= 4
-    and not exists (select 1 from workin_vendor_code x where x.place_id = w.id);
-  get diagnostics n_asset = row_count;
+  -- 자산번호 매칭은 폐기(2026-08-14): 자산번호 칸에 모델명("D420" 등)·임의 값이 많아
+  -- 43곳 중 39곳이 오연결이었다. 시리얼과 이름만 쓴다.
+  n_asset := 0;
 
   -- 3순위: 이름 키(vendor_key_ 8자)가 별칭 테이블에서 코드 하나로만 이어질 때
   insert into workin_vendor_code (place_id, code, method, matched)
