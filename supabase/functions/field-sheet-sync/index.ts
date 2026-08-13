@@ -1,3 +1,4 @@
+import { appendViaSheetsApi, sheetsApiConfigured } from "./sheets-api.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -257,8 +258,32 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
       ? { ...sourcePayload, data: { ...sourceData, _sheetValues: sheetValues } }
       : sourcePayload;
 
-    // 잠금 경합("다른 동기화가 진행 중")은 몇 초 뒤 대부분 풀린다 — 2분 크론까지 미루지 않고
-    // 같은 호출 안에서 5초 간격 3회까지 즉시 재시도한다 (접수 후 시트에 1~2분 걸리던 원인).
+    // ① 시트 API 직행 (1~3초) — 서비스 계정이 설정돼 있고 테스트 모드가 아니면 우선 시도.
+    //    실패하면 아래 ② GAS 웹훅으로 폴백 (무회귀 — SHEET_API_DIRECT=false로 강제 GAS 가능)
+    if (sheetsApiConfigured() && config.SHEET_API_DIRECT !== "false" && !enabled(config.FIELD_SHEET_TEST_MODE)) {
+      try {
+        const direct = await appendViaSheetsApi({
+          category: String(job.category),
+          jobId: String(job.id),
+          author: String(job.author || ""),
+          submittedAt: String(job.created_at || ""),
+          sourceText: String(job.source_text || ""),
+          payload: payload as { data?: Record<string, unknown> },
+        }, { rest, headers });
+        const markDirect = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+          method: "PATCH",
+          headers: { ...headers, Prefer: "return=minimal" },
+          body: JSON.stringify({ sheet_status: "synced", sheet_row: direct.row || null, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
+        });
+        if (!markDirect.ok) throw new Error(`synced 마킹 실패(${markDirect.status})`);
+        return { status: "synced", row: direct.row, sheet: direct.sheet };
+      } catch (directError) {
+        console.error("Sheets API 직행 실패 — GAS 폴백:", (directError as Error).message);
+      }
+    }
+
+    // ② GAS 웹훅 폴백 — 잠금 경합("다른 동기화가 진행 중")은 몇 초 뒤 대부분 풀린다.
+    //    2분 크론까지 미루지 않고 같은 호출 안에서 5초 간격 3회까지 즉시 재시도한다.
     const body = JSON.stringify({
       action: "append_field_sheet_row",
       secret: webhookSecret,
