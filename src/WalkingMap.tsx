@@ -75,6 +75,7 @@ const teamMapViews: Record<Team, { center: [number, number]; zoom: number }> = {
 
 // MapCanvas(자식)의 지도 인스턴스를 메인 컴포넌트의 주소 검색이 쓸 수 있게 하는 다리
 let addressFlyBridge: ((lat: number, lng: number, label: string, sub: string) => void) | null = null;
+let addressClearBridge: (() => void) | null = null;
 
 const mapLabels: MapLabel[] = [
   { code: "G1", name: "", color: "#ff8458" },
@@ -664,6 +665,9 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     canvasRendererRef.current = L.canvas({ padding: 0.18 });
     mapRef.current = map;
     // 주소 검색(메인 컴포넌트)에서 좌표로 지도를 움직일 수 있게 모듈 다리 등록
+    addressClearBridge = () => {
+      if (addressPinRef.current) { addressPinRef.current.remove(); addressPinRef.current = null; }
+    };
     addressFlyBridge = (lat, lng, label, sub) => {
       if (addressPinRef.current) { addressPinRef.current.remove(); addressPinRef.current = null; }
       // 기본 마커 아이콘은 번들에서 이미지가 빠져 깨져 보인다 — 스타일 핀으로 대체
@@ -683,6 +687,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
       map.remove();
       mapRef.current = null;
       addressFlyBridge = null;
+      addressClearBridge = null;
       markerLayerRef.current = null;
       locationLayerRef.current = null;
       canvasRendererRef.current = null;
@@ -883,6 +888,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [query, setQuery] = useState("");
   // 주소 지오코딩(OSM) — 분기점검에 없는 AS 방문지도 주소만 치면 지도에서 위치 확인
   const [geocoding, setGeocoding] = useState(false);
+  const [addressPinLabel, setAddressPinLabel] = useState("");
   const locateAddress = async (raw: string) => {
     const q = raw.trim();
     if (!q) return;
@@ -902,8 +908,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         if (hits.length) { hit = hits[0]; break; }
       }
       if (!hit) { notify(`"${q}" 주소를 찾지 못했어요 — 도로명 주소로 다시 시도해 보세요.`, "error"); return; }
-      if (addressFlyBridge) addressFlyBridge(Number(hit.lat), Number(hit.lon), q, hit.display_name.split(",").slice(0, 3).join(","));
-      else notify("지도가 아직 준비되지 않았어요 — 잠시 후 다시 시도해 주세요.", "error");
+      if (addressFlyBridge) {
+        addressFlyBridge(Number(hit.lat), Number(hit.lon), q, hit.display_name.split(",").slice(0, 3).join(","));
+        setAddressPinLabel(q);
+        setQuery(""); // 검색어를 비워야 업체 리스트가 다시 보인다 (핀은 유지)
+      } else notify("지도가 아직 준비되지 않았어요 — 잠시 후 다시 시도해 주세요.", "error");
     } catch (e) {
       notify(`주소 검색 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -1827,6 +1836,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && query.trim() && !filtered.length) void locateAddress(query); }} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <button type="button" disabled={geocoding || !query.trim()} onClick={() => void locateAddress(query)} title="주소를 좌표로 찾아 지도에 표시"
             className="shrink-0 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">{geocoding ? "…" : "📍주소"}</button>
+          {addressPinLabel && <button type="button" onClick={() => { addressClearBridge?.(); setAddressPinLabel(""); }} title="지도의 주소 핀 지우기"
+            className="flex max-w-[10rem] shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-[11px] font-black text-blue-700 transition hover:bg-blue-100"><span className="truncate">📍{addressPinLabel}</span><span>✕</span></button>}
           {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
           <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>

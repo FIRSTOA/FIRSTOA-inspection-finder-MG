@@ -109,7 +109,8 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
     const map = L.map(mapElRef.current, { zoomControl: true }).setView([37.55, 127.0], 11);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
+    // CARTO 라이트 타일 — OSM 기본보다 깔끔한 회색톤이라 핀·동선이 잘 보인다
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© OpenStreetMap © CARTO", subdomains: "abcd", maxZoom: 20 }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; layerRef.current = null; };

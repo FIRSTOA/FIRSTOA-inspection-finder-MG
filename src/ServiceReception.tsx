@@ -411,8 +411,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     goPage("copier");
     setCustKind(row.lease_no ? "기존" : "신규");
     setFirstNo(row.lease_no || "");
-    setSavedRowId(row.id);           // 이미 저장된 건 — 전송 시 새로 저장하지 않는다
-    sheetRowTargetRef.current = row.id;
+    // savedRowId는 이어받지 않는다 — [접수]를 누르면 "새" 복합기 접수가 생겨야 한다 (원격 실적과 별개)
+    setSavedRowId(null);
+    sheetRowTargetRef.current = "";
     setManual({ ...EMPTY_MANUAL, 접수자성함: row.receiver_name || "", 접수자연락처: row.receiver_phone || "", 제목: row.title || "", 증상: row.symptom || "", 주소: row.address || "" });
     if (row.lease_no) {
       try {
@@ -427,61 +428,62 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     } else if (row.vendor) {
       setManualVendor(row.vendor);
     }
-    notify(`${row.vendor || "접수"} 내용을 복합기 접수 폼으로 불러왔어요 — 확인 후 [⚡ 전체] 또는 [AS방 보내기]로 전송하세요.`);
+    notify(`${row.vendor || "접수"} 내용을 복합기 접수 폼으로 불러왔어요 — 확인 후 [접수] 또는 [⚡ 전체]를 눌러야 접수·시트 기입이 됩니다.`);
+  };
+
+  // 복합기 → 원격/IT 방향도 동일하게 "내용 넘기기"만
+  const prefillRemoteForm = async (row: ServiceReceptionRow, next: "원격이관" | "IT") => {
+    goPage(next === "IT" ? "it" : "remote");
+    setCustKind(row.lease_no ? "기존" : "신규");
+    setFirstNo(row.lease_no || "");
+    setSavedRowId(null);
+    sheetRowTargetRef.current = "";
+    setManual({ ...EMPTY_MANUAL, 접수자성함: row.receiver_name || "", 접수자연락처: row.receiver_phone || "", 증상: row.symptom || "" });
+    if (row.lease_no) {
+      try {
+        const hits = await searchLeaseList(row.lease_no);
+        const hit = hits.find((h) => String(pick(h, "순번", "순") || "").trim() === String(row.lease_no).trim()) || hits[0];
+        if (hit) await selectLease(hit);
+      } catch { /* 수동 진행 */ }
+    } else if (row.vendor) {
+      setManualVendor(row.vendor);
+    }
+    notify(`${row.vendor || "접수"} 내용을 ${next} 접수 폼으로 불러왔어요 — [접수]를 눌러야 접수·시트 기입이 됩니다.`);
   };
 
   const changeType = async (row: ServiceReceptionRow, next: string) => {
     if (row.type === next) return;
     const groupOf = (t: string) => (t === "복합기 AS" ? "copier" : "remote");
     const crossTab = groupOf(row.type) !== groupOf(next);
-    const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
+    // 탭을 건너는 변경(원격↔복합기)은 "전환"이 아니라 "내용 넘기기"다:
+    // 기존 접수는 그대로 남고(한 일은 실적로 인정), 시트 기입도 없다.
+    // 폼에 내용만 채워주고, 사람이 확인 후 [접수]를 눌러야 새 접수·시트 기입이 된다.
     if (crossTab) {
-      lines.push(row.lease_no
-        ? `· ${next === "복합기 AS" ? "복합기 접수 탭" : "원격 탭"}에 접수 행을 새로 기입합니다.`
-        : "· 신규 거래처(순번 없음)라 새 탭 시트 기입은 생략됩니다 — 필요하면 수동 기입.");
-      lines.push(`· 기존 ${row.type === "복합기 AS" ? "복합기" : "원격"} 탭의 행은 남아 있으니 필요 없으면 직접 지워주세요.`);
-      if (next === "복합기 AS") lines.push("· 접수 내용을 복합기 접수 폼으로 불러옵니다 (AS방 전송·일정 등록용).");
+      const target = next === "복합기 AS" ? "복합기 AS" : next;
+      if (!window.confirm([
+        `${row.vendor || "이 접수"}의 내용을 ${target} 접수 폼으로 불러올까요?`,
+        `· 기존 ${row.type} 접수는 그대로 남습니다 (실적 유지)`,
+        `· 시트에는 아직 아무것도 기입되지 않습니다`,
+        `· 내용 확인 후 [접수]를 눌러야 ${target} 접수·시트 기입이 됩니다`,
+        ...(row.type !== "복합기 AS" ? ["· 원격 건 마무리는 처리 저장에서 '처리여부: AS이관'을 선택하세요"] : []),
+      ].join("\n"))) return;
+      if (next === "복합기 AS") void prefillCopierForm(row);
+      else void prefillRemoteForm(row, next as "원격이관" | "IT");
+      return;
     }
+    const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
     if (next === "원격이관") lines.push("· 연결된 방문 일정(미완료)은 삭제됩니다.");
     if (!window.confirm(lines.join("\n"))) return;
     setTypeBusyId(row.id);
     try {
       const keepStatus = ["완료", "원격완료"].includes(row.status);
-      await updateServiceReception(row.id, { type: next, ...(crossTab ? { sheet_row: null } : {}), ...(!keepStatus && row.status !== "접수" ? { status: "접수" } : {}) });
+      await updateServiceReception(row.id, { type: next, ...(!keepStatus && row.status !== "접수" ? { status: "접수" } : {}) });
       // 한조처리 동기화: IT면 "IT", 원격이관이면 공백 (처리 화면·시트 표기 기준값)
       if (next === "IT" || next === "원격이관") void mergeReceptionHandling(row.id, { hanjo: next === "IT" ? "IT" : "" }).catch(() => {});
-      if (crossTab && row.lease_no) {
-        // 새 탭에 접수 행 기입 — 접수 당시 값(작성자·시각·내용)을 그대로 옮긴다
-        const parts = receiptParts(row.created_at);
-        void runSheetWrite(row.id, async () => {
-          if (next === "복합기 AS") {
-            const { row: sheetRow } = await sendReceptionCopierSheetJob({
-              author: row.author, vendor: row.vendor, firstNo: row.lease_no, route: row.route,
-              field: row.field || "A/S", paid: row.paid || "", receiverName: row.receiver_name || "",
-              receiverPhone: row.receiver_phone || "", title: row.title || "", symptom: row.symptom || "",
-            });
-            if (sheetRow) await updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
-            return sheetRow ?? null;
-          }
-          const { row: sheetRow } = await sendReceptionRemoteSheetJob({
-            author: row.author, vendor: row.vendor, leaseNo: row.lease_no, route: row.route,
-            hanjo: next === "IT" ? "IT" : "", start: "", end: "", result: "", handler: "",
-            contact: [row.receiver_name, row.receiver_phone].filter(Boolean).join("\n"),
-            symptom: row.symptom || "", extraCount: "", handled: "", linked: "",
-            receiptDate: parts.date, receiptTime: parts.time, receiptAuthor: row.author,
-          });
-          if (sheetRow) await updateServiceReception(row.id, { sheet_row: sheetRow }).catch(() => {});
-          return sheetRow ?? null;
-        });
-      } else if (!crossTab) {
-        // 원격 탭 안의 IT ↔ 원격이관: 행 유지, 한조처리(L열)만 갱신
-        if (next === "IT") syncRemoteSheet(row, { ...(row.remote_meta || {}), hanjo: "IT" });
-        else notify("원격이관으로 변경됨 — 시트 L열의 'IT' 표기는 직접 지워주세요 (빈 값으로는 덮어쓸 수 없어요)");
-      }
-      // 원격이관은 방문이 없다 — 완료되지 않은 방문 일정을 정리해 상태 뒤집힘을 막는다
+      // 원격 탭 안의 IT ↔ 원격이관: 행 유지, 한조처리(L열)만 갱신
+      if (next === "IT") syncRemoteSheet(row, { ...(row.remote_meta || {}), hanjo: "IT" });
+      else notify("원격이관으로 변경됨 — 시트 L열의 'IT' 표기는 직접 지워주세요 (빈 값으로는 덮어쓸 수 없어요)");
       if (next === "원격이관") void deleteRows("as_tickets", `receptionId=eq.${row.id}&status=neq.완료`).catch(() => {});
-      // 원격 → 복합기: 접수 내용을 폼으로 불러와 바로 전송·일정 등록할 수 있게 한다
-      if (crossTab && next === "복합기 AS") void prefillCopierForm({ ...row, type: next });
       await loadList(listDate, listPeriod);
       void loadRemoteQueue();
     } catch (e) {

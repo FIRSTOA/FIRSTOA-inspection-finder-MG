@@ -43,7 +43,25 @@ export default function AutoSchedule({ author }: { author: string }) {
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
   // 앵커 좌표 — 워킨맵에서 업체명으로 찾고(정규화 키 대조), 없으면 주소 지오코딩 폴백
-  const resolveAnchor = useCallback(async (name: string) => {
+  // 도로명 띄어쓰기 변형까지 시도하는 지오코딩 ("삼성로 100길" ↔ "삼성로100길")
+  const geocodeFlexible = async (q: string): Promise<{ lat: number; lng: number } | null> => {
+    const variants = [...new Set([
+      q,
+      q.replace(/([가-힣]+로)\s+(\d+길)/g, "$1$2"),
+      q.replace(/([가-힣]+로)(\d+길)/g, "$1 $2"),
+      q.replace(/\s*\d+호$/, "").replace(/\s*\d+층$/, ""),
+    ])];
+    for (const variant of variants) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(variant)}`, { headers: { "Accept-Language": "ko" } });
+        const geo = (await res.json()) as Array<{ lat: string; lon: string }>;
+        if (geo.length) return { lat: Number(geo[0].lat), lng: Number(geo[0].lon) };
+      } catch { /* 다음 변형 */ }
+    }
+    return null;
+  };
+
+  const resolveAnchor = useCallback(async (name: string, address = "") => {
     const raw = name.trim();
     if (!raw) { setAnchorGeo(null); return; }
     // 법인 접두어·기호를 뺀 핵심 토큰으로 검색 — "주식회사 무암 (Mooam)" → "무암"
@@ -63,18 +81,19 @@ export default function AutoSchedule({ author }: { author: string }) {
       .sort((a, b) => b.score - a.score);
     const hit = scored[0]?.h;
     if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number }); return; }
-    // 업체를 못 찾으면 입력을 주소로 보고 지오코딩 (직접 지정 칸에 주소를 쳐도 되게)
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=${encodeURIComponent(raw)}`, { headers: { "Accept-Language": "ko" } });
-      const geo = (await res.json()) as Array<{ lat: string; lon: string }>;
-      if (geo.length) { setAnchorGeo({ name: `${raw} (주소)`, lat: Number(geo[0].lat), lng: Number(geo[0].lon) }); return; }
-    } catch { /* 아래 안내로 */ }
+    // 워킨맵에 없는 업체(예: 분기점검 대상 아님) — 일정의 주소 → 입력값 순으로 지오코딩
+    for (const source of [address, raw]) {
+      const q = String(source || "").trim();
+      if (!q) continue;
+      const found = await geocodeFlexible(q);
+      if (found) { setAnchorGeo({ name: `${q.slice(0, 20)} (주소)`, lat: found.lat, lng: found.lng }); return; }
+    }
     setAnchorGeo(null);
     setNotice(`"${raw}"의 좌표를 못 찾았습니다 — 업체명 또는 주소로 다시 시도해 보세요 (거리 정렬 없이 경과일 순).`);
   }, []);
 
   const anchorTicket = tickets.find((t) => t.id === anchorId);
-  useEffect(() => { void resolveAnchor(anchorTicket?.vendor || anchorQuery); }, [anchorTicket?.vendor, anchorQuery, resolveAnchor]);
+  useEffect(() => { void resolveAnchor(anchorTicket?.vendor || anchorQuery, anchorTicket?.address || ""); }, [anchorTicket?.vendor, anchorTicket?.address, anchorQuery, resolveAnchor]);
 
   const suggest = async () => {
     setLoading(true);

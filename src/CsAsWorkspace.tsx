@@ -910,21 +910,18 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setCurrentMonth(monthStart(todayYmd))} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
+                  <button type="button" onClick={() => { setCurrentMonth(monthStart(todayYmd)); window.setTimeout(() => document.getElementById(`cal-day-${todayYmd}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
                   <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">‹</button>
                   <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">›</button>
                   <h2 className="ml-1 text-lg font-black text-slate-950 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
                 </div>
                 <div className="rounded-full bg-slate-100 p-1">
-                  {(["calendar", "list", "mine"] as ViewMode[]).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : mode === "list" ? "목록" : "내 일정"}</button>
+                  {(["calendar", "list"] as ViewMode[]).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : "목록"}</button>
                   ))}
                 </div>
               </div>
 
-              {viewMode === "mine" && (
-                <div className="p-3 sm:p-4"><MyPlan tickets={tickets} author={author} /></div>
-              )}
               {viewMode === "list" ? (
                 <div className="space-y-4 p-3 sm:p-4">
                   {Array.from(
@@ -936,7 +933,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
                         return groups;
                       }, new Map<string, AsTicket[]>()),
                   ).map(([date, list]) => (
-                    <div key={date}>
+                    <div key={date} id={`cal-day-${date}`}>
                       <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg bg-slate-100/95 px-3 py-1.5 backdrop-blur ${date === todayYmd ? "text-blue-700" : "text-slate-600"}`}>
                         <span className="text-sm font-black">{Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()]})</span>
                         {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
