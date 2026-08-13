@@ -12,6 +12,7 @@ import { kstDate } from "./visits";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { getRecentInspections, type InspectionSnapshot } from "./api";
+import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 
@@ -19,7 +20,14 @@ export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
   assignee: string; status: string; scheduleType: string; issue?: string;
   contact?: string; model?: string; serial?: string; asset?: string; grade?: string; keyman?: string; note?: string;
+  source?: string;
 };
+
+// 자동일정 생성 건은 분기점검 워킨맵에서 온 것 — 저장 유형(매월점검) 대신 실제 의미로 표시
+function planTypeLabel(t: MyPlanTicket): string {
+  if (t.source === "autoplan") return t.scheduleType === "AS" ? "재계약" : "분기점검";
+  return t.scheduleType;
+}
 
 type Geo = { lat: number; lng: number };
 
@@ -27,7 +35,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; author: string }) {
+export default function MyPlan({ tickets, author, onSelfRequest }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void }) {
   const [date, setDate] = useState(kstDate());
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -219,7 +227,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
   const markerHtml = (i: number, isPinned: boolean) =>
     `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
   const popupHtml = (i: number, t: MyPlanTicket) =>
-    `<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${t.scheduleType}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`;
+    `<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${planTypeLabel(t)}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`;
 
   useEffect(() => {
     if (engine === "leaflet") {
@@ -341,7 +349,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{t.scheduleType}</span>
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
@@ -374,7 +382,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
         const g = getGeo(detail);
         const phone = (detail.contact || meta?.phone || "").match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] || "";
         const infoRows: Array<[string, string]> = [
-          ["유형", `${detail.scheduleType}${detail.time ? ` · ${detail.time}` : ""}`],
+          ["유형", `${planTypeLabel(detail)}${detail.time ? ` · ${detail.time}` : ""}`],
           ["접수내용", detail.issue || ""],
           ["기종", [detail.model, detail.serial && `S/N ${detail.serial}`, detail.asset && `자산 ${detail.asset}`].filter(Boolean).join(" · ")],
           ["담당자", [detail.keyman, detail.contact].filter(Boolean).join(" · ")],
@@ -388,7 +396,7 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400">
                     <span className="rounded bg-white/10 px-1.5 py-0.5 text-white">{ordered.findIndex((x) => x.id === detail.id) + 1}번</span>
-                    <span>{detail.scheduleType}</span>
+                    <span>{planTypeLabel(detail)}</span>
                     {detail.grade && <span className="rounded bg-purple-400/20 px-1.5 py-0.5 text-purple-200">{detail.grade}</span>}
                   </div>
                   <div className="mt-1 truncate text-[16px] font-black text-white">{detail.vendor}</div>
@@ -425,15 +433,53 @@ export default function MyPlan({ tickets, author }: { tickets: MyPlanTicket[]; a
                   </div>
                 )}
                 <div className="rounded-xl border border-slate-200 p-3">
-                  <div className="text-[11px] font-black text-slate-400">최근 점검</div>
+                  <div className="text-[11px] font-black text-slate-400">최근 점검 · 사용량 분석</div>
                   {detailSnaps === null && <div className="py-3 text-center text-[11px] font-bold text-slate-400">불러오는 중…</div>}
                   {detailSnaps?.length === 0 && <div className="py-3 text-center text-[11px] font-bold text-slate-400">점검 기록 없음</div>}
                   {(detailSnaps || []).map((snap, i) => (
                     <div key={i} className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[12px] font-bold leading-5 text-slate-600">
-                      <span className="text-slate-900">{snap.date}</span>{snap.model ? ` · ${snap.model}` : ""}
+                      <span className="text-slate-900">■ {i === 0 ? "전방문" : "전전방문"} {snap.date}</span>{snap.model ? ` · ${snap.model}` : ""}
                       <br />매수 {snap.counts || "-"} · 토너 {snap.toner || "-"} · 여분 {snap.spare || "-"}{snap.waste ? ` · 폐통 ${snap.waste}` : ""}
                     </div>
                   ))}
+                  {(() => {
+                    const advice = detailSnaps?.length ? usageSpareAdvice(detailSnaps[0], detailSnaps[1], `${detail.model || detailSnaps[0].model || ""}`) : null;
+                    if (!advice) return null;
+                    return (
+                      <div className="mt-2 space-y-1 text-[12px] font-bold leading-5">
+                        {advice.warning && <div className="text-rose-600">■ 주의: {advice.warning}</div>}
+                        {advice.usageLine && <div className="text-slate-700">■ 사용량: {advice.usageLine}</div>}
+                        {advice.adviceLine && <div className="text-blue-700">■ 여분 분석: {advice.adviceLine}</div>}
+                        {advice.needsList.length > 0 && onSelfRequest && (
+                          <button type="button" onClick={() => {
+                            const snap = detailSnaps?.[0];
+                            const text = [
+                              `작성자:${author}`, "구분: 점검", "레벨:1", "등급:",
+                              `업체명:${detail.vendor}`, "부서명:", `지역:${detail.team || ""}`, "키맨/접수자:",
+                              "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ", "1.",
+                              `모델명: ${snap?.model || detail.model || ""}`,
+                              `시리얼넘버: ${snap?.serial || detail.serial || ""}`,
+                              `자산기번: ${snap?.asset || detail.asset || ""}`,
+                              "내용: 여분 자가신청", "처리내용:",
+                              `매수: ${snap?.counts || "흑- 컬- 큰컬- 합-"}`,
+                              `토너잔량: ${snap?.toner || "K- C- M- Y-"}`,
+                              `폐통: ${snap?.waste || ""}`,
+                              `여분: ${snap?.spare || ""}`,
+                              "한틴이카유무:", "주차비지원유무:", "특이사항:",
+                              "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+                              "※자가신청※",
+                              `물품: ${spareNeedItems(advice.needsList)}`,
+                              "수량:", "출고여부:",
+                            ].join("\n");
+                            setDetail(null);
+                            onSelfRequest(text);
+                          }} className="mt-1 w-full rounded-full bg-emerald-600 py-2 text-center text-[12px] font-black text-white transition hover:bg-emerald-700">
+                            🧰 자가신청 양식 만들기 ({spareNeedItems(advice.needsList)})
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">

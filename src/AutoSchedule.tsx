@@ -108,7 +108,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       for (const c of chosen) {
         await upsertRow("as_tickets", {
           id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          team, date, time: "09:00", vendor: c.vendor, contact: "", address: c.addr, department: "",
+          team, date, time: "", vendor: c.vendor, contact: "", address: c.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
           model: "", serial: "", asset: "", grade: c.grade, keyman: "",
           issue: kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${c.last_date || "기록 없음"}${c.days_since < 9999 ? ` · ${c.days_since}일 경과` : ""})`,
           note: "", assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",

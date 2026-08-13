@@ -5780,7 +5780,7 @@ export default function App() {
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
-        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} />}
+        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
 
         {ticketDonePrompt && (

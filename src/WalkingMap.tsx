@@ -908,6 +908,8 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const map = new kakao.maps.Map(elementRef.current, { center: new kakao.maps.LatLng(view.lat, view.lng), level: view.level });
     mapRef.current = map;
     kakao.maps.event.addListener(map, "tilesloaded", () => setReady(true));
+    // 그룹 팝업은 지도 아무 데나 누르면 닫힌다 (✕만 고집하지 않게)
+    kakao.maps.event.addListener(map, "click", () => { if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; } });
     window.setTimeout(() => setReady(true), 2500); // 이벤트가 안 와도 로딩막은 걷는다
     // 주소 검색 다리
     addressClearBridge = () => { if (addressPinRef.current) { addressPinRef.current.setMap(null); addressPinRef.current = null; } };
@@ -1019,7 +1021,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       if (existing) { existing.setMap(null); group.forEach((item) => labelByIdRef.current.delete(item.id)); }
 
       const container = document.createElement("div");
-      container.style.cssText = "position:relative;cursor:pointer;text-align:center";
+      container.style.cssText = "position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center";
       const openGroupPopup = () => {
         if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
         const popup = document.createElement("div");
@@ -1188,11 +1190,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
-  const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; rows: Array<{ date: string; text: string }>; loading: boolean } | null>(null);
+  const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; records: Array<Record<string, unknown>>; loading: boolean } | null>(null);
   const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만") => {
-    setFlagHistory({ vendor, kind, rows: [], loading: true });
+    setFlagHistory({ vendor, kind, records: [], loading: true });
     const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
-    // 법인 접두어를 뗀 핵심 토큰으로 서버에서 바로 거른다 — 최근 400행 안에 없던 옛 이력까지 나온다
+    // 워킨맵 이름의 접두 숫자·등급·법인·꼬리표를 뗀 핵심 토큰 — 짧게 잘라가며 재시도
     const core = vendor
       .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
       .replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim()
@@ -1200,20 +1202,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const key = vendorMatchKey(vendor);
     // 미수·초과는 시트 기준(_출처 시트), 불만은 카톡·시트·웹앱 전부
     const sourceFilter = kind === "미수" ? `&${encodeURIComponent("_출처")}=like.${encodeURIComponent("시트")}*` : "";
-    void selectRows<Record<string, unknown>>(table, `select=*&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(core.slice(0, 8))}*${sourceFilter}&order=id.desc&limit=30`)
-      .then((rows) => {
-        const hits = rows.filter((r) => {
+    void (async () => {
+      let hits: Array<Record<string, unknown>> = [];
+      for (const len of [8, 5, 3]) {
+        const probe = core.slice(0, len);
+        if (probe.length < 2) break;
+        const rows = await selectRows<Record<string, unknown>>(table, `select=*&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*${sourceFilter}&order=id.desc&limit=40`).catch(() => [] as Array<Record<string, unknown>>);
+        hits = rows.filter((r) => {
           const rk = vendorMatchKey(String(r["_업체명"] || ""));
           return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
-        }).slice(0, 10).map((r) => {
-          const source = String(r["_출처"] || "").split(":")[0] || "";
-          if (kind === "미수") {
-            const months = String(r["미수개월"] || r["실제 개월수"] || "").replace(/개월/g, "").trim();
-            const balance = misuBalanceLabel(String(r["미수잔액"] || r["실제 잔액"] || ""));
-            return {
-              date: normMisuDate(String(r["입력일"] || "")) || String(r["입력일"] || "").slice(0, 10),
-              text: `${months ? `${months}개월` : "개월 미상"} · ${balance || "잔액 미상"}${source ? `  (${source})` : ""}`,
-            };
+        });
+        if (hits.length) break;
+      }
+      setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, records: hits.slice(0, 3), loading: false } : cur));
+    })();
+  };
           }
           if (kind === "초과") {
             return {
@@ -2728,15 +2731,33 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               </div>
               <button type="button" onClick={() => setFlagHistory(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
             </div>
-            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
               {flagHistory.loading && <div className="py-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-              {!flagHistory.loading && !flagHistory.rows.length && <div className="py-8 text-center text-xs font-bold text-slate-400">이력을 찾지 못했습니다.</div>}
-              {flagHistory.rows.map((r, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 px-3 py-2">
-                  <div className="text-[10px] font-black text-slate-400">{r.date || "날짜 미상"}</div>
-                  <div className="mt-0.5 whitespace-pre-wrap text-[12px] font-bold leading-5 text-slate-700">{r.text}</div>
-                </div>
-              ))}
+              {!flagHistory.loading && !flagHistory.records.length && <div className="py-8 text-center text-xs font-bold text-slate-400">이력을 찾지 못했습니다.</div>}
+              {flagHistory.records.map((record, i) => {
+                const date = normMisuDate(String(record["입력일"] || record["방문일"] || record["날짜"] || "")) || String(record["입력일"] || record["방문일"] || record["날짜"] || "").slice(0, 10);
+                const source = String(record["_출처"] || "");
+                const hiddenKeys = new Set(["id", "created_at", "_dupKey", "_raw", "_원문", "원문", "_등록시각", "_hidden", "_hidden_by", "_hidden_at", "_출처", "_업체명"]);
+                const fields = Object.entries(record)
+                  .filter(([k, v]) => !hiddenKeys.has(k) && String(v ?? "").trim() !== "" && String(v ?? "").trim() !== "0")
+                  .map(([k, v]) => [k, String(v)] as [string, string]);
+                return (
+                  <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2">
+                      <span className="text-[12px] font-black text-slate-800">{date || "날짜 미상"}</span>
+                      {source && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source.split(":")[0]}</span>}
+                    </div>
+                    <div className="px-3 py-1.5">
+                      {fields.map(([k, v]) => (
+                        <div key={k} className="flex items-start gap-3 border-b border-slate-50 py-1 last:border-0">
+                          <span className="w-20 shrink-0 pt-0.5 text-[10px] font-black text-slate-400">{k}</span>
+                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[12px] font-bold leading-5 text-slate-700">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

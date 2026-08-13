@@ -373,11 +373,11 @@ export function CsCalendar() {
   return <CsAsWorkspace view="calendar" />;
 }
 
-export function AsReception({ author, onUseField }: { author: string; onUseField: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
-  return <CsAsWorkspace view="as" author={author} onUseField={onUseField} />;
+export function AsReception({ author, onUseField, onSelfRequest }: { author: string; onUseField: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void }) {
+  return <CsAsWorkspace view="as" author={author} onUseField={onUseField} onSelfRequest={onSelfRequest} />;
 }
 
-function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
+function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void }) {
   const todayYmd = getTodayYmd();
   const tomorrowYmd = getTomorrowYmd();
   const [, setDateTick] = useState(0);
@@ -1042,7 +1042,7 @@ function CsAsWorkspace({ view, author = "", onUseField }: { view: "calendar" | "
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
 
-          {myPlanOpen && <MyPlan tickets={tickets} author={author} />}
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {scheduleRows.map((ticket, ti) => (
               <div key={ticket.id}>
