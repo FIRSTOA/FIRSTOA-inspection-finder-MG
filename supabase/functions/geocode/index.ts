@@ -17,7 +17,12 @@ function variants(raw: string): string[] {
     .replace(/([가-힣]로)\s*(\d+(?:-\d+)?)(?=\s|$)(?!\s*길)/g, "$1 $2");
   push(joined);
   push(q);
-  push(joined.replace(/\s*\d+(층|호)\b.*$/, "").replace(/\s*\([^)]*\)\s*$/, ""));
+  // 상세주소(층·호·괄호) 제거 — "202호" 뒤 \b는 한글이라 안 걸리므로 명시 패턴으로 자른다
+  const noDetail = joined.replace(/\s*\d+\s*(층|호)(\s.*)?$/, "").replace(/\s*\([^)]*\)\s*$/, "");
+  push(noDetail);
+  // 건물번호까지만 남긴 압축형 — 노미나팀이 가장 잘 먹는 형태
+  const m = noDetail.match(/^(.*?(?:로|길)\d*(?:번)?길?\s*\d+(?:-\d+)?)/);
+  if (m) push(m[1]);
   return out;
 }
 
