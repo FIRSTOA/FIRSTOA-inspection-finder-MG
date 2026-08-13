@@ -11,6 +11,7 @@ import { rpc, selectRows, upsertRow } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
+import { defaultPlanDate, nextBusinessDay } from "./planDate";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = { id: number; place_name: string; vendor: string; grade: string; label: string; addr: string; lat: number | null; lng: number | null; last_date: string | null; days_since: number; distance_km: number | null; quarter_ok: boolean; never_visited: boolean };
@@ -20,7 +21,7 @@ const GRADES = ["N", "NN", "S", "SS", "V"] as const;
 
 export default function AutoSchedule({ author }: { author: string }) {
   const [team, setTeam] = useState("C");
-  const [date, setDate] = useState(kstDate());
+  const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [onlyMine, setOnlyMine] = useState(true);
   const [anchorId, setAnchorId] = useState("");
@@ -136,7 +137,11 @@ export default function AutoSchedule({ author }: { author: string }) {
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검·재계약을 추천합니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white outline-none" />
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>오늘</button>
+              <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>내일</button>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white outline-none" />
+            </div>
             <div className="flex gap-1 rounded-full bg-white/10 p-1">
               {TEAMS.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`${chip} ${team === t ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{t}팀</button>)}
             </div>

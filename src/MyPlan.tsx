@@ -9,9 +9,10 @@ import L from "leaflet";
 import { selectAllRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
+import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getInspForms, getRecentInspections, type InspectionSnapshot, type InspForm } from "./api";
+import { getInspForms, getRecentInspections, searchVendors, type InspectionSnapshot, type InspForm } from "./api";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -36,7 +37,7 @@ function distKm(a: Geo, b: Geo): number {
 }
 
 export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
-  const [date, setDate] = useState(kstDate());
+  const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
@@ -313,9 +314,26 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
   const [fieldPick, setFieldPick] = useState<{ ticket: MyPlanTicket; forms: InspForm[] | null } | null>(null);
   const openFieldPick = (t: MyPlanTicket) => {
     setFieldPick({ ticket: t, forms: null });
-    void getInspForms(t.vendor)
-      .then((res) => setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: res.forms.filter((f) => f.text) } : cur)))
-      .catch(() => setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: [] } : cur)));
+    void (async () => {
+      try {
+        // 1차: 일정의 업체명 그대로 (기록의 _업체명과 정확 일치해야 나온다)
+        let forms = (await getInspForms(t.vendor)).forms.filter((f) => f.text);
+        if (!forms.length) {
+          // 2차: 표기가 다르면(괄호·법인 등) 검색으로 기록상의 실제 업체명을 찾아 재시도
+          const core = t.vendor.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || t.vendor;
+          const found = await searchVendors(core.slice(0, 8));
+          const key = vendorMatchKey(t.vendor);
+          const best = (found.results || [])
+            .map((r) => ({ r, k: vendorMatchKey(r.vendor) }))
+            .filter((x) => x.k && (x.k === key || key.startsWith(x.k) || x.k.startsWith(key)))
+            .sort((a, b) => b.k.length - a.k.length)[0];
+          if (best) forms = (await getInspForms(best.r.vendor)).forms.filter((f) => f.text);
+        }
+        setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms } : cur));
+      } catch {
+        setFieldPick((cur) => (cur && cur.ticket.id === t.id ? { ...cur, forms: [] } : cur));
+      }
+    })();
   };
 
   // 상세 모달 — 워킨맵 정보 + AS 접수내용 + 최근 점검을 한 화면에 (워킨맵 안 봐도 되게)
@@ -334,6 +352,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField }: {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>오늘</button>
+        <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>내일</button>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-black text-slate-700 outline-none" />
         <span className="text-xs font-black text-slate-500">{author}의 일정 {myTickets.length}건</span>
         <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">

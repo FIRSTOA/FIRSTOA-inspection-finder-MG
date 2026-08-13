@@ -2700,13 +2700,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       )}
       {flagHistory && (
         <div className="fixed inset-0 z-[2400] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
-          <div className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
+          <div className="flex max-h-[78vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
               <div className="min-w-0">
-                <div className="text-[11px] font-black text-slate-400">최근 {flagHistory.kind} 이력</div>
-                <div className="truncate text-[15px] font-black text-white">{flagHistory.vendor}</div>
+                <div className="text-[11px] font-black text-blue-600">최근 {flagHistory.kind} 이력 · 최신 {flagHistory.records.length || ""}건</div>
+                <div className="truncate text-base font-black text-slate-950">{flagHistory.vendor}</div>
               </div>
-              <button type="button" onClick={() => setFlagHistory(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+              <button type="button" onClick={() => setFlagHistory(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100">✕</button>
             </div>
             <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
               {flagHistory.loading && <div className="py-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
@@ -2719,16 +2719,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   .filter(([k, v]) => !hiddenKeys.has(k) && String(v ?? "").trim() !== "" && String(v ?? "").trim() !== "0")
                   .map(([k, v]) => [k, String(v)] as [string, string]);
                 return (
-                  <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2">
-                      <span className="text-[12px] font-black text-slate-800">{date || "날짜 미상"}</span>
-                      {source && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source.split(":")[0]}</span>}
+                  <div key={i} className="rounded-lg border border-slate-200 p-3">
+                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{flagHistory.kind}</span>
+                      <span className="text-sm font-black text-slate-950">{date || "날짜 미상"}</span>
+                      {source && <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source.split(":")[0]}</span>}
                     </div>
-                    <div className="px-3 py-1.5">
+                    <div className="pt-1">
                       {fields.map(([k, v]) => (
-                        <div key={k} className="flex items-start gap-3 border-b border-slate-50 py-1 last:border-0">
-                          <span className="w-20 shrink-0 pt-0.5 text-[10px] font-black text-slate-400">{k}</span>
-                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[12px] font-bold leading-5 text-slate-700">{v}</span>
+                        <div key={k} className="flex items-start justify-between gap-3 border-b border-slate-50 py-1.5 last:border-0">
+                          <span className="w-24 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{k.replace(/^_/, "")}</span>
+                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{v}</span>
                         </div>
                       ))}
                     </div>
