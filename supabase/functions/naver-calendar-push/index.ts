@@ -165,6 +165,7 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, status: "deleted" }, { headers: jsonHeaders });
       }
       // caldav_update: 넘어온 필드만 교체(부분 수정) — date/time이 오면 일정 시간도 이동 (익일 연기 등)
+      // 나머지 원본 속성(RRULE 반복 규칙·알림 등)은 그대로 보존한다 — 네이버 직접 일정도 안전하게 수정 가능
       const unfolded = eventBlockOf(ics).replace(/\r?\n[ \t]/g, "");
       const keep = (name: string) => (unfolded.match(new RegExp(`^(${name}[^:]*:.*)$`, "mi")) || [])[1] || "";
       const esc = (v: string) => String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
@@ -173,20 +174,31 @@ Deno.serve(async (req) => {
       const description2 = body.description !== undefined ? String(body.description) : icsProp(ics, "DESCRIPTION");
       let dtstartLine = keep("DTSTART");
       let dtendLine = keep("DTEND");
+      const wasAllDay = /^DTSTART(;[^:]*VALUE=DATE[^:]*)?:\d{8}$/mi.test(unfolded);
       if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
         const [yy, mm, dd] = body.date.split("-").map(Number);
         const oldTime = dtstartLine.match(/T(\d{2})(\d{2})/) || [];
         const hasTime = typeof body.time === "string" && /^\d{2}:\d{2}$/.test(body.time);
-        const hh = hasTime ? Number(String(body.time).slice(0, 2)) : Number(oldTime[1] ?? 9);
-        const mi = hasTime ? Number(String(body.time).slice(3, 5)) : Number(oldTime[2] ?? 0);
         const pad2 = (n: number) => String(n).padStart(2, "0");
-        const stamp2 = (h: number, m: number) => `${yy}${pad2(mm)}${pad2(dd)}T${pad2(h)}${pad2(m)}00`;
-        const endMin = mi + 60;
-        dtstartLine = `DTSTART;TZID=Asia/Seoul:${stamp2(hh, mi)}`;
-        dtendLine = `DTEND;TZID=Asia/Seoul:${stamp2(hh + Math.floor(endMin / 60), endMin % 60)}`;
+        if (wasAllDay && !hasTime) {
+          // 종일 일정은 종일인 채로 날짜만 이동
+          const next = new Date(Date.UTC(yy, mm - 1, dd) + 86400_000);
+          dtstartLine = `DTSTART;VALUE=DATE:${yy}${pad2(mm)}${pad2(dd)}`;
+          dtendLine = `DTEND;VALUE=DATE:${next.getUTCFullYear()}${pad2(next.getUTCMonth() + 1)}${pad2(next.getUTCDate())}`;
+        } else {
+          const hh = hasTime ? Number(String(body.time).slice(0, 2)) : Number(oldTime[1] ?? 9);
+          const mi = hasTime ? Number(String(body.time).slice(3, 5)) : Number(oldTime[2] ?? 0);
+          const stamp2 = (h: number, m: number) => `${yy}${pad2(mm)}${pad2(dd)}T${pad2(h)}${pad2(m)}00`;
+          const endMin = mi + 60;
+          dtstartLine = `DTSTART;TZID=Asia/Seoul:${stamp2(hh, mi)}`;
+          dtendLine = `DTEND;TZID=Asia/Seoul:${stamp2(hh + Math.floor(endMin / 60), endMin % 60)}`;
+        }
       }
-      const newIcs = [
-        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:FirstOA CS Webapp", "CALSCALE:GREGORIAN",
+      // 교체 대상이 아닌 원본 줄(RRULE·X-속성·VALARM 등)은 그대로 유지
+      const replacedProp = /^(DTSTAMP|DTSTART|DTEND|SUMMARY|LOCATION|DESCRIPTION|UID)[;:]/i;
+      const keptLines = unfolded.split(/\r?\n/).filter((line) =>
+        line.trim() && !replacedProp.test(line) && !/^(BEGIN|END):VEVENT/i.test(line));
+      const newEvent = [
         "BEGIN:VEVENT",
         `UID:${uid}`,
         `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
@@ -194,8 +206,11 @@ Deno.serve(async (req) => {
         `SUMMARY:${esc(title2)}`,
         location2.trim() ? `LOCATION:${esc(location2)}` : "",
         description2.trim() ? `DESCRIPTION:${esc(description2)}` : "",
-        "END:VEVENT", "END:VCALENDAR",
+        ...keptLines,
+        "END:VEVENT",
       ].filter(Boolean).join("\r\n");
+      // VCALENDAR 껍데기(VTIMEZONE 포함)는 원본 그대로, VEVENT만 교체
+      const newIcs = ics.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, () => newEvent);
       const put = await fetch(url, { method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: newIcs });
       if (put.status >= 400) throw new Error(`네이버 일정 수정 실패(${put.status})`);
       return Response.json({ ok: true, status: "updated" }, { headers: jsonHeaders });

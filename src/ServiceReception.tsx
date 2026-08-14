@@ -1130,12 +1130,19 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   const removeReception = async (row: ServiceReceptionRow) => {
-    if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)`)) return;
+    if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)\n연결된 일정과 네이버 캘린더 미러도 함께 삭제됩니다.`)) return;
     try {
       deletedIdsRef.current.add(row.id); // 진행 중인 재조회 응답이 이 행을 다시 실어와도 걸러진다
       await updateServiceReception(row.id, { deleted: true });
+      // 연쇄 정리: 이 접수로 만든 일정(웹앱 일정리스트·캘린더) + 네이버 캘린더 미러까지
+      const linked = await selectRows<{ id: string; naverUid?: string }>("as_tickets", `select=id,naverUid&receptionId=eq.${encodeURIComponent(row.id)}`).catch(() => []);
+      const uids = new Set<string>(linked.map((t) => String(t.naverUid || "")).filter(Boolean));
+      uids.add(`firstoa-r-${row.id}`); // 접수번호 고정 UID — 일정 없이 네이버만 등록된 경우도 정리
+      for (const uid of uids) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_delete", uid }).catch(() => undefined);
+      if (linked.length) await deleteRows("as_tickets", `receptionId=eq.${encodeURIComponent(row.id)}`).catch(() => undefined);
       setListRows((current) => current.filter((r) => r.id !== row.id));
       setRemoteQueue((current) => current.filter((r) => r.id !== row.id));
+      if (linked.length) notify(`접수와 연결 일정 ${linked.length}건, 네이버 미러까지 정리했습니다.`, "success");
     } catch (e) {
       notify(`삭제 실패: ${(e as Error).message}\n(reception-sync.sql 실행 여부를 확인하세요)`, "error");
     }
