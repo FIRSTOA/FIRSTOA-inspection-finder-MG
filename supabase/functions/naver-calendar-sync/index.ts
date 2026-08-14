@@ -64,7 +64,7 @@ function xmlUnescape(v: string) {
   return v.replace(/&#13;/g, "\r").replace(/&#10;/g, "\n").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 }
 
-type NaverEvent = { uid: string; date: string; time: string; title: string; location: string; description: string };
+type NaverEvent = { uid: string; date: string; time: string; title: string; location: string; description: string; completed: boolean };
 
 function parseEvents(xml: string): NaverEvent[] {
   const out: NaverEvent[] = [];
@@ -97,7 +97,7 @@ function parseEvents(xml: string): NaverEvent[] {
     }
     const unesc = (s: string) => s.replace(/\\n/g, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").trim();
     const unescKeep = (s: string) => s.replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").trim(); // 내용은 줄바꿈 보존
-    out.push({ uid, date, time, title: unesc(prop("SUMMARY")?.value || ""), location: unesc(prop("LOCATION")?.value || ""), description: unescKeep(prop("DESCRIPTION")?.value || "") });
+    out.push({ uid, date, time, title: unesc(prop("SUMMARY")?.value || ""), location: unesc(prop("LOCATION")?.value || ""), description: unescKeep(prop("DESCRIPTION")?.value || ""), completed: /^X-NAVER-COMPLETED[^:]*:TRUE/mi.test(ics) });
   }
   return out;
 }
@@ -134,8 +134,14 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, calId, listed: listing.length, sample: listing.slice(0, 3) }, { headers: jsonHeaders });
     }
 
+    if (action === "reset_state") {
+      // etag 기억 초기화 — 다음 sync들이 전량을 새로 내려받는다 (스키마 추가 후 재수집용)
+      await fetch(`${rest}/naver_caldav_state?href=neq.`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } });
+      return Response.json({ ok: true, status: "state_cleared" }, { headers: jsonHeaders });
+    }
+
     if (action !== "sync") throw new Error(`알 수 없는 action: ${action}`);
-    const force = body.force === true;
+    const force = body.force === true; // 주의: force는 매 호출 같은 80건을 재처리한다 — 전량 재수집은 reset_state 후 일반 sync 반복
 
     // 모든 대상 캘린더의 목록(href+etag) — href에 캘린더 경로가 포함돼 캘린더 간 충돌 없음
     const listing: Array<{ href: string; etag: string; cal: string }> = [];
@@ -169,7 +175,7 @@ Deno.serve(async (req) => {
       if (!ev.uid.startsWith("firstoa") && !ticketUids.has(ev.uid) && ev.date) {
         await fetch(`${rest}/naver_calendar_events?on_conflict=uid`, {
           method: "POST", headers: { ...restHeaders, Prefer: "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify([{ uid: ev.uid, date: ev.date, time: ev.time, title: ev.title.slice(0, 200), location: ev.location.slice(0, 200), description: ev.description.slice(0, 2000), calendar_id: item.cal, updated_at: new Date().toISOString() }]),
+          body: JSON.stringify([{ uid: ev.uid, date: ev.date, time: ev.time, title: ev.title.slice(0, 200), location: ev.location.slice(0, 200), description: ev.description.slice(0, 2000), completed: ev.completed, calendar_id: item.cal, updated_at: new Date().toISOString() }]),
         });
         manualUpserted += 1;
       }

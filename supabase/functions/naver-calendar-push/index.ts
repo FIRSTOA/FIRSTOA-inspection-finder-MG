@@ -98,12 +98,13 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // CalDAV: 네이버 일정 조회/수정/삭제 (uid 필요 — 웹앱이 등록 때 저장해 둔 값)
-    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move") {
+    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move" || body.action === "caldav_check") {
       const auth = caldavAuth();
       if (!auth) return Response.json({ error: "CalDAV 미설정 — NAVER_CALDAV_ID/NAVER_CALDAV_APP_PASSWORD Secrets가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const uid = String(body.uid || "").trim();
       if (!uid) return Response.json({ error: "uid가 필요합니다" }, { status: 400, headers: jsonHeaders });
-      const calId = await configCalendarIdOf();
+      // calId를 넘기면 그 캘린더에서 작업 (납품일정 등 다른 캘린더의 일정) — 없으면 등록 캘린더
+      const calId = String(body.calId || "").trim() || await configCalendarIdOf();
       if (!calId) return Response.json({ error: "NAVER_CALENDAR_ID 설정이 비어 있습니다 (관리 탭)" }, { status: 400, headers: jsonHeaders });
 
       // caldav_move: 완료 → 팀 완료 캘린더로 이동 + X-NAVER-COMPLETED:TRUE(네이버 완료 체크)
@@ -158,6 +159,15 @@ Deno.serve(async (req) => {
           location: icsProp(ics, "LOCATION"),
           dtstart: icsProp(ics, "DTSTART"),
         }, { headers: jsonHeaders });
+      }
+      // 완료 체크 토글 — 일정을 옮기지 않고 제자리에서 네이버 완료 표시만 켜고/끈다
+      if (body.action === "caldav_check") {
+        const done = body.done !== false;
+        let out = ics.replace(/^X-NAVER-COMPLETED:.*\r?\n?/gm, "");
+        if (done) out = out.replace(/BEGIN:VEVENT\r?\n/, (m) => `${m}X-NAVER-COMPLETED:TRUE\r\n`);
+        const putChk = await fetch(url, { method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: out });
+        if (putChk.status >= 400) throw new Error(`네이버 완료 체크 실패(${putChk.status})`);
+        return Response.json({ ok: true, status: done ? "checked" : "unchecked" }, { headers: jsonHeaders });
       }
       if (body.action === "caldav_delete") {
         const del = await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } });
