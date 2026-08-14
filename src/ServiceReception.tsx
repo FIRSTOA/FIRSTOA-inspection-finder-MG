@@ -982,11 +982,12 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
   // 네이버 캘린더 등록 (단독 실행용 — 실패 시 throw). 팀 시간: A 09시 / B 12시 / C 15시 / D 18시
-  const pushNaverCalendar = async (row: Pick<ServiceReceptionRow, "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null }) => {
+  const pushNaverCalendar = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null }) => {
     const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
     const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
     return await invokeEdgeFunction<{ uid?: string; status?: string }>("naver-calendar-push", {
+      stableKey: row.id, // 접수 번호로 UID 고정 — 중복 등록 방지
       title: firstLine || `[AS] ${cleanVendorName(row.vendor)}`,
       date: kstDate(),
       time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",

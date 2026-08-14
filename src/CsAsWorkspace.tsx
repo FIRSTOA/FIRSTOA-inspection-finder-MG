@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { deleteRows, invokeEdgeFunction, selectAllRows, upsertRow, upsertRows } from "./supabase";
+import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
@@ -483,6 +483,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
+  // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
+  const [naverEvents, setNaverEvents] = useState<Array<{ uid: string; date: string; time: string; title: string; location: string }>>([]);
+  useEffect(() => {
+    const ym = currentMonth.slice(0, 7);
+    void selectRows<{ uid: string; date: string; time: string; title: string; location: string }>(
+      "naver_calendar_events", `select=uid,date,time,title,location&date=gte.${ym}-01&date=lte.${ym}-31&order=date.asc,time.asc`,
+    ).then(setNaverEvents).catch(() => setNaverEvents([]));
+  }, [currentMonth]);
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
   const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
@@ -966,6 +974,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : dayNumberColor(dayIndex, inMonth)}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
                             {rows.slice(0, 4).map((ticket) => { const dt = displayTypeOf(ticket); return <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${dt === "AS[미처리]" ? "bg-purple-500" : dt === "AS[완료]" ? "bg-blue-600" : dt === "물류" ? "bg-rose-500" : dt === "휴가" ? "bg-emerald-500" : "bg-amber-500"}`} />; })}
+                            {naverEvents.some((ev) => ev.date === date) && <span className="h-1.5 w-1.5 rounded-sm bg-emerald-600" />}
                           </span>
                         </button>
                       );
@@ -983,7 +992,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
                         </button>
                       ))}
-                      {!visibleTickets.some((ticket) => ticket.date === mobileSelectedDate) && <div className="py-4 text-center text-xs font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
+                      {naverEvents.filter((ev) => ev.date === mobileSelectedDate).map((ev) => (
+                        <div key={ev.uid} className="block w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-left text-emerald-800">
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span><span className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">네이버</span></div>
+                          {!!ev.location && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ev.location}</div>}
+                        </div>
+                      ))}
+                      {!visibleTickets.some((ticket) => ticket.date === mobileSelectedDate) && !naverEvents.some((ev) => ev.date === mobileSelectedDate) && <div className="py-4 text-center text-xs font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
                     </div>
                   </div>
                 </div>
@@ -1007,6 +1022,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                                 </button>
                               ))}
                               {rows.length > 5 && <div onClick={(event) => event.stopPropagation()} className="px-1 pt-0.5 text-[10px] font-black text-slate-400">+{rows.length - 5}개 더</div>}
+                              {naverEvents.filter((ev) => ev.date === date).slice(0, 3).map((ev) => (
+                                <div key={ev.uid} onClick={(event) => event.stopPropagation()} title={`네이버 캘린더 일정 (읽기 전용)\n${ev.time ? `${ev.time} · ` : ""}${ev.title}${ev.location ? `\n${ev.location}` : ""}`}
+                                  className="block w-full cursor-default truncate rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-left text-[11px] font-bold text-emerald-800">
+                                  <span className="mr-1 rounded bg-emerald-600 px-1 text-[9px] font-black text-white">N</span>{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
+                                </div>
+                              ))}
+                              {naverEvents.filter((ev) => ev.date === date).length > 3 && <div onClick={(event) => event.stopPropagation()} className="px-1 pt-0.5 text-[10px] font-black text-emerald-500">+N {naverEvents.filter((ev) => ev.date === date).length - 3}개 더</div>}
                             </div>
                           </div>
                         );

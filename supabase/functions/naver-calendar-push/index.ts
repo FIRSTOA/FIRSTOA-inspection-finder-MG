@@ -281,7 +281,9 @@ Deno.serve(async (req) => {
     const caldav = caldavAuth();
     const calIdForCreate = configCalendarId || Deno.env.get("NAVER_CALDAV_DEFAULT_CALENDAR") || "";
     if (caldav && calIdForCreate) {
-      const eventUidC = `firstoa-${crypto.randomUUID()}`;
+      // stableKey(접수 id)가 오면 UID를 고정 — 실수로 두 번 등록해도 같은 일정을 덮어쓴다 (CalDAV PUT은 멱등)
+      const stableKey = String(body.stableKey || "").replace(/[^0-9a-zA-Z-]/g, "");
+      const eventUidC = stableKey ? `firstoa-r-${stableKey}` : `firstoa-${crypto.randomUUID()}`;
       const icalC = buildIcal({
         title, date,
         time: String(body.time || "09:00"),
