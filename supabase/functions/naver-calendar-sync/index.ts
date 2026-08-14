@@ -67,7 +67,7 @@ function xmlUnescape(v: string) {
   return v.replace(/&#13;/g, "\r").replace(/&#10;/g, "\n").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 }
 
-type NaverEvent = { uid: string; date: string; time: string; title: string; location: string };
+type NaverEvent = { uid: string; date: string; time: string; title: string; location: string; description: string };
 
 // multistatus 응답에서 VEVENT들을 뽑아 날짜·시간(KST)으로 정규화
 function parseEvents(xml: string): NaverEvent[] {
@@ -101,7 +101,8 @@ function parseEvents(xml: string): NaverEvent[] {
       }
     }
     const unesc = (s: string) => s.replace(/\\n/g, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").trim();
-    out.push({ uid, date, time, title: unesc(prop("SUMMARY")?.value || ""), location: unesc(prop("LOCATION")?.value || "") });
+    const unescKeep = (s: string) => s.replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").trim(); // 내용은 줄바꿈 보존
+    out.push({ uid, date, time, title: unesc(prop("SUMMARY")?.value || ""), location: unesc(prop("LOCATION")?.value || ""), description: unescKeep(prop("DESCRIPTION")?.value || "") });
   }
   return out;
 }
@@ -143,7 +144,8 @@ Deno.serve(async (req) => {
     const state = (await stateRes.json().catch(() => [])) as Array<{ href: string; etag: string; uid: string }>;
     const stateByHref = new Map(state.map((r) => [r.href, r]));
     const listedHrefs = new Set(listing.map((l) => l.href));
-    const changed = listing.filter((l) => stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80); // 한 번에 80건까지 — 남으면 다음 크론
+    const force = body.force === true; // 전량 재수집 (컬럼 추가 등 스키마 변화 후 1회용)
+    const changed = listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80); // 한 번에 80건까지 — 남으면 다음 크론
 
     const ticketsRes = await fetch(`${rest}/as_tickets?select=id,date,time,status,naverUid&naverUid=like.firstoa*`, { headers: restHeaders });
     const tickets = (await ticketsRes.json().catch(() => [])) as Array<{ id: string; date: string; time: string; status: string; naverUid: string }>;
@@ -175,7 +177,7 @@ Deno.serve(async (req) => {
         // 네이버에서 직접 만든 일정 — 웹앱 캘린더 표시용
         await fetch(`${rest}/naver_calendar_events?on_conflict=uid`, {
           method: "POST", headers: { ...restHeaders, Prefer: "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify([{ uid: ev.uid, date: ev.date, time: ev.time, title: ev.title.slice(0, 200), location: ev.location.slice(0, 200), calendar_id: calId, updated_at: new Date().toISOString() }]),
+          body: JSON.stringify([{ uid: ev.uid, date: ev.date, time: ev.time, title: ev.title.slice(0, 200), location: ev.location.slice(0, 200), description: ev.description.slice(0, 2000), calendar_id: calId, updated_at: new Date().toISOString() }]),
         });
         manualUpserted += 1;
       }
