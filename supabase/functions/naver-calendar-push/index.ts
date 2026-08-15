@@ -331,7 +331,7 @@ Deno.serve(async (req) => {
 
     // 등록: CalDAV가 설정돼 있으면 PUT({uid}.ics)으로 — 나중에 조회·수정·삭제가 가능해진다.
     const caldav = caldavAuth();
-    const calIdForCreate = configCalendarId || Deno.env.get("NAVER_CALDAV_DEFAULT_CALENDAR") || "";
+    const calIdForCreate = String(body.calId || "").trim() || configCalendarId || Deno.env.get("NAVER_CALDAV_DEFAULT_CALENDAR") || "";
     if (caldav && calIdForCreate) {
       // stableKey(접수 id)가 오면 UID를 고정 — 실수로 두 번 등록해도 같은 일정을 덮어쓴다 (CalDAV PUT은 멱등)
       const stableKey = String(body.stableKey || "").replace(/[^0-9a-zA-Z-]/g, "");

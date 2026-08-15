@@ -487,8 +487,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [naverDayDate, setNaverDayDate] = useState<string | null>(null); // 날짜 클릭 → 그날 통합 목록 팝업
   useEffect(() => {
     const ym = currentMonth.slice(0, 7);
+    // 달력(이번 달)과 일정리스트(오늘~예정)를 모두 덮는 범위 — 월말에 익일이 다음 달이어도 보이게
+    const from = [`${ym}-01`, addDays(getTodayYmd(), -7)].sort()[0];
+    const to = [`${ym}-31`, addDays(getTodayYmd(), 60)].sort()[1];
     void selectRows<NaverEventRow>(
-      "naver_calendar_events", `select=uid,date,time,title,location,description,calendar_id,completed&date=gte.${ym}-01&date=lte.${ym}-31&order=date.asc,time.asc`,
+      "naver_calendar_events", `select=uid,date,time,title,location,description,calendar_id,completed&date=gte.${from}&date=lte.${to}&order=date.asc,time.asc`,
     ).then(setNaverEvents).catch(() => setNaverEvents([]));
   }, [currentMonth, naverReloadTick]);
   // 10분 동기화 결과가 화면에 따라오도록 — 60초마다·창 복귀 시 다시 읽는다
@@ -900,6 +903,29 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (created.repeatMonthly) ensureMonthlySeries(created);
     setSimpleAdd(null);
     notify("일정이 추가됐습니다 ✓", "success");
+    // 3면 동기화: 매월점검(웹앱 전용) 외에는 네이버 캘린더에도 등록 — 분류에 맞는 캘린더로
+    if (f.cal !== "매월점검") {
+      const calId = f.cal === "납품철수교체휴가교육" ? NAVER_DELIVERY_CAL : NAVER_CAL_LIST[0].id;
+      void invokeEdgeFunction<{ uid?: string }>("naver-calendar-push", {
+        stableKey: created.id, calId,
+        title: created.calendarTitle || created.vendor, date: created.date, time: created.time || "09:00",
+        location: created.address || "", description: created.note || "",
+      }).then((r) => {
+        if (!r.uid) return;
+        update(created.id, { naverUid: r.uid });
+        notify("네이버 캘린더에도 등록됐습니다 ✓", "success");
+        if (created.repeatMonthly) {
+          // 반복 클론도 네이버에 사본 생성 (표시 동기 — 개별 수정 연동은 원본만)
+          void (async () => {
+            let d = created.date;
+            for (let k = 0; k < 11; k++) {
+              d = nextMonthSameDay(d);
+              await invokeEdgeFunction("naver-calendar-push", { action: "caldav_duplicate", uid: r.uid, calId, newDate: d }).catch(() => undefined);
+            }
+          })();
+        }
+      }).catch((e) => notify(`네이버 등록 실패(웹앱 일정은 정상): ${(e as Error).message}`, "error"));
+    }
   };
   // 삭제는 디자인 확인 모달을 거친다 (브라우저 confirm 대체) — 확정 시 doRemoveTicket 실행
   const [deleteTarget, setDeleteTarget] = useState<AsTicket | null>(null);
@@ -1497,7 +1523,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <div className="mt-1 flex items-center gap-2">
                       <input key={`addr-${ticket.id}`} defaultValue={ticket.address || ""}
                         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); if (ticket.naverUid) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, location: v }).catch(() => undefined); notify("주소가 저장됐습니다" + (ticket.naverUid ? " — 네이버에도 반영 ✓" : " ✓"), "success"); } }}
                         placeholder="방문 주소"
                         className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
                       {view === "as" && !!ticket.address && <AddrNav address={ticket.address} />}
@@ -1537,7 +1563,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </label>}
                 <label className="block text-xs font-bold text-slate-500">{view === "calendar" ? "내용" : "내용 (처리 결과·양식)"} <span className="font-semibold text-slate-400">{view === "calendar" ? "— 입력창을 벗어나면 저장" : "— 완료 처리 시 자동으로 쌓이고, 직접 수정도 가능"}</span>
                   <textarea key={`note-${ticket.id}`} defaultValue={ticket.note || ""} rows={ticket.note ? Math.min(10, Math.max(3, ticket.note.split("\n").length)) : 3}
-                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
+                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); if (ticket.naverUid) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: v }).catch(() => undefined); notify("내용이 저장됐습니다" + (ticket.naverUid ? " — 네이버에도 반영 ✓" : " ✓"), "success"); } }}
                     className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
                 </label>
               </div>
