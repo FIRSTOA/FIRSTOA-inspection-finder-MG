@@ -1274,7 +1274,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             <div className="mt-1">
                               <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
                                 value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}
-                                options={[{ value: "", label: naverDetail.time ? `기타 (${naverDetail.time})` : "종일" }, ...["A", "B", "C", "D", "E"].map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
+                                options={[{ value: "", label: "종일" }, ...["A", "B", "C", "D", "E"].map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
                             </div>
                           </div>
                         </div>
@@ -1494,6 +1494,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="fixed inset-0 z-[115] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetailId("")}>
             <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
               <div className="bg-[#1E252F] px-5 py-4">
+                {view === "calendar" ? (
+                  <div className="flex items-center gap-2 text-[11px] font-black">
+                    <span className="rounded bg-lime-600 px-1.5 py-0.5 text-white">익일통합as</span>
+                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-slate-300">{ticket.team}팀</span>
+                    {ticket.status === "완료" && <span className="rounded bg-emerald-500/90 px-1.5 py-0.5 text-white">완료됨</span>}
+                    <span className="ml-auto hidden text-slate-400 sm:inline">수정하면 네이버 캘린더에 바로 반영</span>
+                    <button type="button" onClick={() => setDetailId("")} className="ml-1 rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white" aria-label="닫기"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg></button>
+                  </div>
+                ) : (
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
@@ -1504,6 +1513,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                   <button type="button" onClick={() => setDetailId("")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-black text-slate-400 transition hover:bg-white/10 hover:text-white">×</button>
                 </div>
+                )}
                 {/* 제목 — [수정]을 눌러야 편집, [저장]으로 확정 (저장하면 리스트·캘린더·네이버 제목이 함께 바뀐다) */}
                 <div className="mt-2 flex items-center gap-2">
                   {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{ticket.assignee}</span>}
@@ -1542,15 +1552,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
                       placeholder="방문 주소"
                       className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
-                    {!!ticket.address && <AddrNav address={ticket.address} />}
+                    {view === "as" && !!ticket.address && <AddrNav address={ticket.address} />}
                   </div>
                 </div>
-                <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
+                {view === "as" && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
                   <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}
                     onBlur={(e) => { const v = e.target.value; if (v !== (ticket.issue || "")) { update(ticket.id, { issue: v }); notify("접수 내용이 저장됐습니다 ✓", "success"); } }}
                     className="mt-1 w-full resize-y rounded-lg border border-blue-200 bg-blue-50/40 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
-                </label>
-                <label className="block text-xs font-bold text-slate-500">내용 (처리 결과·양식) <span className="font-semibold text-slate-400">— 완료 처리 시 자동으로 쌓이고, 직접 수정도 가능</span>
+                </label>}
+                <label className="block text-xs font-bold text-slate-500">{view === "calendar" ? "내용" : "내용 (처리 결과·양식)"} <span className="font-semibold text-slate-400">{view === "calendar" ? "— 입력창을 벗어나면 저장" : "— 완료 처리 시 자동으로 쌓이고, 직접 수정도 가능"}</span>
                   <textarea key={`note-${ticket.id}`} defaultValue={ticket.note || ""} rows={ticket.note ? Math.min(10, Math.max(3, ticket.note.split("\n").length)) : 3}
                     onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
                     className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
@@ -1569,6 +1579,16 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {ticket.department && infoCell("부서", ticket.department)}
                   </div>
                 </details>}
+                {view === "calendar" && !!ticket.naverUid && (
+                  <div className="text-xs font-bold text-slate-500">캘린더 이동
+                    <div className="mt-1">
+                      <PortalSelect direction="down" className="w-full py-2 font-semibold" width={280}
+                        value={NAVER_CAL_LIST[0].id}
+                        onChange={(v) => { if (v !== NAVER_CAL_LIST[0].id) { void invokeEdgeFunction("naver-calendar-push", { action: "caldav_transfer", uid: ticket.naverUid, toCal: v }).then(() => notify(`네이버 미러가 "${NAVER_CAL_LIST.find((c) => c.id === v)?.name || "다른 캘린더"}"(으)로 이동됐습니다 ✓`, "success")).catch((e) => notify(`이동 실패: ${(e as Error).message}`, "error")); } }}
+                        options={NAVER_CAL_LIST.map((c) => ({ value: c.id, label: c.name }))} />
+                    </div>
+                  </div>
+                )}
                 {view === "as" && phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
                   <div className="text-[10px] font-black text-slate-400">연락처 — 누를 상대를 선택하세요</div>
                   <div className="mt-1.5 space-y-1.5">
@@ -1598,6 +1618,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
+                  {view === "calendar" && <button type="button" onClick={() => { if (ticket.repeatMonthly) { update(ticket.id, { repeatMonthly: false }); } else { update(ticket.id, { repeatMonthly: true }); notify("다음 달부터 11개월, 매월 같은 날로 생성했습니다 ✓", "success"); } }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">{ticket.repeatMonthly ? "반복 해제" : "매월 반복"}</button>}
                   {view === "as" && <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>}
                   {view === "as" && <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>}
                 </div>
