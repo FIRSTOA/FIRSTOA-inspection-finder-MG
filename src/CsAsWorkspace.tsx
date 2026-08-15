@@ -482,7 +482,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   useEffect(() => { try { localStorage.setItem("cs_as_team_filter_v1", JSON.stringify([team])); } catch { /* 저장 실패 무시 */ } }, [team]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_types_v2", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
-  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [viewMode, setViewMode] = useState<ViewMode>("list"); // 실사용이 목록 중심(네이버 목록 뷰 패턴) — 월 달력은 보조
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
@@ -537,10 +537,16 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       notify(`완료 처리 실패: ${(e as Error).message}`, "error");
     } finally { setNaverCheckBusy(false); }
   };
+  // 네이버 일정의 팀: 시간대 규칙(A=09, B=12, C=15, D=18)으로 유추 — 그 외 시간·종일은 팀 없음(항상 표시)
+  const naverTeamOf = (ev: { time: string }): Team | null => (({ "09:00": "A", "12:00": "B", "15:00": "C", "18:00": "D" } as Record<string, Team>)[ev.time] || null);
   const shownNaverEvents = useMemo(() => {
     const linked = new Set(tickets.map((t) => t.naverUid).filter(Boolean));
-    return naverEvents.filter((ev) => !linked.has(ev.uid) && visibleScheduleTypes.includes(naverCategoryOf(ev)));
-  }, [naverEvents, tickets, visibleScheduleTypes]);
+    return naverEvents.filter((ev) => {
+      if (linked.has(ev.uid) || !visibleScheduleTypes.includes(naverCategoryOf(ev))) return false;
+      const team = naverTeamOf(ev);
+      return !team || visibleTeams.includes(team);
+    });
+  }, [naverEvents, tickets, visibleScheduleTypes, visibleTeams]);
   const promoteNaverEvent = () => {
     if (!naverDetail) return;
     const ev = naverDetail;
@@ -1023,7 +1029,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             {list.map((ticket) => renderTicketCard(ticket))}
                             {dayNaver.map((ev) => (
                               <button key={ev.uid} type="button" onClick={() => setNaverDetail({ ...ev })} className={`block w-full rounded-lg border px-3 py-2.5 text-left transition ${naverChipStyle(ev)}`}>
-                                <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black text-white ${naverBadgeStyle(ev)}`}>네이버</span></div>
+                                <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span>{naverTeamOf(ev) && <span className="shrink-0 text-[10px] font-black opacity-60">{naverTeamOf(ev)}팀</span>}</div>
                                 {!!ev.location && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ev.location}</div>}
                               </button>
                             ))}
@@ -1071,7 +1077,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       ))}
                       {shownNaverEvents.filter((ev) => ev.date === mobileSelectedDate).map((ev) => (
                         <button key={ev.uid} type="button" onClick={() => setNaverDetail({ ...ev })} className={`block w-full rounded-lg border px-3 py-2.5 text-left transition ${naverChipStyle(ev)}`}>
-                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black text-white ${naverBadgeStyle(ev)}`}>네이버</span></div>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span>{naverTeamOf(ev) && <span className="shrink-0 text-[10px] font-black opacity-60">{naverTeamOf(ev)}팀</span>}</div>
                           {!!ev.location && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ev.location}</div>}
                         </button>
                       ))}
@@ -1090,7 +1096,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         const inMonth = date.slice(0, 7) === currentMonth.slice(0, 7);
                         const isToday = date === todayYmd;
                         return (
-                          <div key={date} onClick={() => setNewTicket(blankTicket(date, newTicketDefaults()))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) requestMoveDate(id, date); const nuid = event.dataTransfer.getData("text/naver-event"); if (nuid) moveNaverEvent(nuid, date); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 transition sm:min-h-32 2xl:min-h-40 2xl:p-2 ${inMonth ? (dayIndex === 0 ? "bg-rose-50/25" : dayIndex === 6 ? "bg-blue-50/20" : "bg-white") : "bg-slate-50/70"} hover:bg-blue-50/30`}>
+                          <div key={date} onClick={() => setNaverDayDate(date)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/calendar-ticket"); if (id) requestMoveDate(id, date); const nuid = event.dataTransfer.getData("text/naver-event"); if (nuid) moveNaverEvent(nuid, date); }} className={`group min-h-28 border-b border-r border-slate-200 p-1.5 transition sm:min-h-32 2xl:min-h-40 2xl:p-2 ${inMonth ? (dayIndex === 0 ? "bg-rose-50/25" : dayIndex === 6 ? "bg-blue-50/20" : "bg-white") : "bg-slate-50/70"} hover:bg-blue-50/30`}>
                             <button type="button" className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black tabular-nums transition ${isToday ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]" : `${dayNumberColor(dayIndex, inMonth)}${inMonth ? " hover:bg-slate-100" : ""}`}`}>{Number(date.slice(8, 10))}</button>
                             <div className="space-y-1">
                               {rows.slice(0, 5).map((ticket) => (
@@ -1098,12 +1104,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                                   {displayTitleOf(ticket)}
                                 </button>
                               ))}
-                              {rows.length > 5 && <div onClick={(event) => event.stopPropagation()} className="px-1 pt-0.5 text-[10px] font-black text-slate-400">+{rows.length - 5}개 더</div>}
+                              {rows.length > 5 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[10px] font-black text-slate-500 underline decoration-dotted hover:text-slate-700">+{rows.length - 5}개 더</button>}
                               {shownNaverEvents.filter((ev) => ev.date === date).slice(0, 3).map((ev) => (
                                 <button key={ev.uid} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/naver-event", ev.uid); event.dataTransfer.effectAllowed = "move"; }}
                                   onClick={(event) => { event.stopPropagation(); setNaverDetail({ ...ev }); }} title={`네이버 캘린더 일정\n${ev.time ? `${ev.time} · ` : ""}${ev.title}${ev.location ? `\n${ev.location}` : ""}`}
                                   className={`block w-full cursor-grab truncate rounded-md border px-2 py-1 text-left text-[11px] font-bold transition active:cursor-grabbing ${naverChipStyle(ev)}`}>
-                                  <span className={`mr-1 rounded px-1 text-[9px] font-black text-white ${naverBadgeStyle(ev)}`}>N</span>{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
+                                  {ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
                                 </button>
                               ))}
                               {shownNaverEvents.filter((ev) => ev.date === date).length > 3 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[10px] font-black text-emerald-600 underline decoration-dotted hover:text-emerald-700">+N {shownNaverEvents.filter((ev) => ev.date === date).length - 3}개 더</button>}
@@ -1114,25 +1120,45 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </div>
                   </div>
                 </div>
-                {naverDayDate && (
+                {naverDayDate && (() => {
+                  const dayTickets = visibleTickets.filter((t) => t.date === naverDayDate).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+                  const dayNaverList = shownNaverEvents.filter((ev) => ev.date === naverDayDate);
+                  // 네이버 목록 뷰처럼: 종일(시간 없음) 먼저, 그다음 시간순 — 웹앱·네이버 섞어서 한 줄로
+                  const merged: Array<{ kind: "ticket"; t: AsTicket } | { kind: "naver"; ev: typeof dayNaverList[number] }> = [
+                    ...dayNaverList.filter((ev) => !ev.time).map((ev) => ({ kind: "naver" as const, ev })),
+                    ...[...dayTickets.map((t) => ({ kind: "ticket" as const, t, sortKey: t.time || "99:99" })),
+                       ...dayNaverList.filter((ev) => ev.time).map((ev) => ({ kind: "naver" as const, ev, sortKey: ev.time }))]
+                      .sort((a, b) => a.sortKey.localeCompare(b.sortKey)),
+                  ];
+                  return (
                   <div className="fixed inset-0 z-[2390] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setNaverDayDate(null)}>
-                    <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
                       <div className="bg-[#1E252F] px-5 py-4">
-                        <div className="text-[11px] font-black text-emerald-400">네이버 캘린더 일정</div>
-                        <div className="mt-0.5 text-[15px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {shownNaverEvents.filter((ev) => ev.date === naverDayDate).length}건</div>
+                        <div className="text-[11px] font-black text-slate-400">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${naverDayDate}T00:00:00`).getDay()]}요일 일정</div>
+                        <div className="mt-0.5 text-[15px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {merged.length}건</div>
                       </div>
-                      <div className="max-h-[55vh] space-y-1.5 overflow-y-auto px-4 py-3">
-                        {shownNaverEvents.filter((ev) => ev.date === naverDayDate).map((ev) => (
-                          <button key={ev.uid} type="button" onClick={() => { setNaverDayDate(null); setNaverDetail({ ...ev }); }} className={`block w-full rounded-lg border px-3 py-2.5 text-left transition ${naverChipStyle(ev)}`}>
-                            <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span></div>
-                            {!!ev.location && <div className="mt-0.5 truncate text-xs font-semibold opacity-75">{ev.location}</div>}
+                      <div className="max-h-[58vh] space-y-1.5 overflow-y-auto px-4 py-3">
+                        {merged.map((row) => row.kind === "ticket" ? (
+                          <button key={row.t.id} type="button" onClick={() => { setNaverDayDate(null); setDetailId(row.t.id); }} className={`block w-full rounded-lg px-3 py-2.5 text-left transition hover:brightness-95 ${scheduleColor(row.t.scheduleType, row.t.status === "완료")}`}>
+                            <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{row.t.time && `${row.t.time} `}{displayTitleOf(row.t)}</span><span className="shrink-0 text-[10px] font-black opacity-60">{row.t.team}팀</span></div>
+                            {!!row.t.issue && <div className="mt-0.5 truncate text-xs font-semibold opacity-75">{row.t.issue}</div>}
+                          </button>
+                        ) : (
+                          <button key={row.ev.uid} type="button" onClick={() => { setNaverDayDate(null); setNaverDetail({ ...row.ev }); }} className={`block w-full rounded-lg border px-3 py-2.5 text-left transition ${naverChipStyle(row.ev)}`}>
+                            <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{row.ev.time && `${row.ev.time} `}{row.ev.title || "(제목 없음)"}</span>{naverTeamOf(row.ev) && <span className="shrink-0 text-[10px] font-black opacity-60">{naverTeamOf(row.ev)}팀</span>}</div>
+                            {!!row.ev.location && <div className="mt-0.5 truncate text-xs font-semibold opacity-75">{row.ev.location}</div>}
                           </button>
                         ))}
+                        {!merged.length && <div className="py-8 text-center text-xs font-semibold text-slate-400">이 날짜의 일정이 없습니다.</div>}
                       </div>
-                      <div className="px-4 pb-4"><button type="button" onClick={() => setNaverDayDate(null)} className="w-full rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">닫기</button></div>
+                      <div className="flex gap-2 px-4 pb-4">
+                        <button type="button" onClick={() => setNaverDayDate(null)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">닫기</button>
+                        <button type="button" onClick={() => { const d = naverDayDate; setNaverDayDate(null); setNewTicket(blankTicket(d, newTicketDefaults())); }} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
+                      </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
                 {naverDetail && (
                   <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setNaverDetail(null)}>
                     <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
