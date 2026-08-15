@@ -1080,27 +1080,42 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex min-h-[720px] flex-col lg:flex-row">
-
+            {/* 필터 사이드 — 다크 헤더 디자인을 세로로 (팀·업무 칩 토글 + 일정 추가) */}
+            <aside className="border-b border-slate-700 bg-[#1E252F] p-3.5 lg:w-52 lg:flex-none lg:border-b-0 lg:border-r">
+              {(() => {
+                const pill = (on: boolean) => `flex w-auto items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[11px] font-black transition lg:w-full lg:px-3.5 lg:py-2 ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`;
+                const allTeamsOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일"].every((x) => visibleExtra.includes(x));
+                const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
+                const monthAll = tickets.filter((ticket) => ticket.source !== "autoplan" && ticket.date.slice(0, 7) === currentMonth.slice(0, 7)).length;
+                const hidden = monthAll - monthTickets.length;
+                return (<>
+                  <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700"><span className="text-base leading-none">＋</span> 일정 추가</button>
+                  <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">팀</div>
+                  <div className="flex flex-wrap gap-1 lg:flex-col">
+                    <button type="button" onClick={() => { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }} className={pill(allTeamsOn)}><span>전체</span></button>
+                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={pill(visibleTeams.includes(tm))}><span>{tm}팀</span><span className="text-[9px] font-bold opacity-60">{TEAM_SLOT_LABEL[tm].replace(" ", "")}</span></button>)}
+                    <button type="button" onClick={() => setVisibleExtra((cur) => (cur.includes("E") ? cur.filter((v) => v !== "E") : [...cur, "E"]))} className={pill(visibleExtra.includes("E"))}><span>E팀</span><span className="text-[9px] font-bold opacity-60">오후9시</span></button>
+                    <button type="button" onClick={() => setVisibleExtra((cur) => (cur.includes("종일") ? cur.filter((v) => v !== "종일") : [...cur, "종일"]))} className={pill(visibleExtra.includes("종일"))}><span>종일</span><span className="text-[9px] font-bold opacity-60">연차 등</span></button>
+                  </div>
+                  <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">업무</div>
+                  <div className="flex flex-wrap gap-1 lg:flex-col">
+                    <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={pill(allTypesOn)}><span>전체</span></button>
+                    {displayFilters.map((f) => (
+                      <button key={f} type="button" onClick={() => toggleScheduleFilter(f)} className={pill(visibleScheduleTypes.includes(f))}>
+                        <span className="flex min-w-0 items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${f === "익일통합as" ? "bg-lime-500" : f === "AS[완료]" ? "bg-blue-500" : f === "납품철수교체휴가교육" ? "bg-rose-500" : "bg-amber-500"}`} /><span className="truncate">{f}</span></span>
+                      </button>
+                    ))}
+                  </div>
+                  {hidden > 0 && (
+                    <button type="button" onClick={() => { setVisibleScheduleTypes([...displayFilters]); setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }}
+                      className="mt-4 w-full rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-2 text-[11px] font-black text-amber-300 transition hover:bg-amber-400/20">
+                      ⚠ 이번 달 {hidden}건 숨김 — 모두 표시
+                    </button>
+                  )}
+                </>);
+              })()}
+            </aside>
             <div className="min-w-0 flex-1">
-              {/* 팝업과 같은 다크 헤더 — 팀·업무 필터 칩 + 일정 추가 (사이드바 대체, 달력을 넓게) */}
-              <div className="flex flex-wrap items-center gap-1.5 bg-[#1E252F] px-4 py-3">
-                {(() => {
-                  const dChip = (on: boolean) => `rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`;
-                  const allTeamsOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일"].every((x) => visibleExtra.includes(x));
-                  const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
-                  return (<>
-                    <span className="mr-0.5 text-[10px] font-black text-slate-500">팀</span>
-                    <button type="button" onClick={() => { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }} className={dChip(allTeamsOn)}>전체</button>
-                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={dChip(visibleTeams.includes(tm))}>{tm} {TEAM_SLOT_LABEL[tm].replace(" ", "")}</button>)}
-                    {["E", "종일"].map((x) => <button key={x} type="button" onClick={() => setVisibleExtra((cur) => (cur.includes(x) ? cur.filter((v) => v !== x) : [...cur, x]))} className={dChip(visibleExtra.includes(x))}>{x === "E" ? `E ${TEAM_SLOT_LABEL.E.replace(" ", "")}` : "종일"}</button>)}
-                    <span className="mx-1.5 h-4 w-px bg-white/15" />
-                    <span className="mr-0.5 text-[10px] font-black text-slate-500">업무</span>
-                    <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={dChip(allTypesOn)}>전체</button>
-                    {displayFilters.map((f) => <button key={f} type="button" onClick={() => toggleScheduleFilter(f)} className={dChip(visibleScheduleTypes.includes(f))}>{f}</button>)}
-                    <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
-                  </>);
-                })()}
-              </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => { setCurrentMonth(monthStart(todayYmd)); window.setTimeout(() => document.getElementById(`cal-day-${todayYmd}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
