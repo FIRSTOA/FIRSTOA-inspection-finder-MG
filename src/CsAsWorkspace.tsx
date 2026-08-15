@@ -717,7 +717,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const next = listTypes.includes(name) ? listTypes.filter((item) => item !== name) : [...listTypes, name];
     setListTypesPersist(next.length ? next : [...LIST_TYPE_OPTIONS]);
   };
-  const [editId, setEditId] = useState("");
   const [deferId, setDeferId] = useState("");
   const [detailId, setDetailId] = useState("");
   const [dupTicketId, setDupTicketId] = useState("");
@@ -742,7 +741,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [detailLoading, setDetailLoading] = useState(false);
   const [customDate, setCustomDate] = useState(tomorrowYmd);
 
-  const editTicket = tickets.find((ticket) => ticket.id === editId);
   const detailTicket = tickets.find((ticket) => ticket.id === detailId);
   useEffect(() => {
     setDetailReception(null);
@@ -912,7 +910,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     setTickets(tickets.filter((item) => item.id !== ticket.id));
     removeRemote(ticket.id);
     if (ticket.naverUid) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_delete", uid: ticket.naverUid }).catch(() => { /* CalDAV 미설정·실패 시 네이버에서 직접 삭제 */ });
-    setEditId("");
     setDetailId("");
     setDeleteTarget(null);
     notify("일정이 삭제됐습니다" + (ticket.naverUid ? " — 네이버 캘린더 미러도 함께 삭제 ✓" : " ✓"), "success");
@@ -991,7 +988,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
-  const [assigneeFilter, setAssigneeFilter] = useState(""); // "" = 전체, "__none__" = 미배정만
   // 팀·유형·날짜만 거른 기준 행 — 직원 칩의 건수 배지와 목록이 같은 범위를 본다
   const baseRows = tickets.filter((ticket) => {
     if (team !== "ALL" && ticket.team !== team) return false;
@@ -1001,24 +997,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
   });
-  const assigneeCounts = baseRows.reduce<Record<string, number>>((acc, t) => { const k = t.assignee || ""; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
   // 행에서 바로 전화 — 접수 후 첫 동작이 고객 전화라서 (연락처·키맨의 첫 번호)
   const firstPhoneOf = (t: AsTicket) => (`${t.contact || ""}\n${t.keyman || ""}`.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
   // 상태 요약 바: 전체/미배정/진행/완료 — 클릭하면 그 상태만 (아침에 "뭐부터"가 바로 보이게)
   const [statusPick, setStatusPick] = useState<"" | "미배정" | "배정" | "완료">("");
   const statusOf = (t: AsTicket) => (t.status === "완료" ? "완료" : t.assignee ? "배정" : "미배정");
   const statusCounts = useMemo(() => {
-    const base = baseRows.filter((t) => (assigneeFilter === "__none__" ? !t.assignee : assigneeFilter ? t.assignee === assigneeFilter : true));
-    const c = { 전체: base.length, 미배정: 0, 배정: 0, 완료: 0 };
-    for (const t of base) c[statusOf(t)] += 1;
+    const c = { 전체: baseRows.length, 미배정: 0, 배정: 0, 완료: 0 };
+    for (const t of baseRows) c[statusOf(t)] += 1;
     return c;
-  }, [baseRows, assigneeFilter]);
-  const scheduleRows = baseRows.filter((ticket) => {
-    if (statusPick && statusOf(ticket) !== statusPick) return false;
-    if (assigneeFilter === "__none__") return !ticket.assignee;
-    if (assigneeFilter) return ticket.assignee === assigneeFilter;
-    return true;
-  }).sort((a, b) => {
+  }, [baseRows]);
+  const scheduleRows = baseRows.filter((ticket) => !(statusPick && statusOf(ticket) !== statusPick)).sort((a, b) => {
     // 이름별로 묶어서 표시 — 미배정 먼저, 그 다음 이름순 (여러 직원 일정이 섞여 뒤죽박죽되지 않게)
     const ka = a.assignee || "";
     const kb = b.assignee || "";
@@ -1069,18 +1058,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
             <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
             {teams.map((item) => (
-              <button key={item} type="button" onClick={() => { setTeam(item); setAssigneeFilter(""); }} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
+              <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
             ))}
-          </div>
-          {/* 직원별 필터 = 현황판: 칩에 건수 배지, 일정 없는 직원은 숨겨 칩 수를 줄인다 (드래그 불필요) */}
-          <div className="flex max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white/10 p-1">
-            <button type="button" onClick={() => setAssigneeFilter("")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${!assigneeFilter ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체 <span className="opacity-60">{baseRows.length}</span></button>
-            {(assigneeCounts[""] || 0) > 0 && <button type="button" onClick={() => setAssigneeFilter(assigneeFilter === "__none__" ? "" : "__none__")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === "__none__" ? "bg-amber-300 text-slate-950" : "text-amber-300/90 hover:text-amber-200"}`}>미배정 <span className="opacity-70">{assigneeCounts[""]}</span></button>}
-            {[...new Set([...(team === "ALL" ? teams.flatMap((t) => teamAssignees[t]) : teamAssignees[team]), ...Object.keys(assigneeCounts).filter(Boolean)])]
-              .filter((name) => (assigneeCounts[name] || 0) > 0)
-              .map((name) => (
-                <button key={name} type="button" onClick={() => setAssigneeFilter(assigneeFilter === name ? "" : name)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${assigneeFilter === name ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:text-white"}`}>{name} <span className="opacity-60">{assigneeCounts[name]}</span></button>
-              ))}
           </div>
         </div>
       </section>}
@@ -1275,29 +1254,24 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               ))}
               <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-1 py-1.5 text-[12.5px] font-black transition sm:px-4 sm:text-sm ${myPlanOpen ? "bg-blue-600 text-white shadow-sm" : "text-blue-600 hover:text-blue-700"}`}>내 일정</button>
             </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
-                className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
-              {LIST_TYPE_OPTIONS.map((name) => {
-                const on = listTypes.includes(name) && listTypes.length !== LIST_TYPE_OPTIONS.length;
-                const included = listTypes.includes(name);
-                return (
-                  <button key={name} type="button" onClick={() => toggleListType(name)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-slate-900 text-white" : included ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name === "AS" ? "익일통합as" : name}</button>
-                );
-              })}
-            </div>
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
           {!myPlanOpen && (
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {([["", `전체 ${statusCounts.전체}`, "bg-slate-900 text-white", "bg-slate-100 text-slate-500 hover:bg-slate-200"],
-                 ["미배정", `미배정 ${statusCounts.미배정}`, "bg-amber-500 text-white", "bg-amber-50 text-amber-700 hover:bg-amber-100"],
-                 ["배정", `배정 ${statusCounts.배정}`, "bg-emerald-600 text-white", "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"],
-                 ["완료", `완료 ${statusCounts.완료}`, "bg-blue-600 text-white", "bg-blue-50 text-blue-700 hover:bg-blue-100"]] as const).map(([key, label, onCls, offCls]) => (
+            <div className="mb-4 flex flex-wrap items-center gap-1">
+              {([["", `전체 ${statusCounts.전체}`], ["미배정", `미배정 ${statusCounts.미배정}`], ["배정", `배정 ${statusCounts.배정}`], ["완료", `완료 ${statusCounts.완료}`]] as const).map(([key, label]) => (
                 <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
+                  className={`rounded-full px-3 py-1.5 text-xs font-black transition ${statusPick === key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{label}</button>
               ))}
+              <span className="mx-1.5 h-4 w-px bg-slate-200" />
+              <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
+                className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체 유형</button>
+              {LIST_TYPE_OPTIONS.map((name) => {
+                const on = listTypes.includes(name) && listTypes.length !== LIST_TYPE_OPTIONS.length;
+                return (
+                  <button key={name} type="button" onClick={() => toggleListType(name)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-slate-900 text-white" : listTypes.includes(name) ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name === "AS" ? "익일통합as" : name}</button>
+                );
+              })}
             </div>
           )}
 
@@ -1337,18 +1311,51 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className={`hidden space-y-4 ${myPlanOpen ? "" : "md:block"}`}>
             {(() => {
               // 배정자별 박스 — 미배정(앰버)과 배정자(에메랄드)를 확실히 구분
+              const doneRows = scheduleRows.filter((t) => t.status === "완료");
+              const activeRows = scheduleRows.filter((t) => t.status !== "완료");
               const groups: Array<{ key: string; rows: AsTicket[] }> = [];
-              for (const t of scheduleRows) {
+              for (const t of activeRows) {
                 const key = t.assignee || "";
                 const g = groups.find((x) => x.key === key);
                 if (g) g.rows.push(t); else groups.push({ key, rows: [t] });
               }
+              if (doneRows.length) groups.push({ key: "__done__", rows: doneRows });
               const th = "px-3 py-2 text-xs font-black text-slate-500";
-              return groups.map(({ key, rows }) => (
-                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border ${key ? "border-slate-200" : "border-amber-300"}`}>
-                  <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-emerald-600" : "bg-amber-500"}`}>
-                    <span className="text-sm font-black text-white">{key || "미배정 — 배정 필요"}</span>
-                    <span className="rounded-full bg-white/25 px-2 py-0.5 text-[11px] font-black text-white">{rows.length}건</span>
+              const hoursSince = (t: AsTicket) => {
+                if (!t.time) return 0;
+                const ms = Date.now() - new Date(`${t.date}T${t.time}:00+09:00`).getTime();
+                return Math.floor(ms / 3600_000);
+              };
+              return groups.map(({ key, rows }) => key === "__done__" ? (
+                <details key="__done__" className="overflow-hidden rounded-xl border border-slate-200">
+                  <summary className="flex cursor-pointer items-center gap-2 border-l-4 border-blue-400 bg-blue-50/50 px-4 py-2 transition hover:bg-blue-50">
+                    <span className="text-sm font-black text-blue-800">✓ 완료</span>
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-black text-blue-700">{rows.length}건</span>
+                    <span className="text-[10px] font-bold text-slate-400">— 눌러서 펼치기</span>
+                  </summary>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1050px] text-left">
+                      <tbody>
+                        {rows.map((ticket) => (
+                          <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className="cursor-pointer border-b border-blue-100 bg-blue-50/60 last:border-0 hover:bg-blue-50">
+                            <td className="px-3 py-2.5 text-sm font-black">{ticket.team}팀</td>
+                            <td className="px-3 py-2.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
+                            <td className="px-3 py-2.5 text-sm font-bold">{ticket.time || "종일"}</td>
+                            <td className="w-[54%] px-3 py-2.5 text-sm font-black text-slate-500 line-through"><span className="max-w-[420px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span></td>
+                            <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
+                              <div className="flex justify-end"><button type="button" onClick={() => openDone(ticket)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button></div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ) : (
+                <section key={key || "__none__"} className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className={`flex items-center gap-2 border-l-4 px-4 py-2 ${key ? "border-emerald-500 bg-slate-50" : "border-amber-400 bg-amber-50/60"}`}>
+                    <span className={`text-sm font-black ${key ? "text-slate-800" : "text-amber-800"}`}>{key || "미배정 — 배정 필요"}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${key ? "bg-slate-200 text-slate-600" : "bg-amber-100 text-amber-700"}`}>{rows.length}건</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[1050px] text-left">
@@ -1364,13 +1371,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
                             <td className="px-3 py-2.5 text-sm font-black">{ticket.team}팀</td>
                             <td className="px-3 py-2.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
-                            <td className="px-3 py-2.5 text-sm font-bold">{ticket.time || "종일"}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
+                            <td className="px-3 py-2.5 text-sm font-bold">{ticket.time || "종일"}<div className="text-[11px] text-slate-400">{ticket.date}</div>{!ticket.assignee && hoursSince(ticket) >= 1 && <div className="mt-0.5 text-[10px] font-black text-amber-600">⏱ {hoursSince(ticket)}시간 경과</div>}</td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                               <div className="mt-1"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
                             </td>
                             <td className="px-3 py-2.5 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
-                            <td className="px-3 py-2.5 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
+                            <td className="px-3 py-2.5 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div>{ticket.asset && <div className="text-[11px] text-slate-400">자산 {ticket.asset}</div>}</td>
                             <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                               <div className="flex justify-end gap-1.5">
                                 {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
@@ -1428,9 +1435,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             return phones.map((phone) => ({ line, phone }));
           });
         const reception = detailReception;
-        const infoCell = (label: string, value: string) => (
-          <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[10px] font-black text-slate-400">{label}</div><div className="mt-0.5 truncate text-xs font-black text-slate-800">{value || "-"}</div></div>
-        );
         return (
           <div className="fixed inset-0 z-[115] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetailId("")}>
             <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -1472,59 +1476,48 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-                {/* 날짜·팀 — 네이버 모달과 같은 자리·스타일. 팀을 바꾸면 시간대(A09/B12/C15/D18)도 따라간다 */}
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs font-bold text-slate-500">날짜
-                    <input type="date" value={ticket.date} onClick={openPicker} onChange={(e) => { if (e.target.value && e.target.value !== ticket.date) requestMoveDate(ticket.id, e.target.value); }}
-                      className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
-                  </label>
-                  <div className="text-xs font-bold text-slate-500">팀
-                    <div className="mt-1">
-                      <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
-                        value={ticket.time ? ticket.team : "종일"}
-                        onChange={(v) => {
-                          if (v === "종일") { if (ticket.time) { update(ticket.id, { time: "" }); notify("종일 일정으로 변경 ✓", "success"); } return; }
-                          const tm = v as Team;
-                          if (tm !== ticket.team || !ticket.time) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); }
-                        }}
-                        options={[{ value: "종일", label: "종일" }, ...(["A", "B", "C", "D", "E"] as Team[]).map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
+                {/* 기본 정보 — 날짜·팀·장소·연락처를 한 박스로 (흩어짐 방지) */}
+                <div className="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-bold text-slate-500">날짜
+                      <input type="date" value={ticket.date} onClick={openPicker} onChange={(e) => { if (e.target.value && e.target.value !== ticket.date) requestMoveDate(ticket.id, e.target.value); }}
+                        className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                    </label>
+                    <div className="text-xs font-bold text-slate-500">팀
+                      <div className="mt-1">
+                        <PortalSelect direction="down" className="w-full bg-white py-2 font-semibold" width={240}
+                          value={ticket.time ? ticket.team : "종일"}
+                          onChange={(v) => {
+                            if (v === "종일") { if (ticket.time) { update(ticket.id, { time: "" }); notify("종일 일정으로 변경 ✓", "success"); } return; }
+                            const tm = v as Team;
+                            if (tm !== ticket.team || !ticket.time) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); }
+                          }}
+                          options={[{ value: "종일", label: "종일" }, ...(["A", "B", "C", "D", "E"] as Team[]).map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="text-xs font-bold text-slate-500">장소
-                  <div className="mt-1 flex items-center gap-2">
-                    <input key={`addr-${ticket.id}`} defaultValue={ticket.address || ""}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
-                      placeholder="방문 주소"
-                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
-                    {view === "as" && !!ticket.address && <AddrNav address={ticket.address} />}
+                  <div className="text-xs font-bold text-slate-500">장소
+                    <div className="mt-1 flex items-center gap-2">
+                      <input key={`addr-${ticket.id}`} defaultValue={ticket.address || ""}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
+                        placeholder="방문 주소"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                      {view === "as" && !!ticket.address && <AddrNav address={ticket.address} />}
+                    </div>
                   </div>
+                  {view === "as" && phoneEntries.length > 0 && <div className="text-xs font-bold text-slate-500">연락처
+                    <div className="mt-1 space-y-1.5">
+                      {phoneEntries.map(({ line, phone }, index) => (
+                        <div key={`${phone}-${index}`} className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs font-bold text-slate-700">{line}</span>
+                          <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">📞 {phone}</a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>}
+                  {view === "as" && !phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="text-xs font-bold text-slate-600 whitespace-pre-wrap">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
                 </div>
-                {view === "as" && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
-                  <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}
-                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.issue || "")) { update(ticket.id, { issue: v }); notify("접수 내용이 저장됐습니다 ✓", "success"); } }}
-                    className="mt-1 w-full resize-y rounded-lg border border-blue-200 bg-blue-50/40 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
-                </label>}
-                <label className="block text-xs font-bold text-slate-500">{view === "calendar" ? "내용" : "내용 (처리 결과·양식)"} <span className="font-semibold text-slate-400">{view === "calendar" ? "— 입력창을 벗어나면 저장" : "— 완료 처리 시 자동으로 쌓이고, 직접 수정도 가능"}</span>
-                  <textarea key={`note-${ticket.id}`} defaultValue={ticket.note || ""} rows={ticket.note ? Math.min(10, Math.max(3, ticket.note.split("\n").length)) : 3}
-                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
-                    className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
-                </label>
-                {view === "as" && <details className="rounded-lg border border-slate-200">
-                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-500 transition hover:text-slate-700">상세 정보 — 기종·시리얼·접수 정보</summary>
-                  <div className="grid grid-cols-2 gap-2 border-t border-slate-100 p-3 sm:grid-cols-3">
-                  {infoCell("기종", ticket.model)}
-                  {infoCell("시리얼(기번)", ticket.serial)}
-                  {infoCell("자산기번", ticket.asset)}
-                  {infoCell("등급", ticket.grade)}
-                  {reception && infoCell("순(임대리스트)", reception.lease_no)}
-                  {reception && infoCell("접수유형·경로", `${reception.type} · ${reception.route}`)}
-                  {infoCell("담당자", ticket.assignee || "미배정")}
-                  {reception && infoCell("유상/무상", reception.paid)}
-                  {ticket.department && infoCell("부서", ticket.department)}
-                  </div>
-                </details>}
                 {view === "calendar" && !!ticket.naverUid && (
                   <div className="text-xs font-bold text-slate-500">캘린더 이동
                     <div className="mt-1">
@@ -1535,43 +1528,30 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </div>
                   </div>
                 )}
-                {view === "as" && phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
-                  <div className="text-[10px] font-black text-slate-400">연락처 — 누를 상대를 선택하세요</div>
-                  <div className="mt-1.5 space-y-1.5">
-                    {phoneEntries.map(({ line, phone }, index) => (
-                      <div key={`${phone}-${index}`} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-xs font-bold text-slate-700">{line}</span>
-                        <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">📞 {phone}</a>
-                      </div>
-                    ))}
-                  </div>
-                </div>}
-                {view === "as" && !phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
-
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {view === "as" && !!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
                   <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
                 </div>}
-                {view === "as" && !!reception?.report_text && <details className="rounded-lg border border-slate-200">
-                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-600">원본 보고양식 펼치기</summary>
-                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-slate-100 bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{reception.report_text}</pre>
-                  <div className="border-t border-slate-100 p-2 text-right"><button type="button" onClick={() => void navigator.clipboard.writeText(reception.report_text)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-[11px] font-black text-white">복사</button></div>
-                </details>}
+                {view === "as" && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
+                  <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}
+                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.issue || "")) { update(ticket.id, { issue: v }); notify("접수 내용이 저장됐습니다 ✓", "success"); } }}
+                    className="mt-1 w-full resize-y rounded-lg border border-blue-200 bg-blue-50/40 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+                </label>}
+                <label className="block text-xs font-bold text-slate-500">{view === "calendar" ? "내용" : "내용 (처리 결과·양식)"} <span className="font-semibold text-slate-400">{view === "calendar" ? "— 입력창을 벗어나면 저장" : "— 완료 처리 시 자동으로 쌓이고, 직접 수정도 가능"}</span>
+                  <textarea key={`note-${ticket.id}`} defaultValue={ticket.note || ""} rows={ticket.note ? Math.min(10, Math.max(3, ticket.note.split("\n").length)) : 3}
+                    onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
+                    className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+                </label>
               </div>
-              {/* 하단 액션: 모바일에서 글자가 세로로 꺾이지 않게 균등 분할 + 줄바꿈 금지 */}
               <div className="space-y-1.5 border-t border-slate-100 px-4 py-3 sm:px-5">
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                   {view === "calendar" && <button type="button" onClick={() => { if (ticket.repeatMonthly) { update(ticket.id, { repeatMonthly: false }); } else { update(ticket.id, { repeatMonthly: true }); notify("다음 달부터 11개월, 매월 같은 날로 생성했습니다 ✓", "success"); } }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">{ticket.repeatMonthly ? "반복 해제" : "매월 반복"}</button>}
-                  {view === "as" && <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>}
+                  {view === "as" && <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-black text-emerald-700">배정</button>}
                   <button type="button" onClick={() => { removeTicket(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
-                {view === "as" && <div className="flex gap-1.5">
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="flex-1 whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD AS</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-black text-emerald-700">배정</button>
-                </div>}
                 <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`w-full whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
               </div>
             </div>
@@ -1579,14 +1559,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         );
       })()}
 
-      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => {
-        const newDate = patch.date;
-        if (editTicket.repeatMonthly && patch.repeatMonthly !== false && newDate && newDate !== editTicket.date && seriesOthers(editTicket).length) {
-          update(editTicket.id, { ...patch, date: editTicket.date });
-          setMoveTarget({ ticket: { ...editTicket, ...patch, date: editTicket.date }, date: newDate });
-        } else update(editTicket.id, patch);
-        setEditId("");
-      }} onComplete={() => { setEditId(""); openDone(editTicket); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
       {dupTicket && (
         <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDupTicketId("")}>
           <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -1876,90 +1848,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
 // 네이버 캘린더 미러 일정 조회·수정 — CalDAV 경유 (실험적: 네이버 비공식 통로)
 
-function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void }) {
-  const [draft, setDraft] = useState(ticket);
-  const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
-
-  return (
-    <div className="fixed inset-0 z-[120] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <b>{title}</b>
-          <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
-        </div>
-        <div className="grid min-h-0 gap-3 overflow-y-auto p-4 sm:p-5 md:grid-cols-2">
-          <label className="text-xs font-bold text-slate-500 md:col-span-2">
-            캘린더 제목 {ticket.naverUid ? <span className="font-black text-emerald-600">— 저장하면 네이버 일정 제목도 바뀝니다 (배정자 이름은 자동으로 앞에 붙음)</span> : ""}
-            <input value={draft.calendarTitle || ""} onChange={(event) => set("calendarTitle", event.target.value)} placeholder="비우면 업체명으로 표시"
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-          <Field label="업체명" value={draft.vendor} onChange={(value) => set("vendor", value)} />
-          <label className="text-xs font-bold text-slate-500">
-            담당자
-            <select value={draft.assignee} onChange={(event) => set("assignee", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-              <option value="">미배정</option>
-              {teamAssignees[draft.team].map((name) => <option key={name}>{name}</option>)}
-            </select>
-          </label>
-          <Field label="날짜" value={draft.date} type="date" onChange={(value) => set("date", value)} />
-          <Field label="시간" value={draft.time} type="time" onChange={(value) => set("time", value)} />
-          <label className="text-xs font-bold text-slate-500">
-            팀
-            <select value={draft.team} onChange={(event) => set("team", event.target.value as Team)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-              {teams.map((item) => <option key={item} value={item}>{item}팀</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-bold text-slate-500">
-            캘린더
-            <select value={draft.scheduleType === "익일AS" ? "AS" : draft.scheduleType} onChange={(event) => set("scheduleType", event.target.value as ScheduleType)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-              {(["AS", "납품철수교체휴가교육", "매월점검"] as ScheduleType[]).map((type) => <option key={type} value={type}>{draft.team}팀 {type}</option>)}
-            </select>
-          </label>
-          {/* 자주 안 만지는 정보는 접어서 모달을 가볍게 — 필요할 때만 펼친다 */}
-          <details className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
-            <summary className="cursor-pointer text-xs font-black text-slate-500">상세 정보 (부서·연락처·주소·기기) {[draft.department, draft.contact, draft.address, draft.model].filter(Boolean).length ? `— ${[draft.department, draft.contact, draft.address, draft.model].filter(Boolean).length}칸 입력됨` : ""}</summary>
-            <div className="mt-2 grid gap-3 md:grid-cols-2">
-              <Field label="부서명" value={draft.department} onChange={(value) => set("department", value)} />
-              <Field label="연락처" value={draft.contact} onChange={(value) => set("contact", value)} />
-              <Field label="주소" value={draft.address} onChange={(value) => set("address", value)} />
-              <Field label="기종" value={draft.model} onChange={(value) => set("model", value)} />
-              <Field label="시리얼" value={draft.serial} onChange={(value) => set("serial", value)} />
-              <Field label="자산기번" value={draft.asset || ""} onChange={(value) => set("asset", value)} />
-              <Field label="등급" value={draft.grade || ""} onChange={(value) => set("grade", value)} />
-            </div>
-          </details>
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-700 md:col-span-2">
-            <input type="checkbox" checked={!!draft.repeatMonthly} onChange={(event) => set("repeatMonthly", event.target.checked)} className="h-4 w-4 accent-blue-600" />
-            🔁 매월 반복 — 완료 처리하면 다음 달 같은 날로 일정이 자동 생성됩니다 (매월방문 업체용)
-          </label>
-          <label className="text-xs font-bold text-slate-500 md:col-span-2">
-            키맨 정보 <span className="font-semibold text-slate-400">(FIELD 양식의 키맨/접수자 아랫줄에 그대로 들어감)</span>
-            <textarea value={draft.keyman || ""} onChange={(event) => set("keyman", event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-          <label className="text-xs font-bold text-slate-500 md:col-span-2">
-            접수내용
-            <textarea value={draft.issue} onChange={(event) => set("issue", event.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-          <label className="text-xs font-bold text-slate-500 md:col-span-2">
-            내용 <span className="font-semibold text-slate-400">— 처리 결과·점검/AS 양식 (완료 처리 시 자동으로 쌓임, 직접 붙여넣기도 가능)</span>
-            <AutoGrowTextarea value={draft.note || ""} onChange={(value) => set("note", value)} minRows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
-          <div className="flex items-center gap-2">
-            {onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
-            {onDefer && <button type="button" onClick={onDefer} className="rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-black text-purple-700">익일</button>}
-            {onComplete && <button type="button" onClick={onComplete} className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">{ticket.status === "완료" ? "완료 취소" : "완료"}</button>}
-            <button type="button" onClick={() => onSave(draft)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">저장</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // 완료 사유 입력 — 적으면 팀 AS방 카톡 + 네이버 일정 내용에 남고, 비우면 조용히 완료만
 function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClose: () => void; onApply: (reason: string) => void }) {
@@ -2003,38 +1891,23 @@ function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ti
         {!reason.trim() && <div className="mt-1.5 text-[11px] font-bold text-purple-500">사유를 입력하면 아래 날짜 버튼이 열립니다</div>}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {options.map(([label, date]) => (
-            <button key={label} type="button" disabled={!reason.trim()} onClick={() => onApply(date, reason)} className="rounded-full border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+            <button key={label} type="button" disabled={!reason.trim()} onClick={() => onCustomDate(date)} className={`rounded-full border px-4 py-3 text-sm font-black transition disabled:opacity-40 ${customDate === date ? "border-purple-500 bg-purple-50 text-purple-700 ring-4 ring-purple-500/10" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
               {label}
               <div className="mt-1 text-xs text-slate-400">{date}</div>
             </button>
           ))}
         </div>
-        <div className="mt-3 flex gap-2">
-          <input type="date" value={customDate} onChange={(event) => onCustomDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <button type="button" disabled={!reason.trim()} onClick={() => onApply(customDate, reason)} className="rounded-full bg-purple-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">직접선택</button>
+        <div className="mt-3">
+          <input type="date" value={customDate} onChange={(event) => onCustomDate(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10" />
         </div>
+        <button type="button" disabled={!reason.trim() || !customDate} onClick={() => onApply(customDate, reason)}
+          className="mt-3 w-full rounded-full bg-purple-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(147,51,234,0.3)] transition hover:bg-purple-700 disabled:opacity-40">
+          {customDate ? `${customDate}(으)로 일정 변경` : "날짜를 선택하세요"}
+        </button>
       </div>
     </div>
   );
 }
 
 // 내용에 맞춰 높이가 자동으로 늘어나는 입력칸
-function AutoGrowTextarea({ value, onChange, className = "", minRows = 3 }: { value: string; onChange: (value: string) => void; className?: string; minRows?: number }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-  return <textarea ref={ref} rows={minRows} value={value} onChange={(event) => onChange(event.target.value)} className={`resize-none overflow-hidden ${className}`} />;
-}
 
-function Field({ label, value, type = "text", onChange }: { label: string; value: string; type?: string; onChange: (value: string) => void }) {
-  return (
-    <label className="text-xs font-bold text-slate-500">
-      {label}
-      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-    </label>
-  );
-}
