@@ -6,8 +6,7 @@ import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } 
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
-import { historyCoreName, normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
-import UnifiedHistory from "./UnifiedHistory";
+import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -1221,10 +1220,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
-  // 미수·초과·불만 알림 클릭 → 통합이력 팝업 (전사 공통 흐름 — 자체 미니 이력 팝업은 2026-08-15 통합이력으로 흡수)
-  // 워킨맵 지명은 잡문이 많아 통째로 검색하면 0건 — 공용 추출기로 첫 업체명 토큰만 검색어로 쓴다
-  const [histVendor, setHistVendor] = useState("");
-  const openVendorHistory = (place: { name: string }) => setHistVendor(historyCoreName(place.name));
+  // 미수·초과·불만은 지도 알림에 내용이 다 담기므로 통합이력 연결은 두지 않는다 (2026-08-15 사용자 결정 — 워킨맵은 표시 전용)
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -2256,9 +2252,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
                         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
                         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
-                      {misu && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 통합이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
-                      {overage && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 통합이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 통합이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
+                      {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                      {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={bulman.content}>불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
                     </span>
                   )}
                 </span>
@@ -2283,9 +2279,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>
-                      <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} />
-                        <button type="button" onClick={() => openVendorHistory(place)} className="ml-auto rounded-full bg-slate-900 px-3 py-1 text-[11px] font-black text-white transition hover:bg-slate-800">🗂 통합이력</button>
-                      </div>
+                      <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} /></div>
                       <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{[place.address, place.addressDetail].filter(Boolean).join(" ") || "-"}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -2597,7 +2591,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">업무 정보</div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.team}팀</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}{labelDesc(place.label, place.kind) ? ` · ${labelDesc(place.label, place.kind)}` : ""}</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
-              <button type="button" onClick={() => openVendorHistory(place)} className="mt-2 rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-black text-white">🗂 통합이력 — 미수·초과·불만·점검 한 번에</button>
             </section>
             <section className="px-4 py-4">
               <div className="text-xs font-black text-slate-400">메모</div>
@@ -2788,7 +2781,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           </div>
         </div>
       )}
-      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} />
     </div>
   );
 }

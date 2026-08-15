@@ -135,7 +135,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const [includedHits, setIncludedHits] = useState<VendorHit[]>([]);
   const [historyRegion, setHistoryRegion] = useState("전체");
   const [historyVendor, setHistoryVendor] = useState("전체");
-  const [scopeOpen, setScopeOpen] = useState(true);
+  const [scopeOpen, setScopeOpen] = useState(false); // 조회 범위는 기본 접힘 — 처음 화면을 단순하게
 
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<VendorHit[]>([]);
@@ -166,7 +166,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       setIncludedHits([]);
       setHistoryRegion("전체");
       setHistoryVendor("전체");
-      setScopeOpen(true);
+      setScopeOpen(false);
       setShowHits(false);
     });
     return () => { active = false; };
@@ -383,7 +383,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         {loading && <div className="py-16 text-center text-sm font-semibold text-slate-400">전체 이력을 모으는 중...</div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
         {!loading && detail && activeCat === "전체" && (() => {
-          const chip = (tone: string, text: string, key: string) => <span key={key} className={`inline-flex max-w-full items-center truncate rounded-full border px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
+          const chip = (tone: string, text: string, key: string) => <span key={key} title={text} className={`inline-flex max-w-[300px] items-center overflow-hidden rounded-full border px-2.5 py-1 text-[11px] font-black ${tone}`}><span className="truncate">{text}</span></span>;
           const items: ReturnType<typeof chip>[] = [];
           const f = flags;
           if (f?.inspection) items.push(chip(f.inspection.done ? "border-slate-200 bg-slate-50 text-slate-500" : f.inspection.carried ? "border-slate-200 bg-slate-50 text-slate-500" : "border-blue-300 bg-blue-50 text-blue-700", f.inspection.done ? `점검 완료 (${f.inspection.quarter}분기)` : f.inspection.carried ? "점검 다음분기 이관" : `${f.inspection.quarter}분기 점검 대상`, "insp"));
@@ -405,7 +405,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             <div className="flex flex-wrap gap-1.5 px-4 py-3">
               {items.length ? items : <span className="text-xs font-semibold text-slate-400">이번 분기에 특별히 체크할 항목이 없습니다.</span>}
             </div>
-            {quarterCheck.latest && <div className="border-t border-slate-100 px-4 py-2 text-[11px] font-semibold text-slate-500">최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
+            {quarterCheck.latest && <div className="truncate border-t border-slate-100 px-4 py-2 text-[11px] font-semibold text-slate-500" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}${quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
           </section>;
         })()}
         {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

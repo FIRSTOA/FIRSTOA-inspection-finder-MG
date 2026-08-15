@@ -9,8 +9,21 @@
  * 소비자(뱃지·이력·재계약 매칭)는 "코드 일치 우선, 실패 시 기존 이름 매칭 폴백"으로 쓴다
  * — 코드가 없어도 오늘과 똑같이 동작하고, 코드가 있으면 정확해진다.
  */
-import { selectAllRows } from "./supabase";
+import { selectAllRows, selectRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
+
+// 코드 → 마스터 대표명. 통합이력을 열 때 잡문 이름 대신 정확한 업체명으로 검색하기 위한 것.
+const masterNameCache = new Map<string, string>();
+export async function vendorNameByCode(code: string): Promise<string> {
+  const c = String(code || "").trim();
+  if (!c) return "";
+  const cached = masterNameCache.get(c);
+  if (cached !== undefined) return cached;
+  const rows = await selectRows<{ name: string }>("vendor_master", `select=name&code=eq.${encodeURIComponent(c)}&limit=1`).catch(() => [] as Array<{ name: string }>);
+  const name = String(rows[0]?.name || "").trim();
+  masterNameCache.set(c, name);
+  return name;
+}
 
 const CACHE_MS = 10 * 60_000;
 

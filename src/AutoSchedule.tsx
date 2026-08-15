@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
+import { vendorNameByCode } from "./vendorCodes";
 import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
@@ -47,6 +48,12 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [rows, setRows] = useState<Place[]>([]);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map()); // 불만·미수·초과·재계약·점검 (일정리스트와 같은 기준)
   const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
+  // 코드가 붙은 후보는 마스터 대표명으로 검색(정확) — 워킨맵 잡문 이름 폴백
+  const openPlaceHistory = (r: { vendor: string; place_name: string; code: string }) => {
+    const fallback = historyCoreName(r.vendor || r.place_name);
+    if (!r.code) { setHistVendor(fallback); return; }
+    void vendorNameByCode(r.code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
+  };
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -257,7 +264,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                       {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
-                      <VendorAlertChip flags={fl} onOpen={() => setHistVendor(historyCoreName(r.vendor || r.place_name))} />
+                      <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(r)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
                       {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}

@@ -58,6 +58,13 @@ describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
   it("평범한 업체명은 그대로", () => {
     expect(historyCoreName("한성알앤씨")).toBe("한성알앤씨");
   });
+  it("배정자 접두('이름 - ')를 벗긴다 — 사람 이름이 검색어가 되던 사고", () => {
+    expect(historyCoreName("한왕주 - 전자계약서 작성 확인 / SS / 포바이포")).not.toBe("한왕주");
+  });
+  it("본사·지점 접미를 벗긴다 — '넥스트라이프본사'로 찾으면 놓치던 사고", () => {
+    expect(historyCoreName("㈜넥스트라이프본사")).toBe("넥스트라이프");
+    expect(historyCoreName("세무그룹청연청연 3층 입구왼쪽매년")).toBe("세무그룹청연청연");
+  });
 });
 
 describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL workin_vendor_와 거울)", () => {

@@ -34,7 +34,9 @@ export function workinVendorName(value: string) {
 // 통째로 들어오면 검색이 0건이라, 접수 키워드·모델명·숫자등급 접두를 건너뛰고 첫 업체명 토큰만 남긴다.
 const HISTORY_STOPWORD = /^(여분요청|자가요청|자가|여분|접수|방문|요청|점검|정기점검|교체|철수|납품|이전셋팅만?|셋팅|종료일|지역|수도권[A-E]?|분기마감|매월마감|마감|오전|오후|긴급|급함|레벨\d*)$/;
 export function historyCoreName(raw: string) {
-  const cleaned = workinVendorName(raw) || String(raw || "").trim();
+  // 네이버 미러 제목("한왕주 - 전자계약서 …")의 배정자 접두를 먼저 벗긴다 — 사람 이름이 검색어가 되면 안 된다
+  const noAssignee = String(raw || "").replace(/^[가-힣]{2,4}\s*[-–—]\s+/, "");
+  const cleaned = workinVendorName(noAssignee) || noAssignee.trim();
   for (const token of cleaned.split(/[\s|·,~()/\-]+/)) {
     if (!/[가-힣]/.test(token)) continue; // 영문·숫자만인 토큰은 모델명·시리얼일 가능성이 높다
     if (HISTORY_STOPWORD.test(token)) continue;
@@ -42,7 +44,9 @@ export function historyCoreName(raw: string) {
       .replace(/^\d+[A-Za-z]*(?=[가-힣])/, "") // "14N주식회사" → "주식회사"
       .replace(/^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인|㈜)/, "");
     if (core.length < 2 || HISTORY_STOPWORD.test(core)) continue;
-    return core;
+    // "넥스트라이프본사"로 찾으면 지점 표기 없는 기록을 놓친다 — 위치 접미사는 벗긴다
+    const noBranch = core.replace(/(본사|지사|지점|공장|창고|사옥)$/, "");
+    return noBranch.length >= 2 ? noBranch : core;
   }
   return cleaned;
 }
