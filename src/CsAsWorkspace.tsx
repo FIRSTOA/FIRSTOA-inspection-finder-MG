@@ -98,15 +98,39 @@ function monthGrid(date: string) {
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
 }
 
-// 기본 <select>의 밋밋한 모양을 벗긴 공용 선택상자 — 팀·캘린더 이동 등
-function FancySelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+// 공용 선택상자 — 겉은 날짜 입력과 똑같은 수수한 박스, 누르면 디자인된 목록 패널이 열린다
+// (브라우저 기본 <select>의 드롭다운은 스타일이 안 먹혀서 직접 그린다)
+function FancySelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<{ value: string; label: string }> }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const current = options.find((o) => o.value === value);
   return (
-    <div className="relative">
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full cursor-pointer appearance-none rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2.5 pr-10 text-sm font-black text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.05)] outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-        {children}
-      </select>
-      <svg className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    <div ref={boxRef} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 outline-none transition ${open ? "border-blue-500 ring-4 ring-blue-500/10" : "border-slate-300 hover:border-slate-400"}`}>
+        <span className="truncate">{current?.label || value || "선택"}</span>
+        <svg className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 z-[60] mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_12px_32px_rgba(15,23,42,0.16)]">
+          {options.map((o) => {
+            const on = o.value === value;
+            return (
+              <button key={o.value} type="button" onClick={() => { setOpen(false); if (!on) onChange(o.value); }}
+                className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm transition ${on ? "bg-blue-50 font-black text-blue-700" : "font-semibold text-slate-700 hover:bg-slate-50"}`}>
+                <span className="truncate">{o.label}</span>
+                {on && <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M4.5 10.5L8.5 14.5L15.5 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1284,10 +1308,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           </label>
                           <div className="text-xs font-bold text-slate-500">팀
                             <div className="mt-1">
-                              <FancySelect value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}>
-                                <option value="">{naverDetail.time ? `기타 (${naverDetail.time})` : "종일"}</option>
-                                {["A", "B", "C", "D", "E"].map((tm) => <option key={tm} value={tm}>{tm}팀 · {TEAM_SLOT_LABEL[tm]}</option>)}
-                              </FancySelect>
+                              <FancySelect value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}
+                                options={[{ value: "", label: naverDetail.time ? `기타 (${naverDetail.time})` : "종일" }, ...["A", "B", "C", "D", "E"].map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
                             </div>
                           </div>
                         </div>
@@ -1304,10 +1326,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         </label>
                         <div className="text-xs font-bold text-slate-500">캘린더 이동
                           <div className="mt-1">
-                            <FancySelect value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}>
-                              {NAVER_CAL_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                              {!NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) && <option value={naverDetail.calendar_id}>(현재 캘린더)</option>}
-                            </FancySelect>
+                            <FancySelect value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}
+                              options={[...NAVER_CAL_LIST.map((c) => ({ value: c.id, label: c.name })), ...(NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) ? [] : [{ value: naverDetail.calendar_id, label: "(현재 캘린더)" }])]} />
                           </div>
                         </div>
                       </div>
@@ -1539,14 +1559,23 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-xs font-bold text-slate-500">날짜
                     <input type="date" value={ticket.date} onClick={openPicker} onChange={(e) => { if (e.target.value && e.target.value !== ticket.date) requestMoveDate(ticket.id, e.target.value); }}
-                      className="mt-1 w-full cursor-pointer rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2 text-sm font-black text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.05)] outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                      className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
                   </label>
                   <div className="text-xs font-bold text-slate-500">팀
                     <div className="mt-1">
-                      <FancySelect value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}>
-                        {teams.map((tm) => <option key={tm} value={tm}>{tm}팀 · {TEAM_SLOT_LABEL[tm]}</option>)}
-                      </FancySelect>
+                      <FancySelect value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}
+                        options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
                     </div>
+                  </div>
+                </div>
+                <div className="text-xs font-bold text-slate-500">장소
+                  <div className="mt-1 flex items-center gap-2">
+                    <input key={`addr-${ticket.id}`} defaultValue={ticket.address || ""}
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
+                      placeholder="방문 주소"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                    {!!ticket.address && <AddrNav address={ticket.address} />}
                   </div>
                 </div>
                 <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
@@ -1559,7 +1588,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
                     className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <details className="rounded-lg border border-slate-200">
+                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-500 transition hover:text-slate-700">상세 정보 — 기종·시리얼·접수 정보</summary>
+                  <div className="grid grid-cols-2 gap-2 border-t border-slate-100 p-3 sm:grid-cols-3">
                   {infoCell("기종", ticket.model)}
                   {infoCell("시리얼(기번)", ticket.serial)}
                   {infoCell("자산기번", ticket.asset)}
@@ -1569,7 +1600,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {infoCell("담당자", ticket.assignee || "미배정")}
                   {reception && infoCell("유상/무상", reception.paid)}
                   {ticket.department && infoCell("부서", ticket.department)}
-                </div>
+                  </div>
+                </details>
                 {phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
                   <div className="text-[10px] font-black text-slate-400">연락처 — 누를 상대를 선택하세요</div>
                   <div className="mt-1.5 space-y-1.5">
@@ -1582,16 +1614,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                 </div>}
                 {!phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
-                <div className="text-xs font-bold text-slate-500">방문 주소
-                  <div className="mt-1 flex items-center gap-2">
-                    <input key={`addr-${ticket.id}`} defaultValue={ticket.address || ""}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ticket.address || "")) { update(ticket.id, { address: v }); notify("주소가 저장됐습니다 ✓", "success"); } }}
-                      placeholder="방문 주소"
-                      className="min-w-0 flex-1 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-amber-500 focus:bg-white" />
-                    {!!ticket.address && <AddrNav address={ticket.address} />}
-                  </div>
-                </div>
+
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {!!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
@@ -1614,8 +1637,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="flex gap-1.5">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="flex-1 whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD AS</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`flex-[1.4] whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-blue-600 text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
                 </div>
+                <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`w-full whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
               </div>
             </div>
           </div>
