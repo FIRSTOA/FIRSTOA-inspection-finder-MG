@@ -1488,7 +1488,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               const mergedActive = (rowList: AsTicket[], naverList: NaverEventRow[]) => [
                 ...rowList.map((t) => ({ date: t.date, allday: t.time ? 0 : 1, cat: CAT_ORDER[displayTypeOf(t)] ?? 9, gu: guOf(t.address || "") || "￿", time: t.time || "", title: displayTitleOf(t), node: ticketListRow(t) })),
                 ...naverList.map((ev) => ({ date: ev.date, allday: ev.time ? 0 : 1, cat: CAT_ORDER[naverCategoryOf(ev)] ?? 9, gu: guOf(ev.location || "") || "￿", time: ev.time || "", title: ev.title || "", node: naverListRow(ev, false) })),
-              ].sort((a, b) => a.date.localeCompare(b.date) || a.allday - b.allday || a.cat - b.cat || a.gu.localeCompare(b.gu, "ko") || a.time.localeCompare(b.time) || a.title.localeCompare(b.title, "ko")).map((x) => x.node);
+              ].sort((a, b) => a.date.localeCompare(b.date) || a.allday - b.allday || a.cat - b.cat || a.gu.localeCompare(b.gu, "ko") || a.time.localeCompare(b.time) || a.title.localeCompare(b.title, "ko")).flatMap((x, i, arr) => (
+                // 예정 탭은 여러 날짜가 섞이므로 날짜가 바뀔 때마다 띠를 넣어 일별로 끊어 보여준다
+                dayFilter === "scheduled" && x.date !== arr[i - 1]?.date ? [(
+                  <tr key={`day-${x.date}`} className="border-b border-slate-200 bg-slate-100">
+                    <td colSpan={9} className="px-3 py-1.5 text-[11px] font-black text-slate-600">📅 {Number(x.date.slice(5, 7))}/{Number(x.date.slice(8, 10))} ({dowOf(x.date)})</td>
+                  </tr>
+                ), x.node] : [x.node]
+              ));
               return groups.map(({ key, rows, naver }) => key === "__done__" ? (
                 <details key="__done__" className="overflow-hidden rounded-xl border-2 border-blue-300 bg-white shadow-sm">
                   <summary className="flex cursor-pointer items-center gap-2 bg-blue-50/70 px-4 py-2 transition hover:bg-blue-50">
