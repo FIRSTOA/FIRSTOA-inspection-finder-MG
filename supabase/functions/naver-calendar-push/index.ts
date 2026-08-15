@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // CalDAV: 네이버 일정 조회/수정/삭제 (uid 필요 — 웹앱이 등록 때 저장해 둔 값)
-    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move" || body.action === "caldav_check" || body.action === "caldav_transfer") {
+    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move" || body.action === "caldav_check" || body.action === "caldav_transfer" || body.action === "caldav_duplicate") {
       const auth = caldavAuth();
       if (!auth) return Response.json({ error: "CalDAV 미설정 — NAVER_CALDAV_ID/NAVER_CALDAV_APP_PASSWORD Secrets가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const uid = String(body.uid || "").trim();
@@ -159,6 +159,21 @@ Deno.serve(async (req) => {
           location: icsProp(ics, "LOCATION"),
           dtstart: icsProp(ics, "DTSTART"),
         }, { headers: jsonHeaders });
+      }
+      // 복제 — 같은 캘린더에 새 UID로 사본 생성, newDate가 오면 그 날짜로 (시간 유지)
+      if (body.action === "caldav_duplicate") {
+        const newUid = `dup-${crypto.randomUUID()}`; // firstoa 접두를 쓰지 않는다 — 웹앱 표시 목록에서 숨겨지지 않게
+        let out = ics.replace(/^UID:.*$/mi, `UID:${newUid}`).replace(/^X-NAVER-COMPLETED:.*\r?\n?/gm, "");
+        const newDate = String(body.newDate || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+          const ymd = newDate.replace(/-/g, "");
+          out = out.replace(/^(DTSTART[^:]*:)(\d{8})/mi, `$1${ymd}`).replace(/^(DTEND[^:]*:)(\d{8})/mi, `$1${ymd}`);
+        }
+        const putD = await fetch(caldavEventUrl(auth.id, calId, newUid), {
+          method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: out,
+        });
+        if (putD.status >= 400) throw new Error(`일정 복제 실패(${putD.status})`);
+        return Response.json({ ok: true, status: "duplicated", uid: newUid, date: newDate || undefined }, { headers: jsonHeaders });
       }
       // 캘린더 간 이동 — calId(현재)에서 toCal로 그대로 옮긴다 (내용 무변경)
       if (body.action === "caldav_transfer") {
