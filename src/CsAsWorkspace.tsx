@@ -636,14 +636,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
   // 네이버 일정의 팀: 시간대 규칙(A=09, B=12, C=15, D=18)으로 유추 — 그 외 시간·종일은 팀 없음(항상 표시)
   const naverTeamOf = (ev: { time: string }): string | null => (({ "09:00": "A", "12:00": "B", "15:00": "C", "18:00": "D", "21:00": "E" } as Record<string, string>)[ev.time] || null);
+  // 팀 필터 확장분: E(21시)·종일 — A~D와 똑같이 켜고 끌 수 있다
+  const [visibleExtra, setVisibleExtra] = useState<string[]>(() => loadStoredFilter("cs_calendar_extra_v1", ["E", "종일"], ["E", "종일"]));
+  useEffect(() => { try { localStorage.setItem("cs_calendar_extra_v1", JSON.stringify(visibleExtra)); } catch { /* 무시 */ } }, [visibleExtra]);
   const shownNaverEvents = useMemo(() => {
     const linked = new Set(tickets.map((t) => t.naverUid).filter(Boolean));
     return naverEvents.filter((ev) => {
       if (linked.has(ev.uid) || !visibleScheduleTypes.includes(naverCategoryOf(ev))) return false;
+      if (!ev.time) return visibleExtra.includes("종일");           // 종일 일정(연차 등)
       const team = naverTeamOf(ev);
-      return !team || team === "E" || visibleTeams.includes(team as Team); // E(21시)는 팀 필터 밖 — 항상 표시
+      if (team === "E") return visibleExtra.includes("E");          // 21시 = E팀 — 이제 필터를 따른다
+      if (team) return visibleTeams.includes(team as Team);
+      return true; // 기타 시간(팀 규칙 밖)은 항상 표시
     });
-  }, [naverEvents, tickets, visibleScheduleTypes, visibleTeams]);
+  }, [naverEvents, tickets, visibleScheduleTypes, visibleTeams, visibleExtra]);
   // 네이버 목록 뷰 구도(시간|분류|내용|팀)의 한 줄 행 — 목록 탭·그날 팝업 공용
   const compactTicketRow = (t: AsTicket) => (
     <button key={t.id} type="button" onClick={() => { setNaverDayDate(null); setDetailId(t.id); }}
@@ -700,7 +706,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     setListTypesPersist(next.length ? next : [...LIST_TYPE_OPTIONS]);
   };
   const [editId, setEditId] = useState("");
-  const [newTicket, setNewTicket] = useState<AsTicket | null>(null);
   const [deferId, setDeferId] = useState("");
   const [detailId, setDetailId] = useState("");
   const [dupTicketId, setDupTicketId] = useState("");
@@ -870,6 +875,24 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
+  // 간소 일정 추가(캘린더용) — 제목·날짜·팀·장소·내용·캘린더(분류)·매월반복만
+  const [simpleAdd, setSimpleAdd] = useState<{ date: string; title: string; team: Team; address: string; note: string; cal: ScheduleType; repeat: boolean } | null>(null);
+  const openSimpleAdd = (date: string) => setSimpleAdd({ date, title: "", team: (teams.find((t) => visibleTeams.includes(t)) || "A") as Team, address: "", note: "", cal: "AS", repeat: false });
+  const submitSimpleAdd = () => {
+    const f = simpleAdd;
+    if (!f || !f.title.trim()) return;
+    const created = normalizeTicketSchedule({
+      ...blankTicket(f.date, {}),
+      team: f.team, time: TEAM_SLOT[f.team] || "09:00",
+      vendor: f.title.trim().slice(0, 80), calendarTitle: f.title.trim().slice(0, 120),
+      address: f.address.trim(), note: f.note, scheduleType: f.cal, repeatMonthly: f.repeat,
+    });
+    setTickets([...tickets, created]);
+    persistRemote(created);
+    if (created.repeatMonthly) ensureMonthlySeries(created);
+    setSimpleAdd(null);
+    notify("일정이 추가됐습니다 ✓", "success");
+  };
   // 삭제는 디자인 확인 모달을 거친다 (브라우저 confirm 대체) — 확정 시 doRemoveTicket 실행
   const [deleteTarget, setDeleteTarget] = useState<AsTicket | null>(null);
   const removeTicket = (ticket: AsTicket) => { setDeleteTarget(ticket); return false; };
@@ -1004,10 +1027,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const monthTickets = visibleTickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7));
 
   // 일정 추가 기본값: 캘린더에서 체크된 팀·업무종류 중 첫 값 (예: B팀+매월점검만 켜두면 그대로 미리 채움)
-  const newTicketDefaults = (): Partial<AsTicket> => ({
-    team: teams.find((item) => visibleTeams.includes(item)) || "A",
-    scheduleType: ((): ScheduleType => { const first = displayFilters.find((item) => visibleScheduleTypes.includes(item)); return !first || first.startsWith("AS") || first === "익일통합as" ? "AS" : (first as ScheduleType); })(),
-  });
 
   const toggleScheduleFilter = (filter: DisplayFilter) => {
     setVisibleScheduleTypes((current) => current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]);
@@ -1048,7 +1067,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="flex min-h-[720px] flex-col lg:flex-row">
             <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r lg:p-4">
               <div className="grid grid-cols-2 gap-2 lg:block">
-                <button type="button" onClick={() => setNewTicket(blankTicket(todayYmd, newTicketDefaults()))} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
+                <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
                   <span className="text-lg leading-none">+</span> 일정 추가
                 </button>
                 <button type="button" onClick={() => setCalendarFiltersOpen((current) => !current)} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-4 py-3 text-sm font-black text-slate-600 shadow-sm lg:hidden">필터 {calendarFiltersOpen ? "닫기" : "열기"}</button>
@@ -1074,6 +1093,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleTeams.includes(calendarTeam)} onChange={() => toggleVisibleTeam(calendarTeam)} className="h-4 w-4 accent-blue-600" />
                           {calendarTeam}팀
+                        </label>
+                      ))}
+                      {["E", "종일"].map((extra) => (
+                        <label key={extra} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
+                          <input type="checkbox" checked={visibleExtra.includes(extra)} onChange={() => setVisibleExtra((cur) => (cur.includes(extra) ? cur.filter((x) => x !== extra) : [...cur, extra]))} className="h-4 w-4 accent-blue-600" />
+                          {extra === "E" ? "E팀 (오후 9시)" : "종일 (연차 등)"}
                         </label>
                       ))}
                     </div>
@@ -1166,7 +1191,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <div className="border-t border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm font-black text-slate-900">{Number(mobileSelectedDate.slice(5, 7))}월 {Number(mobileSelectedDate.slice(8, 10))}일 · {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).length}건</div>
-                      <button type="button" onClick={() => setNewTicket(blankTicket(mobileSelectedDate, newTicketDefaults()))} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-xs font-black text-white">+ 일정</button>
+                      <button type="button" onClick={() => openSimpleAdd(mobileSelectedDate)} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-xs font-black text-white">+ 일정</button>
                     </div>
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
@@ -1238,6 +1263,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <div className="text-[11px] font-black text-slate-400">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${naverDayDate}T00:00:00`).getDay()]}요일 일정</div>
                           <div className="mt-0.5 text-[16px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {rows.length}{rows.length !== rowsAll.length ? ` / ${rowsAll.length}` : ""}건</div>
                         </div>
+                        <button type="button" onClick={() => { const d = naverDayDate; setNaverDayDate(null); openSimpleAdd(d); }} className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/70 px-4 py-2">
                         <span className="mr-0.5 text-[10px] font-black text-slate-400">팀</span>
@@ -1637,7 +1663,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {view === "as" && !phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
 
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
-                {!!(reception?.photos?.length) && <div>
+                {view === "as" && !!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
                   <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
                 </div>}
@@ -1675,7 +1701,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         } else update(editTicket.id, patch);
         setEditId("");
       }} onComplete={() => { setEditId(""); openDone(editTicket); }} onDefer={() => { setEditId(""); openDefer(editTicket); }} onDelete={() => removeTicket(editTicket)} />}
-      {newTicket && <TicketEditModal ticket={newTicket} title="일정 추가" onClose={() => setNewTicket(null)} onSave={(patch) => { const created = normalizeTicketSchedule({ ...newTicket, ...patch }); setTickets([...tickets, created]); persistRemote(created); if (created.repeatMonthly) ensureMonthlySeries(created); setNewTicket(null); }} />}
       {dupTicket && (
         <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDupTicketId("")}>
           <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -1731,6 +1756,59 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       )}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
       {doneTicket && <DoneReasonModal ticket={doneTicket} onClose={() => setDoneTicket(null)} onApply={(reason) => void applyDone(reason)} />}
+      {simpleAdd && (
+        <div className="fixed inset-0 z-[2440] flex items-center justify-center bg-black/45 p-4" onMouseDown={() => setSimpleAdd(null)}>
+          <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between bg-[#1E252F] px-5 py-4">
+              <div className="text-[15px] font-black text-white">＋ 일정 추가</div>
+              <button type="button" onClick={() => setSimpleAdd(null)} className="rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white" aria-label="닫기"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg></button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+              <label className="block text-xs font-bold text-slate-500">제목
+                <input value={simpleAdd.title} onChange={(e) => setSimpleAdd({ ...simpleAdd, title: e.target.value })} autoFocus placeholder="예: 신정훈 - 전자계약서 작성 확인"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-bold text-slate-500">날짜
+                  <input type="date" value={simpleAdd.date} onClick={openPicker} onChange={(e) => { if (e.target.value) setSimpleAdd({ ...simpleAdd, date: e.target.value }); }}
+                    className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                </label>
+                <div className="text-xs font-bold text-slate-500">팀
+                  <div className="mt-1">
+                    <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
+                      value={simpleAdd.team} onChange={(v) => setSimpleAdd({ ...simpleAdd, team: v as Team })}
+                      options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
+                  </div>
+                </div>
+              </div>
+              <label className="block text-xs font-bold text-slate-500">장소
+                <input value={simpleAdd.address} onChange={(e) => setSimpleAdd({ ...simpleAdd, address: e.target.value })} placeholder="방문 주소 (선택)"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+              </label>
+              <label className="block text-xs font-bold text-slate-500">내용
+                <textarea value={simpleAdd.note} onChange={(e) => setSimpleAdd({ ...simpleAdd, note: e.target.value })} rows={5} placeholder="일정 내용 (선택)"
+                  className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+              </label>
+              <div className="grid grid-cols-2 items-end gap-2">
+                <div className="text-xs font-bold text-slate-500">캘린더
+                  <div className="mt-1">
+                    <PortalSelect direction="down" className="w-full py-2 font-semibold" width={260}
+                      value={simpleAdd.cal} onChange={(v) => setSimpleAdd({ ...simpleAdd, cal: v as ScheduleType })}
+                      options={[{ value: "AS", label: "익일통합as" }, { value: "납품철수교체휴가교육", label: "납품철수교체휴가교육" }, { value: "매월점검", label: "매월점검" }]} />
+                  </div>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-black text-slate-600 transition hover:bg-slate-50">
+                  <input type="checkbox" checked={simpleAdd.repeat} onChange={(e) => setSimpleAdd({ ...simpleAdd, repeat: e.target.checked })} className="h-4 w-4 accent-blue-600" />
+                  매월 반복 (11개월)
+                </label>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 px-4 py-3">
+              <button type="button" disabled={!simpleAdd.title.trim()} onClick={submitSimpleAdd} className="w-full rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">등록</button>
+            </div>
+          </div>
+        </div>
+      )}
       {deleteTarget && (
         <div className="fixed inset-0 z-[2460] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setDeleteTarget(null)}>
           <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
