@@ -1084,18 +1084,23 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             <aside className="border-b border-slate-700 bg-[#1E252F] p-3.5 lg:w-52 lg:flex-none lg:border-b-0 lg:border-r">
               {(() => {
                 const pill = (on: boolean) => `flex w-auto items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[11px] font-black transition lg:w-full lg:px-3.5 lg:py-2 ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`;
-                const allTeamsOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일"].every((x) => visibleExtra.includes(x));
                 const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
-                const monthAll = tickets.filter((ticket) => ticket.source !== "autoplan" && ticket.date.slice(0, 7) === currentMonth.slice(0, 7)).length;
-                const hidden = monthAll - monthTickets.length;
                 return (<>
                   <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700"><span className="text-base leading-none">＋</span> 일정 추가</button>
                   <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">팀</div>
-                  <div className="flex flex-wrap gap-1 lg:flex-col">
-                    <button type="button" onClick={() => { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }} className={pill(allTeamsOn)}><span>전체</span></button>
-                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={pill(visibleTeams.includes(tm))}><span>{tm}팀</span><span className="text-[9px] font-bold opacity-60">{TEAM_SLOT_LABEL[tm].replace(" ", "")}</span></button>)}
-                    <button type="button" onClick={() => setVisibleExtra((cur) => (cur.includes("E") ? cur.filter((v) => v !== "E") : [...cur, "E"]))} className={pill(visibleExtra.includes("E"))}><span>E팀</span><span className="text-[9px] font-bold opacity-60">오후9시</span></button>
-                    <button type="button" onClick={() => setVisibleExtra((cur) => (cur.includes("종일") ? cur.filter((v) => v !== "종일") : [...cur, "종일"]))} className={pill(visibleExtra.includes("종일"))}><span>종일</span><span className="text-[9px] font-bold opacity-60">연차 등</span></button>
+                  <div className="grid grid-cols-2 gap-0.5 rounded-xl bg-white/5 p-1.5 lg:grid-cols-1">
+                    {teams.map((tm) => (
+                      <label key={tm} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-white/10">
+                        <input type="checkbox" checked={visibleTeams.includes(tm)} onChange={() => toggleVisibleTeam(tm)} className="h-4 w-4 accent-blue-500" />
+                        <span className="flex-1">{tm}팀</span><span className="text-[9px] font-bold text-slate-500">{TEAM_SLOT_LABEL[tm].replace(" ", "")}</span>
+                      </label>
+                    ))}
+                    {(["E", "종일"] as const).map((x) => (
+                      <label key={x} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-white/10">
+                        <input type="checkbox" checked={visibleExtra.includes(x)} onChange={() => setVisibleExtra((cur) => (cur.includes(x) ? cur.filter((v) => v !== x) : [...cur, x]))} className="h-4 w-4 accent-blue-500" />
+                        <span className="flex-1">{x === "E" ? "E팀" : "종일"}</span><span className="text-[9px] font-bold text-slate-500">{x === "E" ? "오후9시" : "연차 등"}</span>
+                      </label>
+                    ))}
                   </div>
                   <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">업무</div>
                   <div className="flex flex-wrap gap-1 lg:flex-col">
@@ -1106,12 +1111,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       </button>
                     ))}
                   </div>
-                  {hidden > 0 && (
-                    <button type="button" onClick={() => { setVisibleScheduleTypes([...displayFilters]); setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }}
-                      className="mt-4 w-full rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-2 text-[11px] font-black text-amber-300 transition hover:bg-amber-400/20">
-                      ⚠ 이번 달 {hidden}건 숨김 — 모두 표시
-                    </button>
-                  )}
                 </>);
               })()}
             </aside>
