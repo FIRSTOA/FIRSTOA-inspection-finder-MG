@@ -1222,8 +1222,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   // 미수·초과·불만 알림 클릭 → 통합이력 팝업 (전사 공통 흐름 — 자체 미니 이력 팝업은 2026-08-15 통합이력으로 흡수)
+  // 워킨맵 지명은 상호가 여러 개 이어붙은 잡문이 많아 통째로 검색하면 0건 — 법인 접두어를 떼고 첫 핵심 토큰만 검색어로 쓴다
   const [histVendor, setHistVendor] = useState("");
-  const openVendorHistory = (place: { name: string }) => setHistVendor(workinVendorName(place.name) || place.name);
+  const openVendorHistory = (place: { name: string }) => {
+    const cleaned = workinVendorName(place.name) || place.name;
+    const core = cleaned.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)|\(유\)/g, " ").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || cleaned;
+    setHistVendor(core.length >= 2 ? core : cleaned);
+  };
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -2196,11 +2201,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <input type="checkbox" checked={allVisibleChecked} onChange={() => setCheckedIds(allVisibleChecked ? [] : filtered.map((place) => place.id))} className="h-4 w-4 accent-blue-600" />
             전체 선택 <span className="text-blue-600">{checkedIds.length}/{filtered.length}</span>
           </label>
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
             {mapLabels.map((item) => (
-              <button key={item.code} type="button" disabled={!checkedIds.length} onClick={() => bulkSetLabel(item.code)} title={`${item.code}${labelDesc(item.code) ? ` — ${labelDesc(item.code)}` : item.name ? ` ${item.name}` : ""}`} className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-full border-2 border-white text-[9px] font-black leading-tight text-white shadow disabled:opacity-30" style={{ backgroundColor: item.color }}>
+              <button key={item.code} type="button" disabled={!checkedIds.length} onClick={() => bulkSetLabel(item.code)} title={`${item.code}${labelDesc(item.code) ? ` — ${labelDesc(item.code)}` : item.name ? ` ${item.name}` : ""}`} className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border-2 border-white px-2.5 text-[11px] font-black text-white shadow disabled:opacity-30" style={{ backgroundColor: item.color }}>
                 <span>{item.code.replace("G", "")}</span>
-                {labelDesc(item.code) && <span className="max-w-[40px] truncate px-0.5 text-[7px] font-bold opacity-90">{labelDesc(item.code)}</span>}
+                {labelDesc(item.code) && <span className="text-[9px] font-bold opacity-90">{labelDesc(item.code)}</span>}
               </button>
             ))}
           </div>
@@ -2395,18 +2400,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
 
           {colorMenuOpen && (
-            <div className="absolute right-0 top-12 z-[1200] w-[250px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className="absolute right-0 top-12 z-[1200] w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
               <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {mapLabels.map((item) => (
-                  <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} title={labelDesc(item.code) || item.name} className={`flex items-center gap-1.5 rounded border px-2 py-1.5 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
+                  <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
                     <span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="min-w-0 text-left leading-tight">{item.code}{labelDesc(item.code) && <span className="block truncate text-[9px] font-bold text-slate-500">{labelDesc(item.code)}</span>}</span>
-                    <span className="ml-auto text-[11px] font-black text-slate-400">{labelCounts.get(item.code) || 0}</span>
+                    <span className="min-w-0 flex-1 text-left leading-tight">
+                      <span className="block">{item.code}</span>
+                      {labelDesc(item.code) && <span className="block truncate text-[10px] font-bold text-slate-500">{labelDesc(item.code)}</span>}
+                    </span>
+                    <span className="shrink-0 text-[11px] font-black text-slate-400">{labelCounts.get(item.code) || 0}</span>
                   </button>
                 ))}
-                {kindFilter === "ALL" && <div className="col-span-3 mt-1 text-[10px] font-bold text-slate-400">업무(분기·매월·재계약)를 고르면 색상별 의미가 표시됩니다.</div>}
               </div>
+              {kindFilter === "ALL" && <div className="mt-2 text-[10px] font-bold text-slate-400">조건에서 업무(분기·매월·재계약)를 고르면 색상별 의미가 표시됩니다.</div>}
             </div>
           )}
 
