@@ -321,7 +321,7 @@ function scheduleColor(type: ScheduleType, completed = false) {
   // AS 계열은 날짜가 아니라 처리 여부가 기준: 미처리=보라, 완료=파랑(취소선)
   if (type === "AS" || type === "익일AS") return completed ? "bg-blue-100 text-blue-700 line-through" : "bg-lime-100 text-lime-800";
   if (completed) return "bg-slate-100 text-slate-400 line-through";
-  if (type === "물류" || type === "휴가" || type === "납품철수교체휴가교육") return "bg-[#efebe9] text-[#4e342e]";
+  if (type === "물류" || type === "휴가" || type === "납품철수교체휴가교육") return "bg-rose-100 text-rose-700";
   if (type === "매월점검") return "bg-amber-100 text-amber-700";
   return "bg-blue-100 text-blue-700";
 }
@@ -504,10 +504,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const naverCategoryOf = (ev: { calendar_id: string }): DisplayFilter => (ev.calendar_id === NAVER_DELIVERY_CAL ? "납품철수교체휴가교육" : "익일통합as");
   const naverChipStyle = (ev: { calendar_id: string; completed: boolean }) =>
     ev.completed ? "border-slate-200 bg-slate-50 text-slate-400 line-through"
-      : ev.calendar_id === NAVER_DELIVERY_CAL ? "border-[#d7ccc8] bg-[#efebe9] text-[#4e342e] hover:bg-[#e4ddd9]"
+      : ev.calendar_id === NAVER_DELIVERY_CAL ? "border-rose-200 bg-rose-100 text-rose-700 hover:bg-rose-200"
       : "border-lime-200 bg-lime-50 text-lime-800 hover:bg-lime-100";
   const naverBadgeStyle = (ev: { calendar_id: string; completed: boolean }) =>
-    ev.completed ? "bg-slate-400" : ev.calendar_id === NAVER_DELIVERY_CAL ? "bg-[#6d4c41]" : "bg-lime-600";
+    ev.completed ? "bg-slate-400" : ev.calendar_id === NAVER_DELIVERY_CAL ? "bg-rose-600" : "bg-lime-600";
   // 드래그로 날짜 이동 — 네이버가 원본이므로 네이버에 바로 반영하고, 실패하면 되돌린다
   const moveNaverEvent = (uid: string, date: string) => {
     const ev = naverEvents.find((x) => x.uid === uid);
@@ -949,7 +949,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       {displayFilters.map((filter) => (
                         <label key={filter} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
                           <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일통합as" ? "bg-lime-500" : filter === "AS[완료]" ? "bg-blue-600" : filter === "납품철수교체휴가교육" ? "bg-[#6d4c41]" : "bg-amber-500"}`} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일통합as" ? "bg-lime-500" : filter === "AS[완료]" ? "bg-blue-600" : filter === "납품철수교체휴가교육" ? "bg-rose-600" : "bg-amber-500"}`} />
                           {filter}
                         </label>
                       ))}
@@ -1050,7 +1050,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         <button key={date} type="button" onClick={() => setMobileSelectedDate(date)} className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? (dayIndex === 0 ? "bg-rose-50/30" : dayIndex === 6 ? "bg-blue-50/25" : "bg-white") : "bg-slate-50"} ${isSelected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${isToday ? "bg-blue-600 text-white" : dayNumberColor(dayIndex, inMonth)}`}>{Number(date.slice(8, 10))}</span>
                           <span className="mt-1 flex flex-wrap gap-0.5">
-                            {rows.slice(0, 4).map((ticket) => { const dt = displayTypeOf(ticket); return <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${dt === "익일통합as" ? "bg-lime-500" : dt === "AS[완료]" ? "bg-blue-600" : dt === "납품철수교체휴가교육" ? "bg-[#6d4c41]" : "bg-amber-500"}`} />; })}
+                            {rows.slice(0, 4).map((ticket) => { const dt = displayTypeOf(ticket); return <span key={ticket.id} className={`h-1.5 w-1.5 rounded-full ${dt === "익일통합as" ? "bg-lime-500" : dt === "AS[완료]" ? "bg-blue-600" : dt === "납품철수교체휴가교육" ? "bg-rose-600" : "bg-amber-500"}`} />; })}
                             {shownNaverEvents.filter((ev) => ev.date === date).slice(0, 2).map((ev) => <span key={ev.uid} className={`h-1.5 w-1.5 rounded-sm ${naverBadgeStyle(ev)}`} />)}
                           </span>
                         </button>
