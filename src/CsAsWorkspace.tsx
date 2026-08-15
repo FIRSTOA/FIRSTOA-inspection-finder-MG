@@ -484,9 +484,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [naverEvents, setNaverEvents] = useState<NaverEventRow[]>([]);
   const [naverReloadTick, setNaverReloadTick] = useState(0);
   const [naverDayDate, setNaverDayDate] = useState<string | null>(null); // 날짜 클릭 → 그날 통합 목록 팝업
-  const [dayTeamFilter, setDayTeamFilter] = useState<string>("전체");
-  const [dayTypeFilter, setDayTypeFilter] = useState<string>("전체");
-  useEffect(() => { setDayTeamFilter("전체"); setDayTypeFilter("전체"); }, [naverDayDate]);
   useEffect(() => {
     const ym = currentMonth.slice(0, 7);
     void selectRows<NaverEventRow>(
@@ -683,7 +680,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
 
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
-  const [calendarFiltersOpen, setCalendarFiltersOpen] = useState(false);
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
   // 일정 유형 필터 (중복 선택) — AS는 익일AS 포함, 비우기는 허용하지 않는다
   const LIST_TYPE_OPTIONS = ["AS", "납품철수교체휴가교육", "매월점검"] as const;
@@ -1065,61 +1061,27 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex min-h-[720px] flex-col lg:flex-row">
-            <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:w-56 lg:flex-none lg:border-b-0 lg:border-r lg:p-4">
-              <div className="grid grid-cols-2 gap-2 lg:block">
-                <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
-                  <span className="text-lg leading-none">+</span> 일정 추가
-                </button>
-                <button type="button" onClick={() => setCalendarFiltersOpen((current) => !current)} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-4 py-3 text-sm font-black text-slate-600 shadow-sm lg:hidden">필터 {calendarFiltersOpen ? "닫기" : "열기"}</button>
-              </div>
-              <div className={`${calendarFiltersOpen ? "block" : "hidden"} mt-3 lg:mt-5 lg:block`}>
-                <div className="grid grid-cols-2 gap-3 lg:block lg:space-y-5">
-                  <div>
-                    <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 종류</div>
-                    <div className="space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5">
-                      {displayFilters.map((filter) => (
-                        <label key={filter} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
-                          <input type="checkbox" checked={visibleScheduleTypes.includes(filter)} onChange={() => toggleScheduleFilter(filter)} className="h-4 w-4 accent-blue-600" />
-                          <span className={`h-2.5 w-2.5 rounded-full ${filter === "익일통합as" ? "bg-lime-500" : filter === "AS[완료]" ? "bg-blue-600" : filter === "납품철수교체휴가교육" ? "bg-rose-600" : "bg-amber-500"}`} />
-                          {filter}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-400">담당 팀</div>
-                    <div className="grid grid-cols-2 gap-0.5 rounded-xl border border-slate-200 bg-white p-1.5 lg:grid-cols-1">
-                      {teams.map((calendarTeam) => (
-                        <label key={calendarTeam} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
-                          <input type="checkbox" checked={visibleTeams.includes(calendarTeam)} onChange={() => toggleVisibleTeam(calendarTeam)} className="h-4 w-4 accent-blue-600" />
-                          {calendarTeam}팀
-                        </label>
-                      ))}
-                      {["E", "종일"].map((extra) => (
-                        <label key={extra} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
-                          <input type="checkbox" checked={visibleExtra.includes(extra)} onChange={() => setVisibleExtra((cur) => (cur.includes(extra) ? cur.filter((x) => x !== extra) : [...cur, extra]))} className="h-4 w-4 accent-blue-600" />
-                          {extra === "E" ? "E팀 (오후 9시)" : "종일 (연차 등)"}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  {/* 필터 때문에 이번 달 일정이 가려져 있으면 알려준다 — "등록했는데 안 보여요" 방지 */}
-                  {(() => {
-                    const monthAll = tickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7)).length;
-                    const hidden = monthAll - monthTickets.length;
-                    if (hidden <= 0) return null;
-                    return (
-                      <button type="button" onClick={() => { setVisibleScheduleTypes([...displayFilters]); setVisibleTeams([...teams]); }}
-                        className="w-full rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] font-black text-amber-700 transition hover:bg-amber-100">
-                        ⚠ 필터로 이번 달 {hidden}건 숨김 — 모두 표시
-                      </button>
-                    );
-                  })()}
-                </div>
-              </div>
-            </aside>
 
             <div className="min-w-0 flex-1">
+              {/* 팝업과 같은 다크 헤더 — 팀·업무 필터 칩 + 일정 추가 (사이드바 대체, 달력을 넓게) */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-[#1E252F] px-4 py-3">
+                {(() => {
+                  const dChip = (on: boolean) => `rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`;
+                  const allTeamsOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일"].every((x) => visibleExtra.includes(x));
+                  const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
+                  return (<>
+                    <span className="mr-0.5 text-[10px] font-black text-slate-500">팀</span>
+                    <button type="button" onClick={() => { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }} className={dChip(allTeamsOn)}>전체</button>
+                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={dChip(visibleTeams.includes(tm))}>{tm}</button>)}
+                    {["E", "종일"].map((x) => <button key={x} type="button" onClick={() => setVisibleExtra((cur) => (cur.includes(x) ? cur.filter((v) => v !== x) : [...cur, x]))} className={dChip(visibleExtra.includes(x))}>{x}</button>)}
+                    <span className="mx-1.5 h-4 w-px bg-white/15" />
+                    <span className="mr-0.5 text-[10px] font-black text-slate-500">업무</span>
+                    <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={dChip(allTypesOn)}>전체</button>
+                    {displayFilters.map((f) => <button key={f} type="button" onClick={() => toggleScheduleFilter(f)} className={dChip(visibleScheduleTypes.includes(f))}>{f}</button>)}
+                    <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
+                  </>);
+                })()}
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => { setCurrentMonth(monthStart(todayYmd)); window.setTimeout(() => document.getElementById(`cal-day-${todayYmd}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
@@ -1246,35 +1208,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                 </div>
                 {naverDayDate && (() => {
-                  const rowsAll = mergedDayRows(naverDayDate);
-                  const rows = rowsAll.filter((row) => {
-                    const team = row.kind === "ticket" ? row.t.team : naverTeamOf(row.ev);
-                    const type = row.kind === "ticket" ? displayTypeOf(row.t) : naverCategoryOf(row.ev);
-                    if (dayTeamFilter !== "전체" && team !== dayTeamFilter) return false;
-                    if (dayTypeFilter !== "전체" && type !== dayTypeFilter) return false;
-                    return true;
-                  });
-                  const chipCls = (on: boolean) => `rounded-full px-2.5 py-1 text-[11px] font-black transition ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
+                  const rows = mergedDayRows(naverDayDate);
                   return (
                   <div className="fixed inset-0 z-[2390] flex items-center justify-center bg-black/45 p-4 sm:p-8" onMouseDown={() => setNaverDayDate(null)}>
                     <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
                       <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-5 py-4">
                         <div>
                           <div className="text-[11px] font-black text-slate-400">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${naverDayDate}T00:00:00`).getDay()]}요일 일정</div>
-                          <div className="mt-0.5 text-[16px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {rows.length}{rows.length !== rowsAll.length ? ` / ${rowsAll.length}` : ""}건</div>
+                          <div className="mt-0.5 text-[16px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {rows.length}건</div>
                         </div>
                         <button type="button" onClick={() => { const d = naverDayDate; setNaverDayDate(null); openSimpleAdd(d); }} className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/70 px-4 py-2">
-                        <span className="mr-0.5 text-[10px] font-black text-slate-400">팀</span>
-                        {["전체", "A", "B", "C", "D", "E"].map((tm) => <button key={tm} type="button" onClick={() => setDayTeamFilter(tm)} className={chipCls(dayTeamFilter === tm)}>{tm}</button>)}
-                        <span className="mx-1.5 h-4 w-px bg-slate-200" />
-                        <span className="mr-0.5 text-[10px] font-black text-slate-400">업무</span>
-                        {["전체", ...displayFilters].map((tp) => <button key={tp} type="button" onClick={() => setDayTypeFilter(tp)} className={chipCls(dayTypeFilter === tp)}>{tp}</button>)}
-                      </div>
                       <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
                         {rows.map((row) => (row.kind === "ticket" ? compactTicketRow(row.t) : compactNaverRow(row.ev)))}
-                        {!rows.length && <div className="py-10 text-center text-xs font-semibold text-slate-400">{rowsAll.length ? "필터에 해당하는 일정이 없습니다." : "이 날짜의 일정이 없습니다."}</div>}
+                        {!rows.length && <div className="py-10 text-center text-xs font-semibold text-slate-400">이 날짜의 일정이 없습니다.</div>}
                       </div>
                       <div className="border-t border-slate-100 px-4 py-3">
                         <button type="button" onClick={() => setNaverDayDate(null)} className="w-full rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">닫기</button>
