@@ -575,7 +575,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
   // 팀 ↔ 시간 규칙 (A=09 B=12 C=15 D=18 E=21) — 팀을 고르면 시간이 따라간다
   const TEAM_SLOT: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00", E: "21:00" };
-  const TEAM_SLOT_LABEL: Record<string, string> = { A: "오전 9시", B: "낮 12시", C: "오후 3시", D: "오후 6시", E: "오후 9시" };
+  const TEAM_SLOT_LABEL: Record<string, string> = { A: "오전 9시", B: "오후 12시", C: "오후 3시", D: "오후 6시", E: "오후 9시" };
   // 날짜 입력은 어디를 눌러도 달력이 열리게 (기본은 아이콘만 반응)
   const openPicker = (e: React.MouseEvent<HTMLInputElement>) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* 미지원 브라우저 */ } };
   const [naverDoneConfirm, setNaverDoneConfirm] = useState(false);
@@ -648,22 +648,28 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     });
   }, [naverEvents, tickets, visibleScheduleTypes, visibleTeams, visibleExtra]);
   // 네이버 목록 뷰 구도(시간|분류|내용|팀)의 한 줄 행 — 목록 탭·그날 팝업 공용
+  // 좌측 한 칸에 "C팀 (오후 3시)" — 팀 시간대와 다르면 실제 시각을 그대로 보여준다
+  const teamTimeLabel = (team: string | null, time: string) => {
+    if (team && time && TEAM_SLOT[team] === time) return `${team}팀 (${TEAM_SLOT_LABEL[team]})`;
+    if (team && time) return `${team}팀 (${time})`;
+    if (team) return `${team}팀 (종일)`;
+    if (time) return Number(time.slice(0, 2)) < 12 ? `오전 ${time}` : `오후 ${time}`;
+    return "종일";
+  };
   const compactTicketRow = (t: AsTicket) => (
     <button key={t.id} type="button" onClick={() => { setNaverDayDate(null); setDetailId(t.id); }}
       className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-slate-50">
-      <span className="w-14 shrink-0 text-[11px] font-black tabular-nums text-slate-500">{t.time ? (Number(t.time.slice(0, 2)) < 12 ? `오전 ${t.time}` : `오후 ${t.time}`) : "종일"}</span>
+      <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(t.team, t.time)}</span>
       <span className={`w-24 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[10px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{displayTypeOf(t)}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${t.status === "완료" ? "text-slate-400 line-through" : "text-slate-800"}`}>{displayTitleOf(t)}{t.issue ? ` ｜ ${t.issue}` : ""}{t.address ? ` ｜ ${t.address}` : ""}</span>
-      <span className="shrink-0 text-[10px] font-black text-slate-400">{t.team}팀</span>
     </button>
   );
   const compactNaverRow = (ev: NaverEventRow) => (
     <button key={ev.uid} type="button" onClick={() => { setNaverDayDate(null); setNaverDetail({ ...ev }); }}
       className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-slate-50">
-      <span className="w-14 shrink-0 text-[11px] font-black tabular-nums text-slate-500">{ev.time ? (Number(ev.time.slice(0, 2)) < 12 ? `오전 ${ev.time}` : `오후 ${ev.time}`) : "종일"}</span>
+      <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(naverTeamOf(ev), ev.time)}</span>
       <span className={`w-24 shrink-0 truncate rounded border px-1.5 py-0.5 text-center text-[10px] font-black ${naverChipStyle(ev)}`}>{naverCategoryOf(ev)}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${ev.completed ? "text-slate-400 line-through" : "text-slate-800"}`}>{ev.title || "(제목 없음)"}{ev.location ? ` ｜ ${ev.location}` : ""}</span>
-      <span className="shrink-0 text-[10px] font-black text-slate-400">{naverTeamOf(ev) ? `${naverTeamOf(ev)}팀` : ""}</span>
     </button>
   );
   // 하루치 통합 행: 종일 먼저, 그다음 시간순 (네이버 목록과 동일한 순서)
@@ -1072,8 +1078,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   return (<>
                     <span className="mr-0.5 text-[10px] font-black text-slate-500">팀</span>
                     <button type="button" onClick={() => { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }} className={dChip(allTeamsOn)}>전체</button>
-                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={dChip(visibleTeams.includes(tm))}>{tm}</button>)}
-                    {["E", "종일"].map((x) => <button key={x} type="button" onClick={() => setVisibleExtra((cur) => (cur.includes(x) ? cur.filter((v) => v !== x) : [...cur, x]))} className={dChip(visibleExtra.includes(x))}>{x}</button>)}
+                    {teams.map((tm) => <button key={tm} type="button" onClick={() => toggleVisibleTeam(tm)} className={dChip(visibleTeams.includes(tm))}>{tm} {TEAM_SLOT_LABEL[tm].replace(" ", "")}</button>)}
+                    {["E", "종일"].map((x) => <button key={x} type="button" onClick={() => setVisibleExtra((cur) => (cur.includes(x) ? cur.filter((v) => v !== x) : [...cur, x]))} className={dChip(visibleExtra.includes(x))}>{x === "E" ? `E ${TEAM_SLOT_LABEL.E.replace(" ", "")}` : "종일"}</button>)}
                     <span className="mx-1.5 h-4 w-px bg-white/15" />
                     <span className="mr-0.5 text-[10px] font-black text-slate-500">업무</span>
                     <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={dChip(allTypesOn)}>전체</button>
