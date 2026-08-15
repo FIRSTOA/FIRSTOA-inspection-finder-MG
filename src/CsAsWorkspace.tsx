@@ -1002,7 +1002,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
   });
   const assigneeCounts = baseRows.reduce<Record<string, number>>((acc, t) => { const k = t.assignee || ""; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+  // 행에서 바로 전화 — 접수 후 첫 동작이 고객 전화라서 (연락처·키맨의 첫 번호)
+  const firstPhoneOf = (t: AsTicket) => (`${t.contact || ""}\n${t.keyman || ""}`.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
+  // 상태 요약 바: 전체/미배정/진행/완료 — 클릭하면 그 상태만 (아침에 "뭐부터"가 바로 보이게)
+  const [statusPick, setStatusPick] = useState<"" | "미배정" | "배정" | "완료">("");
+  const statusOf = (t: AsTicket) => (t.status === "완료" ? "완료" : t.assignee ? "배정" : "미배정");
+  const statusCounts = useMemo(() => {
+    const base = baseRows.filter((t) => (assigneeFilter === "__none__" ? !t.assignee : assigneeFilter ? t.assignee === assigneeFilter : true));
+    const c = { 전체: base.length, 미배정: 0, 배정: 0, 완료: 0 };
+    for (const t of base) c[statusOf(t)] += 1;
+    return c;
+  }, [baseRows, assigneeFilter]);
   const scheduleRows = baseRows.filter((ticket) => {
+    if (statusPick && statusOf(ticket) !== statusPick) return false;
     if (assigneeFilter === "__none__") return !ticket.assignee;
     if (assigneeFilter) return ticket.assignee === assigneeFilter;
     return true;
@@ -1089,7 +1101,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     const pickValue = (() => {
                       const allOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일"].every((x) => visibleExtra.includes(x));
                       if (allOn) return "전체";
-                      if (visibleTeams.length === 1 && !visibleExtra.includes("E")) return visibleTeams[0];
+                      if (visibleTeams.length === 1 && !visibleExtra.length) return visibleTeams[0];
                       if (!visibleTeams.length && visibleExtra.includes("E")) return "E";
                       if (!visibleTeams.length && visibleExtra.includes("종일")) return "종일";
                       return "전체";
@@ -1100,8 +1112,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         onChange={(v) => {
                           if (v === "전체") { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일"]); }
                           else if (v === "종일") { setVisibleTeams([]); setVisibleExtra(["종일"]); }
-                          else if (v === "E") { setVisibleTeams([]); setVisibleExtra(["E", "종일"]); }
-                          else { setVisibleTeams([v as Team]); setVisibleExtra(["종일"]); }
+                          else if (v === "E") { setVisibleTeams([]); setVisibleExtra(["E"]); }
+                          else { setVisibleTeams([v as Team]); setVisibleExtra([]); } // 팀 선택 = 그 팀만 (종일 제외)
                         }}
                         options={[
                           { value: "전체", label: "전체 팀" },
@@ -1277,6 +1289,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             </div>
             <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
           </div>
+          {!myPlanOpen && (
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {([["", `전체 ${statusCounts.전체}`, "bg-slate-900 text-white", "bg-slate-100 text-slate-500 hover:bg-slate-200"],
+                 ["미배정", `미배정 ${statusCounts.미배정}`, "bg-amber-500 text-white", "bg-amber-50 text-amber-700 hover:bg-amber-100"],
+                 ["배정", `배정 ${statusCounts.배정}`, "bg-emerald-600 text-white", "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"],
+                 ["완료", `완료 ${statusCounts.완료}`, "bg-blue-600 text-white", "bg-blue-50 text-blue-700 hover:bg-blue-100"]] as const).map(([key, label, onCls, offCls]) => (
+                <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
+              ))}
+            </div>
+          )}
 
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
@@ -1287,7 +1310,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
                   </div>
                 )}
-              <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
+              <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
@@ -1298,6 +1321,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
                 <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
                 <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
+                  {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full bg-emerald-600 px-2 py-1.5 text-center text-[11px] font-black text-white">📞</a>}
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
@@ -1332,7 +1356,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       </td>
                     </tr>
                   )}
-                  <tr onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
+                  <tr onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : !ticket.assignee ? "border-amber-100 bg-amber-50/40" : "border-slate-100"}`}>
                     <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
                     <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
                     <td className="px-3 py-4">
@@ -1347,6 +1371,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </td>
                     <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
+                        {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="rounded-full bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
                         {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
                         <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
                         <button type="button" onClick={() => openDone(ticket)} className={`rounded-full border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
