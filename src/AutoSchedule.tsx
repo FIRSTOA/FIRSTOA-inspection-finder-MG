@@ -14,7 +14,8 @@ import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { VendorFlagBadges } from "./CsAsWorkspace";
+import { VendorAlertChip } from "./VendorAlert";
+import UnifiedHistory from "./UnifiedHistory";
 import { usageSpareAdvice } from "./spareAdvice";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
@@ -44,7 +45,8 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [minDays, setMinDays] = useState(60);
   const [kind, setKind] = useState<"quarter" | "renewal">("quarter");
   const [rows, setRows] = useState<Place[]>([]);
-  const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map()); // 불만·미수·초과·재계약·점검 배지 (일정리스트와 같은 기준)
+  const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map()); // 불만·미수·초과·재계약·점검 (일정리스트와 같은 기준)
+  const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -255,7 +257,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                       {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
-                      <VendorFlagBadges flags={fl} />
+                      <VendorAlertChip flags={fl} onOpen={() => setHistVendor(r.vendor || r.place_name)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
                       {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}
@@ -275,6 +277,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           </div>
         </section>
       </div>
+      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => setNotice(msg)} />
       {registerConfirm && (() => {
         const chosen = rows.filter((r) => picked.has(r.id));
         return (

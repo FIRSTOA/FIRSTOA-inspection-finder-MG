@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
 import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { usageSpareAdvice } from "./spareAdvice";
 
 type Props = {
   vendor: string;
@@ -59,9 +61,20 @@ function displayDate(value: unknown) {
   return raw;
 }
 
+// 분류 기본 날짜 칸이 비어 있으면(재계약 계약종료일, 초과료 원장 등) 흔한 날짜 칸으로 폴백
+function recordDateRaw(cat: string, rec: Record<string, unknown>) {
+  const primary = String(rec[DATE_FIELD[cat]] ?? "").trim();
+  if (primary) return primary;
+  for (const key of ["날짜", "작성일", "입력일", "등록일", "방문일"]) {
+    const value = String(rec[key] ?? "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
 function recordSummary(cat: string, rec: Record<string, unknown>, exclude: string[]) {
   const dateKey = DATE_FIELD[cat];
-  const date = dateKey ? displayDate(rec[dateKey]) : "";
+  const date = displayDate(recordDateRaw(cat, rec));
   const skip = new Set([dateKey, ...exclude]);
   const fields: SummaryField[] = [];
   let album = "";
@@ -87,8 +100,7 @@ function recordRegionCode(rec: Record<string, unknown>, hits: VendorHit[]) {
 }
 
 function latestRecord(cat: string, rows: Array<Record<string, unknown>>) {
-  const dateKey = DATE_FIELD[cat];
-  return [...rows].sort((left, right) => String(right[dateKey] ?? "").localeCompare(String(left[dateKey] ?? "")))[0];
+  return [...rows].sort((left, right) => recordDateRaw(cat, right).localeCompare(recordDateRaw(cat, left)))[0];
 }
 
 function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: string) => void }) {
@@ -233,8 +245,47 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   }), [includedHits, historyRegion, allRows]);
 
   const totalCount = CAT_ORDER.reduce((sum, cat) => sum + rowsForCategory(cat).length, 0);
-  const latestDate = displayDate(ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => String(record[DATE_FIELD[cat]] || ""))).filter(Boolean).sort().at(-1)) || "없음";
-  const records = activeCat === "전체" ? [] : rowsForCategory(activeCat).slice().sort((left, right) => String(right[DATE_FIELD[activeCat]] ?? "").localeCompare(String(left[DATE_FIELD[activeCat]] ?? "")));
+  const latestDate = displayDate(ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => recordDateRaw(cat, record))).filter(Boolean).sort().at(-1)) || "없음";
+  const records = activeCat === "전체" ? [] : rowsForCategory(activeCat).slice().sort((left, right) => recordDateRaw(activeCat, right).localeCompare(recordDateRaw(activeCat, left)));
+
+  // ── 이번 분기 체크 — 워킨맵·미수·초과·불만(일정리스트 배지와 같은 기준) + 최근 2회 점검으로 사용량·여분 계산
+  const [flags, setFlags] = useState<VendorWorkFlags | null>(null);
+  useEffect(() => {
+    if (!open || !detail) { setFlags(null); return; }
+    const names = Array.from(new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((n) => n.trim()).filter(Boolean)));
+    if (!names.length) { setFlags(null); return; }
+    let active = true;
+    getVendorFlagsBatch(names).then((map) => {
+      if (!active) return;
+      const merged: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null };
+      for (const name of names) {
+        const f = map.get(name);
+        if (!f) continue;
+        merged.inspection = merged.inspection || f.inspection;
+        merged.misu = merged.misu || f.misu;
+        merged.renewal = merged.renewal || f.renewal;
+        merged.overage = merged.overage || f.overage;
+        merged.bulman = merged.bulman || f.bulman;
+      }
+      setFlags(merged);
+    }).catch(() => { if (active) setFlags(null); });
+    return () => { active = false; };
+  }, [open, detail, queryVendor, includedHits]);
+  const quarterCheck = useMemo(() => {
+    const rows = Array.isArray(detail?.["점검"]) ? detail["점검"] as Array<Record<string, unknown>> : [];
+    const sorted = [...rows].sort((a, b) => recordDateRaw("점검", b).localeCompare(recordDateRaw("점검", a)));
+    const snap = (rec?: Record<string, unknown>) => rec ? {
+      date: displayDate(recordDateRaw("점검", rec)), counts: String(rec["매수"] || ""), toner: String(rec["토너잔량"] || ""),
+      spare: String(rec["여분"] || ""), waste: String(rec["폐통"] || ""), serial: String(rec["자산기번"] || ""),
+    } : undefined;
+    const latest = snap(sorted[0]);
+    const previous = snap(sorted[1]);
+    const advice = usageSpareAdvice(latest, previous, String(sorted[0]?.["모델명"] || ""));
+    const specialRaw = String(sorted[0]?.["특이사항"] || "");
+    const special = specialRaw.replace(/[ㅡ\-_.\s]/g, "") ? specialRaw.trim() : ""; // "ㅡㅡㅡ" 채움표시 제외
+    const deviceCount = Array.isArray(detail?.["업체정보"]) ? (detail["업체정보"] as unknown[]).length : 0;
+    return { latest, previous, advice, special, deviceCount };
+  }, [detail]);
 
   const selectNewVendor = (nextVendor: string) => {
     setQueryVendor(nextVendor);
@@ -295,6 +346,28 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       <main className="flex-1 overflow-y-auto p-3 sm:p-5">
         {loading && <div className="py-16 text-center text-sm font-semibold text-slate-400">전체 이력을 모으는 중...</div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
+        {!loading && detail && activeCat === "전체" && (() => {
+          const chip = (tone: string, text: string, key: string) => <span key={key} className={`inline-flex max-w-full items-center truncate rounded-full border px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
+          const items: ReturnType<typeof chip>[] = [];
+          const f = flags;
+          if (f?.inspection) items.push(chip(f.inspection.done ? "border-slate-200 bg-slate-50 text-slate-500" : f.inspection.carried ? "border-slate-200 bg-slate-50 text-slate-500" : "border-blue-300 bg-blue-50 text-blue-700", f.inspection.done ? `점검 완료 (${f.inspection.quarter}분기)` : f.inspection.carried ? "점검 다음분기 이관" : `${f.inspection.quarter}분기 점검 대상`, "insp"));
+          if (f?.renewal) items.push(chip(f.renewal.done ? "border-slate-200 bg-slate-50 text-slate-500" : "border-blue-300 bg-blue-50 text-blue-700", f.renewal.done ? "재계약 완료" : `재계약 도래${f.renewal.due ? ` · ${f.renewal.due}` : ""}`, "renew"));
+          if (f?.misu) items.push(chip(f.misu.cleared ? "border-slate-200 bg-slate-50 text-slate-500" : "border-rose-300 bg-rose-50 text-rose-700", f.misu.cleared ? `미수 완납 (${f.misu.date})` : `미수 ${f.misu.balance}${f.misu.months ? ` · ${f.misu.months}개월` : ""}`, "misu"));
+          if (f?.overage) items.push(chip("border-amber-300 bg-amber-50 text-amber-800", `초과 ${f.overage.total} (${f.overage.date})`, "over"));
+          if (f?.bulman) items.push(chip("border-rose-300 bg-rose-50 text-rose-700", `불만 ${f.bulman.date} · ${f.bulman.content}`, "bul"));
+          if (quarterCheck.advice?.usageLine) items.push(chip("border-blue-200 bg-blue-50 text-blue-700", `📈 ${quarterCheck.advice.usageLine}`, "usage"));
+          if (quarterCheck.advice?.adviceLine) items.push(chip("border-emerald-300 bg-emerald-50 text-emerald-700", `🧰 ${quarterCheck.advice.adviceLine}`, "spare"));
+          if (quarterCheck.advice?.warning) items.push(chip("border-amber-300 bg-amber-50 text-amber-800", `⚠ ${quarterCheck.advice.warning}`, "warn"));
+          if (quarterCheck.special) items.push(chip("border-rose-200 bg-rose-50 text-rose-600", `❗ ${quarterCheck.special}`, "special"));
+          if (quarterCheck.deviceCount > 0) items.push(chip("border-slate-200 bg-slate-50 text-slate-600", `🖨 기기 ${quarterCheck.deviceCount}대`, "dev"));
+          return <section className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950">이번 분기 체크</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">방문 전에 확인할 것들 — 워킨맵·미수·초과·불만·최근 2회 점검(사용량·여분) 기준.</p></div>
+            <div className="flex flex-wrap gap-1.5 px-4 py-3">
+              {items.length ? items : <span className="text-xs font-semibold text-slate-400">이번 분기에 특별히 체크할 항목이 없습니다.</span>}
+            </div>
+            {quarterCheck.latest && <div className="border-t border-slate-100 px-4 py-2 text-[11px] font-semibold text-slate-500">최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
+          </section>;
+        })()}
         {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950">업무별 현황</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">선택한 지역과 거래처 이름에 해당하는 최근 기록입니다.</p></div>
           <div className="divide-y divide-slate-100">{CAT_ORDER.map((cat) => {

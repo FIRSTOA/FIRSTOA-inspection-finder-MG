@@ -60,6 +60,8 @@ const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역" },
   { table: "as_records", category: "AS", dateField: "작성일", regionField: "지역" },
   { table: "overage_adjust", category: "초과", dateField: "방문일", regionField: "지역" },
+  // 초과료 원장(시트 유입 2,798건) — 초과조정 활동(overage_adjust)과 같은 '초과' 분류로 합쳐 보여준다
+  { table: "overage", category: "초과", dateField: "날짜", regionField: "지역" },
   { table: "misu", category: "미수", dateField: "입력일", regionField: "지역" },
   { table: "bulman", category: "불만", dateField: "방문일", regionField: "지역" },
   { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
@@ -532,6 +534,9 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
       ? indexedDetail[config.category] as Array<Record<string, unknown>>
       : []);
     const unique = new Map<string, Record<string, unknown>>();
+    // 같은 분류를 여러 테이블이 채울 수 있다(초과 = overage_adjust + overage) — 앞 테이블 결과를 보존하고 합친다
+    const existing = Array.isArray(detail[config.category]) ? detail[config.category] as Array<Record<string, unknown>> : [];
+    existing.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
     // 원본 테이블 조회가 가능하면 그 결과를 기준으로 삼아 RPC 상세와의 이중 집계를 막는다.
     (directRows.length ? directRows : indexedRows).forEach((row) => {
       const key = String(row._dupKey || row.id || JSON.stringify(row));

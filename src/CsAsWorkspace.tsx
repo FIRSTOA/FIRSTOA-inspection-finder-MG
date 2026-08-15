@@ -5,6 +5,8 @@ import PortalSelect from "./PortalSelect";
 import { nextBusinessDay } from "./planDate";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { VendorAlertChip } from "./VendorAlert";
+import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 
@@ -421,6 +423,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   }, [refreshTickets]);
 
   const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
+  const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
   useEffect(() => {
     const vendors = Array.from(new Set(tickets.map((ticket) => ticket.vendor.trim()).filter(Boolean)));
     if (!vendors.length) { setVendorFlags(new Map()); return; }
@@ -1468,7 +1471,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{ticket.source === "naver" ? <span className="text-slate-300">-</span> : (ticket.time || "종일")}{ticket.source !== "naver" && elapsedLabel(ticket) && <span className="ml-1 text-[10px] font-black text-amber-600">⏱ {elapsedLabel(ticket)}</span>}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<span className="shrink-0"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></span></div>
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(ticket.vendor.trim())} onOpen={() => setHistVendor(ticket.vendor)} /></div>
                   </td>
                   <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ticket.issue || ""}>{ticket.issue || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
@@ -1566,6 +1569,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           </div>
         </section>
       )}
+
+      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} />
 
       {detailTicket && (() => {
         const ticket = detailTicket;
