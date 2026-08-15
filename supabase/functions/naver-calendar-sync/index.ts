@@ -161,17 +161,32 @@ Deno.serve(async (req) => {
     const listedHrefs = new Set(listing.map((l) => l.href));
     const changed = listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80);
 
-    // 웹앱 일정에 연결된 uid(미러+승격) — 표시 목록에서 제외해 이중 표시를 막는다
-    const ticketsRes = await fetch(`${rest}/as_tickets?select=naverUid&naverUid=not.is.null`, { headers: restHeaders });
-    const ticketUids = new Set(((await ticketsRes.json().catch(() => [])) as Array<{ naverUid: string }>).map((t) => t.naverUid).filter(Boolean));
+    // 웹앱 일정에 연결된 uid(미러+승격) — 표시 목록에서 제외 + 네이버에서 옮긴 날짜·시간을 티켓에 반영
+    const ticketsRes = await fetch(`${rest}/as_tickets?select=id,date,time,status,naverUid&naverUid=not.is.null`, { headers: restHeaders });
+    const ticketRows = (await ticketsRes.json().catch(() => [])) as Array<{ id: string; date: string; time: string; status: string; naverUid: string }>;
+    const ticketUids = new Set(ticketRows.map((t) => t.naverUid).filter(Boolean));
+    const ticketByUid = new Map(ticketRows.map((t) => [t.naverUid, t]));
 
-    let manualUpserted = 0, downloaded = 0;
+    let manualUpserted = 0, downloaded = 0, ticketUpdated = 0;
     for (const item of changed) {
       const r = await fetch(`${CALDAV_BASE}${item.href}`, { headers: { Authorization: auth.header } });
       if (!r.ok) continue;
       downloaded += 1;
       const ev = parseEvents(await r.text())[0];
       if (!ev) continue;
+      // 웹앱 일정 미러: 네이버 캘린더에서 누가 날짜·시간을 옮겼으면 웹앱 티켓도 따라간다
+      // (완료 일정은 보관용 — 불변. 웹앱→네이버 방향은 즉시 반영이라 루프 없음)
+      const linkedTicket = ticketByUid.get(ev.uid);
+      if (linkedTicket && linkedTicket.status !== "완료" && ev.date) {
+        const newTime = ev.time || linkedTicket.time;
+        if (linkedTicket.date !== ev.date || (linkedTicket.time || "") !== (newTime || "")) {
+          const patch = await fetch(`${rest}/as_tickets?id=eq.${encodeURIComponent(linkedTicket.id)}`, {
+            method: "PATCH", headers: { ...restHeaders, Prefer: "return=minimal" },
+            body: JSON.stringify({ date: ev.date, time: newTime }),
+          });
+          if (patch.ok) ticketUpdated += 1;
+        }
+      }
       if (!ev.uid.startsWith("firstoa") && !ticketUids.has(ev.uid) && ev.date) {
         await fetch(`${rest}/naver_calendar_events?on_conflict=uid`, {
           method: "POST", headers: { ...restHeaders, Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -212,7 +227,7 @@ Deno.serve(async (req) => {
 
     return Response.json({
       ok: true, calendars: calendars.length, listed: listing.length, changed: changed.length, downloaded,
-      manualUpserted, promotedRemoved, removed, errors,
+      manualUpserted, ticketUpdated, promotedRemoved, removed, errors,
       backlog: Math.max(0, listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).length - changed.length),
     }, { headers: jsonHeaders });
   } catch (error) {
