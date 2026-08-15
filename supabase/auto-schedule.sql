@@ -99,21 +99,38 @@ create function suggest_workin_candidates(
       (array_agg(special order by d desc, jid desc))[1] as sp1
     from hist where length(hk) >= 3 group by 1
   ),
-  -- 임대리스트(vendor_info) 기기: 기번→lease_ident_code로 마스터코드 층, 이름 키 층 두 갈래로 집계
+  -- 임대리스트(vendor_info) 기기: **임대중만** 센다(임대종료·소송 제외). 품목으로 복합기/PC/기타 구분,
+  -- 복합기는 모델·자산번호까지 나열. 마스터코드(기번→lease_ident_code) 층 + 이름 키 층 두 갈래.
   -- (vendor_info.코드는 내부 번호라 workin 코드와 체계가 다르다 — 직접 조인 금지)
+  dev_base as (
+    select lower(regexp_replace(coalesce(v."기번",''), '[^0-9A-Za-z]', '', 'g')) as ident,
+           vendor_key_(v."_업체명") as dk,
+           case when coalesce(v."품목",'') ~ '복합기|프린터|플로터' then '복합기'
+                when coalesce(v."품목",'') ~* 'pc|데스크|노트북|모니터|태블릿|소프트웨어' then 'PC'
+                else '기타' end as cat,
+           btrim(coalesce(nullif(v."모델명",''), v."기종", '') || ' ' || coalesce(v."자산번호",'')) as item
+    from vendor_info v
+    where coalesce(v."_hidden", false) = false and v."임대여부" = '임대중'
+  ),
   dev_code as (
     select l.code as dcode, count(*)::int as cnt,
-           left(string_agg(btrim(coalesce(v."기종",'') || ' ' || coalesce(v."자산번호",'')), ' · ' order by v."자산번호"), 240) as list
-    from vendor_info v
-    join lease_ident_code l on l.ident = lower(regexp_replace(coalesce(v."기번",''), '[^0-9A-Za-z]', '', 'g'))
-    where coalesce(v."_hidden", false) = false
+      left(array_to_string(array_remove(array[
+        case when count(*) filter (where b.cat = '복합기') > 0 then '복합기 ' || (count(*) filter (where b.cat = '복합기')) end,
+        case when count(*) filter (where b.cat = 'PC') > 0 then 'PC ' || (count(*) filter (where b.cat = 'PC')) end,
+        case when count(*) filter (where b.cat = '기타') > 0 then '기타 ' || (count(*) filter (where b.cat = '기타')) end
+      ], null), ' · ') || coalesce(' ｜ ' || nullif(string_agg(b.item, ' · ' order by b.item) filter (where b.cat = '복합기'), ''), ''), 240) as list
+    from dev_base b join lease_ident_code l on l.ident = b.ident
     group by 1
   ),
   dev_key as (
-    select vendor_key_(v."_업체명") as dk, count(*)::int as cnt,
-           left(string_agg(btrim(coalesce(v."기종",'') || ' ' || coalesce(v."자산번호",'')), ' · ' order by v."자산번호"), 240) as list
-    from vendor_info v
-    where coalesce(v."_hidden", false) = false and length(vendor_key_(v."_업체명")) >= 3
+    select b.dk, count(*)::int as cnt,
+      left(array_to_string(array_remove(array[
+        case when count(*) filter (where b.cat = '복합기') > 0 then '복합기 ' || (count(*) filter (where b.cat = '복합기')) end,
+        case when count(*) filter (where b.cat = 'PC') > 0 then 'PC ' || (count(*) filter (where b.cat = 'PC')) end,
+        case when count(*) filter (where b.cat = '기타') > 0 then '기타 ' || (count(*) filter (where b.cat = '기타')) end
+      ], null), ' · ') || coalesce(' ｜ ' || nullif(string_agg(b.item, ' · ' order by b.item) filter (where b.cat = '복합기'), ''), ''), 240) as list
+    from dev_base b
+    where length(b.dk) >= 3
     group by 1
   ),
   scored as (

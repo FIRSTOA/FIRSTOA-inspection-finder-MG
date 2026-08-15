@@ -15,6 +15,7 @@ import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp,
 import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { usageSpareAdvice } from "./spareAdvice";
+import { selectRows } from "./supabase";
 
 type Props = {
   vendor: string;
@@ -283,9 +284,43 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     const advice = usageSpareAdvice(latest, previous, String(sorted[0]?.["모델명"] || ""));
     const specialRaw = String(sorted[0]?.["특이사항"] || "");
     const special = specialRaw.replace(/[ㅡ\-_.\s]/g, "") ? specialRaw.trim() : ""; // "ㅡㅡㅡ" 채움표시 제외
-    const deviceCount = Array.isArray(detail?.["업체정보"]) ? (detail["업체정보"] as unknown[]).length : 0;
-    return { latest, previous, advice, special, deviceCount };
+    return { latest, previous, advice, special };
   }, [detail]);
+  // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
+  const [devices, setDevices] = useState<{ mfp: number; pc: number; etc: number; ended: number; recentSwap: string } | null>(null);
+  useEffect(() => {
+    if (!open || !detail) { setDevices(null); return; }
+    const names = Array.from(new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((n) => n.trim()).filter((n) => n.length >= 2))).slice(0, 6);
+    if (!names.length) { setDevices(null); return; }
+    let active = true;
+    // "납품/교체일"의 슬래시는 PostgREST select가 못 읽어서 따옴표 별칭(swap:"납품/교체일")으로 우회
+    const cols = `${encodeURIComponent("id,품목,임대여부")},swap:${encodeURIComponent("\"납품/교체일\"")}`;
+    Promise.all(names.map((name) => selectRows<Record<string, unknown>>("vendor_info",
+      `select=${cols}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(name.slice(0, 24))}*&_hidden=not.is.true&limit=400`).catch(() => [])))
+      .then((groups) => {
+        if (!active) return;
+        const rows = new Map<string, Record<string, unknown>>();
+        groups.flat().forEach((row) => rows.set(String(row.id), row));
+        const summary = { mfp: 0, pc: 0, etc: 0, ended: 0, recentSwap: "" };
+        const yearAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+        for (const row of rows.values()) {
+          if (String(row["임대여부"] || "") !== "임대중") { summary.ended += 1; continue; }
+          const item = String(row["품목"] || "");
+          if (/복합기|프린터|플로터/.test(item)) summary.mfp += 1;
+          else if (/pc|데스크|노트북|모니터|태블릿|소프트웨어/i.test(item)) summary.pc += 1;
+          else summary.etc += 1;
+          // 납품/교체일: "2025-04-03" 또는 엑셀 일련번호("46140") 혼재
+          const raw = String(row["swap"] || "").trim();
+          const swap = /^\d{5}$/.test(raw)
+            ? new Date(Date.UTC(1899, 11, 30) + Number(raw) * 86400000).toISOString().slice(0, 10)
+            : (raw.match(/\d{4}-\d{2}-\d{2}/)?.[0] || "");
+          if (swap && swap >= yearAgo && swap > summary.recentSwap && swap <= new Date().toISOString().slice(0, 10)) summary.recentSwap = swap;
+        }
+        setDevices(summary);
+      })
+      .catch(() => { if (active) setDevices(null); });
+    return () => { active = false; };
+  }, [open, detail, queryVendor, includedHits]);
 
   const selectNewVendor = (nextVendor: string) => {
     setQueryVendor(nextVendor);
@@ -359,7 +394,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           if (quarterCheck.advice?.adviceLine) items.push(chip("border-emerald-300 bg-emerald-50 text-emerald-700", `🧰 ${quarterCheck.advice.adviceLine}`, "spare"));
           if (quarterCheck.advice?.warning) items.push(chip("border-amber-300 bg-amber-50 text-amber-800", `⚠ ${quarterCheck.advice.warning}`, "warn"));
           if (quarterCheck.special) items.push(chip("border-rose-200 bg-rose-50 text-rose-600", `❗ ${quarterCheck.special}`, "special"));
-          if (quarterCheck.deviceCount > 0) items.push(chip("border-slate-200 bg-slate-50 text-slate-600", `🖨 기기 ${quarterCheck.deviceCount}대`, "dev"));
+          if (devices && devices.mfp + devices.pc + devices.etc > 0) {
+            const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
+            items.push(chip("border-slate-200 bg-slate-50 text-slate-600", `🖨 임대중 ${parts}${devices.ended ? ` (종료 ${devices.ended}대 제외)` : ""}`, "dev"));
+          }
+          if (devices?.recentSwap) items.push(chip("border-indigo-300 bg-indigo-50 text-indigo-700", `🔄 최근 1년 내 납품·교체 ${devices.recentSwap}`, "swap"));
           return <section className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950">이번 분기 체크</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">방문 전에 확인할 것들 — 워킨맵·미수·초과·불만·최근 2회 점검(사용량·여분) 기준.</p></div>
             <div className="flex flex-wrap gap-1.5 px-4 py-3">
