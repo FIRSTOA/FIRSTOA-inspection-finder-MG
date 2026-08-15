@@ -1047,9 +1047,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     setVisibleScheduleTypes((current) => current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]);
   };
 
-    setVisibleTeams((current) => current.includes(calendarTeam) ? current.filter((item) => item !== calendarTeam) : [...current, calendarTeam]);
-  };
-
 
   return (
     <div className="space-y-5">
