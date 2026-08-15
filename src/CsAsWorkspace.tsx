@@ -1555,7 +1555,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     onBlur={(e) => { const v = e.target.value; if (v !== (ticket.note || "")) { update(ticket.id, { note: v }); notify("내용이 저장됐습니다 ✓", "success"); } }}
                     className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                <details className="rounded-lg border border-slate-200">
+                {view === "as" && <details className="rounded-lg border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-500 transition hover:text-slate-700">상세 정보 — 기종·시리얼·접수 정보</summary>
                   <div className="grid grid-cols-2 gap-2 border-t border-slate-100 p-3 sm:grid-cols-3">
                   {infoCell("기종", ticket.model)}
@@ -1568,8 +1568,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {reception && infoCell("유상/무상", reception.paid)}
                   {ticket.department && infoCell("부서", ticket.department)}
                   </div>
-                </details>
-                {phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
+                </details>}
+                {view === "as" && phoneEntries.length > 0 && <div className="rounded-lg border border-slate-200 p-3">
                   <div className="text-[10px] font-black text-slate-400">연락처 — 누를 상대를 선택하세요</div>
                   <div className="mt-1.5 space-y-1.5">
                     {phoneEntries.map(({ line, phone }, index) => (
@@ -1580,14 +1580,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     ))}
                   </div>
                 </div>}
-                {!phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
+                {view === "as" && !phoneEntries.length && !!(ticket.contact || ticket.keyman) && <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">{[ticket.contact, ticket.keyman].filter(Boolean).join("\n")}</div>}
 
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {!!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
                   <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
                 </div>}
-                {!!reception?.report_text && <details className="rounded-lg border border-slate-200">
+                {view === "as" && !!reception?.report_text && <details className="rounded-lg border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-600">원본 보고양식 펼치기</summary>
                   <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-slate-100 bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{reception.report_text}</pre>
                   <div className="border-t border-slate-100 p-2 text-right"><button type="button" onClick={() => void navigator.clipboard.writeText(reception.report_text)} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-[11px] font-black text-white">복사</button></div>
@@ -1598,13 +1598,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
-                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>
-                  <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
+                  {view === "as" && <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>}
+                  {view === "as" && <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>}
                 </div>
-                <div className="flex gap-1.5">
+                {view === "as" && <div className="flex gap-1.5">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="flex-1 whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD AS</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-black text-emerald-700">배정</button>
-                </div>
+                </div>}
                 <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`w-full whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
               </div>
             </div>
