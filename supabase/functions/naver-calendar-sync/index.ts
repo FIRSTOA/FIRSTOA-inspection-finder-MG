@@ -162,8 +162,8 @@ Deno.serve(async (req) => {
     const changed = listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80);
 
     // 웹앱 일정에 연결된 uid(미러+승격) — 표시 목록에서 제외 + 네이버에서 옮긴 날짜·시간을 티켓에 반영
-    const ticketsRes = await fetch(`${rest}/as_tickets?select=id,date,time,status,naverUid&naverUid=not.is.null`, { headers: restHeaders });
-    const ticketRows = (await ticketsRes.json().catch(() => [])) as Array<{ id: string; date: string; time: string; status: string; naverUid: string }>;
+    const ticketsRes = await fetch(`${rest}/as_tickets?select=id,date,time,status,naverUid,assignee,"calendarTitle",vendor&naverUid=not.is.null`, { headers: restHeaders });
+    const ticketRows = (await ticketsRes.json().catch(() => [])) as Array<{ id: string; date: string; time: string; status: string; naverUid: string; assignee?: string; calendarTitle?: string; vendor?: string }>;
     const ticketUids = new Set(ticketRows.map((t) => t.naverUid).filter(Boolean));
     const ticketByUid = new Map(ticketRows.map((t) => [t.naverUid, t]));
 
@@ -178,11 +178,23 @@ Deno.serve(async (req) => {
       // (완료 일정은 보관용 — 불변. 웹앱→네이버 방향은 즉시 반영이라 루프 없음)
       const linkedTicket = ticketByUid.get(ev.uid);
       if (linkedTicket && linkedTicket.status !== "완료" && ev.date) {
+        const patchBody: Record<string, string> = {};
         const newTime = ev.time || linkedTicket.time;
         if (linkedTicket.date !== ev.date || (linkedTicket.time || "") !== (newTime || "")) {
+          patchBody.date = ev.date;
+          patchBody.time = newTime;
+        }
+        // 제목 역반영: 미러 제목은 "배정자-제목" 형식 — 접두를 벗겨 웹앱 제목과 비교
+        if (ev.title) {
+          const assignee = String(linkedTicket.assignee || "");
+          const stripped = assignee && ev.title.startsWith(`${assignee}-`) ? ev.title.slice(assignee.length + 1) : ev.title;
+          const current = (linkedTicket.calendarTitle || "").trim() || String(linkedTicket.vendor || "");
+          if (stripped.trim() && stripped.trim() !== current.trim()) patchBody.calendarTitle = stripped.trim().slice(0, 200);
+        }
+        if (Object.keys(patchBody).length) {
           const patch = await fetch(`${rest}/as_tickets?id=eq.${encodeURIComponent(linkedTicket.id)}`, {
             method: "PATCH", headers: { ...restHeaders, Prefer: "return=minimal" },
-            body: JSON.stringify({ date: ev.date, time: newTime }),
+            body: JSON.stringify(patchBody),
           });
           if (patch.ok) ticketUpdated += 1;
         }
