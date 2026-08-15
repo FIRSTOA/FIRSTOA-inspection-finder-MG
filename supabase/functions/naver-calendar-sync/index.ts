@@ -227,7 +227,8 @@ Deno.serve(async (req) => {
       // ② 네이버 수기 일정: 팀 시간대 + 오늘 이후 → 웹앱 일정으로 자동 수입 (완전 통합)
       //    종일·기타 시간(연차·공지류)은 오버레이(캘린더 표시 전용)
       if (!ev.uid.startsWith("firstoa") && !ticketUids.has(ev.uid) && ev.date) {
-        const team = TEAM_BY_SLOT[ev.time] || "";
+        // 팀 시간대(09/12/15/18/21)면 그 팀, 그 외 시간(11시·9시반 등)은 "기타" — 종일만 오버레이
+        const team = TEAM_BY_SLOT[ev.time] || (ev.time ? "기타" : "");
         const importable = team && ev.date >= todayKst;
         if (importable) {
           const ticketId = `nv-${ev.uid.replace(/[^0-9A-Za-z@._-]/g, "")}`.slice(0, 120);
