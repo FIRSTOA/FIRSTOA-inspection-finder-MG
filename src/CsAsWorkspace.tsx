@@ -98,6 +98,19 @@ function monthGrid(date: string) {
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
 }
 
+// 기본 <select>의 밋밋한 모양을 벗긴 공용 선택상자 — 팀·캘린더 이동 등
+function FancySelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full cursor-pointer appearance-none rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2.5 pr-10 text-sm font-black text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.05)] outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
+        {children}
+      </select>
+      <svg className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </div>
+  );
+}
+
 function normalizeTicketSchedule(ticket: AsTicket): AsTicket {
   if (ticket.scheduleType === "물류" || ticket.scheduleType === "휴가" || ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "매월점검") return ticket;
   const isFuture = ticket.date > getTodayYmd();
@@ -1246,7 +1259,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <span className={`rounded px-1.5 py-0.5 text-white ${naverBadgeStyle(naverDetail)}`}>{naverCategoryOf(naverDetail)}</span>
                           {naverTeamOf(naverDetail) && <span className="rounded bg-white/10 px-1.5 py-0.5 text-slate-300">{naverTeamOf(naverDetail)}팀</span>}
                           {naverDetail.completed && <span className="rounded bg-emerald-500/90 px-1.5 py-0.5 text-white">완료됨</span>}
-                          <span className="ml-auto text-slate-400">수정하면 네이버 캘린더에 바로 반영</span>
+                          <span className="ml-auto hidden text-slate-400 sm:inline">수정하면 네이버 캘린더에 바로 반영</span>
+                          <button type="button" onClick={() => setNaverDetail(null)} className="ml-1 rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white" aria-label="닫기"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg></button>
                         </div>
                         {/* 제목 — [수정]을 눌러야 편집, [저장]으로 확정 (네이버에 바로 반영) */}
                         <div className="mt-2 flex items-center gap-2">
@@ -1268,19 +1282,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             <input type="date" value={naverDetail.date} onClick={openPicker} onChange={(e) => { if (e.target.value) void saveNaverField({ date: e.target.value }); }}
                               className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
                           </label>
-                          <div className="text-xs font-bold text-slate-500">팀 <span className="font-semibold text-slate-400">{naverDetail.time ? (naverTeamOf(naverDetail) ? "" : `(기타 ${naverDetail.time})`) : "(현재 종일)"}</span>
-                            <div className="mt-1 flex gap-1">
-                              {["A", "B", "C", "D", "E"].map((tm) => {
-                                const on = naverTeamOf(naverDetail) === tm;
-                                return (
-                                  <button key={tm} type="button" title={`${tm}팀 ${TEAM_SLOT_LABEL[tm]}`}
-                                    onClick={() => { if (!on) void saveNaverField({ time: TEAM_SLOT[tm], date: naverDetail.date }); }}
-                                    className={`flex-1 rounded-lg border py-2 text-center transition ${on ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]" : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"}`}>
-                                    <div className="text-sm font-black">{tm}</div>
-                                    <div className={`text-[9px] font-bold ${on ? "text-blue-100" : "text-slate-400"}`}>{TEAM_SLOT_LABEL[tm].replace(" ", "")}</div>
-                                  </button>
-                                );
-                              })}
+                          <div className="text-xs font-bold text-slate-500">팀
+                            <div className="mt-1">
+                              <FancySelect value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}>
+                                <option value="">{naverDetail.time ? `기타 (${naverDetail.time})` : "종일"}</option>
+                                {["A", "B", "C", "D", "E"].map((tm) => <option key={tm} value={tm}>{tm}팀 · {TEAM_SLOT_LABEL[tm]}</option>)}
+                              </FancySelect>
                             </div>
                           </div>
                         </div>
@@ -1295,17 +1302,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             onBlur={(e) => { const v = e.target.value; if (v !== naverDetail.description) void saveNaverField({ description: v }); }}
                             className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3.5 text-[13.5px] font-medium leading-[1.7] text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
                         </label>
-                        <label className="block text-xs font-bold text-slate-500">캘린더 이동
-                          <select value={naverDetail.calendar_id} onChange={(e) => { if (e.target.value !== naverDetail.calendar_id) void transferNaverEvent(e.target.value); }}
-                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500">
-                            {NAVER_CAL_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            {!NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) && <option value={naverDetail.calendar_id}>(현재 캘린더)</option>}
-                          </select>
-                        </label>
+                        <div className="text-xs font-bold text-slate-500">캘린더 이동
+                          <div className="mt-1">
+                            <FancySelect value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}>
+                              {NAVER_CAL_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              {!NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) && <option value={naverDetail.calendar_id}>(현재 캘린더)</option>}
+                            </FancySelect>
+                          </div>
+                        </div>
                       </div>
                       <div className="space-y-1.5 border-t border-slate-100 px-4 py-3">
                         <div className="flex gap-1.5">
-                          <button type="button" onClick={() => setNaverDetail(null)} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">닫기</button>
                           <button type="button" onClick={() => { setNaverDupDate(getTomorrowYmd()); setNaverDupOpen("익일"); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
                           <button type="button" onClick={() => { setNaverDupDate(naverDetail.date); setNaverDupOpen("복제"); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                           <button type="button" onClick={() => setNaverDupOpen("반복")} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">매월 반복</button>
@@ -1525,17 +1532,23 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <button type="button" onClick={() => { const v = titleDraft.trim(); if (v) { update(ticket.id, { calendarTitle: v }); notify("제목이 저장됐습니다" + (ticket.naverUid ? " — 네이버 캘린더에도 반영 ✓" : " ✓"), "success"); } setTitleDraft(null); }} className="shrink-0 rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-black text-white shadow-[0_2px_8px_rgba(37,99,235,0.4)] transition hover:bg-blue-700">저장</button>
                   </>)}
                 </div>
-                {/* 날짜·팀 바로 수정 — 팀을 바꾸면 시간대(A09/B12/C15/D18)도 따라간다 */}
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input type="date" value={ticket.date} onClick={openPicker} onChange={(e) => { if (e.target.value && e.target.value !== ticket.date) requestMoveDate(ticket.id, e.target.value); }}
-                    className="w-full cursor-pointer rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]" />
-                  <select value={ticket.team} onChange={(e) => { const tm = e.target.value as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT[tm] || ticket.time})으로 변경 ✓`, "success"); } }}
-                    className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]">
-                    {teams.map((tm) => <option key={tm} value={tm} className="text-slate-900">{tm}팀 ({TEAM_SLOT_LABEL[tm]})</option>)}
-                  </select>
-                </div>
+
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+                {/* 날짜·팀 — 네이버 모달과 같은 자리·스타일. 팀을 바꾸면 시간대(A09/B12/C15/D18)도 따라간다 */}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs font-bold text-slate-500">날짜
+                    <input type="date" value={ticket.date} onClick={openPicker} onChange={(e) => { if (e.target.value && e.target.value !== ticket.date) requestMoveDate(ticket.id, e.target.value); }}
+                      className="mt-1 w-full cursor-pointer rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2 text-sm font-black text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.05)] outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  </label>
+                  <div className="text-xs font-bold text-slate-500">팀
+                    <div className="mt-1">
+                      <FancySelect value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}>
+                        {teams.map((tm) => <option key={tm} value={tm}>{tm}팀 · {TEAM_SLOT_LABEL[tm]}</option>)}
+                      </FancySelect>
+                    </div>
+                  </div>
+                </div>
                 <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
                   <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}
                     onBlur={(e) => { const v = e.target.value; if (v !== (ticket.issue || "")) { update(ticket.id, { issue: v }); notify("접수 내용이 저장됐습니다 ✓", "success"); } }}
