@@ -1146,12 +1146,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       const dayNaver = shownNaverEvents.filter((ev) => ev.date === date);
                       return (
                         <div key={date} id={`cal-day-${date}`}>
-                          <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg bg-slate-100/95 px-3 py-1.5 backdrop-blur ${date === todayYmd ? "text-blue-700" : "text-slate-600"}`}>
+                          <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg px-3 py-1.5 backdrop-blur ${date === todayYmd ? "bg-blue-100/95 text-blue-700" : "bg-slate-100/95 text-slate-600"}`}>
                             <span className="text-sm font-black">{Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()]})</span>
                             {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
                             <span className="text-[11px] font-bold text-slate-400">{list.length + dayNaver.length}건{dayNaver.length ? ` (네이버 ${dayNaver.length})` : ""}</span>
                           </div>
-                          <div className="mt-1 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <div className={`mt-1 divide-y divide-slate-100 overflow-hidden rounded-lg bg-white ${date === todayYmd ? "border-2 border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : "border border-slate-200"}`}>
                             {mergedDayRows(date).map((row) => (row.kind === "ticket" ? compactTicketRow(row.t) : compactNaverRow(row.ev)))}
                           </div>
                         </div>
