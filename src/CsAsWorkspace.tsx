@@ -711,9 +711,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     try { localStorage.setItem("cs_list_types_v2", JSON.stringify(next)); } catch { /* 무시 */ }
   };
   const toggleListType = (name: string) => {
-    // 전체 상태에서 하나를 누르면 "그것만" 선택 — 이후 다른 유형을 누르면 추가(중복 선택),
-    // 켜진 걸 다시 누르면 해제, 전부 꺼지면 전체로 복귀
-    if (listTypes.length === LIST_TYPE_OPTIONS.length) { setListTypesPersist([name]); return; }
+    // 평범한 토글 — 켜진 걸 누르면 그것만 빠진다. 전부 꺼지면 전체로 복귀
     const next = listTypes.includes(name) ? listTypes.filter((item) => item !== name) : [...listTypes, name];
     setListTypesPersist(next.length ? next : [...LIST_TYPE_OPTIONS]);
   };
@@ -1053,17 +1051,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   return (
     <div className="space-y-5">
       {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
-      {view === "as" && <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <p className="text-[11px] font-semibold text-slate-400">팀별 익일통합as·납품철수교체휴가교육·매월점검 일정을 확인하고 담당자 배정·완료·일정 변경을 처리합니다.</p>
-        <div className="flex min-w-0 flex-col gap-2 lg:items-end">
-          <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
-            <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
-            {([...teams, "E"] as Team[]).map((item) => (
-              <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3.5 py-1.5 text-sm font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
-            ))}
-          </div>
-        </div>
-      </section>}
 
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -1248,30 +1235,41 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         </section>
       ) : (
         <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="grid w-full grid-cols-4 rounded-full bg-slate-100 p-1 sm:w-auto">
-              {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`whitespace-nowrap rounded-full px-1 py-1.5 text-[12.5px] font-black transition sm:px-4 sm:text-sm ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
-              ))}
-              <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-1 py-1.5 text-[12.5px] font-black transition sm:px-4 sm:text-sm ${myPlanOpen ? "bg-blue-600 text-white shadow-sm" : "text-blue-600 hover:text-blue-700"}`}>내 일정</button>
+          <div className="space-y-2.5 rounded-xl bg-[#1E252F] px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
+                {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-black transition sm:px-4 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
+                ))}
+                <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-black transition sm:px-4 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
+              </div>
+              <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
+                <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
+                {([...teams, "E"] as Team[]).map((item) => (
+                  <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item}팀</button>
+                ))}
+              </div>
             </div>
-            <div className="text-xs font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</div>
+            {!myPlanOpen && (
+              <div className="flex flex-wrap items-center gap-1">
+                {([["", `전체 ${statusCounts.전체}`, "bg-white text-slate-950", "bg-white/10 text-slate-300 hover:text-white"],
+                   ["미배정", `미배정 ${statusCounts.미배정}`, "bg-rose-500 text-white", "bg-white/10 text-rose-300 hover:text-rose-200"],
+                   ["배정", `배정 ${statusCounts.배정}`, "bg-emerald-500 text-white", "bg-white/10 text-emerald-300 hover:text-emerald-200"],
+                   ["완료", `완료 ${statusCounts.완료}`, "bg-blue-500 text-white", "bg-white/10 text-blue-300 hover:text-blue-200"]] as const).map(([key, label, onCls, offCls]) => (
+                  <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
+                ))}
+                <span className="mx-1.5 h-4 w-px bg-white/15" />
+                <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
+                  className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>전체</button>
+                {LIST_TYPE_OPTIONS.map((name) => (
+                  <button key={name} type="button" onClick={() => toggleListType(name)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/10 text-slate-500 hover:text-slate-300"}`}>{name === "AS" ? "익일통합as" : name}</button>
+                ))}
+                <span className="ml-auto text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</span>
+              </div>
+            )}
           </div>
-          {!myPlanOpen && (
-            <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
-              {([["", `전체 ${statusCounts.전체}`], ["미배정", `미배정 ${statusCounts.미배정}`], ["배정", `배정 ${statusCounts.배정}`], ["완료", `완료 ${statusCounts.완료}`]] as const).map(([key, label]) => (
-                <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-black transition ${statusPick === key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{label}</button>
-              ))}
-              <span className="mx-1.5 h-4 w-px bg-slate-200" />
-              <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
-                className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
-              {LIST_TYPE_OPTIONS.map((name) => (
-                <button key={name} type="button" onClick={() => toggleListType(name)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name === "AS" ? "익일통합as" : name}</button>
-              ))}
-            </div>
-          )}
 
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
@@ -1351,10 +1349,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                 </details>
               ) : (
-                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${key ? "border-slate-300" : "border-amber-400"}`}>
-                  <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-slate-100" : "bg-amber-50"}`}>
-                    <span className={`text-sm font-black ${key ? "text-slate-800" : "text-amber-800"}`}>{key || "미배정 — 배정 필요"}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${key ? "bg-white text-slate-600" : "bg-amber-200/70 text-amber-800"}`}>{rows.length}건</span>
+                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${key ? "border-emerald-300" : "border-rose-400"}`}>
+                  <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-emerald-50/60" : "bg-rose-50"}`}>
+                    <span className={`text-sm font-black ${key ? "text-emerald-900" : "text-rose-800"}`}>{key || "미배정 — 배정 필요"}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${key ? "bg-white text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{rows.length}건</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[1050px] text-left">
@@ -1370,7 +1368,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
                             <td className="px-3 py-1.5 text-sm font-black">{ticket.team}팀</td>
                             <td className="px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
-                            <td className="px-3 py-1.5 text-sm font-bold">{ticket.time || "종일"}<div className="text-[11px] text-slate-400">{ticket.date}</div>{!ticket.assignee && elapsedLabel(ticket) && <div className="mt-0.5 text-[10px] font-black text-amber-600">⏱ {elapsedLabel(ticket)}</div>}</td>
+                            <td className="px-3 py-1.5 text-sm font-bold">{ticket.time || "종일"}<div className="text-[11px] text-slate-400">{ticket.date}</div>{elapsedLabel(ticket) && <div className="mt-0.5 text-[10px] font-black text-amber-600">⏱ {elapsedLabel(ticket)}</div>}</td>
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
                               <div className="mt-1"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
