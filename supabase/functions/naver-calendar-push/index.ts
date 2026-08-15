@@ -90,6 +90,21 @@ function icsProp(ics: string, name: string): string {
   return m ? m[1].trim().replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";") : "";
 }
 
+// 네이버 보호 가드 — 모든 CalDAV 쓰기를 기록하고, 60초에 40건을 넘으면 차단한다
+// (웹앱 버그로 인한 폭주가 네이버 캘린더를 휩쓸지 못하게 하는 안전핀)
+async function writeGuard(action: string, uid: string, cal: string): Promise<string | null> {
+  const sUrl = Deno.env.get("SUPABASE_URL") || "";
+  const sKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!sUrl || !sKey) return null;
+  const h = { apikey: sKey, Authorization: `Bearer ${sKey}`, "Content-Type": "application/json" };
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const cntRes = await fetch(`${sUrl}/rest/v1/naver_write_log?at=gt.${since}&select=id`, { headers: { ...h, Prefer: "count=exact", Range: "0-0", "Range-Unit": "items" } }).catch(() => null);
+  const cnt = cntRes ? Number((cntRes.headers.get("content-range") || "0/0").split("/")[1] || 0) : 0;
+  if (cnt >= 40) return `네이버 쓰기 안전 상한 초과(60초 ${cnt}건) — 잠시 후 다시 시도하세요. 반복되면 웹앱 버그 가능성, 관리자 확인 필요`;
+  void fetch(`${sUrl}/rest/v1/naver_write_log`, { method: "POST", headers: { ...h, Prefer: "return=minimal" }, body: JSON.stringify({ action, uid: uid.slice(0, 120), cal: cal.slice(0, 60) }) }).catch(() => undefined);
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
@@ -106,6 +121,10 @@ Deno.serve(async (req) => {
       // calId를 넘기면 그 캘린더에서 작업 (납품일정 등 다른 캘린더의 일정) — 없으면 등록 캘린더
       const calId = String(body.calId || "").trim() || await configCalendarIdOf();
       if (!calId) return Response.json({ error: "NAVER_CALENDAR_ID 설정이 비어 있습니다 (관리 탭)" }, { status: 400, headers: jsonHeaders });
+      if (body.action !== "caldav_get") {
+        const blocked = await writeGuard(String(body.action), uid, calId);
+        if (blocked) return Response.json({ error: blocked }, { status: 429, headers: jsonHeaders });
+      }
 
       // caldav_move: 완료 → 팀 완료 캘린더로 이동 + X-NAVER-COMPLETED:TRUE(네이버 완료 체크)
       //              완료 취소(direction:"back") → 원래 캘린더로 복귀 + 완료 체크 해제
@@ -333,6 +352,8 @@ Deno.serve(async (req) => {
     const caldav = caldavAuth();
     const calIdForCreate = String(body.calId || "").trim() || configCalendarId || Deno.env.get("NAVER_CALDAV_DEFAULT_CALENDAR") || "";
     if (caldav && calIdForCreate) {
+      const blockedC = await writeGuard("create", String(body.stableKey || ""), calIdForCreate);
+      if (blockedC) return Response.json({ error: blockedC }, { status: 429, headers: jsonHeaders });
       // stableKey(접수 id)가 오면 UID를 고정 — 실수로 두 번 등록해도 같은 일정을 덮어쓴다 (CalDAV PUT은 멱등)
       const stableKey = String(body.stableKey || "").replace(/[^0-9a-zA-Z-]/g, "");
       const eventUidC = stableKey ? `firstoa-r-${stableKey}` : `firstoa-${crypto.randomUUID()}`;

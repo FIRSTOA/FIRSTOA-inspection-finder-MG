@@ -53,6 +53,9 @@ function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilt
   if (t.scheduleType === "물류" || t.scheduleType === "휴가" || t.scheduleType === "납품철수교체휴가교육") return "납품철수교체휴가교육";
   return t.scheduleType as DisplayFilter;
 }
+// AS 완료는 팀별 네이버 완료 캘린더로 이동한다 — 표기도 그 캘린더 이름을 쓴다
+const DONE_CAL_LABEL: Record<Team, string> = { A: "강북A as", B: "강서B as", C: "강남C as", D: "경기D as", E: "지방E as" };
+
 const teamAssignees: Record<Team, string[]> = {
   A: ["김정민", "심태현", "정웅만", "신정훈"],
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
@@ -531,6 +534,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         notify(`네이버 일정 이동 실패: ${(e as Error).message}`, "error");
       });
   };
+  // 캘린더 검색 — 업체·제목·주소·내용에서 찾는다 (웹앱 일정 + 네이버 종일 일정)
+  const [calSearch, setCalSearch] = useState("");
+  const calSearchResults = useMemo(() => {
+    const q = calSearch.trim().toLowerCase();
+    if (q.length < 2) return [] as Array<{ kind: "ticket" | "naver"; id: string; date: string; title: string; key: string }>;
+    const hitT = tickets.filter((t) => [t.vendor, t.calendarTitle, t.address, t.issue].some((v) => (v || "").toLowerCase().includes(q)))
+      .map((t) => ({ kind: "ticket" as const, id: t.id, date: t.date, title: displayTitleOf(t), key: `t-${t.id}` }));
+    const hitN = naverEvents.filter((ev) => [ev.title, ev.location, ev.description].some((v) => (v || "").toLowerCase().includes(q)))
+      .map((ev) => ({ kind: "naver" as const, id: ev.uid, date: ev.date, title: ev.title || "(제목 없음)", key: `n-${ev.uid}` }));
+    return [...hitT, ...hitN].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+  }, [calSearch, tickets, naverEvents]);
   // 네이버 일정 필드 저장 — 티켓 모달과 같은 감각(입력창 벗어나면 저장), 네이버에 바로 반영
   const saveNaverField = async (patch: Partial<Pick<NaverEventRow, "title" | "date" | "time" | "location" | "description">>) => {
     const ev = naverDetail;
@@ -669,7 +683,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50">
       <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(t.team, t.time)}</span>
       <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-400">{guOf(t.address || "")}</span>
-      <span className={`w-24 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[10px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{displayTypeOf(t)}</span>
+      <span className={`w-24 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[10px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{displayTypeOf(t) === "AS[완료]" ? DONE_CAL_LABEL[t.team] : displayTypeOf(t)}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${t.status === "완료" ? "text-slate-400 line-through" : "text-slate-800"}`}>{displayTitleOf(t)}{t.issue ? ` ｜ ${t.issue}` : ""}{t.address ? ` ｜ ${t.address}` : ""}</span>
     </button>
   );
@@ -807,9 +821,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const completedNow = changed.status === "완료" && before.status !== "완료";
       const rescheduled = changed.date !== before.date || changed.time !== before.time;
       const uncompletedNow = before.status === "완료" && changed.status !== "완료";
-      if (completedNow) {
+      const isDelivery = changed.scheduleType === "납품철수교체휴가교육";
+      if (completedNow && isDelivery) {
+        // 납품·철수·교체는 영업부 캘린더 소관 — 이동하지 않고 제자리 완료 체크만
+        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, calId: "75632617", done: true })
+          .then(() => notify("네이버: 납품 일정 완료 체크 ✓", "success"))
+          .catch((e) => notify(`네이버 완료 체크 실패: ${(e as Error).message}`, "error"));
+      } else if (uncompletedNow && isDelivery) {
+        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, calId: "75632617", done: false }).catch(() => undefined);
+      } else if (completedNow) {
         void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
-          .then((r) => { if (r.status === "moved") notify(`네이버: ${changed.team}팀 완료 캘린더로 이동 + 완료 체크 ✓`, "success"); })
+          .then((r) => { if (r.status === "moved") notify(`네이버: ${DONE_CAL_LABEL[changed.team]} 캘린더로 이동 + 완료 체크 ✓`, "success"); })
           .catch((e) => notify(`네이버 완료 이동 실패: ${(e as Error).message}`, "error"));
       } else if (uncompletedNow) {
         void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team, direction: "back" })
@@ -1092,6 +1114,22 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
                 return (<>
                   <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700"><span className="text-base leading-none">＋</span> 일정 추가</button>
+                  <div className="relative mt-2.5">
+                    <input value={calSearch} onChange={(e) => setCalSearch(e.target.value)} placeholder="🔍 일정 검색 (업체·제목·주소)"
+                      className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15" />
+                    {calSearch.trim().length >= 2 && (
+                      <div className="absolute left-0 right-0 z-[70] mt-1.5 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.25)] lg:w-80">
+                        {calSearchResults.map((r) => (
+                          <button key={r.key} type="button" onClick={() => { setCalSearch(""); if (r.kind === "ticket") setDetailId(r.id); else { const ev = naverEvents.find((x) => x.uid === r.id); if (ev) setNaverDetail({ ...ev }); } }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50">
+                            <span className="w-16 shrink-0 text-[10px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
+                            <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{r.title}</span>
+                          </button>
+                        ))}
+                        {!calSearchResults.length && <div className="px-3 py-3 text-center text-[11px] font-semibold text-slate-400">검색 결과 없음</div>}
+                      </div>
+                    )}
+                  </div>
                   <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">팀 <span className="normal-case text-slate-600">— 내 팀만 보기</span></div>
                   {(() => {
                     // 단일 선택: 전체 / 특정 팀(+종일은 팀 무관 정보라 함께) / E팀 / 종일만
@@ -1125,7 +1163,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={pill(allTypesOn)}><span>전체</span></button>
                     {displayFilters.map((f) => (
                       <button key={f} type="button" onClick={() => toggleScheduleFilter(f)} className={pill(visibleScheduleTypes.includes(f))}>
-                        <span className="flex min-w-0 items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${f === "익일통합as" ? "bg-lime-500" : f === "AS[완료]" ? "bg-blue-500" : f === "납품철수교체휴가교육" ? "bg-rose-500" : "bg-amber-500"}`} /><span className="truncate">{f}</span></span>
+                        <span className="flex min-w-0 items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${f === "익일통합as" ? "bg-lime-500" : f === "AS[완료]" ? "bg-blue-500" : f === "납품철수교체휴가교육" ? "bg-rose-500" : "bg-amber-500"}`} /><span className="truncate">{f === "AS[완료]" ? (visibleTeams.length === 1 && !visibleExtra.includes("E") ? DONE_CAL_LABEL[visibleTeams[0]] : "as완료") : f}</span></span>
                       </button>
                     ))}
                   </div>
@@ -1294,7 +1332,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>전체</button>
                 {LIST_TYPE_OPTIONS.map((name) => (
                   <button key={name} type="button" onClick={() => toggleListType(name)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/10 text-slate-500 hover:text-slate-300"}`}>{name === "AS" ? "익일통합as" : name}</button>
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/10 text-slate-500 hover:text-slate-300"}`}>{name === "AS" ? "익일통합as" : name === "AS[완료]" ? (team !== "ALL" ? DONE_CAL_LABEL[team] : "as완료") : name}</button>
                 ))}
                 <span className="ml-auto text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length}건</span>
               </div>
@@ -1356,7 +1394,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               return groups.map(({ key, rows }) => key === "__done__" ? (
                 <details key="__done__" className="overflow-hidden rounded-xl border-2 border-blue-300 bg-white shadow-sm">
                   <summary className="flex cursor-pointer items-center gap-2 bg-blue-50/70 px-4 py-2 transition hover:bg-blue-50">
-                    <span className="text-sm font-black text-blue-800">✓ 완료</span>
+                    <span className="text-sm font-black text-blue-800">✓ {team !== "ALL" ? DONE_CAL_LABEL[team] : "완료 (as완료 캘린더)"}</span>
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-black text-blue-700">{rows.length}건</span>
                     <span className="text-[10px] font-bold text-slate-400">— 눌러서 펼치기</span>
                   </summary>
