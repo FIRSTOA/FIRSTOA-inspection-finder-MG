@@ -1,4 +1,4 @@
--- 네이버 캘린더 → 웹앱 동기화 — 10분마다 (바뀐 일정만 증분 반영)
+-- 네이버 캘린더 → 웹앱 동기화 — 1분마다 (바뀐 일정만 증분 반영)
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 
@@ -11,7 +11,7 @@ end $$;
 
 select cron.schedule(
   'naver-calendar-sync',
-  '*/10 * * * *',
+  '* * * * *',
   $$
   select net.http_post(
     url := 'https://kkdiihazgzesbqxjytqv.supabase.co/functions/v1/naver-calendar-sync',

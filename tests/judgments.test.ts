@@ -111,16 +111,17 @@ describe("detectReportTypesFromInput — 구분 자동 감지", () => {
 });
 
 describe("nextBusinessDay — 주말 건너뛰기 (주말 무근무 설계)", () => {
-  it("금·토·일 다음 영업일은 월요일", () => {
-    expect(nextBusinessDay("2026-08-14")).toBe("2026-08-17"); // 금 → 월
-    expect(nextBusinessDay("2026-08-15")).toBe("2026-08-17"); // 토 → 월
-    expect(nextBusinessDay("2026-08-16")).toBe("2026-08-17"); // 일 → 월
+  it("주말을 건너뛴다 (8/17은 광복절 대체공휴일이라 18일)", () => {
+    expect(nextBusinessDay("2026-08-15")).toBe("2026-08-18");
+    expect(nextBusinessDay("2026-08-16")).toBe("2026-08-18");
+    expect(nextBusinessDay("2026-08-21")).toBe("2026-08-24"); // 평범한 금 → 월
   });
   it("평일은 다음 날", () => {
     expect(nextBusinessDay("2026-08-17")).toBe("2026-08-18");
   });
-  it("연말도 주말만 본다 — 공휴일은 아직 미반영(알려진 한계)", () => {
-    expect(nextBusinessDay("2026-12-31")).toBe("2027-01-01");
+  it("한국 공휴일(대체공휴일 포함)도 건너뛴다", () => {
+    expect(nextBusinessDay("2026-08-14")).toBe("2026-08-18"); // 금 → 광복절 토·대체공휴일 월 건너뛰고 화
+    expect(nextBusinessDay("2026-12-31")).toBe("2027-01-04"); // 신정(금) 건너뛰고 월
   });
 });
 

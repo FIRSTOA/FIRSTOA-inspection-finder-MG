@@ -49,6 +49,7 @@ import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./
 import { prepareImageForUpload } from "./imageUpload";
 import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
+import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import type { AuthorTeam } from "./authors";
 
@@ -5354,7 +5355,7 @@ export default function App() {
 
   // 일정 완료/미루기 팝업 처리 (일정리스트와 같은 규칙: 완료=상태만, 익일=날짜+익일AS)
   const addDaysYmd = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setDate(d.getDate() + days); return kstDate(d); };
-  const nextBizYmd = (date: string) => { let next = addDaysYmd(date, 1); while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDaysYmd(next, 1); return next; };
+  const nextBizYmd = (date: string) => nextBusinessDay(date); // 공용 — 주말+공휴일 제외
   // 반복 클론 생성 전 같은 업체·날짜·유형 일정이 이미 있으면 건너뛴다 (시리즈 미리 생성분과 중복 방지)
   const spawnMonthlyCloneIfMissing = async (row: Record<string, unknown>) => {
     const clone = buildMonthlyCloneRow(row);

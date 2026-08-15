@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import PortalSelect from "./PortalSelect";
+import { nextBusinessDay } from "./planDate";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { notify } from "./toast";
@@ -78,11 +79,7 @@ function addDays(date: string, days: number) {
   return formatDate(d);
 }
 
-function nextBusinessDay(date: string) {
-  let next = addDays(date, 1);
-  while ([0, 6].includes(new Date(`${next}T12:00:00+09:00`).getDay())) next = addDays(next, 1);
-  return next;
-}
+// 영업일 계산은 공용(planDate) 하나만 쓴다 — 주말+한국 공휴일(대체 포함) 제외
 
 function addMonths(date: string, months: number) {
   const d = new Date(`${date}T12:00:00+09:00`);
@@ -494,12 +491,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       "naver_calendar_events", `select=uid,date,time,title,location,description,calendar_id,completed&date=gte.${from}&date=lte.${to}&order=date.asc,time.asc`,
     ).then(setNaverEvents).catch(() => setNaverEvents([]));
   }, [currentMonth, naverReloadTick]);
-  // 10분 동기화 결과가 화면에 따라오도록 — 60초마다·창 복귀 시 다시 읽는다
+  // 동기화 결과가 화면에 바로 따라오도록 — 45초마다 재조회 + 창 복귀 시 네이버를 즉시 당겨온다
   useEffect(() => {
     const bump = () => setNaverReloadTick((t) => t + 1);
-    const timer = window.setInterval(bump, 60_000);
-    window.addEventListener("focus", bump);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", bump); };
+    let lastPull = 0;
+    const pullNow = () => {
+      if (Date.now() - lastPull < 60_000) { bump(); return; } // 과호출 방지
+      lastPull = Date.now();
+      void invokeEdgeFunction("naver-calendar-sync", { action: "sync" }).catch(() => undefined).finally(() => window.setTimeout(bump, 1500));
+    };
+    const timer = window.setInterval(bump, 45_000);
+    window.addEventListener("focus", pullNow);
+    pullNow(); // 첫 진입 시 즉시 1회
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", pullNow); };
   }, []);
   // N 칩 클릭 → 상세 보기 (한방향 원칙: 네이버 직접 일정은 네이버가 원본 — 웹앱은 보기 전용.
   //  처리가 필요하면 [웹앱 일정으로 등록]으로 승격 — naverUid가 연결돼 완료·익일·드래그가
