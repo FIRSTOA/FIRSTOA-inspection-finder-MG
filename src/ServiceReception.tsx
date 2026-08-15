@@ -14,6 +14,9 @@ import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
 import { vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { VendorAlertChip } from "./VendorAlert";
+import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
 
 type ReceiveRoute = "카카오" | "전화";
@@ -593,6 +596,18 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (custKind === "신규" ? manualVendor.trim() : "");
+  // 접수 시점에 이 업체에 걸린 것(미수·초과·불만·점검·재계약)을 ⚠칩 하나로 — 누르면 통합이력 (일정리스트와 같은 기준)
+  const [vendorAlert, setVendorAlert] = useState<VendorWorkFlags | null>(null);
+  const [histVendor, setHistVendor] = useState("");
+  useEffect(() => {
+    const name = vendorName.trim();
+    if (name.length < 2) { setVendorAlert(null); return; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      getVendorFlagsBatch([name]).then((map) => { if (active) setVendorAlert(map.get(name) || null); }).catch(() => undefined);
+    }, 300);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [vendorName]);
   // 신규 거래처: 임대리스트가 없어도 신규 양식 입력으로 같은 보고양식을 만든다 (복합기·IT 공통)
   const pseudoLease = useMemo<LeaseHit | null>(() => {
     if (custKind !== "신규" || type === "원격이관") return null;
@@ -1437,6 +1452,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-base font-black text-slate-950 lg:text-lg">{pick(lease, "거래처명", "_업체명")}</span>
+                  <VendorAlertChip flags={vendorAlert} onOpen={() => setHistVendor(vendorName)} />
                   {workinName && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
                   {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
                 </div>
@@ -1855,6 +1871,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </div>
         );
       })()}
+      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} />
     </div>
   );
 }

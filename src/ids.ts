@@ -20,6 +20,16 @@ export function vendorMatchKey(value: string) {
     .replace(/^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/, "");
 }
 
+// 워킨맵 지명에서 **표시용** 업체명을 꺼낸다 — vendorMatchKey(비교키)와 달리 공백·괄호를 살려
+// 통합이력 검색어로 쓸 수 있는 형태. supabase/auto-schedule.sql의 workin_vendor_()와 거울.
+export function workinVendorName(value: string) {
+  const flat = String(value || "").replace(/_x000d_|\r|\n/g, " ").replace(/\s+/g, " ");
+  const noPrefix = flat.replace(/^\s*[\d/\-#]*\s*(?:V|SS|S|NN|N)(?=[^A-Za-z])/, "").trim();
+  const beforeSlash = noPrefix.split("/")[0];
+  const noTail = beforeSlash.replace(/(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$/, "");
+  return noTail.replace(/[\s\-·,()]+$/, "").trim();
+}
+
 // 워킨맵 comment는 "모델 / 시리얼" 표기(공백 유무 혼재) — 첫 슬래시가 구분자.
 // 자동일정 등록·내 일정 표시가 같은 규칙을 쓴다.
 export function parseEquipComment(comment: string): { model: string; serial: string } {

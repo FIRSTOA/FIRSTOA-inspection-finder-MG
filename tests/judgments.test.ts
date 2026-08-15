@@ -11,7 +11,7 @@
  *  - 내 일정 FIELD 불러오기가 분기점검을 AS로 변환하던 모드 감지 경로
  */
 import { describe, expect, it } from "vitest";
-import { normalizeId, parseEquipComment, vendorMatchKey } from "../src/ids";
+import { normalizeId, parseEquipComment, vendorMatchKey, workinVendorName } from "../src/ids";
 import { normRegion } from "../src/region";
 import { detectReportTypesFromInput, detectUnifiedInputMode } from "../src/fieldModes";
 import { nextBusinessDay } from "../src/planDate";
@@ -46,6 +46,16 @@ describe("vendorMatchKey — 업체명 매칭 키", () => {
 
   it("접두·꼬리 없는 평범한 이름은 그대로", () => {
     expect(vendorMatchKey("잡플러스")).toBe("잡플러스");
+  });
+});
+
+describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL workin_vendor_와 거울)", () => {
+  it("접두 번호·등급을 벗기고 공백은 살린다 (통합이력 검색어용)", () => {
+    expect(workinVendorName("14SS㈜이오플랜본사1매월마감")).toBe("㈜이오플랜본사1");
+    expect(workinVendorName("2609/17#V파인솔루션 주식회사506호C3608 기기이동 매월마감")).toBe("파인솔루션 주식회사506호C3608 기기이동");
+  });
+  it("특이사항(/ 뒤)과 마감 꼬리를 자른다", () => {
+    expect(workinVendorName("3NN 아스크스토리디에스 분기점검/토너 챙길 것")).toBe("아스크스토리디에스 분기점검");
   });
 });
 

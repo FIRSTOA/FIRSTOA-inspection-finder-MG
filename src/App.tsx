@@ -5945,7 +5945,9 @@ export default function App() {
           const misu = fieldVendorFlags?.misu || null;
           const misuBalance = misu ? (misu.balance.replace(/[^\d]/g, "") ? `${Number(misu.balance.replace(/[^\d]/g, "")).toLocaleString()}원` : misu.balance) : "";
           const renewal = fieldVendorFlags?.renewal || null;
-          if (!inspectionLine && !misu && !renewal) return null;
+          const overage = fieldVendorFlags?.overage || null;
+          const bulman = fieldVendorFlags?.bulman || null;
+          if (!inspectionLine && !misu && !renewal && !overage && !bulman) return null;
           return <div className={`rounded-xl border px-4 py-3 ${inspectionLine?.wrap || "border-slate-200 bg-white"}`}>
             {inspectionLine && <div className={`text-sm font-black ${inspectionLine.tone}`}>{inspectionLine.text}</div>}
             {misu && (misu.cleared
@@ -5954,6 +5956,9 @@ export default function App() {
             {renewal && (renewal.done
               ? <div className="mt-1 text-xs font-black text-slate-400">재계약 완료 · {renewal.quarter}분기 워킨맵</div>
               : <div className="mt-1 text-xs font-black text-rose-600">재계약 {renewal.quarter}분기 워킨맵 · {renewal.due ? `종료 ${renewal.due}` : "종료월 확인필요"}</div>)}
+            {overage && <div className="mt-1 text-xs font-black text-purple-700">초과 {overage.total}{overage.date ? ` (${overage.date})` : ""} — 방문 시 초과조정 안내 포인트</div>}
+            {bulman && <div className="mt-1 text-xs font-black text-rose-700">불만 {bulman.date} · {bulman.content} — 방문 전 대응 준비</div>}
+            <button type="button" onClick={() => setHistoryOpen(true)} className="mt-2 rounded-full bg-slate-900 px-3 py-1 text-[11px] font-black text-white transition hover:bg-slate-800">🗂 통합이력</button>
           </div>;
         })()}
 

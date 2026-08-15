@@ -273,28 +273,7 @@ async function migrateLocalOnce() {
   }
 }
 
-// 워킨맵·FIELD와 같은 기준의 점검·미수·재계약 상태 배지 — AS 나가는 김에 함께 처리할 일을 바로 보이게.
-export function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
-  if (!flags) return null;
-  const misuBalance = flags.misu ? (flags.misu.balance.replace(/[^\d]/g, "") ? `${Number(flags.misu.balance.replace(/[^\d]/g, "")).toLocaleString()}원` : flags.misu.balance) : "";
-  return (
-    <span className="flex flex-wrap gap-1">
-      {flags.inspection && (flags.inspection.done
-        ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-600">점검완료</span>
-        : flags.inspection.carried
-          ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">점검 다음분기</span>
-          : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">{flags.inspection.quarter}분기 점검</span>)}
-      {flags.misu && (flags.misu.cleared
-        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">미수 완납</span>
-        : <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-700">미수{flags.misu.months ? ` ${flags.misu.months}개월` : ""}{misuBalance ? ` ${misuBalance}` : ""}</span>)}
-      {flags.renewal && (flags.renewal.done
-        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">재계약 완료</span>
-        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약{flags.renewal.due ? ` · 종료 ${flags.renewal.due}` : ""}</span>)}
-      {flags.overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 {flags.overage.total.replace(/[^\d]/g, "") ? `${Math.round(Number(flags.overage.total.replace(/[^\d]/g, "")) / 10000).toLocaleString()}만원` : ""}</span>}
-      {flags.bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={flags.bulman.content}>불만 {flags.bulman.date.slice(2, 4)}년 {Number(flags.bulman.date.slice(5, 7))}월</span>}
-    </span>
-  );
-}
+// (VendorFlagBadges 배지 나열은 2026-08-15 ⚠칩(VendorAlert)+통합이력 팝업으로 흡수 — 삭제)
 
 // "서울 강남구 삼성로100길 8 202호" → "강남구 삼성로100길" (표에는 지역 요약만)
 function shortAddress(address: string) {
@@ -1612,6 +1591,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{ticket.assignee}</span>}
                   {titleDraft === null ? (<>
                     <span className="min-w-0 flex-1 truncate px-1 text-[15px] font-bold text-white">{(ticket.calendarTitle || "").trim() || ticket.vendor}</span>
+                    <VendorAlertChip flags={vendorFlags.get(ticket.vendor.trim())} onOpen={() => setHistVendor(ticket.vendor)} />
                     <button type="button" onClick={() => setTitleDraft((ticket.calendarTitle || "").trim() || ticket.vendor)} className="shrink-0 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black text-slate-200 transition hover:bg-white/20">수정</button>
                   </>) : (<>
                     <input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} autoFocus

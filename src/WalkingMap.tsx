@@ -6,8 +6,8 @@ import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } 
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
-import { MISU_DETAIL_FIELDS, MISU_DETAIL_LAYOUT, OVERAGE_DETAIL_FIELDS, OVERAGE_DETAIL_LAYOUT, SheetDetailModal } from "./MisuOverageBoards";
-import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
+import { normalizeId as normalizeIdKey, vendorMatchKey, workinVendorName } from "./ids";
+import UnifiedHistory from "./UnifiedHistory";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -95,6 +95,17 @@ const mapLabels: MapLabel[] = [
   { code: "G11", name: "", color: "#1f744a" },
   { code: "G12", name: "이관", color: "#343434" },
 ];
+
+// ── G라벨의 업무별 의미 — 2026-08-15 실데이터 검증 완료.
+// 분기점검 G1~G4 = 이름 앞 마감일 구간(G1 171/172, G2 166/167, G3 156/156, G4 178/181 일치),
+// 재계약 G1~G3 = 계약종료 월(현재 배치 100% 일치 — 실제 월은 컴포넌트에서 동적 계산),
+// 매월점검 G2·G3·G5 = 완료 개월 수(주차 분석 집계 규칙 G2×1·G3×2·G5×3과 동일).
+const QUARTER_LABEL_DESC: Record<string, string> = {
+  G1: "마감 1~8일", G2: "마감 9~16일", G3: "마감 17~24일", G4: "마감 25~31일",
+  G5: "점검 완료", G6: "SS·V급", G7: "공기청정기", G12: "다음분기 이관",
+};
+const MONTHLY_LABEL_DESC: Record<string, string> = { G1: "시작 전", G2: "1개월 완료", G3: "2개월 완료", G5: "3개월 완료" };
+const RENEWAL_LABEL_DESC: Record<string, string> = { G5: "재계약 완료", G6: "영업부 관할", G7: "영업부 관할", G12: "이관" };
 
 type MapPreferences = {
   team: Team;
@@ -1210,43 +1221,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
-  const [flagHistory, setFlagHistory] = useState<{ vendor: string; kind: "미수" | "초과" | "불만"; records: Array<Record<string, unknown>>; loading: boolean } | null>(null);
-  const [flagDetail, setFlagDetail] = useState<{ record: Record<string, unknown>; kind: "미수" | "초과" | "불만" } | null>(null);
-  const openFlagHistory = (vendor: string, kind: "미수" | "초과" | "불만", placeCode?: string) => {
-    setFlagHistory({ vendor, kind, records: [], loading: true });
-    const table = kind === "미수" ? "misu" : kind === "초과" ? "overage" : "bulman";
-    // 워킨맵 이름의 접두 숫자·등급·법인·꼬리표를 뗀 핵심 토큰 — 짧게 잘라가며 재시도
-    const core = vendor
-      .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
-      .replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim()
-      .match(/[가-힣a-zA-Z0-9]+/)?.[0] || vendor;
-    const key = vendorMatchKey(vendor);
-    // 미수·초과는 시트 기준(_출처 시트), 불만은 카톡·시트·웹앱 전부
-    const sourceFilter = kind === "미수" ? `&${encodeURIComponent("_출처")}=like.${encodeURIComponent("시트")}*` : "";
-    void (async () => {
-      const alias = await getAliasCodeMap().catch(() => new Map<string, string | null>());
-      const probes: string[] = [core.slice(0, 8), core.slice(0, 5), core.slice(0, 3)];
-      // 지점에 거래처 코드가 있으면 마스터 대표명으로도 찾는다 — 워킨맵 표기와 시트 표기가 다른 경우 구제
-      if (placeCode) {
-        const master = await selectRows<{ name: string }>("vendor_master", `select=name&code=eq.${encodeURIComponent(placeCode)}&limit=1`).catch(() => [] as Array<{ name: string }>);
-        const masterCore = String(master[0]?.name || "").replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || "";
-        if (masterCore) probes.push(masterCore.slice(0, 8), masterCore.slice(0, 5));
-      }
-      let hits: Array<Record<string, unknown>> = [];
-      for (const probe of probes) {
-        if (probe.length < 2) continue;
-        const rows = await selectRows<Record<string, unknown>>(table, `select=*&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*${sourceFilter}&order=id.desc&limit=40`).catch(() => [] as Array<Record<string, unknown>>);
-        hits = rows.filter((r) => {
-          const recordName = String(r["_업체명"] || "");
-          if (placeCode && translateVendor(alias, recordName) === placeCode) return true; // 코드 일치 = 확실
-          const rk = vendorMatchKey(recordName);
-          return rk && (rk === key || key.startsWith(rk) || rk.startsWith(key));
-        });
-        if (hits.length) break;
-      }
-      setFlagHistory((cur) => (cur && cur.vendor === vendor && cur.kind === kind ? { ...cur, records: hits.slice(0, 3), loading: false } : cur));
-    })();
-  };
+  // 미수·초과·불만 알림 클릭 → 통합이력 팝업 (전사 공통 흐름 — 자체 미니 이력 팝업은 2026-08-15 통합이력으로 흡수)
+  const [histVendor, setHistVendor] = useState("");
+  const openVendorHistory = (place: { name: string }) => setHistVendor(workinVendorName(place.name) || place.name);
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -1697,6 +1674,34 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     }
     return counts;
   }, [places, teamFilter, quarterFilter, kindFilter]);
+
+  // 재계약 G1~G3의 실제 계약종료 월 — 이름 접두("2608/")에서 라벨별 최빈 월을 읽는다 (배치가 바뀌어도 자동 갱신)
+  const renewalLabelMonths = useMemo(() => {
+    const tally = new Map<string, Map<number, number>>();
+    for (const place of places) {
+      if (place.kind !== "renewal" || !place.label) continue;
+      const match = place.name.match(/^\s*(\d{2})(\d{2})\s*\//);
+      const month = match ? Number(match[2]) : 0;
+      if (month < 1 || month > 12) continue;
+      const inner = tally.get(place.label) || new Map<number, number>();
+      inner.set(month, (inner.get(month) || 0) + 1);
+      tally.set(place.label, inner);
+    }
+    const out: Record<string, string> = {};
+    for (const [label, inner] of tally) {
+      const best = [...inner.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (best && best[1] >= 2) out[label] = `${best[0]}월 계약종료`;
+    }
+    return out;
+  }, [places]);
+  // 업무(kind)에 따라 같은 G코드도 뜻이 다르다 — 색상 메뉴·목록·목록편집이 공용으로 쓰는 설명
+  const labelDesc = useCallback((code: string, kind?: WorkKind | "ALL") => {
+    const k = kind && kind !== "ALL" ? kind : kindFilter !== "ALL" ? kindFilter : "";
+    if (k === "quarter") return QUARTER_LABEL_DESC[code] || "";
+    if (k === "monthly") return MONTHLY_LABEL_DESC[code] || "";
+    if (k === "renewal") return renewalLabelMonths[code] || RENEWAL_LABEL_DESC[code] || "";
+    return labelMeta(code).name;
+  }, [kindFilter, renewalLabelMonths]);
 
   const scopedPlaces = useMemo(() => {
     const rows = places.filter((place) => {
@@ -2193,8 +2198,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           </label>
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
             {mapLabels.map((item) => (
-              <button key={item.code} type="button" disabled={!checkedIds.length} onClick={() => bulkSetLabel(item.code)} title={`${item.code} ${item.name}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-white text-[9px] font-black text-white shadow disabled:opacity-30" style={{ backgroundColor: item.color }}>
-                {item.code.replace("G", "")}
+              <button key={item.code} type="button" disabled={!checkedIds.length} onClick={() => bulkSetLabel(item.code)} title={`${item.code}${labelDesc(item.code) ? ` — ${labelDesc(item.code)}` : item.name ? ` ${item.name}` : ""}`} className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-full border-2 border-white text-[9px] font-black leading-tight text-white shadow disabled:opacity-30" style={{ backgroundColor: item.color }}>
+                <span>{item.code.replace("G", "")}</span>
+                {labelDesc(item.code) && <span className="max-w-[40px] truncate px-0.5 text-[7px] font-bold opacity-90">{labelDesc(item.code)}</span>}
               </button>
             ))}
           </div>
@@ -2249,9 +2255,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
                         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
                         : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
-                      {misu && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "미수", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 최근 미수 이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
-                      {overage && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "초과", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 최근 초과 이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span onClick={(e) => { e.stopPropagation(); openFlagHistory(place.name, "불만", placeCodeById.get(place.id)); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 최근 불만 이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
+                      {misu && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 hover:bg-amber-100" title="클릭하면 통합이력">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                      {overage && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700 hover:bg-purple-100" title="클릭하면 통합이력">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span onClick={(e) => { e.stopPropagation(); openVendorHistory(place); }} className="cursor-pointer rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 hover:bg-red-200" title="클릭하면 통합이력">불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
                     </span>
                   )}
                 </span>
@@ -2276,7 +2282,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>
-                      <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} /></div>
+                      <div className="flex items-center gap-2"><span className="font-black text-slate-400">주소</span><NavLinks place={place} />
+                        <button type="button" onClick={() => openVendorHistory(place)} className="ml-auto rounded-full bg-slate-900 px-3 py-1 text-[11px] font-black text-white transition hover:bg-slate-800">🗂 통합이력</button>
+                      </div>
                       <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{[place.address, place.addressDetail].filter(Boolean).join(" ") || "-"}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -2286,7 +2294,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                       </div>
                       <div>
                         <div className="font-black text-slate-400">업무 정보</div>
-                        <div className="mt-1 font-semibold leading-5">{place.label} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
+                        <div className="mt-1 font-semibold leading-5">{place.label}{labelDesc(place.label, place.kind) ? ` (${labelDesc(place.label, place.kind)})` : ""} · {place.team}팀 · {place.quarter}분기 · {workKinds.find((item) => item.value === place.kind)?.label}</div>
                       </div>
                     </div>
                     <div>
@@ -2391,11 +2399,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <button type="button" onClick={() => setLabelFilters([])} className={`mb-2 w-full rounded px-3 py-2 text-left text-xs font-black ${labelFilters.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>전체 색상</button>
               <div className="grid grid-cols-3 gap-2">
                 {mapLabels.map((item) => (
-                  <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} title={item.name} className={`flex items-center gap-2 rounded border px-2 py-2 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
-                    <span className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />{item.code}
+                  <button key={item.code} type="button" onClick={() => setLabelFilters((current) => current.includes(item.code) ? current.filter((code) => code !== item.code) : [...current, item.code])} title={labelDesc(item.code) || item.name} className={`flex items-center gap-1.5 rounded border px-2 py-1.5 text-xs font-black ${labelFilters.includes(item.code) ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white"}`}>
+                    <span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="min-w-0 text-left leading-tight">{item.code}{labelDesc(item.code) && <span className="block truncate text-[9px] font-bold text-slate-500">{labelDesc(item.code)}</span>}</span>
                     <span className="ml-auto text-[11px] font-black text-slate-400">{labelCounts.get(item.code) || 0}</span>
                   </button>
                 ))}
+                {kindFilter === "ALL" && <div className="col-span-3 mt-1 text-[10px] font-bold text-slate-400">업무(분기·매월·재계약)를 고르면 색상별 의미가 표시됩니다.</div>}
               </div>
             </div>
           )}
@@ -2582,7 +2592,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             </section>
             <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">업무 정보</div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.team}팀</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-black"><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.team}팀</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{place.quarter}분기</span><span className="rounded px-2 py-1 text-white" style={{ backgroundColor: meta.color }}>{place.label}{labelDesc(place.label, place.kind) ? ` · ${labelDesc(place.label, place.kind)}` : ""}</span><span className="rounded-full bg-slate-100 px-2.5 py-1">{workKinds.find((item) => item.value === place.kind)?.label}</span></div>
+              <button type="button" onClick={() => openVendorHistory(place)} className="mt-2 rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-black text-white">🗂 통합이력 — 미수·초과·불만·점검 한 번에</button>
             </section>
             <section className="px-4 py-4">
               <div className="text-xs font-black text-slate-400">메모</div>
@@ -2645,7 +2656,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: item.color }} />
                         <b className={active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white" : "text-slate-950"}>{item.code}</b>
                       </span>
-                      {item.name && <span className={`mt-0.5 block text-[10px] font-bold leading-3 ${active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white/90" : "text-slate-500"}`}>{item.name}</span>}
+                      {(labelDesc(item.code, draft.kind) || item.name) && <span className={`mt-0.5 block text-[10px] font-bold leading-3 ${active && ["G4", "G5", "G8", "G11", "G12"].includes(item.code) ? "text-white/90" : "text-slate-500"}`}>{labelDesc(item.code, draft.kind) || item.name}</span>}
                     </button>;
                   })}
                 </div>
@@ -2773,52 +2784,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           </div>
         </div>
       )}
-      {flagDetail && (
-        <SheetDetailModal
-          title={flagHistory?.vendor || ""}
-          row={flagDetail.record}
-          fields={flagDetail.kind === "미수" ? MISU_DETAIL_FIELDS : flagDetail.kind === "초과" ? OVERAGE_DETAIL_FIELDS : Object.keys(flagDetail.record).filter((k) => !k.startsWith("_") && !["id", "created_at"].includes(k))}
-          layout={flagDetail.kind === "미수" ? MISU_DETAIL_LAYOUT : flagDetail.kind === "초과" ? OVERAGE_DETAIL_LAYOUT : undefined}
-          onClose={() => setFlagDetail(null)}
-        />
-      )}
-      {flagHistory && (
-        <div className="fixed inset-0 z-[2400] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setFlagHistory(null)}>
-          <div className="flex max-h-[78vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-              <div className="min-w-0">
-                <div className="text-[11px] font-black text-blue-600">최근 {flagHistory.kind} 이력 · 최신 {flagHistory.records.length || ""}건</div>
-                <div className="truncate text-base font-black text-slate-950">{flagHistory.vendor}</div>
-              </div>
-              <button type="button" onClick={() => setFlagHistory(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100">✕</button>
-            </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-              {flagHistory.loading && <div className="py-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-              {!flagHistory.loading && !flagHistory.records.length && <div className="py-8 text-center text-xs font-bold text-slate-400">이력을 찾지 못했습니다.</div>}
-              {flagHistory.records.map((record, i) => {
-                const date = normMisuDate(String(record["입력일"] || record["방문일"] || record["날짜"] || "")) || String(record["입력일"] || record["방문일"] || record["날짜"] || "").slice(0, 10);
-                const source = String(record["_출처"] || "").split(":")[0];
-                const summary = flagHistory.kind === "미수"
-                  ? `${String(record["미수개월"] || record["실제 개월수"] || "").replace(/개월/g, "").trim() || "-"}개월 · ${misuBalanceLabel(String(record["미수잔액"] || record["실제 잔액"] || ""))}`
-                  : flagHistory.kind === "초과"
-                    ? `합계 ${misuBalanceLabel(String(record["합계"] || "0"))}`
-                    : String(record["불만내용"] || record["불편내용"] || "").slice(0, 60) || "내용 확인";
-                return (
-                  <button key={i} type="button" onClick={() => setFlagDetail({ record, kind: flagHistory.kind })}
-                    className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
-                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{flagHistory.kind}</span>
-                    <span className="shrink-0 text-sm font-black text-slate-950">{date || "날짜 미상"}</span>
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-600">{summary}</span>
-                    {source && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{source}</span>}
-                    <span className="shrink-0 text-slate-300">›</span>
-                  </button>
-                );
-              })}
-              <div className="pt-1 text-center text-[10px] font-bold text-slate-400">건을 누르면 조회탭과 같은 상세가 열립니다</div>
-            </div>
-          </div>
-        </div>
-      )}
+      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} />
     </div>
   );
 }
