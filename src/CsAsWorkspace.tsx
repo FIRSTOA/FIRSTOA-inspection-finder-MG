@@ -1272,7 +1272,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           </label>
                           <div className="text-xs font-bold text-slate-500">팀
                             <div className="mt-1">
-                              <PortalSelect className="w-full py-2 font-semibold" width={240}
+                              <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
                                 value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}
                                 options={[{ value: "", label: naverDetail.time ? `기타 (${naverDetail.time})` : "종일" }, ...["A", "B", "C", "D", "E"].map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
                             </div>
@@ -1291,7 +1291,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         </label>
                         <div className="text-xs font-bold text-slate-500">캘린더 이동
                           <div className="mt-1">
-                            <PortalSelect className="w-full py-2 font-semibold" width={280}
+                            <PortalSelect direction="down" className="w-full py-2 font-semibold" width={280}
                               value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}
                               options={[...NAVER_CAL_LIST.map((c) => ({ value: c.id, label: c.name })), ...(NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) ? [] : [{ value: naverDetail.calendar_id, label: "(현재 캘린더)" }])]} />
                           </div>
@@ -1529,7 +1529,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </label>
                   <div className="text-xs font-bold text-slate-500">팀
                     <div className="mt-1">
-                      <PortalSelect className="w-full py-2 font-semibold" width={240}
+                      <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
                         value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}
                         options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
                     </div>

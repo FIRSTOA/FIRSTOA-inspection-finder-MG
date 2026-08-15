@@ -12,7 +12,7 @@ import { Check, ChevronDown } from "lucide-react";
 export type PortalOption = { value: string; label: string; group?: string; hint?: string };
 
 export default function PortalSelect({
-  value, onChange, options, tone = "light", placeholder = "선택", hint, width = 220, className = "", disabled,
+  value, onChange, options, tone = "light", placeholder = "선택", hint, width = 220, className = "", disabled, direction = "auto",
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -23,6 +23,7 @@ export default function PortalSelect({
   width?: number;
   className?: string;
   disabled?: boolean;
+  direction?: "auto" | "down"; // down = 항상 상자 바로 아래로 (모달 안에서 위로 튀는 것 방지)
 }) {
   const [spot, setSpot] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -33,8 +34,8 @@ export default function PortalSelect({
     if (!box) return;
     const below = window.innerHeight - box.bottom - 16;
     const above = box.top - 16;
-    const openUp = below < 240 && above > below;   // 아래가 좁으면 위로 펼친다
-    const maxHeight = Math.min(420, Math.max(180, openUp ? above : below));
+    const openUp = direction === "auto" && below < 240 && above > below;   // 아래가 좁으면 위로 펼친다 (down 지정 시 항상 아래)
+    const maxHeight = Math.min(420, Math.max(140, openUp ? above : below));
     const panelWidth = Math.max(width, box.width);
     setSpot({
       top: openUp ? box.top - 8 - maxHeight : box.bottom + 8,
