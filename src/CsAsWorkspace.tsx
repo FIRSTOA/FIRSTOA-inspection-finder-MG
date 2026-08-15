@@ -517,6 +517,56 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         notify(`네이버 일정 이동 실패: ${(e as Error).message}`, "error");
       });
   };
+  // 네이버 일정 필드 저장 — 티켓 모달과 같은 감각(입력창 벗어나면 저장), 네이버에 바로 반영
+  const saveNaverField = async (patch: Partial<Pick<NaverEventRow, "title" | "date" | "time" | "location" | "description">>) => {
+    const ev = naverDetail;
+    if (!ev) return;
+    const next = { ...ev, ...patch };
+    setNaverDetail(next);
+    setNaverEvents((cur) => cur.map((x) => (x.uid === ev.uid ? next : x)));
+    try {
+      await invokeEdgeFunction("naver-calendar-push", {
+        action: "caldav_update", uid: ev.uid, calId: ev.calendar_id,
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.location !== undefined ? { location: patch.location } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.date !== undefined ? { date: patch.date } : {}),
+        ...(patch.time !== undefined ? { time: patch.time } : {}),
+      });
+      notify("저장됐습니다 — 네이버 캘린더에도 반영 ✓", "success");
+    } catch (e) {
+      setNaverDetail(ev);
+      setNaverEvents((cur) => cur.map((x) => (x.uid === ev.uid ? ev : x)));
+      notify(`네이버 반영 실패: ${(e as Error).message}`, "error");
+    }
+  };
+  // 캘린더 간 이동 — 동기화 대상 캘린더면 분류가 바뀌고, 그 외(완료 캘린더 등)면 목록에서 빠진다
+  const NAVER_CAL_LIST = [
+    { id: "76de84c7-48a2-46c6-8de0-edc721a03f3f", name: "익일통합as" },
+    { id: NAVER_DELIVERY_CAL, name: "납품철수교체휴가교육" },
+    { id: "75904193", name: "강남C as (완료 캘린더)" },
+  ];
+  const transferNaverEvent = async (toCal: string) => {
+    const ev = naverDetail;
+    if (!ev) return;
+    const toName = NAVER_CAL_LIST.find((c) => c.id === toCal)?.name || "다른 캘린더";
+    if (!window.confirm(`이 일정을 "${toName}"(으)로 옮길까요?`)) return;
+    try {
+      await invokeEdgeFunction("naver-calendar-push", { action: "caldav_transfer", uid: ev.uid, calId: ev.calendar_id, toCal });
+      const synced = toCal === "76de84c7-48a2-46c6-8de0-edc721a03f3f" || toCal === NAVER_DELIVERY_CAL;
+      if (synced) {
+        const next = { ...ev, calendar_id: toCal };
+        setNaverDetail(next);
+        setNaverEvents((cur) => cur.map((x) => (x.uid === ev.uid ? next : x)));
+      } else {
+        setNaverEvents((cur) => cur.filter((x) => x.uid !== ev.uid));
+        setNaverDetail(null);
+      }
+      notify(`"${toName}"(으)로 이동했습니다 ✓`, "success");
+    } catch (e) {
+      notify(`캘린더 이동 실패: ${(e as Error).message}`, "error");
+    }
+  };
   // 완료 체크 토글 — 네이버 일정을 옮기지 않고 완료 표시만 (네이버 앱에도 체크로 보임)
   const [naverCheckBusy, setNaverCheckBusy] = useState(false);
   const toggleNaverComplete = async () => {
@@ -639,7 +689,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [customDate, setCustomDate] = useState(tomorrowYmd);
 
   const editTicket = tickets.find((ticket) => ticket.id === editId);
-  const [naverEditTicket, setNaverEditTicket] = useState<AsTicket | null>(null); // 네이버 미러 일정 조회·수정 모달
   const detailTicket = tickets.find((ticket) => ticket.id === detailId);
   useEffect(() => {
     setDetailReception(null);
@@ -1147,7 +1196,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <div className="text-[11px] font-black text-slate-400">{["일", "월", "화", "수", "목", "금", "토"][new Date(`${naverDayDate}T00:00:00`).getDay()]}요일 일정</div>
                           <div className="mt-0.5 text-[16px] font-black text-white">{Number(naverDayDate.slice(5, 7))}월 {Number(naverDayDate.slice(8, 10))}일 · {rows.length}{rows.length !== rowsAll.length ? ` / ${rowsAll.length}` : ""}건</div>
                         </div>
-                        <button type="button" onClick={() => { const d = naverDayDate; setNaverDayDate(null); setNewTicket(blankTicket(d, newTicketDefaults())); }} className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">＋ 일정 추가</button>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/70 px-4 py-2">
                         <span className="mr-0.5 text-[10px] font-black text-slate-400">팀</span>
@@ -1168,31 +1216,58 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   );
                 })()}
                 {naverDetail && (
-                  <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setNaverDetail(null)}>
-                    <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+                  <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-4" onMouseDown={() => setNaverDetail(null)}>
+                    <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
                       <div className="bg-[#1E252F] px-5 py-4">
-                        <div className="text-[11px] font-black text-emerald-400">네이버 {naverCategoryOf(naverDetail)} — 내용 수정·삭제는 네이버 캘린더에서</div>
-                        <div className={`mt-0.5 text-[15px] font-black leading-snug text-white ${naverDetail.completed ? "line-through opacity-60" : ""}`}>{naverDetail.completed ? "✅ " : ""}{naverDetail.title || "(제목 없음)"}</div>
-                      </div>
-                      <div className="space-y-2 px-5 py-4">
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">일시</span>
-                          {naverDetail.date} {naverDetail.time || "(종일)"}
+                        <div className="flex items-center gap-2 text-[11px] font-black">
+                          <span className={`rounded px-1.5 py-0.5 text-white ${naverBadgeStyle(naverDetail)}`}>{naverCategoryOf(naverDetail)}</span>
+                          {naverTeamOf(naverDetail) && <span className="rounded bg-white/10 px-1.5 py-0.5 text-slate-300">{naverTeamOf(naverDetail)}팀</span>}
+                          {naverDetail.completed && <span className="rounded bg-emerald-500/90 px-1.5 py-0.5 text-white">완료됨</span>}
+                          <span className="ml-auto text-slate-400">수정하면 네이버 캘린더에 바로 반영</span>
                         </div>
-                        {!!naverDetail.location && (
-                          <div className="flex items-start gap-2 text-sm font-bold text-slate-700">
-                            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">장소</span>
-                            <span className="min-w-0">{naverDetail.location}</span>
-                          </div>
-                        )}
-                        {!!naverDetail.description && (
-                          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] font-medium leading-5 text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{naverDetail.description}</div>
-                        )}
-                        <p className="pt-1 text-[11px] font-semibold text-slate-400">배정·완료·익일 처리가 필요하면 웹앱 일정으로 등록하세요 — 등록하면 이 네이버 일정과 연결돼 완료·날짜 변경이 네이버에도 반영됩니다.</p>
+                        {/* 제목 바로 수정 — 웹앱 일정 모달과 같은 방식 (Enter/입력창 벗어나면 저장) */}
+                        <input
+                          key={naverDetail.uid}
+                          defaultValue={naverDetail.title}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== naverDetail.title) void saveNaverField({ title: v }); }}
+                          style={{ fontWeight: 700 }}
+                          className="mt-2 w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-[15px] text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15"
+                          placeholder="제목 (저장하면 네이버도 바뀜)" />
                       </div>
-                      <div className="flex gap-2 px-4 pb-4">
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-xs font-bold text-slate-500">날짜
+                            <input type="date" value={naverDetail.date} onChange={(e) => { if (e.target.value) void saveNaverField({ date: e.target.value }); }}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                          </label>
+                          <label className="text-xs font-bold text-slate-500">시간 {!naverDetail.time && <span className="font-semibold text-slate-400">(종일)</span>}
+                            <input type="time" value={naverDetail.time} onChange={(e) => { if (e.target.value) void saveNaverField({ time: e.target.value, date: naverDetail.date }); }}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                          </label>
+                        </div>
+                        <label className="block text-xs font-bold text-slate-500">장소
+                          <input key={`loc-${naverDetail.uid}`} defaultValue={naverDetail.location}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                            onBlur={(e) => { const v = e.target.value.trim(); if (v !== naverDetail.location) void saveNaverField({ location: v }); }}
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500" />
+                        </label>
+                        <label className="block text-xs font-bold text-slate-500">내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
+                          <textarea key={`desc-${naverDetail.uid}`} defaultValue={naverDetail.description} rows={7}
+                            onBlur={(e) => { const v = e.target.value; if (v !== naverDetail.description) void saveNaverField({ description: v }); }}
+                            className="mt-1 w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                        </label>
+                        <label className="block text-xs font-bold text-slate-500">캘린더 이동
+                          <select value={naverDetail.calendar_id} onChange={(e) => { if (e.target.value !== naverDetail.calendar_id) void transferNaverEvent(e.target.value); }}
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500">
+                            {NAVER_CAL_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {!NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) && <option value={naverDetail.calendar_id}>(현재 캘린더)</option>}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
                         <button type="button" onClick={() => setNaverDetail(null)} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">닫기</button>
-                        <button type="button" disabled={naverCheckBusy} onClick={() => void toggleNaverComplete()} className={`flex-1 rounded-full py-2.5 text-sm font-black transition disabled:opacity-40 ${naverDetail.completed ? "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{naverCheckBusy ? "처리 중…" : naverDetail.completed ? "완료 해제" : "✓ 완료"}</button>
+                        <button type="button" disabled={naverCheckBusy} onClick={() => { if (naverDetail.completed || window.confirm("이 네이버 캘린더 일정을 완료 처리할까요?\n(네이버 앱에도 완료 체크로 표시됩니다)")) void toggleNaverComplete(); }} className={`flex-1 rounded-full py-2.5 text-sm font-black transition disabled:opacity-40 ${naverDetail.completed ? "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{naverCheckBusy ? "처리 중…" : naverDetail.completed ? "완료 해제" : "✓ 완료"}</button>
                         <button type="button" onClick={promoteNaverEvent} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">📋 일정 등록</button>
                       </div>
                     </div>
@@ -1348,7 +1423,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <input
                     key={ticket.id}
                     defaultValue={(ticket.calendarTitle || "").trim() || ticket.vendor}
-                    onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== ((ticket.calendarTitle || "").trim() || ticket.vendor)) update(ticket.id, { calendarTitle: v }); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== ((ticket.calendarTitle || "").trim() || ticket.vendor)) { update(ticket.id, { calendarTitle: v }); notify("제목이 저장됐습니다" + (ticket.naverUid ? " — 네이버 캘린더에도 반영 ✓" : " ✓"), "success"); } }}
                     style={{ fontWeight: 700 }}
                     className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-[15px] text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15"
                     placeholder="제목 (수정하면 네이버 캘린더도 바뀜)" />
@@ -1417,8 +1493,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         );
       })()}
 
-      {naverEditTicket && <NaverEventModal ticket={naverEditTicket} onClose={() => setNaverEditTicket(null)} />}
-      {editTicket && <TicketEditModal ticket={editTicket} onNaver={editTicket.naverUid ? () => setNaverEditTicket(editTicket) : undefined} onClose={() => setEditId("")} onSave={(patch) => {
+      {editTicket && <TicketEditModal ticket={editTicket} onClose={() => setEditId("")} onSave={(patch) => {
         const newDate = patch.date;
         if (editTicket.repeatMonthly && patch.repeatMonthly !== false && newDate && newDate !== editTicket.date && seriesOthers(editTicket).length) {
           update(editTicket.id, { ...patch, date: editTicket.date });
@@ -1487,64 +1562,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 }
 
 // 네이버 캘린더 미러 일정 조회·수정 — CalDAV 경유 (실험적: 네이버 비공식 통로)
-function NaverEventModal({ ticket, onClose }: { ticket: AsTicket; onClose: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({ title: "", location: "", description: "" });
-  useEffect(() => {
-    void (async () => {
-      try {
-        const data = await invokeEdgeFunction<{ title?: string; description?: string; location?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
-        setForm({ title: data.title || "", location: data.location || "", description: data.description || "" });
-        setError("");
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [ticket.naverUid]);
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, ...form });
-      window.alert("네이버 캘린더 일정이 수정됐습니다 ✓");
-      onClose();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-  const field = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
-  return (
-    <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <b>네이버 캘린더 일정 수정 <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">실험적</span></b>
-          <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
-        </div>
-        <div className="min-h-0 space-y-3 overflow-y-auto p-5">
-          {loading && <div className="py-8 text-center text-sm font-bold text-slate-400">네이버에서 일정을 불러오는 중…</div>}
-          {!loading && error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-700">{error}</div>}
-          {!loading && !error && <>
-            <label className="block text-xs font-bold text-slate-500">제목<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} /></label>
-            <label className="block text-xs font-bold text-slate-500">장소<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className={field} /></label>
-            <label className="block text-xs font-bold text-slate-500">내용<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={10} className={`${field} resize-y font-mono text-xs leading-5`} /></label>
-          </>}
-        </div>
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3.5">
-          <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
-          {!loading && !error && <button type="button" disabled={saving} onClick={() => void save()} className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-40">{saving ? "저장 중…" : "네이버에 저장"}</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete, onNaver }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void; onNaver?: () => void }) {
+function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onComplete, onDefer, onDelete }: { ticket: AsTicket; title?: string; onClose: () => void; onSave: (patch: Partial<AsTicket>) => void; onComplete?: () => void; onDefer?: () => void; onDelete?: () => void }) {
   const [draft, setDraft] = useState(ticket);
   const set = <K extends keyof AsTicket>(key: K, value: AsTicket[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -1616,7 +1635,6 @@ function TicketEditModal({ ticket, title = "일정 수정", onClose, onSave, onC
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
           <div className="flex items-center gap-2">
             {onDelete && <button type="button" onClick={onDelete} className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600">삭제</button>}
-            {onNaver && <button type="button" onClick={onNaver} className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">네이버 캘린더</button>}
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
@@ -1636,8 +1654,9 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
   return (
     <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
       <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="text-lg font-black text-slate-950">✓ 완료 처리</div>
+        <div className="text-lg font-black text-slate-950">✓ 완료 처리하시겠습니까?</div>
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
+        {!!ticket.naverUid && <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정도 {ticket.team}팀 완료 캘린더로 이동되고 완료 체크됩니다.</div>}
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
           placeholder="처리 내용 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
           className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />

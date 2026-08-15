@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // CalDAV: 네이버 일정 조회/수정/삭제 (uid 필요 — 웹앱이 등록 때 저장해 둔 값)
-    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move" || body.action === "caldav_check") {
+    if (body.action === "caldav_get" || body.action === "caldav_update" || body.action === "caldav_delete" || body.action === "caldav_move" || body.action === "caldav_check" || body.action === "caldav_transfer") {
       const auth = caldavAuth();
       if (!auth) return Response.json({ error: "CalDAV 미설정 — NAVER_CALDAV_ID/NAVER_CALDAV_APP_PASSWORD Secrets가 필요합니다" }, { status: 400, headers: jsonHeaders });
       const uid = String(body.uid || "").trim();
@@ -159,6 +159,18 @@ Deno.serve(async (req) => {
           location: icsProp(ics, "LOCATION"),
           dtstart: icsProp(ics, "DTSTART"),
         }, { headers: jsonHeaders });
+      }
+      // 캘린더 간 이동 — calId(현재)에서 toCal로 그대로 옮긴다 (내용 무변경)
+      if (body.action === "caldav_transfer") {
+        const toCal = String(body.toCal || "").trim();
+        if (!toCal) return Response.json({ error: "toCal(이동할 캘린더 ID)이 필요합니다" }, { status: 400, headers: jsonHeaders });
+        if (toCal === calId) return Response.json({ ok: true, status: "unchanged" }, { headers: jsonHeaders });
+        const putT = await fetch(caldavEventUrl(auth.id, toCal, uid), {
+          method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: ics,
+        });
+        if (putT.status >= 400) throw new Error(`캘린더 이동 실패(${putT.status}) — 대상 캘린더 권한을 확인하세요`);
+        await fetch(url, { method: "DELETE", headers: { Authorization: auth.header } }).catch(() => {});
+        return Response.json({ ok: true, status: "transferred", toCal }, { headers: jsonHeaders });
       }
       // 완료 체크 토글 — 일정을 옮기지 않고 제자리에서 네이버 완료 표시만 켜고/끈다
       if (body.action === "caldav_check") {
