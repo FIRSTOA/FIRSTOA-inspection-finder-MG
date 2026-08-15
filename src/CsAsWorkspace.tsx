@@ -1069,8 +1069,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [naverEvents, tickets, listTypes, team, dayFilter, todayYmd, tomorrowYmd]);
-  // 행에서 바로 전화 — 접수 후 첫 동작이 고객 전화라서. 네이버 수입 건은 제목·내용에 적힌 번호를 찾는다
-  const firstPhoneOf = (t: AsTicket) => (`${t.contact || ""}\n${t.keyman || ""}\n${t.vendor || ""}\n${t.issue || ""}\n${t.note || ""}`.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
+  // 행에서 바로 전화 — 접수자 연락처·키맨의 첫 번호만. 없으면 버튼을 만들지 않는다 (제목에서 긁으면 엉뚱한 숫자가 잡힘)
+  const firstPhoneOf = (t: AsTicket) => (`${t.contact || ""}\n${t.keyman || ""}`.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
   // 상태 요약 바: 전체/미배정/진행/완료 — 클릭하면 그 상태만 (아침에 "뭐부터"가 바로 보이게)
   const [statusPick, setStatusPick] = useState<"" | "미배정" | "배정" | "완료">("");
   const statusOf = (t: AsTicket) => (t.status === "완료" ? "완료" : t.assignee ? "배정" : "미배정");
@@ -1086,15 +1086,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const ka = a.assignee || "";
     const kb = b.assignee || "";
     if (ka !== kb) return ka === "" ? -1 : kb === "" ? 1 : ka.localeCompare(kb, "ko");
-    // 같은 사람 안에서는 날짜 → 시간 → 지역구(성동구끼리 모임) → 제목 이름순
+    // 같은 사람 안에서는 날짜 → 구분(납품 먼저→익일as) → 지역구(성동구끼리 모임) → 시간 → 제목 이름순
     if (a.date !== b.date) return a.date.localeCompare(b.date);
-    if ((a.time || "") !== (b.time || "")) return (a.time || "").localeCompare(b.time || "");
+    const ca = CAT_ORDER[displayTypeOf(a)] ?? 9, cb = CAT_ORDER[displayTypeOf(b)] ?? 9;
+    if (ca !== cb) return ca - cb;
     const ga = guOf(a.address || ""), gb = guOf(b.address || "");
     if (ga !== gb) return ga.localeCompare(gb, "ko");
+    if ((a.time || "") !== (b.time || "")) return (a.time || "").localeCompare(b.time || "");
     return displayTitleOf(a).localeCompare(displayTitleOf(b), "ko");
   });
   const listNaver = naverBase.filter((ev) => !statusPick || (ev.completed ? "완료" : "미배정") === statusPick)
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || "") || guOf(a.location || "").localeCompare(guOf(b.location || ""), "ko") || (a.title || "").localeCompare(b.title || "", "ko"));
+    .sort((a, b) => a.date.localeCompare(b.date) || ((CAT_ORDER[naverCategoryOf(a)] ?? 9) - (CAT_ORDER[naverCategoryOf(b)] ?? 9)) || guOf(a.location || "").localeCompare(guOf(b.location || ""), "ko") || (a.time || "").localeCompare(b.time || "") || (a.title || "").localeCompare(b.title || "", "ko"));
 
   // 기본 조회 범위(6개월) 이전 달을 캘린더에서 열면 그 달 일정만 추가 로드
   const loadedOldMonthsRef = useRef(new Set<string>());
@@ -1439,7 +1441,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               const dowOf = (date: string) => ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()];
               // 네이버 원본 행 — 티켓과 같은 컬럼 구도로 한 표에 들어간다 (클릭=네이버 상세, 완료=제자리 체크)
               const naverListRow = (ev: NaverEventRow, done: boolean) => {
-                const phone = ((`${ev.title}\n${ev.description || ""}\n${ev.location || ""}`).match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
                 const evTeam = ev.time ? (naverTeamOf(ev) || "기타") : "종일";
                 return (
                   <tr key={`nv-${ev.uid}`} onClick={() => setNaverDetail({ ...ev })} className={`h-12 cursor-pointer border-b last:border-0 ${done ? "border-blue-100 bg-blue-50/60 hover:bg-blue-50" : "border-slate-100 hover:bg-blue-50/40"}`}>
@@ -1447,13 +1448,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ev.location || "") || "-"}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold text-slate-300">-</td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ev.date)})</span></td>
+                    {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ev.date)})</span></td>}
                     <td className="px-3 py-1.5"><div className={`max-w-[360px] truncate text-sm font-black ${done ? "text-slate-400 line-through" : "text-slate-900"}`} title={ev.title}>{ev.title || "(제목 없음)"}</div></td>
                     <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ev.description || ""}>{ev.description || "-"}</div></td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-xs text-slate-300">-</td>
                     <td className="whitespace-nowrap px-3 py-1.5" onClick={(event) => event.stopPropagation()}>
                       <div className="flex flex-nowrap justify-end gap-1.5">
-                        {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700" title={phone}>📞</a>}
                         <button type="button" onClick={() => void toggleNaverComplete(ev)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-black ${done ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{done ? "취소" : "완료"}</button>
                       </div>
                     </td>
@@ -1475,7 +1475,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{ticket.team === "기타" ? "기타" : `${ticket.team}팀`}</td>
                             <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, true)}`}>{shortCat(displayTypeOf(ticket))}</span></td>
                             <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
-                            <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</td>
+                            {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</td>}
                             <td className="w-[54%] px-3 py-1.5 text-sm font-black text-slate-500 line-through"><div className="max-w-[420px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div></td>
                             <td className="whitespace-nowrap px-3 py-1.5" onClick={(event) => event.stopPropagation()}>
                               <div className="flex justify-end"><button type="button" onClick={() => openDone(ticket)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button></div>
@@ -1489,7 +1489,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                               <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{evTeam === "종일" || evTeam === "기타" ? evTeam : `${evTeam}팀`}</td>
                               <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
                               <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ev.location || "") || "-"}</td>
-                              <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))}</td>
+                              {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))}</td>}
                               <td className="w-[54%] px-3 py-1.5 text-sm font-black text-slate-500 line-through"><div className="max-w-[420px] truncate" title={ev.title}>{ev.title || "(제목 없음)"}</div></td>
                               <td className="whitespace-nowrap px-3 py-1.5" onClick={(event) => event.stopPropagation()}>
                                 <div className="flex justify-end"><button type="button" onClick={() => void toggleNaverComplete(ev)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-500">완료 취소</button></div>
@@ -1511,7 +1511,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <table className="w-full min-w-[1100px] text-left">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50">
-                          <th className={th}>팀</th><th className={th}>구분</th><th className={th}>지역구</th><th className={th}>접수시간</th><th className={th}>방문일정</th>
+                          <th className={th}>팀</th><th className={th}>구분</th><th className={th}>지역구</th><th className={th}>접수시간</th>{dayFilter === "scheduled" && <th className={th}>방문일정</th>}
                           <th className={`${th} w-[28%]`}>제목</th><th className={`${th} w-[20%]`}>접수내용</th>
                           <th className={th}>기기</th><th className={`${th} text-right`}>처리</th>
                         </tr>
@@ -1523,7 +1523,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>{shortCat(displayTypeOf(ticket))}</span></td>
                             <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                             <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{ticket.source === "naver" ? <span className="text-slate-300">-</span> : (ticket.time || "종일")}{ticket.source !== "naver" && elapsedLabel(ticket) && <span className="ml-1 text-[10px] font-black text-amber-600">⏱ {elapsedLabel(ticket)}</span>}</td>
-                            <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>
+                            {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<span className="shrink-0"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></span></div>
                             </td>
