@@ -588,6 +588,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [naverDupOpen, setNaverDupOpen] = useState<"복제" | "반복" | "익일" | null>(null);
   const [naverDupDate, setNaverDupDate] = useState("");
   const [naverDupBusy, setNaverDupBusy] = useState(false);
+  const [naverDeleteConfirm, setNaverDeleteConfirm] = useState(false);
+  const deleteNaverEvent = async () => {
+    const ev = naverDetail;
+    if (!ev) return;
+    setNaverDeleteConfirm(false);
+    try {
+      await invokeEdgeFunction("naver-calendar-push", { action: "caldav_delete", uid: ev.uid, calId: ev.calendar_id });
+      setNaverEvents((cur) => cur.filter((x) => x.uid !== ev.uid));
+      setNaverDetail(null);
+      notify("네이버 캘린더에서 삭제됐습니다 ✓", "success");
+    } catch (e) {
+      notify(`삭제 실패: ${(e as Error).message}`, "error");
+    }
+  };
   const duplicateNaverEvent = async (dates: string[]) => {
     const ev = naverDetail;
     if (!ev || naverDupBusy) return;
@@ -856,13 +870,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
-  const removeTicket = (ticket: AsTicket) => {
-    if (!window.confirm(`${ticket.vendor || "이 일정"}을 삭제할까요?${ticket.naverUid ? "\n(네이버 캘린더 미러 일정도 함께 삭제 시도)" : ""}`)) return false;
+  // 삭제는 디자인 확인 모달을 거친다 (브라우저 confirm 대체) — 확정 시 doRemoveTicket 실행
+  const [deleteTarget, setDeleteTarget] = useState<AsTicket | null>(null);
+  const removeTicket = (ticket: AsTicket) => { setDeleteTarget(ticket); return false; };
+  const doRemoveTicket = (ticket: AsTicket) => {
     setTickets(tickets.filter((item) => item.id !== ticket.id));
     removeRemote(ticket.id);
     if (ticket.naverUid) void invokeEdgeFunction("naver-calendar-push", { action: "caldav_delete", uid: ticket.naverUid }).catch(() => { /* CalDAV 미설정·실패 시 네이버에서 직접 삭제 */ });
     setEditId("");
-    return true;
+    setDetailId("");
+    setDeleteTarget(null);
+    notify("일정이 삭제됐습니다" + (ticket.naverUid ? " — 네이버 캘린더 미러도 함께 삭제 ✓" : " ✓"), "success");
   };
 
   // 완료·연기 사유 공유: 팀 AS방으로 "업체명 - 라벨 / 줄바꿈 / 내용" 전송 + 네이버 일정 내용에 기록.
@@ -1302,9 +1320,25 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <button type="button" onClick={() => { setNaverDupDate(getTomorrowYmd()); setNaverDupOpen("익일"); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
                           <button type="button" onClick={() => { setNaverDupDate(naverDetail.date); setNaverDupOpen("복제"); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                           <button type="button" onClick={() => setNaverDupOpen("반복")} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">매월 반복</button>
+                          <button type="button" onClick={() => setNaverDeleteConfirm(true)} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
                         </div>
                         <button type="button" disabled={naverCheckBusy} onClick={() => { if (naverDetail.completed) void toggleNaverComplete(); else setNaverDoneConfirm(true); }} className={`w-full rounded-lg py-2.5 text-xs font-black transition disabled:opacity-40 ${naverDetail.completed ? "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{naverCheckBusy ? "처리 중…" : naverDetail.completed ? "완료 해제" : "✓ 완료"}</button>
                       </div>
+                      {naverDeleteConfirm && (
+                        <div className="fixed inset-0 z-[2460] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setNaverDeleteConfirm(false)}>
+                          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+                            <div className="bg-[#1E252F] px-5 py-4">
+                              <div className="text-[11px] font-black text-rose-400">🗑 삭제하시겠습니까?</div>
+                              <div className="mt-0.5 truncate text-[15px] font-black text-white">{naverDetail.title || "(제목 없음)"}</div>
+                            </div>
+                            <div className="px-5 py-4 text-sm font-bold text-slate-700">삭제하면 되돌릴 수 없습니다.<div className="mt-1.5 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">네이버 캘린더에서도 삭제됩니다.</div></div>
+                            <div className="flex gap-2 px-4 pb-4">
+                              <button type="button" onClick={() => setNaverDeleteConfirm(false)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
+                              <button type="button" onClick={() => void deleteNaverEvent()} className="flex-[2] rounded-full bg-rose-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(225,29,72,0.3)] transition hover:bg-rose-700">삭제</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {naverDoneConfirm && (
                         <div className="fixed inset-0 z-[2450] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setNaverDoneConfirm(false)}>
                           <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -1620,7 +1654,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                   {view === "calendar" && <button type="button" onClick={() => { if (ticket.repeatMonthly) { update(ticket.id, { repeatMonthly: false }); } else { update(ticket.id, { repeatMonthly: true }); notify("다음 달부터 11개월, 매월 같은 날로 생성했습니다 ✓", "success"); } }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">{ticket.repeatMonthly ? "반복 해제" : "매월 반복"}</button>}
                   {view === "as" && <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>}
-                  {view === "as" && <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>}
+                  <button type="button" onClick={() => { removeTicket(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
                 {view === "as" && <div className="flex gap-1.5">
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && onUseField && <button type="button" onClick={() => { setDetailId(""); onUseField(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }); }} className="flex-1 whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD AS</button>}
@@ -1697,6 +1731,21 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       )}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
       {doneTicket && <DoneReasonModal ticket={doneTicket} onClose={() => setDoneTicket(null)} onApply={(reason) => void applyDone(reason)} />}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[2460] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setDeleteTarget(null)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="bg-[#1E252F] px-5 py-4">
+              <div className="text-[11px] font-black text-rose-400">🗑 삭제하시겠습니까?</div>
+              <div className="mt-0.5 truncate text-[15px] font-black text-white">{(deleteTarget.calendarTitle || "").trim() || deleteTarget.vendor || "이 일정"}</div>
+            </div>
+            <div className="px-5 py-4 text-sm font-bold text-slate-700">삭제하면 되돌릴 수 없습니다.{deleteTarget.naverUid && <div className="mt-1.5 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">네이버 캘린더의 미러 일정도 함께 삭제됩니다.</div>}</div>
+            <div className="flex gap-2 px-4 pb-4">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
+              <button type="button" onClick={() => doRemoveTicket(deleteTarget)} className="flex-[2] rounded-full bg-rose-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(225,29,72,0.3)] transition hover:bg-rose-700">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
