@@ -11,7 +11,7 @@
  *  - 내 일정 FIELD 불러오기가 분기점검을 AS로 변환하던 모드 감지 경로
  */
 import { describe, expect, it } from "vitest";
-import { normalizeId, parseEquipComment, vendorMatchKey, workinVendorName } from "../src/ids";
+import { historyCoreName, normalizeId, parseEquipComment, vendorMatchKey, workinVendorName } from "../src/ids";
 import { normRegion } from "../src/region";
 import { detectReportTypesFromInput, detectUnifiedInputMode } from "../src/fieldModes";
 import { nextBusinessDay } from "../src/planDate";
@@ -46,6 +46,17 @@ describe("vendorMatchKey — 업체명 매칭 키", () => {
 
   it("접두·꼬리 없는 평범한 이름은 그대로", () => {
     expect(vendorMatchKey("잡플러스")).toBe("잡플러스");
+  });
+});
+
+describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
+  it("접수 제목에서 업체명만 뽑는다 (퍼뮤니티 사례 — 통째 검색 0건 사고)", () => {
+    expect(historyCoreName("여분요청 N SL-X3220NR 14N주식회사 퍼뮤니티 (Furmunity Corp.)-분기마감 종료일 28. 5. 14 지역 수도권C 접수")).toBe("퍼뮤니티");
+    expect(historyCoreName("주식회사 무암 (Mooam)")).toBe("무암");
+    expect(historyCoreName("이동유통 주식회사에스플러스인베스트먼트(유")).toBe("이동유통");
+  });
+  it("평범한 업체명은 그대로", () => {
+    expect(historyCoreName("한성알앤씨")).toBe("한성알앤씨");
   });
 });
 

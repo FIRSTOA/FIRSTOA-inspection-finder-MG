@@ -30,6 +30,23 @@ export function workinVendorName(value: string) {
   return noTail.replace(/[\s\-·,()]+$/, "").trim();
 }
 
+// 통합이력 검색어 뽑기 — 접수 제목("여분요청 N SL-X3220NR 14N주식회사 퍼뮤니티 …")이나 워킨맵 잡문이
+// 통째로 들어오면 검색이 0건이라, 접수 키워드·모델명·숫자등급 접두를 건너뛰고 첫 업체명 토큰만 남긴다.
+const HISTORY_STOPWORD = /^(여분요청|자가요청|자가|여분|접수|방문|요청|점검|정기점검|교체|철수|납품|이전셋팅만?|셋팅|종료일|지역|수도권[A-E]?|분기마감|매월마감|마감|오전|오후|긴급|급함|레벨\d*)$/;
+export function historyCoreName(raw: string) {
+  const cleaned = workinVendorName(raw) || String(raw || "").trim();
+  for (const token of cleaned.split(/[\s|·,~()/\-]+/)) {
+    if (!/[가-힣]/.test(token)) continue; // 영문·숫자만인 토큰은 모델명·시리얼일 가능성이 높다
+    if (HISTORY_STOPWORD.test(token)) continue;
+    const core = token
+      .replace(/^\d+[A-Za-z]*(?=[가-힣])/, "") // "14N주식회사" → "주식회사"
+      .replace(/^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인|㈜)/, "");
+    if (core.length < 2 || HISTORY_STOPWORD.test(core)) continue;
+    return core;
+  }
+  return cleaned;
+}
+
 // 워킨맵 comment는 "모델 / 시리얼" 표기(공백 유무 혼재) — 첫 슬래시가 구분자.
 // 자동일정 등록·내 일정 표시가 같은 규칙을 쓴다.
 export function parseEquipComment(comment: string): { model: string; serial: string } {

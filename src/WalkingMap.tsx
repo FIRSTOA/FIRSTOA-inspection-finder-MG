@@ -6,7 +6,7 @@ import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } 
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
-import { normalizeId as normalizeIdKey, vendorMatchKey, workinVendorName } from "./ids";
+import { historyCoreName, normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import UnifiedHistory from "./UnifiedHistory";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
@@ -1222,13 +1222,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   // 미수·초과·불만 알림 클릭 → 통합이력 팝업 (전사 공통 흐름 — 자체 미니 이력 팝업은 2026-08-15 통합이력으로 흡수)
-  // 워킨맵 지명은 상호가 여러 개 이어붙은 잡문이 많아 통째로 검색하면 0건 — 법인 접두어를 떼고 첫 핵심 토큰만 검색어로 쓴다
+  // 워킨맵 지명은 잡문이 많아 통째로 검색하면 0건 — 공용 추출기로 첫 업체명 토큰만 검색어로 쓴다
   const [histVendor, setHistVendor] = useState("");
-  const openVendorHistory = (place: { name: string }) => {
-    const cleaned = workinVendorName(place.name) || place.name;
-    const core = cleaned.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)|\(유\)/g, " ").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || cleaned;
-    setHistVendor(core.length >= 2 ? core : cleaned);
-  };
+  const openVendorHistory = (place: { name: string }) => setHistVendor(historyCoreName(place.name));
   const [misuFailed, setMisuFailed] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);

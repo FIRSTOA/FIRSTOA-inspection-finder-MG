@@ -9,7 +9,7 @@ import { parseEquipComment } from "./ids";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
-import { vendorMatchKey } from "./ids";
+import { historyCoreName, vendorMatchKey } from "./ids";
 import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
@@ -257,7 +257,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                       {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
-                      <VendorAlertChip flags={fl} onOpen={() => setHistVendor(r.vendor || r.place_name)} />
+                      <VendorAlertChip flags={fl} onOpen={() => setHistVendor(historyCoreName(r.vendor || r.place_name))} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
                       {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}

@@ -12,7 +12,7 @@ import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemot
 import { prepareImageForUpload } from "./imageUpload";
 import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
-import { vendorMatchKey } from "./ids";
+import { historyCoreName, vendorMatchKey } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
@@ -1452,7 +1452,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-base font-black text-slate-950 lg:text-lg">{pick(lease, "거래처명", "_업체명")}</span>
-                  <VendorAlertChip flags={vendorAlert} onOpen={() => setHistVendor(vendorName)} />
+                  <VendorAlertChip flags={vendorAlert} onOpen={() => setHistVendor(historyCoreName(vendorName))} />
                   {workinName && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
                   {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
                 </div>
