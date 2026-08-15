@@ -106,7 +106,8 @@ create function suggest_workin_candidates(
     select lower(regexp_replace(coalesce(v."기번",''), '[^0-9A-Za-z]', '', 'g')) as ident,
            vendor_key_(v."_업체명") as dk,
            case when coalesce(v."품목",'') ~ '복합기|프린터|플로터' then '복합기'
-                when coalesce(v."품목",'') ~* 'pc|데스크|노트북|모니터|태블릿|소프트웨어' then 'PC'
+                when coalesce(v."품목",'') ~* '모니터' then '모니터'  -- "PC모니터"를 PC로 합치면 대수가 부풀어 보인다
+                when coalesce(v."품목",'') ~* 'pc|데스크|노트북|태블릿|소프트웨어' then 'PC'
                 else '기타' end as cat,
            btrim(coalesce(nullif(v."모델명",''), v."기종", '') || ' ' || coalesce(v."자산번호",'')) as item
     from vendor_info v
@@ -117,6 +118,7 @@ create function suggest_workin_candidates(
       left(array_to_string(array_remove(array[
         case when count(*) filter (where b.cat = '복합기') > 0 then '복합기 ' || (count(*) filter (where b.cat = '복합기')) end,
         case when count(*) filter (where b.cat = 'PC') > 0 then 'PC ' || (count(*) filter (where b.cat = 'PC')) end,
+        case when count(*) filter (where b.cat = '모니터') > 0 then '모니터 ' || (count(*) filter (where b.cat = '모니터')) end,
         case when count(*) filter (where b.cat = '기타') > 0 then '기타 ' || (count(*) filter (where b.cat = '기타')) end
       ], null), ' · ') || coalesce(' ｜ ' || nullif(string_agg(b.item, ' · ' order by b.item) filter (where b.cat = '복합기'), ''), ''), 240) as list
     from dev_base b join lease_ident_code l on l.ident = b.ident
@@ -127,6 +129,7 @@ create function suggest_workin_candidates(
       left(array_to_string(array_remove(array[
         case when count(*) filter (where b.cat = '복합기') > 0 then '복합기 ' || (count(*) filter (where b.cat = '복합기')) end,
         case when count(*) filter (where b.cat = 'PC') > 0 then 'PC ' || (count(*) filter (where b.cat = 'PC')) end,
+        case when count(*) filter (where b.cat = '모니터') > 0 then '모니터 ' || (count(*) filter (where b.cat = '모니터')) end,
         case when count(*) filter (where b.cat = '기타') > 0 then '기타 ' || (count(*) filter (where b.cat = '기타')) end
       ], null), ' · ') || coalesce(' ｜ ' || nullif(string_agg(b.item, ' · ' order by b.item) filter (where b.cat = '복합기'), ''), ''), 240) as list
     from dev_base b
