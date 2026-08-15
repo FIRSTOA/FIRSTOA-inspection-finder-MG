@@ -7,7 +7,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 
-type Team = "A" | "B" | "C" | "D";
+type Team = "A" | "B" | "C" | "D" | "E";
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 // 분류는 네이버 캘린더 이름과 맞춘다(2026-08-15): 물류·휴가 → '납품철수교체휴가교육'로 통합,
 // AS 미처리 표시는 '익일통합as'. "물류"/"휴가"는 옛 데이터 호환용으로만 남긴다.
@@ -43,7 +43,7 @@ export type AsTicket = {
   naverPushedAt?: string | null;   // 네이버 캘린더로 보낸 시각 (중복 등록 방지용)
 };
 
-const teams: Team[] = ["A", "B", "C", "D"];
+const teams: Team[] = ["A", "B", "C", "D"]; // 필터·배정 명단용 기본 4팀 (E는 21시 슬롯 — 아래 개별 취급)
 // 캘린더 표시 유형 — AS 계열은 날짜가 아니라 처리 여부로 구분한다 (금일·익일·예정 어디든 미처리는 미처리)
 const displayFilters = ["익일통합as", "AS[완료]", "납품철수교체휴가교육", "매월점검"] as const;
 type DisplayFilter = typeof displayFilters[number];
@@ -57,6 +57,7 @@ const teamAssignees: Record<Team, string[]> = {
   B: ["권태혁", "조윤", "윤기준", "신정훈"],
   C: ["이홍진", "박영현", "이민구", "한왕주", "신정훈"],
   D: ["양승원", "김종희", "이호준", "신정훈"],
+  E: [], // 충청외 극지방 — 전담 명단 없음(전체에서 선택)
 };
 
 const storageKey = "cs_as_tickets_v4";
@@ -658,31 +659,40 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
   const compactTicketRow = (t: AsTicket) => (
     <button key={t.id} type="button" onClick={() => { setNaverDayDate(null); setDetailId(t.id); }}
-      className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-slate-50">
+      className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50">
       <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(t.team, t.time)}</span>
+      <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-400">{guOf(t.address || "")}</span>
       <span className={`w-24 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[10px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{displayTypeOf(t)}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${t.status === "완료" ? "text-slate-400 line-through" : "text-slate-800"}`}>{displayTitleOf(t)}{t.issue ? ` ｜ ${t.issue}` : ""}{t.address ? ` ｜ ${t.address}` : ""}</span>
     </button>
   );
   const compactNaverRow = (ev: NaverEventRow) => (
     <button key={ev.uid} type="button" onClick={() => { setNaverDayDate(null); setNaverDetail({ ...ev }); }}
-      className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-slate-50">
+      className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50">
       <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(naverTeamOf(ev), ev.time)}</span>
+      <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-400">{guOf(ev.location || "")}</span>
       <span className={`w-24 shrink-0 truncate rounded border px-1.5 py-0.5 text-center text-[10px] font-black ${naverChipStyle(ev)}`}>{naverCategoryOf(ev)}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${ev.completed ? "text-slate-400 line-through" : "text-slate-800"}`}>{ev.title || "(제목 없음)"}{ev.location ? ` ｜ ${ev.location}` : ""}</span>
     </button>
   );
-  // 하루치 통합 행: 종일 먼저, 그다음 시간순 (네이버 목록과 동일한 순서)
+  // 주소에서 지역구(송파구·광명시 등) 추출 — 표시·정렬용 (필터는 하지 않는다)
+  const guOf = (addr: string) => {
+    const a = String(addr || "");
+    const gu = a.match(/[가-힣]{1,6}구(?=[\s\d]|$)/)?.[0];
+    if (gu) return gu;
+    const si = (a.match(/[가-힣]{1,6}시(?=[\s\d]|$)/g) || []).filter((x) => !/특별시|광역시$/.test(x));
+    return si[si.length - 1] || "";
+  };
+  // 하루치 통합 행 — 정렬: 분류(납품철수교체 먼저 → 익일통합as) → 종일 먼저 → 시간 → 지역구
+  const CAT_ORDER: Record<string, number> = { "납품철수교체휴가교육": 0, "익일통합as": 1, "AS[완료]": 2, "매월점검": 3 };
   const mergedDayRows = (date: string) => {
     const dayTickets = visibleTickets.filter((t) => t.date === date);
     const dayNaver = shownNaverEvents.filter((ev) => ev.date === date);
-    return [
-      ...dayNaver.filter((ev) => !ev.time).map((ev) => ({ kind: "naver" as const, ev, sortKey: "" })),
-      ...dayTickets.filter((t) => !t.time).map((t) => ({ kind: "ticket" as const, t, sortKey: "" })),
-      ...[...dayTickets.filter((t) => t.time).map((t) => ({ kind: "ticket" as const, t, sortKey: t.time })),
-         ...dayNaver.filter((ev) => ev.time).map((ev) => ({ kind: "naver" as const, ev, sortKey: ev.time }))]
-        .sort((a, b) => a.sortKey.localeCompare(b.sortKey)),
+    const items = [
+      ...dayTickets.map((t) => ({ kind: "ticket" as const, t, cat: CAT_ORDER[displayTypeOf(t)] ?? 9, time: t.time || "", gu: guOf(t.address || "") })),
+      ...dayNaver.map((ev) => ({ kind: "naver" as const, ev, cat: CAT_ORDER[naverCategoryOf(ev)] ?? 9, time: ev.time || "", gu: guOf(ev.location || "") })),
     ];
+    return items.sort((a, b) => a.cat - b.cat || (a.time === "" ? -1 : b.time === "" ? 1 : 0) || a.time.localeCompare(b.time) || a.gu.localeCompare(b.gu));
   };
 
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
@@ -1022,9 +1032,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => {
       if (ticket.source === "autoplan") return false; // 자동일정 생성 건은 캘린더를 어지럽히지 않는다 (내 일정·일정리스트에는 표시)
-      return visibleTeams.includes(ticket.team) && visibleScheduleTypes.includes(displayTypeOf(ticket));
+      if (!visibleScheduleTypes.includes(displayTypeOf(ticket))) return false;
+      if (!ticket.time) return visibleExtra.includes("종일");
+      if (ticket.team === "E") return visibleExtra.includes("E");
+      return visibleTeams.includes(ticket.team);
     }),
-    [tickets, visibleScheduleTypes, visibleTeams],
+    [tickets, visibleScheduleTypes, visibleTeams, visibleExtra],
   );
   const monthTickets = visibleTickets.filter((ticket) => ticket.date.slice(0, 7) === currentMonth.slice(0, 7));
 
@@ -1097,7 +1110,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </div>
                 <div className="rounded-full bg-slate-100 p-1">
                   {(["calendar", "list"] as ViewMode[]).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "월" : "목록"}</button>
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "달력" : "목록"}</button>
                   ))}
                 </div>
               </div>
@@ -1553,8 +1566,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <div className="text-xs font-bold text-slate-500">팀
                     <div className="mt-1">
                       <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
-                        value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}
-                        options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
+                        value={ticket.time ? ticket.team : "종일"}
+                        onChange={(v) => {
+                          if (v === "종일") { if (ticket.time) { update(ticket.id, { time: "" }); notify("종일 일정으로 변경 ✓", "success"); } return; }
+                          const tm = v as Team;
+                          if (tm !== ticket.team || !ticket.time) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); }
+                        }}
+                        options={[{ value: "종일", label: "종일" }, ...(["A", "B", "C", "D", "E"] as Team[]).map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
                     </div>
                   </div>
                 </div>
@@ -1730,7 +1748,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <div className="mt-1">
                     <PortalSelect direction="down" className="w-full py-2 font-semibold" width={240}
                       value={simpleAdd.team} onChange={(v) => setSimpleAdd({ ...simpleAdd, team: v as Team })}
-                      options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
+                      options={(["A", "B", "C", "D", "E"] as Team[]).map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
                   </div>
                 </div>
               </div>
