@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import PortalSelect from "./PortalSelect";
@@ -651,8 +651,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 네이버 목록 뷰 구도(시간|분류|내용|팀)의 한 줄 행 — 목록 탭·그날 팝업 공용
   // 좌측 한 칸에 "C팀 (오후 3시)" — 팀 시간대와 다르면 실제 시각을 그대로 보여준다
   const teamTimeLabel = (team: string | null, time: string) => {
-    if (team && time && TEAM_SLOT[team] === time) return `${team}팀 (${TEAM_SLOT_LABEL[team]})`;
-    if (team && time) return `${team}팀 (${time})`;
+    // 팀이 있으면 항상 팀 시간대로 — 접수 시각(12:53 등)은 일정리스트의 접수시간 칸에서만 보여준다
+    if (team && time) return `${team}팀 (${TEAM_SLOT_LABEL[team] || time})`;
     if (team) return `${team}팀 (종일)`;
     if (time) return Number(time.slice(0, 2)) < 12 ? `오전 ${time}` : `오후 ${time}`;
     return "종일";
@@ -1283,7 +1283,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 const included = listTypes.includes(name);
                 return (
                   <button key={name} type="button" onClick={() => toggleListType(name)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-slate-900 text-white" : included ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name}</button>
+                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-slate-900 text-white" : included ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-50 text-slate-300 hover:bg-slate-100"}`}>{name === "AS" ? "익일통합as" : name}</button>
                 );
               })}
             </div>
@@ -1334,59 +1334,86 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             {!scheduleRows.length && <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
           </div>
 
-          <div className={`hidden overflow-x-auto ${myPlanOpen ? "" : "md:block"}`}>
-            <table className="w-full min-w-[1100px] text-left">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">
-                  <th className="px-3 py-3">팀</th>
-                  <th className="px-3 py-3">일정</th>
-                  <th className="w-[21%] px-3 py-3">업체명</th>
-                  <th className="w-[24%] px-3 py-3">접수내용</th>
-                  <th className="px-3 py-3">기기</th>
-                  <th className="px-3 py-3">담당자</th>
-                  <th className="px-3 py-3 text-right">처리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scheduleRows.map((ticket, ti) => (<Fragment key={ticket.id}>
-                  {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
-                    <tr className="border-b border-slate-100 bg-slate-50/80">
-                      <td colSpan={7} className="px-3 py-1 text-[11px] font-black text-slate-500">
-                        <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
-                      </td>
-                    </tr>
-                  )}
-                  <tr onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : !ticket.assignee ? "border-amber-100 bg-amber-50/40" : "border-slate-100"}`}>
-                    <td className="px-3 py-4 text-sm font-black">{ticket.team}팀</td>
-                    <td className="px-3 py-4 text-sm font-bold">{ticket.time}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[340px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
-                      {shortAddress(ticket.address) && <div className="mt-0.5 text-[10px] font-bold text-slate-400">📍 {shortAddress(ticket.address)}</div>}
-                      <div className="mt-1.5"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
-                    </td>
-                    <td className="px-3 py-4 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
-                    <td className="px-3 py-4 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
-                    <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
-                      <span className={`rounded-full px-3 py-1.5 text-sm font-black ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
-                    </td>
-                    <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
-                      <div className="flex justify-end gap-1.5">
-                        {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="rounded-full bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
-                        {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-2 text-xs font-black text-white">FIELD AS</button>}
-                        <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">배정</button>
-                        <button type="button" onClick={() => openDone(ticket)} className={`rounded-full border px-3 py-2 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "완료취소" : "완료"}</button>
-                        <button type="button" onClick={() => openDefer(ticket)} className="rounded-full border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-black text-purple-700">익일</button>
-                        <button type="button" onClick={() => removeTicket(ticket)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">삭제</button>
-                      </div>
-                    </td>
-                  </tr>
-                </Fragment>))}
-                {!scheduleRows.length && (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className={`hidden space-y-4 ${myPlanOpen ? "" : "md:block"}`}>
+            {(() => {
+              // 배정자별 박스 — 미배정(앰버)과 배정자(에메랄드)를 확실히 구분
+              const groups: Array<{ key: string; rows: AsTicket[] }> = [];
+              for (const t of scheduleRows) {
+                const key = t.assignee || "";
+                const g = groups.find((x) => x.key === key);
+                if (g) g.rows.push(t); else groups.push({ key, rows: [t] });
+              }
+              const th = "px-3 py-2 text-xs font-black text-slate-500";
+              return groups.map(({ key, rows }) => (
+                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border ${key ? "border-slate-200" : "border-amber-300"}`}>
+                  <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-emerald-600" : "bg-amber-500"}`}>
+                    <span className="text-sm font-black text-white">{key || "미배정 — 배정 필요"}</span>
+                    <span className="rounded-full bg-white/25 px-2 py-0.5 text-[11px] font-black text-white">{rows.length}건</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1050px] text-left">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50">
+                          <th className={th}>팀</th><th className={th}>지역구</th><th className={th}>접수시간</th>
+                          <th className={`${th} w-[30%]`}>제목</th><th className={`${th} w-[24%]`}>접수내용</th>
+                          <th className={th}>기기</th><th className={`${th} text-right`}>처리</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((ticket) => (
+                          <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
+                            <td className="px-3 py-2.5 text-sm font-black">{ticket.team}팀</td>
+                            <td className="px-3 py-2.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
+                            <td className="px-3 py-2.5 text-sm font-bold">{ticket.time || "종일"}<div className="text-[11px] text-slate-400">{ticket.date}</div></td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[360px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}</div>
+                              <div className="mt-1"><VendorFlagBadges flags={vendorFlags.get(ticket.vendor.trim())} /></div>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs font-semibold text-slate-600">{ticket.issue || "-"}</td>
+                            <td className="px-3 py-2.5 text-sm font-semibold text-slate-600">{ticket.model}<div className="text-[11px] text-slate-400">{ticket.serial}</div></td>
+                            <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
+                              <div className="flex justify-end gap-1.5">
+                                {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
+                                {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => onUseField?.(buildFieldAsText(ticket, author), { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor })} className="rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
+                                <button type="button" onClick={() => setAssignId(ticket.id)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">배정</button>
+                                <button type="button" onClick={() => openDone(ticket)} className={`rounded-full border px-3 py-1.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
+                                <button type="button" onClick={() => openDefer(ticket)} className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-black text-purple-700">익일</button>
+                                <button type="button" onClick={() => removeTicket(ticket)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-600">삭제</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ));
+            })()}
+            {!scheduleRows.length && <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
           </div>
+
+          {/* ⑥ 네이버 캘린더 일정 — 일정리스트에서도 같이 본다 (원본은 네이버, 클릭=상세) */}
+          {!myPlanOpen && (() => {
+            const listNaver = shownNaverEvents.filter((ev) => {
+              const inRange = dayFilter === "scheduled" ? ev.date > tomorrowYmd : ev.date === (dayFilter === "today" ? todayYmd : tomorrowYmd);
+              if (!inRange) return false;
+              const cat = naverCategoryOf(ev);
+              return listTypes.includes(cat === "익일통합as" ? "AS" : (cat as typeof LIST_TYPE_OPTIONS[number]));
+            });
+            if (!listNaver.length) return null;
+            return (
+              <section className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                <div className="flex items-center gap-2 bg-[#1E252F] px-4 py-2">
+                  <span className="text-sm font-black text-white">네이버 캘린더 일정</span>
+                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-black text-white">{listNaver.length}건</span>
+                  <span className="ml-auto text-[10px] font-bold text-slate-400">클릭하면 상세 · 수정하면 네이버에 반영</span>
+                </div>
+                <div className="divide-y divide-slate-100 bg-white">
+                  {listNaver.map((ev) => compactNaverRow(ev))}
+                </div>
+              </section>
+            );
+          })()}
         </section>
       )}
 
