@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
+import PortalSelect from "./PortalSelect";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { notify } from "./toast";
@@ -96,43 +97,6 @@ function monthGrid(date: string) {
   const first = new Date(`${monthStart(date)}T12:00:00+09:00`);
   const gridStart = addDays(formatDate(first), -first.getDay());
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
-}
-
-// 공용 선택상자 — 겉은 날짜 입력과 똑같은 수수한 박스, 누르면 디자인된 목록 패널이 열린다
-// (브라우저 기본 <select>의 드롭다운은 스타일이 안 먹혀서 직접 그린다)
-function FancySelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<{ value: string; label: string }> }) {
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-  const current = options.find((o) => o.value === value);
-  return (
-    <div ref={boxRef} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 outline-none transition ${open ? "border-blue-500 ring-4 ring-blue-500/10" : "border-slate-300 hover:border-slate-400"}`}>
-        <span className="truncate">{current?.label || value || "선택"}</span>
-        <svg className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      </button>
-      {open && (
-        <div className="absolute left-0 right-0 z-[60] mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_12px_32px_rgba(15,23,42,0.16)]">
-          {options.map((o) => {
-            const on = o.value === value;
-            return (
-              <button key={o.value} type="button" onClick={() => { setOpen(false); if (!on) onChange(o.value); }}
-                className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm transition ${on ? "bg-blue-50 font-black text-blue-700" : "font-semibold text-slate-700 hover:bg-slate-50"}`}>
-                <span className="truncate">{o.label}</span>
-                {on && <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M4.5 10.5L8.5 14.5L15.5 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function normalizeTicketSchedule(ticket: AsTicket): AsTicket {
@@ -1308,7 +1272,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           </label>
                           <div className="text-xs font-bold text-slate-500">팀
                             <div className="mt-1">
-                              <FancySelect value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}
+                              <PortalSelect className="w-full py-2 font-semibold" width={240}
+                                value={naverTeamOf(naverDetail) || ""} onChange={(v) => { const slot = TEAM_SLOT[v]; if (slot) void saveNaverField({ time: slot, date: naverDetail.date }); }}
                                 options={[{ value: "", label: naverDetail.time ? `기타 (${naverDetail.time})` : "종일" }, ...["A", "B", "C", "D", "E"].map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))]} />
                             </div>
                           </div>
@@ -1326,7 +1291,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         </label>
                         <div className="text-xs font-bold text-slate-500">캘린더 이동
                           <div className="mt-1">
-                            <FancySelect value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}
+                            <PortalSelect className="w-full py-2 font-semibold" width={280}
+                              value={naverDetail.calendar_id} onChange={(v) => { if (v !== naverDetail.calendar_id) void transferNaverEvent(v); }}
                               options={[...NAVER_CAL_LIST.map((c) => ({ value: c.id, label: c.name })), ...(NAVER_CAL_LIST.some((c) => c.id === naverDetail.calendar_id) ? [] : [{ value: naverDetail.calendar_id, label: "(현재 캘린더)" }])]} />
                           </div>
                         </div>
@@ -1563,7 +1529,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </label>
                   <div className="text-xs font-bold text-slate-500">팀
                     <div className="mt-1">
-                      <FancySelect value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}
+                      <PortalSelect className="w-full py-2 font-semibold" width={240}
+                        value={ticket.team} onChange={(v) => { const tm = v as Team; if (tm !== ticket.team) { update(ticket.id, { team: tm, time: TEAM_SLOT[tm] || ticket.time }); notify(`${tm}팀(${TEAM_SLOT_LABEL[tm]})으로 변경 ✓`, "success"); } }}
                         options={teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` }))} />
                     </div>
                   </div>
@@ -1629,9 +1596,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               {/* 하단 액션: 모바일에서 글자가 세로로 꺾이지 않게 균등 분할 + 줄바꿈 금지 */}
               <div className="space-y-1.5 border-t border-slate-100 px-4 py-3 sm:px-5">
                 <div className="flex gap-1.5">
-                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>
-                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
                   <button type="button" onClick={() => { setDetailId(""); openDefer(ticket); }} className="flex-1 whitespace-nowrap rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-xs font-black text-purple-700">익일</button>
+                  <button type="button" onClick={() => { setDetailId(""); setDupTicketId(ticket.id); setDupDate(ticket.date); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">복제</button>
+                  <button type="button" onClick={() => { setDetailId(""); setEditId(ticket.id); }} className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">수정</button>
                   <button type="button" onClick={() => { if (removeTicket(ticket)) setDetailId(""); }} className="flex-1 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-xs font-black text-rose-600">삭제</button>
                 </div>
                 <div className="flex gap-1.5">
