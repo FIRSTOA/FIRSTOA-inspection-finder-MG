@@ -13,9 +13,21 @@ import { vendorMatchKey } from "./ids";
 import { geocodeKR } from "./geocode";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { VendorFlagBadges } from "./CsAsWorkspace";
+import { usageSpareAdvice } from "./spareAdvice";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
-type Place = { id: number; place_name: string; vendor: string; grade: string; label: string; addr: string; lat: number | null; lng: number | null; comment: string; last_date: string | null; days_since: number; distance_km: number | null; quarter_ok: boolean; never_visited: boolean };
+type Place = {
+  id: number; place_name: string; vendor: string; grade: string; label: string; addr: string;
+  lat: number | null; lng: number | null; comment: string;
+  last_date: string | null; days_since: number; distance_km: number | null; quarter_ok: boolean; never_visited: boolean;
+  code: string;
+  prev_date: string | null; last_pages: string | null; prev_pages: string | null;
+  last_toner: string | null; last_spare: string | null; last_waste: string | null;
+  last_serial: string | null; prev_serial: string | null; last_special: string | null;
+  device_count: number; devices: string | null;
+};
 
 const TEAMS = ["A", "B", "C", "D"] as const;
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
@@ -32,6 +44,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [minDays, setMinDays] = useState(60);
   const [kind, setKind] = useState<"quarter" | "renewal">("quarter");
   const [rows, setRows] = useState<Place[]>([]);
+  const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map()); // 불만·미수·초과·재계약·점검 배지 (일정리스트와 같은 기준)
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -92,6 +105,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       setRows(list || []);
       setPicked(new Set());
       setNotice(`${(list || []).length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}`);
+      void getVendorFlagsBatch((list || []).map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
     } catch (e) {
       setNotice(`추천 실패: ${(e as Error).message}`);
     } finally { setLoading(false); }
@@ -224,6 +238,12 @@ export default function AutoSchedule({ author }: { author: string }) {
           <div className="max-h-[64vh] divide-y divide-slate-100 overflow-y-auto">
             {rows.map((r) => {
               const on = picked.has(r.id);
+              const fl = flags.get((r.vendor || r.place_name).trim());
+              // 최근 2회 점검으로 사용량·여분 권장 계산 — MyPlan의 여분 분석과 같은 헬퍼
+              const latest = r.last_date ? { date: r.last_date, counts: r.last_pages || "", toner: r.last_toner || "", spare: r.last_spare || "", waste: r.last_waste || "", serial: r.last_serial || "" } : undefined;
+              const previous = r.prev_date ? { date: r.prev_date, counts: r.prev_pages || "", toner: "", spare: "", serial: r.prev_serial || "" } : undefined;
+              const advice = usageSpareAdvice(latest, previous, parseEquipComment(r.comment).model || r.devices || "");
+              const special = String(r.last_special || "").replace(/[ㅡ\-_.\s]/g, "") ? String(r.last_special).trim() : ""; // "ㅡㅡㅡ" 채움표시는 특이사항 아님
               return (
                 <label key={r.id} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${on ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                   <input type="checkbox" checked={on} onChange={() => toggle(r.id)} className="mt-1 h-4 w-4 accent-blue-600" />
@@ -235,10 +255,17 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                       {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
+                      <VendorFlagBadges flags={fl} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
                       {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}
+                      {r.device_count > 0 && <span className="ml-1.5 text-slate-400">🖨 {r.device_count}대{r.devices ? ` · ${r.devices}` : ""}</span>}
                     </span>
+                    {r.last_pages && <span className="block truncate text-[10px] font-semibold text-slate-500">📊 {r.last_pages.trim()}{r.prev_pages ? ` ｜ 전전(${(r.prev_date || "").slice(5)}) ${r.prev_pages.trim()}` : ""}</span>}
+                    {advice?.usageLine && <span className="block truncate text-[10px] font-bold text-blue-600">📈 {advice.usageLine}</span>}
+                    {(r.last_spare || advice?.adviceLine) && <span className="block truncate text-[10px] font-bold text-emerald-700">🧰 여분 {String(r.last_spare || "-").trim()}{advice?.adviceLine ? ` → ${advice.adviceLine}` : ""}</span>}
+                    {advice?.warning && <span className="block truncate text-[10px] font-bold text-amber-600">⚠ {advice.warning}</span>}
+                    {special && <span className="block truncate text-[10px] font-bold text-rose-600">❗ {special}</span>}
                     <span className="block truncate text-[10px] font-semibold text-slate-400"><MapPin size={9} className="mr-0.5 inline" />{r.addr || "주소 없음"}</span>
                   </span>
                 </label>

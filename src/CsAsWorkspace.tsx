@@ -272,7 +272,7 @@ async function migrateLocalOnce() {
 }
 
 // 워킨맵·FIELD와 같은 기준의 점검·미수·재계약 상태 배지 — AS 나가는 김에 함께 처리할 일을 바로 보이게.
-function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
+export function VendorFlagBadges({ flags }: { flags: VendorWorkFlags | undefined }) {
   if (!flags) return null;
   const misuBalance = flags.misu ? (flags.misu.balance.replace(/[^\d]/g, "") ? `${Number(flags.misu.balance.replace(/[^\d]/g, "")).toLocaleString()}원` : flags.misu.balance) : "";
   return (
