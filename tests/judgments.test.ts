@@ -74,6 +74,10 @@ describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
     expect(historyCoreName("여분전달 V D450 11V사단법인 안보경영연구원-백평")).toBe("안보경영연구원");
     expect(historyCoreName("여분요청 SS ECOSYS-M5521CDN K3개 브라더")).not.toBe("브라더");
   });
+  it("슬래시 제목·#등급 접두도 뚫는다 — '제목'·'20#SS한불…' 오탐 사고", () => {
+    expect(historyCoreName("제목/캘린더제목 이전셋팅 S SL-X7400LX 26S주식회사 피알유-방문 전날 연락요청분기마감")).toBe("피알유");
+    expect(historyCoreName("한왕주 여분요청 SS ECOSYS-M5521CDN K3개 브라더 토너 3개 20#SS한불엠앤에스㈜1층 리셉션")).toBe("한불엠앤에스");
+  });
 });
 
 describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL workin_vendor_와 거울)", () => {

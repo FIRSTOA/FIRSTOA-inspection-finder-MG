@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a5c222c662",
+    "date": "2026-08-17",
+    "note": "고객 리포트 이력 조회를 핵심 토큰으로 — '푸드나무' 표기 변형 누락 수정"
+  },
+  {
     "hash": "84cf71b0e8",
     "date": "2026-08-17",
     "note": "고객 리포트 정확도 3건 — 지점별 기기 수·브랜드 추론·연차 문구 제거"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d0fcd2d99e",
     "date": "2026-08-01",
     "note": "PC·복합기 확장성 미러 복구 — anon DELETE/UPDATE GRANT 누락 보완"
-  },
-  {
-    "hash": "78d37eb99d",
-    "date": "2026-08-01",
-    "note": "카톡 수집: 즉시 실행 버튼 + 받는 방향 매핑을 웹앱에서 관리"
   }
 ];
