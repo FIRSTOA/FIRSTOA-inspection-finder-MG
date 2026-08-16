@@ -153,6 +153,7 @@ export function TemplateBar({ context, author, body, onApply, preferredTitle = "
   const { templates, loaded, save, update, remove, editableIds } = useMessageTemplates(context, author);
   const [selected, setSelected] = useState(templates[0]?.id || "");
   const [dialog, setDialog] = useState<null | { mode: "add" | "edit" | "remove"; title: string; error?: string; busy?: boolean }>(null);
+  const [savedNote, setSavedNote] = useState("");
   const appliedRevision = useRef("");
   const selectedId = templates.some((item) => item.id === selected) ? selected : templates[0]?.id || "";
   useEffect(() => {
@@ -165,6 +166,7 @@ export function TemplateBar({ context, author, body, onApply, preferredTitle = "
   }, [applyRevision, onApply, preferredTitle, templates]);
   return <div className="grid grid-cols-3 gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
     <div className="col-span-3 flex items-center justify-between gap-2 px-1"><span className="text-[11px] font-black text-blue-700">회사 공용 문구{!loaded && <span className="ml-1.5 text-[10px] font-bold text-amber-500">불러오는 중…</span>}</span><span className="text-[10px] font-bold text-slate-400">추가·수정 시 전 직원에게 반영</span></div>
+    {savedNote && <div className="col-span-3 rounded-lg bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-700">{savedNote}</div>}
     <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
@@ -199,6 +201,8 @@ export function TemplateBar({ context, author, body, onApply, preferredTitle = "
                   if (dialog.mode === "add") await save(dialog.title, body);
                   else if (dialog.mode === "edit") await update(selectedId, dialog.title, body);
                   else await remove(selectedId);
+                  setSavedNote(dialog.mode === "remove" ? `'${dialog.title}' 삭제됨` : `'${dialog.title.trim()}' 공용 저장 완료 — 전 직원에게 반영됩니다 ✓`);
+                  window.setTimeout(() => setSavedNote(""), 6000);
                   setDialog(null);
                 } catch (error) {
                   setDialog({ ...dialog, busy: false, error: `실패: ${(error as Error).message}` });
