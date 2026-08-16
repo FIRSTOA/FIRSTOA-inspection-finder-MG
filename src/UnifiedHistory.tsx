@@ -25,18 +25,18 @@ type Props = {
   onError: (msg: string) => void;
 };
 
-const CAT_ORDER = ["점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
-const ACTIVITY_CATS = ["점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성"];
+const CAT_ORDER = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
+const ACTIVITY_CATS = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성"];
 const CAT_SHORT: Record<string, string> = {
-  점검: "점검", AS: "AS", 초과: "초과", 미수: "미수", 불만: "불만",
+  접수: "접수", 점검: "점검", AS: "AS", 초과: "초과", 미수: "미수", 불만: "불만",
   복합기확장성: "복합기", PC확장성: "PC·IT", 재계약: "재계약", 업체정보: "업체정보",
 };
 const DATE_FIELD: Record<string, string> = {
-  AS: "작성일", 점검: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일",
+  접수: "receipt_date", AS: "작성일", 점검: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일",
   PC확장성: "날짜", 복합기확장성: "등록일", 업체정보: "종료일", 재계약: "계약종료일",
 };
-const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자"];
-const REGION_KEYS = ["지역", "미팅지역", "시/구"];
+const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자", "author"];
+const REGION_KEYS = ["지역", "미팅지역", "시/구", "region"];
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
 
 type SummaryField = { key: string; value: string };
@@ -50,7 +50,7 @@ function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val:
 }
 
 function recordVendor(rec: Record<string, unknown>) {
-  return String(rec._업체명 || rec.업체명 || rec.상호명 || "").trim();
+  return String(rec._업체명 || rec.업체명 || rec.상호명 || rec.vendor || "").trim();
 }
 
 function displayDate(value: unknown) {

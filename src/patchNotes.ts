@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1659cd6e93",
+    "date": "2026-08-16",
+    "note": "홈 복원 + 자동 패치노트 — 쇼케이스 랜딩 유지, 배포마다 목록 자동 갱신"
+  },
+  {
     "hash": "f68351cc73",
     "date": "2026-08-16",
     "note": "홈 전면 개편 — 홍보 랜딩에서 오늘의 작업대로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "42d586a38f",
     "date": "2026-08-01",
     "note": "관리·조회 재정리 + 카톡 파서 버그로 오염된 6,333행 정리"
-  },
-  {
-    "hash": "154b2bc910",
-    "date": "2026-08-01",
-    "note": "카톡 파서: 빈 칸이 다음 줄 라벨을 삼키던 버그 수정"
   }
 ];

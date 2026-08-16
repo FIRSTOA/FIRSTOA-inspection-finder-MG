@@ -54,6 +54,9 @@ type HistorySearchTable = {
   category: string;
   dateField: string;
   regionField: string;
+  nameField?: string;   // 업체명 컬럼 (기본 _업체명 — 웹앱 자체 테이블은 vendor 등)
+  hiddenField?: string; // 숨김 컬럼 (기본 _hidden — 접수는 deleted)
+  select?: string;      // 조회 컬럼 제한 (report_text·photos처럼 긴 필드 제외용)
 };
 
 const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
@@ -67,6 +70,9 @@ const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
   { table: "mfp_expansion", category: "복합기확장성", dateField: "등록일", regionField: "미팅지역" },
   { table: "recontract", category: "재계약", dateField: "계약종료일", regionField: "지역" },
+  // 웹앱 서비스접수(복합기 AS·IT·원격이관) — "이 업체 이번 달 접수가 몇 번 왔나"를 통합이력에서 본다
+  { table: "service_receptions", category: "접수", dateField: "receipt_date", regionField: "region", nameField: "vendor", hiddenField: "deleted",
+    select: "id,receipt_date,type,vendor,region,symptom,status,author,model,serial,asset_no,lease_no,address,paid,completed_at,created_at" },
 ];
 
 type HistoryRows = { config: HistorySearchTable; rows: Array<Record<string, unknown>> };
@@ -111,11 +117,13 @@ async function fetchHistoryRows(value: string): Promise<HistoryRows[]> {
   const key = term.toLowerCase();
   const cached = historySearchCache.get(key);
   if (cached && Date.now() - cached.at < 15_000) return cached.promise;
-  const filter = `${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(term)}*&_hidden=not.is.true&limit=500`;
-  const promise = Promise.all(HISTORY_SEARCH_TABLES.map(async (config) => ({
-    config,
-    rows: await selectRows<Record<string, unknown>>(config.table, `select=*&${filter}`).catch(() => []),
-  })));
+  const promise = Promise.all(HISTORY_SEARCH_TABLES.map(async (config) => {
+    const filter = `${encodeURIComponent(config.nameField || "_업체명")}=ilike.*${encodeURIComponent(term)}*&${config.hiddenField || "_hidden"}=not.is.true&limit=500`;
+    return {
+      config,
+      rows: await selectRows<Record<string, unknown>>(config.table, `select=${config.select || "*"}&${filter}`).catch(() => []),
+    };
+  }));
   historySearchCache.set(key, { at: Date.now(), promise });
   return promise;
 }
@@ -142,7 +150,7 @@ function mergeHistoryHits(hits: VendorHit[]) {
 function hitsFromHistoryRows(results: HistoryRows[]): VendorHit[] {
   const hits = new Map<string, VendorHit>();
   results.forEach(({ config, rows }) => rows.forEach((row) => {
-    const vendor = String(row._업체명 || row.업체명 || row.상호명 || "").trim();
+    const vendor = String(row[config.nameField || "_업체명"] || row._업체명 || row.업체명 || row.상호명 || "").trim();
     if (!vendor) return;
     const current = hits.get(vendor) || { vendor, counts: {}, meta: {} };
     current.counts[config.category] = (current.counts[config.category] || 0) + 1;
