@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "824e90fba3",
+    "date": "2026-08-16",
+    "note": "분기점검 안내 다듬기 — 전환을 다크 헤더 안으로, 개수 깔때기 표기"
+  },
+  {
     "hash": "d76671e552",
     "date": "2026-08-16",
     "note": "고객 리포트 + 분기점검 방문 안내 문자 — 고객관리 2종 신설"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "58d213b4a0",
     "date": "2026-08-01",
     "note": "first-data 죽은 코드 제거 — Legacy.gs(v10 폴백)·Migrate.gs(1회용 이관)"
-  },
-  {
-    "hash": "73d9726bec",
-    "date": "2026-08-01",
-    "note": "first-data를 라이브 GAS 기준으로 동기화 + 파서 픽스 재적용"
   }
 ];

@@ -6,7 +6,7 @@
  * 발송(문자 MMS·메일)은 2단계 — 지금은 생성·저장까지.
  */
 import { useMemo, useState } from "react";
-import { Download, FileImage, Printer, Search } from "lucide-react";
+import { Download, FileImage, Laptop, Monitor, Package, Printer, Search, ShieldCheck, UserPlus, Wind } from "lucide-react";
 import { selectRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
@@ -18,10 +18,25 @@ type ReportData = {
   periodLabel: string;
   rows: ServiceRow[];
   counts: { as: number; remote: number; it: number; inspection: number };
-  devices: { mfp: number; pc: number; monitor: number; etc: number };
-  deviceList: string[];
+  deviceTotal: number;
+  catCounts: Array<{ label: string; count: number }>; // 품목별 대수 (컬러복합기·데스크탑·모니터…)
   lastInspection: string;
 };
+
+// 품목명 표기 정리 + 아이콘 — 리포트 '관리 중인 장비'에서 품목별 대수로 보여준다 (기종 나열은 안 함)
+function normalizeCat(item: string) {
+  const t = item.trim();
+  if (/^pc모니터$/i.test(t)) return "PC모니터";
+  if (/^태블릿pc$/i.test(t)) return "태블릿PC";
+  return t || "기타";
+}
+function catIcon(label: string) {
+  if (/복합기|프린터|플로터/.test(label)) return Printer;
+  if (/노트북|태블릿/.test(label)) return Laptop;
+  if (/모니터|데스크탑|소프트웨어|유지보수/.test(label)) return Monitor;
+  if (/공기청정기/.test(label)) return Wind;
+  return Package;
+}
 
 const PERIOD_OPTIONS: Array<{ key: PeriodKind; label: string }> = [
   { key: "month", label: "월간" }, { key: "quarter", label: "분기" }, { key: "half", label: "반기" }, { key: "year", label: "연간" },
@@ -94,15 +109,12 @@ export default function CustomerReport({ author }: { author: string }) {
         "vendor_info", `select=${encodeURIComponent("품목,모델명,기종,자산번호,임대여부,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
       );
       const active = deviceRows.filter((r) => r["임대여부"] === "임대중");
-      const devices = { mfp: 0, pc: 0, monitor: 0, etc: 0 };
-      const deviceList: string[] = [];
+      const catMap = new Map<string, number>();
       for (const r of active) {
-        const item = String(r["품목"] || "");
-        if (/복합기|프린터|플로터/.test(item)) { devices.mfp += 1; deviceList.push(`${r["모델명"] || r["기종"] || "복합기"}${r["자산번호"] ? ` (${r["자산번호"]})` : ""}`); }
-        else if (/모니터/i.test(item)) devices.monitor += 1;
-        else if (/pc|데스크|노트북|태블릿|소프트웨어/i.test(item)) devices.pc += 1;
-        else devices.etc += 1;
+        const label = normalizeCat(String(r["품목"] || ""));
+        catMap.set(label, (catMap.get(label) || 0) + 1);
       }
+      const catCounts = Array.from(catMap.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
       // ② 기간 내 접수 (AS·원격·IT)
       const receptions = (await selectRows<Record<string, unknown>>(
         "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
@@ -149,7 +161,8 @@ export default function CustomerReport({ author }: { author: string }) {
           it: receptions.filter((r) => r.type === "IT").length,
           inspection: inspections.length,
         },
-        devices, deviceList,
+        deviceTotal: active.length,
+        catCounts,
         lastInspection: String(lastAll[0]?.["작성일"] || "").slice(0, 10),
       });
       setHits([]);
@@ -187,7 +200,7 @@ export default function CustomerReport({ author }: { author: string }) {
   const totalServices = report ? report.counts.as + report.counts.remote + report.counts.it + report.counts.inspection : 0;
 
   const summaryCells = report ? [
-    ["정기 점검", report.counts.inspection], ["AS 방문", report.counts.as], ["원격 지원", report.counts.remote + report.counts.it], ["관리 기기", report.devices.mfp + report.devices.pc + report.devices.monitor + report.devices.etc],
+    ["정기 점검", report.counts.inspection], ["AS 방문", report.counts.as], ["원격 지원", report.counts.remote + report.counts.it], ["관리 기기", report.deviceTotal],
   ] as const : [];
 
   return (
@@ -261,7 +274,7 @@ export default function CustomerReport({ author }: { author: string }) {
                 {page1Rows.length ? (
                   <table className="mt-3 w-full text-left text-[12px]">
                     <thead><tr className="border-b-2 border-slate-900 text-[11px] font-black text-slate-500">
-                      <th className="py-2 pr-3">날짜</th><th className="py-2 pr-3">구분</th><th className="py-2 pr-3">기기</th><th className="py-2 pr-3">요청 내용</th><th className="py-2">처리</th>
+                      <th className="py-2 pr-3">날짜</th><th className="py-2 pr-3">구분</th><th className="py-2 pr-3">기기</th><th className="py-2 pr-3">내용</th><th className="py-2">처리</th>
                     </tr></thead>
                     <tbody>
                       {page1Rows.map((row, i) => (
@@ -283,21 +296,46 @@ export default function CustomerReport({ author }: { author: string }) {
                 )}
                 {report.rows.length > PAGE1_ROWS && <div className="mt-2 text-right text-[11px] font-bold text-slate-400">계속 → 2장</div>}
 
-                <div className="mt-7 text-[13px] font-black text-slate-950">■ 관리 중인 장비</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {report.devices.mfp > 0 && <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-black text-slate-800">복합기 {report.devices.mfp}대</span>}
-                  {report.devices.pc > 0 && <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-black text-slate-800">PC·노트북 {report.devices.pc}대</span>}
-                  {report.devices.monitor > 0 && <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-black text-slate-800">모니터 {report.devices.monitor}대</span>}
-                  {report.devices.etc > 0 && <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-black text-slate-800">기타 {report.devices.etc}대</span>}
-                  {report.deviceList.slice(0, 3).map((d) => <span key={d} className="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500">{d}</span>)}
+                <div className="mt-7 text-[13px] font-black text-slate-950">■ 관리 중인 장비 <span className="text-[11px] font-bold text-slate-400">총 {report.deviceTotal}대</span></div>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {report.catCounts.slice(0, 8).map(({ label, count }) => {
+                    const Icon = catIcon(label);
+                    return (
+                      <div key={label} className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm"><Icon size={16} /></span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[11px] font-black text-slate-700">{label}</span>
+                          <span className="block text-[13px] font-black text-slate-950" style={{ fontVariantNumeric: "tabular-nums" }}>{count}대</span>
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
+                {report.catCounts.length > 8 && <div className="mt-1.5 text-[10px] font-bold text-slate-400">외 {report.catCounts.slice(8).reduce((s, c) => s + c.count, 0)}대</div>}
               </div>
 
               <div className="mt-auto px-10 pb-8">
-                <div className="rounded-xl bg-gradient-to-r from-[#1E252F] to-[#2b3a52] px-6 py-5 text-white">
-                  <div className="text-[12px] font-black text-blue-300">퍼스트전산이 함께합니다</div>
-                  <div className="mt-1.5 text-[13px] font-bold leading-6">복합기·프린터 렌탈 <span className="text-slate-400">|</span> PC·모니터·소프트웨어 <span className="text-slate-400">|</span> 입·퇴사자 IT 셋업 <span className="text-slate-400">|</span> 정기 방문 점검</div>
-                  <div className="mt-1 text-[11px] font-semibold text-slate-400">사무실 IT의 모든 것 — 필요하실 때 담당자에게 말씀만 주세요. 대표번호 02-000-0000</div>
+                <div className="overflow-hidden rounded-xl bg-gradient-to-r from-[#1E252F] to-[#2b3a52] px-6 py-5 text-white">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-black text-blue-300">사무실 IT의 모든 것, 퍼스트전산이 함께합니다</div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-400">아래 어떤 것이든 담당자에게 말씀만 주세요 · 대표번호 02-000-0000</div>
+                    </div>
+                  </div>
+                  <div className="mt-3.5 grid grid-cols-4 gap-2">
+                    {[
+                      { icon: Printer, title: "복합기·프린터", desc: "렌탈 · 유지보수" },
+                      { icon: Monitor, title: "PC·모니터·SW", desc: "구성 · 설치 · 관리" },
+                      { icon: UserPlus, title: "입·퇴사자 IT", desc: "셋업 · 회수 대행" },
+                      { icon: ShieldCheck, title: "정기 방문 점검", desc: "분기마다 케어" },
+                    ].map(({ icon: Icon, title, desc }) => (
+                      <div key={title} className="rounded-lg bg-white/10 px-3 py-3 text-center">
+                        <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/25"><Icon size={17} className="text-blue-200" /></span>
+                        <div className="mt-1.5 text-[11.5px] font-black leading-4">{title}</div>
+                        <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{desc}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="mt-3 text-center text-[10px] font-semibold text-slate-400">본 리포트는 {report.periodLabel} 서비스 기록을 바탕으로 자동 작성되었습니다 · 퍼스트전산</div>
               </div>
@@ -313,7 +351,7 @@ export default function CustomerReport({ author }: { author: string }) {
                 <div className="px-10 py-7">
                   <table className="w-full text-left text-[12px]">
                     <thead><tr className="border-b-2 border-slate-900 text-[11px] font-black text-slate-500">
-                      <th className="py-2 pr-3">날짜</th><th className="py-2 pr-3">구분</th><th className="py-2 pr-3">기기</th><th className="py-2 pr-3">요청 내용</th><th className="py-2">처리</th>
+                      <th className="py-2 pr-3">날짜</th><th className="py-2 pr-3">구분</th><th className="py-2 pr-3">기기</th><th className="py-2 pr-3">내용</th><th className="py-2">처리</th>
                     </tr></thead>
                     <tbody>
                       {page2Rows.map((row, i) => (
