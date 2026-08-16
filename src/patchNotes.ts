@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7bbb007155",
+    "date": "2026-08-16",
+    "note": "통합이력 접수 탭에 유형 구분 — 복합기 AS·원격이관·IT 필터·칩·요약 분해"
+  },
+  {
     "hash": "36a3316759",
     "date": "2026-08-16",
     "note": "통합이력에 '접수' 분류 합류 — 서비스접수(복합기AS·IT·원격)를 이력으로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "55708347c2",
     "date": "2026-08-01",
     "note": "apps-script README — GAS 4종 목록과 배포 방법"
-  },
-  {
-    "hash": "527b5e3700",
-    "date": "2026-08-01",
-    "note": "First-DATA GAS를 apps-script/first-data로 통합 (이력 보존)"
   }
 ];

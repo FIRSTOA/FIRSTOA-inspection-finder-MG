@@ -5187,9 +5187,11 @@ export default function App() {
       }
     }
     setSending(false);
-    if (FIELD_NAVER_BUTTON && res.ok && kind === "normal" && pendingAsTicketRef.current) {
+    // 일정리스트·내 일정에서 [FIELD]로 넘어온 건만 — 전송 성공 시 일정 정리(완료/익일) 팝업.
+    // 필드탭을 직접 쓰는 경우(검색·원문 붙여넣기)는 pendingAsTicketRef가 없어 아무 변화 없다.
+    if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
-      // 연결은 유지 — 팝업을 닫아도 [네이버 캘린더] 버튼으로 다시 정리할 수 있다 (새 작업 시작 시 해제)
+      // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
     }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
@@ -5779,7 +5781,7 @@ export default function App() {
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
+                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
                 <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>
               </div>
               <button type="button" onClick={() => setTicketDonePrompt(null)} className="mt-2 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-500">그대로 두기</button>
@@ -5793,14 +5795,14 @@ export default function App() {
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDeferPrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 {([["익일", nextBizYmd(kstDate())], ["1주 뒤", addDaysYmd(kstDate(), 7)]] as [string, string][]).map(([label, date]) => (
-                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
                     {label}<div className="mt-0.5 text-xs font-bold text-slate-400">{date}</div>
                   </button>
                 ))}
               </div>
               <div className="mt-2 flex gap-2">
                 <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
               </div>
             </div>
           </div>
