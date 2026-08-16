@@ -10,6 +10,7 @@ import {
   type ActivityKind,
 } from "./operations";
 import { kstDate, weekRange } from "./visits";
+import { vendorMatchKey } from "./ids";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Props = { author: string };
@@ -65,11 +66,16 @@ function inspectionMachineSum(events: ActivityEvent[]) {
   return events.reduce((sum, event) => sum + Math.max(1, Number(event.machineCount) || 0), 0);
 }
 
+// 재계약은 협상이 몇 번을 오가도 결국 업체 1곳의 진행 — 기간 안에서는 같은 업체(표기 변형 포함)를 1로 센다
+function recontractVendorCount(events: ActivityEvent[]) {
+  return new Set(events.map((event) => vendorMatchKey(event.vendor || "") || event.vendor.trim()).filter(Boolean)).size;
+}
+
 function countByCategory(events: ActivityEvent[]) {
   return Object.fromEntries(
     ACTIVITY_KINDS.map((kind) => {
       const matched = events.filter((event) => event.category === kind);
-      return [kind, kind === "inspection" ? inspectionMachineSum(matched) : matched.length];
+      return [kind, kind === "inspection" ? inspectionMachineSum(matched) : kind === "recontract" ? recontractVendorCount(matched) : matched.length];
     }),
   ) as Record<ActivityKind, number>;
 }
