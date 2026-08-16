@@ -136,8 +136,10 @@ function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notic
     const title = window.prompt("전 직원에게 공유할 새 문구 이름을 입력하세요.");
     if (!title?.trim() || !body.trim()) return;
     if (!window.confirm(`'${title.trim()}' 문구를 회사 공용으로 추가할까요?\n모든 직원에게 동일하게 표시됩니다.`)) return;
-    await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
-    await reload();
+    try {
+      await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
+      await reload();
+    } catch (error) { window.alert(`공용 문구 저장 실패: ${(error as Error).message}`); }
   };
   const update = async (id: string, body: string) => {
     const current = custom.find((item) => item.id === id);
@@ -145,8 +147,10 @@ function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notic
     const title = window.prompt("회사 공용 문구 이름", current.title);
     if (!title?.trim() || !body.trim()) return;
     if (!window.confirm(`'${current.title}' 공용 문구를 수정할까요?\n변경 내용은 모든 직원에게 반영됩니다.`)) return;
-    await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
-    await reload();
+    try {
+      await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
+      await reload();
+    } catch (error) { window.alert(`공용 문구 수정 실패: ${(error as Error).message}`); }
   };
   const remove = async (id: string) => {
     const current = custom.find((item) => item.id === id);
