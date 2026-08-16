@@ -9,6 +9,10 @@ import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { historyCoreName } from "./ids";
 import { vendorNameByCode } from "./vendorCodes";
+import { COMPANY_MEMBERS } from "./companyDirectory";
+
+// 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
+const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 
@@ -406,8 +410,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
   // 코드가 붙은 일정은 마스터 대표명으로 검색(정확) — 없으면 제목에서 업체명 토큰 추출(폴백)
-  const openTicketHistory = (t: { vendor: string; vendor_code?: string }) => {
-    const fallback = historyCoreName(t.vendor);
+  const openTicketHistory = (t: { vendor: string; vendor_code?: string; assignee?: string }) => {
+    // 네이버 수기 제목은 "이름 제목"으로 시작하는 관행 — 배정자 또는 회사 명단과 대조해 사람 이름을 벗긴다
+    let raw = t.vendor.trim();
+    const who = (t.assignee || "").trim();
+    const firstToken = raw.split(/\s+/)[0] || "";
+    if (who && raw.startsWith(who)) raw = raw.slice(who.length).replace(/^[\s\-–—:]+/, "");
+    else if (MEMBER_NAMES.has(firstToken.replace(/[-–—:]+$/, ""))) raw = raw.slice(firstToken.length).replace(/^[\s\-–—:]+/, "");
+    const fallback = historyCoreName(raw);
     if (!t.vendor_code) { setHistVendor(fallback); return; }
     void vendorNameByCode(t.vendor_code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
   };

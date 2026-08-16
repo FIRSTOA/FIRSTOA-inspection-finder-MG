@@ -330,6 +330,17 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     loadedFor.current = "";
   };
 
+  // 같은 건물·같은 그룹에 법인이 여러 개인 경우(청연 등) — 업종 접두를 뗀 짧은 이름으로 넓혀 검색하는 지름길.
+  // 자동으로 합치지는 않는다: 법인이 다르면 미수·초과도 다른 회사 것이라 섞으면 사고다.
+  const broaderQuery = useMemo(() => {
+    const q = queryVendor.trim();
+    const stripped = q
+      .replace(/^(세무그룹|세무법인|법무법인|회계법인|법률사무소|특허법인|노무법인|의료법인|주식회사|유한회사|㈜|\(주\))+\s*/, "")
+      .replace(/(본사|지사|지점|사옥|타워|빌딩)$/, "")
+      .trim();
+    return stripped && stripped !== q && stripped.length >= 2 ? stripped : "";
+  }, [queryVendor]);
+
   if (!open) return null;
 
   return <div className="fixed inset-0 z-[2600] flex items-end bg-slate-950/45 sm:items-center sm:justify-center" onClick={onClose}>
@@ -354,6 +365,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         </div>}
       </div>
 
+      {!loading && detail && broaderQuery && <div className="border-b border-slate-100 bg-white px-3 py-2 sm:px-5">
+        <button type="button" onClick={() => selectNewVendor(broaderQuery)} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-100">
+          🔍 "{broaderQuery}"(으)로 넓게 보기 — 같은 이름을 쓰는 다른 법인·지점까지
+        </button>
+      </div>}
       {!loading && detail && <section className="border-b border-slate-200 bg-white">
         <div className="grid grid-cols-3 divide-x divide-slate-200">
           <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">통합 이름</div><div className="mt-1 text-base font-black text-slate-950">{includedHits.length}개</div></div>

@@ -40,6 +40,7 @@ export function historyCoreName(raw: string) {
   for (const token of cleaned.split(/[\s|·,~()/\-]+/)) {
     if (!/[가-힣]/.test(token)) continue; // 영문·숫자만인 토큰은 모델명·시리얼일 가능성이 높다
     if (HISTORY_STOPWORD.test(token)) continue;
+    if (/^[A-Za-z0-9]*\d+(개|대|매|장|세트|셋트|통|권|박스)$/.test(token)) continue; // "K3개" 같은 수량 표기
     const core = token
       .replace(/^\d+[A-Za-z]*(?=[가-힣])/, "") // "14N주식회사" → "주식회사"
       .replace(/^(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인|㈜)/, "");
