@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6ccb54e8b5",
+    "date": "2026-08-16",
+    "note": "고객 리포트 다듬기 — 장비 품목별 상세·'내용' 컬럼·홍보 아이콘 카드"
+  },
+  {
     "hash": "824e90fba3",
     "date": "2026-08-16",
     "note": "분기점검 안내 다듬기 — 전환을 다크 헤더 안으로, 개수 깔때기 표기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5d95bb0700",
     "date": "2026-08-01",
     "note": "동기화 현황에 임대리스트·임대현황표 추가 — 조용한 실패 감시"
-  },
-  {
-    "hash": "58d213b4a0",
-    "date": "2026-08-01",
-    "note": "first-data 죽은 코드 제거 — Legacy.gs(v10 폴백)·Migrate.gs(1회용 이관)"
   }
 ];
