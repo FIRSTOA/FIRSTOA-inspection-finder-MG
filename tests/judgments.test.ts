@@ -65,6 +65,15 @@ describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
     expect(historyCoreName("㈜넥스트라이프본사")).toBe("넥스트라이프");
     expect(historyCoreName("세무그룹청연청연 3층 입구왼쪽매년")).toBe("세무그룹청연청연");
   });
+  it("보고 양식 단어(제목·방문전 등)는 검색어가 아니다", () => {
+    expect(historyCoreName("제목 방문전 연락 요망 무천디자인 토너 전달")).toBe("무천디자인");
+    expect(historyCoreName("방문후 확인 전달 셋팅")).not.toBe("방문후");
+  });
+  it("등급 접두 토큰(30S업체명)을 최우선으로 잡는다 — 브라더·셋팅요청 오탐 사고", () => {
+    expect(historyCoreName("셋팅요청 S D450 30S제이드자산운용전 ㈜이도헬스케어")).toBe("제이드자산운용전");
+    expect(historyCoreName("여분전달 V D450 11V사단법인 안보경영연구원-백평")).toBe("안보경영연구원");
+    expect(historyCoreName("여분요청 SS ECOSYS-M5521CDN K3개 브라더")).not.toBe("브라더");
+  });
 });
 
 describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL workin_vendor_와 거울)", () => {

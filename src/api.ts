@@ -56,15 +56,23 @@ type HistorySearchTable = {
   regionField: string;
   nameField?: string;   // 업체명 컬럼 (기본 _업체명 — 웹앱 자체 테이블은 vendor 등)
   hiddenField?: string; // 숨김 컬럼 (기본 _hidden — 접수는 deleted)
-  select?: string;      // 조회 컬럼 제한 (report_text·photos처럼 긴 필드 제외용)
+  select?: string;      // 조회 컬럼 제한 (거대한 _raw·_원문 제외 — 통합이력 UI는 _컬럼을 숨기므로 표시엔 영향 없음)
 };
 
+// PostgREST select용 컬럼 나열 — 한글·특수문자(/·공백·괄호) 이름은 따옴표로 감싸고 통째로 인코딩
+function pgCols(...names: string[]) {
+  return names.map((name) => encodeURIComponent(/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ? name : `"${name}"`)).join(",");
+}
+// 시트 원장 공통 경량 컬럼 (점검·AS 계열 — _원문·_raw 제외로 응답이 수 MB → 수백 KB로 줄어든다)
+const JEOMGEOM_COLS = pgCols("id", "작성일", "작성자", "구분", "레벨", "등급", "업체명", "부서명", "지역", "키맨/접수자", "모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "한틴이카유무", "주차비지원유무", "특이사항", "_업체명", "_출처", "_dupKey", "created_at");
+
 const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
-  { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역" },
-  { table: "as_records", category: "AS", dateField: "작성일", regionField: "지역" },
+  { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역", select: JEOMGEOM_COLS },
+  { table: "as_records", category: "AS", dateField: "작성일", regionField: "지역", select: JEOMGEOM_COLS },
   { table: "overage_adjust", category: "초과", dateField: "방문일", regionField: "지역" },
   // 초과료 원장(시트 유입 2,798건) — 초과조정 활동(overage_adjust)과 같은 '초과' 분류로 합쳐 보여준다
-  { table: "overage", category: "초과", dateField: "날짜", regionField: "지역" },
+  { table: "overage", category: "초과", dateField: "날짜", regionField: "지역",
+    select: pgCols("id", "순번", "날짜", "특이사항", "임대여부", "등급", "접수내용", "컬러초과료", "흑백초과료", "합계", "마감방식", "자산번호", "모델명", "기본금액", "연평균", "계약일", "종료일", "남은개월", "기본매수", "초과장당금액", "미수개월수", "미수금액", "_업체명", "_출처", "_dupKey", "created_at") },
   { table: "misu", category: "미수", dateField: "입력일", regionField: "지역" },
   { table: "bulman", category: "불만", dateField: "방문일", regionField: "지역" },
   { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
@@ -73,6 +81,9 @@ const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   // 웹앱 서비스접수(복합기 AS·IT·원격이관) — "이 업체 이번 달 접수가 몇 번 왔나"를 통합이력에서 본다
   { table: "service_receptions", category: "접수", dateField: "receipt_date", regionField: "region", nameField: "vendor", hiddenField: "deleted",
     select: "id,receipt_date,type,vendor,region,symptom,status,author,model,serial,asset_no,lease_no,address,paid,completed_at,created_at" },
+  // 임대리스트(업체정보)도 직접 조회로 합류 — 서버 색인이 놓친 표기 변형까지 이름으로 한 번 더 잡는다 (누락 방어)
+  { table: "vendor_info", category: "업체정보", dateField: "종료일", regionField: "시/구", select:
+    pgCols("id", "임대여부", "품목", "제조사", "모델명", "기종", "자산번호", "순번", "기번", "계약일", "종료일", "대수", "등급", "시/구", "_업체명", "_dupKey", "created_at") },
 ];
 
 type HistoryRows = { config: HistorySearchTable; rows: Array<Record<string, unknown>> };
@@ -97,7 +108,12 @@ function historySearchTerms(value: string) {
     .replace(/\s+[가-힣]+(?:시|군|구)\s+.*$/u, "")
     .replace(/\s+[가-힣0-9·._()-]+(?:로|길)\s*\d+(?:-\d+)?(?:\s.*)?$/u, "")
     .trim();
-  return Array.from(new Set([query, normalized, withoutAddress].filter((term) => term.length >= 2)));
+  // 누락 방어: "넥스트라이프본사"·"세무그룹청연"처럼 접두·접미가 붙은 이름은 축약형도 같이 검색한다.
+  // 넓게 잡혀도 후보로만 나오고 '포함된 거래처 이름' 필터로 구분되므로, 못 찾는 것보다 낫다.
+  const noBiz = withoutAddress.replace(/^(세무그룹|세무법인|법무법인|회계법인|법률사무소|특허법인|노무법인|의료법인)\s*/, "").trim();
+  const noBranch = withoutAddress.replace(/(본사|지사|지점|사옥|타워|빌딩)$/, "").trim();
+  const core = noBiz.replace(/(본사|지사|지점|사옥|타워|빌딩)$/, "").trim();
+  return Array.from(new Set([query, normalized, withoutAddress, noBiz, noBranch, core].filter((term) => term.length >= 2)));
 }
 
 function mergeHistoryRows(groups: HistoryRows[][]): HistoryRows[] {
@@ -534,7 +550,8 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
   const candidates = allCandidates.filter((candidate) => Object.entries(candidate.counts || {})
     .some(([category, count]) => category !== "임대현황표" && Number(count || 0) > 0));
   const exactVendors = candidates.length ? candidates.map((candidate) => candidate.vendor) : terms;
-  const indexedDetails = await Promise.all(Array.from(new Set(exactVendors)).map(getVendorDetail));
+  // 후보가 수십 개로 넓어져도(청연 계열 등) 상세 RPC는 상위 8개까지만 — 속도 보호. 직접 조회가 나머지를 받친다.
+  const indexedDetails = await Promise.all(Array.from(new Set(exactVendors)).slice(0, 8).map(getVendorDetail));
   const detail: DetailResp = { vendor: query };
   HISTORY_SEARCH_TABLES.forEach((config) => {
     const directRows = sourceRows.find((result) => result.config.table === config.table)?.rows || [];
@@ -545,11 +562,9 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
     // 같은 분류를 여러 테이블이 채울 수 있다(초과 = overage_adjust + overage) — 앞 테이블 결과를 보존하고 합친다
     const existing = Array.isArray(detail[config.category]) ? detail[config.category] as Array<Record<string, unknown>> : [];
     existing.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
-    // 원본 테이블 조회가 가능하면 그 결과를 기준으로 삼아 RPC 상세와의 이중 집계를 막는다.
-    (directRows.length ? directRows : indexedRows).forEach((row) => {
-      const key = String(row._dupKey || row.id || JSON.stringify(row));
-      unique.set(key, row);
-    });
+    // 색인(RPC) 결과와 원본 직접 조회를 합집합으로 — 어느 한쪽이 놓친 기록도 살린다(누락 방어). 직접 조회가 나중이라 우선.
+    indexedRows.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
+    directRows.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
     detail[config.category] = Array.from(unique.values());
   });
   // 원본 테이블을 모르는 업체정보 등은 기존 상세 RPC 결과를 그대로 보존한다.

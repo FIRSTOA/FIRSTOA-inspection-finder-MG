@@ -12,7 +12,7 @@ import { workinVendorName } from "./ids";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
-import { HappyCallWorkspace } from "./CustomerEngagement";
+import { HappyCallWorkspace, TemplateBar } from "./CustomerEngagement";
 import { notify } from "./toast";
 
 type Place = { id: number; name: string; phone: string; team: string; label: string };
@@ -202,9 +202,10 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
       <section className="space-y-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-1.5 text-sm font-black text-slate-900"><MessageSquareText size={16} className="text-blue-600" />문자 내용 <span className="text-[10px] font-bold text-slate-400">{"{업체명}"} 자동 치환</span></div>
+          <div className="mt-2"><TemplateBar context="quarter_notice" author={author} body={message} onApply={setMessage} /></div>
           <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={7} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[13px] font-semibold leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <div className="mt-1 text-right text-[11px] font-bold text-slate-400">{message.length}자 {message.length > 88 ? "· LMS(장문)로 발송" : "· SMS"}</div>
-          {picked[0] && <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[12px] font-semibold leading-5 text-slate-600"><div className="mb-1 text-[10px] font-black text-slate-400">미리보기 — {workinVendorName(picked[0].place.name)}</div>{applyMessage(picked[0].place.name)}</div>}
+          {picked[0] && <div className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2.5 text-[12px] font-semibold leading-5 text-slate-600"><div className="mb-1 text-[10px] font-black text-slate-400">미리보기 — {workinVendorName(picked[0].place.name)}</div>{applyMessage(picked[0].place.name)}</div>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-1.5 text-sm font-black text-slate-900"><ShieldCheck size={16} className="text-emerald-600" />발송</div>
@@ -232,7 +233,12 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
                 {Object.entries(gradeCounts).map(([g, n]) => <span key={g} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">{g} {n}곳</span>)}
                 {excludeMisu && misuExcluded > 0 && <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-600">미수 {misuExcluded}곳 제외됨</span>}
               </div>
-              <div className="mt-2 text-[12px] font-semibold leading-5 text-slate-500">보내고 나면 되돌릴 수 없습니다. 테스트 발송으로 문안을 먼저 확인하는 것을 권장합니다.</div>
+              {/* 실제로 나갈 문안을 마지막으로 한 번 더 — 대량 발송이라 실수 방지 */}
+              {picked[0] && <div className="mt-2.5 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] font-semibold leading-5 text-slate-700">
+                <div className="mb-1 text-[10px] font-black text-slate-400">발송 문안 미리보기 — {workinVendorName(picked[0].place.name)} 기준 ({"{업체명}"}만 업체마다 바뀝니다)</div>
+                {applyMessage(picked[0].place.name)}
+              </div>}
+              <div className="mt-2 text-[12px] font-semibold leading-5 text-rose-600">⚠ 보내고 나면 되돌릴 수 없습니다. 문안을 위에서 꼭 확인하세요.</div>
             </div>
             <div className="flex gap-2 px-4 pb-4">
               <button type="button" onClick={() => setConfirmOpen(false)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>

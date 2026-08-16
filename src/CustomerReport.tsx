@@ -6,7 +6,7 @@
  * 발송(문자 MMS·메일)은 2단계 — 지금은 생성·저장까지.
  */
 import { useMemo, useState } from "react";
-import { Download, FileImage, Laptop, Monitor, Package, Printer, Search, ShieldCheck, UserPlus, Wind } from "lucide-react";
+import { Download, FileImage, Laptop, Monitor, Package, Printer, Search, UserPlus, Wind } from "lucide-react";
 import { selectRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
@@ -20,6 +20,8 @@ type ReportData = {
   counts: { as: number; remote: number; it: number; inspection: number };
   deviceTotal: number;
   catCounts: Array<{ label: string; count: number }>; // 품목별 대수 (컬러복합기·데스크탑·모니터…)
+  deviceDetail: Array<{ cat: string; maker: string; model: string; asset: string }>; // 상세: 품목·브랜드·기종·자산기번
+  sinceYear: number | null; // 첫 계약 연도 — "20XX년부터 함께" 감사 문구용
   lastInspection: string;
 };
 
@@ -106,7 +108,7 @@ export default function CustomerReport({ author }: { author: string }) {
       const nameCol = encodeURIComponent("_업체명");
       // ① 기기 현황 (임대중)
       const deviceRows = await selectRows<Record<string, string>>(
-        "vendor_info", `select=${encodeURIComponent("품목,모델명,기종,자산번호,임대여부,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
+        "vendor_info", `select=${encodeURIComponent("품목,제조사,모델명,기종,자산번호,임대여부,첫계약일,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
       );
       const active = deviceRows.filter((r) => r["임대여부"] === "임대중");
       const catMap = new Map<string, number>();
@@ -115,6 +117,15 @@ export default function CustomerReport({ author }: { author: string }) {
         catMap.set(label, (catMap.get(label) || 0) + 1);
       }
       const catCounts = Array.from(catMap.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+      // 상세 목록: 복합기·플로터 등 관리 핵심 장비 우선, 브랜드·기종·자산기번만 간결하게
+      const deviceDetail = active
+        .map((r) => ({ cat: normalizeCat(String(r["품목"] || "")), maker: String(r["제조사"] || "").trim(), model: String(r["모델명"] || r["기종"] || "").trim(), asset: String(r["자산번호"] || "").trim() }))
+        .sort((a, b) => (/복합기|프린터|플로터/.test(b.cat) ? 1 : 0) - (/복합기|프린터|플로터/.test(a.cat) ? 1 : 0));
+      // 함께한 기간: 임대리스트 첫계약일 중 가장 오래된 연도
+      const sinceYear = (() => {
+        const years = deviceRows.map((r) => Number(String(r["첫계약일"] || "").match(/(20\d{2})/)?.[1] || 0)).filter((y) => y >= 2000);
+        return years.length ? Math.min(...years) : null;
+      })();
       // ② 기간 내 접수 (AS·원격·IT)
       const receptions = (await selectRows<Record<string, unknown>>(
         "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
@@ -138,13 +149,21 @@ export default function CustomerReport({ author }: { author: string }) {
           desc: String(r.symptom || "").slice(0, 34),
           result: handledLine(String(noteOf.get(String(r.id)) || "")) || (String(r.status) === "완료" || String(r.status) === "전송완료" ? "처리 완료" : "진행 중"),
         })),
-        ...inspections.map((r) => ({
-          date: String(r["작성일"] || "").slice(0, 10),
-          kind: "정기 점검",
-          device: [String(r["모델명"] || ""), String(r["자산기번"] || "")].filter(Boolean).join(" · "),
-          desc: "정기 방문 점검",
-          result: String(r["처리내용"] || "점검 완료").slice(0, 40),
-        })),
+        // 점검은 방문 한 번에 여러 대를 보므로 날짜별로 1행으로 묶고 기기 칸엔 대수만 (기기 나열은 의미 없음)
+        ...(() => {
+          const byDate = new Map<string, Array<Record<string, unknown>>>();
+          for (const r of inspections) {
+            const d = String(r["작성일"] || "").slice(0, 10);
+            byDate.set(d, [...(byDate.get(d) || []), r]);
+          }
+          return Array.from(byDate.entries()).map(([d, group]) => ({
+            date: d,
+            kind: "정기 점검",
+            device: `복합기 ${group.length}대`,
+            desc: "정기 방문 점검",
+            result: String(group[0]?.["처리내용"] || "점검 완료").slice(0, 40),
+          }));
+        })(),
       ].sort((a, b) => a.date.localeCompare(b.date));
 
       const lastAll = (await selectRows<Record<string, unknown>>(
@@ -162,7 +181,7 @@ export default function CustomerReport({ author }: { author: string }) {
           inspection: inspections.length,
         },
         deviceTotal: active.length,
-        catCounts,
+        catCounts, deviceDetail, sinceYear,
         lastInspection: String(lastAll[0]?.["작성일"] || "").slice(0, 10),
       });
       setHits([]);
@@ -260,6 +279,11 @@ export default function CustomerReport({ author }: { author: string }) {
                 </div>
               </div>
 
+              {/* 감사 인사 — 리포트의 첫 문장은 숫자가 아니라 관계여야 한다 */}
+              <div className="border-b border-slate-100 px-10 py-4 text-[12.5px] font-semibold leading-6 text-slate-600">
+                {report.vendor} 담당자님, {report.sinceYear ? `${report.sinceYear}년부터 ${Math.max(1, new Date().getFullYear() - report.sinceYear + 1)}년째 ` : ""}저희 퍼스트전산을 믿고 맡겨 주셔서 진심으로 감사합니다.
+                {" "}{report.periodLabel} 동안 함께한 서비스 내용을 정리해 전해 드립니다. 불편하셨던 점이나 필요하신 것이 있다면 언제든 담당자에게 편하게 말씀해 주세요.
+              </div>
               <div className="grid grid-cols-4 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
                 {summaryCells.map(([label, value]) => (
                   <div key={label} className="px-6 py-5 text-center">
@@ -312,6 +336,26 @@ export default function CustomerReport({ author }: { author: string }) {
                   })}
                 </div>
                 {report.catCounts.length > 8 && <div className="mt-1.5 text-[10px] font-bold text-slate-400">외 {report.catCounts.slice(8).reduce((s, c) => s + c.count, 0)}대</div>}
+                {report.deviceDetail.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+                    <table className="w-full text-left text-[11.5px]">
+                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-[10.5px] font-black text-slate-500">
+                        <th className="px-3 py-1.5">품목</th><th className="px-3 py-1.5">브랜드</th><th className="px-3 py-1.5">기종</th><th className="px-3 py-1.5">자산기번</th>
+                      </tr></thead>
+                      <tbody>
+                        {report.deviceDetail.slice(0, 8).map((d, i) => (
+                          <tr key={i} className="border-b border-slate-100 last:border-0">
+                            <td className="whitespace-nowrap px-3 py-1.5 font-bold text-slate-600">{d.cat}</td>
+                            <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-slate-600">{d.maker || "-"}</td>
+                            <td className="max-w-[220px] truncate px-3 py-1.5 font-semibold text-slate-700">{d.model || "-"}</td>
+                            <td className="whitespace-nowrap px-3 py-1.5 font-bold text-slate-800" style={{ fontVariantNumeric: "tabular-nums" }}>{d.asset || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {report.deviceDetail.length > 8 && <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-400">외 {report.deviceDetail.length - 8}대 — 전체 목록은 담당자에게 요청하시면 보내드립니다.</div>}
+                  </div>
+                )}
               </div>
 
               <div className="mt-auto px-10 pb-8">
@@ -319,22 +363,45 @@ export default function CustomerReport({ author }: { author: string }) {
                   <div className="flex items-end justify-between gap-3">
                     <div>
                       <div className="text-[13px] font-black text-blue-300">사무실 IT의 모든 것, 퍼스트전산이 함께합니다</div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-slate-400">아래 어떤 것이든 담당자에게 말씀만 주세요 · 대표번호 02-000-0000</div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-400">렌탈도 판매도 — 필요하실 때 담당자에게 말씀만 주세요 · 대표번호 1522-1093</div>
                     </div>
                   </div>
-                  <div className="mt-3.5 grid grid-cols-4 gap-2">
+                  <div className="mt-3.5 grid grid-cols-3 gap-2">
                     {[
-                      { icon: Printer, title: "복합기·프린터", desc: "렌탈 · 유지보수" },
-                      { icon: Monitor, title: "PC·모니터·SW", desc: "구성 · 설치 · 관리" },
-                      { icon: UserPlus, title: "입·퇴사자 IT", desc: "셋업 · 회수 대행" },
-                      { icon: ShieldCheck, title: "정기 방문 점검", desc: "분기마다 케어" },
+                      { icon: Printer, title: "복합기 · 프린터", desc: "렌탈 · 판매 · 유지보수" },
+                      { icon: Monitor, title: "PC · 맥 · 모니터", desc: "렌탈 · 판매 · 사양 상담" },
+                      { icon: UserPlus, title: "입·퇴사자 IT", desc: "계정·장비 셋업 · 회수 대행" },
                     ].map(({ icon: Icon, title, desc }) => (
-                      <div key={title} className="rounded-lg bg-white/10 px-3 py-3 text-center">
-                        <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/25"><Icon size={17} className="text-blue-200" /></span>
-                        <div className="mt-1.5 text-[11.5px] font-black leading-4">{title}</div>
-                        <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{desc}</div>
+                      <div key={title} className="flex items-center gap-3 rounded-lg bg-white/10 px-4 py-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/25"><Icon size={17} className="text-blue-200" /></span>
+                        <span>
+                          <div className="text-[12px] font-black leading-4">{title}</div>
+                          <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{desc}</div>
+                        </span>
                       </div>
                     ))}
+                  </div>
+                  {/* 취급 소프트웨어 — 제품이 눈에 보이게 워드마크풍 배지로 (로고 원본은 라이선스 문제로 안 씀) */}
+                  <div className="mt-3 flex items-center gap-2 rounded-lg bg-black/20 px-4 py-2.5">
+                    <span className="shrink-0 text-[10px] font-black text-slate-400">소프트웨어<br />설치·라이선스</span>
+                    <div className="flex flex-1 flex-wrap items-center gap-1.5">
+                      {[
+                        { mark: "W", name: "Windows", bg: "#0078D4" },
+                        { mark: "X", name: "Excel", bg: "#217346" },
+                        { mark: "P", name: "PowerPoint", bg: "#D24726" },
+                        { mark: "한", name: "한글·한컴오피스", bg: "#0E4A9E" },
+                        { mark: "A", name: "AutoCAD", bg: "#C43C33" },
+                        { mark: "Ps", name: "Photoshop", bg: "#001E36" },
+                        { mark: "Ai", name: "Illustrator", bg: "#330000" },
+                        { mark: "V3", name: "백신·보안", bg: "#1B7A43" },
+                      ].map(({ mark, name, bg }) => (
+                        <span key={name} className="flex items-center gap-1.5 rounded-md bg-white/[0.08] py-1 pl-1 pr-2">
+                          <span className="flex h-5 w-5 items-center justify-center rounded text-[9px] font-black text-white" style={{ background: bg }}>{mark}</span>
+                          <span className="text-[10px] font-bold text-slate-200">{name}</span>
+                        </span>
+                      ))}
+                      <span className="text-[10px] font-bold text-slate-400">외 업무용 SW 전반</span>
+                    </div>
                   </div>
                 </div>
                 <div className="mt-3 text-center text-[10px] font-semibold text-slate-400">본 리포트는 {report.periodLabel} 서비스 기록을 바탕으로 자동 작성되었습니다 · 퍼스트전산</div>

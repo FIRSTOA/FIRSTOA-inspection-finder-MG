@@ -402,29 +402,47 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         {loading && <div className="py-16 text-center text-sm font-semibold text-slate-400">전체 이력을 모으는 중...</div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
         {!loading && detail && activeCat === "전체" && (() => {
-          const chip = (tone: string, text: string, key: string) => <span key={key} title={text} className={`inline-flex max-w-[300px] items-center overflow-hidden rounded-full border px-2.5 py-1 text-[11px] font-black ${tone}`}><span className="truncate">{text}</span></span>;
-          const items: ReturnType<typeof chip>[] = [];
+          // 한 줄 = 한 항목 (색 점 + 고정 라벨 + 값) — 어느 화면에서 열어도 같은 기준·같은 모양
+          type CheckRow = { dot: string; label: string; value: string; tone?: string; strong?: boolean };
+          const rows: CheckRow[] = [];
           const f = flags;
-          if (f?.inspection) items.push(chip(f.inspection.done ? "border-slate-200 bg-slate-50 text-slate-500" : f.inspection.carried ? "border-slate-200 bg-slate-50 text-slate-500" : "border-blue-300 bg-blue-50 text-blue-700", f.inspection.done ? `점검 완료 (${f.inspection.quarter}분기)` : f.inspection.carried ? "점검 다음분기 이관" : `${f.inspection.quarter}분기 점검 대상`, "insp"));
-          if (f?.renewal) items.push(chip(f.renewal.done ? "border-slate-200 bg-slate-50 text-slate-500" : "border-blue-300 bg-blue-50 text-blue-700", f.renewal.done ? "재계약 완료" : `재계약 도래${f.renewal.due ? ` · ${f.renewal.due}` : ""}`, "renew"));
-          if (f?.misu) items.push(chip(f.misu.cleared ? "border-slate-200 bg-slate-50 text-slate-500" : "border-rose-300 bg-rose-50 text-rose-700", f.misu.cleared ? `미수 완납 (${f.misu.date})` : `미수 ${f.misu.balance}${f.misu.months ? ` · ${f.misu.months}개월` : ""}`, "misu"));
-          if (f?.overage) items.push(chip("border-amber-300 bg-amber-50 text-amber-800", `초과 ${f.overage.total} (${f.overage.date})`, "over"));
-          if (f?.bulman) items.push(chip("border-rose-300 bg-rose-50 text-rose-700", `불만 ${f.bulman.date} · ${f.bulman.content}`, "bul"));
-          if (quarterCheck.advice?.usageLine) items.push(chip("border-blue-200 bg-blue-50 text-blue-700", `📈 ${quarterCheck.advice.usageLine}`, "usage"));
-          if (quarterCheck.advice?.adviceLine) items.push(chip("border-emerald-300 bg-emerald-50 text-emerald-700", `🧰 ${quarterCheck.advice.adviceLine}`, "spare"));
-          if (quarterCheck.advice?.warning) items.push(chip("border-amber-300 bg-amber-50 text-amber-800", `⚠ ${quarterCheck.advice.warning}`, "warn"));
-          if (quarterCheck.special) items.push(chip("border-rose-200 bg-rose-50 text-rose-600", `❗ ${quarterCheck.special}`, "special"));
+          if (f?.misu) rows.push(f.misu.cleared
+            ? { dot: "bg-slate-300", label: "미수", value: `완납 (${f.misu.date})${f.misu.count > 1 ? ` · 그동안 ${f.misu.count}회 발생` : ""}`, tone: "text-slate-500" }
+            : { dot: "bg-rose-500", label: "미수", value: `잔액 ${f.misu.balance}${f.misu.months ? ` · ${f.misu.months}개월` : ""}${f.misu.count > 1 ? ` · 누적 ${f.misu.count}회` : ""}`, tone: "text-rose-700", strong: true });
+          if (f?.bulman) rows.push({ dot: "bg-rose-500", label: "불만", value: `${f.bulman.date} · ${f.bulman.content}${f.bulman.count90 > 1 ? ` (최근 90일 ${f.bulman.count90}건)` : ""}`, tone: "text-rose-700", strong: true });
+          if (f?.overage) rows.push({ dot: "bg-amber-500", label: "초과", value: `${f.overage.total} (${f.overage.date})${f.overage.count12 > 1 ? ` · 12개월 새 ${f.overage.count12}회` : ""}`, tone: "text-amber-800" });
+          if (f?.inspection) rows.push(f.inspection.done
+            ? { dot: "bg-slate-300", label: "점검", value: `완료 (${f.inspection.quarter}분기)`, tone: "text-slate-500" }
+            : f.inspection.carried
+              ? { dot: "bg-slate-300", label: "점검", value: "다음 분기로 이관됨", tone: "text-slate-500" }
+              : { dot: "bg-blue-500", label: "점검", value: `${f.inspection.quarter}분기 방문 대상`, tone: "text-blue-700" });
+          if (f?.renewal) rows.push(f.renewal.done
+            ? { dot: "bg-slate-300", label: "재계약", value: "완료", tone: "text-slate-500" }
+            : { dot: "bg-blue-500", label: "재계약", value: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
+          if (quarterCheck.advice?.usageLine) rows.push({ dot: "bg-blue-400", label: "사용량", value: quarterCheck.advice.usageLine, tone: "text-slate-700" });
+          if (quarterCheck.advice?.adviceLine) rows.push({ dot: "bg-emerald-500", label: "여분", value: quarterCheck.advice.adviceLine, tone: "text-emerald-700" });
+          if (quarterCheck.advice?.warning) rows.push({ dot: "bg-amber-500", label: "주의", value: quarterCheck.advice.warning, tone: "text-amber-800" });
+          if (quarterCheck.special) rows.push({ dot: "bg-rose-400", label: "특이", value: quarterCheck.special, tone: "text-rose-700" });
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
-            items.push(chip("border-slate-200 bg-slate-50 text-slate-600", `🖨 임대중 ${parts}${devices.ended ? ` (종료 ${devices.ended}대 제외)` : ""}`, "dev"));
+            rows.push({ dot: "bg-slate-400", label: "기기", value: `임대중 ${parts}${devices.ended ? ` (종료 ${devices.ended}대 제외)` : ""}`, tone: "text-slate-600" });
           }
-          if (devices?.recentSwap) items.push(chip("border-indigo-300 bg-indigo-50 text-indigo-700", `🔄 최근 1년 내 납품·교체 ${devices.recentSwap}`, "swap"));
+          if (devices?.recentSwap) rows.push({ dot: "bg-indigo-500", label: "교체", value: `최근 1년 내 납품·교체 ${devices.recentSwap}`, tone: "text-indigo-700" });
           return <section className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950">이번 분기 체크</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">방문 전에 확인할 것들 — 워킨맵·미수·초과·불만·최근 2회 점검(사용량·여분) 기준.</p></div>
-            <div className="flex flex-wrap gap-1.5 px-4 py-3">
-              {items.length ? items : <span className="text-xs font-semibold text-slate-400">이번 분기에 특별히 체크할 항목이 없습니다.</span>}
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+              <h3 className="text-sm font-black text-slate-950">이번 분기 체크</h3>
+              <span className="text-[10px] font-bold text-slate-400">워킨맵 · 미수 · 초과 · 불만 · 최근 2회 점검 기준</span>
             </div>
-            {quarterCheck.latest && <div className="truncate border-t border-slate-100 px-4 py-2 text-[11px] font-semibold text-slate-500" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}${quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
+            <div className="divide-y divide-slate-50">
+              {rows.length ? rows.map((row) => (
+                <div key={`${row.label}-${row.value}`} className="flex items-center gap-3 px-4 py-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${row.dot}`} />
+                  <span className="w-11 shrink-0 text-[11px] font-black text-slate-400">{row.label}</span>
+                  <span className={`min-w-0 flex-1 truncate text-[12.5px] ${row.strong ? "font-black" : "font-semibold"} ${row.tone || "text-slate-700"}`} title={row.value}>{row.value}</span>
+                </div>
+              )) : <div className="px-4 py-4 text-xs font-semibold text-slate-400">이번 분기에 특별히 체크할 항목이 없습니다.</div>}
+            </div>
+            {quarterCheck.latest && <div className="truncate border-t border-slate-100 bg-slate-50/50 px-4 py-2 text-[11px] font-semibold text-slate-500" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}${quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
           </section>;
         })()}
         {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

@@ -6,7 +6,7 @@ import FormModal from "./FormModal";
 type Contact = { id: string; name: string; phone: string; email: string; selected: boolean };
 type HappycallStatus = "pending" | "scheduled" | "sent" | "failed" | "skip" | "cancelled";
 type HappycallRecord = { visit_id: string; author: string; recipient: string; keyman: string; message: string; recipients?: Contact[]; job_ids?: string[]; scheduled_at?: string; status: HappycallStatus; sent_at?: string; error?: string };
-type MessageTemplate = { id: string; context: "happycall" | "promotion"; title: string; body: string; active: boolean; created_by: string };
+type MessageTemplate = { id: string; context: "happycall" | "promotion" | "quarter_notice"; title: string; body: string; active: boolean; created_by: string };
 type PromoMaterial = { id: string; title: string; category: string; description: string; file_url: string; file_type: string; created_by: string; created_at: string };
 
 const happycallDays = 7;
@@ -15,6 +15,9 @@ const happycallDefaults = [
   { id: "00000000-0000-0000-0000-000000000101", context: "happycall" as const, title: "방문 기본 확인형", body: "[퍼스트전산] 고객님, {방문일} 방문한 {담당자}입니다. 방문 후 기기는 잘 사용하고 계신가요? 불편한 점이 있다면 대표번호로 말씀해 주세요.", active: true, created_by: "SYSTEM" },
   { id: "00000000-0000-0000-0000-000000000102", context: "happycall" as const, title: "AS 기본 확인형", body: "[퍼스트전산] 고객님, {방문일} 방문한 {담당자}입니다. 처리해 드린 증상은 다시 발생하지 않고 잘 사용 중이신가요? 같은 증상이 반복되면 대표번호로 말씀해 주세요.", active: true, created_by: "SYSTEM" },
   { id: "00000000-0000-0000-0000-000000000103", context: "happycall" as const, title: "짧은 만족 확인형", body: "[퍼스트전산] 고객님, 오늘 방문한 {담당자}입니다. 불편 없이 잘 사용 중이신지 확인차 연락드립니다. 추가 도움이 필요하시면 대표번호로 연락 부탁드립니다.", active: true, created_by: "SYSTEM" },
+];
+const quarterNoticeDefaults = [
+  { id: "00000000-0000-0000-0000-000000000301", context: "quarter_notice" as const, title: "분기점검 기본 안내형", body: "안녕하세요, {업체명} 담당자님. 사무기기 관리업체 퍼스트전산입니다.\n이번 분기 정기 점검을 위해 기간 내 방문드려 인사드리겠습니다.\n방문 전 연락드리며, 불편하신 점이 있으시면 언제든 말씀 부탁드립니다.\n항상 저희 퍼스트전산을 이용해 주셔서 감사합니다.", active: true, created_by: "SYSTEM" },
 ];
 const promotionDefaults = [
   { id: "00000000-0000-0000-0000-000000000201", context: "promotion" as const, title: "자료 안내형", body: "[퍼스트전산] 고객님께 업무에 도움이 될 {자료명} 자료를 보내드립니다.\n{자료설명}\n{자료링크}", active: true, created_by: "SYSTEM" },
@@ -107,8 +110,8 @@ function ContactsEditor({ contacts, onChange, email = false }: { contacts: Conta
   </div>;
 }
 
-function useMessageTemplates(context: "happycall" | "promotion", author: string) {
-  const defaults = context === "happycall" ? happycallDefaults : promotionDefaults;
+function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notice", author: string) {
+  const defaults = context === "happycall" ? happycallDefaults : context === "quarter_notice" ? quarterNoticeDefaults : promotionDefaults;
   // 마지막으로 본 공용 문구를 로컬에 캐시 — 서버 응답 전에 옛 기본문구가 번쩍이지 않고 즉시 최신으로 뜬다
   const cacheKey = `msg_templates_${context}_v1`;
   const readCache = (): MessageTemplate[] => { try { const parsed = JSON.parse(localStorage.getItem(cacheKey) || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } };
@@ -154,7 +157,7 @@ function useMessageTemplates(context: "happycall" | "promotion", author: string)
   return { templates: custom.length ? custom : defaults, loaded, save, update, remove, editableIds: new Set(custom.map((item) => item.id)) };
 }
 
-function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
+export function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion" | "quarter_notice"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
   const { templates, loaded, save, update, remove, editableIds } = useMessageTemplates(context, author);
   const [selected, setSelected] = useState(templates[0]?.id || "");
   const appliedRevision = useRef("");
@@ -284,7 +287,7 @@ function MaterialPreview({ material, compact = false }: { material: PromoMateria
   if (material.file_type.startsWith("image/")) return <img src={material.file_url} alt={material.title} loading="lazy" className="h-full w-full object-cover" />;
   return <div className="relative h-full w-full overflow-hidden bg-white">
     <PdfCanvas url={material.file_url} fit={compact ? "cover" : "contain"} />
-    <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-slate-900/75 px-2 py-1 text-[10px] font-black text-white">{compact ? "PDF" : "PDF 미리보기"}</span>
+    
   </div>;
 }
 
@@ -320,7 +323,7 @@ export function PromoWorkspace({ author }: { author: string }) {
     <div className="mt-1 text-[10px] font-bold text-slate-400">이 칸만 고치면 현재 발송에만 적용됩니다. 전체 문구를 바꾸려면 공용 수정 버튼을 누르세요.</div>
     {(() => { const first = contacts.find((contact) => contact.selected); if (!first || !message.trim()) return null; return <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/40 px-3.5 py-2.5"><div className="text-[10px] font-black tracking-wide text-blue-600">발송 미리보기 · {first.name || "고객"}</div><p className="mt-1 whitespace-pre-wrap break-all text-[13px] font-semibold leading-6 text-slate-700">{applyTokens(message, promoTokens(first))}</p></div>; })()}
     {notice && <div className="mt-3 rounded-lg bg-slate-100 p-3 text-xs font-bold text-slate-600">{notice}</div>}
-    <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2.5 text-sm font-black text-white">문자 발송</button><button onClick={() => void send("email")} className="rounded-full border border-blue-200 bg-white px-3 py-2.5 text-sm font-black text-blue-700 transition hover:bg-blue-50">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">원본 열기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">파일 저장</a></div>
+    <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2.5 text-sm font-black text-white">문자 발송</button><button onClick={() => void send("email")} className="rounded-full border border-blue-200 bg-white px-3 py-2.5 text-sm font-black text-blue-700 transition hover:bg-blue-50">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">미리보기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">파일 저장</a></div>
   </div> : <div className="flex min-h-[400px] items-center justify-center text-sm font-semibold text-slate-400">홍보물을 선택하세요.</div>;
   return <div className="space-y-4"><section className="flex items-center justify-between gap-3 overflow-hidden rounded-xl bg-[#1E252F] px-5 py-4 shadow-sm"><div><h2 className="text-base font-black text-white lg:text-lg">홍보물 센터</h2><p className="mt-0.5 hidden text-[11px] font-semibold text-slate-400 sm:block">방문 업체를 불러오거나 직접 입력해 문자·메일·인쇄합니다.</p></div><button onClick={() => setUploadOpen(true)} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2.5 text-sm font-black text-white">+ 자료 등록</button></section><div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(470px,.9fr)]"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap items-center gap-1.5 bg-[#151A23] px-4 py-2.5">
       <label className="mr-0.5 flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 transition focus-within:bg-white/[0.14]"><span className="text-xs text-slate-500">🔍</span><input value={materialQuery} onChange={(event) => setMaterialQuery(event.target.value)} placeholder="자료 검색" className="w-16 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500 sm:w-24" /></label>

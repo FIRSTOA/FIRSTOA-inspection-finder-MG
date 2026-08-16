@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "838dac4119",
+    "date": "2026-08-17",
+    "note": "홍보물 PDF 미리보기 수리 — pdfjs 직접 렌더링으로 교체"
+  },
+  {
     "hash": "e8448d8d01",
     "date": "2026-08-16",
     "note": "분기점검 안내 — 해피콜과 같은 2열 틀 + ⚠플래그·미수 제외"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "9286de0543",
     "date": "2026-08-01",
     "note": "First-DATA 콘솔 제거·기능 이식 + 카톡 수집 실패 원인 수정"
-  },
-  {
-    "hash": "31628b2e98",
-    "date": "2026-08-01",
-    "note": "동기화 현황 표시 정정 — 경로 정의를 실측 기준으로, 날짜 판정 수정"
   }
 ];
