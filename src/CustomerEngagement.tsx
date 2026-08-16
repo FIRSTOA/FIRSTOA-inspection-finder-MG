@@ -27,7 +27,6 @@ function cleanPhone(value: string) { return value.replace(/[^\d]/g, ""); }
 function newContact(name = "", phone = "", email = ""): Contact { return { id: crypto.randomUUID(), name, phone: cleanPhone(phone), email, selected: true }; }
 function validPhone(value: string) { return /^01\d{8,9}$/.test(cleanPhone(value)); }
 function validEmail(value: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()); }
-function pdfFallbackUrl(url: string) { return `https://drive.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}`; }
 function downloadUrl(url: string, title: string) { return `${url}?download=${encodeURIComponent(`${title}.pdf`)}`; }
 
 function extractVisitContacts(text: string): Contact[] {
@@ -249,12 +248,42 @@ export function HappyCallWorkspace({ author, switcher }: { author: string; switc
   </div>;
 }
 
+// PDF 첫 장을 pdfjs로 직접 그린다 — 브라우저 내장 뷰어(툴바가 썸네일을 덮음)나
+// 구글 드라이브 뷰어(이제 iframe 삽입 차단)에 기대지 않아 어떤 브라우저에서도 미리보기가 나온다.
+function PdfCanvas({ url, fit = "cover" }: { url: string; fit?: "cover" | "contain" }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default as string;
+        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+        const doc = await pdfjs.getDocument({ url }).promise;
+        const first = await doc.getPage(1);
+        const canvas = canvasRef.current;
+        if (!canvas || !alive) return;
+        const containerWidth = canvas.parentElement?.clientWidth || 420;
+        const base = first.getViewport({ scale: 1 });
+        const viewport = first.getViewport({ scale: (containerWidth * 2) / base.width }); // 2배 렌더 = 선명한 축소 표시
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await first.render({ canvas, canvasContext: canvas.getContext("2d") as CanvasRenderingContext2D, viewport }).promise;
+      } catch {
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [url]);
+  if (failed) return <div className="flex h-full w-full items-center justify-center bg-slate-100 text-xs font-black text-slate-400">PDF — [원본 열기]로 확인</div>;
+  return <canvas ref={canvasRef} className="h-full w-full bg-white" style={{ objectFit: fit, objectPosition: "top" }} />;
+}
+
 function MaterialPreview({ material, compact = false }: { material: PromoMaterial; compact?: boolean }) {
   if (material.file_type.startsWith("image/")) return <img src={material.file_url} alt={material.title} loading="lazy" className="h-full w-full object-cover" />;
   return <div className="relative h-full w-full overflow-hidden bg-white">
-    <object data={`${material.file_url}#page=1&view=FitH&toolbar=0&navpanes=0`} type="application/pdf" aria-label={`${material.title} PDF 미리보기`} className="pointer-events-none h-full w-full">
-      <iframe src={pdfFallbackUrl(material.file_url)} title={`${material.title} PDF 대체 미리보기`} loading="lazy" tabIndex={-1} className="pointer-events-none h-full w-full border-0 bg-white" />
-    </object>
+    <PdfCanvas url={material.file_url} fit={compact ? "cover" : "contain"} />
     <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-slate-900/75 px-2 py-1 text-[10px] font-black text-white">{compact ? "PDF" : "PDF 미리보기"}</span>
   </div>;
 }

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "e8448d8d01",
+    "date": "2026-08-16",
+    "note": "분기점검 안내 — 해피콜과 같은 2열 틀 + ⚠플래그·미수 제외"
+  },
+  {
     "hash": "6ccb54e8b5",
     "date": "2026-08-16",
     "note": "고객 리포트 다듬기 — 장비 품목별 상세·'내용' 컬럼·홍보 아이콘 카드"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "31628b2e98",
     "date": "2026-08-01",
     "note": "동기화 현황 표시 정정 — 경로 정의를 실측 기준으로, 날짜 판정 수정"
-  },
-  {
-    "hash": "5d95bb0700",
-    "date": "2026-08-01",
-    "note": "동기화 현황에 임대리스트·임대현황표 추가 — 조용한 실패 감시"
   }
 ];
