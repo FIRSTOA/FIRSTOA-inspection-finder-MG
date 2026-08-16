@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "2d07e928b3",
+    "date": "2026-08-17",
+    "note": "분기 안내 공용 문구 저장 불가 수리 — context CHECK 제약 확장"
+  },
+  {
     "hash": "b56fc6642c",
     "date": "2026-08-17",
     "note": "검색어 추출 2건 더 근절 — 슬래시 제목·#등급 접두"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "f2b600c92b",
     "date": "2026-08-01",
     "note": "조회 팀 필터 보강 — 출처 라벨의 팀까지 매칭 + 불만 테스트 기록 삭제"
-  },
-  {
-    "hash": "7d343c86c7",
-    "date": "2026-08-01",
-    "note": "동기화 현황 팀별 카톡 칩 + 조회 팀 필터 + 권한 전수점검"
   }
 ];

@@ -132,29 +132,17 @@ function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notic
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [reload]);
-  const save = async (body: string) => {
-    const title = window.prompt("전 직원에게 공유할 새 문구 이름을 입력하세요.");
-    if (!title?.trim() || !body.trim()) return;
-    if (!window.confirm(`'${title.trim()}' 문구를 회사 공용으로 추가할까요?\n모든 직원에게 동일하게 표시됩니다.`)) return;
-    try {
-      await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
-      await reload();
-    } catch (error) { window.alert(`공용 문구 저장 실패: ${(error as Error).message}`); }
+  // 브라우저 prompt/confirm을 쓰지 않는다 — "추가 대화상자 차단"에 걸리면 소리 없이 실패해 "저장이 안 돼"가 된다.
+  const save = async (title: string, body: string) => {
+    await upsertRow("message_templates", { id: crypto.randomUUID(), context, title: title.trim(), body, active: true, created_by: author }, "id");
+    await reload();
   };
-  const update = async (id: string, body: string) => {
-    const current = custom.find((item) => item.id === id);
-    if (!current) return save(body);
-    const title = window.prompt("회사 공용 문구 이름", current.title);
-    if (!title?.trim() || !body.trim()) return;
-    if (!window.confirm(`'${current.title}' 공용 문구를 수정할까요?\n변경 내용은 모든 직원에게 반영됩니다.`)) return;
-    try {
-      await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
-      await reload();
-    } catch (error) { window.alert(`공용 문구 수정 실패: ${(error as Error).message}`); }
+  const update = async (id: string, title: string, body: string) => {
+    if (!custom.find((item) => item.id === id)) return save(title, body); // 기본 문구는 수정 대신 새 공용으로 저장
+    await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { title: title.trim(), body });
+    await reload();
   };
   const remove = async (id: string) => {
-    const current = custom.find((item) => item.id === id);
-    if (!current || !window.confirm(`'${current.title}' 공용 문구를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
     await updateRows("message_templates", `id=eq.${encodeURIComponent(id)}`, { active: false });
     await reload();
   };
@@ -164,6 +152,7 @@ function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notic
 export function TemplateBar({ context, author, body, onApply, preferredTitle = "", applyRevision = "" }: { context: "happycall" | "promotion" | "quarter_notice"; author: string; body: string; onApply: (body: string) => void; preferredTitle?: string; applyRevision?: string }) {
   const { templates, loaded, save, update, remove, editableIds } = useMessageTemplates(context, author);
   const [selected, setSelected] = useState(templates[0]?.id || "");
+  const [dialog, setDialog] = useState<null | { mode: "add" | "edit" | "remove"; title: string; error?: string; busy?: boolean }>(null);
   const appliedRevision = useRef("");
   const selectedId = templates.some((item) => item.id === selected) ? selected : templates[0]?.id || "";
   useEffect(() => {
@@ -179,9 +168,49 @@ export function TemplateBar({ context, author, body, onApply, preferredTitle = "
     <select value={selectedId} onChange={(event) => { setSelected(event.target.value); const template = templates.find((item) => item.id === event.target.value); if (template) onApply(template.body); }} className="col-span-3 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-black sm:col-span-1 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
       {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
     </select>
-    <button type="button" onClick={() => void save(body)} className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-600 transition hover:bg-blue-50">공용 추가</button>
-    <button type="button" onClick={() => void update(selectedId, body)} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">공용 수정</button>
-    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => void remove(selectedId)} className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40">공용 삭제</button>
+    <button type="button" onClick={() => setDialog({ mode: "add", title: "" })} className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-blue-600 transition hover:bg-blue-50">공용 추가</button>
+    <button type="button" onClick={() => setDialog({ mode: editableIds.has(selectedId) ? "edit" : "add", title: templates.find((t) => t.id === selectedId)?.title || "" })} className="rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">공용 수정</button>
+    <button type="button" disabled={!editableIds.has(selectedId)} onClick={() => setDialog({ mode: "remove", title: templates.find((t) => t.id === selectedId)?.title || "" })} className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40">공용 삭제</button>
+    {dialog && (
+      <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => !dialog.busy && setDialog(null)}>
+        <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="bg-[#1E252F] px-5 py-4">
+            <div className="text-[11px] font-black text-slate-400">회사 공용 문구 · 전 직원에게 반영됩니다</div>
+            <div className="mt-0.5 text-[15px] font-black text-white">{dialog.mode === "add" ? "공용 문구로 저장" : dialog.mode === "edit" ? "공용 문구 수정" : "공용 문구 삭제"}</div>
+          </div>
+          <div className="space-y-2.5 px-5 py-4">
+            {dialog.mode !== "remove" ? (<>
+              <label className="block text-[11px] font-black text-slate-500">문구 이름
+                <input value={dialog.title} onChange={(e) => setDialog({ ...dialog, title: e.target.value })} autoFocus placeholder="예: 분기점검 기본 안내형"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              </label>
+              <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-[12px] font-semibold leading-5 text-slate-600">{body}</div>
+            </>) : (
+              <div className="text-sm font-bold text-slate-700">'{dialog.title}' 문구를 삭제할까요? 모든 직원의 목록에서 사라집니다.</div>
+            )}
+            {dialog.error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-bold text-rose-600">{dialog.error}</div>}
+          </div>
+          <div className="flex gap-2 px-4 pb-4">
+            <button type="button" disabled={dialog.busy} onClick={() => setDialog(null)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">취소</button>
+            <button type="button" disabled={dialog.busy || (dialog.mode !== "remove" && (!dialog.title.trim() || !body.trim()))}
+              onClick={() => { void (async () => {
+                setDialog({ ...dialog, busy: true, error: "" });
+                try {
+                  if (dialog.mode === "add") await save(dialog.title, body);
+                  else if (dialog.mode === "edit") await update(selectedId, dialog.title, body);
+                  else await remove(selectedId);
+                  setDialog(null);
+                } catch (error) {
+                  setDialog({ ...dialog, busy: false, error: `실패: ${(error as Error).message}` });
+                }
+              })(); }}
+              className={`flex-[2] rounded-full py-2.5 text-sm font-black text-white shadow transition disabled:opacity-40 ${dialog.mode === "remove" ? "bg-rose-600 hover:bg-rose-700" : "bg-blue-600 hover:bg-blue-700"}`}>
+              {dialog.busy ? "처리 중…" : dialog.mode === "remove" ? "삭제" : "저장"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 }
 
@@ -283,12 +312,15 @@ function PdfCanvas({ url, fit = "cover" }: { url: string; fit?: "cover" | "conta
     })();
     return () => { alive = false; };
   }, [url]);
-  if (failed) return <div className="flex h-full w-full items-center justify-center bg-slate-100 text-xs font-black text-slate-400">PDF — [원본 열기]로 확인</div>;
-  return <canvas ref={canvasRef} className="h-full w-full bg-white" style={{ objectFit: fit, objectPosition: "top" }} />;
+  if (failed) return <div className="flex h-full w-full items-center justify-center bg-slate-100 py-10 text-xs font-black text-slate-400">PDF — [미리보기]로 확인</div>;
+  // 카드(cover)는 상자를 채우고, 상세(contain)는 폭에 맞춰 크게 — 세로 문서는 래퍼가 스크롤한다
+  return fit === "cover"
+    ? <canvas ref={canvasRef} className="h-full w-full bg-white" style={{ objectFit: "cover", objectPosition: "top" }} />
+    : <canvas ref={canvasRef} className="block h-auto w-full bg-white" />;
 }
 
 function MaterialPreview({ material, compact = false }: { material: PromoMaterial; compact?: boolean }) {
-  if (material.file_type.startsWith("image/")) return <img src={material.file_url} alt={material.title} loading="lazy" className="h-full w-full object-cover" />;
+  if (material.file_type.startsWith("image/")) return <img src={material.file_url} alt={material.title} loading="lazy" className={compact ? "h-full w-full object-cover" : "block h-auto w-full"} />;
   return <div className="relative h-full w-full overflow-hidden bg-white">
     <PdfCanvas url={material.file_url} fit={compact ? "cover" : "contain"} />
     
@@ -309,7 +341,7 @@ export function PromoWorkspace({ author }: { author: string }) {
   const send = async (channel: "sms" | "email") => { if (!selected) return; const targets = contacts.filter((contact) => contact.selected && (channel === "sms" ? validPhone(contact.phone) : validEmail(contact.email))); if (!targets.length) return setNotice(channel === "sms" ? "발송할 휴대전화 번호를 확인해 주세요." : "발송할 이메일 주소를 확인해 주세요."); try { for (const contact of targets) { const text = applyTokens(message, promoTokens(contact)); await invokeEdgeFunction("customer-message-send", { channel, type: "promotion", to: channel === "sms" ? contact.phone : contact.email, text, materialId: selected.id, author }); } setNotice(`${targets.length}명에게 ${channel === "sms" ? "문자" : "메일"}를 발송했습니다.`); } catch (error) { setNotice(`발송 실패: ${(error as Error).message}`); } };
   const detail = selected ? <div className="flex min-h-0 flex-col">
     <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black text-blue-600">{selected.category}</div><div className="mt-1 text-lg font-black">{selected.title}</div></div><button onClick={() => void removeMaterial()} className="rounded-full border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">삭제</button></div>
-    <div className="mt-3 aspect-[16/9] overflow-hidden rounded-lg border bg-slate-100"><MaterialPreview material={selected} /></div>
+    <div className="mt-3 max-h-[480px] overflow-y-auto rounded-lg border bg-slate-100"><MaterialPreview material={selected} /></div>
     <div className="mt-4 text-xs font-black text-slate-500">
       최근 방문 업체
       <button type="button" onClick={() => setVisitPickerOpen((current) => !current)} className="mt-1 flex w-full items-center justify-between gap-3 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-800">
