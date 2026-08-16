@@ -4,7 +4,7 @@
  * 등급(N/NN/S/SS/V)·팀별 선택 발송, 완료(G5)·이관(G12) 제외, 휴대폰(01X) 번호만,
  * 같은 분기 중복 발송 방지(quarter_notice_log), 발송 전 확인 모달 + 테스트 발송.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MessageSquareText, Send, ShieldCheck } from "lucide-react";
 import { insertRow, invokeEdgeFunction, selectAllRows, selectRows } from "./supabase";
 import { workinVendorName } from "./ids";
@@ -13,7 +13,6 @@ import { notify } from "./toast";
 
 type Place = { id: number; name: string; phone: string; team: string; label: string };
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
-const TEAMS = ["전체", "A", "B", "C", "D"] as const;
 
 const gradeOf = (name: string) => (name.match(/^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])/)?.[1] || "");
 const mobileOf = (phone: string) => (String(phone || "").match(/01[016789][ -]?\d{3,4}[ -]?\d{4}/)?.[0] || "").replace(/[^\d]/g, "");
@@ -23,14 +22,14 @@ const DEFAULT_MESSAGE = `안녕하세요, {업체명} 담당자님. 사무기기
 방문 전 연락드리며, 불편하신 점이 있으시면 언제든 말씀 부탁드립니다.
 항상 저희 퍼스트전산을 이용해 주셔서 감사합니다.`;
 
-function QuarterNoticeBoard({ author }: { author: string }) {
+function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: ReactNode }) {
   const now = new Date();
   const quarterNum = Math.floor(now.getMonth() / 3) + 1;
   const quarterKey = `${now.getFullYear()}-Q${quarterNum}`;
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
   const [grades, setGrades] = useState<string[]>([...GRADES]);
-  const [team, setTeam] = useState<(typeof TEAMS)[number]>("전체");
+  const [team, setTeam] = useState("전체");
   const [excludeDone, setExcludeDone] = useState(true);
   const [excludeSent, setExcludeSent] = useState(true);
   const [unchecked, setUnchecked] = useState<Set<number>>(new Set());
@@ -59,8 +58,10 @@ function QuarterNoticeBoard({ author }: { author: string }) {
     return () => { active = false; };
   }, [quarterNum, quarterKey]);
 
+  // 팀 목록은 실데이터에서 — 현 분기 워킨맵에 있는 팀만 나온다 (E팀 지점이 생기면 자동 표시)
+  const teamOptions = useMemo(() => ["전체", ...Array.from(new Set(places.map((p) => p.team).filter(Boolean))).sort()], [places]);
   // 대상 계산: 등급·팀·라벨 필터 → 휴대폰 있는 곳만 → 번호로 중복 제거(지점 여러 개 = 문자 1통)
-  const { targets, noPhone, alreadySent } = useMemo(() => {
+  const { targets, scopeCount, noPhone, alreadySent } = useMemo(() => {
     const filtered = places.filter((p) => {
       if (excludeDone && (p.label === "G5" || p.label === "G12")) return false;
       if (team !== "전체" && p.team !== team) return false;
@@ -77,6 +78,7 @@ function QuarterNoticeBoard({ author }: { author: string }) {
     const all = Array.from(byPhone.entries()).map(([phone, p]) => ({ phone, place: p, sent: sentPhones.has(phone) }));
     return {
       targets: all.filter((t) => !excludeSent || !t.sent),
+      scopeCount: filtered.length,
       noPhone: missing,
       alreadySent: all.filter((t) => t.sent).length,
     };
@@ -126,18 +128,23 @@ function QuarterNoticeBoard({ author }: { author: string }) {
   return (
     <div className="space-y-3">
       <section className="rounded-xl bg-[#1E252F] px-5 py-4 text-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="text-[15px] font-black">{quarterNum}분기 점검 방문 안내</div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">현 분기 워킨맵(분기점검) 대상에게 방문 전 인사 문자 — 대표번호로 발송됩니다.</div>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs font-black">
-            <span className="rounded-full bg-blue-600/25 px-3 py-1.5 text-blue-200">대상 {targets.length}곳</span>
-            <span className="rounded-full bg-white/10 px-3 py-1.5 text-slate-300">번호 없음 {noPhone}</span>
-            <span className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-emerald-300">이번 분기 발송됨 {alreadySent}</span>
-          </div>
+          {switcher}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* 워킨맵 지점 수와 문자 통수가 다른 이유가 한눈에 보이게 — 깔때기 표기 */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs font-black">
+          <span className="rounded-full bg-white/10 px-3 py-1.5 text-slate-300">워킨맵 지점 {scopeCount}곳</span>
+          <span className="text-slate-500">→</span>
+          <span className="rounded-full bg-white/10 px-3 py-1.5 text-slate-300">휴대폰 없음 −{noPhone}</span>
+          <span className="text-slate-500">→</span>
+          <span className="rounded-full bg-blue-600/25 px-3 py-1.5 text-blue-200">같은 번호 묶어 문자 {targets.length + (excludeSent ? alreadySent : 0)}통</span>
+          {alreadySent > 0 && <span className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-emerald-300">이번 분기 발송됨 {alreadySent}</span>}
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <div className="flex gap-1 rounded-full bg-white/10 p-1">
             {GRADES.map((g) => (
               <button key={g} type="button" onClick={() => toggleGrade(g)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${grades.includes(g) ? "bg-white text-slate-950" : "text-slate-500 hover:text-slate-300"}`}>{g}</button>
@@ -145,7 +152,7 @@ function QuarterNoticeBoard({ author }: { author: string }) {
             <button type="button" onClick={() => setGrades(grades.length === GRADES.length ? [] : [...GRADES])} className="rounded-full px-3 py-1.5 text-xs font-black text-blue-300">{grades.length === GRADES.length ? "해제" : "전체"}</button>
           </div>
           <div className="flex gap-1 rounded-full bg-white/10 p-1">
-            {TEAMS.map((t) => (
+            {teamOptions.map((t) => (
               <button key={t} type="button" onClick={() => setTeam(t)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === t ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{t === "전체" ? "전체 팀" : `${t}팀`}</button>
             ))}
           </div>
@@ -225,16 +232,15 @@ function QuarterNoticeBoard({ author }: { author: string }) {
   );
 }
 
-// 해피콜(방문 후) + 분기점검 안내(방문 전) — 둘 다 "고객에게 대표번호 문자"라 한 탭에서 모드로 오간다
+// 해피콜(방문 후) + 분기점검 안내(방문 전) — 둘 다 "고객에게 대표번호 문자"라 한 탭에서 모드로 오간다.
+// 전환 알약은 각 화면의 다크 헤더 안에 심는다 (헤더 밖에 떠 있지 않게)
 export default function CustomerCallHub({ author }: { author: string }) {
   const [tab, setTab] = useState<"happycall" | "quarter">("happycall");
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-1 rounded-full bg-slate-200/70 p-1 sm:w-fit">
-        <button type="button" onClick={() => setTab("happycall")} className={`flex-1 rounded-full px-5 py-2 text-sm font-black transition sm:flex-none ${tab === "happycall" ? "bg-[#1E252F] text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>해피콜 (방문 후)</button>
-        <button type="button" onClick={() => setTab("quarter")} className={`flex-1 rounded-full px-5 py-2 text-sm font-black transition sm:flex-none ${tab === "quarter" ? "bg-[#1E252F] text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>분기점검 안내 (방문 전)</button>
-      </div>
-      {tab === "happycall" ? <HappyCallWorkspace author={author} /> : <QuarterNoticeBoard author={author} />}
+  const switcher = (
+    <div className="flex shrink-0 gap-1 rounded-full bg-white/10 p-1">
+      <button type="button" onClick={() => setTab("happycall")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "happycall" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>해피콜</button>
+      <button type="button" onClick={() => setTab("quarter")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "quarter" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>분기점검 안내</button>
     </div>
   );
+  return tab === "happycall" ? <HappyCallWorkspace author={author} switcher={switcher} /> : <QuarterNoticeBoard author={author} switcher={switcher} />;
 }

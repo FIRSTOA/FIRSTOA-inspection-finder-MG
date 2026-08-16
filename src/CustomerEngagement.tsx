@@ -179,7 +179,7 @@ function TemplateBar({ context, author, body, onApply, preferredTitle = "", appl
   </div>;
 }
 
-export function HappyCallWorkspace({ author }: { author: string }) {
+export function HappyCallWorkspace({ author, switcher }: { author: string; switcher?: import("react").ReactNode }) {
   const [visits, setVisits] = useState<VisitRow[]>([]); const [records, setRecords] = useState<HappycallRecord[]>([]);
   const [selectedId, setSelectedId] = useState(""); const [contacts, setContacts] = useState<Contact[]>([]); const [message, setMessage] = useState("");
   const [filter, setFilter] = useState<"pending" | "scheduled" | "cancelled" | "sent" | "all">("pending"); const [kindFilter, setKindFilter] = useState<"inspection" | "as">("inspection"); const [scheduleAt, setScheduleAt] = useState(defaultScheduleTime); const [loading, setLoading] = useState(true); const [sending, setSending] = useState(false); const [notice, setNotice] = useState("");
@@ -218,9 +218,12 @@ export function HappyCallWorkspace({ author }: { author: string }) {
   </div> : <div className="flex min-h-[430px] items-center justify-center text-center text-sm font-semibold text-slate-400">방문 건을 선택하세요.</div>;
   return <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(430px,.95fr)]">
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="bg-[#1E252F] px-5 py-4">
-        <h2 className="text-base font-black text-white lg:text-lg">해피콜</h2>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">최근 7일 점검·AS 방문 고객에게 만족 확인 문자를 보냅니다.</p>
+      <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+        <div>
+          <h2 className="text-base font-black text-white lg:text-lg">해피콜</h2>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">최근 7일 점검·AS 방문 고객에게 만족 확인 문자를 보냅니다.</p>
+        </div>
+        {switcher}
       </div>
       <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
         <div className="flex rounded-full bg-white/[0.07] p-1">
