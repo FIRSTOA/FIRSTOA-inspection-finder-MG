@@ -6,7 +6,7 @@
  * 발송(문자 MMS·메일)은 2단계 — 지금은 생성·저장까지.
  */
 import { useMemo, useState } from "react";
-import { Download, FileImage, Laptop, Monitor, Package, Printer, Search, UserPlus, Wind } from "lucide-react";
+import { Armchair, Download, FileImage, Laptop, Monitor, Package, Printer, Search, UserPlus, Wind } from "lucide-react";
 import { selectRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
@@ -21,7 +21,6 @@ type ReportData = {
   deviceTotal: number;
   catCounts: Array<{ label: string; count: number }>; // 품목별 대수 (컬러복합기·데스크탑·모니터…)
   deviceDetail: Array<{ cat: string; maker: string; model: string; asset: string }>; // 상세: 품목·브랜드·기종·자산기번
-  sinceYear: number | null; // 첫 계약 연도 — "20XX년부터 함께" 감사 문구용
   lastInspection: string;
 };
 
@@ -58,6 +57,20 @@ function periodRange(kind: PeriodKind, anchor: string): { start: string; end: st
     return { start: `${y}-${first ? "01" : "07"}-01`, end: end(y, first ? 6 : 12), label: `${y}년 ${first ? "상반기" : "하반기"}` };
   }
   return { start: `${y}-01-01`, end: `${y}-12-31`, label: `${y}년` };
+}
+
+// 임대리스트 제조사 칸은 오기재가 있다(MFC-L8900이 '교세라'로 등 — 원본은 읽기 전용).
+// 고객에게 가는 문서라 모델명 접두로 브랜드를 추론해 우선 쓰고, 못 알아보면 시트 값을 쓴다.
+function guessMaker(model: string) {
+  const m = model.toUpperCase();
+  if (/^(MFC|DCP|HL-|L\d{4})/.test(m) || m.includes("BROTHER")) return "브라더";
+  if (/APEOSPORT|DOCUCENTRE|DOCUPRINT/.test(m)) return "제록스";
+  if (/^SL-|^CLX|^SCX/.test(m)) return "삼성";
+  if (/ECOSYS|TASKALFA/.test(m)) return "교세라";
+  if (/BIZHUB/.test(m)) return "코니카미놀타";
+  if (/^ES\d/.test(m)) return "OKI";
+  if (/^(LBP|IR-|IR |MF\d)/.test(m)) return "캐논";
+  return "";
 }
 
 // FIELD 보고 전문에서 처리내용 줄만 뽑는다 — 리포트에는 결과 한 줄이면 충분
@@ -108,7 +121,7 @@ export default function CustomerReport({ author }: { author: string }) {
       const nameCol = encodeURIComponent("_업체명");
       // ① 기기 현황 (임대중)
       const deviceRows = await selectRows<Record<string, string>>(
-        "vendor_info", `select=${encodeURIComponent("품목,제조사,모델명,기종,자산번호,임대여부,첫계약일,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
+        "vendor_info", `select=${encodeURIComponent("품목,제조사,모델명,기종,자산번호,임대여부,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
       );
       const active = deviceRows.filter((r) => r["임대여부"] === "임대중");
       const catMap = new Map<string, number>();
@@ -119,13 +132,8 @@ export default function CustomerReport({ author }: { author: string }) {
       const catCounts = Array.from(catMap.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
       // 상세 목록: 복합기·플로터 등 관리 핵심 장비 우선, 브랜드·기종·자산기번만 간결하게
       const deviceDetail = active
-        .map((r) => ({ cat: normalizeCat(String(r["품목"] || "")), maker: String(r["제조사"] || "").trim(), model: String(r["모델명"] || r["기종"] || "").trim(), asset: String(r["자산번호"] || "").trim() }))
+        .map((r) => ({ cat: normalizeCat(String(r["품목"] || "")), maker: guessMaker(String(r["모델명"] || r["기종"] || "")) || String(r["제조사"] || "").trim(), model: String(r["모델명"] || r["기종"] || "").trim(), asset: String(r["자산번호"] || "").trim() }))
         .sort((a, b) => (/복합기|프린터|플로터/.test(b.cat) ? 1 : 0) - (/복합기|프린터|플로터/.test(a.cat) ? 1 : 0));
-      // 함께한 기간: 임대리스트 첫계약일 중 가장 오래된 연도
-      const sinceYear = (() => {
-        const years = deviceRows.map((r) => Number(String(r["첫계약일"] || "").match(/(20\d{2})/)?.[1] || 0)).filter((y) => y >= 2000);
-        return years.length ? Math.min(...years) : null;
-      })();
       // ② 기간 내 접수 (AS·원격·IT)
       const receptions = (await selectRows<Record<string, unknown>>(
         "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
@@ -138,7 +146,7 @@ export default function CustomerReport({ author }: { author: string }) {
       const noteOf = new Map(notes.map((n) => [n.receptionId, n.note] as const));
       // ③ 기간 내 점검 방문
       const inspections = (await selectRows<Record<string, unknown>>(
-        "jeomgeom", `select=${encodeURIComponent("작성일,_업체명,모델명,자산기번,처리내용")}&${nameCol}=ilike.*${core}*&_hidden=not.is.true&${encodeURIComponent("작성일")}=gte.${range.start}&${encodeURIComponent("작성일")}=lte.${range.end}&limit=200`,
+        "jeomgeom", `select=${encodeURIComponent("작성일,_업체명,지역,모델명,자산기번,처리내용,_기번목록")}&${nameCol}=ilike.*${core}*&_hidden=not.is.true&${encodeURIComponent("작성일")}=gte.${range.start}&${encodeURIComponent("작성일")}=lte.${range.end}&limit=200`,
       ).catch(() => [])).filter((r) => vendorMatchKey(String(r["_업체명"] || "")) === key);
 
       const rows: ServiceRow[] = [
@@ -149,19 +157,32 @@ export default function CustomerReport({ author }: { author: string }) {
           desc: String(r.symptom || "").slice(0, 34),
           result: handledLine(String(noteOf.get(String(r.id)) || "")) || (String(r.status) === "완료" || String(r.status) === "전송완료" ? "처리 완료" : "진행 중"),
         })),
-        // 점검은 방문 한 번에 여러 대를 보므로 날짜별로 1행으로 묶고 기기 칸엔 대수만 (기기 나열은 의미 없음)
+        // 점검은 방문 1행에 여러 기기가 _기번목록으로 담긴다 — 지점(지역)별로 나눠 "복합기 N대"를 정확히 센다
+        // (푸드나무 사례: 강북 1대 + 강남 5대를 행 수로 세면 오표기)
         ...(() => {
-          const byDate = new Map<string, Array<Record<string, unknown>>>();
+          const REGION_NAME: Record<string, string> = { A: "강북", B: "강서", C: "강남", D: "경기", E: "지방" };
+          const assetsIn = (r: Record<string, unknown>) => {
+            const list = Array.isArray(r["_기번목록"]) ? (r["_기번목록"] as unknown[]).map(String) : [];
+            const assets = new Set(list.filter((t) => /^[A-Za-z]\d{4,5}$/.test(t.trim())).map((t) => t.trim().toUpperCase()));
+            const own = String(r["자산기번"] || "").trim().toUpperCase();
+            if (/^[A-Z]\d{4,5}$/.test(own)) assets.add(own);
+            return assets;
+          };
+          const byKey = new Map<string, { date: string; region: string; assets: Set<string>; result: string }>();
           for (const r of inspections) {
             const d = String(r["작성일"] || "").slice(0, 10);
-            byDate.set(d, [...(byDate.get(d) || []), r]);
+            const region = String(r["지역"] || "").trim().toUpperCase();
+            const key = `${d}|${region}`;
+            const cur = byKey.get(key) || { date: d, region, assets: new Set<string>(), result: String(r["처리내용"] || "점검 완료").slice(0, 40) };
+            assetsIn(r).forEach((a) => cur.assets.add(a));
+            byKey.set(key, cur);
           }
-          return Array.from(byDate.entries()).map(([d, group]) => ({
-            date: d,
+          return Array.from(byKey.values()).map((g) => ({
+            date: g.date,
             kind: "정기 점검",
-            device: `복합기 ${group.length}대`,
-            desc: "정기 방문 점검",
-            result: String(group[0]?.["처리내용"] || "점검 완료").slice(0, 40),
+            device: `복합기 ${Math.max(1, g.assets.size)}대`,
+            desc: `${REGION_NAME[g.region] ? `${REGION_NAME[g.region]} ` : ""}정기 방문 점검`,
+            result: g.result,
           }));
         })(),
       ].sort((a, b) => a.date.localeCompare(b.date));
@@ -181,7 +202,7 @@ export default function CustomerReport({ author }: { author: string }) {
           inspection: inspections.length,
         },
         deviceTotal: active.length,
-        catCounts, deviceDetail, sinceYear,
+        catCounts, deviceDetail,
         lastInspection: String(lastAll[0]?.["작성일"] || "").slice(0, 10),
       });
       setHits([]);
@@ -281,7 +302,7 @@ export default function CustomerReport({ author }: { author: string }) {
 
               {/* 감사 인사 — 리포트의 첫 문장은 숫자가 아니라 관계여야 한다 */}
               <div className="border-b border-slate-100 px-10 py-4 text-[12.5px] font-semibold leading-6 text-slate-600">
-                {report.vendor} 담당자님, {report.sinceYear ? `${report.sinceYear}년부터 ${Math.max(1, new Date().getFullYear() - report.sinceYear + 1)}년째 ` : ""}저희 퍼스트전산을 믿고 맡겨 주셔서 진심으로 감사합니다.
+                {report.vendor} 담당자님, 언제나 저희 퍼스트전산을 믿고 맡겨 주셔서 진심으로 감사합니다.
                 {" "}{report.periodLabel} 동안 함께한 서비스 내용을 정리해 전해 드립니다. 불편하셨던 점이나 필요하신 것이 있다면 언제든 담당자에게 편하게 말씀해 주세요.
               </div>
               <div className="grid grid-cols-4 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
@@ -366,18 +387,17 @@ export default function CustomerReport({ author }: { author: string }) {
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-400">렌탈도 판매도 — 필요하실 때 담당자에게 말씀만 주세요 · 대표번호 1522-1093</div>
                     </div>
                   </div>
-                  <div className="mt-3.5 grid grid-cols-3 gap-2">
+                  <div className="mt-3.5 grid grid-cols-4 gap-2">
                     {[
                       { icon: Printer, title: "복합기 · 프린터", desc: "렌탈 · 판매 · 유지보수" },
                       { icon: Monitor, title: "PC · 맥 · 모니터", desc: "렌탈 · 판매 · 사양 상담" },
                       { icon: UserPlus, title: "입·퇴사자 IT", desc: "계정·장비 셋업 · 회수 대행" },
+                      { icon: Armchair, title: "사무환경 전반", desc: "가구 · 냉장고 · 에어컨 · 코팅기" },
                     ].map(({ icon: Icon, title, desc }) => (
-                      <div key={title} className="flex items-center gap-3 rounded-lg bg-white/10 px-4 py-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/25"><Icon size={17} className="text-blue-200" /></span>
-                        <span>
-                          <div className="text-[12px] font-black leading-4">{title}</div>
-                          <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{desc}</div>
-                        </span>
+                      <div key={title} className="rounded-lg bg-white/10 px-3 py-3 text-center">
+                        <span className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/25"><Icon size={16} className="text-blue-200" /></span>
+                        <div className="mt-1.5 text-[11.5px] font-black leading-4">{title}</div>
+                        <div className="mt-0.5 text-[9.5px] font-semibold text-slate-400">{desc}</div>
                       </div>
                     ))}
                   </div>
