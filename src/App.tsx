@@ -24,7 +24,9 @@ import { useInboxBadge } from "./useInboxBadge";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
 import ServiceReception from "./ServiceReception";
-import { HappyCallWorkspace, PromoWorkspace } from "./CustomerEngagement";
+import { PromoWorkspace } from "./CustomerEngagement";
+import CustomerReport from "./CustomerReport";
+import CustomerCallHub from "./QuarterNotice";
 import { AsReception, CsCalendar, buildMonthlyCloneRow } from "./CsAsWorkspace";
 import ItLearningHistory from "./ItLearningHistory";
 import LogisticsForm from "./LogisticsForm";
@@ -4641,7 +4643,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -5521,7 +5523,7 @@ export default function App() {
     { title: "소식", items: [["inbox", "공지·요청"]] },
     { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
     { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
-    { title: "고객·홍보", items: [["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
+    { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
@@ -5811,7 +5813,8 @@ export default function App() {
         {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "stock" && <StockBoard author={author} />}
         {(screen === "inbox" || screen === "deptRequests") && <InboxHub author={author} />}
-        {screen === "happycall" && <HappyCallWorkspace author={author} />}
+        {screen === "customerReport" && <CustomerReport author={author} />}
+        {screen === "happycall" && <CustomerCallHub author={author} />}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
         {screen === "itHistory" && <ItLearningHistory author={author} />}
         {screen === "counterSms" && <CounterSms author={author} />}
