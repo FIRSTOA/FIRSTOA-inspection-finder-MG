@@ -8,7 +8,7 @@
 import { useMemo, useState } from "react";
 import { Armchair, Download, FileImage, Laptop, Monitor, Package, Printer, Search, UserPlus, Wind } from "lucide-react";
 import { selectRows } from "./supabase";
-import { vendorMatchKey } from "./ids";
+import { historyCoreName, vendorMatchKey } from "./ids";
 import { notify } from "./toast";
 
 type PeriodKind = "month" | "quarter" | "half" | "year";
@@ -117,7 +117,8 @@ export default function CustomerReport({ author }: { author: string }) {
     setReport(null);
     try {
       const key = vendorMatchKey(vendorName);
-      const core = encodeURIComponent(vendorName.slice(0, 12));
+      // "주식회사 푸드나무"로 ilike하면 "푸드나무"로 적힌 점검 기록을 놓친다 — 핵심 토큰으로 넓게 잡고 키 대조로 거른다
+      const core = encodeURIComponent(historyCoreName(vendorName) || vendorName.slice(0, 12));
       const nameCol = encodeURIComponent("_업체명");
       // ① 기기 현황 (임대중)
       const deviceRows = await selectRows<Record<string, string>>(

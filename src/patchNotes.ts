@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "84cf71b0e8",
+    "date": "2026-08-17",
+    "note": "고객 리포트 정확도 3건 — 지점별 기기 수·브랜드 추론·연차 문구 제거"
+  },
+  {
     "hash": "a546f9f9b4",
     "date": "2026-08-17",
     "note": "야간 일괄 개편 — 통합이력·플래그 기준 강화, 고객 리포트 완성, 오탐 근절"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "78d37eb99d",
     "date": "2026-08-01",
     "note": "카톡 수집: 즉시 실행 버튼 + 받는 방향 매핑을 웹앱에서 관리"
-  },
-  {
-    "hash": "eb8247fb6a",
-    "date": "2026-08-01",
-    "note": "수집 큐 정리 버튼 + GAS kakaoclear 액션"
   }
 ];
