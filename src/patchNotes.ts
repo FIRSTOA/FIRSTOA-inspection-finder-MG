@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "36a3316759",
+    "date": "2026-08-16",
+    "note": "통합이력에 '접수' 분류 합류 — 서비스접수(복합기AS·IT·원격)를 이력으로"
+  },
+  {
     "hash": "1659cd6e93",
     "date": "2026-08-16",
     "note": "홈 복원 + 자동 패치노트 — 쇼케이스 랜딩 유지, 배포마다 목록 자동 갱신"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "527b5e3700",
     "date": "2026-08-01",
     "note": "First-DATA GAS를 apps-script/first-data로 통합 (이력 보존)"
-  },
-  {
-    "hash": "42d586a38f",
-    "date": "2026-08-01",
-    "note": "관리·조회 재정리 + 카톡 파서 버그로 오염된 6,333행 정리"
   }
 ];
