@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1aa573fcd9",
+    "date": "2026-08-17",
+    "note": "자동일정 그룹 기기 수를 임대리스트 기준으로(워킨맵 미등록 표기) + 파서 위치 번호접두 정리"
+  },
+  {
     "hash": "b9a294ce3b",
     "date": "2026-08-17",
     "note": "통합이력 업체정보 탭 — 임대중 기기만 표시"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "626d551a63",
     "date": "2026-08-01",
     "note": "직원 선택 3단 공용 픽커 + 부서요청 받은/보낸 구분 + 대상 뱃지 명확화 + 사진업로드 수정"
-  },
-  {
-    "hash": "e7a8677308",
-    "date": "2026-08-01",
-    "note": "독서: 베스트 구절·홈 책장 상세 모달·추천 표지 일괄 해석·사진 첨부"
   }
 ];

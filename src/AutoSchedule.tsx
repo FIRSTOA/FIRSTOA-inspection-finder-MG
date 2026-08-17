@@ -191,6 +191,31 @@ export default function AutoSchedule({ author }: { author: string }) {
     } finally { setLoading(false); }
   };
 
+  // 같은 건물(도로명+번지)에 법인 그룹이 여럿 — 청연원 건물처럼 한 방문으로 처리하는 관행을 동선 단계에서 보이게
+  const buildingKey = (addr: string) => {
+    const match = String(addr || "").match(/^(.*?(?:로|길)\s*\d+(?:-\d+)?)/);
+    return (match ? match[1] : String(addr || "")).replace(/\s+/g, "");
+  };
+  const buildingMates = useMemo(() => {
+    const counts = new Map<string, { groups: number; devices: number }>();
+    groups.forEach((group) => {
+      const key = buildingKey(group.members[0].addr);
+      if (!key) return;
+      const mfp = Number(String(group.members[0].devices || "").match(/복합기 (\d+)/)?.[1] || 0) || group.members[0].device_count || group.members.length;
+      const cur = counts.get(key) || { groups: 0, devices: 0 };
+      cur.groups += 1;
+      cur.devices += mfp;
+      counts.set(key, cur);
+    });
+    return counts;
+  }, [groups]);
+  const buildingBadge = (addr: string) => {
+    const mates = buildingMates.get(buildingKey(addr));
+    return mates && mates.groups > 1
+      ? <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-black text-cyan-700">🏢 같은 건물 {mates.groups}개 법인 · 총 {mates.devices}대</span>
+      : null;
+  };
+
   const chip = "rounded-full px-3 py-1.5 text-xs font-black transition";
   const gradeChip = (on: boolean) => `rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
   const anchorLabel = anchorTicket?.vendor || anchorQuery.trim();
@@ -311,6 +336,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                         {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                         {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                         {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
+                        {buildingBadge(r.addr)}
                         <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(r)} />
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
@@ -346,6 +372,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {first.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(first.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{first.grade}</span>}
                       {allNever && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!first.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
+                      {buildingBadge(first.addr)}
                       <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(first)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">

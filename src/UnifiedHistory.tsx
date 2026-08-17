@@ -372,16 +372,24 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     const retired = occur
       .map((entry) => ({ key: keyOf(entry.block), label: entry.block.asset || entry.block.serial || "", date: entry.date }))
       .find((entry) => entry.key !== "미기재" && !activeKeys.has(entry.key));
+    // 시트-현장 대조용: 식별자(기번·시리얼)별 마지막 목격일과 방문일 목록
+    const identLastSeen = new Map<string, string>();
+    occur.forEach((entry) => {
+      for (const ident of [normalizeId(entry.block.asset), normalizeId(entry.block.serial)]) {
+        if (ident && (identLastSeen.get(ident) || "") < entry.date) identLastSeen.set(ident, entry.date);
+      }
+    });
+    const visitDates = Array.from(new Set(occur.map((entry) => entry.date))).sort().reverse();
     const latestVisitDate = sorted[0] ? displayDate(recordDateRaw("점검", sorted[0])) : "";
     const regionSet = new Set(machines.map((machine) => normRegion(machine.region)).filter((region) => REGIONS.includes(region)));
     const latestBlocks = sorted[0] ? parseInspectionBlocks(String(sorted[0]["_원문"] || "")) : [];
     const latestVisit = sorted[0] ? { date: latestVisitDate, region: String(sorted[0]["지역"] || "").trim(), count: latestBlocks.length || 1 } : null;
     const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
     const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
-    return { machines, retired, multiRegion: regionSet.size > 1, latestVisit, special };
+    return { machines, retired, multiRegion: regionSet.size > 1, latestVisit, special, identLastSeen, visitDates };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
-  const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string; gu: Record<string, string>; endedIdents: Record<string, true> } | null>(null);
+  const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string; gu: Record<string, string>; endedIdents: Record<string, true>; mfpActive: Array<{ asset: string; idents: string[] }> } | null>(null);
   useEffect(() => {
     if (!open || !detail) { setDevices(null); return; }
     const names = Array.from(new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((n) => n.trim()).filter((n) => n.length >= 2))).slice(0, 6);
@@ -395,7 +403,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         if (!active) return;
         const rows = new Map<string, Record<string, unknown>>();
         groups.flat().forEach((row) => rows.set(String(row.id), row));
-        const summary = { mfp: 0, pc: 0, monitor: 0, etc: 0, ended: 0, recentSwap: "", gu: {} as Record<string, string>, endedIdents: {} as Record<string, true> };
+        const summary = { mfp: 0, pc: 0, monitor: 0, etc: 0, ended: 0, recentSwap: "", gu: {} as Record<string, string>, endedIdents: {} as Record<string, true>, mfpActive: [] as Array<{ asset: string; idents: string[] }> };
         const yearAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
         for (const row of rows.values()) {
           // 지역구(시/구)는 임대종료 행에서도 가져온다 — 기기 위치 표시용
@@ -414,7 +422,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             continue;
           }
           const item = String(row["품목"] || "");
-          if (/복합기|프린터|플로터/.test(item)) summary.mfp += 1;
+          if (/복합기|프린터|플로터/.test(item)) {
+            summary.mfp += 1;
+            // 시트-현장 대조 대상: 임대중 복합기의 자산번호·기번 (세단기·PC는 점검 기록에 안 나와 오탐)
+            summary.mfpActive.push({ asset: String(row["자산번호"] || "").trim(), idents: [normalizeId(String(row["자산번호"] || "")), normalizeId(String(row["기번"] || ""))].filter(Boolean) });
+          }
           else if (/모니터/i.test(item)) summary.monitor += 1; // "PC모니터"가 PC로 합산되면 대수가 부풀어 보인다 — 분리
           else if (/pc|데스크|노트북|태블릿|소프트웨어/i.test(item)) summary.pc += 1;
           else summary.etc += 1;
@@ -544,6 +556,21 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
             add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: `${devices.ended ? `종료 ${devices.ended}대 제외 · ` : ""}${machines.length ? `최근 점검에서 ${machines.length}대 확인` : ""}${returnedCount ? ` (반납된 ${returnedCount}대 제외)` : ""}`.replace(/ · $/, ""), tone: "text-slate-700" });
+          }
+          // 시트-현장 불일치: 임대중 복합기인데 최근 2회 방문 모두에서 안 보인 기기 — 회수 미반영·기번 오기재 신호 (빌엔터 사례)
+          if (quarterCheck.visitDates.length >= 2 && devices?.mfpActive?.length) {
+            const secondLatest = quarterCheck.visitDates[1];
+            const suspects = devices.mfpActive.filter((device) => {
+              if (!device.idents.length) return false;
+              const seen = device.idents.map((ident) => quarterCheck.identLastSeen.get(ident) || "").sort().at(-1) || "";
+              return !seen || seen < secondLatest;
+            });
+            if (suspects.length) add("기기", {
+              dot: "bg-amber-500",
+              headline: `시트 확인 필요 ${suspects.length}대`,
+              detail: `${suspects.map((device) => device.asset || device.idents[0]).join(", ").slice(0, 48)} — 임대중인데 최근 2회 점검에서 안 보임 (회수·교체·기번 확인)`,
+              tone: "text-amber-800",
+            });
           }
           // 납품인지 교체인지는 시트가 한 칸에 적어 구분이 없다 — 점검 기기(시리얼) 변화가 있으면 "교체"로 확정해 준다
           if (devices?.recentSwap || quarterCheck.retired) add("교체", {
