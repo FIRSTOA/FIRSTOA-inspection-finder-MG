@@ -37,7 +37,8 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
   const [excludeDone, setExcludeDone] = useState(true);
   const [excludeSent, setExcludeSent] = useState(true);
   const [excludeMisu, setExcludeMisu] = useState(true); // 미수 잔액 있는 곳은 점검을 안 가므로 안내도 기본 제외
-  const [unchecked, setUnchecked] = useState<Set<number>>(new Set());
+  // 기본은 아무도 선택 안 된 상태 — 들어가자마자 전체 체크면 잘못 눌러 대량 발송할 위험
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [sentPhones, setSentPhones] = useState<Set<string>>(new Set());
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
@@ -101,7 +102,7 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places, grades, team, excludeDone, excludeSent, excludeMisu, sentPhones, flags]);
 
-  const picked = targets.filter((t) => !unchecked.has(t.place.id));
+  const picked = targets.filter((t) => checkedIds.has(t.place.id));
   const toggleGrade = (g: string) => setGrades((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]));
   const applyMessage = (vendor: string) => message.replaceAll("{업체명}", workinVendorName(vendor) || vendor);
 
@@ -177,13 +178,13 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
         </div>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
           <span className="text-sm font-black text-slate-900">발송 대상 <span className="text-blue-600">{picked.length}</span>/{targets.length}곳</span>
-          <button type="button" onClick={() => setUnchecked(unchecked.size ? new Set() : new Set(targets.map((t) => t.place.id)))} className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-50">{unchecked.size ? "전체 선택" : "전체 해제"}</button>
+          <button type="button" onClick={() => setCheckedIds(checkedIds.size ? new Set() : new Set(targets.map((t) => t.place.id)))} className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-50">{checkedIds.size ? "전체 해제" : "전체 선택"}</button>
         </div>
         <div className="max-h-[480px] divide-y divide-slate-100 overflow-y-auto">
           {loading && <div className="py-14 text-center text-sm font-bold text-slate-400">이번 분기 대상을 불러오는 중…</div>}
           {!loading && targets.map((t) => (
             <label key={t.place.id} className="flex cursor-pointer items-center gap-3 px-4 py-2 hover:bg-slate-50">
-              <input type="checkbox" checked={!unchecked.has(t.place.id)} onChange={() => setUnchecked((cur) => { const next = new Set(cur); next.has(t.place.id) ? next.delete(t.place.id) : next.add(t.place.id); return next; })} className="h-4 w-4 shrink-0 accent-blue-600" />
+              <input type="checkbox" checked={checkedIds.has(t.place.id)} onChange={() => setCheckedIds((cur) => { const next = new Set(cur); next.has(t.place.id) ? next.delete(t.place.id) : next.add(t.place.id); return next; })} className="h-4 w-4 shrink-0 accent-blue-600" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-black text-slate-900">{workinVendorName(t.place.name) || t.place.name}</span>

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "db0d8d8ef9",
+    "date": "2026-08-17",
+    "note": "모바일 일정 카드에 구분 칩(익일as/납품/점검) + 교체 추정 오탐 가드"
+  },
+  {
     "hash": "724e2e1e66",
     "date": "2026-08-17",
     "note": "그룹 기기 수는 임대리스트·워킨맵 최댓값 — 코드 매핑 누락 보정"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1cc0290b14",
     "date": "2026-08-01",
     "note": "가이드 편집기 노션화 — 토글·구분선·서식 버튼·Ctrl+V 사진 + 분류 고정 옵션"
-  },
-  {
-    "hash": "f9dd3b88f3",
-    "date": "2026-08-01",
-    "note": "직원 선택을 이름 칩으로 즉시 + 개인 픽커 줄 정리 + 요청은 당사자만 보기"
   }
 ];
