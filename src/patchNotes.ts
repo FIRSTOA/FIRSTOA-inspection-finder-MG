@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "261bb086c4",
+    "date": "2026-08-17",
+    "note": "FIELD 전송 UX 개편 2차 — 4방 멀티선택 카드팝업(✓표시)·자가/부품 줄단위 감지·물류 고객사/품목 파서·교육 오탐 수리·window.confirm 28곳 인앱 모달 전환·버튼 리스타일·익일 사유는 다음 커밋"
+  },
+  {
     "hash": "525fc23ccf",
     "date": "2026-08-17",
     "note": "감사 후속 일괄 수리 — 원장 9종 익명권한 축소·사진 덮어쓰기 차단·리포트 수신자 잔류 차단·vendorMatchKey SQL 정렬·병합 열쇠 보강·파싱 캐시·재검색 방지·분기안내 로그 실패 표면화·KST 보정·접수필터 리셋"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ad6c1c6f39",
     "date": "2026-08-01",
     "note": "복합기 데일리 퀴즈를 AI 출제·브랜드 트랙제로 + 문제풀이 화면 재설계"
-  },
-  {
-    "hash": "fcc88cc327",
-    "date": "2026-08-01",
-    "note": "검색 다중 단어 AND + 복합기 데일리 퀴즈(평일 5문제·월간 랭킹)"
   }
 ];

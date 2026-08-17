@@ -45,9 +45,9 @@ import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination , notifyDeferToAsRoom } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination  } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { setServiceReceptionStatus } from "./api";
+import { setServiceReceptionStatus, sendServiceReception } from "./api";
 import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
 
@@ -4677,6 +4677,7 @@ export default function App() {
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
   // 통합 전송 팝업은 "일정리스트에서 넘어온 세션"에서만 — ref는 리렌더를 못 일으켜 상태를 병행한다
   const [linkedTicket, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const [ticketDeferReason, setTicketDeferReason] = useState(""); // 익일 사유 — 일정리스트와 동일하게 필수
   const setPendingTicket = (t: { id: string; receptionId: string; vendor: string } | null) => {
     pendingAsTicketRef.current = t;
     setLinkedTicket(t);
@@ -5480,20 +5481,32 @@ export default function App() {
     } catch { /* 매칭은 부가 기능 — 실패해도 전송 흐름에 영향 없음 */ }
   };
 
-  const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string) => {
+  const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string, deferReason = "") => {
     try {
       const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch(() => []);
+      // 익일 사유 블록 — 일정리스트의 연기 처리와 같은 양식으로 팀 AS방·네이버·일정 메모에 남긴다
+      const reasonBlock = deferReason.trim() && patch.date ? [
+        `업체명: ${String(rows[0]?.["vendor"] || "-")}`,
+        `배정자: ${String(rows[0]?.["assignee"] || author || "-")}`,
+        `기종: ${String(rows[0]?.["model"] || "-")}`,
+        `자산기번: ${String(rows[0]?.["asset"] || "-")}`,
+        `시리얼번호: ${String(rows[0]?.["serial"] || "-")}`,
+        `접수내용: ${String(rows[0]?.["issue"] || "-")}`,
+        `처리내용: ${deferReason.trim()} (${Number(String(patch.date).slice(5, 7))}/${Number(String(patch.date).slice(8, 10))}로 연기)`,
+      ].join("\n") : "";
+      if (reasonBlock) {
+        void sendServiceReception("AS", `수도권${String(rows[0]?.["team"] || "")}`, reasonBlock)
+          .then((r) => { if (!r.ok) showToast(`사유 카톡 전송 실패: ${r.error || "오류"}`, "error"); })
+          .catch((e) => showToast(`사유 카톡 전송 실패: ${(e as Error).message}`, "error"));
+      }
       // 완료 시 전송한 양식 전문을 티켓 '내용'에 쌓는다 (처리 이력이 캘린더에 남게)
       const finalPatch = receptionStatus === "완료" && ticket.sentText
         ? { ...patch, note: appendTicketNote(rows[0]?.["note"], ticket.sentText) }
-        : patch;
+        : reasonBlock
+          ? { ...patch, note: appendTicketNote(rows[0]?.["note"], reasonBlock) }
+          : patch;
       await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, finalPatch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
-      // 익일 이관은 담당 팀 AS방에도 알린다 — "왜 안 왔지"가 방에서 바로 보이게
-      if (receptionStatus !== "완료" && patch.date) {
-        const deferVendor = fieldTicketVendor(String(rows[0]?.["vendor"] || "")).vendor || String(rows[0]?.["vendor"] || "");
-        void notifyDeferToAsRoom(String(rows[0]?.["team"] || ""), deferVendor, String(patch.date), author).catch(() => {});
-      }
       // 네이버 미러 정리: 완료면 접수양식 밑에 처리내용을 잇고 팀 완료 캘린더로 이동, 미루기면 날짜만 변경
       const naverUid = String(rows[0]?.["naverUid"] || "");
       const naverTeam = String(rows[0]?.["team"] || "");
@@ -5508,7 +5521,12 @@ export default function App() {
               const moved = await invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: naverUid, team: naverTeam });
               if (moved.status === "moved") showToast(`네이버: ${naverTeam}팀 완료 캘린더로 이동 ✓`, "success");
             } else if (patch.date) {
-              await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date) });
+              if (deferReason.trim()) {
+                const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: naverUid }).catch(() => ({ description: "" }));
+                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date), description: `${cur.description || ""}\n\n[연기] ${deferReason.trim()}` });
+              } else {
+                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date) });
+              }
               showToast(`네이버 일정도 ${String(patch.date)}로 이동 ✓`, "success");
             }
           } catch (e) {
@@ -5944,7 +5962,7 @@ export default function App() {
           <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDonePrompt(null)}>
             <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
-              <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
+              <div className="mt-1 truncate text-sm font-semibold text-slate-500">{fieldTicketVendor(ticketDonePrompt.vendor || "").vendor || ticketDonePrompt.vendor || "이 일정"}</div>
               {ticketDonePrompt.matched && <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">방금 보낸 양식과 같은 업체의 미완료 일정을 일정리스트에서 찾았어요. 같은 건이면 완료로 정리하세요 — 다른 건이면 [그대로 두기].</div>}
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
@@ -5954,25 +5972,40 @@ export default function App() {
             </div>
           </div>
         )}
-        {ticketDeferPrompt && (
-          <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDeferPrompt(null)}>
+        {ticketDeferPrompt && (() => {
+          const reasonReady = ticketDeferReason.trim().length > 0;
+          const defer = (date: string) => {
+            const t = ticketDeferPrompt;
+            const reason = ticketDeferReason;
+            setTicketDeferPrompt(null);
+            setTicketDeferReason("");
+            setPendingTicket(null);
+            void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일", reason);
+          };
+          return (
+          <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { setTicketDeferPrompt(null); setTicketDeferReason(""); }}>
             <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">언제로 미룰까요?</div>
-              <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDeferPrompt.vendor || "이 일정"}</div>
-              <div className="mt-5 grid grid-cols-2 gap-2">
+              <div className="mt-1 truncate text-sm font-semibold text-slate-500">{fieldTicketVendor(ticketDeferPrompt.vendor || "").vendor || ticketDeferPrompt.vendor || "이 일정"}</div>
+              <textarea value={ticketDeferReason} onChange={(e) => setTicketDeferReason(e.target.value)} rows={3} autoFocus
+                placeholder="① 미루는 사유부터 입력하세요 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"
+                className="mt-3 w-full resize-none rounded-xl border border-purple-200 bg-purple-50/40 px-3 py-2.5 text-sm font-semibold leading-5 outline-none transition placeholder:text-purple-300 focus:border-purple-400 focus:bg-white" />
+              {!reasonReady && <div className="mt-1.5 text-[11px] font-bold text-purple-500">사유를 입력하면 아래 날짜 버튼이 열립니다</div>}
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 {([["익일", nextBizYmd(kstDate())], ["1주 뒤", addDaysYmd(kstDate(), 7)]] as [string, string][]).map(([label, date]) => (
-                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); setPendingTicket(null); void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+                  <button key={label} type="button" disabled={!reasonReady} onClick={() => defer(date)} className="rounded-xl border border-slate-200 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-35">
                     {label}<div className="mt-0.5 text-xs font-bold text-slate-400">{date}</div>
                   </button>
                 ))}
               </div>
               <div className="mt-2 flex gap-2">
-                <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); setPendingTicket(null); void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+                <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} disabled={!reasonReady} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-35" />
+                <button type="button" disabled={!reasonReady || !ticketDeferDate} onClick={() => defer(ticketDeferDate)} className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-black text-white transition hover:bg-purple-700 disabled:opacity-35">직접선택</button>
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
         {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "stock" && <StockBoard author={author} />}
