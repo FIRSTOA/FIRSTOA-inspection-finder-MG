@@ -170,7 +170,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         const multi = group.members.length > 1;
         const vendorName = multi ? group.rep : (first.vendor || first.place_name);
         const machineNote = multi
-          ? `기기 ${group.members.length}대 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
+          ? `워킨맵 등록 ${group.members.length}곳 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
           : "";
         const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
         const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
@@ -332,6 +332,9 @@ export default function AutoSchedule({ author }: { author: string }) {
               const lastDate = group.members.map((m: Place) => m.last_date || "").sort().at(-1) || "";
               const minDaysSince = Math.min(...group.members.map((m: Place) => m.days_since));
               const allNever = group.members.every((m: Place) => m.never_visited);
+              // "기기 N대"는 임대리스트 기준 — 워킨맵에 지점(기기)이 일부만 등록된 업체(청연원 9대 중 3곳)가 있다
+              const mfpCount = Number(String(first.devices || "").match(/복합기 (\d+)/)?.[1] || 0);
+              const deviceTotal = mfpCount || first.device_count || group.members.length;
               return (
                 <label key={group.key} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${allOn ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                   <input type="checkbox" checked={allOn} onChange={() => toggleGroup(group)} className="mt-1 h-4 w-4 accent-blue-600" />
@@ -339,14 +342,14 @@ export default function AutoSchedule({ author }: { author: string }) {
                     <span className="flex flex-wrap items-center gap-1.5">
                       {distances.length > 0 && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{Math.min(...distances) < 1 ? `${Math.round(Math.min(...distances) * 1000)}m` : `${Math.min(...distances)}km`}</span>}
                       <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{group.rep}</span>
-                      <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">기기 {group.members.length}대</span>
+                      <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">기기 {deviceTotal}대</span>
                       {first.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(first.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{first.grade}</span>}
                       {allNever && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!first.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
                       <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(first)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
-                      {allNever ? "마지막 점검 기록 없음" : `마지막 ${lastDate} · ${minDaysSince}일 경과`} · 방문 1건으로 등록됩니다
+                      {allNever ? "마지막 점검 기록 없음" : `마지막 ${lastDate} · ${minDaysSince}일 경과`} · 워킨맵 {group.members.length}곳{deviceTotal > group.members.length ? ` (기기 ${deviceTotal - group.members.length}대는 워킨맵 미등록)` : ""} · 방문 1건으로 등록
                     </span>
                     <span className="mt-1 block space-y-0.5">
                       {group.members.map((m: Place) => {
