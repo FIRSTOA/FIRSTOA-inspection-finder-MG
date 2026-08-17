@@ -7,7 +7,7 @@ import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatu
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
-import { historyCoreName } from "./ids";
+import { fieldTicketVendor, historyCoreName } from "./ids";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 
@@ -311,12 +311,14 @@ function scheduleColor(type: ScheduleType, completed = false) {
 
 function buildFieldAsText(ticket: AsTicket, author: string) {
   // 접수 보고양식을 FIELD에 복붙했을 때(formatPrinterReport)와 완전히 같은 형식.
+  // 네이버 미러 일정은 제목 전체가 vendor에 실려 온다 — 업체명부만 남기고 구분(셋팅요청→세팅)도 제목에서 읽는다
+  const cleaned = fieldTicketVendor(ticket.vendor);
   return [
     `작성자:${author || ticket.assignee || ""}`,
-    "구분:A/S",
+    `구분:${cleaned.gubun}`,
     "레벨:1",
     `등급:${ticket.grade || ""}`,
-    `업체명:${ticket.vendor}`,
+    `업체명:${cleaned.vendor}`,
     `부서명:${ticket.department}`,
     `지역:${ticket.team}`,
     `키맨/접수자:${ticket.contact}`,

@@ -12,6 +12,8 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
+import { historyCoreName } from "./ids";
+import { COMPANY_MEMBERS } from "./companyDirectory";
 import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
@@ -3801,6 +3803,8 @@ function AirPurifierFormPanel({
 // ────────────────────────────────────────────────────────────────────────────
 
 // 생성된 양식/결과 텍스트에서 "업체명: X" 줄을 찾아 거래처명을 뽑는다.
+const DIRECTORY_NAMES = new Set(COMPANY_MEMBERS.map((member) => member.name));
+
 // 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
 function extractVendorFromText(text: string): string {
   const m = text.match(/^\s*업체명\s*[:：]\s*(.+)$/m);
@@ -3931,6 +3935,14 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  // 일정리스트→FIELD 경로는 업체명 칸에 네이버 제목 전체("이민구 셋팅요청 S D450 30S…")가 실려 온다
+  // — 통합이력 검색은 배정자 이름을 명단으로 벗기고 핵심 업체명만 쓴다 (저장·앨범용 원문 업체명은 그대로)
+  const historyPopupVendor = useMemo(() => {
+    let raw = String(currentVendor || "").trim();
+    const firstToken = raw.split(/\s+/)[0] || "";
+    if (DIRECTORY_NAMES.has(firstToken.replace(/[-–—:]+$/, ""))) raw = raw.slice(firstToken.length).replace(/^[\s\-–—:]+/, "");
+    return historyCoreName(raw) || raw;
+  }, [currentVendor]);
   const [workinInspectionMatch, setWorkinInspectionMatch] = useState<WorkinInspectionMatch | null>(null);
   const [fieldVendorFlags, setFieldVendorFlags] = useState<VendorWorkFlags | null>(null);
   const [workinSyncResult, setWorkinSyncResult] = useState<WorkinSyncResult | null>(null);
@@ -5963,7 +5975,6 @@ export default function App() {
               : <div className="mt-1 text-xs font-black text-rose-600">재계약 {renewal.quarter}분기 워킨맵 · {renewal.due ? `종료 ${renewal.due}` : "종료월 확인필요"}</div>)}
             {overage && <div className="mt-1 text-xs font-black text-purple-700">초과 {overage.total}{overage.date ? ` (${overage.date})` : ""} — 방문 시 초과조정 안내 포인트</div>}
             {bulman && <div className="mt-1 text-xs font-black text-rose-700">불만 {bulman.date} · {bulman.content} — 방문 전 대응 준비</div>}
-            <button type="button" onClick={() => setHistoryOpen(true)} className="mt-2 rounded-full bg-slate-900 px-3 py-1 text-[11px] font-black text-white transition hover:bg-slate-800">🗂 통합이력</button>
           </div>;
         })()}
 
@@ -6588,7 +6599,7 @@ export default function App() {
 
       {/* 통합이력 팝업 (controlled) */}
       <UnifiedHistory
-        vendor={currentVendor}
+        vendor={historyPopupVendor}
         accent={config.accent}
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}

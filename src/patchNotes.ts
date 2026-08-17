@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a5c47f6fda",
+    "date": "2026-08-17",
+    "note": "홍보물 PDF 카드 모바일 미리보기 — Promise.withResolvers 폴리필 (구형 모바일 브라우저 렌더 실패 수리)"
+  },
+  {
     "hash": "7e605c51f4",
     "date": "2026-08-17",
     "note": "분기점검 안내 기본 선택 해제 — 명시적으로 고른 곳만 발송 대상"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "75314f7e12",
     "date": "2026-08-01",
     "note": "복합기 기록 탭을 A안(솔루션 센터)으로 + 가이드 편집기 실시간 미리보기"
-  },
-  {
-    "hash": "82be0d3835",
-    "date": "2026-08-01",
-    "note": "가이드 편집기에 미리보기 토글 — 작성 중 완성본 즉시 확인"
   }
 ];

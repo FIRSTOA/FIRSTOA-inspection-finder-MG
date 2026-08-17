@@ -55,7 +55,7 @@ export function historyCoreName(raw: string) {
     const match = tokens[i].match(/^\d{1,4}[#]?(?:SS|NN|S|N|V)([가-힣㈜].*)$/);
     if (!match) continue;
     const stripped = beforeCorpMark(match[1].replace(CORP_PREFIX, "").replace(/^㈜/, ""));
-    if (stripped.length >= 2 && !HISTORY_STOPWORD.test(stripped)) return stripped.replace(/(본사|지사|지점|공장|창고|사옥)$/, "") || stripped;
+    if (stripped.length >= 2 && !HISTORY_STOPWORD.test(stripped)) return stripped.replace(/(전|본사|지사|지점|공장|창고|사옥)$/, "") || stripped;
     // "11V사단법인"처럼 법인 접두만 남으면 업체명은 다음 토큰이다
     const following = beforeCorpMark((tokens[i + 1] || "").replace(CORP_PREFIX, ""));
     if (following.length >= 2 && /[가-힣]/.test(following) && !HISTORY_STOPWORD.test(following)) return following;
@@ -71,7 +71,7 @@ export function historyCoreName(raw: string) {
       .replace(CORP_PREFIX, ""));
     if (core.length < 2 || HISTORY_STOPWORD.test(core)) continue;
     // "넥스트라이프본사"로 찾으면 지점 표기 없는 기록을 놓친다 — 위치 접미사는 벗긴다
-    const noBranch = core.replace(/(본사|지사|지점|공장|창고|사옥)$/, "");
+    const noBranch = core.replace(/(전|본사|지사|지점|공장|창고|사옥)$/, "");
     return noBranch.length >= 2 ? noBranch : core;
   }
   return workinVendorName(noAssignee) || flat;
@@ -121,4 +121,30 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
   }
   if (cur) out.push(cur);
   return out.filter((block) => block.model || block.asset || block.serial);
+}
+
+// 일정리스트→FIELD 변환용: 네이버 미러 제목("이민구 셋팅요청 S D450 30S업체명…분기마감 종료일 …")에서
+// 업체명부(슬래시·공백 보존)와 구분을 꺼낸다 — 접수원본 변환(A양식)과 같은 모양이 되도록.
+const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$/;
+export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
+  const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
+  const tokens = flat.split(" ");
+  const gubun = tokens.some((token) => /^(이전)?(셋팅|세팅)(요청)?$/.test(token)) ? "세팅"
+    : tokens.some((token) => /^여분요청$/.test(token)) ? "여분"
+    : "A/S";
+  // 업체명 시작점 1순위: "30S업체명" 등급 접두 토큰 (임대리스트 표기)
+  const graded = flat.match(/\d{1,4}#?(?:SS|NN|S|N|V)([가-힣㈜(].*)$/);
+  let vendor = graded ? graded[1] : "";
+  if (!vendor) {
+    // 접두 정리: 직원 이름·행위어·단독 등급·영숫자(모델) 토큰을 걷어낸 나머지
+    let start = 0;
+    while (start < tokens.length) {
+      const token = tokens[start];
+      if (FIELD_TITLE_ACTION.test(token) || /^(SS|NN|S|N|V)$/.test(token) || /^[A-Za-z0-9./-]+$/.test(token) || /^[가-힣]{2,4}$/.test(token) && start === 0 && tokens.length > 2 && FIELD_TITLE_ACTION.test(tokens[1] || "")) { start += 1; continue; }
+      break;
+    }
+    vendor = tokens.slice(start).join(" ");
+  }
+  vendor = vendor.replace(/(매월마감|분기마감|매주마감|월말마감|매년마감|단순마감|마감|매년|종료일).*$/, "").replace(/[\s\-·,]+$/, "").trim();
+  return { vendor: vendor || flat, gubun };
 }

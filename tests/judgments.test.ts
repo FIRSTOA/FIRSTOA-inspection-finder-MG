@@ -11,7 +11,7 @@
  *  - 내 일정 FIELD 불러오기가 분기점검을 AS로 변환하던 모드 감지 경로
  */
 import { describe, expect, it } from "vitest";
-import { historyCoreName, normalizeId, parseEquipComment, parseInspectionBlocks, vendorMatchKey, workinVendorName } from "../src/ids";
+import { fieldTicketVendor, historyCoreName, normalizeId, parseEquipComment, parseInspectionBlocks, vendorMatchKey, workinVendorName } from "../src/ids";
 import { normRegion } from "../src/region";
 import { detectReportTypesFromInput, detectUnifiedInputMode } from "../src/fieldModes";
 import { nextBusinessDay } from "../src/planDate";
@@ -70,7 +70,7 @@ describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
     expect(historyCoreName("방문후 확인 전달 셋팅")).not.toBe("방문후");
   });
   it("등급 접두 토큰(30S업체명)을 최우선으로 잡는다 — 브라더·셋팅요청 오탐 사고", () => {
-    expect(historyCoreName("셋팅요청 S D450 30S제이드자산운용전 ㈜이도헬스케어")).toBe("제이드자산운용전");
+    expect(historyCoreName("셋팅요청 S D450 30S제이드자산운용전 ㈜이도헬스케어")).toBe("제이드자산운용"); // "전(前)" 표기까지 벗긴다 — 검색 0건 사고
     expect(historyCoreName("여분전달 V D450 11V사단법인 안보경영연구원-백평")).toBe("안보경영연구원");
     expect(historyCoreName("여분요청 SS ECOSYS-M5521CDN K3개 브라더")).not.toBe("브라더");
   });
@@ -216,5 +216,17 @@ describe("parseInspectionBlocks — 점검 원문의 기기 블록 분해 (푸�
   it("원문이 없거나 블록이 아니면 빈 배열", () => {
     expect(parseInspectionBlocks("")).toEqual([]);
     expect(parseInspectionBlocks("단순 메모 텍스트")).toEqual([]);
+  });
+});
+
+describe("fieldTicketVendor — 일정리스트→FIELD 변환의 업체명·구분 (네이버 미러 제목)", () => {
+  const TITLE = "이민구 셋팅요청\t S\tD450\t30S제이드자산운용전 ㈜이도헬스케어/ 알에프헬스케어전 주식회사 제이드앤파트너스분기마감\t종료일\t27. 8. 24\t ";
+  it("업체명부(슬래시·법인 병기 보존)만 남기고 마감·종료일 꼬리를 뗀다", () => {
+    const parsed = fieldTicketVendor(TITLE);
+    expect(parsed.vendor).toBe("제이드자산운용전 ㈜이도헬스케어/ 알에프헬스케어전 주식회사 제이드앤파트너스");
+    expect(parsed.gubun).toBe("세팅"); // 셋팅요청 → 구분 세팅 (AS 고정이던 사고)
+  });
+  it("접수 경로의 평범한 업체명은 그대로", () => {
+    expect(fieldTicketVendor("주식회사 무암")).toEqual({ vendor: "주식회사 무암", gubun: "A/S" });
   });
 });
