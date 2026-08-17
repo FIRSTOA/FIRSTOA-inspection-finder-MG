@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "681b5ef453",
+    "date": "2026-08-17",
+    "note": "FIELD 전송 개편 — 일정 연결 세션 통합 전송 팝업(자가·부품 자동감지)·복붙 완료 매칭 제안·익일 AS방 알림·납품 일정→물류탭 진입"
+  },
+  {
     "hash": "c69f867498",
     "date": "2026-08-17",
     "note": "일정→FIELD: 티켓 note의 접수원본을 변환 파이프라인에 직접 태움 — 복붙과 동일한 A양식(부서명·키맨·구분 세팅)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "740bbd64a2",
     "date": "2026-08-01",
     "note": "기종 칩을 기기재고 실기기명과 얼추 매칭 — 관용명·실명 혼재 기록 모두 잡기"
-  },
-  {
-    "hash": "9a846452b9",
-    "date": "2026-08-01",
-    "note": "퀴즈 품질 게이트·가이드 대략 매칭·증상 필터 정밀화"
   }
 ];

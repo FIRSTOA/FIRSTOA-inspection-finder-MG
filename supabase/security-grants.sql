@@ -7,3 +7,9 @@
 -- 참고: DELETE는 정책 자체를 만들지 않는다(숨김으로 대체).
 -- workin_vendor_code는 method='manual' 행만 anon 수정 허용(수동 확정 UI용).
 -- service_receptions는 완료 처리 기능이 상태 컬럼을 고쳐야 해 전컬럼 유지 — 2순위 축소 후보.
+
+-- 2026-08-17 감사 후속 확장: bulman, mfp_expansion, pc_expansion, overage_adjust, recontract,
+--   churn_defense, mgmt_support(숨김 3컬럼), lease_status(_hidden만 — _hidden_by/_at 컬럼 없음),
+--   vendor_info(_raw+_hidden — 주소 변경 기능이 _raw 갱신). 전부 DELETE 회수.
+-- storage: photos 버킷의 public UPDATE 정책 제거(익명 덮어쓰기 차단 — 업로드는 유니크 경로 INSERT만으로 동작).
+-- 남겨둔 예외(기능 필요): workin_map_places(주소·라벨 편집), app_config/room_map(관리 탭), outbox(봇 소비 경로 미확인), message_templates(공용 문구 수정).

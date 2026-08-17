@@ -69,6 +69,16 @@ function priorityPreview(cat: string, rec: Record<string, unknown>) {
 // "주식회사 무암"과 "무암"은 같은 회사 — 법인 표기만 다른 이름을 매 줄 반복하지 않기 위한 비교용
 const coreName = (name: string) => name.replace(/주식회사|유한회사|㈜|\(주\)|\s+/g, "");
 
+// 원문 블록 파싱은 무겁다 — 같은 기록 객체는 한 번만 파싱 (목록 렌더·검색 타이핑마다 재파싱 방지)
+const blocksCache = new WeakMap<object, InspBlock[]>();
+function cachedBlocks(rec: Record<string, unknown>): InspBlock[] {
+  const hit = blocksCache.get(rec);
+  if (hit) return hit;
+  const parsed = parseInspectionBlocks(String(rec["_원문"] || ""));
+  blocksCache.set(rec, parsed);
+  return parsed;
+}
+
 
 // 분기 체크 카드의 한 섹션(라벨 1개 + 항목 여러 개) — 기기 패널과 나란히 그리려고 컴포넌트로 분리
 type CheckItem = { dot: string; headline: string; detail?: string; tone?: string; strong?: boolean; tag?: string };
@@ -194,6 +204,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const [searchRegion, setSearchRegion] = useState("전체");
   const requestSequence = useRef(0);
   const loadedFor = useRef("");
+  // 부모가 인라인 함수를 넘겨도 검색이 재발사되지 않게 — 최신 콜백만 ref로 들고 deps에서 뺀다
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   const searchBase = useMemo(() => hits.filter((hit) => CAT_ORDER.some((cat) => Number(hit.counts?.[cat] || 0) > 0)), [hits]);
   const searchRegionTabs = useMemo(() => {
@@ -218,6 +231,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       setHistoryVendor("전체");
       setScopeOpen(false);
       setShowHits(false);
+      setReceptionType("전체"); // 이전 업체의 접수 유형 필터가 새 업체에 남지 않게
     });
     return () => { active = false; };
   }, [open, vendor]);
@@ -234,11 +248,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           setHits(response.results || []);
           setSearchRegion("전체");
         })
-        .catch((error) => onError(error.message || "검색 실패"))
+        .catch((error) => onErrorRef.current(error.message || "검색 실패"))
         .finally(() => { if (sequence === requestSequence.current) setSearching(false); });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [q, open, onError]);
+  }, [q, open]);
 
   useEffect(() => {
     if (!open || !queryVendor || loadedFor.current === queryVendor) return;
@@ -259,10 +273,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         setActiveCat("전체");
         loadedFor.current = queryVendor;
       })
-      .catch((error) => onError(error.message || "통합이력 조회 실패"))
+      .catch((error) => onErrorRef.current(error.message || "통합이력 조회 실패"))
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [open, queryVendor, onError]);
+  }, [open, queryVendor]);
 
   const allRows = useMemo(() => CAT_ORDER.flatMap((cat) => {
     const rows = Array.isArray(detail?.[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
@@ -337,7 +351,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       const date = displayDate(recordDateRaw("점검", rec));
       if (!date) return;
       const region = String(rec["지역"] || "").trim();
-      const blocks = parseInspectionBlocks(String(rec["_원문"] || ""));
+      const blocks = cachedBlocks(rec);
       const list = blocks.length ? blocks : [{
         loc: "", model: String(rec["모델명"] || "").trim(), serial: String(rec["시리얼넘버"] || "").trim(),
         asset: String(rec["자산기번"] || "").trim(), content: "", handled: "",
@@ -382,7 +396,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     const visitDates = Array.from(new Set(occur.map((entry) => entry.date))).sort().reverse();
     const latestVisitDate = sorted[0] ? displayDate(recordDateRaw("점검", sorted[0])) : "";
     const regionSet = new Set(machines.map((machine) => normRegion(machine.region)).filter((region) => REGIONS.includes(region)));
-    const latestBlocks = sorted[0] ? parseInspectionBlocks(String(sorted[0]["_원문"] || "")) : [];
+    const latestBlocks = sorted[0] ? cachedBlocks(sorted[0]) : [];
     const latestVisit = sorted[0] ? { date: latestVisitDate, region: String(sorted[0]["지역"] || "").trim(), count: latestBlocks.length || 1 } : null;
     const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
     const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
@@ -648,7 +662,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             // 같은 업체 기록 목록에서 업체명을 제목으로 반복하면 내용이 안 보인다 — 대표 문장이 제목
             const title = priorityPreview(activeCat, record) || vendorName;
             // 한 방문에 기기 여러 대(원문 블록) — 첫 기기(구조화 컬럼)만 보여주면 나머지 기기가 사라진다
-            const blocks = (activeCat === "점검" || activeCat === "AS") ? parseInspectionBlocks(String(record["_원문"] || "")) : [];
+            const blocks = (activeCat === "점검" || activeCat === "AS") ? cachedBlocks(record) : [];
             return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden sm:px-4">
                 <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50">

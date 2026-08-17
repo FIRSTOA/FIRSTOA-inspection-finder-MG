@@ -571,7 +571,9 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
     const rowKey = (row: Record<string, unknown>) => {
       const date = String(row[config.dateField] || row["날짜"] || row["작성일"] || row["입력일"] || row["등록일"] || row["방문일"] || row["receipt_date"] || "").slice(0, 10);
       const content = HISTORY_ROW_CONTENT_KEYS.map((key) => String(row[key] ?? "").trim()).find(Boolean)?.slice(0, 60) || "";
-      if (content) return `${config.category}|${date}|${content}`;
+      // 같은 날 두 지점의 "정기점검"이 하나로 합쳐지지 않게 기기·지역을 보조 열쇠로 (색인·직접 양쪽 다 실리는 컬럼)
+      const extra = `${String(row["자산기번"] || row["asset_no"] || row["자산번호"] || "")}|${String(row["지역"] || row["region"] || "")}`;
+      if (content) return `${config.category}|${date}|${content}|${extra}`;
       const vendorName = String(row["_업체명"] || row["업체명"] || row["vendor"] || "").trim();
       return `${config.category}|${date}|${vendorName}|${String(row["id"] || row["_dupKey"] || "")}`;
     };

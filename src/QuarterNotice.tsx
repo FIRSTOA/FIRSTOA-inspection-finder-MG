@@ -125,7 +125,13 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
       const t = picked[i];
       try {
         await invokeEdgeFunction("customer-message-send", { channel: "sms", type: "quarter_notice", to: t.phone, text: applyMessage(t.place.name), vendor: workinVendorName(t.place.name), author });
-        await insertRow("quarter_notice_log", { quarter: quarterKey, place_id: t.place.id, vendor: workinVendorName(t.place.name), phone: t.phone, author }).catch(() => undefined);
+        // 재발송 방지 기록 — 실패를 삼키면 다음 회차에 같은 고객에게 또 나간다: 한 번 재시도 후 드러낸다
+        try {
+          await insertRow("quarter_notice_log", { quarter: quarterKey, place_id: t.place.id, vendor: workinVendorName(t.place.name), phone: t.phone, author });
+        } catch {
+          await insertRow("quarter_notice_log", { quarter: quarterKey, place_id: t.place.id, vendor: workinVendorName(t.place.name), phone: t.phone, author })
+            .catch(() => notify(`${workinVendorName(t.place.name)} — 발송기록 저장 실패 (다음 회차 재발송 제외 목록에 없음)`, "error"));
+        }
         setSentPhones((cur) => new Set(cur).add(t.phone));
       } catch {
         failed += 1;

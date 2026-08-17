@@ -149,6 +149,10 @@ export default function CustomerReport({ author }: { author: string }) {
   const build = async (vendorName: string) => {
     setLoading(true);
     setReport(null);
+    // 업체 전환 시 이전 업체의 수신자·로그가 잔류하면 오발송 사고 — 먼저 비우고 새로 싣는다
+    setRecipients([]);
+    setSuggests([]);
+    setLogs([]);
     try {
       const key = vendorMatchKey(vendorName);
       // "주식회사 푸드나무"로 ilike하면 "푸드나무"로 적힌 점검 기록을 놓친다 — 핵심 토큰으로 넓게 잡고 키 대조로 거른다
@@ -364,7 +368,10 @@ export default function CustomerReport({ author }: { author: string }) {
       receps.forEach((row) => offer(row["author"], row["receiver_phone"], "접수 회신번호"));
       misuRows.forEach((row) => offer(row["업체담당자"], row["휴대폰번호"], "미수 기록"));
       setSuggests(Array.from(unique.values()).slice(0, 8));
-    } catch { /* 발송 부가 기능 — 리포트 생성은 막지 않는다 */ }
+    } catch {
+      // 수신자 로드 실패 — 목록이 빈 채로 남아 발송 버튼이 "수신자 먼저 추가"로 막힌다(잘못된 수신자보다 안전)
+      notify("수신자 목록을 불러오지 못했습니다 — 새로고침 후 다시 시도해 주세요.", "error");
+    }
   };
 
   const addRecipient = async (name: string, phone: string) => {
@@ -550,17 +557,18 @@ export default function CustomerReport({ author }: { author: string }) {
         </div>
       </div>}
 
+        {queueIdx >= 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-black text-emerald-800">연속 발송 {queueIdx + 1}/{queue.length}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-bold text-emerald-700">{queue[queueIdx]?.vendor}{queue[queueIdx]?.sentAlready ? " (이번 기간 발송 이력 있음)" : ""}</span>
+          <span className="shrink-0 text-[11px] font-bold text-emerald-600">보냄 {queueStats.sent} · 건너뜀 {queueStats.skipped}</span>
+          <button type="button" onClick={() => advanceQueue("skipped")} className="shrink-0 whitespace-nowrap rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">건너뛰고 다음</button>
+          <button type="button" onClick={() => setQueueIdx(-1)} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black text-slate-500 hover:bg-white">중단</button>
+        </div>}
+
       {loading && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm font-bold text-slate-400">리포트를 만드는 중…</div>}
 
       {report && !loading && (
         <>
-          {queueIdx >= 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 shadow-sm">
-            <span className="text-sm font-black text-emerald-800">연속 발송 {queueIdx + 1}/{queue.length}</span>
-            <span className="min-w-0 flex-1 truncate text-xs font-bold text-emerald-700">{queue[queueIdx]?.vendor}{queue[queueIdx]?.sentAlready ? " (이번 기간 발송 이력 있음)" : ""}</span>
-            <span className="shrink-0 text-[11px] font-bold text-emerald-600">보냄 {queueStats.sent} · 건너뜀 {queueStats.skipped}</span>
-            <button type="button" onClick={() => advanceQueue("skipped")} className="shrink-0 whitespace-nowrap rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">건너뛰고 다음</button>
-            <button type="button" onClick={() => setQueueIdx(-1)} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black text-slate-500 hover:bg-white">중단</button>
-          </div>}
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void savePng()} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40"><FileImage size={15} />{saving ? "저장 중…" : "PNG 저장 (장별)"}</button>
             <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Printer size={15} />인쇄 / PDF</button>

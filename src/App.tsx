@@ -5448,8 +5448,9 @@ export default function App() {
       const core = historyCoreName(vendorLine) || vendorLine.trim();
       const key = vendorMatchKey(core);
       if (!key || key.length < 2) return;
-      const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-      const until = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+      // KST 자정 경계(00~09시) 보정 — UTC 그대로 자르면 하루 어긋난다
+      const from = new Date(Date.now() + 9 * 3600000 - 14 * 86400000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() + 9 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);
       const statusList = ["접수", "배정", "익일"].map(encodeURIComponent).join(",");
       const typeList = ["AS", "익일AS"].map(encodeURIComponent).join(",");
       const rows = await selectRows<Record<string, unknown>>("as_tickets",

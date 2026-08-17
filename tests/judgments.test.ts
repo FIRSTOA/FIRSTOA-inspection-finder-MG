@@ -47,6 +47,11 @@ describe("vendorMatchKey — 업체명 매칭 키", () => {
   it("접두·꼬리 없는 평범한 이름은 그대로", () => {
     expect(vendorMatchKey("잡플러스")).toBe("잡플러스");
   });
+  it("법인표기 위치 불문·괄호 메모 제거 — SQL vendor_key_와 정렬 (고객리포트 점검 0회 오표기 방지)", () => {
+    expect(vendorMatchKey("블루닷 주식회사(bluedot Inc.)")).toBe("블루닷");
+    expect(vendorMatchKey("블루닷")).toBe("블루닷");
+    expect(vendorMatchKey("디자인멜로우 (비번 2580*)")).toBe("디자인멜로우");
+  });
 });
 
 describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
