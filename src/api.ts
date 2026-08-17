@@ -360,6 +360,14 @@ export type ServiceReceptionRow = {
 };
 export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" | "created_at" | "receipt_date">): Promise<string> {
   const saved = await insertRowReturning<{ id: string }>("service_receptions", row);
+  // 새 접수 웹푸시 — 구독자 전체(접수자 본인 제외). 실패해도 접수 저장엔 영향 없음.
+  void invokeEdgeFunction("push-send", {
+    title: `새 접수 — ${row.vendor || row.title || row.type || "서비스"}`.slice(0, 80),
+    body: [row.type, row.region, row.author && `접수자 ${row.author}`].filter(Boolean).join(" · ").slice(0, 120),
+    tag: `reception-${saved?.id || ""}`,
+    all: true,
+    exclude: row.author ? [row.author] : [],
+  }).catch(() => undefined);
   return saved?.id || "";
 }
 export async function getServiceReceptions(start: string, end: string): Promise<ServiceReceptionRow[]> {

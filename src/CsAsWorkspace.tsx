@@ -832,6 +832,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, title: displayTitleOf(changed) })
         .catch((e) => notify(`네이버 제목 동기화 실패: ${(e as Error).message}`, "error"));
     }
+    // 새로 배정된 사람에게 웹푸시 — 자기 이름이 걸린 일정을 바로 알게
+    if (changed && before && changed.assignee && changed.assignee !== before.assignee) {
+      void invokeEdgeFunction("push-send", {
+        title: `일정 배정 — ${(changed.calendarTitle || "").trim() || changed.vendor || "일정"}`.slice(0, 80),
+        body: `${changed.date} ${changed.time || ""} · ${changed.team}팀`.trim(),
+        tag: `assign-${changed.id}`,
+        targets: [changed.assignee],
+      }).catch(() => undefined);
+    }
     // 네이버 미러 동기화: 완료되면 팀 완료 캘린더(예: C→강남C as)로 이동, 날짜·시간이 바뀌면(익일 연기 등) 일정 시간 이동
     if (changed && before && changed.naverUid) {
       const completedNow = changed.status === "완료" && before.status !== "완료";

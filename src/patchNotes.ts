@@ -2,6 +2,21 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5f7e95c5f6",
+    "date": "2026-08-17",
+    "note": "웹앱 생성 일정의 네이버 연결고리 유실 수리 — 간소 추가 naverUid 저장"
+  },
+  {
+    "hash": "4896a6bf01",
+    "date": "2026-08-17",
+    "note": "보안 문서 — all_vendor_tabs security_invoker 적용 기록"
+  },
+  {
+    "hash": "a2c53749d4",
+    "date": "2026-08-17",
+    "note": "일정→FIELD 재진입 시 접수원본만 절단 사용 — 누적된 전송 양식이 기기로 오인되는 것 방지"
+  },
+  {
     "hash": "1d69e4b00c",
     "date": "2026-08-17",
     "note": "익일 처리 시 전송 양식 전문 + 미루는 사유를 네이버·웹앱 메모에 함께 기록"
@@ -1235,20 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8f7e8b96c4",
     "date": "2026-08-01",
     "note": "접수폼 우측 여백 제거 + 신규 양식을 시트 구조에 맞게 분리"
-  },
-  {
-    "hash": "60f6b8e5e4",
-    "date": "2026-08-01",
-    "note": "서비스접수 다듬기 6건 — 상태칩·완료기록·배치·양식반응성·자동값수정·신규확대"
-  },
-  {
-    "hash": "efa89f9993",
-    "date": "2026-08-01",
-    "note": "서비스접수 A안 듀얼 확정 — 3탭(복합기AS/원격/IT) + 상시 접수 리스트 + 상태 파이프라인"
-  },
-  {
-    "hash": "a72c67759a",
-    "date": "2026-08-01",
-    "note": "복합기 퀴즈 철회 + 일정리스트 유형 필터(중복 선택) + 접수 문구 교체"
   }
 ];

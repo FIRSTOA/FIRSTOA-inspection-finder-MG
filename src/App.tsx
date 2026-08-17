@@ -20,6 +20,7 @@ import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
 import { ToastHost } from "./toast";
 import { ConfirmHost } from "./confirmModal";
+import { syncPush } from "./push";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
@@ -3993,6 +3994,9 @@ export default function App() {
       // ignore quota / private mode errors
     }
   }, [author]);
+
+  // 웹푸시: 켜둔 기기라면 구독을 살리고 작성자 이름 연동을 최신화 (알림 대상 매칭의 기준)
+  useEffect(() => { void syncPush(author); }, [author]);
 
   // 내장 자가테스트는 화면 패널 대신 개발 콘솔로만 출력한다(평소엔 숨김).
   useEffect(() => {

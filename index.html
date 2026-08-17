@@ -20,11 +20,16 @@
   <body>
     <div id="root"></div>
     <script>
+      // 옛 캐싱 서비스워커 잔재만 청소 — 푸시 전용 워커(/push-sw.js)는 남긴다 (웹푸시 알림용)
       (async () => {
         if (!("serviceWorker" in navigator)) return;
         const registrations = await navigator.serviceWorker.getRegistrations();
-        if (!registrations.length) return;
-        await Promise.all(registrations.map((registration) => registration.unregister()));
+        const legacy = registrations.filter((registration) => {
+          const worker = registration.active || registration.waiting || registration.installing;
+          return !worker || !worker.scriptURL.endsWith("/push-sw.js");
+        });
+        if (!legacy.length) return;
+        await Promise.all(legacy.map((registration) => registration.unregister()));
         if ("caches" in window) {
           const keys = await caches.keys();
           await Promise.all(keys.map((key) => caches.delete(key)));

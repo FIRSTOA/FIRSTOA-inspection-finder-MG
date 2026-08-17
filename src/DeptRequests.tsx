@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
-import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { displayTitle, useAuthorBook, useMembers } from "./authors";
 import PersonPicker from "./PersonPicker";
-import { makeIsForMe, myGroupLabel, teamTargetLabel, teamTargetOptions } from "./audience";
+import { audienceNames, makeIsForMe, myGroupLabel, teamTargetLabel, teamTargetOptions } from "./audience";
 import { pingInbox } from "./useInboxBadge";
 import FormModal from "./FormModal";
 import { Send, Trash2 } from "lucide-react";
@@ -134,6 +134,16 @@ export default function DeptRequests({ author, embedded = false }: { author: str
         content: draft.content.trim(), due_date: draft.due_date || null,
         target_type: draft.target_type, target: draft.target_type === "전체" ? "" : draft.target,
       });
+      // 대상자에게 웹푸시 — 실패해도 요청 등록엔 영향 없음 (요청자 본인은 제외)
+      const pushTargets = draft.target_type === "전체" ? null
+        : audienceNames({ target_type: draft.target_type, target: draft.target }, members, book);
+      void invokeEdgeFunction("push-send", {
+        title: `부서 요청 — ${kind}`.slice(0, 80),
+        body: `${requester} · ${draft.content.trim()}`.slice(0, 120),
+        tag: "dept-request",
+        ...(pushTargets ? { targets: pushTargets } : { all: true }),
+        exclude: author ? [author] : [],
+      }).catch(() => undefined);
       setDraft({ ...draft, vendor: "", content: "", due_date: "", kindCustom: "" });
       setFormOpen(false);
       await load();
@@ -157,6 +167,18 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     try {
       await updateRows("dept_requests", `id=eq.${row.id}`, patch);
       pingInbox();
+      // 진행 소식을 요청자에게 웹푸시 (처리자 본인은 제외)
+      const requesterNames = (row.requester || "").split(/[\s,·]+/).filter(Boolean);
+      if (requesterNames.length) {
+        const word = status === "완료" ? "완료했습니다" : status === "처리중" ? "처리를 시작했습니다" : `상태를 "${status}"로 바꿨습니다`;
+        void invokeEdgeFunction("push-send", {
+          title: `내 요청 ${status} — ${row.kind}`.slice(0, 80),
+          body: `${author || "담당자"}님이 ${word}`,
+          tag: `dept-req-${row.id}`,
+          targets: requesterNames,
+          exclude: author ? [author] : [],
+        }).catch(() => undefined);
+      }
     } catch (e) {
       notify(`상태 변경 실패: ${(e as Error).message}`, "error");
       void load();

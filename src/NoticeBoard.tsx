@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { Megaphone, Pin, Plus, Search, Trash2 } from "lucide-react";
 import FormModal from "./FormModal";
-import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { useAuthorBook, useMembers } from "./authors";
 import PersonPicker from "./PersonPicker";
 import { audienceNames, makeIsForMe, teamTargetLabel, teamTargetOptions } from "./audience";
@@ -129,6 +129,16 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
         author: author || "미지정", title: draft.title.trim(), body: draft.body.trim(), category: draft.category,
         target_type: draft.target_type, target: draft.target_type === "전체" ? "" : draft.target, pinned: draft.pinned,
       });
+      // 대상자에게 웹푸시 — 실패해도 공지 등록엔 영향 없음 (등록자 본인은 제외)
+      const pushTargets = draft.target_type === "전체" ? null
+        : audienceNames({ target_type: draft.target_type, target: draft.target }, members, book);
+      void invokeEdgeFunction("push-send", {
+        title: `공지 — ${draft.title.trim()}`.slice(0, 80),
+        body: (draft.body.trim() || draft.category).slice(0, 120),
+        tag: "notice",
+        ...(pushTargets ? { targets: pushTargets } : { all: true }),
+        exclude: author ? [author] : [],
+      }).catch(() => undefined);
       setDraft({ title: "", body: "", category: "일반", target_type: "전체", target: "", pinned: false });
       setFormOpen(false);
       await load();
