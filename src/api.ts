@@ -86,6 +86,12 @@ const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
     pgCols("id", "임대여부", "품목", "제조사", "모델명", "기종", "자산번호", "순번", "기번", "계약일", "종료일", "대수", "등급", "시/구", "_업체명", "_dupKey", "created_at") },
 ];
 
+// 병합 중복판정용 내용 열쇠 — 색인(RPC)·직접 조회 양쪽 모두 실리는 정식 컬럼만 (앞에서부터 첫 유효값 사용)
+const HISTORY_ROW_CONTENT_KEYS = [
+  "처리내용", "내용", "불만내용", "불편내용", "합계", "미수잔액", "symptom", "진행상황", "진행상황(원문)",
+  "프로젝트", "첫등록내용", "세부사양", "어필 OR 추가영업", "자산번호", "기번", "수량", "금액", "포인트",
+];
+
 type HistoryRows = { config: HistorySearchTable; rows: Array<Record<string, unknown>> };
 const historySearchCache = new Map<string, { at: number; promise: Promise<HistoryRows[]> }>();
 
@@ -559,13 +565,14 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
       ? indexedDetail[config.category] as Array<Record<string, unknown>>
       : []);
     const unique = new Map<string, Record<string, unknown>>();
-    // 색인(RPC)과 직접 조회가 같은 기록을 다른 모양(컬럼 구성)으로 돌려줘 id·_dupKey만으론 중복이 남는다
-    // → 날짜+업체+핵심 내용 기반 열쇠로 합친다 (같은 분류 다중 테이블 합류(초과)도 이 열쇠로 안전)
+    // 색인(RPC) 행은 strip_helpers_로 id·_dupKey·_업체명이 벗겨져 오고, 직접 조회 행은 전부 실린다
+    // → 양쪽 모두 갖고 있는 정식 컬럼(날짜+내용)으로 열쇠를 만들어야 같은 기록이 합쳐진다
     const rowKey = (row: Record<string, unknown>) => {
       const date = String(row[config.dateField] || row["날짜"] || row["작성일"] || row["입력일"] || row["등록일"] || row["방문일"] || row["receipt_date"] || "").slice(0, 10);
+      const content = HISTORY_ROW_CONTENT_KEYS.map((key) => String(row[key] ?? "").trim()).find(Boolean)?.slice(0, 60) || "";
+      if (content) return `${config.category}|${date}|${content}`;
       const vendorName = String(row["_업체명"] || row["업체명"] || row["vendor"] || "").trim();
-      const content = String(row["처리내용"] || row["내용"] || row["불만내용"] || row["불편내용"] || row["합계"] || row["미수잔액"] || row["symptom"] || row["진행상황"] || row["자산번호"] || row["기번"] || row["_dupKey"] || row["id"] || "").slice(0, 60);
-      return `${config.category}|${date}|${vendorName}|${content}`;
+      return `${config.category}|${date}|${vendorName}|${String(row["id"] || row["_dupKey"] || "")}`;
     };
     const existing = Array.isArray(detail[config.category]) ? detail[config.category] as Array<Record<string, unknown>> : [];
     existing.forEach((row) => unique.set(rowKey(row), row));
