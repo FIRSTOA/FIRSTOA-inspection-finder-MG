@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1a11eaaa5a",
+    "date": "2026-08-17",
+    "note": "통합이력 UI 격상 — 다크 히어로 헤더·월별 타임라인·내용 제목 카드 + 점검/AS 시리얼 표시 + 중복 병합 완결"
+  },
+  {
     "hash": "be28fcd2f2",
     "date": "2026-08-17",
     "note": "통합이력 타임라인 미리보기 — 순수 숫자 값 대신 문장형 필드 우선"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b3606e212c",
     "date": "2026-08-01",
     "note": "조직 명단을 부서·팀·직책 구조로 재편"
-  },
-  {
-    "hash": "33d14fde63",
-    "date": "2026-08-01",
-    "note": "사이드바 소식 배지 + 부서 요청 폼 4종 개선 + 회사 조직 명단"
   }
 ];

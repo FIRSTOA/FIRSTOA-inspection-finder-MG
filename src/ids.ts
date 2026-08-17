@@ -26,8 +26,12 @@ export function workinVendorName(value: string) {
   const flat = String(value || "").replace(/_x000d_|\r|\n/g, " ").replace(/\s+/g, " ");
   const noPrefix = flat.replace(/^\s*[\d/\-#]*\s*(?:V|SS|S|NN|N)(?=[^A-Za-z])/, "").trim();
   const beforeSlash = noPrefix.split("/")[0];
-  const noTail = beforeSlash.replace(/(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$/, "");
-  return noTail.replace(/[\s\-·,()]+$/, "").trim();
+  const noTail = beforeSlash.replace(/(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$/, "")
+    .replace(/[\s\-·,()]+$/, "");
+  // "블루닷 주식회사(bluedot Inc.)" — 영문 괄호 꼬리(닫힘 유실 포함)와 뒤에 붙은 법인표기를 벗겨야 이력 키가 맞는다
+  const noParenTail = noTail.replace(/\s*\([A-Za-z0-9 .,&\-]*\)?\s*$/, "");
+  const noCorpTail = noParenTail.replace(/\s*(주식회사|유한회사|\(주\)|㈜)\s*$/, "");
+  return noCorpTail.replace(/[\s\-·,()]+$/, "").trim();
 }
 
 // 통합이력 검색어 뽑기 — 접수 제목("여분요청 N SL-X3220NR 14N주식회사 퍼뮤니티 …")이나 워킨맵 잡문이

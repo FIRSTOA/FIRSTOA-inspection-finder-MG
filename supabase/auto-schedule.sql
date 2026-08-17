@@ -20,8 +20,12 @@ create or replace function workin_vendor_(nm text) returns text language sql imm
   with t as (select regexp_replace(regexp_replace(coalesce(nm,''), '_x000d_|\r|\n', ' ', 'g'), '\s+', ' ', 'g') as v),
   a as (select btrim(regexp_replace(v, '^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])', '')) as v from t),
   b as (select split_part(v, '/', 1) as v from a),  -- 특이사항은 / 뒤에 붙는다
-  c as (select regexp_replace(v, '(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$', '') as v from b)
-  select btrim(regexp_replace(v, '[\s\-·,()]+$', '')) from c;
+  c as (select regexp_replace(v, '(매월마감|분기마감|매주마감|월말마감|단순마감|매월방문|매주방문|격주방문|월말방문|마감).*$', '') as v from b),
+  c2 as (select regexp_replace(v, '[\s\-·,()]+$', '') as v from c),
+  -- "블루닷 주식회사(bluedot Inc.)" — 영문 괄호 꼬리(닫힘 유실 포함)와 뒤에 붙은 법인표기를 벗겨야 이력 키가 맞는다 (src/ids.ts workinVendorName과 거울)
+  d as (select regexp_replace(v, '\s*\([A-Za-z0-9 .,&\-]*\)?\s*$', '') as v from c2),
+  e as (select regexp_replace(v, '\s*(주식회사|유한회사|\(주\)|㈜)\s*$', '') as v from d)
+  select btrim(regexp_replace(v, '[\s\-·,()]+$', '')) from e;
 $$;
 -- 업체명 매칭 키: 공백·괄호·㈜ 등 표기 차이를 없애고 앞 8글자만 — 워킨맵과 점검이력을 이어준다
 create or replace function vendor_key_(v text) returns text language sql immutable as $$

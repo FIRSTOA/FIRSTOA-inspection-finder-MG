@@ -66,6 +66,8 @@ function priorityPreview(cat: string, rec: Record<string, unknown>) {
   const candidates = (PRIORITY_FIELDS[cat] || []).map((key) => String(rec[key] ?? "").trim()).filter((value) => value && !junkValue(value));
   return (candidates.find((value) => !/^[\d,.\s]+$/.test(value)) || candidates[0] || "").replace(/\s+/g, " ");
 }
+// "주식회사 무암"과 "무암"은 같은 회사 — 법인 표기만 다른 이름을 매 줄 반복하지 않기 위한 비교용
+const coreName = (name: string) => name.replace(/주식회사|유한회사|㈜|\(주\)|\s+/g, "");
 
 type SummaryField = { key: string; value: string };
 
@@ -306,12 +308,32 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       date: displayDate(recordDateRaw("점검", rec)), counts: String(rec["매수"] || ""), toner: String(rec["토너잔량"] || ""),
       spare: String(rec["여분"] || ""), waste: String(rec["폐통"] || ""), serial: String(rec["자산기번"] || ""),
     } : undefined;
+    // 기기가 여러 대인 업체는 "최근 2건"이 서로 다른 기기라 사용량 비교가 어긋난다(푸드나무 3대 사례)
+    // → 기번별로 묶어 같은 기기의 직전 점검끼리 비교하고, 기기별로 따로 조언한다
+    const keyOf = (rec: Record<string, unknown>) => String(rec["자산기번"] || "").trim().toUpperCase() || String(rec["시리얼넘버"] || "").trim().toUpperCase();
+    const byMachine = new Map<string, Array<Record<string, unknown>>>();
+    sorted.forEach((rec) => {
+      const key = keyOf(rec) || "미기재";
+      const list = byMachine.get(key) || [];
+      list.push(rec);
+      byMachine.set(key, list);
+    });
+    // 최근 15개월 내 점검된 기기만 현역으로 본다 — 그 전에 끊긴 기번은 교체·반납된 기기
+    const cutoff = new Date(Date.now() - 456 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const machines = Array.from(byMachine.entries()).map(([serial, recs]) => ({
+      serial,
+      date: displayDate(recordDateRaw("점검", recs[0])),
+      latest: snap(recs[0]),
+      advice: usageSpareAdvice(snap(recs[0]), snap(recs[1]), String(recs[0]?.["모델명"] || "")),
+    })).filter((machine) => machine.date && machine.date >= cutoff);
+    const activeKeys = new Set(machines.map((machine) => machine.serial));
+    const retired = sorted
+      .map((rec) => ({ key: keyOf(rec) || "미기재", date: displayDate(recordDateRaw("점검", rec)) }))
+      .find((entry) => !activeKeys.has(entry.key));
     const latest = snap(sorted[0]);
-    const previous = snap(sorted[1]);
-    const advice = usageSpareAdvice(latest, previous, String(sorted[0]?.["모델명"] || ""));
     const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
     const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
-    return { latest, previous, advice, special };
+    return { latest, machines, retired, special };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
   const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string } | null>(null);
@@ -357,6 +379,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     loadedFor.current = "";
   };
 
+  // 표기만 다른 같은 회사 이름(주식회사 무암=무암)은 매 줄 반복하지 않는다 — 실제 다른 법인명일 때만 표시
+  const showVendorOf = (name: string) => includedHits.length > 1 && !!name && coreName(name) !== coreName(queryVendor);
+
   // 같은 건물·같은 그룹에 법인이 여러 개인 경우(청연 등) — 업종 접두를 뗀 짧은 이름으로 넓혀 검색하는 지름길.
   // 자동으로 합치지는 않는다: 법인이 다르면 미수·초과도 다른 회사 것이라 섞으면 사고다.
   const broaderQuery = useMemo(() => {
@@ -394,6 +419,15 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         </div>}
       </header>
 
+      {!loading && detail && scopeOpen && <section className="space-y-3 border-b border-slate-200 bg-slate-50 px-3 py-3 sm:px-6">
+        <div><div className="mb-1.5 text-[10px] font-black text-slate-400">지역</div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{historyRegionTabs.map((region) => <button key={region} type="button" onClick={() => { setHistoryRegion(region); setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyRegion === region ? "text-white" : "border border-slate-200 bg-white text-slate-600"}`} style={historyRegion === region ? { background: accent } : undefined}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}<span className="ml-1 opacity-70">{region === "전체" ? allRows.length : regionCounts[region] || 0}</span></button>)}</div></div>
+        <div><div className="mb-1.5 text-[10px] font-black text-slate-400">포함된 거래처 이름</div><div className="flex gap-1.5 overflow-x-auto pb-0.5"><button type="button" onClick={() => { setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyVendor === "전체" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체 이름</button>{visibleAliases.map((hit) => {
+          const normalizedAliasRegion = normRegion(primaryRegion(hit));
+          const aliasRegion = REGIONS.includes(normalizedAliasRegion) ? normalizedAliasRegion : "-";
+          return <button key={hit.vendor} type="button" onClick={() => { setHistoryVendor(hit.vendor); setActiveCat("전체"); }} className={`flex max-w-[260px] shrink-0 items-center rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyVendor === hit.vendor ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}><span className="mr-1 shrink-0 text-[9px] text-slate-400">{aliasRegion}</span><span className="truncate">{hit.vendor}</span></button>;
+        })}</div></div>
+      </section>}
+
       <div className="relative border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6">
         <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 sm:left-9" />
         <input value={q} onChange={(event) => { const value = event.target.value; setQ(value); setHits([]); setShowHits(value.trim().length >= 2); }} onFocus={() => hits.length && setShowHits(true)} placeholder="거래처 이름 검색" className="h-10 w-full rounded-full border border-slate-200 bg-slate-100 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white" />
@@ -404,15 +438,6 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           {!searching && visibleSearchHits.length === 0 && <div className="px-3 py-3 text-xs font-semibold text-slate-400">이력이 있는 거래처가 없습니다.</div>}
         </div>}
       </div>
-
-      {!loading && detail && scopeOpen && <section className="space-y-3 border-b border-slate-200 bg-slate-50 px-3 py-3 sm:px-6">
-        <div><div className="mb-1.5 text-[10px] font-black text-slate-400">지역</div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{historyRegionTabs.map((region) => <button key={region} type="button" onClick={() => { setHistoryRegion(region); setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyRegion === region ? "text-white" : "border border-slate-200 bg-white text-slate-600"}`} style={historyRegion === region ? { background: accent } : undefined}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}<span className="ml-1 opacity-70">{region === "전체" ? allRows.length : regionCounts[region] || 0}</span></button>)}</div></div>
-        <div><div className="mb-1.5 text-[10px] font-black text-slate-400">포함된 거래처 이름</div><div className="flex gap-1.5 overflow-x-auto pb-0.5"><button type="button" onClick={() => { setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyVendor === "전체" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체 이름</button>{visibleAliases.map((hit) => {
-          const normalizedAliasRegion = normRegion(primaryRegion(hit));
-          const aliasRegion = REGIONS.includes(normalizedAliasRegion) ? normalizedAliasRegion : "-";
-          return <button key={hit.vendor} type="button" onClick={() => { setHistoryVendor(hit.vendor); setActiveCat("전체"); }} className={`flex max-w-[260px] shrink-0 items-center rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyVendor === hit.vendor ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}><span className="mr-1 shrink-0 text-[9px] text-slate-400">{aliasRegion}</span><span className="truncate">{hit.vendor}</span></button>;
-        })}</div></div>
-      </section>}
 
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-5">
         <button type="button" onClick={() => setActiveCat("전체")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${activeCat === "전체" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>요약 {totalCount || ""}</button>
@@ -430,49 +455,81 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         </div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
         {!loading && detail && activeCat === "전체" && (() => {
-          // 한 줄 = 한 항목 (색 바 + 고정 라벨 + 값) — 어느 화면에서 열어도 같은 기준·같은 모양
-          type CheckRow = { dot: string; label: string; value: string; tone?: string; strong?: boolean };
+          // 한 줄 = 짧은 결론(굵게) + 근거(옅게) 2단 — 굵기가 결론에만 있어야 한눈에 읽힌다
+          type CheckRow = { dot: string; label: string; headline: string; detail?: string; tone?: string; strong?: boolean };
           const rows: CheckRow[] = [];
           const f = flags;
           if (f?.misu) rows.push(f.misu.cleared
-            ? { dot: "bg-slate-300", label: "미수", value: `완납 (${f.misu.date})${f.misu.count > 1 ? ` · 그동안 ${f.misu.count}회 발생` : ""}`, tone: "text-slate-500" }
-            : { dot: "bg-rose-500", label: "미수", value: `잔액 ${f.misu.balance}${f.misu.months ? ` · ${f.misu.months}개월` : ""}${f.misu.count > 1 ? ` · 누적 ${f.misu.count}회` : ""}`, tone: "text-rose-700", strong: true });
-          if (f?.bulman) rows.push({ dot: "bg-rose-500", label: "불만", value: `${f.bulman.date} · ${f.bulman.content}${f.bulman.count90 > 1 ? ` (최근 90일 ${f.bulman.count90}건)` : ""}`, tone: "text-rose-700", strong: true });
-          if (f?.overage) rows.push({ dot: "bg-amber-500", label: "초과", value: `${f.overage.total} (${f.overage.date})${f.overage.count12 > 1 ? ` · 12개월 새 ${f.overage.count12}회` : ""}`, tone: "text-amber-800" });
+            ? { dot: "bg-slate-300", label: "미수", headline: "완납", detail: `${f.misu.date}${f.misu.count > 1 ? ` · 그동안 ${f.misu.count}회 발생` : ""}`, tone: "text-slate-600" }
+            : { dot: "bg-rose-500", label: "미수", headline: `잔액 ${f.misu.balance}${f.misu.months ? ` · ${f.misu.months}개월` : ""}`, detail: f.misu.count > 1 ? `누적 ${f.misu.count}회 발생` : "", tone: "text-rose-700", strong: true });
+          if (f?.bulman) rows.push({ dot: "bg-rose-500", label: "불만", headline: f.bulman.content, detail: `${f.bulman.date}${f.bulman.count90 > 1 ? ` · 최근 90일 ${f.bulman.count90}건` : ""}`, tone: "text-rose-700", strong: true });
+          if (f?.overage) rows.push({ dot: "bg-amber-500", label: "초과", headline: f.overage.total, detail: `${f.overage.date}${f.overage.count12 > 1 ? ` · 12개월 새 ${f.overage.count12}회` : ""}`, tone: "text-amber-800" });
           if (f?.inspection) rows.push(f.inspection.done
-            ? { dot: "bg-slate-300", label: "점검", value: `완료 (${f.inspection.quarter}분기)`, tone: "text-slate-500" }
+            ? { dot: "bg-slate-300", label: "점검", headline: "완료", detail: `${f.inspection.quarter}분기`, tone: "text-slate-600" }
             : f.inspection.carried
-              ? { dot: "bg-slate-300", label: "점검", value: "다음 분기로 이관됨", tone: "text-slate-500" }
-              : { dot: "bg-blue-500", label: "점검", value: `${f.inspection.quarter}분기 방문 대상`, tone: "text-blue-700" });
+              ? { dot: "bg-slate-300", label: "점검", headline: "다음 분기로 이관", tone: "text-slate-600" }
+              : { dot: "bg-blue-500", label: "점검", headline: `${f.inspection.quarter}분기 방문 대상`, tone: "text-blue-700" });
           if (f?.renewal) rows.push(f.renewal.done
-            ? { dot: "bg-slate-300", label: "재계약", value: "완료", tone: "text-slate-500" }
-            : { dot: "bg-blue-500", label: "재계약", value: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
-          if (quarterCheck.advice?.usageLine && !quarterCheck.advice.usageLine.includes("약 0매")) rows.push({ dot: "bg-blue-400", label: "사용량", value: quarterCheck.advice.usageLine, tone: "text-slate-700" });
-          if (quarterCheck.advice?.adviceLine) rows.push({ dot: "bg-emerald-500", label: "여분", value: quarterCheck.advice.adviceLine, tone: "text-emerald-700" });
-          if (quarterCheck.advice?.warning) rows.push({ dot: "bg-amber-500", label: "주의", value: quarterCheck.advice.warning, tone: "text-amber-800" });
-          if (quarterCheck.special) rows.push({ dot: "bg-rose-400", label: "특이", value: quarterCheck.special, tone: "text-rose-700" });
+            ? { dot: "bg-slate-300", label: "재계약", headline: "완료", tone: "text-slate-600" }
+            : { dot: "bg-blue-500", label: "재계약", headline: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
+          // 사용량·여분은 기기별 — 같은 기번의 직전 점검과 비교하고, 여러 대면 기번을 붙여 구분한다
+          const multi = quarterCheck.machines.length > 1;
+          quarterCheck.machines.slice(0, 3).forEach((machine) => {
+            const tag = multi ? ` — ${machine.serial}` : "";
+            const usage = machine.advice?.usageLine;
+            if (usage && !usage.includes("약 0매")) {
+              const parsed = usage.match(/^(.*?)\s*\((월평균 약 [\d,]+매)\)\s*$/);
+              rows.push(parsed
+                ? { dot: "bg-blue-400", label: "사용량", headline: `${parsed[2]}${tag}`, detail: `${parsed[1]} · 같은 기기 직전 점검 대비` }
+                : { dot: "bg-blue-400", label: "사용량", headline: `${usage}${tag}` });
+            }
+            const advice = machine.advice?.adviceLine;
+            if (advice) {
+              const arrow = advice.match(/^현재\s*(.+?)\s*→\s*(.+?)(?:\s*\((.+)\))?\s*$/);
+              const dash = advice.match(/^(.+?)\s*—\s*(.+)$/);
+              rows.push(arrow
+                ? { dot: "bg-emerald-500", label: "여분", headline: `${arrow[2]}${tag}`, detail: `현재 ${arrow[1]}${arrow[3] ? ` · ${arrow[3]}` : ""}`, tone: "text-emerald-700" }
+                : dash
+                  ? { dot: "bg-emerald-500", label: "여분", headline: `${dash[1]}${tag}`, detail: dash[2], tone: "text-emerald-700" }
+                  : { dot: "bg-emerald-500", label: "여분", headline: `${advice}${tag}`, tone: "text-emerald-700" });
+            }
+            if (machine.advice?.warning) rows.push({ dot: "bg-amber-500", label: "주의", headline: `${machine.advice.warning}${tag}`, tone: "text-amber-800" });
+          });
+          if (quarterCheck.machines.length > 3) rows.push({ dot: "bg-slate-300", label: "여분", headline: `외 ${quarterCheck.machines.length - 3}대는 점검 탭에서 기기별 확인`, tone: "text-slate-500" });
+          if (quarterCheck.special) rows.push({ dot: "bg-rose-400", label: "특이", headline: quarterCheck.special, detail: quarterCheck.latest ? `${quarterCheck.latest.date} 점검 기록` : "", tone: "text-rose-700" });
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
-            rows.push({ dot: "bg-slate-400", label: "기기", value: `임대중 ${parts}${devices.ended ? ` (종료 ${devices.ended}대 제외)` : ""}`, tone: "text-slate-600" });
+            rows.push({ dot: "bg-slate-400", label: "기기", headline: `임대중 ${parts}`, detail: devices.ended ? `종료 ${devices.ended}대 제외` : "", tone: "text-slate-700" });
           }
-          if (devices?.recentSwap) rows.push({ dot: "bg-indigo-500", label: "교체", value: `최근 1년 내 납품·교체 ${devices.recentSwap}`, tone: "text-indigo-700" });
-          // 주의(빨강·주황) 행은 옅은 바탕으로 띄워 "지금 봐야 할 것"이 먼저 읽히게
+          // 납품인지 교체인지는 시트가 한 칸에 적어 구분이 없다 — 점검 기번 변화가 있으면 "교체"로 확정해 준다
+          if (devices?.recentSwap || quarterCheck.retired) rows.push({
+            dot: "bg-indigo-500", label: "교체",
+            headline: devices?.recentSwap ? `${devices.recentSwap} 납품/교체` : "기기 교체된 것으로 보임",
+            detail: quarterCheck.retired
+              ? `점검 기번 ${quarterCheck.retired.key} → ${quarterCheck.machines[0]?.serial || "?"} 변경 (이전 기기 마지막 점검 ${quarterCheck.retired.date})`
+              : "최근 1년 내 · 임대리스트 납품/교체일 기준",
+            tone: "text-indigo-700",
+          });
+          // 주의(빨강) 행은 옅은 바탕으로 띄워 "지금 봐야 할 것"이 먼저 읽히게
           const TINT: Record<string, string> = { "bg-rose-500": "bg-rose-50/70", "bg-amber-500": "bg-amber-50/60", "bg-blue-500": "bg-blue-50/40" };
           return <section className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between gap-2 px-4 py-3 sm:px-5">
               <h3 className="text-[15px] font-black text-slate-950">이번 분기 체크</h3>
-              <span className="text-[10px] font-bold text-slate-400">워킨맵 · 미수 · 초과 · 불만 · 최근 2회 점검 기준</span>
+              <span className="text-[10px] font-bold text-slate-400">워킨맵 · 미수 · 초과 · 불만 · 기기별 최근 점검 기준</span>
             </div>
             <div className="divide-y divide-slate-100 border-t border-slate-100">
               {rows.length ? rows.map((row) => (
-                <div key={`${row.label}-${row.value}`} className={`flex items-center gap-3 px-4 py-2.5 sm:px-5 ${row.strong ? TINT[row.dot] || "" : ""}`}>
-                  <span className={`h-5 w-1 shrink-0 rounded-full ${row.dot}`} />
-                  <span className="w-12 shrink-0 text-[11px] font-black text-slate-400">{row.label}</span>
-                  <span className={`min-w-0 flex-1 truncate text-[13px] ${row.strong ? "font-black" : "font-semibold"} ${row.tone || "text-slate-700"}`} title={row.value}>{row.value}</span>
+                <div key={`${row.label}-${row.headline}`} className={`flex gap-3 px-4 py-2.5 sm:px-5 ${row.strong ? TINT[row.dot] || "" : ""}`}>
+                  <span className={`mt-1 h-4 w-1 shrink-0 rounded-full ${row.dot}`} />
+                  <span className="w-12 shrink-0 pt-0.5 text-[11px] font-bold text-slate-400">{row.label}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate text-[13.5px] ${row.strong ? "font-black" : "font-bold"} ${row.tone || "text-slate-800"}`} title={row.headline}>{row.headline}</div>
+                    {row.detail && <div className="mt-0.5 truncate text-[11.5px] font-medium text-slate-400" title={row.detail}>{row.detail}</div>}
+                  </div>
                 </div>
               )) : <div className="px-4 py-5 text-xs font-semibold text-slate-400 sm:px-5">이번 분기에 특별히 체크할 항목이 없습니다.</div>}
             </div>
-            {quarterCheck.latest && <div className="truncate border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-[11px] font-semibold tabular-nums text-slate-500 sm:px-5" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}${quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
+            {quarterCheck.latest && <div className="truncate border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-[11px] font-medium tabular-nums text-slate-400 sm:px-5" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}</div>}
           </section>;
         })()}
         {!loading && detail && activeCat === "전체" && (() => {
@@ -497,17 +554,19 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             <div className="flex items-center justify-between gap-2 px-4 py-3 sm:px-5"><h3 className="text-[15px] font-black text-slate-950">최근 활동</h3><span className="text-[10px] font-bold text-slate-400">누르면 그 분류의 전체 기록이 열립니다</span></div>
             <div className="border-t border-slate-100 pb-2">
               {groups.map((group) => <div key={group.month}>
-                <div className="px-4 pb-1 pt-3 text-[10px] font-black tracking-wide text-slate-400 sm:px-5">{group.month}</div>
+                <div className="bg-slate-50/80 px-4 py-1 text-[10px] font-black tracking-wide text-slate-500 sm:px-5">{group.month}</div>
                 {group.items.map((item, index) => (
                   <button key={`${item.cat}-${item.date}-${index}`} type="button" onClick={() => setActiveCat(item.cat)} className="group flex w-full items-center gap-2.5 px-4 text-left transition hover:bg-slate-50 sm:px-5">
                     <span className="relative w-3.5 shrink-0 self-stretch">
                       <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-slate-200" />
                       <span className={`absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[3px] ring-white ${CAT_DOT[item.cat] || "bg-slate-400"}`} />
                     </span>
-                    <span className="w-9 shrink-0 py-2.5 text-[11px] font-black tabular-nums text-slate-500">{item.date.slice(8, 10)}일</span>
+                    <span className="w-9 shrink-0 py-2.5 text-[11px] font-semibold tabular-nums text-slate-400">{item.date.slice(8, 10)}일</span>
+                    <span className="min-w-0 flex-1 truncate py-2.5 text-[13px] font-medium text-slate-800" title={item.preview}>
+                      {showVendorOf(item.vendorName) && <span className="font-normal text-slate-400">{item.vendorName} · </span>}
+                      {item.preview || "-"}
+                    </span>
                     <span className={`w-12 shrink-0 rounded-md px-1.5 py-0.5 text-center text-[10px] font-black ${CAT_TONE[item.cat] || "bg-slate-100 text-slate-600"}`}>{CAT_SHORT[item.cat]}</span>
-                    {includedHits.length > 1 && item.vendorName && <span className="max-w-[110px] shrink-0 truncate text-[11px] font-bold text-slate-400">{item.vendorName}</span>}
-                    <span className="min-w-0 flex-1 truncate py-2.5 text-[13px] font-semibold text-slate-700" title={item.preview}>{item.preview || "-"}</span>
                     <ChevronRight size={14} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500" />
                   </button>
                 ))}
@@ -541,12 +600,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] font-black text-slate-900" title={title}>{title}</span>
-                  <span className="mt-1 flex items-center gap-2 text-[10.5px] font-bold text-slate-500">
+                  <span className="mt-1 flex items-center gap-2 text-[10.5px] font-medium text-slate-500">
                     {date && <span className="shrink-0 tabular-nums">{date}</span>}
                     {activeCat === "접수" && !!record["type"] && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 font-black text-blue-700">{String(record["type"])}</span>}
                     <span className="flex shrink-0 items-center gap-0.5"><MapPin size={11} />{region}</span>
                     {who.val && <span className="flex min-w-0 items-center gap-0.5 truncate"><UserRound size={11} />{who.val}</span>}
-                    {includedHits.length > 1 && <span className="min-w-0 truncate text-slate-400">{vendorName}</span>}
+                    {showVendorOf(vendorName) && <span className="min-w-0 truncate text-slate-400">{vendorName}</span>}
                   </span>
                 </span>
                 <ChevronDown size={17} className="shrink-0 text-slate-400 transition group-open:rotate-180" />
@@ -561,8 +620,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                     <div className="divide-y divide-slate-100 bg-white px-4">
                       {mains.map((field) => (
                         <div key={field.key} className="flex gap-3 py-2.5">
-                          <span className="w-16 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{fieldLabel(field.key)}</span>
-                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-bold leading-6 text-slate-800">{field.value}</span>
+                          <span className="w-16 shrink-0 pt-0.5 text-[11px] font-bold text-slate-400">{fieldLabel(field.key)}</span>
+                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13.5px] font-medium leading-6 text-slate-800">{field.value}</span>
                         </div>
                       ))}
                       {!mains.length && !rest.length && <div className="py-5 text-center text-xs font-semibold text-slate-400">표시할 상세 내용이 없습니다.</div>}
@@ -573,8 +632,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                         <div className="grid gap-x-6 gap-y-2 py-2 sm:grid-cols-2">
                           {rest.map((field, fieldIndex) => (
                             <div key={`${field.key}-${fieldIndex}`} className="min-w-0">
-                              <div className="text-[10px] font-black text-slate-400">{fieldLabel(field.key)}</div>
-                              <div className="whitespace-pre-wrap break-words text-[12px] font-semibold leading-5 text-slate-600">{field.value}</div>
+                              <div className="text-[10px] font-bold text-slate-400">{fieldLabel(field.key)}</div>
+                              <div className="whitespace-pre-wrap break-words text-[12px] font-normal leading-5 text-slate-600">{field.value}</div>
                             </div>
                           ))}
                         </div>

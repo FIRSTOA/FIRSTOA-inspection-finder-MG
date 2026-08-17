@@ -88,6 +88,12 @@ describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL w
   it("특이사항(/ 뒤)과 마감 꼬리를 자른다", () => {
     expect(workinVendorName("3NN 아스크스토리디에스 분기점검/토너 챙길 것")).toBe("아스크스토리디에스 분기점검");
   });
+  it("영문 괄호 꼬리와 뒤붙은 법인표기를 벗긴다 — 블루닷 이력 키 어긋남 수리", () => {
+    expect(workinVendorName("30S블루닷 주식회사(bluedot Inc.)-분기마감")).toBe("블루닷");
+    expect(workinVendorName("블루닷 주식회사(bluedot Inc.")).toBe("블루닷");
+    // ㈜가 이름 중간에 낀 경우는 그대로 (꼬리만 벗긴다)
+    expect(workinVendorName("15NN한불엠앤에스㈜1층")).toBe("한불엠앤에스㈜1층");
+  });
 });
 
 describe("normalizeId — 기번/자산번호 비교 키", () => {
