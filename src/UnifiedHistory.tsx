@@ -58,7 +58,7 @@ const FIELD_LABELS: Record<string, string> = {
   completed_at: "완료시각", completed_by: "처리자", region: "지역", title: "제목", notes: "메모", route: "경로",
 };
 const fieldLabel = (key: string) => FIELD_LABELS[key] || key;
-const junkValue = (value: string) => /^[ㅡ_\-\s.]*$/.test(value) || value === "0" || value === "false";
+const junkValue = (value: string) => /^[ㅡ_\-\s.]*$/.test(value) || value === "0" || value === "false" || /^(없음|없슴|무|x|X)\.?$/.test(value.trim());
 
 type SummaryField = { key: string; value: string };
 
@@ -302,8 +302,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     const latest = snap(sorted[0]);
     const previous = snap(sorted[1]);
     const advice = usageSpareAdvice(latest, previous, String(sorted[0]?.["모델명"] || ""));
-    const specialRaw = String(sorted[0]?.["특이사항"] || "");
-    const special = specialRaw.replace(/[ㅡ\-_.\s]/g, "") ? specialRaw.trim() : ""; // "ㅡㅡㅡ" 채움표시 제외
+    const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
+    const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
     return { latest, previous, advice, special };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
@@ -435,7 +435,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           if (f?.renewal) rows.push(f.renewal.done
             ? { dot: "bg-slate-300", label: "재계약", value: "완료", tone: "text-slate-500" }
             : { dot: "bg-blue-500", label: "재계약", value: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
-          if (quarterCheck.advice?.usageLine) rows.push({ dot: "bg-blue-400", label: "사용량", value: quarterCheck.advice.usageLine, tone: "text-slate-700" });
+          if (quarterCheck.advice?.usageLine && !quarterCheck.advice.usageLine.includes("약 0매")) rows.push({ dot: "bg-blue-400", label: "사용량", value: quarterCheck.advice.usageLine, tone: "text-slate-700" });
           if (quarterCheck.advice?.adviceLine) rows.push({ dot: "bg-emerald-500", label: "여분", value: quarterCheck.advice.adviceLine, tone: "text-emerald-700" });
           if (quarterCheck.advice?.warning) rows.push({ dot: "bg-amber-500", label: "주의", value: quarterCheck.advice.warning, tone: "text-amber-800" });
           if (quarterCheck.special) rows.push({ dot: "bg-rose-400", label: "특이", value: quarterCheck.special, tone: "text-rose-700" });
@@ -466,8 +466,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           const CAT_TONE: Record<string, string> = { 접수: "bg-blue-50 text-blue-700", 점검: "bg-emerald-50 text-emerald-700", AS: "bg-indigo-50 text-indigo-700", 초과: "bg-amber-50 text-amber-800", 미수: "bg-rose-50 text-rose-700", 불만: "bg-red-50 text-red-700", 복합기확장성: "bg-slate-100 text-slate-600", PC확장성: "bg-slate-100 text-slate-600" };
           const recent = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => {
             const date = displayDate(recordDateRaw(cat, record));
+            // 중요 필드(처리내용·불만내용 등)를 미리보기로 — 아무 칸 앞 2개를 붙이면 "점검 · 점검" 같은 잡문이 된다
+            const priorityValue = (PRIORITY_FIELDS[cat] || []).map((key) => String(record[key] ?? "").trim()).find((value) => value && !junkValue(value));
             const summary = recordSummary(cat, record, [...REGION_KEYS]);
-            const preview = summary.fields.slice(0, 2).map((field) => field.value.replace(/\s+/g, " ")).join(" · ");
+            const preview = (priorityValue || summary.fields.slice(0, 2).map((field) => field.value).join(" · ")).replace(/\s+/g, " ").slice(0, 80);
             return { cat, date, preview, vendorName: recordVendor(record) || "" };
           })).filter((item) => item.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
           return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

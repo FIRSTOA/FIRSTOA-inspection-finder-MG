@@ -559,12 +559,19 @@ export async function getVendorHistoryDetail(q: string): Promise<{ detail: Detai
       ? indexedDetail[config.category] as Array<Record<string, unknown>>
       : []);
     const unique = new Map<string, Record<string, unknown>>();
-    // 같은 분류를 여러 테이블이 채울 수 있다(초과 = overage_adjust + overage) — 앞 테이블 결과를 보존하고 합친다
+    // 색인(RPC)과 직접 조회가 같은 기록을 다른 모양(컬럼 구성)으로 돌려줘 id·_dupKey만으론 중복이 남는다
+    // → 날짜+업체+핵심 내용 기반 열쇠로 합친다 (같은 분류 다중 테이블 합류(초과)도 이 열쇠로 안전)
+    const rowKey = (row: Record<string, unknown>) => {
+      const date = String(row[config.dateField] || row["날짜"] || row["작성일"] || row["입력일"] || row["등록일"] || row["방문일"] || row["receipt_date"] || "").slice(0, 10);
+      const vendorName = String(row["_업체명"] || row["업체명"] || row["vendor"] || "").trim();
+      const content = String(row["처리내용"] || row["내용"] || row["불만내용"] || row["불편내용"] || row["합계"] || row["미수잔액"] || row["symptom"] || row["진행상황"] || row["자산번호"] || row["기번"] || row["_dupKey"] || row["id"] || "").slice(0, 60);
+      return `${config.category}|${date}|${vendorName}|${content}`;
+    };
     const existing = Array.isArray(detail[config.category]) ? detail[config.category] as Array<Record<string, unknown>> : [];
-    existing.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
-    // 색인(RPC) 결과와 원본 직접 조회를 합집합으로 — 어느 한쪽이 놓친 기록도 살린다(누락 방어). 직접 조회가 나중이라 우선.
-    indexedRows.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
-    directRows.forEach((row) => unique.set(String(row._dupKey || row.id || JSON.stringify(row)), row));
+    existing.forEach((row) => unique.set(rowKey(row), row));
+    // 합집합 병합(누락 방어) — 직접 조회가 나중이라 같은 기록이면 경량 컬럼 구성이 남는다
+    indexedRows.forEach((row) => unique.set(rowKey(row), row));
+    directRows.forEach((row) => unique.set(rowKey(row), row));
     detail[config.category] = Array.from(unique.values());
   });
   // 원본 테이블을 모르는 업체정보 등은 기존 상세 RPC 결과를 그대로 보존한다.

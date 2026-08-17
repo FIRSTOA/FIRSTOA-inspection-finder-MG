@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "848c69439d",
+    "date": "2026-08-17",
+    "note": "통합이력 전면 정돈 — 요약은 2블록, 상세는 중요 필드 우선"
+  },
+  {
     "hash": "828350d68d",
     "date": "2026-08-17",
     "note": "조회탭 접수를 하나로 — 이름 '접수' + 유형 칩(복합기/IT/원격)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4deb56d0dc",
     "date": "2026-08-01",
     "note": "조회 탭 필터 전수 점검 — 색·라벨·밀도 통일"
-  },
-  {
-    "hash": "059e25ba35",
-    "date": "2026-08-01",
-    "note": "조회 범용 화면을 미수 보드 스타일로 + #N/A 표시 정리"
   }
 ];
