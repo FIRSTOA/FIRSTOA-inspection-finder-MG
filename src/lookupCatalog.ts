@@ -32,6 +32,7 @@ export type LookupCategory = {
   teamField?: string;           // 팀(A~D) 필터에 쓸 컬럼 — 값에 팀 글자가 포함되면 매칭 (수도권C 등)
   teamSourceParen?: boolean;    // 출처 라벨의 괄호에서도 팀 매칭 ("카톡:재계약(A)") — 지역 칸이 빈 시트분 보완
   custom?: "misu" | "overage" | "stock";  // 범용 표 대신 전용 보드를 렌더 (CS체크·정렬·수량조절 등 기능이 더 풍부)
+  chipFilter?: { field: string; options: Array<[value: string, label: string]> }; // 카테고리 안 유형 칩 (접수: 복합기/IT/원격)
 };
 
 const VENDOR: LookupColumn = { key: "_업체명", label: "업체명", width: "minmax(0,1.4fr)", strong: true };
@@ -212,56 +213,15 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "reception", label: "서비스접수", group: "접수·자산", teamField: "region", table: "service_receptions",
+    key: "reception", label: "접수", group: "접수·자산", teamField: "region", table: "service_receptions",
     dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
     searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
     filterQuery: "deleted=is.false",
+    chipFilter: { field: "type", options: [["복합기 AS", "복합기"], ["IT", "IT"], ["원격이관", "원격"]] },
     columns: [
       { key: "receipt_date", label: "접수일", width: "96px", mono: true },
       { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
       { key: "type", label: "구분", width: "90px" },
-      { key: "author", label: "접수자", width: "80px" },
-      { key: "status", label: "상태", width: "90px" },
-      { key: "symptom", label: "증상", width: "minmax(0,1.6fr)" },
-      { key: "address", label: "주소", width: "minmax(0,1.2fr)", hideBelow: "lg" },
-    ],
-  },
-  {
-    key: "reception_copier", label: "접수 · 복합기", group: "접수·자산", teamField: "region", table: "service_receptions",
-    dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
-    searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
-    filterQuery: "deleted=is.false&type=eq." + encodeURIComponent("복합기 AS"),
-    columns: [
-      { key: "receipt_date", label: "접수일", width: "96px", mono: true },
-      { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
-      { key: "author", label: "접수자", width: "80px" },
-      { key: "status", label: "상태", width: "90px" },
-      { key: "symptom", label: "증상", width: "minmax(0,1.6fr)" },
-      { key: "address", label: "주소", width: "minmax(0,1.2fr)", hideBelow: "lg" },
-    ],
-  },
-  {
-    key: "reception_it", label: "접수 · IT", group: "접수·자산", teamField: "region", table: "service_receptions",
-    dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
-    searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
-    filterQuery: "deleted=is.false&type=eq." + encodeURIComponent("IT"),
-    columns: [
-      { key: "receipt_date", label: "접수일", width: "96px", mono: true },
-      { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
-      { key: "author", label: "접수자", width: "80px" },
-      { key: "status", label: "상태", width: "90px" },
-      { key: "symptom", label: "증상", width: "minmax(0,1.6fr)" },
-      { key: "address", label: "주소", width: "minmax(0,1.2fr)", hideBelow: "lg" },
-    ],
-  },
-  {
-    key: "reception_remote", label: "접수 · 원격", group: "접수·자산", teamField: "region", table: "service_receptions",
-    dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
-    searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
-    filterQuery: "deleted=is.false&type=eq." + encodeURIComponent("원격이관"),
-    columns: [
-      { key: "receipt_date", label: "접수일", width: "96px", mono: true },
-      { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },
       { key: "author", label: "접수자", width: "80px" },
       { key: "status", label: "상태", width: "90px" },
       { key: "symptom", label: "증상", width: "minmax(0,1.6fr)" },

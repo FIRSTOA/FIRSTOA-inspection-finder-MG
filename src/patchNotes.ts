@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "cd9b98dc01",
+    "date": "2026-08-17",
+    "note": "분기 안내 '저장 안 됨' 진짜 원인 수리 — 탭 복귀 시 저장 문구 자동 적용"
+  },
+  {
     "hash": "82d2773755",
     "date": "2026-08-17",
     "note": "공용 문구 저장 확인 표시 + 조회탭 접수 유형 분리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7e49a3314b",
     "date": "2026-08-01",
     "note": "조회가 미수·초과료·재고 보드를 흡수 + 부서 요청 대상 지정"
-  },
-  {
-    "hash": "95a47a283e",
-    "date": "2026-08-01",
-    "note": "안 쓰는 OperationsDashboard 임포트 제거 (빌드 수정)"
   }
 ];

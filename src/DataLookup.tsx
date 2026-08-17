@@ -54,6 +54,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   // 잘못된 기록 숨김(soft delete) — 원문 보존, 누가·언제 숨겼는지 기록. 지원 테이블에만 노출
   const HIDEABLE = useMemo(() => new Set(["jeomgeom", "as_records", "logistics_records", "bulman", "misu", "overage", "overage_adjust", "recontract", "churn_defense", "mgmt_support", "pc_expansion", "mfp_expansion", "contact_changes", "stock_items"]), []);
   const [showHidden, setShowHidden] = useState(false);
+  const [chip, setChip] = useState(""); // chipFilter 유형 선택 (빈 값 = 전체)
   const [hideBusy, setHideBusy] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
@@ -66,13 +67,14 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   );
 
   useEffect(() => { window.localStorage.setItem("cs_lookup_category_v1", categoryKey); }, [categoryKey]);
-  useEffect(() => { setRows([]); setReachedEnd(false); }, [categoryKey, team]);
+  useEffect(() => { setRows([]); setReachedEnd(false); setChip(""); }, [categoryKey, team]);
 
   // 조회 한 번에 필요한 쿼리를 만든다. offset만 바꿔 "더 보기"에 재사용.
   const buildQuery = useCallback((offset: number) => {
     const parts = ["select=*"];
     if (HIDEABLE.has(category.table)) parts.push(`_hidden=${showHidden ? "is.true" : "not.is.true"}`);
     if (category.filterQuery) parts.push(category.filterQuery);
+    if (category.chipFilter && chip) parts.push(`${encodeURIComponent(category.chipFilter.field)}=eq.${encodeURIComponent(chip)}`);
     if (period !== "all") {
       const months = period === "1m" ? -1 : period === "3m" ? -3 : period === "6m" ? -6 : -12;
       parts.push(`${encodeURIComponent(category.dateField)}=gte.${shiftMonths(kstDate(), months)}`);
@@ -95,7 +97,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query, team, HIDEABLE, showHidden]);
+  }, [category, period, query, team, HIDEABLE, showHidden, chip]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -222,6 +224,17 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               </button>
             </div>
           </div>
+          {category.chipFilter && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">유형</span>
+              <button type="button" onClick={() => setChip("")}
+                className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${chip === "" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>전체</button>
+              {category.chipFilter.options.map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setChip(value)}
+                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${chip === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</button>
+              ))}
+            </div>
+          )}
           {category.teamField && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
