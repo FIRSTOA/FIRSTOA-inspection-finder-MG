@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "fc00d8745c",
+    "date": "2026-08-17",
+    "note": "통합이력 다듬기 — 중복 기록 병합·없음 특이 숨김·0매 사용량 숨김·타임라인 중요필드 미리보기"
+  },
+  {
     "hash": "848c69439d",
     "date": "2026-08-17",
     "note": "통합이력 전면 정돈 — 요약은 2블록, 상세는 중요 필드 우선"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1c8b40aebe",
     "date": "2026-08-01",
     "note": "공지·요청 허브 신설 — 공지사항(읽음 확인 포함) + 부서 요청 통합"
-  },
-  {
-    "hash": "4deb56d0dc",
-    "date": "2026-08-01",
-    "note": "조회 탭 필터 전수 점검 — 색·라벨·밀도 통일"
   }
 ];

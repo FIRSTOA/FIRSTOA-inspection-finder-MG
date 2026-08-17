@@ -467,7 +467,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           const recent = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => {
             const date = displayDate(recordDateRaw(cat, record));
             // 중요 필드(처리내용·불만내용 등)를 미리보기로 — 아무 칸 앞 2개를 붙이면 "점검 · 점검" 같은 잡문이 된다
-            const priorityValue = (PRIORITY_FIELDS[cat] || []).map((key) => String(record[key] ?? "").trim()).find((value) => value && !junkValue(value));
+            // 순수 숫자(수량·금액)는 문장형 필드가 있으면 미리보기로 쓰지 않는다 — "2" 한 글자 프리뷰 방지
+            const priorityCandidates = (PRIORITY_FIELDS[cat] || []).map((key) => String(record[key] ?? "").trim()).filter((value) => value && !junkValue(value));
+            const priorityValue = priorityCandidates.find((value) => !/^[\d,.\s]+$/.test(value)) || priorityCandidates[0];
             const summary = recordSummary(cat, record, [...REGION_KEYS]);
             const preview = (priorityValue || summary.fields.slice(0, 2).map((field) => field.value).join(" · ")).replace(/\s+/g, " ").slice(0, 80);
             return { cat, date, preview, vendorName: recordVendor(record) || "" };
