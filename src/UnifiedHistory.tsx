@@ -379,7 +379,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     return { machines, retired, multiRegion: regionSet.size > 1, latestVisit, special };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
-  const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string; gu: Record<string, string> } | null>(null);
+  const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string; gu: Record<string, string>; endedIdents: Record<string, true> } | null>(null);
   useEffect(() => {
     if (!open || !detail) { setDevices(null); return; }
     const names = Array.from(new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((n) => n.trim()).filter((n) => n.length >= 2))).slice(0, 6);
@@ -393,7 +393,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         if (!active) return;
         const rows = new Map<string, Record<string, unknown>>();
         groups.flat().forEach((row) => rows.set(String(row.id), row));
-        const summary = { mfp: 0, pc: 0, monitor: 0, etc: 0, ended: 0, recentSwap: "", gu: {} as Record<string, string> };
+        const summary = { mfp: 0, pc: 0, monitor: 0, etc: 0, ended: 0, recentSwap: "", gu: {} as Record<string, string>, endedIdents: {} as Record<string, true> };
         const yearAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
         for (const row of rows.values()) {
           // 지역구(시/구)는 임대종료 행에서도 가져온다 — 기기 위치 표시용
@@ -403,7 +403,14 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               if (ident && !summary.gu[ident]) summary.gu[ident] = guName;
             }
           }
-          if (String(row["임대여부"] || "") !== "임대중") { summary.ended += 1; continue; }
+          if (String(row["임대여부"] || "") !== "임대중") {
+            summary.ended += 1;
+            // 반납·종료된 기기의 기번·자산번호 — 점검 기록엔 남아 있어도 "현역"으로 세면 안 된다
+            for (const ident of [normalizeId(String(row["자산번호"] || "")), normalizeId(String(row["기번"] || ""))]) {
+              if (ident) summary.endedIdents[ident] = true;
+            }
+            continue;
+          }
           const item = String(row["품목"] || "");
           if (/복합기|프린터|플로터/.test(item)) summary.mfp += 1;
           else if (/모니터/i.test(item)) summary.monitor += 1; // "PC모니터"가 PC로 합산되면 대수가 부풀어 보인다 — 분리
@@ -527,11 +534,14 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             ? { dot: "bg-slate-300", headline: "완료", tone: "text-slate-600" }
             : { dot: "bg-blue-500", headline: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
           // 사용량·여분 분석은 자동일정(방문 준비)으로 이관 — 통합이력은 상태 플래그만 (2026-08-17 단순화)
-          const machines = quarterCheck.machines;
+          // 점검 기록엔 있지만 임대리스트에서 반납(종료) 확인된 기기는 현역으로 세지 않는다 (푸드나무 A0079)
+          const endedIdents = devices?.endedIdents || {};
+          const machines = quarterCheck.machines.filter((machine) => !endedIdents[machine.key] && !endedIdents[normalizeId(machine.asset)]);
+          const returnedCount = quarterCheck.machines.length - machines.length;
           if (quarterCheck.special) add("특이", { dot: "bg-rose-400", headline: quarterCheck.special, detail: quarterCheck.latestVisit ? `${quarterCheck.latestVisit.date} 점검 기록` : "", tone: "text-rose-700" });
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
-            add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: `${devices.ended ? `종료 ${devices.ended}대 제외 · ` : ""}${machines.length ? `최근 점검에서 ${machines.length}대 확인` : ""}`.replace(/ · $/, ""), tone: "text-slate-700" });
+            add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: `${devices.ended ? `종료 ${devices.ended}대 제외 · ` : ""}${machines.length ? `최근 점검에서 ${machines.length}대 확인` : ""}${returnedCount ? ` (반납된 ${returnedCount}대 제외)` : ""}`.replace(/ · $/, ""), tone: "text-slate-700" });
           }
           // 납품인지 교체인지는 시트가 한 칸에 적어 구분이 없다 — 점검 기기(시리얼) 변화가 있으면 "교체"로 확정해 준다
           if (devices?.recentSwap || quarterCheck.retired) add("교체", {
