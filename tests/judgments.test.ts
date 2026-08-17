@@ -11,7 +11,7 @@
  *  - 내 일정 FIELD 불러오기가 분기점검을 AS로 변환하던 모드 감지 경로
  */
 import { describe, expect, it } from "vitest";
-import { fieldTicketVendor, historyCoreName, normalizeId, parseEquipComment, parseInspectionBlocks, vendorMatchKey, workinVendorName } from "../src/ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, normalizeId, parseEquipComment, parseInspectionBlocks, vendorMatchKey, workinVendorName } from "../src/ids";
 import { normRegion } from "../src/region";
 import { detectReportTypesFromInput, detectUnifiedInputMode } from "../src/fieldModes";
 import { nextBusinessDay } from "../src/planDate";
@@ -233,5 +233,17 @@ describe("fieldTicketVendor — 일정리스트→FIELD 변환의 업체명·구
   });
   it("접수 경로의 평범한 업체명은 그대로", () => {
     expect(fieldTicketVendor("주식회사 무암")).toEqual({ vendor: "주식회사 무암", gubun: "A/S" });
+  });
+});
+
+describe("logisticsTicketInfo — 물류 제목에서 고객사·품목·구분 (일정→FIELD 물류탭)", () => {
+  it("슬래시 열차에서 품목 앞 세그먼트가 고객사", () => {
+    expect(logisticsTicketInfo("네오정보 직송-판매납품/네오정보/개인영업/디스페이스코리아/안드로이드전자칠판 65형(본체+옵션(스탠드)/확인서서명필수"))
+      .toEqual({ vendor: "디스페이스코리아", item: "안드로이드전자칠판 65형(본체+옵션(스탠드)", category: "납품" });
+    expect(logisticsTicketInfo("◆◆◆◆◆ 오전9시고정-IT/납품(현장)/퍼스트/운영팀/증설/웅진컴퍼스-서울교육대학교 단기/I5일사노(리퍼) 6대/확인서서명필수").vendor)
+      .toBe("웅진컴퍼스-서울교육대학교 단기");
+    const out = logisticsTicketInfo("9시부터 수업이기에 오전 7~8시 사이 철수해야함-철수(일반)/퍼스트/현장종료/웅진컴퍼스-서울교육대학교 단기/D420 2대, 노트북6대/확인서서명필수");
+    expect(out.vendor).toBe("웅진컴퍼스-서울교육대학교 단기");
+    expect(out.category).toBe("철수");
   });
 });

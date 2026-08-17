@@ -3,6 +3,7 @@
  * 독서/배움공유는 reading_posts(kind)를 공유하고, 목표는 self_goals 테이블을 쓴다. (supabase/selfdev.sql)
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import ReadingHub from "./ReadingHub";
 import { kstDate } from "./visits";
@@ -366,7 +367,7 @@ function PraiseBoard({ author }: { author: string }) {
   };
   const removePraise = async (row: PraisePost) => {
     if (row.from_author !== author) return;
-    if (!window.confirm("이 칭찬을 삭제할까요?")) return;
+    if (!await askConfirm("이 칭찬을 삭제할까요?")) return;
     try {
       await deleteRows("praise_posts", `id=eq.${row.id}`);
       setRows((current) => current.filter((r) => r.id !== row.id));
@@ -570,7 +571,7 @@ function GoalsBoard({ author }: { author: string }) {
 
   const removeGoal = async (goal: SelfGoal) => {
     if (goal.author !== author) return;
-    if (!window.confirm(`"${goal.title}" 목표를 삭제할까요?`)) return;
+    if (!await askConfirm(`"${goal.title}" 목표를 삭제할까요?`)) return;
     try {
       await deleteRows("self_goals", `id=eq.${goal.id}`);
       setGoals((current) => current.filter((g) => g.id !== goal.id));

@@ -3,6 +3,7 @@
  * 글은 익명으로 노출되고 author는 저장만 하여 포인트(받은 추천 합계) 집계에 쓴다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, uploadPublicFile } from "./supabase";
 import { GAS_GET_URL } from "./api";
 
@@ -376,7 +377,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
 
   const removePost = async (post: ReadingPost) => {
     if (post.author !== author) return;
-    if (!window.confirm("이 글을 삭제할까요?")) return;
+    if (!await askConfirm("이 글을 삭제할까요?")) return;
     try {
       await deleteRows("reading_posts", `id=eq.${post.id}`);
       setPosts((current) => current.filter((p) => p.id !== post.id));

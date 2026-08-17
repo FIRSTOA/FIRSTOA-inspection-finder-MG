@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { AlertTriangle, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { GAS_GET_URL } from "./api";
@@ -119,7 +120,7 @@ export default function SystemAdmin() {
   };
 
   const removeRoom = async (row: RoomRow) => {
-    if (!window.confirm(`${row.category} · ${row.region} 방 매핑을 삭제할까요?\n\n"${row.room}"`)) return;
+    if (!await askConfirm(`${row.category} · ${row.region} 방 매핑을 삭제할까요?\n\n"${row.room}"`)) return;
     setBusy(`${row.category}|${row.region}`);
     try {
       await deleteRows("room_map", `category=eq.${encodeURIComponent(row.category)}&region=eq.${encodeURIComponent(row.region)}`);
@@ -373,8 +374,8 @@ export default function SystemAdmin() {
               <span className="w-10 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.team || "-"}</span>
               <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800" title={row.roomName}>{row.roomName}</span>
               <button type="button" disabled={busy === `collect-del-${row.roomName}`}
-                onClick={() => {
-                  if (!window.confirm(`"${row.roomName}" 수집 매핑을 삭제할까요?`)) return;
+                onClick={async () => {
+                  if (!await askConfirm(`"${row.roomName}" 수집 매핑을 삭제할까요?`)) return;
                   setBusy(`collect-del-${row.roomName}`);
                   fetch(`${GAS_GET_URL}?action=roommapdel&room=${encodeURIComponent(row.roomName)}`)
                     .then((res) => res.json())

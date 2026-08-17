@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, selectAllRows, selectRows, updateRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
@@ -38,7 +39,7 @@ export default function ContactChangeHistory() {
   const [deleteBusyId, setDeleteBusyId] = useState("");
 
   const removeRow = async (row: ContactChangeRow) => {
-    if (!window.confirm(`이 변경이력을 삭제할까요?\n\n${row.company || "업체명 미기재"} · ${dateLabel(row.change_date || row.created_at)}`)) return;
+    if (!await askConfirm(`이 변경이력을 삭제할까요?\n\n${row.company || "업체명 미기재"} · ${dateLabel(row.change_date || row.created_at)}`)) return;
     setDeleteBusyId(row.id);
     try {
       await deleteRows("contact_changes", `id=eq.${row.id}`);
@@ -69,7 +70,7 @@ export default function ContactChangeHistory() {
       const isAddress = /주소/.test(row.category);
       const fieldLabel = isAddress ? "주소" : "연락처";
       const names = matches.slice(0, 5).map((m) => m.name).join("\n");
-      if (!window.confirm(`워킨맵 ${matches.length}곳의 ${fieldLabel}를 아래 내용으로 바꿉니다.
+      if (!await askConfirm(`워킨맵 ${matches.length}곳의 ${fieldLabel}를 아래 내용으로 바꿉니다.
 
 ${names}${matches.length > 5 ? `
 외 ${matches.length - 5}곳` : ""}

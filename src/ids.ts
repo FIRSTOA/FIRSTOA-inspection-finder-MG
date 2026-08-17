@@ -150,3 +150,21 @@ export function fieldTicketVendor(raw: string): { vendor: string; gubun: string 
   vendor = vendor.replace(/(매월마감|분기마감|매주마감|월말마감|매년마감|단순마감|마감|매년|종료일).*$/, "").replace(/[\s\-·,]+$/, "").trim();
   return { vendor: vendor || flat, gubun };
 }
+
+// 물류(납품·철수·교체) 네이버 제목 파서 — "머리말-구분/발주처/영업구분/고객사/품목/비고" 슬래시 열차에서
+// 고객사와 품목을 꺼낸다. 규칙: 수량·모델이 든 세그먼트(품목) 바로 앞이 고객사다.
+//   "네오정보 직송-판매납품/네오정보/개인영업/디스페이스코리아/안드로이드전자칠판 65형(…)/확인서서명필수" → 디스페이스코리아
+export function logisticsTicketInfo(raw: string): { vendor: string; item: string; category: string } {
+  const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
+  const category = /철수/.test(flat) ? "철수" : /교체/.test(flat) ? "교체" : "납품";
+  const segments = flat.split("/").map((seg) => seg.trim()).filter(Boolean);
+  const PRODUCT_RX = /\d+\s*(대|개|형|세트|셋트|EA)\b|\d+(대|개|형)|리퍼|본체|노트북|데스크탑|모니터|소모품|전자칠판/i;
+  for (let i = 1; i < segments.length; i += 1) {
+    if (PRODUCT_RX.test(segments[i])) {
+      const vendor = segments[i - 1];
+      // 앞 세그먼트가 영업구분(운영팀·개인영업 등) 같은 짧은 내부 용어면 그 앞을 본다? — 실데이터상 품목 앞은 항상 고객사
+      if (vendor && vendor.length >= 2) return { vendor, item: segments[i], category };
+    }
+  }
+  return { vendor: fieldTicketVendor(flat).vendor, item: "", category };
+}

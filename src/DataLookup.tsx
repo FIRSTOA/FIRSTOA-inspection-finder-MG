@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { notify } from "./toast";
+import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
@@ -356,9 +358,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                 className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50">전체 복사</button>
               {HIDEABLE.has(category.table) && detail.id != null && (
                 <button type="button" disabled={hideBusy}
-                  onClick={() => {
+                  onClick={async () => {
                     const hiding = !showHidden;
-                    if (!window.confirm(hiding ? "이 기록을 숨길까요?\n목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)" : "이 기록을 복원할까요?")) return;
+                    if (!await askConfirm(hiding ? "이 기록을 숨길까요?\n목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)" : "이 기록을 복원할까요?")) return;
                     setHideBusy(true);
                     void updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, hiding ? { _hidden: true, _hidden_by: author || "미지정", _hidden_at: new Date().toISOString() } : { _hidden: false })
                       .then(() => {
@@ -381,7 +383,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                         setRows((current) => current.filter((r) => r.id !== detail.id));
                         setDetail(null);
                       })
-                      .catch((e: unknown) => window.alert(`처리 실패: ${(e as Error).message}`))
+                      .catch((e: unknown) => notify(`처리 실패: ${(e as Error).message}`, "error"))
                       .finally(() => setHideBusy(false));
                   }}
                   className={`rounded-full border px-4 py-2 text-sm font-black transition disabled:opacity-40 ${showHidden ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"}`}>

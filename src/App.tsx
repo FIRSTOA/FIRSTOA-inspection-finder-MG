@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import { askConfirm } from "./confirmModal";
 import {
   Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2,
   Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
@@ -12,12 +13,13 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
-import { fieldTicketVendor, historyCoreName, vendorMatchKey } from "./ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey } from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
 import { ToastHost } from "./toast";
+import { ConfirmHost } from "./confirmModal";
 import SelfDevHub from "./SelfDev";
 import CopierNotes from "./CopierNotes";
 import StockBoard from "./StockBoard";
@@ -3812,7 +3814,9 @@ function sectionFilled(text: string, header: "※자가신청※" | "※부품�
   const rest = text.slice(at + header.length);
   const next = rest.indexOf("※");
   const seg = next >= 0 ? rest.slice(0, next) : rest;
-  return /(물품명?|수량)\s*[:：]\s*\S/.test(seg);
+  // 같은 줄의 값만 본다 — \s는 줄바꿈까지 삼켜 "수량:\n출고여부:"를 값 있음으로 오인했다.
+  // 판정은 물품(명)·수량만: "출고여부: 출고부탁드립니다"는 다들 상비 문구라 신호가 아니다.
+  return /(물품명?|수량)[^\S\n]*[:：][^\S\n]*\S/.test(seg);
 }
 
 // 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
@@ -4677,13 +4681,16 @@ export default function App() {
     pendingAsTicketRef.current = t;
     setLinkedTicket(t);
   };
-  // 통합 전송 팝업(일정 연결 세션 전용): 열 때마다 현재 양식에서 방·신청을 새로 감지한다
-  const [sendPicker, setSendPicker] = useState<{ main: SendDestination; self: boolean; parts: boolean } | null>(null);
+  // 통합 전송 팝업(일정 연결 세션 전용): 점검방·AS방·자가방·부품방 4개를 나란히 놓고 복수 선택.
+  // 열 때마다 현재 양식에서 새로 감지한다 — 다른 업체 양식이 오면 이전 체크가 남을 수 없다.
+  const [sendPicker, setSendPicker] = useState<{ inspection: boolean; as: boolean; self: boolean; parts: boolean } | null>(null);
   const openSendPicker = () => {
     const text = buildResultText();
     if (!text) { showToast("보낼 내용이 없어요", "error"); return; }
+    const isInspection = mode === "inspection" || reportTypes.includes("점검");
     setSendPicker({
-      main: mode === "inspection" || reportTypes.includes("점검") ? "inspection" : "as",
+      inspection: isInspection,
+      as: !isInspection,
       self: sectionFilled(text, "※자가신청※"),
       parts: sectionFilled(text, "※부품신청※"),
     });
@@ -4692,8 +4699,10 @@ export default function App() {
     if (!sendPicker) return;
     const picked = sendPicker;
     setSendPicker(null);
-    const mainOk = await handleSendAll("normal", picked.main, true);
-    if (!mainOk) return; // 주 보고 실패 — 자가·부품 부속 전송 중단
+    let mainOk = !picked.inspection && !picked.as; // 주 보고 미선택(자가·부품만)이면 바로 진행
+    if (picked.inspection) mainOk = await handleSendAll("normal", "inspection", true) || mainOk;
+    if (picked.as) mainOk = await handleSendAll("normal", "as", true) || mainOk;
+    if (!mainOk) return; // 주 보고 전부 실패 — 자가·부품 부속 전송 중단
     if (picked.self) await handleSendAll("자가", undefined, true);
     if (picked.parts) await handleSendAll("부품", undefined, true);
   };
@@ -5362,10 +5371,10 @@ export default function App() {
     setEditedBlocks({});
   };
 
-  const removeInspectionDevice = (index: number) => {
+  const removeInspectionDevice = async (index: number) => {
     const parts = inspectionDeviceParts(buildResultText());
     if (parts.devices.length <= 1) return;
-    if (!window.confirm(`${index + 1}번 기기를 양식에서 삭제할까요?`)) return;
+    if (!await askConfirm(`${index + 1}번 기기를 양식에서 삭제할까요?`)) return;
     const devices = parts.devices.filter((_, i) => i !== index);
     setTextOutput(rebuildInspectionDevices(parts.header, devices, parts.footer));
     setItemForms((prev) => prev.filter((_, i) => i !== index));
@@ -5385,20 +5394,19 @@ export default function App() {
 
   // 납품·철수·교체 일정 → FIELD 물류탭으로: 구분은 제목 키워드로, 거래처·품목은 티켓에서 미리 채운다
   const openLogisticsTicketInField = (t: { id: string; receptionId?: string; vendor?: string; issue?: string; model?: string; note?: string }) => {
-    const cleaned = fieldTicketVendor(t.vendor || "");
-    const title = `${t.vendor || ""} ${t.issue || ""}`;
-    const category = /철수/.test(title) ? "철수" : /교체/.test(title) ? "교체" : "납품";
+    // 물류 제목("…/발주처/…/고객사/품목/비고")에서 고객사·품목·구분을 꺼낸다 — 디스페이스코리아처럼 딱 업체명만
+    const parsed = logisticsTicketInfo(`${t.vendor || ""} ${t.issue || ""}`);
     setScreen("field");
     handleModeChange("logistics");
     setLogisticsForm({
       ...EMPTY_LOGISTICS_FORM,
-      category,
-      vendor: cleaned.vendor,
-      item: t.model || "",
+      category: parsed.category,
+      vendor: parsed.vendor,
+      item: parsed.item || t.model || "",
       notes: String(t.issue || "").slice(0, 200),
     });
     setPendingTicket(t.id ? { id: t.id, receptionId: t.receptionId || "", vendor: t.vendor || "" } : null);
-    showToast(`물류 양식으로 불러왔어요 — 구분 ${category} · 전송하면 일정 정리(완료/익일)를 물어봅니다`, "success");
+    showToast(`물류 양식으로 불러왔어요 — 구분 ${parsed.category} · 전송하면 일정 정리(완료/익일)를 물어봅니다`, "success");
   };
 
   const openAsTicketInField = (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
@@ -5657,6 +5665,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
       <ToastHost />
+      <ConfirmHost />
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
@@ -5887,36 +5896,45 @@ export default function App() {
           const previewText = buildResultText();
           const selfOk = sectionFilled(previewText, "※자가신청※");
           const partsOk = sectionFilled(previewText, "※부품신청※");
-          const sendLabel = [sendPicker.main === "inspection" ? "점검방" : "AS방", sendPicker.self ? "자가" : "", sendPicker.parts ? "부품" : ""].filter(Boolean).join(" + ");
+          const ROOMS = [
+            { key: "inspection" as const, label: "점검방", on: "border-blue-600 bg-blue-600 text-white", enabled: true, hint: "" },
+            { key: "as" as const, label: "AS방", on: "border-rose-600 bg-rose-600 text-white", enabled: true, hint: "" },
+            { key: "self" as const, label: "자가방", on: "border-teal-600 bg-teal-600 text-white", enabled: selfOk, hint: selfOk ? "" : "작성 안 됨" },
+            { key: "parts" as const, label: "부품방", on: "border-amber-600 bg-amber-600 text-white", enabled: partsOk, hint: partsOk ? "" : "작성 안 됨" },
+          ];
+          const pickedLabels = ROOMS.filter((room) => sendPicker[room.key]).map((room) => room.label);
           return (
-            <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setSendPicker(null)}>
-              <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fixed inset-0 z-[300] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setSendPicker(null)}>
+              <div className="flex max-h-[92vh] w-full flex-col rounded-t-3xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="border-b border-slate-100 px-5 py-4">
                   <div className="text-lg font-black text-slate-950">카톡방 전송</div>
-                  <div className="mt-0.5 text-[12px] font-semibold text-slate-500">내용을 확인하고 보낼 방을 고르세요 · 사진 {photos.length}장{photos.length === 0 ? " (사진 없이 전송)" : ""}</div>
+                  <div className="mt-0.5 text-[12px] font-semibold text-slate-500">내용 확인 → 보낼 방 선택(복수 가능) → 보내기 · 사진 {photos.length}장{photos.length === 0 ? " (사진 없이 전송)" : ""}</div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-                  <pre className="whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-sans text-[12px] font-medium leading-5 text-slate-700">{previewText}</pre>
+                  <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 font-sans text-[12px] font-medium leading-5 text-slate-700">{previewText}</pre>
                 </div>
-                <div className="space-y-2.5 border-t border-slate-100 px-5 py-3">
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setSendPicker({ ...sendPicker, main: "inspection" })} className={`flex-1 rounded-lg py-2.5 text-sm font-black ${sendPicker.main === "inspection" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>점검방</button>
-                    <button type="button" onClick={() => setSendPicker({ ...sendPicker, main: "as" })} className={`flex-1 rounded-lg py-2.5 text-sm font-black ${sendPicker.main === "as" ? "bg-rose-600 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>AS방</button>
-                  </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-                    <label className={`flex cursor-pointer items-center gap-1.5 text-sm font-bold ${selfOk ? "text-teal-700" : "cursor-not-allowed text-slate-300"}`}>
-                      <input type="checkbox" checked={sendPicker.self} disabled={!selfOk} onChange={() => setSendPicker({ ...sendPicker, self: !sendPicker.self })} className="h-4 w-4 accent-teal-600" />
-                      자가신청 함께{selfOk ? "" : " (작성 안 됨)"}
-                    </label>
-                    <label className={`flex cursor-pointer items-center gap-1.5 text-sm font-bold ${partsOk ? "text-amber-700" : "cursor-not-allowed text-slate-300"}`}>
-                      <input type="checkbox" checked={sendPicker.parts} disabled={!partsOk} onChange={() => setSendPicker({ ...sendPicker, parts: !sendPicker.parts })} className="h-4 w-4 accent-amber-600" />
-                      부품신청 함께{partsOk ? "" : " (작성 안 됨)"}
-                    </label>
+                <div className="border-t border-slate-100 px-5 py-3">
+                  <div className="grid grid-cols-4 gap-2">
+                    {ROOMS.map((room) => {
+                      const checked = sendPicker[room.key];
+                      return (
+                        <button key={room.key} type="button" disabled={!room.enabled}
+                          onClick={() => setSendPicker({ ...sendPicker, [room.key]: !checked })}
+                          className={`relative rounded-xl border-2 px-1 pb-2.5 pt-3 text-center transition ${!room.enabled ? "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300" : checked ? `${room.on} shadow-md` : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
+                          {checked && <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white shadow">✓</span>}
+                          <span className="block text-[13px] font-black">{room.label}</span>
+                          <span className={`mt-0.5 block text-[10px] font-bold ${!room.enabled ? "text-slate-300" : checked ? "text-white/80" : "text-slate-400"}`}>{room.hint || (checked ? "보냄" : "안 보냄")}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="flex gap-2 border-t border-slate-100 p-4">
-                  <button type="button" onClick={() => setSendPicker(null)} className="flex-1 rounded-full border border-slate-300 py-3 text-sm font-black text-slate-600">취소</button>
-                  <button type="button" onClick={() => void runSendPicker()} className="flex-[2] rounded-full bg-slate-900 py-3 text-sm font-black text-white">{sendLabel}로 보내기</button>
+                  <button type="button" onClick={() => setSendPicker(null)} className="flex-1 rounded-xl border border-slate-200 bg-white py-3.5 text-sm font-black text-slate-500 transition hover:bg-slate-50">취소</button>
+                  <button type="button" disabled={!pickedLabels.length} onClick={() => void runSendPicker()}
+                    className="flex-[2] rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-slate-800 disabled:bg-slate-200 disabled:shadow-none">
+                    {pickedLabels.length ? `${pickedLabels.join(" · ")}로 보내기` : "보낼 방을 선택하세요"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -6280,8 +6298,8 @@ export default function App() {
           )}
           <div className="space-y-2 border-t border-slate-200 bg-slate-50 p-3">
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={handleReset} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500">초기화</button>
-              <button onClick={handleCopyAll} disabled={!hasOutput} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40">복사</button>
+              <button onClick={handleReset} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500 shadow-sm transition hover:bg-slate-50 active:scale-[0.99]">초기화</button>
+              <button onClick={handleCopyAll} disabled={!hasOutput} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 active:scale-[0.99] disabled:opacity-40">복사</button>
               <label className="cursor-pointer rounded-xl border border-slate-200 bg-white py-2.5 text-center text-sm font-bold text-slate-600">
                 사진{photos.length > 0 ? ` ${photos.length}` : ""}
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
@@ -6292,13 +6310,13 @@ export default function App() {
               {(mode === "inspection" || mode === "blank-report") ? (
                 linkedTicket ? (
                   /* 일정리스트에서 넘어온 세션 — 방 선택·자가/부품 자동 감지가 담긴 통합 전송 팝업 (필드 직접 사용은 기존 버튼 유지) */
-                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-6 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-6 rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
                 ) : (
                 <>
-                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
-                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
-                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40`} style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}>자가신청</button>
-                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40`} style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
+                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">점검방 보내기</button>
+                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">AS방 보내기</button>
+                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-teal-200 bg-teal-50 py-3 text-sm font-black text-teal-700 shadow-sm transition hover:bg-teal-100 active:scale-[0.99] disabled:opacity-40`}>자가신청</button>
+                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-black text-amber-700 shadow-sm transition hover:bg-amber-100 active:scale-[0.99] disabled:opacity-40`}>부품신청</button>
                   {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>}
                 </>
                 )
@@ -6406,10 +6424,10 @@ export default function App() {
           {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요"}</div>}
           <div className="flex flex-wrap gap-2">
             {(mode === "inspection" || mode === "blank-report") ? (linkedTicket ? <>
-              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
             </> : <>
-              <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
-              <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
+              <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "점검방 보내기"}</button>
+              <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "AS방 보내기"}</button>
               {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>}
             </>) : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
@@ -6422,16 +6440,14 @@ export default function App() {
                 <button
                   onClick={() => handleSendAll("자가")}
                   disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
-                  style={{ borderColor: "#0f766e", color: "#0f766e", background: "#fff" }}
+                  className="flex-1 whitespace-nowrap rounded-xl border border-teal-200 bg-teal-50 py-3 text-sm font-black text-teal-700 shadow-sm transition hover:bg-teal-100 active:scale-[0.99] disabled:opacity-40"
                 >
                   자가신청
                 </button>
                 <button
                   onClick={() => handleSendAll("부품")}
                   disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-lg border py-3 text-sm font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40"
-                  style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}
+                  className="flex-1 whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-black text-amber-700 shadow-sm transition hover:bg-amber-100 active:scale-[0.99] disabled:opacity-40"
                 >
                   부품신청
                 </button>

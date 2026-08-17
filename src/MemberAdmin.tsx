@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
 import { addMember, displayTitle, fetchMembers, restoreMember, retireMember, updateMember, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
@@ -167,7 +168,7 @@ export default function MemberAdmin() {
             <Pencil size={13} />
           </button>
           <button type="button" disabled={busyId === row.id}
-            onClick={() => { if (window.confirm(`${row.name} 님을 퇴사 처리할까요?\n\n명단에서만 빠지고 과거 기록은 그대로 남습니다.`)) void act(row.id, () => retireMember(row.id)); }}
+            onClick={async () => { if (await askConfirm(`${row.name} 님을 퇴사 처리할까요?\n\n명단에서만 빠지고 과거 기록은 그대로 남습니다.`)) void act(row.id, () => retireMember(row.id)); }}
             className="whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">퇴사</button>
         </span>
       </td>

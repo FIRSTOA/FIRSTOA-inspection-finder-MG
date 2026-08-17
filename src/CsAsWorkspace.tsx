@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import PortalSelect from "./PortalSelect";
@@ -588,7 +589,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const ev = naverDetail;
     if (!ev) return;
     const toName = NAVER_CAL_LIST.find((c) => c.id === toCal)?.name || "다른 캘린더";
-    if (!window.confirm(`이 일정을 "${toName}"(으)로 옮길까요?`)) return;
+    if (!await askConfirm(`이 일정을 "${toName}"(으)로 옮길까요?`)) return;
     try {
       await invokeEdgeFunction("naver-calendar-push", { action: "caldav_transfer", uid: ev.uid, calId: ev.calendar_id, toCal });
       const synced = toCal === "76de84c7-48a2-46c6-8de0-edc721a03f3f" || toCal === NAVER_DELIVERY_CAL;
@@ -801,12 +802,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
   // 매월 반복 중지: 이후(오늘 이후 날짜) 미완료 반복 일정을 지우고, 지난 일정들의 반복 플래그도 꺼서
   // 새로고침 자동 연장이 시리즈를 되살리지 않게 한다.
-  const stopMonthlySeries = (base: AsTicket) => {
+  const stopMonthlySeries = async (base: AsTicket) => {
     const g = seriesGroupOf(base);
     const members = tickets.filter((t) => t.id !== base.id && seriesGroupOf(t) === g && t.repeatMonthly);
     if (!members.length) return;
     const future = members.filter((t) => t.date > base.date && t.status !== "완료");
-    if (future.length && !window.confirm(`매월 반복을 중지할까요?\n예정된 반복 일정 ${future.length}건이 함께 삭제됩니다.`)) return;
+    if (future.length && !await askConfirm(`매월 반복을 중지할까요?\n예정된 반복 일정 ${future.length}건이 함께 삭제됩니다.`)) return;
     const futureIds = new Set(future.map((t) => t.id));
     const rest = members.filter((t) => !futureIds.has(t.id)).map((t) => ({ ...t, repeatMonthly: false }));
     const restIds = new Set(rest.map((t) => t.id));
@@ -822,7 +823,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const changed = next.find((ticket) => ticket.id === id);
     if (changed) persistRemote(changed);
     if (changed?.repeatMonthly && before && !before.repeatMonthly) ensureMonthlySeries(changed);
-    if (changed && before?.repeatMonthly && !changed.repeatMonthly) stopMonthlySeries(changed);
+    if (changed && before?.repeatMonthly && !changed.repeatMonthly) void stopMonthlySeries(changed);
     // 배정자·제목이 바뀌면 네이버 일정 제목도 "이름-제목"으로 동기화 (수기로 캘린더에 이름 적던 작업 대체)
     if (changed && before && changed.naverUid && (changed.calendarTitle || "").trim()
       && (changed.assignee !== before.assignee || (changed.calendarTitle || "") !== (before.calendarTitle || ""))) {
@@ -1410,7 +1411,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
                   {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full bg-emerald-600 px-2 py-1.5 text-center text-[11px] font-black text-white">📞</a>}
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
-                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|교육|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="flex-1 rounded-full bg-slate-700 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-600">FIELD</button>}
+                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="flex-1 rounded-full bg-slate-700 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-600">FIELD</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
                   <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
                   <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700">익일</button>
@@ -1490,7 +1491,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <div className="flex flex-nowrap justify-end gap-1.5">
                       {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
                       {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
-                      {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|교육|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="shrink-0 rounded-full bg-slate-700 transition hover:bg-slate-600 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
+                      {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="shrink-0 rounded-full bg-slate-700 transition hover:bg-slate-600 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
                       <button type="button" onClick={() => setAssignId(ticket.id)} className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">배정</button>
                       <button type="button" onClick={() => openDone(ticket)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
                       <button type="button" onClick={() => openDefer(ticket)} className="shrink-0 rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-black text-purple-700">익일</button>

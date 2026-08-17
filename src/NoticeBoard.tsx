@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { Megaphone, Pin, Plus, Search, Trash2 } from "lucide-react";
 import FormModal from "./FormModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
@@ -147,7 +148,7 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
   };
 
   const remove = async (row: Notice) => {
-    if (!window.confirm(`"${row.title}" 공지를 삭제할까요?`)) return;
+    if (!await askConfirm(`"${row.title}" 공지를 삭제할까요?`)) return;
     try {
       await deleteRows("notices", `id=eq.${row.id}`);
       setRows((current) => current.filter((item) => item.id !== row.id));

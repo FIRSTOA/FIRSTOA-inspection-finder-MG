@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import L from "leaflet";
 import { LocateFixed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
@@ -1938,9 +1939,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     setDraft(null);
   };
 
-  const deleteDraft = () => {
+  const deleteDraft = async () => {
     if (!draft || !places.some((place) => place.id === draft.id)) return setDraft(null);
-    if (!window.confirm("이 거래처를 워킨맵에서 삭제할까요?")) return;
+    if (!await askConfirm("이 거래처를 워킨맵에서 삭제할까요?")) return;
     if (sharedReady) void deleteRows("workin_map_places", `id=eq.${draft.id}`).catch((error) => {
       console.error(error);
       setSyncState("error");

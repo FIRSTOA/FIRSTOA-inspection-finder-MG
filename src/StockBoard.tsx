@@ -3,6 +3,7 @@
  * (교체 약속 전 기기 재고 확인, 부품 없어서 재방문하는 일 방지 — supabase/stock.sql)
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { ALL_MODEL_NAMES, CATALOG_BRANDS, brandOfModel } from "./modelCatalog";
 import { notify } from "./toast";
@@ -103,7 +104,7 @@ export default function StockBoard({ author }: { author: string }) {
   };
 
   const removeItem = async (item: StockItem) => {
-    if (!window.confirm(`"${item.name}${item.condition ? ` (${item.condition})` : ""}" 항목을 삭제할까요?`)) return;
+    if (!await askConfirm(`"${item.name}${item.condition ? ` (${item.condition})` : ""}" 항목을 삭제할까요?`)) return;
     try {
       await deleteRows("stock_items", `id=eq.${item.id}`);
       setItems((current) => current.filter((i) => i.id !== item.id));

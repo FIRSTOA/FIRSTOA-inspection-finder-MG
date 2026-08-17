@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { displayTitle, useAuthorBook, useMembers } from "./authors";
 import PersonPicker from "./PersonPicker";
@@ -163,7 +164,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
   };
 
   const remove = async (row: DeptRequest) => {
-    if (!window.confirm("이 요청을 삭제할까요?")) return;
+    if (!await askConfirm("이 요청을 삭제할까요?")) return;
     try {
       await deleteRows("dept_requests", `id=eq.${row.id}`);
       setRows((current) => current.filter((r) => r.id !== row.id));

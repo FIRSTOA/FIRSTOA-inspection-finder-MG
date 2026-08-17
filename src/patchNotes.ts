@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "525fc23ccf",
+    "date": "2026-08-17",
+    "note": "감사 후속 일괄 수리 — 원장 9종 익명권한 축소·사진 덮어쓰기 차단·리포트 수신자 잔류 차단·vendorMatchKey SQL 정렬·병합 열쇠 보강·파싱 캐시·재검색 방지·분기안내 로그 실패 표면화·KST 보정·접수필터 리셋"
+  },
+  {
     "hash": "681b5ef453",
     "date": "2026-08-17",
     "note": "FIELD 전송 개편 — 일정 연결 세션 통합 전송 팝업(자가·부품 자동감지)·복붙 완료 매칭 제안·익일 AS방 알림·납품 일정→물류탭 진입"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fcc88cc327",
     "date": "2026-08-01",
     "note": "검색 다중 단어 AND + 복합기 데일리 퀴즈(평일 5문제·월간 랭킹)"
-  },
-  {
-    "hash": "740bbd64a2",
-    "date": "2026-08-01",
-    "note": "기종 칩을 기기재고 실기기명과 얼추 매칭 — 관용명·실명 혼재 기록 모두 잡기"
   }
 ];

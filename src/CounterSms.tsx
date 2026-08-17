@@ -4,6 +4,7 @@
  * 지역별 문구 세트만 파일 대신 DB(counter_sms_settings)에 저장해 전 직원이 공유한다.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { MessageSquare, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
 import { deleteRows, selectRows, upsertRow } from "./supabase";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS } from "./counterSmsData";
@@ -86,7 +87,7 @@ export default function CounterSms({ author }: { author: string }) {
     } finally { setBusy(false); }
   };
   const resetProfile = async () => {
-    if (!window.confirm(`[${active.region}] 문구를 기본값으로 되돌릴까요?`)) return;
+    if (!await askConfirm(`[${active.region}] 문구를 기본값으로 되돌릴까요?`)) return;
     setBusy(true);
     try {
       await upsertRow("counter_sms_settings", { region: active.region, machines: DEFAULT_FORMATS, templates: DEFAULT_TEMPLATES, updated_by: author, updated_at: new Date().toISOString() }, "region");
@@ -107,7 +108,7 @@ export default function CounterSms({ author }: { author: string }) {
   };
   const removeRegion = async () => {
     if (profiles.length <= 1) return;
-    if (!window.confirm(`[${active.region}] 프로필을 삭제할까요?`)) return;
+    if (!await askConfirm(`[${active.region}] 프로필을 삭제할까요?`)) return;
     await deleteRows("counter_sms_settings", `region=eq.${encodeURIComponent(active.region)}`);
     const rest = profiles.filter((p) => p.region !== active.region);
     setProfiles(rest);

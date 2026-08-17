@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { askConfirm } from "./confirmModal";
 import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send } from "lucide-react";
 import {
   searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
@@ -484,7 +485,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     }
     const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
     if (next === "원격이관") lines.push("· 연결된 방문 일정(미완료)은 삭제됩니다.");
-    if (!window.confirm(lines.join("\n"))) return;
+    if (!await askConfirm(lines.join("\n"))) return;
     setTypeBusyId(row.id);
     try {
       const keepStatus = ["완료", "원격완료"].includes(row.status);
@@ -1018,11 +1019,11 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     const existing = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}&limit=1`).catch(() => []);
     if (existing.length) {
       if (!confirmDup) return true; // 자동 등록: 이미 있으니 그대로 성공 처리
-      if (!window.confirm("이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)")) return false;
+      if (!await askConfirm("이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)")) return false;
     }
     if (confirmDup && !existing.length) {
       const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
-      if (dup.length && !window.confirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
+      if (dup.length && !await askConfirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
     }
     const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     await upsertRow("as_tickets", {
@@ -1087,7 +1088,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     if (applyBusyId) return;
     const after = (row.address || "").trim();
     if (!after) { notify("반영할 주소가 비어 있습니다.", "info"); return; }
-    if (!window.confirm(`워킨맵과 임대리스트(Supabase)의 주소를 아래로 바꿉니다.\n\n${after}\n\n구글시트 원본은 자동으로 바뀌지 않으니 별도 수정 후 '시트 반영 완료'를 눌러주세요. 계속할까요?`)) return;
+    if (!await askConfirm(`워킨맵과 임대리스트(Supabase)의 주소를 아래로 바꿉니다.\n\n${after}\n\n구글시트 원본은 자동으로 바뀌지 않으니 별도 수정 후 '시트 반영 완료'를 눌러주세요. 계속할까요?`)) return;
     setApplyBusyId(row.id);
     try {
       // 1) 워킨맵: 업체명 매칭되는 모든 지점 주소 갱신 + 메모 기록
@@ -1134,7 +1135,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   // 시트 원본 주소를 고친 뒤 누르면 '주소확인' 목록에서 내려간다.
   // 플래그를 지우지 않고 처리자·처리일을 남겨 나중에 누가 반영했는지 추적 가능.
   const resolveAddress = async (row: ServiceReceptionRow) => {
-    if (!window.confirm("임대리스트 시트의 주소를 수정하셨나요? 확인 목록에서 제외합니다. (처리자와 처리일이 기록됩니다)")) return;
+    if (!await askConfirm("임대리스트 시트의 주소를 수정하셨나요? 확인 목록에서 제외합니다. (처리자와 처리일이 기록됩니다)")) return;
     try {
       const patch = { address_resolved_at: new Date().toISOString(), address_resolved_by: author || "미지정" };
       await updateServiceReception(row.id, patch);
@@ -1145,7 +1146,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   const removeReception = async (row: ServiceReceptionRow) => {
-    if (!window.confirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)\n연결된 일정과 네이버 캘린더 미러도 함께 삭제됩니다.`)) return;
+    if (!await askConfirm(`${row.vendor || "이 접수"} 건을 삭제할까요? (잘못 접수된 건 정리용)\n연결된 일정과 네이버 캘린더 미러도 함께 삭제됩니다.`)) return;
     try {
       deletedIdsRef.current.add(row.id); // 진행 중인 재조회 응답이 이 행을 다시 실어와도 걸러진다
       await updateServiceReception(row.id, { deleted: true });

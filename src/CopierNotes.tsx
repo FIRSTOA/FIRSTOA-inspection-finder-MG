@@ -3,6 +3,7 @@
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { askConfirm } from "./confirmModal";
 import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import FormModal from "./FormModal";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
@@ -244,7 +245,7 @@ export default function CopierNotes({ author }: { author: string }) {
     }
   };
   const removeGuide = async (doc: KnowledgeDoc) => {
-    if (!window.confirm(`"${doc.title}" 가이드를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
+    if (!await askConfirm(`"${doc.title}" 가이드를 삭제할까요?\n모든 직원의 목록에서 사라집니다.`)) return;
     try {
       await deleteRows("knowledge_docs", `id=eq.${doc.id}`);
       setOpenGuide(null);
@@ -355,7 +356,7 @@ export default function CopierNotes({ author }: { author: string }) {
 
   const removeNote = async (note: CopierNote) => {
     if (note.author !== author) return;
-    if (!window.confirm("이 기록을 삭제할까요?")) return;
+    if (!await askConfirm("이 기록을 삭제할까요?")) return;
     try {
       await deleteRows("copier_notes", `id=eq.${note.id}`);
       setNotes((current) => current.filter((n) => n.id !== note.id));
