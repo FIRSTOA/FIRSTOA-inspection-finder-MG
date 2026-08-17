@@ -313,7 +313,9 @@ function scheduleColor(type: ScheduleType, completed = false) {
 // 네이버 미러 일정의 note에는 접수원본 전문이 들어 있다 — 있으면 조립 양식 대신 원문을 FIELD 변환기에 태운다
 // (접수 내용을 직접 복붙해 변환한 것과 완전히 같은 결과: 구분 세팅·부서명·키맨·내용까지)
 function receptionRawOf(ticket: AsTicket): string {
-  const note = String(ticket.note || "");
+  // 익일 처리 후엔 메모에 "[날짜 전송 양식]" 블록이 누적된다 — 접수원본 부분만 잘라 변환기에 넣는다
+  // (어제 양식의 모델명·매수 줄이 두 번째 기기로 오인되는 것 방지)
+  const note = String(ticket.note || "").split(/\n\[\d{4}-\d{2}-\d{2} 전송 양식\]/)[0].trim();
   return /기번\s/.test(note) && /(접수분야|접수유형|임대리스트순번|★키맨)/.test(note) ? note : "";
 }
 

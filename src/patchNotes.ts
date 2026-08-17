@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1d69e4b00c",
+    "date": "2026-08-17",
+    "note": "익일 처리 시 전송 양식 전문 + 미루는 사유를 네이버·웹앱 메모에 함께 기록"
+  },
+  {
     "hash": "dd6c72665a",
     "date": "2026-08-17",
     "note": "익일 팝업을 일정리스트와 동일하게 — 사유 필수·팀 AS방 카톡·네이버/메모 기록, 팝업 업체명 정제 표기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a72c67759a",
     "date": "2026-08-01",
     "note": "복합기 퀴즈 철회 + 일정리스트 유형 필터(중복 선택) + 접수 문구 교체"
-  },
-  {
-    "hash": "e1f0d26b6f",
-    "date": "2026-08-01",
-    "note": "자유 연습도 AI 문제은행으로 — 원본 로그 출제 사실상 퇴역"
   }
 ];
