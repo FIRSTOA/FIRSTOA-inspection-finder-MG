@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a10c76c964",
+    "date": "2026-08-18",
+    "note": "거래처 특이사항 — 점검 기록의 그날 메모와 분리한 '업체 고유 방문 규칙' 층"
+  },
+  {
     "hash": "75387c34e4",
     "date": "2026-08-18",
     "note": "FIELD 탭 AS방 보내기에서 일정 완료·익일 팝업 숨김"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8591a6177b",
     "date": "2026-08-02",
     "note": "원격 탭 줄바꿈 헤더 매칭 수정 — 한조처리(L)·추가대수(X)가 안 들어가던 원인"
-  },
-  {
-    "hash": "683d33643e",
-    "date": "2026-08-02",
-    "note": "처리 갱신 중복 행 근절 + 접수 UX 5건 수리"
   }
 ];

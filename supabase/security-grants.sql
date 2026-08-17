@@ -18,3 +18,8 @@
 -- all_vendor_tabs(통합이력 검색 색인 뷰)에 security_invoker=true 적용.
 -- 뷰가 소유자 권한으로 실행되며 RLS를 우회하던 잠재 뒷문 제거 (기반 13개 테이블은 어차피 익명 읽기 허용이라 동작 변화 없음 — 익명 RPC 실검색으로 확인).
 --   alter view public.all_vendor_tabs set (security_invoker = true);
+
+-- 2026-08-18: workin_vendor_code 정책에 'name-prefix' 추가.
+-- 이름-접두 자동 매칭(스크립트)이 결과를 manual로 위장하지 않도록 — 출처가 남아야 사람 판단과 구분되고
+-- 잘못 붙은 매칭만 골라 지울 수 있다. anon은 여전히 자동 계층(serial·name)을 손댈 수 없다.
+--   INSERT/UPDATE CHECK: method IN ('manual','name-prefix') / DELETE USING: 같은 조건

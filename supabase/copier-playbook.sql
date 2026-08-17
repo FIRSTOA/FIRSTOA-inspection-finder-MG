@@ -26,3 +26,8 @@ CREATE TABLE IF NOT EXISTS public.copier_playbook (
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.copier_playbook TO anon, authenticated;
 GRANT ALL ON public.copier_playbook TO service_role;
+
+-- 2026-08-18 추가: knowledge_docs.symptoms(jsonb) — 가이드에도 증상 축을 붙여 족보 카드와 연결한다.
+--   ALTER TABLE public.knowledge_docs ADD COLUMN IF NOT EXISTS symptoms jsonb NOT NULL DEFAULT '[]';
+-- 태깅은 2단: 규칙(scratchpad/tag-guides.mjs — 제목·본문의 기종·부품 어휘) → AI(guide-tag 함수)로 나머지.
+-- copier_playbook.confirmed_by(jsonb): 확인한 사람 이름 누적("✓ N명 확인"). 게시/초안 이분법 대체.

@@ -8,6 +8,7 @@ import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicF
 import FormModal from "./FormModal";
 import { ALL_MODEL_NAMES, brandOfModel } from "./modelCatalog";
 import { notify } from "./toast";
+import { BRANDS, BRAND_NAMES, MODEL_RULES, SYMPTOM_FILTERS } from "./copierTaxonomy";
 
 type CopierNote = {
   id: string; created_at: string; author: string; brand: string; model: string;
@@ -33,75 +34,6 @@ const confirmersOf = (c: PlaybookCard) => (Array.isArray(c.confirmed_by) ? c.con
 const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700", 보통: "bg-amber-100 text-amber-700", 낮음: "bg-slate-100 text-slate-500" };
 
 // 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
-const BRANDS: Record<string, string[]> = {
-  삼성: ["MX3", "MX4", "MX7", "9201", "흑백기"],
-  신도: ["320", "410", "420", "450", "N501", "600", "bizhub"],
-  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "SC2022", "305", "5005"],
-  교세라: ["2100", "2101", "5521", "5526"],
-  브라더: ["5700", "8900"],
-  오키: ["5473"],
-  HP: ["477", "530", "650", "7740", "8600", "8610", "8710", "8720", "8730", "9010"],
-  리코: [],
-  캐논: [],
-  코니카미놀타: [],
-  렉스마크: ["MX410"],
-  기타: [],
-};
-const BRAND_NAMES = Object.keys(BRANDS);
-
-/**
- * 기종 칩 → 실제 모델명 매칭 규칙.
- * 기록의 model엔 관용명("MX3")과 실기기명("SL-X3220NR")이 섞여 있어서
- * 칩 선택 시 [관용명 일치 OR 포함 패턴 OR 정규식]으로 다 잡는다.
- * 삼성 K+숫자(SL-K…)는 흑백기로 분류 — MX 칩에서는 제외.
- */
-type ModelRule = { include: string[]; regex?: string; excludeRegex?: string };
-const MODEL_RULES: Record<string, Record<string, ModelRule>> = {
-  삼성: {
-    MX3: { include: ["3220", "3250", "3255", "3280"], excludeRegex: "k[0-9]" },
-    MX4: { include: ["4220", "4225", "4250", "4255", "4300", "4305", "4350", "4355"], excludeRegex: "k[0-9]" },
-    MX7: { include: ["7400", "7500", "7600"], excludeRegex: "k[0-9]" },
-    "9201": { include: ["9201", "9251", "9301"] }, // CLX-9201/9251/9301 — 삼성 대형 컬러기(기록에 제록스로 오기된 건이 있었다)
-    흑백기: { include: [], regex: "k[0-9]{3}" },
-  },
-  신도: {
-    "320": { include: ["320", "321"] }, "410": { include: ["410", "411"] }, "420": { include: ["420", "422"] },
-    "450": { include: ["450", "451", "452"] }, N501: { include: ["501"] }, "600": { include: ["600"] }, bizhub: { include: ["bizhub"] },
-  },
-  // 제록스는 기록에 팀 약어가 쓰인다(VC3375·APVIIC2273·DCVC2263…). 세대 약어 = 코드명 대응은
-  // 팀이 코드명을 병기해 둔 기록에서 확인됨: V→세이토, VI→베니, VII→보탄, IV→키슈,
-  // DocuCentre-V C2263→마블, V C5585→헤라(클래스). 순서가 우선순위 — 헤라·번호 시리즈를 먼저 걸러야
-  // "VC5585"가 세이토로 새지 않는다. 9201/9301은 코드명 확인 전이라 번호 그대로 둔다.
-  제록스: {
-    헤라: { include: ["헤라", "5580", "5585", "6680"] },
-    "305": { include: ["305"] },
-    "5005": { include: ["5005"] },
-    SC2022: { include: ["sc2022", "sc-2022", "2022"] },
-    보탄: { include: ["보탄", "port-vii c"], regex: "vii[\\s-]*c?\\d{4}" },
-    베니: { include: ["베니", "port-vi c"], regex: "vi(?!i)[\\s-]*c?\\d{4}" },
-    키슈: { include: ["키슈", "port-iv c"], regex: "iv[\\s-]*c?\\d{4}" },
-    마블: { include: ["마블", "centre-v c226", "c2263", "c2265"] },
-    세이토: { include: ["세이토", "port-v c", "centre-v c2276", "centre-v c3375"], regex: "(?:^|[^aeiou])v[\\s-]*c?\\d{4}" },
-    APEOS: { include: ["apeos-c", "apeos-3", "apeosc", "2060", "3070", "2560"] },
-  },
-  교세라: { "2100": { include: ["2100"] }, "2101": { include: ["2101"] }, "5521": { include: ["5521"] }, "5526": { include: ["5526"] } },
-  브라더: { "5700": { include: ["5700"] }, "8900": { include: ["8900"] } },
-  오키: { "5473": { include: ["5473"] } },
-  HP: Object.fromEntries(["477", "530", "650", "7740", "8600", "8610", "8710", "8720", "8730", "9010"].map((num) => [num, { include: [num] }])),
-  렉스마크: { MX410: { include: ["410"] } },
-};
-
-// 증상 유형 필터 — 제목·내용 키워드로 서버에서 거른다 (기종 × 증상으로 범위 축소)
-const SYMPTOM_FILTERS: Record<string, string[]> = {
-  "급지·걸림": ["급지", "걸림", "잼", "JAM"],
-  "줄·화질": ["세로줄", "가로줄", "얼룩", "화질", "번짐", "흐림", "비침"],
-  "에러코드": ["에러", "error", "E-", "SC", "코드"],
-  "토너·드럼": ["토너", "드럼", "카트리지", "폐토너"],
-  "정착기·롤러": ["정착", "퓨저", "롤러", "히터"],
-  "스캔·팩스": ["스캔", "팩스", "ADF"],
-  "네트워크·드라이버": ["네트워크", "드라이버", "IP", "무선", "포트", "공유"],
-  "소음": ["소음", "소리", "이음"],
-};
 
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
