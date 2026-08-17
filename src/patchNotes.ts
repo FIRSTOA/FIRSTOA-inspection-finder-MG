@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "82dbc90f17",
+    "date": "2026-08-17",
+    "note": "모바일 일정리스트 예정 탭에 날짜 띠 — PC 표와 동일하게 일별 구분"
+  },
+  {
     "hash": "610ddfd25d",
     "date": "2026-08-17",
     "note": "알림 상태바 배지 아이콘 — 투명 배경 F. 글리프(흰 네모 현상 수리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "701a808839",
     "date": "2026-08-02",
     "note": "복합기 접수 새 행의 VLOOKUP 열을 접수 시점 \"값\"으로 교체 (스냅샷 보존)"
-  },
-  {
-    "hash": "70c0a78168",
-    "date": "2026-08-02",
-    "note": "BD 갱신 잡은 처리완료 열만 쓰도록 봉인 — 접수시간·날짜가 완료 시각으로 덮이던 사고 수정 (field-sheet-sync.gs 재붙여넣기 필요)"
   }
 ];
