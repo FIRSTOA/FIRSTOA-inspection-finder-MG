@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6a138c8203",
+    "date": "2026-08-17",
+    "note": "복합기 학습·처리이력 상단 통일 — 다크 한 덩어리 + 필터 드롭다운화"
+  },
+  {
     "hash": "ab8c7030be",
     "date": "2026-08-17",
     "note": "웹푸시 개선 — 접수는 지역 팀에게만 + 종류별 선택 + 설정을 관리 탭으로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ff75571cb1",
     "date": "2026-08-01",
     "note": "원격이관 신규 양식에서 추가대수·처리내용·연동완료 제거 — 시작·끝/처리 저장이 채우는 값, IT 탭에서만 접수 시 기입"
-  },
-  {
-    "hash": "4dbeaddd3a",
-    "date": "2026-08-01",
-    "note": "원격·IT 신규 양식에 추가대수·처리내용·연동완료 입력칸 추가 — 접수 시점에도 기입 가능 (처리 단계에서 갱신도 그대로 동작)"
   }
 ];

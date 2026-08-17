@@ -558,18 +558,21 @@ export default function CopierNotes({ author }: { author: string }) {
         {headerTop}
         {/* 다크 히어로 — 통계·검색·필터가 한 블록. 칩 무더기는 드롭다운으로 접었다 */}
         <div className="bg-[#151A23] px-5 pb-4 pt-4">
-          {stats && <div className="mb-3 flex flex-wrap justify-center gap-1.5">
-            {([["전체", stats.total.toLocaleString()], ["학습", stats.learn.toLocaleString()], ["처리이력", stats.cases.toLocaleString()], ["이번 달", `+${stats.month.toLocaleString()}`]] as [string, string][]).map(([label, value]) => (
-              <span key={label} className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">{label} <b className="tabular-nums text-white">{value}</b></span>
-            ))}
-          </div>}
-          <label className="mx-auto flex max-w-xl items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16]">
-            <span className="shrink-0 text-slate-500">🔍</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 에러코드 · 기종 검색 — 띄어 쓰면 모두 포함 (예: 3220 줄 CTD)"
-              className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
-            {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기" className="shrink-0 text-xs font-black text-slate-500 transition hover:text-slate-300">✕</button>}
-          </label>
-          {recentSearches.length > 0 && <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+          {/* 검색(좌) + 통계(우) 한 줄 — 가운데 정렬은 이 레이아웃에서 붕 떠 보인다 */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <label className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16] lg:max-w-2xl">
+              <span className="shrink-0 text-slate-500">🔍</span>
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="증상 · 에러코드 · 기종 검색 — 띄어 쓰면 모두 포함 (예: 3220 줄 CTD)"
+                className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
+              {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기" className="shrink-0 text-xs font-black text-slate-500 transition hover:text-slate-300">✕</button>}
+            </label>
+            {stats && <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              {([["전체", stats.total.toLocaleString()], ["학습", stats.learn.toLocaleString()], ["처리이력", stats.cases.toLocaleString()], ["이번 달", `+${stats.month.toLocaleString()}`]] as [string, string][]).map(([label, value]) => (
+                <span key={label} className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">{label} <b className="tabular-nums text-white">{value}</b></span>
+              ))}
+            </div>}
+          </div>
+          {recentSearches.length > 0 && <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-black text-slate-600">최근</span>
             {recentSearches.map((item) => (
               <button key={item} type="button" onClick={() => setQuery(item)} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14] hover:text-slate-200">{item}</button>
