@@ -85,6 +85,15 @@ export function usageSpareAdvice(latest: SnapshotLike | undefined, previous: Sna
         total += diff;
         parts.push(`${label} ${diff.toLocaleString()}매`);
       }
+      // 흑/컬 없이 "합"만 적는 관행(3060 등) — 합계 차이로라도 월평균을 잡는다
+      if (!parts.length) {
+        const curTotal = counterOf(latest.counts, "합");
+        const prevTotal = counterOf(previous.counts, "합");
+        if (curTotal !== null && prevTotal !== null && curTotal >= prevTotal) {
+          total = curTotal - prevTotal;
+          parts.push(`합계 ${total.toLocaleString()}매`);
+        }
+      }
       if (parts.length) {
         const monthly = months ? Math.round(total / months) : total;
         usageLine = `${months}개월간 ${parts.join(" · ")} (월평균 약 ${monthly.toLocaleString()}매)`;
