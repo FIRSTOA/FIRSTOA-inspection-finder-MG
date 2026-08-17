@@ -290,6 +290,20 @@ export function HappyCallWorkspace({ author, switcher }: { author: string; switc
 
 // PDF 첫 장을 pdfjs로 직접 그린다 — 브라우저 내장 뷰어(툴바가 썸네일을 덮음)나
 // 구글 드라이브 뷰어(이제 iframe 삽입 차단)에 기대지 않아 어떤 브라우저에서도 미리보기가 나온다.
+// pdfjs 4.x는 Promise.withResolvers(크롬119+/사파리17.4+)를 요구한다 — 구형 모바일 브라우저(삼성 인터넷 등)에서
+// import가 통째로 실패해 "미리보기로 확인" 문구만 뜨던 원인. 없으면 채워 넣는다.
+function ensurePdfPolyfills() {
+  const promiseAny = Promise as unknown as { withResolvers?: () => unknown };
+  if (typeof promiseAny.withResolvers !== "function") {
+    promiseAny.withResolvers = function withResolvers<T>() {
+      let resolve!: (value: T | PromiseLike<T>) => void;
+      let reject!: (reason?: unknown) => void;
+      const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+      return { promise, resolve, reject };
+    };
+  }
+}
+
 function PdfCanvas({ url, fit = "cover" }: { url: string; fit?: "cover" | "contain" }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
@@ -297,6 +311,7 @@ function PdfCanvas({ url, fit = "cover" }: { url: string; fit?: "cover" | "conta
     let alive = true;
     void (async () => {
       try {
+        ensurePdfPolyfills();
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default as string;
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -316,7 +331,7 @@ function PdfCanvas({ url, fit = "cover" }: { url: string; fit?: "cover" | "conta
     })();
     return () => { alive = false; };
   }, [url]);
-  if (failed) return <div className="flex h-full w-full items-center justify-center bg-slate-100 py-10 text-xs font-black text-slate-400">PDF — [미리보기]로 확인</div>;
+  if (failed) return <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-100 py-10"><span className="rounded bg-rose-600 px-2 py-0.5 text-[10px] font-black text-white">PDF</span><span className="text-[11px] font-black text-slate-400">[미리보기]로 열어 확인</span></div>;
   // 카드(cover)는 상자를 채우고, 상세(contain)는 폭에 맞춰 크게 — 세로 문서는 래퍼가 스크롤한다
   return fit === "cover"
     ? <canvas ref={canvasRef} className="h-full w-full bg-white" style={{ objectFit: "cover", objectPosition: "top" }} />

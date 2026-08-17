@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7e605c51f4",
+    "date": "2026-08-17",
+    "note": "분기점검 안내 기본 선택 해제 — 명시적으로 고른 곳만 발송 대상"
+  },
+  {
     "hash": "db0d8d8ef9",
     "date": "2026-08-17",
     "note": "모바일 일정 카드에 구분 칩(익일as/납품/점검) + 교체 추정 오탐 가드"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "82be0d3835",
     "date": "2026-08-01",
     "note": "가이드 편집기에 미리보기 토글 — 작성 중 완성본 즉시 확인"
-  },
-  {
-    "hash": "1cc0290b14",
-    "date": "2026-08-01",
-    "note": "가이드 편집기 노션화 — 토글·구분선·서식 버튼·Ctrl+V 사진 + 분류 고정 옵션"
   }
 ];
