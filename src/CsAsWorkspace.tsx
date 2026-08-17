@@ -1385,8 +1385,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                 )}
               <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
-                <div className="flex items-center gap-1.5 text-[11px] font-black">
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
+                  {/* PC 표와 같은 구분 칩 — 모바일에서도 익일as(연두)/납품(로즈)/점검(호박)이 한눈에 갈리게 */}
+                  <span className={`rounded px-1.5 py-0.5 ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                    {ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? "점검" : "납품"}
+                  </span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
                   <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
                   {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}

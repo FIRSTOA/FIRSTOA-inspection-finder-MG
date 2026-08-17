@@ -573,10 +573,12 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             });
           }
           // 납품인지 교체인지는 시트가 한 칸에 적어 구분이 없다 — 점검 기기(시리얼) 변화가 있으면 "교체"로 확정해 준다
-          if (devices?.recentSwap || quarterCheck.retired) add("교체", {
+          // 교체 추정은 "새 기기가 있을 때"만 — 방문이 오래 끊긴 업체는 교체가 아니라 방문 공백이다 (빌엔터 오탐)
+          const retiredValid = quarterCheck.retired && quarterCheck.machines.length > 0;
+          if (devices?.recentSwap || retiredValid) add("교체", {
             dot: "bg-indigo-500",
             headline: devices?.recentSwap ? `${devices.recentSwap} 납품/교체` : "기기 교체된 것으로 보임",
-            detail: quarterCheck.retired
+            detail: retiredValid && quarterCheck.retired
               ? `점검 기기 ${quarterCheck.retired.label} → ${quarterCheck.machines[0]?.asset || quarterCheck.machines[0]?.serialNo || "?"} 변경 (이전 기기 마지막 점검 ${quarterCheck.retired.date})`
               : "최근 1년 내 · 임대리스트 납품/교체일 기준",
             tone: "text-indigo-700",
