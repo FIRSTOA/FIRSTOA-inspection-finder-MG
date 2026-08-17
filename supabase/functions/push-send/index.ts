@@ -1,8 +1,12 @@
 /**
  * 웹푸시 발송 — push_subscriptions의 구독으로 알림을 밀어넣는다.
  *
- * 요청: { title, body?, url?, tag?, all?: true | targets?: string[](이름), exclude?: string[] }
- *  - all이면 전 구독자, 아니면 targets 이름과 person이 일치하는 구독만.
+ * 요청: { title, body?, url?, tag?, category?,
+ *         all?: true | targets?: string[](이름) | team?: "A"~"E"|"IT"|"팀장",
+ *         exclude?: string[] }
+ *  - 대상: all=전 구독자 / targets=이름 일치 / team=cs_members 재직자 중 그 팀 이름들.
+ *  - category("reception"|"notice"|"request"|"assign")는 구독별 prefs로 걸러진다
+ *    (prefs[category]===false인 구독 제외 — 종류별 알림 끄기).
  *  - exclude는 행위 당사자 제외용(자기가 등록한 공지 알림을 자기가 받지 않게).
  * 죽은 구독(404/410)은 발송 중 자동 삭제. VAPID 비밀키는 Secrets(VAPID_KEYS_JWK).
  */
@@ -40,16 +44,24 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const restHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
 
-    const targets = Array.isArray(body.targets) ? body.targets.map((v: unknown) => String(v).trim()).filter(Boolean) : [];
-    let query = `${rest}/push_subscriptions?select=endpoint,p256dh,auth,person`;
+    let targets = Array.isArray(body.targets) ? body.targets.map((v: unknown) => String(v).trim()).filter(Boolean) : [];
+    if (body.all !== true && !targets.length && body.team) {
+      // 팀 지정(접수 등) → 재직자 명단에서 그 팀 이름들로 변환
+      const memRes = await fetch(`${rest}/cs_members?select=name&active=eq.true&team=eq.${encodeURIComponent(String(body.team))}`, { headers: restHeaders });
+      const members = (await memRes.json().catch(() => [])) as Array<{ name: string }>;
+      targets = members.map((m) => String(m.name || "").trim()).filter(Boolean);
+    }
+    let query = `${rest}/push_subscriptions?select=endpoint,p256dh,auth,person,prefs`;
     if (body.all !== true) {
       if (!targets.length) return Response.json({ ok: true, sent: 0, reason: "no_targets" }, { headers: jsonHeaders });
       const list = targets.map((t: string) => `"${t.replace(/"/g, "")}"`).join(",");
       query += `&person=in.(${encodeURIComponent(list)})`;
     }
-    const rows = (await (await fetch(query, { headers: restHeaders })).json().catch(() => [])) as Array<{ endpoint: string; p256dh: string; auth: string; person: string }>;
+    const rows = (await (await fetch(query, { headers: restHeaders })).json().catch(() => [])) as Array<{ endpoint: string; p256dh: string; auth: string; person: string; prefs: Record<string, boolean> | null }>;
     const exclude = new Set((Array.isArray(body.exclude) ? body.exclude : []).map((v: unknown) => String(v).trim()).filter(Boolean));
-    const recipients = rows.filter((row) => !exclude.has(row.person));
+    const category = String(body.category || "").trim();
+    const recipients = rows.filter((row) => !exclude.has(row.person)
+      && !(category && row.prefs && row.prefs[category] === false));
     if (!recipients.length) return Response.json({ ok: true, sent: 0, reason: "no_subscribers" }, { headers: jsonHeaders });
 
     const appServer = await appServerOf();

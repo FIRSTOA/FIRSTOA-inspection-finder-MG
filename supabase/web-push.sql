@@ -13,9 +13,13 @@ CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   p256dh text NOT NULL,               -- 페이로드 암호화 공개키 (구독 산물)
   auth text NOT NULL,                 -- 페이로드 암호화 인증 시크릿 (구독 산물)
   ua text NOT NULL DEFAULT '',
+  prefs jsonb NOT NULL DEFAULT '{}',  -- 종류별 끄기: {"reception":false,...} — false만 의미 있음(기본 전부 켜짐)
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- 대상 지정: all(전체) / targets(이름 목록) / team(cs_members 재직자의 팀 — 접수는 지역 팀에게만).
+-- 종류(category): reception(새 접수) / notice(공지) / request(부서요청) / assign(일정배정).
+-- 설정 UI: 관리 탭 → 알림 (src/PushSettings.tsx).
 
 -- anon: 자기 기기 구독의 등록·갱신·해지에 필요. 발송(전체 조회)은 service_role(edge)만 한다.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.push_subscriptions TO anon, authenticated;

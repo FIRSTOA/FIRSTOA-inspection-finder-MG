@@ -136,6 +136,7 @@ export default function NoticeBoard({ author, onUnreadChange }: { author: string
         title: `공지 — ${draft.title.trim()}`.slice(0, 80),
         body: (draft.body.trim() || draft.category).slice(0, 120),
         tag: "notice",
+        category: "notice",
         ...(pushTargets ? { targets: pushTargets } : { all: true }),
         exclude: author ? [author] : [],
       }).catch(() => undefined);

@@ -838,6 +838,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         title: `일정 배정 — ${(changed.calendarTitle || "").trim() || changed.vendor || "일정"}`.slice(0, 80),
         body: `${changed.date} ${changed.time || ""} · ${changed.team}팀`.trim(),
         tag: `assign-${changed.id}`,
+        category: "assign",
         targets: [changed.assignee],
       }).catch(() => undefined);
     }

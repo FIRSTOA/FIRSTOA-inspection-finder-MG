@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "59737ec1cc",
+    "date": "2026-08-17",
+    "note": "웹푸시 알림 도입 — 접수·공지·부서요청·일정배정을 폰/PC 알림으로"
+  },
+  {
     "hash": "5f7e95c5f6",
     "date": "2026-08-17",
     "note": "웹앱 생성 일정의 네이버 연결고리 유실 수리 — 간소 추가 naverUid 저장"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cc86635165",
     "date": "2026-08-01",
     "note": "복합기 완료 → 접수시트 BD열 기입 + 원격·IT 신규 직접 기입 지원"
-  },
-  {
-    "hash": "8f7e8b96c4",
-    "date": "2026-08-01",
-    "note": "접수폼 우측 여백 제거 + 신규 양식을 시트 구조에 맞게 분리"
   }
 ];

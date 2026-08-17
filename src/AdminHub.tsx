@@ -6,6 +6,7 @@ import MemberAdmin from "./MemberAdmin";
 import ContactChangeHistory from "./ContactChangeHistory";
 import SyncStatus from "./SyncStatus";
 import SystemAdmin from "./SystemAdmin";
+import PushSettings from "./PushSettings";
 
 /**
  * 관리 허브 — 값을 바꾸는 화면들을 한 지붕 아래 모은다.
@@ -14,13 +15,14 @@ import SystemAdmin from "./SystemAdmin";
  * 특히 테스트 모드·전송 꺼짐은 회사 전체 전송이 멈추는 상태라 어느 탭에 있든 보여야 한다.
  * (문자 문구·홍보물 편집은 해피콜·홍보 화면에, 재고는 자재·요청 메뉴에 있다)
  */
-type Tab = "members" | "changes" | "sync" | "system";
+type Tab = "members" | "changes" | "sync" | "system" | "push";
 
 const TABS: Array<[Tab, string]> = [
   ["members", "인원"],
   ["changes", "담당자·주소 변경"],
   ["sync", "동기화 현황"],
   ["system", "전송·카톡방"],
+  ["push", "알림"],
 ];
 
 type Summary = {
@@ -30,7 +32,6 @@ type Summary = {
 };
 
 export default function AdminHub({ author }: { author: string }) {
-  void author;
   const [tab, setTab] = useState<Tab>(() => {
     const saved = window.localStorage.getItem("cs_admin_tab_v1") as Tab;
     return TABS.some(([key]) => key === saved) ? saved : "members";
@@ -126,6 +127,7 @@ export default function AdminHub({ author }: { author: string }) {
       {tab === "changes" && <ContactChangeHistory />}
       {tab === "sync" && <SyncStatus />}
       {tab === "system" && <SystemAdmin />}
+      {tab === "push" && <PushSettings author={author} />}
     </div>
   );
 }

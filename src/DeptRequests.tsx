@@ -141,6 +141,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
         title: `부서 요청 — ${kind}`.slice(0, 80),
         body: `${requester} · ${draft.content.trim()}`.slice(0, 120),
         tag: "dept-request",
+        category: "request",
         ...(pushTargets ? { targets: pushTargets } : { all: true }),
         exclude: author ? [author] : [],
       }).catch(() => undefined);
@@ -175,6 +176,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
           title: `내 요청 ${status} — ${row.kind}`.slice(0, 80),
           body: `${author || "담당자"}님이 ${word}`,
           tag: `dept-req-${row.id}`,
+          category: "request",
           targets: requesterNames,
           exclude: author ? [author] : [],
         }).catch(() => undefined);

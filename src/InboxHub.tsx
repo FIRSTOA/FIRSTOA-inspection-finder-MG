@@ -5,59 +5,6 @@ import { makeIsForMe, myGroupLabel } from "./audience";
 import { INBOX_EVENT } from "./useInboxBadge";
 import NoticeBoard from "./NoticeBoard";
 import DeptRequests from "./DeptRequests";
-import { askConfirm } from "./confirmModal";
-import { notify } from "./toast";
-import { disablePush, enablePush, isPushOn, pushPermission, pushSupport } from "./push";
-
-/** 웹푸시 켜기/끄기 칩 — 접수·공지·요청·배정을 이 기기 알림으로 받는다 */
-function PushChip({ author }: { author: string }) {
-  const [state, setState] = useState<"loading" | "on" | "off" | "blocked" | "ios" | "unsupported">("loading");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const support = pushSupport();
-      if (support === "ios-need-install") { if (alive) setState("ios"); return; }
-      if (support === "unsupported") { if (alive) setState("unsupported"); return; }
-      if (pushPermission() === "denied") { if (alive) setState("blocked"); return; }
-      const on = await isPushOn();
-      if (alive) setState(on ? "on" : "off");
-    })();
-    return () => { alive = false; };
-  }, []);
-  if (state === "unsupported") return null;
-  const click = async () => {
-    if (busy || state === "loading") return;
-    if (state === "ios") { notify("아이폰은 사파리 공유 버튼 → \"홈 화면에 추가\" 후, 그 앱 아이콘으로 들어와서 알림을 켤 수 있어요.", "error"); return; }
-    if (state === "blocked") { notify("알림이 브라우저에서 차단돼 있어요 — 주소창 왼쪽 자물쇠 → 알림 → 허용으로 바꾼 뒤 다시 눌러주세요.", "error"); return; }
-    setBusy(true);
-    try {
-      if (state === "off") {
-        if (!author) { notify("우측 상단에서 작성자(본인)를 먼저 선택하세요 — 알림 대상 매칭 기준입니다.", "error"); return; }
-        await enablePush(author);
-        setState("on");
-        notify("이 기기로 알림이 옵니다 ✓ (접수·공지·요청·일정 배정)", "success");
-      } else {
-        if (!await askConfirm("이 기기의 알림을 끌까요?")) return;
-        await disablePush();
-        setState("off");
-        notify("알림을 껐습니다", "success");
-      }
-    } catch (e) {
-      notify((e as Error).message, "error");
-      if (pushPermission() === "denied") setState("blocked");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const label = state === "on" ? "🔔 알림 켜짐" : state === "blocked" ? "🔕 알림 차단됨" : "🔔 알림 켜기";
-  return (
-    <button type="button" onClick={() => void click()} disabled={busy || state === "loading"}
-      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${state === "on" ? "bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25" : "bg-white/[0.07] text-slate-300 hover:bg-white/[0.14] hover:text-white"}`}>
-      {busy ? "처리 중…" : label}
-    </button>
-  );
-}
 
 /**
  * 공지·요청 허브 — "사람이 나에게 보낸 것"을 한 지붕 아래.
@@ -124,7 +71,6 @@ export default function InboxHub({ author }: { author: string }) {
           {chip("안 읽은 공지", unreadNotices, (unreadNotices ?? 0) > 0, "notice")}
           {chip("내 대기 요청", myWaiting, (myWaiting ?? 0) > 0, "request")}
           {myUpdates > 0 && chip("내 요청 진행 소식", myUpdates, true, "request")}
-          <PushChip author={author} />
           <span className="ml-auto text-[11px] font-semibold text-slate-500">{author ? `${author}${groupLabel ? ` · ${groupLabel}` : ""} 기준` : "작성자를 선택하면 내 것만 골라 보여줍니다"}</span>
         </div>
         <div className="flex overflow-x-auto">

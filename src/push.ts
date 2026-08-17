@@ -6,7 +6,16 @@
  * 알림음은 웹 표준이 지정을 막아 OS 기본음이 난다(받는 사람이 폰 설정에서 변경은 가능).
  * 아이폰은 "홈 화면에 추가"한 PWA에서만 구독 가능(iOS 16.4+ 제약).
  */
-import { deleteRows, upsertRow } from "./supabase";
+import { deleteRows, selectRows, updateRows, upsertRow } from "./supabase";
+
+/** 알림 종류 — false로 저장된 종류는 push-send가 걸러서 안 보낸다 (기본은 전부 켜짐) */
+export type PushCategory = "reception" | "notice" | "request" | "assign";
+export const PUSH_CATEGORIES: Array<{ key: PushCategory; label: string; hint: string }> = [
+  { key: "reception", label: "새 접수", hint: "내 팀 지역으로 접수가 들어올 때" },
+  { key: "notice", label: "공지사항", hint: "나를 대상으로 공지가 올라올 때" },
+  { key: "request", label: "부서 요청", hint: "나에게 온 요청·내 요청의 진행 소식" },
+  { key: "assign", label: "일정 배정", hint: "내 이름으로 일정이 배정될 때" },
+];
 
 // VAPID 공개키(applicationServerKey) — 비밀키는 Supabase Secrets(VAPID_KEYS_JWK)에만 있다.
 // 이 값을 바꾸면 기존 구독이 전부 무효가 되니 재발급 금지.
@@ -85,6 +94,30 @@ export async function isPushOn(): Promise<boolean> {
   if (pushSupport() !== "ok" || Notification.permission !== "granted") return false;
   const reg = await navigator.serviceWorker.getRegistration(SW_PATH).catch(() => undefined);
   return !!(await reg?.pushManager.getSubscription());
+}
+
+async function currentEndpoint(): Promise<string> {
+  if (!("serviceWorker" in navigator)) return "";
+  const reg = await navigator.serviceWorker.getRegistration(SW_PATH).catch(() => undefined);
+  const sub = await reg?.pushManager.getSubscription();
+  return sub?.endpoint || "";
+}
+
+/** 이 기기 구독의 종류별 설정 읽기 — 구독이 없으면 null */
+export async function getPushPrefs(): Promise<Record<string, boolean> | null> {
+  const endpoint = await currentEndpoint();
+  if (!endpoint) return null;
+  const rows = await selectRows<{ prefs: Record<string, boolean> | null }>(
+    "push_subscriptions", `select=prefs&endpoint=eq.${encodeURIComponent(endpoint)}&limit=1`);
+  return rows.length ? (rows[0].prefs || {}) : null;
+}
+
+export async function setPushPref(category: PushCategory, on: boolean): Promise<void> {
+  const endpoint = await currentEndpoint();
+  if (!endpoint) throw new Error("먼저 알림을 켜주세요.");
+  const prefs = (await getPushPrefs()) || {};
+  prefs[category] = on;
+  await updateRows("push_subscriptions", `endpoint=eq.${encodeURIComponent(endpoint)}`, { prefs, updated_at: new Date().toISOString() });
 }
 
 /**
