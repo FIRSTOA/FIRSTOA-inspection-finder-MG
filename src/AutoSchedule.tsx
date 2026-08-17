@@ -6,7 +6,7 @@
  * 규칙: 마지막 점검 경과일 기준(조절 가능) · N·NN·S는 언제든 · SS·V는 분기 중반부터 권장.
  */
 import { parseEquipComment } from "./ids";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
@@ -290,7 +290,7 @@ export default function AutoSchedule({ author }: { author: string }) {
             {groups.map((group) => {
               const single = group.members.length === 1;
               const first = group.members[0];
-              const allOn = group.members.every((m) => picked.has(m.id));
+              const allOn = group.members.every((m: Place) => picked.has(m.id));
               const fl = flags.get((first.vendor || first.place_name).trim());
               if (single) {
                 const r = first;
@@ -328,10 +328,10 @@ export default function AutoSchedule({ author }: { author: string }) {
                 );
               }
               // 같은 회사 기기 여러 대 — 카드 1장, 방문 1건
-              const distances = group.members.map((m) => m.distance_km).filter((d): d is number => d != null);
-              const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
-              const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
-              const allNever = group.members.every((m) => m.never_visited);
+              const distances = group.members.map((m: Place) => m.distance_km).filter((d: number | null): d is number => d != null);
+              const lastDate = group.members.map((m: Place) => m.last_date || "").sort().at(-1) || "";
+              const minDaysSince = Math.min(...group.members.map((m: Place) => m.days_since));
+              const allNever = group.members.every((m: Place) => m.never_visited);
               return (
                 <label key={group.key} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${allOn ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                   <input type="checkbox" checked={allOn} onChange={() => toggleGroup(group)} className="mt-1 h-4 w-4 accent-blue-600" />
