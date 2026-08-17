@@ -1410,6 +1410,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
                   </div>
                 )}
+                {/* 예정 탭: PC 표의 날짜 띠와 동일하게 — 같은 사람 안에서 날짜가 바뀔 때마다 일별로 끊어 보여준다 */}
+                {dayFilter === "scheduled" && (ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "") || scheduleRows[ti - 1].date !== ticket.date) && (
+                  <div className="mb-1 mt-1 flex items-center gap-2">
+                    <span className="rounded bg-slate-200/80 px-2 py-0.5 text-[11px] font-black text-slate-600">📅 {Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${ticket.date}T00:00:00`).getDay()]})</span>
+                    <span className="h-px flex-1 bg-slate-200" />
+                  </div>
+                )}
               <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>

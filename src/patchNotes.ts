@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "610ddfd25d",
+    "date": "2026-08-17",
+    "note": "알림 상태바 배지 아이콘 — 투명 배경 F. 글리프(흰 네모 현상 수리)"
+  },
+  {
+    "hash": "6f4de47346",
+    "date": "2026-08-17",
+    "note": "가이드 탭 헤더를 기록 탭과 동일 문법으로 — 검색+건수 위, 필터+작성 아래"
+  },
+  {
     "hash": "c7bb2f5b36",
     "date": "2026-08-17",
     "note": "앱 아이콘 리뉴얼(F. 레터마크) + 복합기 검색줄 좌측 정렬"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "70c0a78168",
     "date": "2026-08-02",
     "note": "BD 갱신 잡은 처리완료 열만 쓰도록 봉인 — 접수시간·날짜가 완료 시각으로 덮이던 사고 수정 (field-sheet-sync.gs 재붙여넣기 필요)"
-  },
-  {
-    "hash": "d7bcf2bff0",
-    "date": "2026-08-01",
-    "note": "BD열 기입 보강 — 과거 접수 폴백(퍼스트순 찾기) + 익일 표기 + 취소 시 \"-\""
-  },
-  {
-    "hash": "06b86551fb",
-    "date": "2026-08-01",
-    "note": "원격이관 처리 저장 가드 — 시작·끝 시각 없이 저장 시 팝업으로 차단 (IT는 종전대로)"
   }
 ];
