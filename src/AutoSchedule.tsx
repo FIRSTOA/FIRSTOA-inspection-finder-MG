@@ -360,7 +360,8 @@ export default function AutoSchedule({ author }: { author: string }) {
               const allNever = group.members.every((m: Place) => m.never_visited);
               // "기기 N대"는 임대리스트 기준 — 워킨맵에 지점(기기)이 일부만 등록된 업체(청연원 9대 중 3곳)가 있다
               const mfpCount = Number(String(first.devices || "").match(/복합기 (\d+)/)?.[1] || 0);
-              const deviceTotal = mfpCount || first.device_count || group.members.length;
+              // 임대리스트 기번→코드 매핑이 빠진 기기(청연원 B5650 등)는 코드 집계에서 새니, 워킨맵 등록 수와의 최댓값으로
+              const deviceTotal = Math.max(mfpCount || first.device_count || 0, group.members.length);
               return (
                 <label key={group.key} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${allOn ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                   <input type="checkbox" checked={allOn} onChange={() => toggleGroup(group)} className="mt-1 h-4 w-4 accent-blue-600" />

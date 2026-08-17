@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "92bf1d18fa",
+    "date": "2026-08-17",
+    "note": "시트-현장 불일치 감지(시트 확인 필요 N대) + 자동일정 같은 건물 배지"
+  },
+  {
     "hash": "1aa573fcd9",
     "date": "2026-08-17",
     "note": "자동일정 그룹 기기 수를 임대리스트 기준으로(워킨맵 미등록 표기) + 파서 위치 번호접두 정리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ea9ce22360",
     "date": "2026-08-01",
     "note": "현황판·방문일지 서로 보기(읽기 전용) + 복합기 가이드를 노션식 위키로"
-  },
-  {
-    "hash": "626d551a63",
-    "date": "2026-08-01",
-    "note": "직원 선택 3단 공용 픽커 + 부서요청 받은/보낸 구분 + 대상 뱃지 명확화 + 사진업로드 수정"
   }
 ];
