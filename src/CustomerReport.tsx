@@ -6,12 +6,15 @@
  * 발송(문자 MMS·메일)은 2단계 — 지금은 생성·저장까지.
  */
 import { useMemo, useState } from "react";
-import { Armchair, Download, FileImage, Laptop, Monitor, Package, Printer, Search, UserPlus, Wind } from "lucide-react";
-import { selectRows } from "./supabase";
+import { Armchair, FileImage, Laptop, Monitor, Package, Plus, Printer, Search, Send, UserPlus, Users, Wind, X } from "lucide-react";
+import { insertRow, insertRowReturning, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
 import { notify } from "./toast";
 
 type PeriodKind = "month" | "quarter" | "half" | "year";
+type Recipient = { id: number; vendor: string; name: string; phone: string; memo: string; active: boolean };
+type SendLogRow = { id: number; recipient_name: string; phone: string; status: string; period: string; created_at: string };
+const validPhone = (value: string) => /^01\d{8,9}$/.test(String(value || "").replace(/[^\d]/g, ""));
 type ServiceRow = { date: string; kind: string; device: string; desc: string; result: string };
 type ReportData = {
   vendor: string;
@@ -82,7 +85,6 @@ function handledLine(note: string) {
 const KIND_LABEL: Record<string, string> = { "복합기 AS": "AS 방문", "원격이관": "원격 지원", "IT": "IT 지원" };
 
 export default function CustomerReport({ author }: { author: string }) {
-  void author;
   const today = new Date();
   const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 15);
   const [periodKind, setPeriodKind] = useState<PeriodKind>("month");
@@ -93,6 +95,15 @@ export default function CustomerReport({ author }: { author: string }) {
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // ── 2단계: 수신자 관리(키맨 추천+직접 추가) + 반검수 발송(확인 팝업) + 발송 로그 ──
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [recipOpen, setRecipOpen] = useState(false);
+  const [suggests, setSuggests] = useState<Array<{ name: string; phone: string }>>([]);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [logs, setLogs] = useState<SendLogRow[]>([]);
 
   const range = useMemo(() => periodRange(periodKind, anchor), [periodKind, anchor]);
 
@@ -207,6 +218,7 @@ export default function CustomerReport({ author }: { author: string }) {
         lastInspection: String(lastAll[0]?.["작성일"] || "").slice(0, 10),
       });
       setHits([]);
+      void loadSendData(vendorName);
     } catch (e) {
       notify(`리포트 생성 실패: ${(e as Error).message}`, "error");
     } finally { setLoading(false); }
@@ -218,6 +230,104 @@ export default function CustomerReport({ author }: { author: string }) {
   const page1Rows = report ? report.rows.slice(0, PAGE1_ROWS) : [];
   const page2Rows = report ? report.rows.slice(PAGE1_ROWS, PAGE1_ROWS + PAGE2_ROWS) : [];
   const overflow = report ? Math.max(0, report.rows.length - PAGE1_ROWS - PAGE2_ROWS) : 0;
+
+  const vendorCore = report ? (historyCoreName(report.vendor) || report.vendor) : "";
+
+  const loadSendData = async (vendorName: string) => {
+    const core = historyCoreName(vendorName) || vendorName;
+    try {
+      const keymanCols = `${encodeURIComponent("키맨성함+직함")},${encodeURIComponent("키맨전화번호")}`;
+      const [recips, logRows, keymen] = await Promise.all([
+        selectRows<Recipient>("report_recipients", `select=*&vendor=eq.${encodeURIComponent(core)}&active=is.true&order=id.asc`),
+        selectRows<SendLogRow>("report_send_log", `select=id,recipient_name,phone,status,period,created_at&vendor=eq.${encodeURIComponent(core)}&order=id.desc&limit=6`),
+        selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(core.slice(0, 24))}*&_hidden=not.is.true&limit=20`),
+      ]);
+      setRecipients(recips);
+      setLogs(logRows);
+      const have = new Set(recips.map((r) => r.phone.replace(/[^\d]/g, "")));
+      const unique = new Map<string, { name: string; phone: string }>();
+      keymen.forEach((row) => {
+        const phone = String(row["키맨전화번호"] || "").replace(/[^\d]/g, "");
+        if (!validPhone(phone) || have.has(phone)) return;
+        unique.set(phone, { name: String(row["키맨성함+직함"] || "").trim(), phone });
+      });
+      setSuggests(Array.from(unique.values()).slice(0, 6));
+    } catch { /* 발송 부가 기능 — 리포트 생성은 막지 않는다 */ }
+  };
+
+  const addRecipient = async (name: string, phone: string) => {
+    const digits = phone.replace(/[^\d]/g, "");
+    if (!validPhone(digits)) { notify("휴대폰 번호(01x)를 확인해 주세요.", "error"); return; }
+    if (recipients.some((r) => r.phone.replace(/[^\d]/g, "") === digits)) { notify("이미 등록된 번호입니다.", "error"); return; }
+    try {
+      const row = await insertRowReturning<Recipient>("report_recipients", { vendor: vendorCore, name: name.trim(), phone: digits });
+      setRecipients((prev) => [...prev, row]);
+      setSuggests((prev) => prev.filter((sug) => sug.phone !== digits));
+      setNewName(""); setNewPhone("");
+    } catch (e) { notify(`추가 실패: ${(e as Error).message}`, "error"); }
+  };
+
+  const removeRecipient = async (id: number) => {
+    try {
+      await updateRows("report_recipients", `id=eq.${id}`, { active: false });
+      setRecipients((prev) => prev.filter((r) => r.id !== id));
+    } catch (e) { notify(`삭제 실패: ${(e as Error).message}`, "error"); }
+  };
+
+  const buildSmsText = (links: string[]) => [
+    `[퍼스트오에이] ${report?.vendor || ""} ${report?.periodLabel || ""} 서비스 리포트`,
+    "",
+    "안녕하세요, 퍼스트오에이입니다.",
+    `${report?.periodLabel || ""} 동안의 점검·서비스 내역을 정리해 보내드립니다.`,
+    "",
+    ...links.map((link, index) => `▶ 리포트${links.length > 1 ? ` ${index + 1}장` : ""} 보기: ${link}`),
+    "",
+    "늘 믿고 맡겨주셔서 감사합니다.",
+    "문의 1522-1093",
+  ].join("\n");
+
+  const sendTargets = recipients.filter((r) => validPhone(r.phone));
+
+  const sendReports = async () => {
+    if (!report || sending) return;
+    setSending(true);
+    try {
+      // 1) 보이는 리포트를 장별 이미지로 만들어 공개 저장소에 올리고
+      const { default: html2canvas } = await import("html2canvas");
+      const pages = Array.from(document.querySelectorAll<HTMLElement>(".report-page"));
+      const links: string[] = [];
+      const stamp = Date.now();
+      for (let i = 0; i < pages.length; i += 1) {
+        const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff" });
+        const blob: Blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("이미지 변환 실패"))), "image/png"));
+        const path = `${new Date().toISOString().slice(0, 7)}/${(vendorMatchKey(report.vendor) || "vendor").slice(0, 24)}-${stamp}-p${i + 1}.png`;
+        links.push(await uploadPublicFile("reports", path, blob, "image/png"));
+      }
+      // 2) 수신자마다 링크가 담긴 문자를 대표번호로 발송 (같은 번호 1통)
+      const text = buildSmsText(links);
+      const seen = new Set<string>();
+      let ok = 0; const fails: string[] = [];
+      for (const r of sendTargets) {
+        const phone = r.phone.replace(/[^\d]/g, "");
+        if (seen.has(phone)) continue;
+        seen.add(phone);
+        try {
+          await invokeEdgeFunction("customer-message-send", { channel: "sms", type: "report", to: phone, text, vendor: report.vendor, author });
+          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "sent", image_url: links[0] || "", sender: author });
+          ok += 1;
+        } catch (e) {
+          fails.push(r.name || phone);
+          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "failed", error: String((e as Error).message).slice(0, 200), image_url: links[0] || "", sender: author }).catch(() => undefined);
+        }
+      }
+      setSendOpen(false);
+      void loadSendData(report.vendor);
+      if (fails.length) notify(`발송 ${ok}명 완료 · 실패 ${fails.length}명 (${fails.join(", ")})`, "error");
+      else notify(`리포트 문자 발송 완료 — ${ok}명 ✓`, "success");
+    } catch (e) {
+      notify(`발송 실패: ${(e as Error).message}`, "error");
+    } finally { setSending(false); }
+  };
 
   const savePng = async () => {
     if (!report) return;
@@ -281,8 +391,67 @@ export default function CustomerReport({ author }: { author: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void savePng()} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40"><FileImage size={15} />{saving ? "저장 중…" : "PNG 저장 (장별)"}</button>
             <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Printer size={15} />인쇄 / PDF</button>
-            <span className="text-xs font-bold text-slate-400"><Download size={12} className="mr-1 inline" />저장한 이미지를 문자·메일로 보내세요 (자동 발송은 2단계 예정)</span>
+            <button type="button" onClick={() => setRecipOpen(true)} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Users size={15} />수신자 관리 <span className="rounded-full bg-slate-100 px-1.5 text-xs">{recipients.length}</span></button>
+            <button type="button" onClick={() => { if (!sendTargets.length) { notify("수신자를 먼저 추가해 주세요.", "error"); setRecipOpen(true); return; } setSendOpen(true); }} className="flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700"><Send size={15} />문자 발송</button>
+            {logs.length > 0 && <span className="text-[11px] font-bold text-slate-400">최근 발송 {logs[0].created_at.slice(5, 10)} · {logs[0].recipient_name || logs[0].phone} {logs[0].status === "sent" ? "성공" : "실패"}{logs.length > 1 ? ` 외 ${logs.length - 1}건` : ""}</span>}
           </div>
+
+          {recipOpen && <div className="fixed inset-0 z-[2700] flex items-center justify-center bg-slate-950/45 p-3" onClick={() => setRecipOpen(false)}>
+            <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between bg-slate-950 px-4 py-3 text-white">
+                <div><div className="text-sm font-black">리포트 수신자</div><div className="text-[11px] font-semibold text-slate-400">{vendorCore} · 표기가 달라도 같은 회사면 함께 씁니다</div></div>
+                <button type="button" onClick={() => setRecipOpen(false)} aria-label="닫기" className="rounded-full p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
+              </div>
+              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                {recipients.length > 0 ? <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                  {recipients.map((r) => (
+                    <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">{r.name || "이름 없음"}</span>
+                      <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">{r.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")}</span>
+                      <button type="button" onClick={() => void removeRecipient(r.id)} className="shrink-0 rounded-full px-2 py-1 text-[11px] font-black text-rose-500 hover:bg-rose-50">삭제</button>
+                    </div>
+                  ))}
+                </div> : <div className="rounded-lg border border-dashed border-slate-300 px-3 py-5 text-center text-xs font-semibold text-slate-400">아직 수신자가 없습니다 — 아래에서 추가해 주세요.</div>}
+                {suggests.length > 0 && <div>
+                  <div className="mb-1.5 text-[11px] font-black text-slate-400">키맨 기록에서 찾음 (복합기확장성 DB)</div>
+                  <div className="space-y-1.5">
+                    {suggests.map((sug) => (
+                      <div key={sug.phone} className="flex items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700">{sug.name || "이름 미기재"}</span>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">{sug.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")}</span>
+                        <button type="button" onClick={() => void addRecipient(sug.name, sug.phone)} className="flex shrink-0 items-center gap-0.5 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-black text-white hover:bg-blue-700"><Plus size={12} />추가</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>}
+                <div className="flex gap-2">
+                  <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="이름·직함" className="w-28 rounded-lg border border-slate-300 px-2.5 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+                  <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="휴대폰 번호" inputMode="numeric" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2.5 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+                  <button type="button" onClick={() => void addRecipient(newName, newPhone)} className="shrink-0 rounded-full bg-slate-900 px-3.5 py-2 text-sm font-black text-white hover:bg-slate-800">추가</button>
+                </div>
+              </div>
+            </div>
+          </div>}
+
+          {sendOpen && <div className="fixed inset-0 z-[2700] flex items-center justify-center bg-slate-950/45 p-3" onClick={() => !sending && setSendOpen(false)}>
+            <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="bg-slate-950 px-4 py-3 text-white"><div className="text-sm font-black">발송 전 확인</div><div className="text-[11px] font-semibold text-slate-400">리포트 {page2Rows.length || overflow ? 2 : 1}장을 이미지 링크로 만들어 아래 문안으로 보냅니다</div></div>
+              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                <div>
+                  <div className="mb-1 text-[11px] font-black text-slate-400">받는 사람 {sendTargets.length}명</div>
+                  <div className="flex flex-wrap gap-1.5">{sendTargets.map((r) => <span key={r.id} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{r.name || r.phone}</span>)}</div>
+                </div>
+                <div>
+                  <div className="mb-1 text-[11px] font-black text-slate-400">문안 (링크는 발송 때 자동 생성)</div>
+                  <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700">{buildSmsText(["(이미지 링크 자동 첨부)"])}</div>
+                </div>
+              </div>
+              <div className="flex gap-2 border-t border-slate-100 p-3">
+                <button type="button" disabled={sending} onClick={() => setSendOpen(false)} className="flex-1 rounded-full border border-slate-300 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:opacity-40">취소</button>
+                <button type="button" disabled={sending} onClick={() => void sendReports()} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-40">{sending ? "발송 중…" : `${sendTargets.length}명에게 발송`}</button>
+              </div>
+            </div>
+          </div>}
 
           <div className="report-print-area space-y-5 overflow-x-auto pb-1">
             {/* ─── 1장 ─── */}

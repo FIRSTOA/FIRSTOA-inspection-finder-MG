@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "46a9c40c83",
+    "date": "2026-08-17",
+    "note": "통합이력 상단 다크 통일·분기체크 라벨 그룹·타임라인 날짜 나열 + 자동일정 이력 매칭 3층(코드>키>접두) + 미수·초과 익명권한 축소 + 리포트 모바일 가로스크롤"
+  },
+  {
     "hash": "1dedea72fd",
     "date": "2026-08-17",
     "note": "통합이력 가독성 재구성 — 결론+근거 2단·기기별 사용량/여분·교체 추정 + 블루닷류 이름 꼬리 정규화(SQL·JS 거울)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "96cc32dfbc",
     "date": "2026-08-01",
     "note": "인원 관리 — 팀별 구분 표시 + 부서·팀·직책 수정 모달"
-  },
-  {
-    "hash": "df18e7e274",
-    "date": "2026-08-01",
-    "note": "인원 명단을 회사 전체로 통합(DB 원본) + 프로필 표시 + 등록 모달 재디자인"
   }
 ];
