@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "82d2773755",
+    "date": "2026-08-17",
+    "note": "공용 문구 저장 확인 표시 + 조회탭 접수 유형 분리"
+  },
+  {
     "hash": "5d1bce14e4",
     "date": "2026-08-17",
     "note": "공용 문구를 디자인 모달로 + 홍보물 상세 미리보기 크게"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "95a47a283e",
     "date": "2026-08-01",
     "note": "안 쓰는 OperationsDashboard 임포트 제거 (빌드 수정)"
-  },
-  {
-    "hash": "669f9c4f93",
-    "date": "2026-08-01",
-    "note": "조회를 관리와 같은 [다크 상태줄 + 탭] 허브로 + 관리 상태줄 보강"
   }
 ];
