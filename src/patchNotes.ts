@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9fb1c48afc",
+    "date": "2026-08-17",
+    "note": "블록 파서 위치 머리글에서 라벨 줄(콜론 포함) 제외"
+  },
+  {
     "hash": "92c73ad6d1",
     "date": "2026-08-17",
     "note": "분기체크 사용량/여분 기기 리스트 통합 — 시리얼 우선 기기 식별·A~E+지역구 표기·합계 매수 폴백"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cb814d8958",
     "date": "2026-08-01",
     "note": "고객 문자 호칭을 항상 \"고객님\"으로 + 문구를 \"방문한 ○○○입니다\"로 통일"
-  },
-  {
-    "hash": "2dde5a7c50",
-    "date": "2026-08-01",
-    "note": "해피콜·홍보물 발송 미리보기 + 고객용 날짜 표기 + 주제목 다크 헤더"
   }
 ];

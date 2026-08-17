@@ -3,4 +3,4 @@
 -- (실사고 — as_tickets CHECK와 같은 패턴). 새 문구 맥락을 추가할 땐 여기부터.
 alter table message_templates drop constraint if exists message_templates_context_check;
 alter table message_templates add constraint message_templates_context_check
-  check (context = any (array['happycall','promotion','quarter_notice']));
+  check (context = any (array['happycall','promotion','quarter_notice', 'report']));

@@ -5,9 +5,9 @@
  * [PNG 저장]으로 장마다 이미지 파일, [인쇄]로 브라우저 PDF 저장.
  * 발송(문자 MMS·메일)은 2단계 — 지금은 생성·저장까지.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Armchair, FileImage, Laptop, Monitor, Package, Plus, Printer, Search, Send, UserPlus, Users, Wind, X } from "lucide-react";
-import { insertRow, insertRowReturning, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile } from "./supabase";
+import { insertRow, insertRowReturning, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
 import { notify } from "./toast";
 
@@ -117,6 +117,9 @@ export default function CustomerReport({ author }: { author: string }) {
   const [newPhone, setNewPhone] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [smsBody, setSmsBody] = useState(() => { try { return localStorage.getItem(REPORT_SMS_KEY) || DEFAULT_REPORT_SMS; } catch { return DEFAULT_REPORT_SMS; } });
+  const [smsTemplateId, setSmsTemplateId] = useState("");
+  const [smsSavedNote, setSmsSavedNote] = useState("");
+  const [smsSaving, setSmsSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [logs, setLogs] = useState<SendLogRow[]>([]);
 
@@ -246,6 +249,36 @@ export default function CustomerReport({ author }: { author: string }) {
   const page2Rows = report ? report.rows.slice(PAGE1_ROWS, PAGE1_ROWS + PAGE2_ROWS) : [];
   const overflow = report ? Math.max(0, report.rows.length - PAGE1_ROWS - PAGE2_ROWS) : 0;
 
+  // 리포트 문자 문구는 공용(message_templates context='report') — 브라우저 저장만으론 기기·직원 간 안 남는다
+  useEffect(() => {
+    let alive = true;
+    selectRows<{ id: string; body: string }>("message_templates", "select=id,body&context=eq.report&active=eq.true&order=created_at.desc&limit=1")
+      .then((rows) => {
+        if (!alive || !rows.length) return;
+        setSmsTemplateId(rows[0].id);
+        if (String(rows[0].body || "").trim()) setSmsBody(rows[0].body);
+      })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  const saveSmsBody = async () => {
+    if (smsSaving) return;
+    setSmsSaving(true);
+    try {
+      if (smsTemplateId) {
+        await updateRows("message_templates", `id=eq.${encodeURIComponent(smsTemplateId)}`, { body: smsBody });
+      } else {
+        const id = crypto.randomUUID();
+        await upsertRow("message_templates", { id, context: "report", title: "리포트 문자 기본 문구", body: smsBody, active: true, created_by: author }, "id");
+        setSmsTemplateId(id);
+      }
+      setSmsSavedNote("공용으로 저장됨 ✓ — 전 직원에게 반영");
+      window.setTimeout(() => setSmsSavedNote(""), 5000);
+    } catch (e) {
+      notify(`문구 저장 실패: ${(e as Error).message}`, "error");
+    } finally { setSmsSaving(false); }
+  };
+
   const vendorCore = report ? (historyCoreName(report.vendor) || report.vendor) : "";
 
   const loadSendData = async (vendorName: string) => {
@@ -322,23 +355,32 @@ export default function CustomerReport({ author }: { author: string }) {
     if (!report || sending) return;
     setSending(true);
     try {
-      // 1) 보이는 리포트를 장별 이미지로 만들어 공개 저장소에 올리고
+      // 1) 보이는 리포트를 장별로 캡처해 **한 장의 세로 이미지**로 합친다 — 링크 1개, 폰에서 여백 없이 이어 보인다
+      //    (스토리지·엣지 모두 HTML 서빙을 막아 뷰어 페이지는 불가 — GAS 뷰어는 clasp 재로그인 후 전환 예정)
       const { default: html2canvas } = await import("html2canvas-pro");
       const pages = Array.from(document.querySelectorAll<HTMLElement>(".report-page"));
-      const links: string[] = [];
       const stamp = Date.now();
-      for (let i = 0; i < pages.length; i += 1) {
-        const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff" });
-        const blob: Blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("이미지 변환 실패"))), "image/png"));
-        // 스토리지는 한글 키를 거부한다(InvalidKey) — 영문·숫자만 남기고, 비면 이름 해시로 구분
-        const ascii = (vendorMatchKey(report.vendor) || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
-        let hash = 0;
-        for (const ch of report.vendor) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-        const path = `${new Date().toISOString().slice(0, 7)}/${ascii || "v"}-${hash.toString(36)}-${stamp}-p${i + 1}.png`;
-        links.push(await uploadPublicFile("reports", path, blob, "image/png"));
-      }
+      const canvases: HTMLCanvasElement[] = [];
+      for (const page of pages) canvases.push(await html2canvas(page, { scale: 2, backgroundColor: "#ffffff" }));
+      const gap = canvases.length > 1 ? 24 : 0;
+      const merged = document.createElement("canvas");
+      merged.width = Math.max(...canvases.map((canvas) => canvas.width));
+      merged.height = canvases.reduce((sum, canvas) => sum + canvas.height, 0) + gap * (canvases.length - 1);
+      const context = merged.getContext("2d");
+      if (!context) throw new Error("이미지 합성 실패");
+      context.fillStyle = "#e2e8f0";
+      context.fillRect(0, 0, merged.width, merged.height);
+      let offsetY = 0;
+      for (const canvas of canvases) { context.drawImage(canvas, 0, offsetY); offsetY += canvas.height + gap; }
+      const blob: Blob = await new Promise((resolve, reject) => merged.toBlob((b) => (b ? resolve(b) : reject(new Error("이미지 변환 실패"))), "image/png"));
+      // 스토리지는 한글 키를 거부한다(InvalidKey) — 영문·숫자만 남기고, 비면 이름 해시로 구분
+      const ascii = (vendorMatchKey(report.vendor) || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+      let hash = 0;
+      for (const ch of report.vendor) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+      const path = `${new Date().toISOString().slice(0, 7)}/${ascii || "v"}-${hash.toString(36)}-${stamp}.png`;
+      const viewerUrl = await uploadPublicFile("reports", path, blob, "image/png");
       // 2) 수신자마다 링크가 담긴 문자를 대표번호로 발송 (같은 번호 1통)
-      const text = buildSmsText(links);
+      const text = buildSmsText([viewerUrl]);
       const seen = new Set<string>();
       let ok = 0; const fails: string[] = [];
       for (const r of sendTargets) {
@@ -347,11 +389,11 @@ export default function CustomerReport({ author }: { author: string }) {
         seen.add(phone);
         try {
           await invokeEdgeFunction("customer-message-send", { channel: "sms", type: "report", to: phone, text, vendor: report.vendor, author });
-          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "sent", image_url: links[0] || "", sender: author });
+          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "sent", image_url: viewerUrl, sender: author });
           ok += 1;
         } catch (e) {
           fails.push(r.name || phone);
-          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "failed", error: String((e as Error).message).slice(0, 200), image_url: links[0] || "", sender: author }).catch(() => undefined);
+          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "failed", error: String((e as Error).message).slice(0, 200), image_url: viewerUrl, sender: author }).catch(() => undefined);
         }
       }
       setSendOpen(false);
@@ -478,7 +520,11 @@ export default function CustomerReport({ author }: { author: string }) {
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-[11px] font-black text-slate-400">문안 — 바로 수정할 수 있습니다 ({"{업체명}"} {"{기간}"} {"{링크}"} 자동 치환)</span>
-                    <button type="button" onClick={() => { setSmsBody(DEFAULT_REPORT_SMS); try { localStorage.removeItem(REPORT_SMS_KEY); } catch { /* 무시 */ } }} className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">기본 문구</button>
+                    <span className="flex items-center gap-1.5">
+                      {smsSavedNote && <span className="text-[10px] font-black text-emerald-600">{smsSavedNote}</span>}
+                      <button type="button" disabled={smsSaving} onClick={() => void saveSmsBody()} className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[10px] font-black text-white hover:bg-slate-800 disabled:opacity-40">{smsSaving ? "저장 중…" : "공용 저장"}</button>
+                      <button type="button" onClick={() => { setSmsBody(DEFAULT_REPORT_SMS); try { localStorage.removeItem(REPORT_SMS_KEY); } catch { /* 무시 */ } }} className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">기본 문구</button>
+                    </span>
                   </div>
                   <textarea value={smsBody} onChange={(e) => { setSmsBody(e.target.value); try { localStorage.setItem(REPORT_SMS_KEY, e.target.value); } catch { /* 무시 */ } }} rows={9}
                     className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700 outline-none focus:border-blue-500" />

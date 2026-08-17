@@ -58,6 +58,7 @@ function doGet(e) {
     else if (action === 'quizgen') result = copierQuizGen_(e.parameter.date, e.parameter.brand);   // 복합기 데일리 퀴즈 AI 생성 (일·브랜드별 1회 캐시)
     else if (action === 'quizbank') result = copierQuizBank_(e.parameter.brand);   // 복합기 자유연습 문제은행 적립
     else if (action === 'photoarchive') result = photoArchiveRun_(e.parameter.limit, e.parameter.days);   // 오래된 사진 → 이 계정 드라이브 이관 (엣지/크론 경유)
+    else if (action === 'reportview') return reportViewHtml_(e.parameter.f, e.parameter.v);   // 고객 리포트 뷰어 (문자 링크 → 흰 배경 HTML — 스토리지·엣지는 HTML 서빙 불가)
     else result = { error: 'Invalid action: ' + action };
   } catch (err) {
     result = { error: err.toString() };
