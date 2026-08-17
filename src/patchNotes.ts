@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "828350d68d",
+    "date": "2026-08-17",
+    "note": "조회탭 접수를 하나로 — 이름 '접수' + 유형 칩(복합기/IT/원격)"
+  },
+  {
     "hash": "cd9b98dc01",
     "date": "2026-08-17",
     "note": "분기 안내 '저장 안 됨' 진짜 원인 수리 — 탭 복귀 시 저장 문구 자동 적용"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "059e25ba35",
     "date": "2026-08-01",
     "note": "조회 범용 화면을 미수 보드 스타일로 + #N/A 표시 정리"
-  },
-  {
-    "hash": "7e49a3314b",
-    "date": "2026-08-01",
-    "note": "조회가 미수·초과료·재고 보드를 흡수 + 부서 요청 대상 지정"
   }
 ];

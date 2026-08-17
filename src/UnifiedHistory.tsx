@@ -39,6 +39,27 @@ const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자
 const REGION_KEYS = ["지역", "미팅지역", "시/구", "region"];
 const ALBUM_RX = /https?:\/\/\S*[?&]album=[\w-]+/;
 
+// 상세 펼침에서 위에 크게 보여줄 분류별 중요 필드 — 나머지는 "그 외 정보"로 접는다
+const PRIORITY_FIELDS: Record<string, string[]> = {
+  점검: ["처리내용", "내용", "매수", "토너잔량", "여분", "폐통", "모델명", "자산기번", "특이사항"],
+  AS: ["내용", "처리내용", "모델명", "자산기번", "매수", "특이사항"],
+  접수: ["type", "symptom", "status", "model", "serial", "asset_no", "address", "author"],
+  초과: ["합계", "컬러초과료", "흑백초과료", "접수내용", "제안", "고객반응", "진행상태", "특이사항"],
+  미수: ["미수잔액", "미수개월", "실제 잔액", "실제 개월수", "입금약속일", "방문내용", "고객반응"],
+  불만: ["불만내용", "불편내용", "조치내용", "고객요청사항", "현장고객반응", "최종상태"],
+  재계약: ["진행상황", "내용", "결과", "제안조건", "갱신상태", "계약종료일"],
+  복합기확장성: ["프로젝트", "관심품목(세분화)", "진행상황(원문)", "특이사항"],
+  PC확장성: ["세부사양", "수량", "금액", "시기", "포인트"],
+  업체정보: ["품목", "제조사", "모델명", "기종", "자산번호", "순번", "계약일", "종료일", "임대여부"],
+};
+const FIELD_LABELS: Record<string, string> = {
+  type: "구분", symptom: "증상", status: "상태", model: "모델", serial: "시리얼", asset_no: "자산번호",
+  address: "주소", author: "접수자", receipt_date: "접수일", paid: "유상", lease_no: "순번",
+  completed_at: "완료시각", completed_by: "처리자", region: "지역", title: "제목", notes: "메모", route: "경로",
+};
+const fieldLabel = (key: string) => FIELD_LABELS[key] || key;
+const junkValue = (value: string) => /^[ㅡ_\-\s.]*$/.test(value) || value === "0" || value === "false";
+
 type SummaryField = { key: string; value: string };
 
 function pick(rec: Record<string, unknown>, keys: string[]): { key: string; val: string } {
@@ -98,10 +119,6 @@ function recordRegionCode(rec: Record<string, unknown>, hits: VendorHit[]) {
   if (REGIONS.includes(fallback)) return fallback;
   const groupRegions = Array.from(new Set(hits.map(primaryRegion).filter((region) => REGIONS.includes(region))));
   return groupRegions.length === 1 ? groupRegions[0] : "기타";
-}
-
-function latestRecord(cat: string, rows: Array<Record<string, unknown>>) {
-  return [...rows].sort((left, right) => recordDateRaw(cat, right).localeCompare(recordDateRaw(cat, left)))[0];
 }
 
 function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: string) => void }) {
@@ -368,18 +385,17 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         </div>}
       </div>
 
-      {!loading && detail && broaderQuery && <div className="border-b border-slate-100 bg-white px-3 py-2 sm:px-5">
-        <button type="button" onClick={() => selectNewVendor(broaderQuery)} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-100">
-          🔍 "{broaderQuery}"(으)로 넓게 보기 — 같은 이름을 쓰는 다른 법인·지점까지
-        </button>
-      </div>}
       {!loading && detail && <section className="border-b border-slate-200 bg-white">
-        <div className="grid grid-cols-3 divide-x divide-slate-200">
-          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">통합 이름</div><div className="mt-1 text-base font-black text-slate-950">{includedHits.length}개</div></div>
-          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">현재 기록</div><div className="mt-1 text-base font-black text-slate-950">{totalCount}건</div></div>
-          <div className="px-3 py-3 sm:px-5"><div className="text-[10px] font-black text-slate-400">최근 기록</div><div className="mt-1 truncate text-sm font-black text-slate-950">{latestDate}</div></div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:px-5">
+          <span className="text-[11px] font-bold text-slate-500">기록 <b className="text-[13px] text-slate-900">{totalCount}</b>건 · 최근 <b className="text-slate-900">{latestDate}</b>{includedHits.length > 1 ? <> · 통합 이름 <b className="text-slate-900">{includedHits.length}</b>개</> : null}</span>
+          {broaderQuery && <button type="button" onClick={() => selectNewVendor(broaderQuery)} className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-700 transition hover:bg-blue-100" title="같은 이름을 쓰는 다른 법인·지점까지 함께 검색">🔍 "{broaderQuery}" 넓게 보기</button>}
+          {(includedHits.length > 1 || historyRegionTabs.length > 2) && (
+            <button type="button" onClick={() => setScopeOpen(!scopeOpen)} className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
+              범위 · {historyRegion === "전체" ? "전체" : historyRegion}{historyVendor !== "전체" ? " · 이름 1개" : ""}
+              <ChevronDown size={13} className={`transition ${scopeOpen ? "rotate-180" : ""}`} />
+            </button>
+          )}
         </div>
-        <button type="button" onClick={() => setScopeOpen(!scopeOpen)} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-left sm:px-5"><Building2 size={16} className="text-slate-500" /><span className="flex-1 text-xs font-black text-slate-700">조회 범위</span><span className="text-[10px] font-bold text-slate-400">{historyRegion === "전체" ? "전체 지역" : `${historyRegion} ${REGION_LABEL[historyRegion] || ""}`} · {historyVendor === "전체" ? "전체 이름" : historyVendor}</span><ChevronDown size={16} className={`text-slate-400 transition ${scopeOpen ? "rotate-180" : ""}`} /></button>
         {scopeOpen && <div className="space-y-3 border-t border-slate-100 bg-slate-50 px-3 py-3 sm:px-5">
           <div><div className="mb-1.5 text-[10px] font-black text-slate-400">지역</div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{historyRegionTabs.map((region) => <button key={region} type="button" onClick={() => { setHistoryRegion(region); setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyRegion === region ? "text-white" : "border border-slate-200 bg-white text-slate-600"}`} style={historyRegion === region ? { background: accent } : undefined}>{REGION_LABEL[region] ? `${region} ${REGION_LABEL[region]}` : region}<span className="ml-1 opacity-70">{region === "전체" ? allRows.length : regionCounts[region] || 0}</span></button>)}</div></div>
           <div><div className="mb-1.5 text-[10px] font-black text-slate-400">포함된 거래처 이름</div><div className="flex gap-1.5 overflow-x-auto pb-0.5"><button type="button" onClick={() => { setHistoryVendor("전체"); setActiveCat("전체"); }} className={`shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black ${historyVendor === "전체" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>전체 이름</button>{visibleAliases.map((hit) => {
@@ -392,9 +408,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
 
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-5">
         <button type="button" onClick={() => setActiveCat("전체")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${activeCat === "전체" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>요약 {totalCount || ""}</button>
-        {CAT_ORDER.map((cat) => {
+        {CAT_ORDER.filter((cat) => rowsForCategory(cat).length > 0).map((cat) => {
           const count = rowsForCategory(cat).length;
-          return <button key={cat} type="button" disabled={!count} onClick={() => setActiveCat(cat)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${activeCat === cat ? "text-white" : count ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-300"}`} style={activeCat === cat ? { background: accent } : undefined}>{CAT_SHORT[cat]}{count ? ` ${count}` : ""}</button>;
+          return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${activeCat === cat ? "text-white" : "bg-slate-100 text-slate-700"}`} style={activeCat === cat ? { background: accent } : undefined}>{CAT_SHORT[cat]} {count}</button>;
         })}
       </nav>
 
@@ -445,24 +461,31 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             {quarterCheck.latest && <div className="truncate border-t border-slate-100 bg-slate-50/50 px-4 py-2 text-[11px] font-semibold text-slate-500" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}${quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}{quarterCheck.previous ? ` ｜ 전전 ${quarterCheck.previous.date} — 매수 ${quarterCheck.previous.counts || "-"}` : ""}</div>}
           </section>;
         })()}
-        {!loading && detail && activeCat === "전체" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950">업무별 현황</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">선택한 지역과 거래처 이름에 해당하는 최근 기록입니다.</p></div>
-          <div className="divide-y divide-slate-100">{CAT_ORDER.map((cat) => {
-            const rows = rowsForCategory(cat);
-            if (!rows.length) return null;
-            const latest = latestRecord(cat, rows);
-            const who = pick(latest, WHO_KEYS);
-            const region = recordRegionCode(latest, includedHits);
-            const vendorName = recordVendor(latest) || queryVendor;
-            const summary = recordSummary(cat, latest, [who.key, ...REGION_KEYS]);
-            const preview = summary.fields.slice(0, 2).map((field) => `${field.key} ${field.value.replace(/\s+/g, " ")}`).join(" · ");
-            return <button key={cat} type="button" onClick={() => setActiveCat(cat)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"><span className="flex h-9 min-w-[52px] shrink-0 items-center justify-center rounded-xl bg-slate-100 px-2 text-xs font-black text-slate-700">{CAT_SHORT[cat]}</span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-black text-slate-950">{CAT_SHORT[cat]}</span><span className="text-[11px] font-black text-blue-600">{rows.length}건</span>{cat === "접수" && (() => {
-                const countOf = (t: string) => rows.filter((r) => String(r["type"] || "") === t).length;
-                const parts = [countOf("복합기 AS") ? `AS ${countOf("복합기 AS")}` : "", countOf("원격이관") ? `원격 ${countOf("원격이관")}` : "", countOf("IT") ? `IT ${countOf("IT")}` : ""].filter(Boolean).join(" · ");
-                return parts ? <span className="text-[10px] font-bold text-slate-400">({parts})</span> : null;
-              })()}</span><span className="mt-0.5 block truncate text-xs font-bold text-slate-600">{vendorName}</span><span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{summary.date || "날짜 없음"} · {region}{who.val ? ` · ${who.val}` : ""}{preview ? ` · ${preview}` : ""}</span></span><ChevronRight size={17} className="shrink-0 text-slate-300" /></button>;
-          })}{totalCount === 0 && <div className="py-12 text-center text-sm font-semibold text-slate-400">선택한 범위에 이력이 없습니다.</div>}</div>
-        </section>}
+        {!loading && detail && activeCat === "전체" && (() => {
+          // 분류별 "최신 1건" 나열 대신, 모든 분류를 합친 최근 활동 타임라인 — 무슨 일이 있었는지가 한 흐름으로 읽힌다
+          const CAT_TONE: Record<string, string> = { 접수: "bg-blue-50 text-blue-700", 점검: "bg-emerald-50 text-emerald-700", AS: "bg-indigo-50 text-indigo-700", 초과: "bg-amber-50 text-amber-800", 미수: "bg-rose-50 text-rose-700", 불만: "bg-red-50 text-red-700", 복합기확장성: "bg-slate-100 text-slate-600", PC확장성: "bg-slate-100 text-slate-600" };
+          const recent = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => {
+            const date = displayDate(recordDateRaw(cat, record));
+            const summary = recordSummary(cat, record, [...REGION_KEYS]);
+            const preview = summary.fields.slice(0, 2).map((field) => field.value.replace(/\s+/g, " ")).join(" · ");
+            return { cat, date, preview, vendorName: recordVendor(record) || "" };
+          })).filter((item) => item.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+          return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5"><h3 className="text-sm font-black text-slate-950">최근 활동</h3><span className="text-[10px] font-bold text-slate-400">누르면 그 분류의 전체 기록이 열립니다</span></div>
+            <div className="divide-y divide-slate-50">
+              {recent.map((item, index) => (
+                <button key={`${item.cat}-${item.date}-${index}`} type="button" onClick={() => setActiveCat(item.cat)} className="flex w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-slate-50">
+                  <span className="w-16 shrink-0 text-[11px] font-black tabular-nums text-slate-500">{item.date.slice(2)}</span>
+                  <span className={`w-12 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-black ${CAT_TONE[item.cat] || "bg-slate-100 text-slate-600"}`}>{CAT_SHORT[item.cat]}</span>
+                  {includedHits.length > 1 && item.vendorName && <span className="w-28 shrink-0 truncate text-[11px] font-bold text-slate-400">{item.vendorName}</span>}
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-700" title={item.preview}>{item.preview || "-"}</span>
+                  <ChevronRight size={14} className="shrink-0 text-slate-300" />
+                </button>
+              ))}
+              {!recent.length && <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다 — 검색어를 줄이거나 "넓게 보기"를 눌러 보세요.</div>}
+            </div>
+          </section>;
+        })()}
 
         {!loading && detail && activeCat !== "전체" && <section className="space-y-2">
           <div className="flex items-end justify-between px-1 pb-1"><div><h3 className="text-sm font-black text-slate-950">{CAT_SHORT[activeCat]} 이력</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-500">최신순 · 항목을 누르면 전체 내용이 열립니다.</p></div><span className="text-xs font-black text-slate-500">{visibleRecords.length}건</span></div>
@@ -486,7 +509,36 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 <ChevronDown size={17} className="shrink-0 text-slate-400 transition group-open:rotate-180" />
               </summary>
               <div className="border-t border-slate-200 bg-slate-50">
-                <div className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map((field, fieldIndex) => <div key={`${field.key}-${fieldIndex}`} className={`bg-white px-3 py-2.5 ${field.value.length > 48 || field.value.includes("\n") ? "sm:col-span-2" : ""}`}><div className="text-[10px] font-black text-slate-400">{field.key}</div><div className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">{field.value}</div></div>)}{!fields.length && <div className="bg-white px-3 py-5 text-center text-xs font-semibold text-slate-400 sm:col-span-2">표시할 상세 내용이 없습니다.</div>}</div>
+                {(() => {
+                  const clean = fields.filter((field) => !junkValue(field.value));
+                  const priority = PRIORITY_FIELDS[activeCat] || [];
+                  const mains = priority.map((key) => clean.find((field) => field.key === key)).filter((field): field is SummaryField => !!field);
+                  const rest = clean.filter((field) => !priority.includes(field.key));
+                  return <>
+                    <div className="divide-y divide-slate-100 bg-white px-4">
+                      {mains.map((field) => (
+                        <div key={field.key} className="flex gap-3 py-2.5">
+                          <span className="w-16 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{fieldLabel(field.key)}</span>
+                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-bold leading-6 text-slate-800">{field.value}</span>
+                        </div>
+                      ))}
+                      {!mains.length && !rest.length && <div className="py-5 text-center text-xs font-semibold text-slate-400">표시할 상세 내용이 없습니다.</div>}
+                    </div>
+                    {rest.length > 0 && (
+                      <details className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
+                        <summary className="cursor-pointer text-[11px] font-black text-slate-400 hover:text-slate-600">그 외 정보 {rest.length}개 보기</summary>
+                        <div className="grid gap-x-6 gap-y-2 py-2 sm:grid-cols-2">
+                          {rest.map((field, fieldIndex) => (
+                            <div key={`${field.key}-${fieldIndex}`} className="min-w-0">
+                              <div className="text-[10px] font-black text-slate-400">{fieldLabel(field.key)}</div>
+                              <div className="whitespace-pre-wrap break-words text-[12px] font-semibold leading-5 text-slate-600">{field.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </>;
+                })()}
                 <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-[10px] font-bold text-slate-500"><Clock3 size={13} />{date || "날짜 없음"}<span>·</span><Building2 size={13} />{vendorName}{album && <a href={album} target="_blank" rel="noreferrer" className="ml-auto rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-white">사진·영상 보기</a>}</div>
               </div>
             </details>;
