@@ -14,13 +14,22 @@ type CopierNote = {
   kind: "학습" | "처리이력"; title: string; content: string;
 };
 
-// 족보 카드 — 시리즈×증상 단위의 정제 지식 (원인 TOP N + 처리 절차). AI 초안 → 사람 검토 → 게시.
+/**
+ * 족보 카드 — 시리즈×증상 단위의 정제 지식 (원인 TOP N + 처리 절차).
+ *
+ * 카드는 만들어진 순간부터 팀 전원에게 보인다(감추지 않는다 — 감춰두면 아무도 안 고친다).
+ * 다만 "AI가 정리했을 뿐 아무도 확인 안 한 카드"와 "현장에서 맞다고 확인된 카드"는 구분한다:
+ * confirmed_by에 확인한 사람 이름이 쌓이고, 카드는 그 인원수를 배지로 보여준다.
+ * 확인은 한 번 탭 — 한 사람이 100장을 검수하는 대신, 쓰는 사람이 쓰면서 확인해 준다.
+ */
 type PlaybookCause = { cause: string; share: string; steps: string[]; parts: string[] };
 type PlaybookCard = {
   id: string; brand: string; series: string; symptom: string; title: string; summary: string;
-  causes: PlaybookCause[]; tips: string; case_count: number; status: string; author: string; source?: string; created_at: string; updated_at?: string;
+  causes: PlaybookCause[]; tips: string; case_count: number; status: string; author: string;
+  confirmed_by?: string[]; source?: string; created_at: string; updated_at?: string;
 };
-const BLANK_CARD: PlaybookCard = { id: "", brand: "삼성", series: "", symptom: "급지·걸림", title: "", summary: "", causes: [{ cause: "", share: "높음", steps: [], parts: [] }], tips: "", case_count: 0, status: "초안", author: "", created_at: "" };
+const BLANK_CARD: PlaybookCard = { id: "", brand: "삼성", series: "", symptom: "급지·걸림", title: "", summary: "", causes: [{ cause: "", share: "높음", steps: [], parts: [] }], tips: "", case_count: 0, status: "초안", author: "", confirmed_by: [], created_at: "" };
+const confirmersOf = (c: PlaybookCard) => (Array.isArray(c.confirmed_by) ? c.confirmed_by.filter(Boolean) : []);
 const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700", 보통: "bg-amber-100 text-amber-700", 낮음: "bg-slate-100 text-slate-500" };
 
 // 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
@@ -206,7 +215,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [jkQuery, setJkQuery] = useState("");
   const [jkBrand, setJkBrand] = useState("전체");
   const [jkSymptom, setJkSymptom] = useState("전체");
-  const [jkStatus, setJkStatus] = useState<"전체" | "게시" | "초안">("전체");
+  const [jkStatus, setJkStatus] = useState<"전체" | "확인됨" | "미확인">("전체");
   const [jkOpen, setJkOpen] = useState<PlaybookCard | null>(null);
   const [jkDraft, setJkDraft] = useState<PlaybookCard | null>(null); // 수정/새 카드 편집 버퍼
   const [jkBusy, setJkBusy] = useState(false);
@@ -484,10 +493,10 @@ export default function CopierNotes({ author }: { author: string }) {
         const filtered = cards.filter((c) =>
           (jkBrand === "전체" || c.brand === jkBrand) &&
           (jkSymptom === "전체" || c.symptom === jkSymptom) &&
-          (jkStatus === "전체" || c.status === jkStatus) &&
+          (jkStatus === "전체" || (jkStatus === "확인됨" ? confirmersOf(c).length > 0 : confirmersOf(c).length === 0)) &&
           (!tokens.length || tokens.every((t) => norm(`${c.brand} ${c.series} ${c.symptom} ${c.title} ${c.summary} ${c.causes.map((x) => `${x.cause} ${x.steps.join(" ")} ${x.parts.join(" ")}`).join(" ")}`).includes(t))));
         const cardBrands = ["전체", ...Array.from(new Set(cards.map((c) => c.brand)))];
-        const published = cards.filter((c) => c.status === "게시").length;
+        const published = cards.filter((c) => confirmersOf(c).length > 0).length;
         return (
           <div className="space-y-3">
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -501,7 +510,7 @@ export default function CopierNotes({ author }: { author: string }) {
                   </label>
                   <div className="ml-auto flex flex-wrap items-center gap-1.5">
                     <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">카드 <b className="tabular-nums text-white">{filtered.length}</b></span>
-                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">확인됨 <b className="tabular-nums text-emerald-300">{published}</b> · 검토 전 <b className="tabular-nums text-amber-300">{cards.length - published}</b></span>
+                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">현장 확인 <b className="tabular-nums text-emerald-300">{published}</b> · 미확인 <b className="tabular-nums text-slate-300">{cards.length - published}</b></span>
                   </div>
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -516,7 +525,7 @@ export default function CopierNotes({ author }: { author: string }) {
                     ))}
                   </select>
                   <select value={jkStatus} onChange={(e) => setJkStatus(e.target.value as typeof jkStatus)} className={darkSelect(jkStatus !== "전체")}>
-                    {["전체", "게시", "초안"].map((name) => <option key={name} value={name}>{name === "전체" ? "상태 전체" : name === "게시" ? "확인됨(게시)" : "검토 전(AI 초안)"}</option>)}
+                    {(["전체", "확인됨", "미확인"] as const).map((name) => <option key={name} value={name}>{name === "전체" ? "확인 여부 전체" : name === "확인됨" ? "현장 확인됨" : "아직 확인 안 됨"}</option>)}
                   </select>
                   <button type="button" onClick={() => setJkDraft({ ...BLANK_CARD, causes: [{ cause: "", share: "높음", steps: [], parts: [] }] })}
                     className="ml-auto rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 카드 작성</button>
@@ -532,7 +541,9 @@ export default function CopierNotes({ author }: { author: string }) {
                       className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{card.brand}</span>
-                        {card.status === "초안" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">AI 초안 · 검토 전</span>}
+                        {confirmersOf(card).length > 0
+                          ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700" title={confirmersOf(card).join(", ")}>✓ {confirmersOf(card).length}명 확인</span>
+                          : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">AI 정리 · 미확인</span>}
                         <span className="ml-auto text-[11px] font-bold tabular-nums text-slate-400">사례 {card.case_count.toLocaleString()}건</span>
                       </div>
                       <div className="mt-2 text-[17px] font-black leading-6 text-slate-950">{card.title}</div>
@@ -556,7 +567,9 @@ export default function CopierNotes({ author }: { author: string }) {
                   <span className="flex flex-col gap-1.5">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black text-white">{jkOpen.brand}</span>
-                      {jkOpen.status === "초안" && <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-black text-amber-950">AI 초안 · 아직 사람이 확인하지 않음</span>}
+                      {confirmersOf(jkOpen).length > 0
+                        ? <span className="rounded-full bg-emerald-400/90 px-2 py-0.5 text-[10px] font-black text-emerald-950">✓ 현장 확인 — {confirmersOf(jkOpen).join(", ")}</span>
+                        : <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black text-slate-200">AI 정리 · 아직 아무도 확인 안 함 — 맞으면 아래에서 확인 눌러주세요</span>}
                     </span>
                     <span className="text-base leading-snug">{jkOpen.title}</span>
                   </span>
@@ -568,16 +581,20 @@ export default function CopierNotes({ author }: { author: string }) {
                   <button type="button" onClick={() => openCases(jkOpen)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">사례 {jkOpen.case_count.toLocaleString()}건 보기</button>
                   <button type="button" onClick={() => setJkDraft({ ...jkOpen, causes: jkOpen.causes.map((c) => ({ ...c })) })} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">✎ 수정</button>
                   <button type="button" disabled={jkBusy} onClick={() => { void (async () => {
+                    if (!author) { notify("우측 상단에서 본인 이름을 먼저 선택하세요.", "error"); return; }
                     setJkBusy(true);
-                    const next = jkOpen.status === "게시" ? "초안" : "게시";
+                    const list = confirmersOf(jkOpen);
+                    const mine = list.includes(author);
+                    const next = mine ? list.filter((n) => n !== author) : [...list, author];
                     try {
-                      await updateRows("copier_playbook", `id=eq.${jkOpen.id}`, { status: next, author: next === "게시" ? (author || jkOpen.author) : jkOpen.author, updated_at: new Date().toISOString() });
-                      notify(next === "게시" ? "게시했습니다 — 팀 모두에게 보입니다 ✓" : "초안으로 되돌렸습니다");
-                      setJkOpen(null); setPlaybook(null);
-                    } catch (e) { notify(`상태 변경 실패: ${(e as Error).message}`, "error"); } finally { setJkBusy(false); }
+                      await updateRows("copier_playbook", `id=eq.${jkOpen.id}`, { confirmed_by: next, status: next.length ? "게시" : "초안", updated_at: new Date().toISOString() });
+                      notify(mine ? "확인을 취소했습니다" : "확인 표시했습니다 — 이 카드는 현장에서 검증된 내용으로 표시됩니다 ✓", mine ? "success" : "success");
+                      setJkOpen({ ...jkOpen, confirmed_by: next });
+                      setPlaybook((cur) => (cur ? cur.map((c) => (c.id === jkOpen.id ? { ...c, confirmed_by: next } : c)) : cur));
+                    } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); } finally { setJkBusy(false); }
                   })(); }}
-                    className={`rounded-full px-6 py-2 text-xs font-black text-white transition ${jkOpen.status === "게시" ? "bg-slate-500 hover:bg-slate-600" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                    {jkOpen.status === "게시" ? "검토 전으로 되돌리기" : "✓ 내용 맞음 — 팀에 게시"}
+                    className={`rounded-full px-6 py-2 text-xs font-black text-white transition ${confirmersOf(jkOpen).includes(author) ? "bg-slate-500 hover:bg-slate-600" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                    {confirmersOf(jkOpen).includes(author) ? "확인 취소" : "👍 내용 맞음 — 확인"}
                   </button>
                 </>}>
                 <div className="space-y-3">
@@ -925,7 +942,7 @@ export default function CopierNotes({ author }: { author: string }) {
             && (model === "전체" || c.series === model)
             && (symptomFilter === "전체" || c.symptom === symptomFilter)
             && (!tokens.length || tokens.every((t) => hay(c).includes(t.replace(/\s/g, "")))))
-            .sort((a, b) => (a.status === b.status ? b.case_count - a.case_count : a.status === "게시" ? -1 : 1))
+            .sort((a, b) => (confirmersOf(b).length - confirmersOf(a).length) || (b.case_count - a.case_count))
             .slice(0, 3);
           if (!hits.length) return null;
           return (
@@ -937,7 +954,7 @@ export default function CopierNotes({ author }: { author: string }) {
                     className="flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-slate-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50">
                     <span>{card.title}</span>
                     <span className="text-[10px] font-bold text-slate-400">원인 {card.causes.length}개 · 사례 {card.case_count.toLocaleString()}건</span>
-                    {card.status === "초안" && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9.5px] font-black text-amber-700">초안</span>}
+                    {confirmersOf(card).length > 0 && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-black text-emerald-700">✓{confirmersOf(card).length}</span>}
                   </button>
                 ))}
               </div>

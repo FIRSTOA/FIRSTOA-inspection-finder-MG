@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "e6bf049a4a",
+    "date": "2026-08-17",
+    "note": "3층 구조 정리 — 기록/족보/가이드 순 + 족보에서 가이드로 연결"
+  },
+  {
     "hash": "be43e27797",
     "date": "2026-08-17",
     "note": "기록 탭 상단에 족보 추천 — 사례를 다 읽기 전에 정제된 답부터"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e405d5c811",
     "date": "2026-08-02",
     "note": "원격 탭도 임대리스트 직접 조회로 값 기입 — 재계산 의존(계산-고정) 방식 폐기"
-  },
-  {
-    "hash": "ec0d99b2e1",
-    "date": "2026-08-02",
-    "note": "원격 값 고정 안전화 — 재계산 전 빈 값을 고정해 수식이 소실되던 사고 수정"
   }
 ];
