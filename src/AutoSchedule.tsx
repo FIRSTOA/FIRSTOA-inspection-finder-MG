@@ -351,13 +351,16 @@ export default function AutoSchedule({ author }: { author: string }) {
                     <span className="mt-1 block space-y-0.5">
                       {group.members.map((m: Place) => {
                         const eq = parseEquipComment(m.comment);
-                        const latest = m.last_date ? { date: m.last_date, counts: m.last_pages || "", toner: m.last_toner || "", spare: m.last_spare || "", waste: m.last_waste || "", serial: m.last_serial || "" } : undefined;
-                        const previous = m.prev_date ? { date: m.prev_date, counts: m.prev_pages || "", toner: "", spare: "", serial: m.prev_serial || "" } : undefined;
-                        const advice = usageSpareAdvice(latest, previous, eq.model);
+                        // 코드 묶음의 이력은 그룹 공통이라 그대로 뿌리면 같은 사용량이 전 기기에 복제된다
+                        // — 최근 기록의 기번·시리얼과 이 기기가 일치할 때만 그 기기의 수치로 보여준다
+                        const mine = !!eq.serial && !!m.last_serial && (eq.serial.replace(/[^0-9a-z]/gi, "").toLowerCase() === String(m.last_serial).replace(/[^0-9a-z]/gi, "").toLowerCase());
+                        const latest = mine && m.last_date ? { date: m.last_date, counts: m.last_pages || "", toner: m.last_toner || "", spare: m.last_spare || "", waste: m.last_waste || "", serial: m.last_serial || "" } : undefined;
+                        const previous = mine && m.prev_date ? { date: m.prev_date, counts: m.prev_pages || "", toner: "", spare: "", serial: m.prev_serial || "" } : undefined;
+                        const advice = latest ? usageSpareAdvice(latest, previous, eq.model) : null;
                         return <span key={m.id} className="block truncate text-[10px] font-semibold text-slate-500">
                           <span className="rounded bg-slate-100 px-1 py-0.5 font-bold text-slate-600">{memberTail(group, m)}</span>
                           {eq.model && <span className="ml-1">{eq.model}{eq.serial ? `/${eq.serial}` : ""}</span>}
-                          {m.last_date && <span className="ml-1 text-slate-400">마지막 {m.last_date.slice(2)}</span>}
+                          {mine && m.last_date && <span className="ml-1 text-slate-400">마지막 {m.last_date.slice(2)}</span>}
                           {advice?.usageLine && <span className="ml-1 font-bold text-blue-600">📈 {advice.usageLine.replace(/^.*\(/, "").replace(/\)$/, "")}</span>}
                           {advice?.adviceLine && !/기록 없음/.test(advice.adviceLine) && <span className="ml-1 font-bold text-emerald-700">🧰 {advice.adviceLine.replace(/\s*\(.+\)\s*$/, "")}</span>}
                         </span>;
