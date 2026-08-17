@@ -367,20 +367,27 @@ export default function CopierNotes({ author }: { author: string }) {
   };
 
 
+  // 상단 다크 헤더 공통부 — 제목 + 기록/가이드 전환 (두 뷰가 같은 지붕을 쓴다)
+  const headerTop = (
+    <div className="flex flex-wrap items-center gap-3 bg-[#1E252F] px-5 pb-3.5 pt-4">
+      <div className="min-w-0">
+        <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 실전 가이드 — 팀의 복합기 기술 저장소</p>
+      </div>
+      <div className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-1">
+        {([["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setView(key)}
+            className={`rounded-full px-4 py-1.5 text-xs font-black transition ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
+        ))}
+      </div>
+    </div>
+  );
+  // 다크 헤더용 드롭다운 — 칩 수십 개 대신 접힌 필터. 선택되면 파란 배경으로 "걸려 있음"을 표시
+  const darkSelect = (active: boolean) =>
+    `max-w-[46vw] rounded-full px-3 py-1.5 text-xs font-black outline-none transition [&>option]:bg-white [&>option]:font-bold [&>option]:text-slate-900 ${active ? "bg-blue-600 text-white" : "bg-white/[0.08] text-slate-300 hover:bg-white/[0.14]"}`;
+
   return (
     <div className="space-y-4 pb-16">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="bg-[#1E252F] px-5 py-4">
-          <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 실전 가이드를 쌓아 팀의 복합기 기술을 지킵니다.</p>
-        </div>
-        <div className="flex overflow-x-auto">
-          {([["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setView(key)}
-              className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
-          ))}
-        </div>
-      </section>
       {view === "guide" && (() => {
         const list = guides || [];
         const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
@@ -401,42 +408,33 @@ export default function CopierNotes({ author }: { author: string }) {
         return (
           <div className="space-y-3">
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              {/* 다크 검색바 */}
-              <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
-                <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-full bg-white/[0.08] px-4 py-2 transition focus-within:bg-white/[0.14] sm:max-w-md">
-                  <span className="shrink-0 text-xs text-slate-500">🔍</span>
-                  <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목 · 요약 · 기종 · 부품 검색"
-                    className="min-w-0 flex-1 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500" />
-                </label>
-                <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">가이드 <b className="tabular-nums text-white">{filtered.length}</b></span>
-                <button type="button" onClick={() => openGuideEditor()} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 가이드 작성</button>
-              </div>
-              {/* 브랜드(건수) */}
-              <div className="flex flex-wrap gap-1 border-b border-slate-100 px-4 py-2.5">
-                {brands.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuideBrand(name)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${guideBrand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                    {name} <span className={`tabular-nums ${guideBrand === name ? "text-slate-400" : "text-slate-400"}`}>{brandCount(name)}</span>
-                  </button>
-                ))}
-              </div>
-              {/* 분류 + 난이도 */}
-              <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/50 px-4 py-2">
-                <span className="mr-0.5 text-[10px] font-black text-slate-400">분류</span>
-                {categories.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuideCategory(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guideCategory === name ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{name}</button>
-                ))}
-                <div className="ml-auto flex rounded-full bg-white p-0.5 ring-1 ring-slate-200">
-                  {["전체", "쉬움", "보통", "어려움"].map((name) => (
-                    <button key={name} type="button" onClick={() => setGuideDiff(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guideDiff === name ? "bg-slate-900 text-white" : "text-slate-500"}`}>{name}</button>
-                  ))}
+              {headerTop}
+              {/* 다크 필터부 — 칩 무더기 대신 접힌 드롭다운, 상단이 한 덩어리로 읽히게 */}
+              <div className="bg-[#151A23] px-5 pb-4 pt-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-full bg-white/[0.08] px-4 py-2.5 transition focus-within:bg-white/[0.16] sm:max-w-md">
+                    <span className="shrink-0 text-xs text-slate-500">🔍</span>
+                    <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목 · 요약 · 기종 · 부품 검색"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
+                  </label>
+                  <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">가이드 <b className="tabular-nums text-white">{filtered.length}</b></span>
+                  <button type="button" onClick={() => openGuideEditor()} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 가이드 작성</button>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  <select value={guideBrand} onChange={(e) => setGuideBrand(e.target.value)} className={darkSelect(guideBrand !== "전체")}>
+                    {brands.map((name) => <option key={name} value={name}>{name === "전체" ? `브랜드 전체 (${list.length})` : `${name} (${brandCount(name)})`}</option>)}
+                  </select>
+                  <select value={guideCategory} onChange={(e) => setGuideCategory(e.target.value)} className={darkSelect(guideCategory !== "전체")}>
+                    {categories.map((name) => <option key={name} value={name}>{name === "전체" ? "분류 전체" : name}</option>)}
+                  </select>
+                  {topParts.length > 1 && <select value={guidePart} onChange={(e) => setGuidePart(e.target.value)} className={darkSelect(guidePart !== "전체")}>
+                    {topParts.map((name) => <option key={name} value={name}>{name === "전체" ? "부품 전체" : name}</option>)}
+                  </select>}
+                  <select value={guideDiff} onChange={(e) => setGuideDiff(e.target.value)} className={darkSelect(guideDiff !== "전체")}>
+                    {["전체", "쉬움", "보통", "어려움"].map((name) => <option key={name} value={name}>{name === "전체" ? "난이도 전체" : name}</option>)}
+                  </select>
                 </div>
               </div>
-              {topParts.length > 1 && <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 py-2">
-                <span className="mr-0.5 text-[10px] font-black text-slate-400">부품</span>
-                {topParts.map((name) => (
-                  <button key={name} type="button" onClick={() => setGuidePart(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${guidePart === name ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
-                ))}
-              </div>}
               {guides === null && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
               {guides !== null && !filtered.length && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 가이드가 없어요 — 첫 가이드를 작성해 보세요.</div>}
               {filtered.length > 0 && <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -557,9 +555,10 @@ export default function CopierNotes({ author }: { author: string }) {
 
       {view === "notes" && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {/* 다크 히어로 — 검색이 주인공 */}
-        <div className="bg-[#151A23] px-5 pb-5 pt-5 text-center">
-          {stats && <div className="mb-3.5 flex flex-wrap justify-center gap-1.5">
+        {headerTop}
+        {/* 다크 히어로 — 통계·검색·필터가 한 블록. 칩 무더기는 드롭다운으로 접었다 */}
+        <div className="bg-[#151A23] px-5 pb-4 pt-4">
+          {stats && <div className="mb-3 flex flex-wrap justify-center gap-1.5">
             {([["전체", stats.total.toLocaleString()], ["학습", stats.learn.toLocaleString()], ["처리이력", stats.cases.toLocaleString()], ["이번 달", `+${stats.month.toLocaleString()}`]] as [string, string][]).map(([label, value]) => (
               <span key={label} className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">{label} <b className="tabular-nums text-white">{value}</b></span>
             ))}
@@ -576,44 +575,36 @@ export default function CopierNotes({ author }: { author: string }) {
               <button key={item} type="button" onClick={() => setQuery(item)} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14] hover:text-slate-200">{item}</button>
             ))}
           </div>}
-        </div>
-
-        {/* 브랜드 바 + 구분·정렬 + 기록 추가 */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2.5">
-          {["전체", ...BRAND_NAMES].map((name) => (
-            <button key={name} type="button" onClick={() => { setBrand(name); setModel("전체"); }}
-              className={`rounded-full px-3 py-1.5 text-xs font-black transition ${brand === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
-          ))}
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            <div className="flex rounded-full bg-slate-100 p-0.5">
-              {(["전체", "학습", "처리이력"] as const).map((value) => (
-                <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{value}</button>
-              ))}
+          {/* 필터 한 줄: 브랜드 ▾ (기종 ▾) 증상 ▾ ··· 구분 · 정렬 · 기록 추가 */}
+          <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+            <select value={brand} onChange={(e) => { setBrand(e.target.value); setModel("전체"); }} className={darkSelect(brand !== "전체")}>
+              <option value="전체">브랜드 전체</option>
+              {BRAND_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            {brand !== "전체" && (BRANDS[brand] || []).length > 0 && (
+              <select value={model} onChange={(e) => setModel(e.target.value)} className={darkSelect(model !== "전체")}>
+                <option value="전체">기종 전체</option>
+                {(BRANDS[brand] || []).map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            )}
+            <select value={symptomFilter} onChange={(e) => setSymptomFilter(e.target.value)} className={darkSelect(symptomFilter !== "전체")}>
+              <option value="전체">증상 전체</option>
+              {Object.keys(SYMPTOM_FILTERS).map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <div className="flex rounded-full bg-white/[0.08] p-0.5">
+                {(["전체", "학습", "처리이력"] as const).map((value) => (
+                  <button key={value} type="button" onClick={() => setKindFilter(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${kindFilter === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{value}</button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setOrder(order === "desc" ? "asc" : "desc")}
+                className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-white/[0.14] hover:text-white">
+                {order === "desc" ? "최신순 ↓" : "오래된순 ↑"}
+              </button>
+              <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }}
+                className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 기록 추가</button>
             </div>
-            <div className="flex rounded-full bg-slate-100 p-0.5">
-              {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setOrder(value)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${order === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>
-              ))}
-            </div>
-            <button type="button" onClick={() => { setWriteOpen(true); setDraft({ ...draft, brand: brand === "전체" ? "삼성" : brand, model: model === "전체" ? "" : model }); }}
-              className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">+ 기록 추가</button>
           </div>
-        </div>
-        {brand !== "전체" && (
-          <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50/50 px-4 py-2">
-            <span className="mr-0.5 self-center text-[10px] font-black text-slate-400">기종</span>
-            {["전체", ...(BRANDS[brand] || [])].map((name) => (
-              <button key={name} type="button" onClick={() => setModel(name)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${model === name ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{name}</button>
-            ))}
-          </div>
-        )}
-        {/* 증상 유형 — 기종 × 증상으로 1만 건을 수십 건까지 좁힌다 */}
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 py-2">
-          <span className="mr-0.5 text-[10px] font-black text-slate-400">증상</span>
-          {["전체", ...Object.keys(SYMPTOM_FILTERS)].map((name) => (
-            <button key={name} type="button" onClick={() => setSymptomFilter(name)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${symptomFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>
-          ))}
         </div>
 
         {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}

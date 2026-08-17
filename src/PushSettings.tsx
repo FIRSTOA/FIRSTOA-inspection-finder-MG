@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { BellRing } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
+import { invokeEdgeFunction } from "./supabase";
 import { PUSH_CATEGORIES, disablePush, enablePush, getPushPrefs, isPushOn, pushPermission, pushSupport, setPushPref, type PushCategory } from "./push";
 
 export default function PushSettings({ author }: { author: string }) {
@@ -16,6 +17,7 @@ export default function PushSettings({ author }: { author: string }) {
   const [busy, setBusy] = useState(false);
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [prefBusy, setPrefBusy] = useState<string>("");
+  const [testBusy, setTestBusy] = useState(false);
 
   const refresh = async () => {
     const support = pushSupport();
@@ -110,9 +112,29 @@ export default function PushSettings({ author }: { author: string }) {
         })}
       </div>
 
+      {state === "on" && (
+        <div className="border-t border-slate-100 px-5 py-3.5">
+          <button type="button" disabled={testBusy}
+            onClick={() => {
+              if (!author) { notify("작성자(본인)를 먼저 선택하세요.", "error"); return; }
+              setTestBusy(true);
+              void invokeEdgeFunction<{ sent?: number }>("push-send", {
+                title: "테스트 알림 🔔", body: "알림이 정상 작동합니다 — 이 기기(와 내 다른 기기)로 왔어요.", targets: [author], tag: "push-test",
+              }).then((r) => notify(r.sent ? `테스트 발송 완료 ✓ — 내 이름 구독 ${r.sent}개 기기로 보냈어요` : "발송했지만 내 이름으로 켜진 기기가 없어요 — 위에서 알림을 먼저 켜주세요", r.sent ? "success" : "error"))
+                .catch((e) => notify(`테스트 발송 실패: ${(e as Error).message}`, "error"))
+                .finally(() => setTestBusy(false));
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:text-slate-300">
+            {testBusy ? "발송 중…" : "📨 내 기기로 테스트 알림 보내기"}
+          </button>
+          <span className="ml-3 text-xs font-semibold text-slate-400">1~2초 안에 알림창에 떠야 정상입니다</span>
+        </div>
+      )}
+
       <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3 text-xs font-semibold leading-relaxed text-slate-500">
         알림은 <b className="text-slate-700">기기·브라우저 단위</b>예요 — PC와 폰 각각 켜야 하고, 켠 기기로만 옵니다.
-        내가 등록·처리한 건 나에게 오지 않아요. 알림음은 기기 기본음이며 폰 설정(사이트별 알림)에서 바꿀 수 있습니다.
+        <b className="text-slate-700"> 내가 등록·처리한 건 나에게 오지 않아요</b> (혼자 테스트할 땐 작성자를 다른 이름으로 바꿔 등록하거나 위 테스트 버튼 사용).
+        알림음은 기기 기본음이며 폰 설정(사이트별 알림)에서 바꿀 수 있습니다.
       </div>
     </section>
   );

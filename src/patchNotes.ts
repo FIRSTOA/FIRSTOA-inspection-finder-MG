@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ab8c7030be",
+    "date": "2026-08-17",
+    "note": "웹푸시 개선 — 접수는 지역 팀에게만 + 종류별 선택 + 설정을 관리 탭으로"
+  },
+  {
     "hash": "59737ec1cc",
     "date": "2026-08-17",
     "note": "웹푸시 알림 도입 — 접수·공지·부서요청·일정배정을 폰/PC 알림으로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4dbeaddd3a",
     "date": "2026-08-01",
     "note": "원격·IT 신규 양식에 추가대수·처리내용·연동완료 입력칸 추가 — 접수 시점에도 기입 가능 (처리 단계에서 갱신도 그대로 동작)"
-  },
-  {
-    "hash": "cc86635165",
-    "date": "2026-08-01",
-    "note": "복합기 완료 → 접수시트 BD열 기입 + 원격·IT 신규 직접 기입 지원"
   }
 ];
