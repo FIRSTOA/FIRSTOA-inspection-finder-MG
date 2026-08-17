@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ebd017b958",
+    "date": "2026-08-17",
+    "note": "익명 권한 원칙 문서화 (misu·overage 숨김 3컬럼 축소 반영)"
+  },
+  {
+    "hash": "b92dec1c8c",
+    "date": "2026-08-17",
+    "note": "고객 리포트 2단계 — 수신자 관리(키맨 추천+직접 추가)·이미지 링크 문자 발송(확인 팝업 반검수)·발송 로그"
+  },
+  {
     "hash": "46a9c40c83",
     "date": "2026-08-17",
     "note": "통합이력 상단 다크 통일·분기체크 라벨 그룹·타임라인 날짜 나열 + 자동일정 이력 매칭 3층(코드>키>접두) + 미수·초과 익명권한 축소 + 리포트 모바일 가로스크롤"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "33ec476cf0",
     "date": "2026-08-01",
     "note": "인원 관리를 ERP식 테이블형(A안)으로 재구축 — 팀별 구분행 포함"
-  },
-  {
-    "hash": "f9fa556ba0",
-    "date": "2026-08-01",
-    "note": "공지 리스트·인원 관리 재디자인 + 요청 처리 이력·양방향 알림"
-  },
-  {
-    "hash": "96cc32dfbc",
-    "date": "2026-08-01",
-    "note": "인원 관리 — 팀별 구분 표시 + 부서·팀·직책 수정 모달"
   }
 ];

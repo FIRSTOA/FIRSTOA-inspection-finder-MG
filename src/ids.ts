@@ -86,3 +86,39 @@ export function parseEquipComment(comment: string): { model: string; serial: str
   if (i < 0) return { model: t, serial: "" };
   return { model: t.slice(0, i).trim(), serial: t.slice(i + 1).trim() };
 }
+
+// ── 점검·AS 원문 블록 파서 ──────────────────────────────────────────
+// 한 방문 기록의 _원문에 기기 여러 대가 "ㅡㅡㅡ" 구분으로 들어 있다(푸드나무 5대).
+// 구조화 컬럼에는 첫 기기만 남아 대수·기기별 매수가 틀리므로, 원문을 기기 단위로 되살린다.
+export type InspBlock = { loc: string; model: string; serial: string; asset: string; content: string; handled: string; counts: string; toner: string; waste: string; spare: string; special: string };
+const INSP_KEY: Record<string, keyof InspBlock> = {
+  모델명: "model", 시리얼넘버: "serial", 시리얼: "serial", 자산기번: "asset", 내용: "content", 처리내용: "handled",
+  매수: "counts", 토너잔량: "toner", 폐통: "waste", 여분: "spare", 특이사항: "special",
+};
+export function parseInspectionBlocks(raw: string): InspBlock[] {
+  const lines = String(raw || "").replace(/\r/g, "").split("\n");
+  const out: InspBlock[] = [];
+  const fresh = (): InspBlock => ({ loc: "", model: "", serial: "", asset: "", content: "", handled: "", counts: "", toner: "", waste: "", spare: "", special: "" });
+  let cur: InspBlock | null = null;
+  let curField: keyof InspBlock | "" = "";
+  let pendingLoc = "";
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (/^[ㅡ―—=_\-]{3,}$/.test(line)) { if (cur) out.push(cur); cur = null; curField = ""; pendingLoc = ""; continue; }
+    const labeled = line.match(/^([가-힣A-Za-z]{2,8})\s*[:：]\s*(.*)$/);
+    const fieldKey = labeled ? INSP_KEY[labeled[1]] : undefined;
+    if (labeled && (fieldKey || /유무$/.test(labeled[1]))) {
+      // 구분선 없이 모델명이 또 나오면 새 기기 블록의 시작
+      if (fieldKey === "model" && cur && cur.model) { out.push(cur); cur = null; }
+      if (!cur) { cur = fresh(); cur.loc = pendingLoc; pendingLoc = ""; }
+      if (fieldKey) { cur[fieldKey] = labeled[2].trim(); curField = fieldKey; }
+      else curField = "";
+      continue;
+    }
+    if (!line) continue;
+    if (cur && curField) cur[curField] = cur[curField] ? `${cur[curField]}\n${line}` : line; // 처리내용·여분의 여러 줄 값
+    else if (!cur && line.length <= 12 && !/^\d+[.]?$/.test(line)) pendingLoc = line; // "4층", "지하1층" 같은 위치 머리글
+  }
+  if (cur) out.push(cur);
+  return out.filter((block) => block.model || block.asset || block.serial);
+}

@@ -98,7 +98,7 @@ export default function CustomerReport({ author }: { author: string }) {
   // ── 2단계: 수신자 관리(키맨 추천+직접 추가) + 반검수 발송(확인 팝업) + 발송 로그 ──
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [recipOpen, setRecipOpen] = useState(false);
-  const [suggests, setSuggests] = useState<Array<{ name: string; phone: string }>>([]);
+  const [suggests, setSuggests] = useState<Array<{ name: string; phone: string; source: string }>>([]);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
@@ -236,22 +236,31 @@ export default function CustomerReport({ author }: { author: string }) {
   const loadSendData = async (vendorName: string) => {
     const core = historyCoreName(vendorName) || vendorName;
     try {
+      const coreEnc = encodeURIComponent(core.slice(0, 24));
       const keymanCols = `${encodeURIComponent("키맨성함+직함")},${encodeURIComponent("키맨전화번호")}`;
-      const [recips, logRows, keymen] = await Promise.all([
+      // 키맨 후보는 4곳에서 모은다 — 복합기확장성(키맨 DB)·워킨맵(지점 연락처)·서비스접수(회신번호)·미수(업체담당자)
+      const [recips, logRows, keymen, places, receps, misuRows] = await Promise.all([
         selectRows<Recipient>("report_recipients", `select=*&vendor=eq.${encodeURIComponent(core)}&active=is.true&order=id.asc`),
         selectRows<SendLogRow>("report_send_log", `select=id,recipient_name,phone,status,period,created_at&vendor=eq.${encodeURIComponent(core)}&order=id.desc&limit=6`),
-        selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(core.slice(0, 24))}*&_hidden=not.is.true&limit=20`),
+        selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=20`).catch(() => []),
+        selectRows<Record<string, unknown>>("workin_map_places", `select=name,phone&name=ilike.*${coreEnc}*&visible=not.is.false&limit=20`).catch(() => []),
+        selectRows<Record<string, unknown>>("service_receptions", `select=receiver_phone,author&vendor=ilike.*${coreEnc}*&deleted=not.is.true&order=id.desc&limit=20`).catch(() => []),
+        selectRows<Record<string, unknown>>("misu", `select=${encodeURIComponent("업체담당자")},${encodeURIComponent("휴대폰번호")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&order=id.desc&limit=10`).catch(() => []),
       ]);
       setRecipients(recips);
       setLogs(logRows);
       const have = new Set(recips.map((r) => r.phone.replace(/[^\d]/g, "")));
-      const unique = new Map<string, { name: string; phone: string }>();
-      keymen.forEach((row) => {
-        const phone = String(row["키맨전화번호"] || "").replace(/[^\d]/g, "");
-        if (!validPhone(phone) || have.has(phone)) return;
-        unique.set(phone, { name: String(row["키맨성함+직함"] || "").trim(), phone });
-      });
-      setSuggests(Array.from(unique.values()).slice(0, 6));
+      const unique = new Map<string, { name: string; phone: string; source: string }>();
+      const offer = (rawName: unknown, rawPhone: unknown, source: string) => {
+        const phone = (String(rawPhone || "").match(/01[016789][ -]?\d{3,4}[ -]?\d{4}/)?.[0] || "").replace(/[^\d]/g, "");
+        if (!validPhone(phone) || have.has(phone) || unique.has(phone)) return;
+        unique.set(phone, { name: String(rawName || "").trim(), phone, source });
+      };
+      keymen.forEach((row) => offer(row["키맨성함+직함"], row["키맨전화번호"], "키맨 DB"));
+      places.forEach((row) => offer("", row["phone"], "워킨맵"));
+      receps.forEach((row) => offer(row["author"], row["receiver_phone"], "접수 회신번호"));
+      misuRows.forEach((row) => offer(row["업체담당자"], row["휴대폰번호"], "미수 기록"));
+      setSuggests(Array.from(unique.values()).slice(0, 8));
     } catch { /* 발송 부가 기능 — 리포트 생성은 막지 않는다 */ }
   };
 
@@ -293,7 +302,7 @@ export default function CustomerReport({ author }: { author: string }) {
     setSending(true);
     try {
       // 1) 보이는 리포트를 장별 이미지로 만들어 공개 저장소에 올리고
-      const { default: html2canvas } = await import("html2canvas");
+      const { default: html2canvas } = await import("html2canvas-pro");
       const pages = Array.from(document.querySelectorAll<HTMLElement>(".report-page"));
       const links: string[] = [];
       const stamp = Date.now();
@@ -333,7 +342,7 @@ export default function CustomerReport({ author }: { author: string }) {
     if (!report) return;
     setSaving(true);
     try {
-      const { default: html2canvas } = await import("html2canvas");
+      const { default: html2canvas } = await import("html2canvas-pro");
       const pages = Array.from(document.querySelectorAll<HTMLElement>(".report-page"));
       for (let i = 0; i < pages.length; i += 1) {
         const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff" });
@@ -413,11 +422,11 @@ export default function CustomerReport({ author }: { author: string }) {
                   ))}
                 </div> : <div className="rounded-lg border border-dashed border-slate-300 px-3 py-5 text-center text-xs font-semibold text-slate-400">아직 수신자가 없습니다 — 아래에서 추가해 주세요.</div>}
                 {suggests.length > 0 && <div>
-                  <div className="mb-1.5 text-[11px] font-black text-slate-400">키맨 기록에서 찾음 (복합기확장성 DB)</div>
+                  <div className="mb-1.5 text-[11px] font-black text-slate-400">기존 기록에서 찾은 연락처</div>
                   <div className="space-y-1.5">
                     {suggests.map((sug) => (
                       <div key={sug.phone} className="flex items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2">
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700">{sug.name || "이름 미기재"}</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700">{sug.name || "이름 미기재"} <span className="ml-1 rounded bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400">{sug.source}</span></span>
                         <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">{sug.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")}</span>
                         <button type="button" onClick={() => void addRecipient(sug.name, sug.phone)} className="flex shrink-0 items-center gap-0.5 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-black text-white hover:bg-blue-700"><Plus size={12} />추가</button>
                       </div>

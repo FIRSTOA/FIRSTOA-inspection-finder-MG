@@ -11,7 +11,7 @@
  *  - 내 일정 FIELD 불러오기가 분기점검을 AS로 변환하던 모드 감지 경로
  */
 import { describe, expect, it } from "vitest";
-import { historyCoreName, normalizeId, parseEquipComment, vendorMatchKey, workinVendorName } from "../src/ids";
+import { historyCoreName, normalizeId, parseEquipComment, parseInspectionBlocks, vendorMatchKey, workinVendorName } from "../src/ids";
 import { normRegion } from "../src/region";
 import { detectReportTypesFromInput, detectUnifiedInputMode } from "../src/fieldModes";
 import { nextBusinessDay } from "../src/planDate";
@@ -182,5 +182,38 @@ describe("parseCompanyAndGrade — 카운터 문자 첫 줄 판정 (원본 로�
   });
   it("빈 줄은 확인 바람 처리", () => {
     expect(parseCompanyAndGrade("").vendor).toBe("거래처 확인 바람");
+  });
+});
+
+describe("parseInspectionBlocks — 점검 원문의 기기 블록 분해 (푸드나무 5대 사례)", () => {
+  const FOODNAMU = [
+    "4층", "모델명: L8900", "시리얼넘버: E76881M5F576410", "자산기번: B8547", "내용: 정기점검", "처리내용:",
+    "매수:흑835 컬766 큰컬- 합1601", "토너잔량:K80 C80 M80 Y80", "폐통:        %", "여분:", "한틴이카유무:", "주차비지원유무:", "특이사항:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "4층", "모델명: ApeosPort-C2560", "시리얼넘버: 226993", "자산기번: A0078", "내용: 정기점검", "처리내용: 정기점검",
+    "매수:흑384481 컬85270 큰컬1576 합469751", "토너잔량:K48 C61 M52 Y58", "폐통: 20%",
+    "여분: 4층 창고방에 통합보관", "K8 C5 M5 Y6 폐통 6개", "8900 1set",
+    "한틴이카유무: 한조 한공X Ip따로 받아야함", "주차비지원유무: 주차장 자리 없을시 유료주차장이용", "특이사항:",
+    "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ",
+    "지하1층", "모델명: ApeosPort-C2060", "시리얼넘버: 226750", "자산기번: A0077", "내용: 정기점검",
+    "처리내용: 정기점검", "빨간색 출력 불량", "테스트패턴 5번 빨간색 100%20매 이상 출력으로 농도 강제 조정 처리",
+    "매수:흑121755 컬74140 큰컬3795 합195895", "토너잔량:K34 C60 M57 Y58", "폐통: 70%", "여분: 4층 창고 통합 보관",
+    "한틴이카유무: 한조", "주차비지원유무: 유", "특이사항: 없음",
+  ].join("\n");
+  it("기기 대수·기번·층·여러 줄 값을 정확히 나눈다", () => {
+    const blocks = parseInspectionBlocks(FOODNAMU);
+    expect(blocks.length).toBe(3);
+    expect(blocks.map((b) => b.asset)).toEqual(["B8547", "A0078", "A0077"]);
+    expect(blocks[0].loc).toBe("4층");
+    expect(blocks[2].loc).toBe("지하1층");
+    expect(blocks[1].counts).toBe("흑384481 컬85270 큰컬1576 합469751");
+    expect(blocks[1].spare).toContain("통합보관");
+    expect(blocks[1].spare).toContain("K8 C5 M5 Y6 폐통 6개"); // 여러 줄 여분이 붙는다
+    expect(blocks[2].handled).toContain("농도 강제 조정 처리"); // 여러 줄 처리내용
+    expect(blocks[2].special).toBe("없음");
+  });
+  it("원문이 없거나 블록이 아니면 빈 배열", () => {
+    expect(parseInspectionBlocks("")).toEqual([]);
+    expect(parseInspectionBlocks("단순 메모 텍스트")).toEqual([]);
   });
 });

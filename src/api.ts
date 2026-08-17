@@ -64,7 +64,8 @@ function pgCols(...names: string[]) {
   return names.map((name) => encodeURIComponent(/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ? name : `"${name}"`)).join(",");
 }
 // 시트 원장 공통 경량 컬럼 (점검·AS 계열 — _원문·_raw 제외로 응답이 수 MB → 수백 KB로 줄어든다)
-const JEOMGEOM_COLS = pgCols("id", "작성일", "작성자", "구분", "레벨", "등급", "업체명", "부서명", "지역", "키맨/접수자", "모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "한틴이카유무", "주차비지원유무", "특이사항", "_업체명", "_출처", "_dupKey", "created_at");
+// _원문 포함: 한 방문에 기기 여러 대가 블록으로 들어 있어(푸드나무 5대) 구조화 컬럼(첫 기기)만으론 대수·기기별 수치가 틀린다
+const JEOMGEOM_COLS = pgCols("id", "작성일", "작성자", "구분", "레벨", "등급", "업체명", "부서명", "지역", "키맨/접수자", "모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "한틴이카유무", "주차비지원유무", "특이사항", "_업체명", "_출처", "_dupKey", "_원문", "created_at");
 
 const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역", select: JEOMGEOM_COLS },

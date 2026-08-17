@@ -13,6 +13,7 @@ import {
 import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
 import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import { parseInspectionBlocks, type InspBlock } from "./ids";
 import { usageSpareAdvice } from "./spareAdvice";
 import { selectRows } from "./supabase";
 
@@ -68,6 +69,7 @@ function priorityPreview(cat: string, rec: Record<string, unknown>) {
 }
 // "주식회사 무암"과 "무암"은 같은 회사 — 법인 표기만 다른 이름을 매 줄 반복하지 않기 위한 비교용
 const coreName = (name: string) => name.replace(/주식회사|유한회사|㈜|\(주\)|\s+/g, "");
+
 
 type SummaryField = { key: string; value: string };
 
@@ -304,37 +306,59 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const quarterCheck = useMemo(() => {
     const rows = Array.isArray(detail?.["점검"]) ? detail["점검"] as Array<Record<string, unknown>> : [];
     const sorted = [...rows].sort((a, b) => recordDateRaw("점검", b).localeCompare(recordDateRaw("점검", a)));
-    const snap = (rec?: Record<string, unknown>) => rec ? {
-      date: displayDate(recordDateRaw("점검", rec)), counts: String(rec["매수"] || ""), toner: String(rec["토너잔량"] || ""),
-      spare: String(rec["여분"] || ""), waste: String(rec["폐통"] || ""), serial: String(rec["자산기번"] || ""),
-    } : undefined;
-    // 기기가 여러 대인 업체는 "최근 2건"이 서로 다른 기기라 사용량 비교가 어긋난다(푸드나무 3대 사례)
-    // → 기번별로 묶어 같은 기기의 직전 점검끼리 비교하고, 기기별로 따로 조언한다
-    const keyOf = (rec: Record<string, unknown>) => String(rec["자산기번"] || "").trim().toUpperCase() || String(rec["시리얼넘버"] || "").trim().toUpperCase();
-    const byMachine = new Map<string, Array<Record<string, unknown>>>();
+    // 방문(기록)마다 원문을 기기 블록으로 나눈다 — 원문이 없으면(색인 잔존분) 구조화 컬럼을 1기기로
+    type Occur = { date: string; region: string; block: InspBlock };
+    const occur: Occur[] = [];
     sorted.forEach((rec) => {
-      const key = keyOf(rec) || "미기재";
+      const date = displayDate(recordDateRaw("점검", rec));
+      if (!date) return;
+      const region = String(rec["지역"] || "").trim();
+      const blocks = parseInspectionBlocks(String(rec["_원문"] || ""));
+      const list = blocks.length ? blocks : [{
+        loc: "", model: String(rec["모델명"] || "").trim(), serial: String(rec["시리얼넘버"] || "").trim(),
+        asset: String(rec["자산기번"] || "").trim(), content: "", handled: "",
+        counts: String(rec["매수"] || ""), toner: String(rec["토너잔량"] || ""), waste: String(rec["폐통"] || ""),
+        spare: String(rec["여분"] || ""), special: String(rec["특이사항"] || ""),
+      }];
+      list.forEach((block) => occur.push({ date, region, block }));
+    });
+    const keyOf = (block: InspBlock) => (block.asset || block.serial || "").trim().toUpperCase() || "미기재";
+    const byMachine = new Map<string, Occur[]>();
+    occur.forEach((entry) => {
+      const key = keyOf(entry.block);
       const list = byMachine.get(key) || [];
-      list.push(rec);
+      list.push(entry);
       byMachine.set(key, list);
     });
+    const snapOf = (entry?: Occur) => entry ? {
+      date: entry.date, counts: entry.block.counts, toner: entry.block.toner,
+      spare: entry.block.spare, waste: entry.block.waste, serial: entry.block.asset,
+    } : undefined;
     // 최근 15개월 내 점검된 기기만 현역으로 본다 — 그 전에 끊긴 기번은 교체·반납된 기기
     const cutoff = new Date(Date.now() - 456 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const machines = Array.from(byMachine.entries()).map(([serial, recs]) => ({
+    const machines = Array.from(byMachine.entries()).map(([serial, occs]) => ({
       serial,
-      model: String(recs[0]?.["모델명"] || "").trim(),
-      date: displayDate(recordDateRaw("점검", recs[0])),
-      latest: snap(recs[0]),
-      advice: usageSpareAdvice(snap(recs[0]), snap(recs[1]), String(recs[0]?.["모델명"] || "")),
-    })).filter((machine) => machine.date && machine.date >= cutoff);
+      model: occs[0].block.model,
+      region: occs[0].region,
+      loc: occs[0].block.loc,
+      date: occs[0].date,
+      advice: usageSpareAdvice(snapOf(occs[0]), snapOf(occs[1]), occs[0].block.model),
+    })).filter((machine) => machine.date && machine.date >= cutoff && machine.serial !== "미기재");
+    machines.sort((a, b) => b.date.localeCompare(a.date) || a.serial.localeCompare(b.serial));
     const activeKeys = new Set(machines.map((machine) => machine.serial));
-    const retired = sorted
-      .map((rec) => ({ key: keyOf(rec) || "미기재", date: displayDate(recordDateRaw("점검", rec)) }))
-      .find((entry) => !activeKeys.has(entry.key));
-    const latest = snap(sorted[0]);
+    const retired = occur
+      .map((entry) => ({ key: keyOf(entry.block), date: entry.date }))
+      .find((entry) => entry.key !== "미기재" && !activeKeys.has(entry.key));
+    // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — 다른 기기의 "기록 없음"을 이걸로 설명한다
+    const latestVisitDate = displayDate(recordDateRaw("점검", sorted[0]));
+    const communalSpare = occur.filter((entry) => entry.date === latestVisitDate)
+      .map((entry) => entry.block.spare).find((spare) => /통합/.test(spare)) || "";
+    const regionSet = new Set(machines.map((machine) => normRegion(machine.region)).filter((region) => REGIONS.includes(region)));
+    const latestBlocks = sorted[0] ? parseInspectionBlocks(String(sorted[0]["_원문"] || "")) : [];
+    const latestVisit = sorted[0] ? { date: latestVisitDate, region: String(sorted[0]["지역"] || "").trim(), count: latestBlocks.length || 1 } : null;
     const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
     const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
-    return { latest, machines, retired, special };
+    return { machines, retired, communalSpare, multiRegion: regionSet.size > 1, latestVisit, special };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
   const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string } | null>(null);
@@ -479,10 +503,14 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           if (f?.renewal) add("재계약", f.renewal.done
             ? { dot: "bg-slate-300", headline: "완료", tone: "text-slate-600" }
             : { dot: "bg-blue-500", headline: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });
-          // 사용량·여분·주의는 기기별 — 같은 기번의 직전 점검과 비교. 여러 대면 기번·모델 태그로 구분
+          // 사용량·여분·주의는 원문 블록으로 되살린 기기 단위 — 같은 기번의 직전 방문과 비교
           const multi = quarterCheck.machines.length > 1;
-          const tagOf = (machine: typeof quarterCheck.machines[number]) => multi ? `${machine.serial}${machine.model ? ` · ${machine.model}` : ""}` : "";
-          const shown = quarterCheck.machines.slice(0, 5);
+          const tagOf = (machine: typeof quarterCheck.machines[number]) => {
+            if (!multi) return "";
+            const regionName = quarterCheck.multiRegion ? (REGION_LABEL[normRegion(machine.region)] || machine.region) : "";
+            return [regionName, machine.loc, machine.serial, machine.model].filter(Boolean).join(" · ");
+          };
+          const shown = quarterCheck.machines.slice(0, 6);
           let usageCount = 0;
           shown.forEach((machine) => {
             const usage = machine.advice?.usageLine;
@@ -494,10 +522,15 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 : { dot: "bg-blue-400", headline: usage, tag: tagOf(machine) });
             }
           });
-          if (usageCount > 0 && usageCount < quarterCheck.machines.length) add("사용량", { dot: "bg-slate-200", headline: `나머지 ${quarterCheck.machines.length - usageCount}대는 이전 매수 기재가 없어 계산 생략`, tone: "text-slate-400" });
+          if (usageCount > 0 && usageCount < quarterCheck.machines.length) add("사용량", { dot: "bg-slate-200", headline: `나머지 ${quarterCheck.machines.length - usageCount}대는 이전 방문 기록이 없거나 매수 미기재로 계산 생략`, tone: "text-slate-400" });
           shown.forEach((machine) => {
             const advice = machine.advice?.adviceLine;
             if (!advice) return;
+            // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — "기록 없음" 대신 통합보관 안내
+            if (/^여분 기록 없음/.test(advice) && quarterCheck.communalSpare) {
+              add("여분", { dot: "bg-emerald-300", headline: "통합보관 참조", detail: quarterCheck.communalSpare.replace(/\s+/g, " ").slice(0, 64), tone: "text-slate-600", tag: tagOf(machine) });
+              return;
+            }
             const arrow = advice.match(/^현재\s*(.+?)\s*→\s*(.+?)(?:\s*\((.+)\))?\s*$/);
             const dash = advice.match(/^(.+?)\s*—\s*(.+)$/);
             add("여분", arrow
@@ -506,14 +539,14 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 ? { dot: "bg-emerald-500", headline: dash[1], detail: dash[2], tone: "text-emerald-700", tag: tagOf(machine) }
                 : { dot: "bg-emerald-500", headline: advice, tone: "text-emerald-700", tag: tagOf(machine) });
           });
-          if (quarterCheck.machines.length > 5) add("여분", { dot: "bg-slate-200", headline: `외 ${quarterCheck.machines.length - 5}대는 점검 탭에서 기기별 확인`, tone: "text-slate-400" });
+          if (quarterCheck.machines.length > 6) add("여분", { dot: "bg-slate-200", headline: `외 ${quarterCheck.machines.length - 6}대는 점검 탭에서 기기별 확인`, tone: "text-slate-400" });
           shown.forEach((machine) => {
             if (machine.advice?.warning) add("주의", { dot: "bg-amber-500", headline: machine.advice.warning, tone: "text-amber-800", tag: tagOf(machine) });
           });
-          if (quarterCheck.special) add("특이", { dot: "bg-rose-400", headline: quarterCheck.special, detail: quarterCheck.latest ? `${quarterCheck.latest.date} 점검 기록` : "", tone: "text-rose-700" });
+          if (quarterCheck.special) add("특이", { dot: "bg-rose-400", headline: quarterCheck.special, detail: quarterCheck.latestVisit ? `${quarterCheck.latestVisit.date} 점검 기록` : "", tone: "text-rose-700" });
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
-            add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: devices.ended ? `종료 ${devices.ended}대 제외` : "", tone: "text-slate-700" });
+            add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: `${devices.ended ? `종료 ${devices.ended}대 제외 · ` : ""}${quarterCheck.machines.length ? `최근 점검에서 ${quarterCheck.machines.length}대 확인` : ""}`.replace(/ · $/, ""), tone: "text-slate-700" });
           }
           // 납품인지 교체인지는 시트가 한 칸에 적어 구분이 없다 — 점검 기번 변화가 있으면 "교체"로 확정해 준다
           if (devices?.recentSwap || quarterCheck.retired) add("교체", {
@@ -526,11 +559,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           });
           const TINT: Record<string, string> = { "bg-rose-500": "bg-rose-50/70", "bg-amber-500": "bg-amber-50/60" };
           return <section className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-2 px-4 py-3 sm:px-5">
-              <h3 className="text-[15px] font-black text-slate-950">이번 분기 체크</h3>
-              <span className="text-[10px] font-bold text-slate-400">워킨맵 · 미수 · 초과 · 불만 · 기기별 최근 점검 기준</span>
+            <div className="flex items-center justify-between gap-2 bg-slate-900 px-4 py-2.5 sm:px-5">
+              <h3 className="text-[14px] font-black text-white">이번 분기 체크</h3>
+              <span className="text-[10px] font-bold text-slate-500">워킨맵 · 미수 · 초과 · 불만 · 기기별 최근 점검 기준</span>
             </div>
-            <div className="divide-y divide-slate-100 border-t border-slate-100">
+            <div className="divide-y divide-slate-100">
               {sections.length ? sections.map((sec) => (
                 <div key={sec.label} className="flex gap-3 px-4 py-2.5 sm:px-5">
                   <span className="w-12 shrink-0 pt-1 text-[11px] font-black text-slate-400">{sec.label}</span>
@@ -551,7 +584,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                 </div>
               )) : <div className="px-4 py-5 text-xs font-semibold text-slate-400 sm:px-5">이번 분기에 특별히 체크할 항목이 없습니다.</div>}
             </div>
-            {quarterCheck.latest && <div className="truncate border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-[11px] font-medium tabular-nums text-slate-400 sm:px-5" title={`최근 점검 ${quarterCheck.latest.date} — 매수 ${quarterCheck.latest.counts || "-"} · 여분 ${quarterCheck.latest.spare || "-"}`}>최근 점검 {quarterCheck.latest.date} — 매수 {quarterCheck.latest.counts || "-"} · 여분 {quarterCheck.latest.spare || "-"}</div>}
+            {quarterCheck.latestVisit && <div className="truncate border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-[11px] font-medium tabular-nums text-slate-400 sm:px-5">최근 점검 {quarterCheck.latestVisit.date}{REGION_LABEL[normRegion(quarterCheck.latestVisit.region)] ? ` · ${REGION_LABEL[normRegion(quarterCheck.latestVisit.region)]}` : ""} · 기기 {quarterCheck.latestVisit.count}대 방문</div>}
           </section>;
         })()}
         {!loading && detail && activeCat === "전체" && (() => {
@@ -600,6 +633,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             const { date, fields, album } = recordSummary(activeCat, record, [who.key, directRegion.key]);
             // 같은 업체 기록 목록에서 업체명을 제목으로 반복하면 내용이 안 보인다 — 대표 문장이 제목
             const title = priorityPreview(activeCat, record) || vendorName;
+            // 한 방문에 기기 여러 대(원문 블록) — 첫 기기(구조화 컬럼)만 보여주면 나머지 기기가 사라진다
+            const blocks = (activeCat === "점검" || activeCat === "AS") ? parseInspectionBlocks(String(record["_원문"] || "")) : [];
             return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden sm:px-4">
                 <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50">
@@ -612,6 +647,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                     {date && <span className="shrink-0 tabular-nums">{date}</span>}
                     {activeCat === "접수" && !!record["type"] && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 font-black text-blue-700">{String(record["type"])}</span>}
                     <span className="flex shrink-0 items-center gap-0.5"><MapPin size={11} />{region}</span>
+                    {blocks.length > 1 && <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 font-black text-white">기기 {blocks.length}대</span>}
                     {who.val && <span className="flex min-w-0 items-center gap-0.5 truncate"><UserRound size={11} />{who.val}</span>}
                     {showVendorOf(vendorName) && <span className="min-w-0 truncate text-slate-400">{vendorName}</span>}
                   </span>
@@ -623,7 +659,44 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
                   const clean = fields.filter((field) => !junkValue(field.value));
                   const priority = PRIORITY_FIELDS[activeCat] || [];
                   const mains = priority.map((key) => clean.find((field) => field.key === key)).filter((field): field is SummaryField => !!field);
-                  const rest = clean.filter((field) => !priority.includes(field.key));
+                  // 기기 여러 대 방문: 구조화 컬럼(첫 기기) 대신 원문 블록을 기기별로 보여준다
+                  const machineKeys = new Set(["모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "특이사항"]);
+                  const rest = clean.filter((field) => !priority.includes(field.key) && !(blocks.length > 1 && machineKeys.has(field.key)));
+                  if (blocks.length > 1) return <>
+                    <div className="bg-white px-4 pt-2.5 text-[11px] font-black text-slate-500 sm:px-5">이 방문에서 점검한 기기 {blocks.length}대</div>
+                    <div className="divide-y divide-slate-100 bg-white px-4 sm:px-5">
+                      {blocks.map((block, blockIndex) => (
+                        <div key={`${block.asset}-${blockIndex}`} className="py-3">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-black text-white">{block.asset || block.serial || `기기 ${blockIndex + 1}`}</span>
+                            {block.model && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{block.model}</span>}
+                            {block.loc && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{block.loc}</span>}
+                            {block.serial && block.asset && <span className="text-[10px] font-semibold text-slate-400">{block.serial}</span>}
+                          </div>
+                          {([["처리내용", block.handled || block.content], ["매수", block.counts], ["토너잔량", block.toner], ["폐통", block.waste], ["여분", block.spare], ["특이사항", block.special]] as const)
+                            .filter(([, value]) => value && !junkValue(value)).map(([label, value]) => (
+                            <div key={label} className="mt-1.5 flex gap-3">
+                              <span className="w-16 shrink-0 pt-0.5 text-[11px] font-bold text-slate-400">{label}</span>
+                              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-medium leading-5 text-slate-800">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    {rest.length > 0 && (
+                      <details className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
+                        <summary className="cursor-pointer text-[11px] font-black text-slate-400 hover:text-slate-600">그 외 정보 {rest.length}개 보기</summary>
+                        <div className="grid gap-x-6 gap-y-2 py-2 sm:grid-cols-2">
+                          {rest.map((field, fieldIndex) => (
+                            <div key={`${field.key}-${fieldIndex}`} className="min-w-0">
+                              <div className="text-[10px] font-bold text-slate-400">{fieldLabel(field.key)}</div>
+                              <div className="whitespace-pre-wrap break-words text-[12px] font-normal leading-5 text-slate-600">{field.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </>;
                   return <>
                     <div className="divide-y divide-slate-100 bg-white px-4">
                       {mains.map((field) => (
