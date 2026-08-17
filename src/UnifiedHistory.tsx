@@ -283,6 +283,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
   const rowsForCategory = (cat: string) => {
     const rows = Array.isArray(detail?.[cat]) ? detail[cat] as Array<Record<string, unknown>> : [];
     return rows.filter((record) => {
+      // 업체정보는 지금 사용 중(임대중)인 기기만 — 종료·소송 이력은 통합이력에선 소음이다
+      if (cat === "업체정보" && String(record["임대여부"] || "") !== "임대중") return false;
       if (historyRegion !== "전체" && recordRegionCode(record, includedHits) !== historyRegion) return false;
       if (historyVendor !== "전체" && recordVendor(record) !== historyVendor) return false;
       return true;

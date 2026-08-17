@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7659f4fee6",
+    "date": "2026-08-17",
+    "note": "통합이력 점검·AS 상세를 FIELD식 원문 그대로 표시 (라벨 분해는 원문 없는 기록만)"
+  },
+  {
     "hash": "4ad5aa6487",
     "date": "2026-08-17",
     "note": "통합이력 기기 확인 대수 — 임대종료(반납) 기기는 제외하고 표기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e421e5eb82",
     "date": "2026-08-01",
     "note": "독서탭에 장르별 추천 도서 — 큐레이션 6장르 × 매일 3권 로테이션"
-  },
-  {
-    "hash": "c8cf823929",
-    "date": "2026-08-01",
-    "note": "책 검색을 키 없이 해결 — GAS 프록시(리디북스 공개 검색)를 1순위로"
   }
 ];
