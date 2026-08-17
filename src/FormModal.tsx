@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -17,6 +17,17 @@ export default function FormModal({
   footer: ReactNode;
   wide?: boolean | "xl";
 }) {
+  // Esc로 닫기 — 바깥 클릭·X만 되던 것을 키보드로도. 여러 모달이 겹치면 가장 위(마지막 마운트)만 닫힌다
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-[200] flex items-end bg-black/45 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
       <div className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide === "xl" ? "sm:max-w-4xl" : wide ? "sm:max-w-xl" : "sm:max-w-lg"}`} onMouseDown={(e) => e.stopPropagation()}>

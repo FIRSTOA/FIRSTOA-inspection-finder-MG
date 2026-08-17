@@ -36,7 +36,7 @@ const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700
 // 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
 
 
-type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; difficulty: string; author: string; created_at: string };
+type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; symptoms?: string[]; difficulty: string; author: string; created_at: string };
 
 // 노션식 미니 렌더러 — 제목(##/###) · 목록(-, 1.) · 구분선(---) · 토글(::: 제목 ~ :::) · 이미지 · 파일링크
 function mdLine(line: string, key: number): ReactNode {
@@ -164,25 +164,32 @@ export default function CopierNotes({ author }: { author: string }) {
   const relatedGuides = (card: PlaybookCard): KnowledgeDoc[] => {
     const docs = guides || [];
     if (!docs.length) return [];
-    const symptomWords = (SYMPTOM_FILTERS[card.symptom] || []).map((w) => w.toLowerCase());
-    const partWords = card.causes.flatMap((c) => [...c.parts, c.cause]).join(" ").toLowerCase().match(/[가-힣a-z0-9]{2,}/g) || [];
-    const seriesKey = card.series.toLowerCase();
-    return docs
+    const norm = (v: string) => String(v || "").toLowerCase().replace(/\s+/g, "");
+    const series = norm(card.series);
+    const cardParts = [...new Set(card.causes.flatMap((c) => c.parts).map(norm).filter((p) => p.length >= 2))];
+    const scored = docs
       .filter((d) => !d.brand || d.brand === card.brand || d.brand === "공용")
       .map((d) => {
-        const hay = `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")}`.toLowerCase();
+        const models = (d.models || []).map(norm);
+        const parts = (d.parts || []).map(norm);
+        const symptoms = d.symptoms || [];
         let score = 0;
-        if (seriesKey && hay.includes(seriesKey)) score += 3;
-        if (symptomWords.some((w) => hay.includes(w))) score += 2;
-        // 부품 낱말 가점은 상한 — 부품 목록이 긴 범용 문서(전체 분해 자료 등)가 모든 카드를 점령하지 않게
-        score += Math.min(partWords.filter((w) => w.length >= 2 && hay.includes(w)).length, 4) * 0.4;
+        // 태깅된 축이 정확히 일치할 때 가장 높게 — 제목에 우연히 스친 것보다 신뢰도가 높다
+        if (series && models.includes(series)) score += 3;
+        else if (series && norm(`${d.title} ${d.summary}`).includes(series)) score += 1.5;
+        if (symptoms.includes(card.symptom)) score += 3;
+        // 부품은 "겹친 비율" — 부품 목록이 긴 범용 문서가 개수만으로 이기지 못하게
+        if (cardParts.length && parts.length) {
+          const hit = cardParts.filter((p) => parts.some((q) => q.includes(p) || p.includes(q))).length;
+          score += (hit / cardParts.length) * 2.5;
+        }
         if (d.brand === card.brand) score += 0.5;
+        if (models.length >= 5 || parts.length >= 7) score -= 1.2; // 광범위 참고 문서는 특정 증상의 답이 아니다
         return { d, score };
       })
-      .filter((x) => x.score >= 2)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map((x) => x.d);
+      .filter((x) => x.score >= 3.5)
+      .sort((a, b) => b.score - a.score);
+    return scored.slice(0, 5).map((x) => x.d);
   };
   /** 카드의 사례들로 점프 — 기록 탭 필터를 카드 축(브랜드·기종·증상)에 맞춰 놓고 전환 */
   const openCases = (card: PlaybookCard) => {
@@ -220,6 +227,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [guideCategory, setGuideCategory] = useState("전체");
   const [guidePart, setGuidePart] = useState("전체");
   const [guideDiff, setGuideDiff] = useState("전체");
+  const [guideSymptom, setGuideSymptom] = useState("전체"); // 증상 태깅(2026-08-18)으로 족보와 같은 축으로 좁힐 수 있다
   const [showOriginal, setShowOriginal] = useState(false);
   const [guideQuery, setGuideQuery] = useState("");
   const [openGuide, setOpenGuide] = useState<KnowledgeDoc | null>(null);
@@ -655,6 +663,7 @@ export default function CopierNotes({ author }: { author: string }) {
           (guideCategory === "전체" || d.category === guideCategory) &&
           (guidePart === "전체" || (d.parts || []).includes(guidePart)) &&
           (guideDiff === "전체" || d.difficulty === guideDiff) &&
+          (guideSymptom === "전체" || (d.symptoms || []).includes(guideSymptom)) &&
           (!tokens.length || (() => { const hay = normalize(`${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")} ${d.brand} ${d.content}`); return tokens.every((token) => hay.includes(token)); })()));
         const brandCount = (name: string) => name === "전체" ? list.length : list.filter((d) => d.brand === name).length;
         return (
@@ -682,6 +691,12 @@ export default function CopierNotes({ author }: { author: string }) {
                   {topParts.length > 1 && <select value={guidePart} onChange={(e) => setGuidePart(e.target.value)} className={darkSelect(guidePart !== "전체")}>
                     {topParts.map((name) => <option key={name} value={name}>{name === "전체" ? "부품 전체" : name}</option>)}
                   </select>}
+                  <select value={guideSymptom} onChange={(e) => setGuideSymptom(e.target.value)} className={darkSelect(guideSymptom !== "전체")}>
+                    <option value="전체">증상 전체</option>
+                    {Object.keys(SYMPTOM_FILTERS).filter((sym) => list.some((d) => (d.symptoms || []).includes(sym))).map((sym) => (
+                      <option key={sym} value={sym}>{sym} ({list.filter((d) => (d.symptoms || []).includes(sym)).length})</option>
+                    ))}
+                  </select>
                   <select value={guideDiff} onChange={(e) => setGuideDiff(e.target.value)} className={darkSelect(guideDiff !== "전체")}>
                     {["전체", "쉬움", "보통", "어려움"].map((name) => <option key={name} value={name}>{name === "전체" ? "난이도 전체" : name}</option>)}
                   </select>
