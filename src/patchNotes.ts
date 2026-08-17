@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "75387c34e4",
+    "date": "2026-08-18",
+    "note": "FIELD 탭 AS방 보내기에서 일정 완료·익일 팝업 숨김"
+  },
+  {
     "hash": "130c35e1b9",
     "date": "2026-08-18",
     "note": "족보 검수를 분산형으로 — 혼자 100장 검토 대신 쓰는 사람이 한 번 탭"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "683d33643e",
     "date": "2026-08-02",
     "note": "처리 갱신 중복 행 근절 + 접수 UX 5건 수리"
-  },
-  {
-    "hash": "d3762d1b8c",
-    "date": "2026-08-02",
-    "note": "원격 값 기입 확장(Z·AA·AD·AF) + A열 순번 직접 기입 + 구간 일괄 기입으로 속도 개선"
   }
 ];

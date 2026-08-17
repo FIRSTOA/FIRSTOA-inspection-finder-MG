@@ -19,7 +19,12 @@ export type VendorWorkFlags = {
   overage: { total: string; date: string; count12: number } | null;
   // 최근 90일 불만 — count90=그 기간 건수 (반복 불만 = 방문 전 대응 준비)
   bulman: { date: string; content: string; count90: number } | null;
+  // 거래처 특이사항(vendor_notes) — 방문 규칙·출입·유무상 범위 등 "그 업체 고유"의 사항.
+  // 점검 기록의 특이사항 칸(그날 기기 상태)과는 다른 층이라 별도로 싣는다.
+  note: { text: string; grade: string; count: number } | null;
 };
+
+type NoteEntry = { text: string; grade: string; count: number };
 
 type PlaceRow = { id: number; name: string; label: string; quarter: number; kind: string; memos?: unknown };
 
@@ -63,6 +68,7 @@ type Sources = {
   renewal: Map<string, RenewEntry[]>;
   overage: Map<string, OverEntry>;
   bulman: Map<string, BulEntry>;
+  notes: Map<string, NoteEntry>;
   // 거래처 코드 계층 — 이름 키와 병행 구축, 조회 시 코드 일치를 먼저 본다
   alias: Map<string, string | null>;
   misuByCode: Map<string, MisuEntry>;
@@ -73,6 +79,9 @@ type Sources = {
 };
 
 let cached: { at: number; promise: Promise<Sources> } | null = null;
+
+/** 특이사항을 고친 직후처럼 즉시 반영이 필요할 때 — 다음 조회가 새로 읽는다 */
+export function resetVendorFlagsCache() { cached = null; }
 
 async function loadSources(): Promise<Sources> {
   const quarter = Math.floor(new Date().getMonth() / 3) + 1;
@@ -86,7 +95,7 @@ async function loadSources(): Promise<Sources> {
   const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
   const bulmanCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes] = await Promise.all([
+  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes, noteRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
     selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
     selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter},${nextQuarter})`),
@@ -95,7 +104,19 @@ async function loadSources(): Promise<Sources> {
     selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
     getAliasCodeMap().catch(() => new Map<string, string | null>()),
     getWorkinCodeMap().catch(() => new Map<number, string>()),
+    selectAllRows<{ vendor: string; vendor_key: string; grade: string; note: string }>("vendor_notes", "select=vendor,vendor_key,grade,note&order=updated_at.desc").catch(() => []),
   ]);
+
+  // 거래처 특이사항 — 한 업체에 여러 건이면 최신부터 이어 붙이고 건수를 남긴다
+  const notes = new Map<string, NoteEntry>();
+  for (const row of noteRows) {
+    const key = row.vendor_key || vendorMatchKey(row.vendor);
+    const text = String(row.note || "").trim();
+    if (!key || !text) continue;
+    const prev = notes.get(key);
+    if (prev) notes.set(key, { text: `${prev.text}\n\n${text}`, grade: prev.grade || row.grade || "", count: prev.count + 1 });
+    else notes.set(key, { text, grade: row.grade || "", count: 1 });
+  }
 
   const misu = new Map<string, MisuEntry>();
   const misuByCode = new Map<string, MisuEntry>();
@@ -192,7 +213,7 @@ async function loadSources(): Promise<Sources> {
     }
   }
 
-  return { quarter, misu, inspection, renewal, overage, bulman, alias, misuByCode, inspectionByCode, renewalByCode, overageByCode, bulmanByCode };
+  return { quarter, misu, inspection, renewal, overage, bulman, notes, alias, misuByCode, inspectionByCode, renewalByCode, overageByCode, bulmanByCode };
 }
 
 function getSources(): Promise<Sources> {
@@ -248,8 +269,9 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
       })() : null,
       overage: over || null,
       bulman: bul || null,
+      note: lookup(sources.notes, key) || null,
     };
-    if (flags.inspection || flags.misu || flags.renewal || flags.overage || flags.bulman) result.set(vendor, flags);
+    if (flags.inspection || flags.misu || flags.renewal || flags.overage || flags.bulman || flags.note) result.set(vendor, flags);
   }
   return result;
 }

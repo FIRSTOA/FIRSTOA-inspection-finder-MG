@@ -1872,7 +1872,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </div>
         );
       })()}
-      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} />
+      <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => notify(msg, "error")} author={author} />
     </div>
   );
 }

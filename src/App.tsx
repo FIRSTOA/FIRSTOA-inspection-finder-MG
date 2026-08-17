@@ -6801,6 +6801,7 @@ export default function App() {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onError={(m) => showToast(m, "error")}
+        author={author}
       />
 
       {/* Toast */}

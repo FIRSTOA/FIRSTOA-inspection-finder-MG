@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
 import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
-import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { normalizeId, parseInspectionBlocks, type InspBlock } from "./ids";
-import { selectRows } from "./supabase";
+import { getVendorFlagsBatch, resetVendorFlagsCache, type VendorWorkFlags } from "./vendorFlags";
+import { normalizeId, parseInspectionBlocks, vendorMatchKey, type InspBlock } from "./ids";
+import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { notify } from "./toast";
 
 type Props = {
   vendor: string;
@@ -22,6 +23,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onError: (msg: string) => void;
+  author?: string; // 특이사항을 누가 적었는지 남기기 위함
 };
 
 const CAT_ORDER = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
@@ -187,7 +189,7 @@ function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: st
   </button>;
 }
 
-export default function UnifiedHistory({ vendor, accent, open, onClose, onError }: Props) {
+export default function UnifiedHistory({ vendor, accent, open, onClose, onError, author = "" }: Props) {
   const [queryVendor, setQueryVendor] = useState("");
   const [detail, setDetail] = useState<DetailResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -320,6 +322,37 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
 
   // ── 이번 분기 체크 — 워킨맵·미수·초과·불만(일정리스트 배지와 같은 기준) + 최근 2회 점검으로 사용량·여분 계산
   const [flags, setFlags] = useState<VendorWorkFlags | null>(null);
+  // 거래처 특이사항 편집 — null이면 보기 모드
+  const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  const [noteBusy, setNoteBusy] = useState(false);
+  useEffect(() => { setNoteEdit(null); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
+  const saveVendorNote = async () => {
+    if (noteEdit === null || noteBusy) return;
+    const text = noteEdit.trim();
+    const key = vendorMatchKey(queryVendor);
+    if (!key) { notify("업체를 먼저 선택하세요.", "error"); return; }
+    setNoteBusy(true);
+    try {
+      const rows = await selectRows<{ id: string }>("vendor_notes", `select=id&vendor_key=eq.${encodeURIComponent(key)}&order=updated_at.desc&limit=1`);
+      if (!text) {
+        if (rows[0]) await deleteRows("vendor_notes", `id=eq.${rows[0].id}`);
+        notify("특이사항을 지웠습니다.");
+      } else if (rows[0]) {
+        await updateRows("vendor_notes", `id=eq.${rows[0].id}`, { note: text, author: author || "미지정", updated_at: new Date().toISOString() });
+        notify("특이사항을 저장했습니다 ✓");
+      } else {
+        await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: text, author: author || "미지정", source: "webapp" });
+        notify("특이사항을 등록했습니다 ✓");
+      }
+      setFlags((cur) => (cur ? { ...cur, note: text ? { text, grade: cur.note?.grade || "", count: 1 } : null } : cur));
+      resetVendorFlagsCache(); // 일정리스트 배지도 새 내용으로
+      setNoteEdit(null);
+    } catch (e) {
+      notify(`저장 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setNoteBusy(false);
+    }
+  };
   useEffect(() => {
     if (!open || !detail) { setFlags(null); return; }
     const names = Array.from(new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((n) => n.trim()).filter(Boolean)));
@@ -327,7 +360,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     let active = true;
     getVendorFlagsBatch(names).then((map) => {
       if (!active) return;
-      const merged: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null };
+      const merged: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
       for (const name of names) {
         const f = map.get(name);
         if (!f) continue;
@@ -336,6 +369,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
         merged.renewal = merged.renewal || f.renewal;
         merged.overage = merged.overage || f.overage;
         merged.bulman = merged.bulman || f.bulman;
+        merged.note = merged.note || f.note;
       }
       setFlags(merged);
     }).catch(() => { if (active) setFlags(null); });
@@ -539,6 +573,40 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           <p className="pt-2 text-center text-xs font-semibold text-slate-400">전체 이력을 모으는 중...</p>
         </div>}
         {!loading && !queryVendor && <div className="py-16 text-center text-sm font-semibold text-slate-400">거래처를 검색해 주세요.</div>}
+        {/* 거래처 특이사항 — 방문 규칙·출입·유무상 범위 등 "그 업체 고유"의 사항. 그날 기기 메모(방문 메모)와 다른 층이라
+            맨 위에 세우고, 누구나 바로 고칠 수 있게 한다(현장에서 알게 된 규칙이 바로 쌓이도록). */}
+        {!loading && queryVendor && activeCat === "전체" && (flags?.note || noteEdit !== null) && (
+          <section className="mb-3 overflow-hidden rounded-2xl border-2 border-violet-300 bg-violet-50/50 shadow-sm">
+            <div className="flex items-center justify-between gap-2 bg-violet-700 px-4 py-2.5 sm:px-5">
+              <h3 className="text-[14px] font-black text-white">📌 거래처 특이사항</h3>
+              <span className="text-[10px] font-bold text-violet-200">방문 규칙·출입·유무상 범위 — 그날 기기 상태는 아래 방문 메모</span>
+            </div>
+            {noteEdit === null ? (
+              <div className="px-4 py-3.5 sm:px-5">
+                <p className="whitespace-pre-wrap text-[13.5px] font-bold leading-6 text-slate-900">{flags?.note?.text}</p>
+                <button type="button" onClick={() => setNoteEdit(flags?.note?.text || "")}
+                  className="mt-2.5 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-black text-violet-700 transition hover:bg-violet-50">✎ 수정</button>
+              </div>
+            ) : (
+              <div className="px-4 py-3.5 sm:px-5">
+                <textarea value={noteEdit} onChange={(e) => setNoteEdit(e.target.value)} rows={6}
+                  placeholder={"예) 매달 방문, 20일 마감\n- 방문 시 OO 대리님께 연락 후 카드키 수령\n- 3층 소형기는 점검 제외"}
+                  className="w-full rounded-xl border border-violet-300 bg-white px-3 py-2.5 text-[13.5px] font-semibold leading-6 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10" />
+                <div className="mt-2 flex gap-2">
+                  <button type="button" disabled={noteBusy} onClick={() => void saveVendorNote()}
+                    className="rounded-full bg-violet-700 px-4 py-1.5 text-[11px] font-black text-white transition hover:bg-violet-800">{noteBusy ? "저장 중…" : "저장"}</button>
+                  <button type="button" onClick={() => setNoteEdit(null)} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-[11px] font-black text-slate-500">취소</button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+        {!loading && queryVendor && activeCat === "전체" && !flags?.note && noteEdit === null && (
+          <button type="button" onClick={() => setNoteEdit("")}
+            className="mb-3 w-full rounded-2xl border-2 border-dashed border-violet-200 bg-white px-4 py-3 text-[12px] font-black text-violet-600 transition hover:border-violet-400 hover:bg-violet-50/60">
+            📌 이 거래처의 특이사항 적기 — 방문 규칙·출입 방법·점검 제외 기기 등
+          </button>
+        )}
         {!loading && detail && activeCat === "전체" && (() => {
           // 같은 라벨(여분·사용량)은 한 섹션으로 묶는다 — "점검/여분/사용량/기기/교체"가 딱 나뉘어 읽히도록
           const sections: CheckSection[] = [];
@@ -566,7 +634,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           const endedIdents = devices?.endedIdents || {};
           const machines = quarterCheck.machines.filter((machine) => !endedIdents[machine.key] && !endedIdents[normalizeId(machine.asset)]);
           const returnedCount = quarterCheck.machines.length - machines.length;
-          if (quarterCheck.special) add("특이", { dot: "bg-rose-400", headline: quarterCheck.special, detail: quarterCheck.latestVisit ? `${quarterCheck.latestVisit.date} 점검 기록` : "", tone: "text-rose-700" });
+          // 점검 기록의 특이사항 칸 — 그날 기기 상태 메모다(거래처 고유 사항은 아래 별도 블록)
+          if (quarterCheck.special) add("방문 메모", { dot: "bg-rose-400", headline: quarterCheck.special, detail: quarterCheck.latestVisit ? `${quarterCheck.latestVisit.date} 점검 기록` : "", tone: "text-rose-700" });
           if (devices && devices.mfp + devices.pc + devices.monitor + devices.etc > 0) {
             const parts = [devices.mfp && `복합기 ${devices.mfp}`, devices.pc && `PC ${devices.pc}`, devices.monitor && `모니터 ${devices.monitor}`, devices.etc && `기타 ${devices.etc}`].filter(Boolean).join(" · ");
             add("기기", { dot: "bg-slate-400", headline: `임대중 ${parts}`, detail: `${devices.ended ? `종료 ${devices.ended}대 제외 · ` : ""}${machines.length ? `최근 점검에서 ${machines.length}대 확인` : ""}${returnedCount ? ` (반납된 ${returnedCount}대 제외)` : ""}`.replace(/ · $/, ""), tone: "text-slate-700" });

@@ -28,12 +28,25 @@ const CHIP_STYLE = {
 
 export function VendorAlertChip({ flags, onOpen }: { flags: VendorWorkFlags | undefined | null; onOpen: () => void }) {
   const alert = vendorAlertLevel(flags);
-  if (!alert) return null;
+  const note = flags?.note || null;
+  if (!alert && !note) return null;
   return (
-    <button type="button" title="이번 분기 체크 항목 — 누르면 통합이력이 열립니다"
-      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
-      className={`shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-black transition ${CHIP_STYLE[alert.level]}`}>
-      ⚠ {alert.count}
-    </button>
+    <>
+      {/* 거래처 특이사항은 방문 전에 반드시 봐야 하는 층이라 분기체크 개수에 섞지 않고 따로 세운다 */}
+      {note && (
+        <button type="button" title={note.text.slice(0, 300)}
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
+          className="shrink-0 cursor-pointer rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 transition hover:bg-violet-100">
+          📌 특이사항
+        </button>
+      )}
+      {alert && (
+        <button type="button" title="이번 분기 체크 항목 — 누르면 통합이력이 열립니다"
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
+          className={`shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-black transition ${CHIP_STYLE[alert.level]}`}>
+          ⚠ {alert.count}
+        </button>
+      )}
+    </>
   );
 }
