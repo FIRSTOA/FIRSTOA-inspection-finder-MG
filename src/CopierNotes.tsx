@@ -27,7 +27,7 @@ const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700
 const BRANDS: Record<string, string[]> = {
   삼성: ["MX3", "MX4", "MX7", "흑백기"],
   신도: ["320", "410", "420", "450", "N501", "600", "bizhub"],
-  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "SC2022", "305", "5005"],
+  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "9201", "SC2022", "305", "5005"],
   교세라: ["2100", "2101", "5521", "5526"],
   브라더: ["5700", "8900"],
   오키: ["5473"],
@@ -58,17 +58,22 @@ const MODEL_RULES: Record<string, Record<string, ModelRule>> = {
     "320": { include: ["320", "321"] }, "410": { include: ["410", "411"] }, "420": { include: ["420", "422"] },
     "450": { include: ["450", "451", "452"] }, N501: { include: ["501"] }, "600": { include: ["600"] }, bizhub: { include: ["bizhub"] },
   },
+  // 제록스는 기록에 팀 약어가 쓰인다(VC3375·APVIIC2273·DCVC2263…). 세대 약어 = 코드명 대응은
+  // 팀이 코드명을 병기해 둔 기록에서 확인됨: V→세이토, VI→베니, VII→보탄, IV→키슈,
+  // DocuCentre-V C2263→마블, V C5585→헤라(클래스). 순서가 우선순위 — 헤라·번호 시리즈를 먼저 걸러야
+  // "VC5585"가 세이토로 새지 않는다. 9201/9301은 코드명 확인 전이라 번호 그대로 둔다.
   제록스: {
-    키슈: { include: ["키슈", "port-iv c"] },
-    세이토: { include: ["세이토", "port-v c", "centre-v c2276", "centre-v c3375"] },
-    마블: { include: ["마블", "centre-v c226"] },
-    베니: { include: ["베니", "port-vi c"] },
-    보탄: { include: ["보탄", "port-vii c"] },
     헤라: { include: ["헤라", "5580", "5585", "6680"] },
-    APEOS: { include: ["apeos-c", "apeos-3"] },
-    SC2022: { include: ["sc2022", "sc-2022", "2022"] },
     "305": { include: ["305"] },
     "5005": { include: ["5005"] },
+    "9201": { include: ["9201", "9301"] },
+    SC2022: { include: ["sc2022", "sc-2022", "2022"] },
+    보탄: { include: ["보탄", "port-vii c"], regex: "vii[\\s-]*c?\\d{4}" },
+    베니: { include: ["베니", "port-vi c"], regex: "vi(?!i)[\\s-]*c?\\d{4}" },
+    키슈: { include: ["키슈", "port-iv c"], regex: "iv[\\s-]*c?\\d{4}" },
+    마블: { include: ["마블", "centre-v c226", "c2263", "c2265"] },
+    세이토: { include: ["세이토", "port-v c", "centre-v c2276", "centre-v c3375"], regex: "(?:^|[^aeiou])v[\\s-]*c?\\d{4}" },
+    APEOS: { include: ["apeos-c", "apeos-3", "apeosc", "2060", "3070", "2560"] },
   },
   교세라: { "2100": { include: ["2100"] }, "2101": { include: ["2101"] }, "5521": { include: ["5521"] }, "5526": { include: ["5526"] } },
   브라더: { "5700": { include: ["5700"] }, "8900": { include: ["8900"] } },
@@ -200,6 +205,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [playbook, setPlaybook] = useState<PlaybookCard[] | null>(null);
   const [jkQuery, setJkQuery] = useState("");
   const [jkBrand, setJkBrand] = useState("전체");
+  const [jkSymptom, setJkSymptom] = useState("전체");
   const [jkStatus, setJkStatus] = useState<"전체" | "게시" | "초안">("전체");
   const [jkOpen, setJkOpen] = useState<PlaybookCard | null>(null);
   const [jkDraft, setJkDraft] = useState<PlaybookCard | null>(null); // 수정/새 카드 편집 버퍼
@@ -450,6 +456,7 @@ export default function CopierNotes({ author }: { author: string }) {
         const tokens = jkQuery.trim().split(/\s+/).map(norm).filter(Boolean);
         const filtered = cards.filter((c) =>
           (jkBrand === "전체" || c.brand === jkBrand) &&
+          (jkSymptom === "전체" || c.symptom === jkSymptom) &&
           (jkStatus === "전체" || c.status === jkStatus) &&
           (!tokens.length || tokens.every((t) => norm(`${c.brand} ${c.series} ${c.symptom} ${c.title} ${c.summary} ${c.causes.map((x) => `${x.cause} ${x.steps.join(" ")} ${x.parts.join(" ")}`).join(" ")}`).includes(t))));
         const cardBrands = ["전체", ...Array.from(new Set(cards.map((c) => c.brand)))];
@@ -473,6 +480,13 @@ export default function CopierNotes({ author }: { author: string }) {
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <select value={jkBrand} onChange={(e) => setJkBrand(e.target.value)} className={darkSelect(jkBrand !== "전체")}>
                     {cardBrands.map((name) => <option key={name} value={name}>{name === "전체" ? "브랜드 전체" : name}</option>)}
+                  </select>
+                  {/* 증상별 모아보기 — "급지·걸림만" 처럼 증상 축으로 좁힌다 (카드에 있는 증상만 나열) */}
+                  <select value={jkSymptom} onChange={(e) => setJkSymptom(e.target.value)} className={darkSelect(jkSymptom !== "전체")}>
+                    <option value="전체">증상 전체</option>
+                    {Object.keys(SYMPTOM_FILTERS).filter((s) => cards.some((c) => c.symptom === s)).map((s) => (
+                      <option key={s} value={s}>{s} ({cards.filter((c) => c.symptom === s).length})</option>
+                    ))}
                   </select>
                   <select value={jkStatus} onChange={(e) => setJkStatus(e.target.value as typeof jkStatus)} className={darkSelect(jkStatus !== "전체")}>
                     {["전체", "게시", "초안"].map((name) => <option key={name} value={name}>{name === "전체" ? "상태 전체" : name}</option>)}

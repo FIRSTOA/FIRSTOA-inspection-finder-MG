@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "d59b75d17a",
+    "date": "2026-08-17",
+    "note": "복합기 족보 탭 — 시리즈×증상 카드로 12,580건 처리이력을 정제"
+  },
+  {
     "hash": "8d4b18c479",
     "date": "2026-08-17",
     "note": "모바일 예정일정 날짜 띠를 전체 폭 다크 바로 — 날짜·요일·그날 건수"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fdd3632c55",
     "date": "2026-08-02",
     "note": "원격·IT 접수도 순 조회 열을 값으로 고정 — 복합기와 동일한 스냅샷 방식"
-  },
-  {
-    "hash": "494d76ec9a",
-    "date": "2026-08-02",
-    "note": "접수 저장 시 자동 입력값(수정 반영)을 leaseFix로 동봉 — 시트 값 기입에 웹앱 값 우선 적용"
   }
 ];
