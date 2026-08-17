@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "09dc0e3ae1",
+    "date": "2026-08-17",
+    "note": "일정→FIELD 양식 정합 — 제목에서 업체명부·구분(세팅) 추출, 통합이력 '전(前)' 꼬리 제거, FIELD 카드 통합이력 버튼 정리"
+  },
+  {
     "hash": "a5c47f6fda",
     "date": "2026-08-17",
     "note": "홍보물 PDF 카드 모바일 미리보기 — Promise.withResolvers 폴리필 (구형 모바일 브라우저 렌더 실패 수리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "f0def70cb7",
     "date": "2026-08-01",
     "note": "복합기 가이드·퀴즈 탭 신식 개편 + 기록·가이드 탐색성 강화"
-  },
-  {
-    "hash": "75314f7e12",
-    "date": "2026-08-01",
-    "note": "복합기 기록 탭을 A안(솔루션 센터)으로 + 가이드 편집기 실시간 미리보기"
   }
 ];
