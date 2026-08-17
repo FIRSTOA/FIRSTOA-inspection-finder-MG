@@ -349,16 +349,19 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
     const retired = occur
       .map((entry) => ({ key: keyOf(entry.block), date: entry.date }))
       .find((entry) => entry.key !== "미기재" && !activeKeys.has(entry.key));
-    // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — 다른 기기의 "기록 없음"을 이걸로 설명한다
-    const latestVisitDate = displayDate(recordDateRaw("점검", sorted[0]));
-    const communalSpare = occur.filter((entry) => entry.date === latestVisitDate)
-      .map((entry) => entry.block.spare).find((spare) => /통합/.test(spare)) || "";
+    // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — 같은 방문(날짜)의 다른 기기 칸에서 찾아
+    // "기록 없음" 대신 통합보관으로 설명한다. 방문 날짜별로 통합 문구를 모아둔다.
+    const latestVisitDate = sorted[0] ? displayDate(recordDateRaw("점검", sorted[0])) : "";
+    const communalByDate = new Map<string, string>();
+    occur.forEach((entry) => {
+      if (/통합/.test(entry.block.spare) && !communalByDate.has(entry.date)) communalByDate.set(entry.date, entry.block.spare);
+    });
     const regionSet = new Set(machines.map((machine) => normRegion(machine.region)).filter((region) => REGIONS.includes(region)));
     const latestBlocks = sorted[0] ? parseInspectionBlocks(String(sorted[0]["_원문"] || "")) : [];
     const latestVisit = sorted[0] ? { date: latestVisitDate, region: String(sorted[0]["지역"] || "").trim(), count: latestBlocks.length || 1 } : null;
     const specialRaw = String(sorted[0]?.["특이사항"] || "").trim();
     const special = junkValue(specialRaw) ? "" : specialRaw; // "ㅡㅡㅡ"·"없음" 같은 채움표시 제외
-    return { machines, retired, communalSpare, multiRegion: regionSet.size > 1, latestVisit, special };
+    return { machines, retired, communalByDate, multiRegion: regionSet.size > 1, latestVisit, special };
   }, [detail]);
   // 임대리스트 기기 요약 — 임대중만 세고 복합기/PC/기타 구분, 최근 1년 내 납품/교체 감지
   const [devices, setDevices] = useState<{ mfp: number; pc: number; monitor: number; etc: number; ended: number; recentSwap: string } | null>(null);
@@ -526,9 +529,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
           shown.forEach((machine) => {
             const advice = machine.advice?.adviceLine;
             if (!advice) return;
-            // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — "기록 없음" 대신 통합보관 안내
-            if (/^여분 기록 없음/.test(advice) && quarterCheck.communalSpare) {
-              add("여분", { dot: "bg-emerald-300", headline: "통합보관 참조", detail: quarterCheck.communalSpare.replace(/\s+/g, " ").slice(0, 64), tone: "text-slate-600", tag: tagOf(machine) });
+            // 여분을 한 기기 칸에 몰아 적는 관행("4층 창고 통합보관") — 같은 방문의 통합 문구로 설명
+            const communal = quarterCheck.communalByDate.get(machine.date) || "";
+            if (/^여분 기록 없음/.test(advice) && communal) {
+              add("여분", { dot: "bg-emerald-300", headline: "통합보관 참조", detail: communal.replace(/\s+/g, " ").slice(0, 64), tone: "text-slate-600", tag: tagOf(machine) });
               return;
             }
             const arrow = advice.match(/^현재\s*(.+?)\s*→\s*(.+?)(?:\s*\((.+)\))?\s*$/);

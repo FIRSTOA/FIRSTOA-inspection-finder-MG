@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "2a68d9a0a4",
+    "date": "2026-08-17",
+    "note": "점검 원문 기기 블록 파서 — 분기체크·상세를 기기 단위로(대수·지역·층·통합보관) + 리포트 oklch 수리·키맨 4소스"
+  },
+  {
     "hash": "ebd017b958",
     "date": "2026-08-17",
     "note": "익명 권한 원칙 문서화 (misu·overage 숨김 3컬럼 축소 반영)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1321fee405",
     "date": "2026-08-01",
     "note": "공지·요청 대상을 전사(인원 DB) 기준으로 + 배지 즉시 갱신 + 요청자 필드 제거"
-  },
-  {
-    "hash": "33ec476cf0",
-    "date": "2026-08-01",
-    "note": "인원 관리를 ERP식 테이블형(A안)으로 재구축 — 팀별 구분행 포함"
   }
 ];
