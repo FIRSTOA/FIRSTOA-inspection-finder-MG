@@ -84,6 +84,20 @@ function handledLine(note: string) {
 
 const KIND_LABEL: Record<string, string> = { "복합기 AS": "AS 방문", "원격이관": "원격 지원", "IT": "IT 지원" };
 
+// 리포트 문자 기본 문안 — {업체명}·{기간}·{링크} 토큰이 발송 때 채워진다. 수정본은 이 브라우저에 저장.
+const REPORT_SMS_KEY = "reportSmsBody.v1";
+const DEFAULT_REPORT_SMS = [
+  "[퍼스트오에이] {업체명} {기간} 서비스 리포트",
+  "",
+  "안녕하세요, 퍼스트오에이입니다.",
+  "{기간} 동안의 점검·서비스 내역을 정리해 보내드립니다.",
+  "",
+  "{링크}",
+  "",
+  "늘 믿고 맡겨주셔서 감사합니다.",
+  "문의 1522-1093",
+].join("\n");
+
 export default function CustomerReport({ author }: { author: string }) {
   const today = new Date();
   const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 15);
@@ -102,6 +116,7 @@ export default function CustomerReport({ author }: { author: string }) {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
+  const [smsBody, setSmsBody] = useState(() => { try { return localStorage.getItem(REPORT_SMS_KEY) || DEFAULT_REPORT_SMS; } catch { return DEFAULT_REPORT_SMS; } });
   const [sending, setSending] = useState(false);
   const [logs, setLogs] = useState<SendLogRow[]>([]);
 
@@ -238,10 +253,11 @@ export default function CustomerReport({ author }: { author: string }) {
     try {
       const coreEnc = encodeURIComponent(core.slice(0, 24));
       const keymanCols = `${encodeURIComponent("키맨성함+직함")},${encodeURIComponent("키맨전화번호")}`;
-      // 키맨 후보는 4곳에서 모은다 — 복합기확장성(키맨 DB)·워킨맵(지점 연락처)·서비스접수(회신번호)·미수(업체담당자)
-      const [recips, logRows, keymen, places, receps, misuRows] = await Promise.all([
+      // 키맨 후보 1순위는 임대리스트 키맨(AA열 — 22,243행 보유) — 워킨맵·접수·미수는 폴백
+      const [recips, logRows, leaseKeymen, keymen, places, receps, misuRows] = await Promise.all([
         selectRows<Recipient>("report_recipients", `select=*&vendor=eq.${encodeURIComponent(core)}&active=is.true&order=id.asc`),
         selectRows<SendLogRow>("report_send_log", `select=id,recipient_name,phone,status,period,created_at&vendor=eq.${encodeURIComponent(core)}&order=id.desc&limit=6`),
+        selectRows<Record<string, unknown>>("vendor_info", `select=${encodeURIComponent("키맨")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=60`).catch(() => []),
         selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=20`).catch(() => []),
         selectRows<Record<string, unknown>>("workin_map_places", `select=name,phone&name=ilike.*${coreEnc}*&visible=not.is.false&limit=20`).catch(() => []),
         selectRows<Record<string, unknown>>("service_receptions", `select=receiver_phone,author&vendor=ilike.*${coreEnc}*&deleted=not.is.true&order=id.desc&limit=20`).catch(() => []),
@@ -256,6 +272,14 @@ export default function CustomerReport({ author }: { author: string }) {
         if (!validPhone(phone) || have.has(phone) || unique.has(phone)) return;
         unique.set(phone, { name: String(rawName || "").trim(), phone, source });
       };
+      // 임대리스트 키맨: "이름 010-…" 자유 텍스트 — 번호를 빼낸 나머지를 이름으로
+      leaseKeymen.forEach((row) => {
+        const raw = String(row["키맨"] || "").trim();
+        if (!raw) return;
+        const phone = raw.match(/01[016789][ -]?\d{3,4}[ -]?\d{4}/)?.[0] || "";
+        const name = raw.replace(phone, "").replace(/[()\s]+/g, " ").trim();
+        offer(name, phone, "임대리스트 키맨");
+      });
       keymen.forEach((row) => offer(row["키맨성함+직함"], row["키맨전화번호"], "키맨 DB"));
       places.forEach((row) => offer("", row["phone"], "워킨맵"));
       receps.forEach((row) => offer(row["author"], row["receiver_phone"], "접수 회신번호"));
@@ -283,17 +307,14 @@ export default function CustomerReport({ author }: { author: string }) {
     } catch (e) { notify(`삭제 실패: ${(e as Error).message}`, "error"); }
   };
 
-  const buildSmsText = (links: string[]) => [
-    `[퍼스트오에이] ${report?.vendor || ""} ${report?.periodLabel || ""} 서비스 리포트`,
-    "",
-    "안녕하세요, 퍼스트오에이입니다.",
-    `${report?.periodLabel || ""} 동안의 점검·서비스 내역을 정리해 보내드립니다.`,
-    "",
-    ...links.map((link, index) => `▶ 리포트${links.length > 1 ? ` ${index + 1}장` : ""} 보기: ${link}`),
-    "",
-    "늘 믿고 맡겨주셔서 감사합니다.",
-    "문의 1522-1093",
-  ].join("\n");
+  const buildSmsText = (links: string[]) => {
+    const linkLines = links.map((link, index) => `▶ 리포트${links.length > 1 ? ` ${index + 1}장` : ""} 보기: ${link}`).join("\n");
+    const base = smsBody
+      .replaceAll("{업체명}", report?.vendor || "")
+      .replaceAll("{기간}", report?.periodLabel || "");
+    // {링크} 토큰이 지워졌어도 링크는 반드시 나간다 — 문서 없는 안내 문자는 의미가 없다
+    return base.includes("{링크}") ? base.replaceAll("{링크}", linkLines) : `${base}\n\n${linkLines}`;
+  };
 
   const sendTargets = recipients.filter((r) => validPhone(r.phone));
 
@@ -309,7 +330,11 @@ export default function CustomerReport({ author }: { author: string }) {
       for (let i = 0; i < pages.length; i += 1) {
         const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff" });
         const blob: Blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("이미지 변환 실패"))), "image/png"));
-        const path = `${new Date().toISOString().slice(0, 7)}/${(vendorMatchKey(report.vendor) || "vendor").slice(0, 24)}-${stamp}-p${i + 1}.png`;
+        // 스토리지는 한글 키를 거부한다(InvalidKey) — 영문·숫자만 남기고, 비면 이름 해시로 구분
+        const ascii = (vendorMatchKey(report.vendor) || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+        let hash = 0;
+        for (const ch of report.vendor) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+        const path = `${new Date().toISOString().slice(0, 7)}/${ascii || "v"}-${hash.toString(36)}-${stamp}-p${i + 1}.png`;
         links.push(await uploadPublicFile("reports", path, blob, "image/png"));
       }
       // 2) 수신자마다 링크가 담긴 문자를 대표번호로 발송 (같은 번호 1통)
@@ -451,7 +476,13 @@ export default function CustomerReport({ author }: { author: string }) {
                   <div className="flex flex-wrap gap-1.5">{sendTargets.map((r) => <span key={r.id} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{r.name || r.phone}</span>)}</div>
                 </div>
                 <div>
-                  <div className="mb-1 text-[11px] font-black text-slate-400">문안 (링크는 발송 때 자동 생성)</div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-400">문안 — 바로 수정할 수 있습니다 ({"{업체명}"} {"{기간}"} {"{링크}"} 자동 치환)</span>
+                    <button type="button" onClick={() => { setSmsBody(DEFAULT_REPORT_SMS); try { localStorage.removeItem(REPORT_SMS_KEY); } catch { /* 무시 */ } }} className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">기본 문구</button>
+                  </div>
+                  <textarea value={smsBody} onChange={(e) => { setSmsBody(e.target.value); try { localStorage.setItem(REPORT_SMS_KEY, e.target.value); } catch { /* 무시 */ } }} rows={9}
+                    className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700 outline-none focus:border-blue-500" />
+                  <div className="mt-1.5 text-[11px] font-black text-slate-400">받는 사람이 보게 될 내용</div>
                   <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700">{buildSmsText(["(이미지 링크 자동 첨부)"])}</div>
                 </div>
               </div>

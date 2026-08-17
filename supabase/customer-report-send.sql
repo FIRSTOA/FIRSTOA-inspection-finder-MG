@@ -51,3 +51,7 @@ drop policy if exists "reports anon upload" on storage.objects;
 create policy "reports anon upload" on storage.objects for insert to anon with check (bucket_id = 'reports');
 drop policy if exists "reports public read" on storage.objects;
 create policy "reports public read" on storage.objects for select to anon using (bucket_id = 'reports');
+
+-- 임대리스트 키맨(AA열) 승격 — 시트 원본 무수정, _raw에서 생성 컬럼으로 (품목·모델명·제조사와 같은 패턴)
+-- 값 형태: "이름 010-xxxx-xxxx" 자유 텍스트 (순서 혼재) — 앱에서 휴대폰 번호를 정규식으로 분리해 쓴다
+alter table vendor_info add column if not exists "키맨" text generated always as ((_raw::jsonb ->> '키맨')) stored;
