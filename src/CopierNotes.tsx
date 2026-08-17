@@ -25,9 +25,9 @@ const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700
 
 // 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
 const BRANDS: Record<string, string[]> = {
-  삼성: ["MX3", "MX4", "MX7", "흑백기"],
+  삼성: ["MX3", "MX4", "MX7", "9201", "흑백기"],
   신도: ["320", "410", "420", "450", "N501", "600", "bizhub"],
-  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "9201", "SC2022", "305", "5005"],
+  제록스: ["키슈", "세이토", "마블", "베니", "보탄", "헤라", "APEOS", "SC2022", "305", "5005"],
   교세라: ["2100", "2101", "5521", "5526"],
   브라더: ["5700", "8900"],
   오키: ["5473"],
@@ -52,6 +52,7 @@ const MODEL_RULES: Record<string, Record<string, ModelRule>> = {
     MX3: { include: ["3220", "3250", "3255", "3280"], excludeRegex: "k[0-9]" },
     MX4: { include: ["4220", "4225", "4250", "4255", "4300", "4305", "4350", "4355"], excludeRegex: "k[0-9]" },
     MX7: { include: ["7400", "7500", "7600"], excludeRegex: "k[0-9]" },
+    "9201": { include: ["9201", "9251", "9301"] }, // CLX-9201/9251/9301 — 삼성 대형 컬러기(기록에 제록스로 오기된 건이 있었다)
     흑백기: { include: [], regex: "k[0-9]{3}" },
   },
   신도: {
@@ -66,7 +67,6 @@ const MODEL_RULES: Record<string, Record<string, ModelRule>> = {
     헤라: { include: ["헤라", "5580", "5585", "6680"] },
     "305": { include: ["305"] },
     "5005": { include: ["5005"] },
-    "9201": { include: ["9201", "9301"] },
     SC2022: { include: ["sc2022", "sc-2022", "2022"] },
     보탄: { include: ["보탄", "port-vii c"], regex: "vii[\\s-]*c?\\d{4}" },
     베니: { include: ["베니", "port-vi c"], regex: "vi(?!i)[\\s-]*c?\\d{4}" },
@@ -216,6 +216,33 @@ export default function CopierNotes({ author }: { author: string }) {
       .then(setPlaybook)
       .catch(() => setPlaybook([]));
   }, [playbook]);
+  /**
+   * 카드에 딸린 실제 작업 가이드 — 족보가 "무엇을 할지"면 가이드는 "어떻게 하는지"(사진·절차).
+   * 브랜드(또는 공용) 안에서 기종·증상·부품 낱말이 겹치는 문서를 점수순으로 고른다.
+   */
+  const relatedGuides = (card: PlaybookCard): KnowledgeDoc[] => {
+    const docs = guides || [];
+    if (!docs.length) return [];
+    const symptomWords = (SYMPTOM_FILTERS[card.symptom] || []).map((w) => w.toLowerCase());
+    const partWords = card.causes.flatMap((c) => [...c.parts, c.cause]).join(" ").toLowerCase().match(/[가-힣a-z0-9]{2,}/g) || [];
+    const seriesKey = card.series.toLowerCase();
+    return docs
+      .filter((d) => !d.brand || d.brand === card.brand || d.brand === "공용")
+      .map((d) => {
+        const hay = `${d.title} ${d.summary} ${(d.models || []).join(" ")} ${(d.parts || []).join(" ")}`.toLowerCase();
+        let score = 0;
+        if (seriesKey && hay.includes(seriesKey)) score += 3;
+        if (symptomWords.some((w) => hay.includes(w))) score += 2;
+        // 부품 낱말 가점은 상한 — 부품 목록이 긴 범용 문서(전체 분해 자료 등)가 모든 카드를 점령하지 않게
+        score += Math.min(partWords.filter((w) => w.length >= 2 && hay.includes(w)).length, 4) * 0.4;
+        if (d.brand === card.brand) score += 0.5;
+        return { d, score };
+      })
+      .filter((x) => x.score >= 2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((x) => x.d);
+  };
   /** 카드의 사례들로 점프 — 기록 탭 필터를 카드 축(브랜드·기종·증상)에 맞춰 놓고 전환 */
   const openCases = (card: PlaybookCard) => {
     setBrand(card.brand in BRANDS ? card.brand : "전체");
@@ -325,11 +352,11 @@ export default function CopierNotes({ author }: { author: string }) {
     finally { setGuidePhotoBusy(false); }
   };
   useEffect(() => {
-    if (view !== "guide" || guides !== null) return;
+    if (guides !== null) return; // 족보 카드의 "관련 가이드"에도 쓰이므로 탭과 무관하게 한 번 읽는다
     selectRows<KnowledgeDoc>("knowledge_docs", "select=*&order=brand.asc,title.asc&limit=1000")
       .then(setGuides)
       .catch(() => setGuides([]));
-  }, [view, guides]);
+  }, [guides]);
   const [draft, setDraft] = useState({ brand: "삼성", model: "", kind: "학습" as "학습" | "처리이력", title: "", content: "" });
   const [busy, setBusy] = useState(false);
 
@@ -434,10 +461,10 @@ export default function CopierNotes({ author }: { author: string }) {
     <div className="flex flex-wrap items-center gap-3 bg-[#1E252F] px-5 pb-3.5 pt-4">
       <div className="min-w-0">
         <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 실전 가이드 — 팀의 복합기 기술 저장소</p>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법)</p>
       </div>
       <div className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-1">
-        {([["jokbo", "족보"], ["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
+        {([["notes", "기록"], ["jokbo", "족보"], ["guide", "가이드"]] as const).map(([key, label]) => (
           <button key={key} type="button" onClick={() => setView(key)}
             className={`rounded-full px-4 py-1.5 text-xs font-black transition ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
         ))}
@@ -474,7 +501,7 @@ export default function CopierNotes({ author }: { author: string }) {
                   </label>
                   <div className="ml-auto flex flex-wrap items-center gap-1.5">
                     <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">카드 <b className="tabular-nums text-white">{filtered.length}</b></span>
-                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">게시 <b className="tabular-nums text-emerald-300">{published}</b> · 초안 <b className="tabular-nums text-amber-300">{cards.length - published}</b></span>
+                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">확인됨 <b className="tabular-nums text-emerald-300">{published}</b> · 검토 전 <b className="tabular-nums text-amber-300">{cards.length - published}</b></span>
                   </div>
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -489,7 +516,7 @@ export default function CopierNotes({ author }: { author: string }) {
                     ))}
                   </select>
                   <select value={jkStatus} onChange={(e) => setJkStatus(e.target.value as typeof jkStatus)} className={darkSelect(jkStatus !== "전체")}>
-                    {["전체", "게시", "초안"].map((name) => <option key={name} value={name}>{name === "전체" ? "상태 전체" : name}</option>)}
+                    {["전체", "게시", "초안"].map((name) => <option key={name} value={name}>{name === "전체" ? "상태 전체" : name === "게시" ? "확인됨(게시)" : "검토 전(AI 초안)"}</option>)}
                   </select>
                   <button type="button" onClick={() => setJkDraft({ ...BLANK_CARD, causes: [{ cause: "", share: "높음", steps: [], parts: [] }] })}
                     className="ml-auto rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 카드 작성</button>
@@ -505,7 +532,7 @@ export default function CopierNotes({ author }: { author: string }) {
                       className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{card.brand}</span>
-                        {card.status === "초안" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">검토 전 초안</span>}
+                        {card.status === "초안" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">AI 초안 · 검토 전</span>}
                         <span className="ml-auto text-[11px] font-bold tabular-nums text-slate-400">사례 {card.case_count.toLocaleString()}건</span>
                       </div>
                       <div className="mt-2 text-[17px] font-black leading-6 text-slate-950">{card.title}</div>
@@ -529,7 +556,7 @@ export default function CopierNotes({ author }: { author: string }) {
                   <span className="flex flex-col gap-1.5">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black text-white">{jkOpen.brand}</span>
-                      {jkOpen.status === "초안" && <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-black text-amber-950">검토 전 초안 — 게시 전엔 참고용</span>}
+                      {jkOpen.status === "초안" && <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-black text-amber-950">AI 초안 · 아직 사람이 확인하지 않음</span>}
                     </span>
                     <span className="text-base leading-snug">{jkOpen.title}</span>
                   </span>
@@ -550,7 +577,7 @@ export default function CopierNotes({ author }: { author: string }) {
                     } catch (e) { notify(`상태 변경 실패: ${(e as Error).message}`, "error"); } finally { setJkBusy(false); }
                   })(); }}
                     className={`rounded-full px-6 py-2 text-xs font-black text-white transition ${jkOpen.status === "게시" ? "bg-slate-500 hover:bg-slate-600" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                    {jkOpen.status === "게시" ? "초안으로" : "✓ 검토 완료 — 게시"}
+                    {jkOpen.status === "게시" ? "검토 전으로 되돌리기" : "✓ 내용 맞음 — 팀에 게시"}
                   </button>
                 </>}>
                 <div className="space-y-3">
@@ -583,6 +610,24 @@ export default function CopierNotes({ author }: { author: string }) {
                       <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{jkOpen.tips}</p>
                     </div>
                   )}
+                  {/* 실제 작업 방법 — 족보가 "무엇을", 가이드가 "어떻게"(사진·절차) */}
+                  {(() => {
+                    const linked = relatedGuides(jkOpen);
+                    if (!linked.length) return null;
+                    return (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                        <div className="text-[11px] font-black text-emerald-700">🔧 관련 가이드 — 실제 작업 방법(사진·절차)</div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {linked.map((doc) => (
+                            <button key={doc.id} type="button" onClick={() => { setJkOpen(null); setOpenGuide(doc); setShowOriginal(false); setView("guide"); }}
+                              className="max-w-full truncate rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-black text-slate-800 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50">
+                              {doc.title}{doc.content.includes("storage/v1") ? " 📷" : ""}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </FormModal>
             )}

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "be43e27797",
+    "date": "2026-08-17",
+    "note": "기록 탭 상단에 족보 추천 — 사례를 다 읽기 전에 정제된 답부터"
+  },
+  {
     "hash": "ddf6b711df",
     "date": "2026-08-17",
     "note": "제록스 기종 매칭 보강 + 족보 증상 필터"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ec0d99b2e1",
     "date": "2026-08-02",
     "note": "원격 값 고정 안전화 — 재계산 전 빈 값을 고정해 수식이 소실되던 사고 수정"
-  },
-  {
-    "hash": "a1e8fe2b70",
-    "date": "2026-08-02",
-    "note": "원격 탭 값 고정 목록에 한조(T열 VLOOKUP) 추가 — 실제 수식 열 대조 반영"
   }
 ];
