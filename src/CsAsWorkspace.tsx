@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
-import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow, upsertRows } from "./supabase";
+import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import PortalSelect from "./PortalSelect";
 import { nextBusinessDay } from "./planDate";
@@ -954,7 +954,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         location: created.address || "", description: created.note || "",
       }).then((r) => {
         if (!r.uid) return;
-        update(created.id, { naverUid: r.uid });
+        const uid = r.uid;
+        // update()는 이 콜백이 잡은 클로저의 tickets(생성 전 배열)를 봐서 방금 만든 일정을 못 찾는다
+        // — naverUid가 유실되면 네이버 쪽 수정·삭제·완료가 웹앱으로 돌아오지 못한다
+        setTicketsState((current) => current.map((t) => (t.id === created.id ? { ...t, naverUid: uid } : t)));
+        void trackWrite(updateRows("as_tickets", `id=eq.${encodeURIComponent(created.id)}`, { naverUid: uid }), "네이버 연결 저장 실패 — 이 일정은 네이버 쪽 수정이 웹앱에 반영되지 않습니다.");
         notify("네이버 캘린더에도 등록됐습니다 ✓", "success");
         if (created.repeatMonthly) {
           // 반복 클론도 네이버에 사본 생성 (표시 동기 — 개별 수정 연동은 원본만)
