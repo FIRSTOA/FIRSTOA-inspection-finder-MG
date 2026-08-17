@@ -639,47 +639,17 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
               </summary>
               <div className="border-t border-slate-200 bg-slate-50">
                 {(() => {
+                  // 점검·AS는 FIELD에서 검색할 때와 똑같이 — 직원들이 매일 보는 원문 양식 그대로 (라벨 분해는 더 헷갈린다)
+                  const rawText = (activeCat === "점검" || activeCat === "AS") ? String(record["_원문"] || "").trim() : "";
+                  if (rawText) return (
+                    <div className="bg-white px-4 py-3 sm:px-5">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-[13px] font-medium leading-6 text-slate-800">{rawText}</pre>
+                    </div>
+                  );
                   const clean = fields.filter((field) => !junkValue(field.value));
                   const priority = PRIORITY_FIELDS[activeCat] || [];
                   const mains = priority.map((key) => clean.find((field) => field.key === key)).filter((field): field is SummaryField => !!field);
-                  // 기기 여러 대 방문: 구조화 컬럼(첫 기기) 대신 원문 블록을 기기별로 보여준다
-                  const machineKeys = new Set(["모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "특이사항"]);
-                  const rest = clean.filter((field) => !priority.includes(field.key) && !(blocks.length > 1 && machineKeys.has(field.key)));
-                  if (blocks.length > 1) return <>
-                    <div className="bg-white px-4 pt-2.5 text-[11px] font-black text-slate-500 sm:px-5">이 방문에서 점검한 기기 {blocks.length}대</div>
-                    <div className="divide-y divide-slate-100 bg-white px-4 sm:px-5">
-                      {blocks.map((block, blockIndex) => (
-                        <div key={`${block.asset}-${blockIndex}`} className="py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-black text-white">{block.asset || block.serial || `기기 ${blockIndex + 1}`}</span>
-                            {block.model && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{block.model}</span>}
-                            {block.loc && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{block.loc}</span>}
-                            {block.serial && block.asset && <span className="text-[10px] font-semibold text-slate-400">{block.serial}</span>}
-                          </div>
-                          {([["처리내용", block.handled || block.content], ["매수", block.counts], ["토너잔량", block.toner], ["폐통", block.waste], ["여분", block.spare], ["특이사항", block.special]] as const)
-                            .filter(([, value]) => value && !junkValue(value)).map(([label, value]) => (
-                            <div key={label} className="mt-1.5 flex gap-3">
-                              <span className="w-16 shrink-0 pt-0.5 text-[11px] font-bold text-slate-400">{label}</span>
-                              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-medium leading-5 text-slate-800">{value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    {rest.length > 0 && (
-                      <details className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
-                        <summary className="cursor-pointer text-[11px] font-black text-slate-400 hover:text-slate-600">그 외 정보 {rest.length}개 보기</summary>
-                        <div className="grid gap-x-6 gap-y-2 py-2 sm:grid-cols-2">
-                          {rest.map((field, fieldIndex) => (
-                            <div key={`${field.key}-${fieldIndex}`} className="min-w-0">
-                              <div className="text-[10px] font-bold text-slate-400">{fieldLabel(field.key)}</div>
-                              <div className="whitespace-pre-wrap break-words text-[12px] font-normal leading-5 text-slate-600">{field.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </>;
+                  const rest = clean.filter((field) => !priority.includes(field.key));
                   return <>
                     <div className="divide-y divide-slate-100 bg-white px-4">
                       {mains.map((field) => (

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4ad5aa6487",
+    "date": "2026-08-17",
+    "note": "통합이력 기기 확인 대수 — 임대종료(반납) 기기는 제외하고 표기"
+  },
+  {
     "hash": "91c8cfc9d6",
     "date": "2026-08-17",
     "note": "그룹 카드 기기별 수치는 시리얼 일치 기기에만 — 코드 공통 이력 복제 방지"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c8cf823929",
     "date": "2026-08-01",
     "note": "책 검색을 키 없이 해결 — GAS 프록시(리디북스 공개 검색)를 1순위로"
-  },
-  {
-    "hash": "8758ed5935",
-    "date": "2026-08-01",
-    "note": "칭찬 대상 부서→팀→이름 3단 + 책 검색 3중 체인(카카오/구글/오픈라이브러리)"
   }
 ];
