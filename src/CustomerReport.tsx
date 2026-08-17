@@ -284,9 +284,9 @@ export default function CustomerReport({ author }: { author: string }) {
             <span className="text-xs font-bold text-slate-400"><Download size={12} className="mr-1 inline" />저장한 이미지를 문자·메일로 보내세요 (자동 발송은 2단계 예정)</span>
           </div>
 
-          <div className="report-print-area space-y-5">
+          <div className="report-print-area space-y-5 overflow-x-auto pb-1">
             {/* ─── 1장 ─── */}
-            <div className="report-page mx-auto w-[794px] max-w-full overflow-hidden rounded-sm bg-white text-slate-900 shadow-lg" style={{ minHeight: 1050 }}>
+            <div className="report-page mx-auto w-[794px] min-w-[794px] overflow-hidden rounded-sm bg-white text-slate-900 shadow-lg" style={{ minHeight: 1050 }}>
               <div className="bg-[#1E252F] px-10 pb-7 pt-8 text-white">
                 <div className="flex items-start justify-between">
                   <div>
@@ -431,7 +431,7 @@ export default function CustomerReport({ author }: { author: string }) {
 
             {/* ─── 2장 (내역이 넘칠 때만) ─── */}
             {page2Rows.length > 0 && (
-              <div className="report-page mx-auto w-[794px] max-w-full overflow-hidden rounded-sm bg-white text-slate-900 shadow-lg" style={{ minHeight: 1050 }}>
+              <div className="report-page mx-auto w-[794px] min-w-[794px] overflow-hidden rounded-sm bg-white text-slate-900 shadow-lg" style={{ minHeight: 1050 }}>
                 <div className="flex items-center justify-between bg-[#1E252F] px-10 py-5 text-white">
                   <div className="text-sm font-black">{report.periodLabel} 서비스 내역 (계속) — {report.vendor}</div>
                   <div className="text-[11px] font-semibold text-slate-400">퍼스트전산 · 2/2</div>

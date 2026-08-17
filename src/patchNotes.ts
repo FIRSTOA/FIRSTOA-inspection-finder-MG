@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1dedea72fd",
+    "date": "2026-08-17",
+    "note": "통합이력 가독성 재구성 — 결론+근거 2단·기기별 사용량/여분·교체 추정 + 블루닷류 이름 꼬리 정규화(SQL·JS 거울)"
+  },
+  {
     "hash": "1a11eaaa5a",
     "date": "2026-08-17",
     "note": "통합이력 UI 격상 — 다크 히어로 헤더·월별 타임라인·내용 제목 카드 + 점검/AS 시리얼 표시 + 중복 병합 완결"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "df18e7e274",
     "date": "2026-08-01",
     "note": "인원 명단을 회사 전체로 통합(DB 원본) + 프로필 표시 + 등록 모달 재디자인"
-  },
-  {
-    "hash": "b3606e212c",
-    "date": "2026-08-01",
-    "note": "조직 명단을 부서·팀·직책 구조로 재편"
   }
 ];

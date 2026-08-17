@@ -28,8 +28,9 @@ create or replace function workin_vendor_(nm text) returns text language sql imm
   select btrim(regexp_replace(v, '[\s\-·,()]+$', '')) from e;
 $$;
 -- 업체명 매칭 키: 공백·괄호·㈜ 등 표기 차이를 없애고 앞 8글자만 — 워킨맵과 점검이력을 이어준다
+-- 법인표기(주식회사 등)는 위치 불문 제거 — 워킨맵 "주식회사 엘엠디" vs 점검 "엘엠디"가 같은 키가 되도록 (미스 436곳 중 다수 원인)
 create or replace function vendor_key_(v text) returns text language sql immutable as $$
-  select left(regexp_replace(lower(coalesce(v,'')), '[^가-힣a-z0-9]', '', 'g'), 8);
+  select left(regexp_replace(lower(regexp_replace(coalesce(v,''), '주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인|\(주\)|㈜', ' ', 'g')), '[^가-힣a-z0-9]', '', 'g'), 8);
 $$;
 grant execute on function safe_date_(text), workin_grade_(text), workin_vendor_(text), vendor_key_(text) to anon, authenticated;
 
@@ -56,6 +57,7 @@ create function suggest_workin_candidates(
 ) language sql stable as $$
   with places as (
     select w.id, w.name as place_name, workin_vendor_(w.name) as vendor, workin_grade_(w.name) as grade,
+           vendor_key_(workin_vendor_(w.name)) as pkey,  -- 키를 한 번만 계산 (조인마다 regexp 재계산 금지 — 19초→밀리초)
            coalesce(w.label, '') as label,
            coalesce(nullif(w.address, ''), '') || case when coalesce(w.address_detail,'') <> '' then ' ' || w.address_detail else '' end as addr,
            w.latitude as lat, w.longitude as lng,
@@ -140,19 +142,28 @@ create function suggest_workin_candidates(
     where length(b.dk) >= 3
     group by 1
   ),
+  -- 접두 일치 폴백 후보: 워킨맵 이름에 메모 꼬리(2층·추가·공장 등)가 붙어 정확 일치가 깨진 곳 —
+  -- 앞 3글자 동일(해시 조인)로 먼저 거르고, 업체당 가장 구체적인(긴) 이력 키 하나만 남긴다
+  pre as (
+    select p2.id as pid, k.*, row_number() over (partition by p2.id order by length(k.hk) desc) as rn
+    from places p2
+    join by_key k on left(k.hk, 3) = left(p2.pkey, 3)
+                 and (k.hk like p2.pkey || '%' or p2.pkey like k.hk || '%')
+    where length(p2.pkey) >= 3
+  ),
   scored as (
     select p.*,
-      -- 코드 일치가 있으면 그 층의 값 전체를, 없으면 이름 키 층 전체를 쓴다 (층 섞임 금지 — 매수 비교가 어긋난다)
-      case when bc.hcode is not null then bc.d1 else bk.d1 end as last_date,
-      case when bc.hcode is not null then bc.d2 else bk.d2 end as prev_date,
-      case when bc.hcode is not null then bc.p1 else bk.p1 end as last_pages,
-      case when bc.hcode is not null then bc.p2 else bk.p2 end as prev_pages,
-      case when bc.hcode is not null then bc.t1 else bk.t1 end as last_toner,
-      case when bc.hcode is not null then bc.s1 else bk.s1 end as last_spare,
-      case when bc.hcode is not null then bc.w1 else bk.w1 end as last_waste,
-      case when bc.hcode is not null then bc.sr1 else bk.sr1 end as last_serial,
-      case when bc.hcode is not null then bc.sr2 else bk.sr2 end as prev_serial,
-      case when bc.hcode is not null then bc.sp1 else bk.sp1 end as last_special,
+      -- 코드 일치 > 이름 키 일치 > 접두 일치 순으로 **한 층의 값 전체**를 쓴다 (층 섞임 금지 — 매수 비교가 어긋난다)
+      case when bc.hcode is not null then bc.d1 when bk.hk is not null then bk.d1 else bp.d1 end as last_date,
+      case when bc.hcode is not null then bc.d2 when bk.hk is not null then bk.d2 else bp.d2 end as prev_date,
+      case when bc.hcode is not null then bc.p1 when bk.hk is not null then bk.p1 else bp.p1 end as last_pages,
+      case when bc.hcode is not null then bc.p2 when bk.hk is not null then bk.p2 else bp.p2 end as prev_pages,
+      case when bc.hcode is not null then bc.t1 when bk.hk is not null then bk.t1 else bp.t1 end as last_toner,
+      case when bc.hcode is not null then bc.s1 when bk.hk is not null then bk.s1 else bp.s1 end as last_spare,
+      case when bc.hcode is not null then bc.w1 when bk.hk is not null then bk.w1 else bp.w1 end as last_waste,
+      case when bc.hcode is not null then bc.sr1 when bk.hk is not null then bk.sr1 else bp.sr1 end as last_serial,
+      case when bc.hcode is not null then bc.sr2 when bk.hk is not null then bk.sr2 else bp.sr2 end as prev_serial,
+      case when bc.hcode is not null then bc.sp1 when bk.hk is not null then bk.sp1 else bp.sp1 end as last_special,
       coalesce(dc.cnt, dk2.cnt, 0) as device_count, coalesce(dc.list, dk2.list, '') as devices,
       case when p_lat is null or p.lat is null then null
            else round((sqrt(power((p.lat - p_lat) * 111.0, 2) + power((p.lng - p_lng) * 88.0, 2)))::numeric, 2)
@@ -161,9 +172,11 @@ create function suggest_workin_candidates(
            then current_date >= date_trunc('quarter', current_date)::date + 40 else true end as quarter_ok
     from places p
     left join by_code bc on p.code <> '' and bc.hcode = p.code
-    left join by_key bk on bk.hk = vendor_key_(p.vendor) and length(vendor_key_(p.vendor)) >= 3
+    left join by_key bk on bk.hk = p.pkey and length(p.pkey) >= 3
+    -- 접두 일치 폴백: 코드·정확 키 둘 다 실패한 곳만 채택 (rn=1 = 가장 구체적인 이력 키)
+    left join pre bp on bp.pid = p.id and bp.rn = 1 and bc.hcode is null and bk.hk is null
     left join dev_code dc on p.code <> '' and dc.dcode = p.code
-    left join dev_key dk2 on dk2.dk = vendor_key_(p.vendor) and length(vendor_key_(p.vendor)) >= 3
+    left join dev_key dk2 on dk2.dk = p.pkey and length(p.pkey) >= 3
   )
   select id, place_name, vendor, grade, label, addr, lat, lng, comment,
          last_date,
