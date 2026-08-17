@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "92c73ad6d1",
+    "date": "2026-08-17",
+    "note": "분기체크 사용량/여분 기기 리스트 통합 — 시리얼 우선 기기 식별·A~E+지역구 표기·합계 매수 폴백"
+  },
+  {
     "hash": "92acdf73b1",
     "date": "2026-08-17",
     "note": "리포트 발송 수리 — 임대리스트 키맨(생성 컬럼) 우선 추천·스토리지 ASCII 키·문안 편집(토큰 치환+저장)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2dde5a7c50",
     "date": "2026-08-01",
     "note": "해피콜·홍보물 발송 미리보기 + 고객용 날짜 표기 + 주제목 다크 헤더"
-  },
-  {
-    "hash": "09a4b69f80",
-    "date": "2026-08-01",
-    "note": "해피콜·홍보물·주간현황판·일일방문일지 배민 디자인 정합 + 기능 보강"
   }
 ];

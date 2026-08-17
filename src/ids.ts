@@ -117,7 +117,7 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
     }
     if (!line) continue;
     if (cur && curField) cur[curField] = cur[curField] ? `${cur[curField]}\n${line}` : line; // 처리내용·여분의 여러 줄 값
-    else if (!cur && line.length <= 12 && !/^\d+[.]?$/.test(line)) pendingLoc = line; // "4층", "지하1층" 같은 위치 머리글
+    else if (!cur && line.length <= 12 && !/^\d+[.]?$/.test(line) && !/[:：]/.test(line)) pendingLoc = line; // "4층", "지하1층" 같은 위치 머리글 ("키맨/접수자: …" 같은 라벨 줄은 제외)
   }
   if (cur) out.push(cur);
   return out.filter((block) => block.model || block.asset || block.serial);
