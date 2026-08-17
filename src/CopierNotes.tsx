@@ -14,6 +14,15 @@ type CopierNote = {
   kind: "학습" | "처리이력"; title: string; content: string;
 };
 
+// 족보 카드 — 시리즈×증상 단위의 정제 지식 (원인 TOP N + 처리 절차). AI 초안 → 사람 검토 → 게시.
+type PlaybookCause = { cause: string; share: string; steps: string[]; parts: string[] };
+type PlaybookCard = {
+  id: string; brand: string; series: string; symptom: string; title: string; summary: string;
+  causes: PlaybookCause[]; tips: string; case_count: number; status: string; author: string; source?: string; created_at: string; updated_at?: string;
+};
+const BLANK_CARD: PlaybookCard = { id: "", brand: "삼성", series: "", symptom: "급지·걸림", title: "", summary: "", causes: [{ cause: "", share: "높음", steps: [], parts: [] }], tips: "", case_count: 0, status: "초안", author: "", created_at: "" };
+const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700", 보통: "bg-amber-100 text-amber-700", 낮음: "bg-slate-100 text-slate-500" };
+
 // 기종 필터 칩 — 팀 관용 시리즈명. 실제 기기명(기기재고 카탈로그)과는 MODEL_RULES로 얼추 매칭한다.
 const BRANDS: Record<string, string[]> = {
   삼성: ["MX3", "MX4", "MX7", "흑백기"],
@@ -77,6 +86,7 @@ const SYMPTOM_FILTERS: Record<string, string[]> = {
   "정착기·롤러": ["정착", "퓨저", "롤러", "히터"],
   "스캔·팩스": ["스캔", "팩스", "ADF"],
   "네트워크·드라이버": ["네트워크", "드라이버", "IP", "무선", "포트", "공유"],
+  "소음": ["소음", "소리", "이음"],
 };
 
 
@@ -183,7 +193,53 @@ export default function CopierNotes({ author }: { author: string }) {
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try { const parsed = JSON.parse(localStorage.getItem("copier_recent_q_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 6) : []; } catch { return []; }
   });
-  const [view, setView] = useState<"notes" | "guide">("notes");
+  const [view, setView] = useState<"jokbo" | "notes" | "guide">(() =>
+    (["jokbo", "notes", "guide"].includes(localStorage.getItem("copier_view_v1") || "") ? localStorage.getItem("copier_view_v1") : "jokbo") as "jokbo" | "notes" | "guide");
+  useEffect(() => { localStorage.setItem("copier_view_v1", view); }, [view]);
+  // ── 족보: 시리즈×증상 카드 — 12,580건 처리이력을 정제한 "이것만 보면 되는" 층 ──
+  const [playbook, setPlaybook] = useState<PlaybookCard[] | null>(null);
+  const [jkQuery, setJkQuery] = useState("");
+  const [jkBrand, setJkBrand] = useState("전체");
+  const [jkStatus, setJkStatus] = useState<"전체" | "게시" | "초안">("전체");
+  const [jkOpen, setJkOpen] = useState<PlaybookCard | null>(null);
+  const [jkDraft, setJkDraft] = useState<PlaybookCard | null>(null); // 수정/새 카드 편집 버퍼
+  const [jkBusy, setJkBusy] = useState(false);
+  useEffect(() => {
+    if (view !== "jokbo" || playbook !== null) return;
+    selectRows<PlaybookCard>("copier_playbook", "select=*&order=case_count.desc,brand.asc&limit=500")
+      .then(setPlaybook)
+      .catch(() => setPlaybook([]));
+  }, [view, playbook]);
+  /** 카드의 사례들로 점프 — 기록 탭 필터를 카드 축(브랜드·기종·증상)에 맞춰 놓고 전환 */
+  const openCases = (card: PlaybookCard) => {
+    setBrand(card.brand in BRANDS ? card.brand : "전체");
+    setModel(card.series && (BRANDS[card.brand] || []).includes(card.series) ? card.series : "전체");
+    setSymptomFilter(card.symptom in SYMPTOM_FILTERS ? card.symptom : "전체");
+    setQuery("");
+    setJkOpen(null);
+    setView("notes");
+  };
+  const saveJkDraft = async () => {
+    const d = jkDraft;
+    if (!d || jkBusy) return;
+    if (!d.brand || !d.symptom || (d.title || "").trim() === "") { notify("브랜드·증상·제목을 채워주세요.", "error"); return; }
+    setJkBusy(true);
+    try {
+      const payload = {
+        brand: d.brand, series: d.series.trim(), symptom: d.symptom, title: d.title.trim().slice(0, 100),
+        summary: d.summary.trim(), causes: d.causes.filter((c) => c.cause.trim()), tips: d.tips.trim(),
+        case_count: d.case_count || 0, status: d.status || "초안", updated_at: new Date().toISOString(),
+      };
+      if (d.id) await updateRows("copier_playbook", `id=eq.${d.id}`, payload);
+      else await insertRow("copier_playbook", { ...payload, author: author || "미지정", source: "manual" });
+      notify(d.id ? "족보 카드를 수정했습니다." : "족보 카드를 만들었습니다.");
+      setJkDraft(null); setJkOpen(null); setPlaybook(null); // 다시 불러오기
+    } catch (e) {
+      notify(`저장 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setJkBusy(false);
+    }
+  };
   // 노션에서 이관한 지식 가이드 (탈거·조립·에러 처리 등 실무 문서)
   const [guides, setGuides] = useState<KnowledgeDoc[] | null>(null);
   const [guideBrand, setGuideBrand] = useState("전체");
@@ -375,7 +431,7 @@ export default function CopierNotes({ author }: { author: string }) {
         <p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 기록과 실전 가이드 — 팀의 복합기 기술 저장소</p>
       </div>
       <div className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-1">
-        {([["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
+        {([["jokbo", "족보"], ["notes", "기록"], ["guide", "가이드"]] as const).map(([key, label]) => (
           <button key={key} type="button" onClick={() => setView(key)}
             className={`rounded-full px-4 py-1.5 text-xs font-black transition ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
         ))}
@@ -388,6 +444,194 @@ export default function CopierNotes({ author }: { author: string }) {
 
   return (
     <div className="space-y-4 pb-16">
+      {view === "jokbo" && (() => {
+        const cards = playbook || [];
+        const norm = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+        const tokens = jkQuery.trim().split(/\s+/).map(norm).filter(Boolean);
+        const filtered = cards.filter((c) =>
+          (jkBrand === "전체" || c.brand === jkBrand) &&
+          (jkStatus === "전체" || c.status === jkStatus) &&
+          (!tokens.length || tokens.every((t) => norm(`${c.brand} ${c.series} ${c.symptom} ${c.title} ${c.summary} ${c.causes.map((x) => `${x.cause} ${x.steps.join(" ")} ${x.parts.join(" ")}`).join(" ")}`).includes(t))));
+        const cardBrands = ["전체", ...Array.from(new Set(cards.map((c) => c.brand)))];
+        const published = cards.filter((c) => c.status === "게시").length;
+        return (
+          <div className="space-y-3">
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {headerTop}
+              <div className="bg-[#151A23] px-5 pb-4 pt-3.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <label className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16] lg:max-w-2xl">
+                    <span className="shrink-0 text-slate-500">🔍</span>
+                    <input value={jkQuery} onChange={(e) => setJkQuery(e.target.value)} placeholder="기종 · 증상 · 부품 검색 (예: MX3 급지)"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
+                  </label>
+                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">카드 <b className="tabular-nums text-white">{filtered.length}</b></span>
+                    <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">게시 <b className="tabular-nums text-emerald-300">{published}</b> · 초안 <b className="tabular-nums text-amber-300">{cards.length - published}</b></span>
+                  </div>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  <select value={jkBrand} onChange={(e) => setJkBrand(e.target.value)} className={darkSelect(jkBrand !== "전체")}>
+                    {cardBrands.map((name) => <option key={name} value={name}>{name === "전체" ? "브랜드 전체" : name}</option>)}
+                  </select>
+                  <select value={jkStatus} onChange={(e) => setJkStatus(e.target.value as typeof jkStatus)} className={darkSelect(jkStatus !== "전체")}>
+                    {["전체", "게시", "초안"].map((name) => <option key={name} value={name}>{name === "전체" ? "상태 전체" : name}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setJkDraft({ ...BLANK_CARD, causes: [{ cause: "", share: "높음", steps: [], parts: [] }] })}
+                    className="ml-auto rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 카드 작성</button>
+                </div>
+              </div>
+
+              {playbook === null && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+              {playbook !== null && !filtered.length && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 족보 카드가 없어요.</div>}
+              {filtered.length > 0 && (
+                <div className="grid gap-2.5 p-3.5 sm:grid-cols-2 xl:grid-cols-3">
+                  {filtered.map((card) => (
+                    <button key={card.id} type="button" onClick={() => setJkOpen(card)}
+                      className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-black text-white">{card.brand}</span>
+                        {card.status === "초안" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">검토 전 초안</span>}
+                        <span className="ml-auto text-[11px] font-bold tabular-nums text-slate-400">사례 {card.case_count.toLocaleString()}건</span>
+                      </div>
+                      <div className="mt-2 text-[17px] font-black leading-6 text-slate-950">{card.title}</div>
+                      {card.summary && <div className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{card.summary}</div>}
+                      <div className="mt-2.5 flex flex-wrap gap-1">
+                        {card.causes.slice(0, 3).map((c, i) => (
+                          <span key={i} className="max-w-full truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">{i + 1}. {c.cause}</span>
+                        ))}
+                        {card.causes.length > 3 && <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10.5px] font-bold text-slate-400">+{card.causes.length - 3}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* 카드 상세 — 원인별 절차가 본문 */}
+            {jkOpen && (
+              <FormModal icon={<span className="text-base">📖</span>} onClose={() => setJkOpen(null)}
+                title={
+                  <span className="flex flex-col gap-1.5">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black text-white">{jkOpen.brand}</span>
+                      {jkOpen.status === "초안" && <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-black text-amber-950">검토 전 초안 — 게시 전엔 참고용</span>}
+                    </span>
+                    <span className="text-base leading-snug">{jkOpen.title}</span>
+                  </span>
+                }
+                subtitle={`실제 사례 ${jkOpen.case_count.toLocaleString()}건 기반 · ${jkOpen.author}${jkOpen.updated_at ? ` · ${jkOpen.updated_at.slice(0, 10)}` : ""}`}
+                footer={<>
+                  <button type="button" onClick={() => { void (async () => { if (await askConfirm("이 족보 카드를 삭제할까요?", { danger: true, okLabel: "삭제" })) { await deleteRows("copier_playbook", `id=eq.${jkOpen.id}`).catch(() => undefined); setJkOpen(null); setPlaybook(null); } })(); }}
+                    className="mr-auto rounded-full px-3 py-2 text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-500">삭제</button>
+                  <button type="button" onClick={() => openCases(jkOpen)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">사례 {jkOpen.case_count.toLocaleString()}건 보기</button>
+                  <button type="button" onClick={() => setJkDraft({ ...jkOpen, causes: jkOpen.causes.map((c) => ({ ...c })) })} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">✎ 수정</button>
+                  <button type="button" disabled={jkBusy} onClick={() => { void (async () => {
+                    setJkBusy(true);
+                    const next = jkOpen.status === "게시" ? "초안" : "게시";
+                    try {
+                      await updateRows("copier_playbook", `id=eq.${jkOpen.id}`, { status: next, author: next === "게시" ? (author || jkOpen.author) : jkOpen.author, updated_at: new Date().toISOString() });
+                      notify(next === "게시" ? "게시했습니다 — 팀 모두에게 보입니다 ✓" : "초안으로 되돌렸습니다");
+                      setJkOpen(null); setPlaybook(null);
+                    } catch (e) { notify(`상태 변경 실패: ${(e as Error).message}`, "error"); } finally { setJkBusy(false); }
+                  })(); }}
+                    className={`rounded-full px-6 py-2 text-xs font-black text-white transition ${jkOpen.status === "게시" ? "bg-slate-500 hover:bg-slate-600" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                    {jkOpen.status === "게시" ? "초안으로" : "✓ 검토 완료 — 게시"}
+                  </button>
+                </>}>
+                <div className="space-y-3">
+                  {jkOpen.summary && <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold leading-6 text-slate-700">{jkOpen.summary}</p>}
+                  {jkOpen.causes.map((c, i) => (
+                    <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
+                      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[12px] font-black text-white">{i + 1}</span>
+                        <span className="min-w-0 flex-1 text-sm font-black text-slate-900">{c.cause}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${SHARE_STYLE[c.share] || SHARE_STYLE.보통}`}>빈도 {c.share}</span>
+                      </div>
+                      <ol className="space-y-1.5 px-4 py-3">
+                        {c.steps.map((s, si) => (
+                          <li key={si} className="flex gap-2 text-sm font-semibold leading-6 text-slate-800">
+                            <span className="shrink-0 font-black text-blue-600">{si + 1}.</span><span className="min-w-0">{s}</span>
+                          </li>
+                        ))}
+                      </ol>
+                      {c.parts.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 bg-slate-50/50 px-4 py-2">
+                          <span className="text-[10px] font-black text-slate-400">부품</span>
+                          {c.parts.map((p, pi) => <span key={pi} className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">{p}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {jkOpen.tips && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                      <div className="text-[11px] font-black text-amber-700">⚠ 주의·꿀팁</div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-800">{jkOpen.tips}</p>
+                    </div>
+                  )}
+                </div>
+              </FormModal>
+            )}
+
+            {/* 카드 편집 — 원인별 (제목·절차 줄단위·부품 콤마) */}
+            {jkDraft && (
+              <FormModal icon={<span className="text-base">✏️</span>} onClose={() => setJkDraft(null)}
+                title={jkDraft.id ? "족보 카드 수정" : "족보 카드 작성"}
+                subtitle="절차는 한 줄에 한 단계, 부품은 콤마로 구분"
+                footer={<>
+                  <button type="button" onClick={() => setJkDraft(null)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-500">취소</button>
+                  <button type="button" disabled={jkBusy} onClick={() => void saveJkDraft()} className="rounded-full bg-slate-900 px-6 py-2 text-xs font-black text-white transition hover:bg-slate-800">{jkBusy ? "저장 중…" : "저장"}</button>
+                </>}>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <label className="text-xs font-black text-slate-500">브랜드
+                      <select value={jkDraft.brand} onChange={(e) => setJkDraft({ ...jkDraft, brand: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-bold">
+                        {BRAND_NAMES.map((b) => <option key={b}>{b}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-black text-slate-500">기종(시리즈)
+                      <input value={jkDraft.series} onChange={(e) => setJkDraft({ ...jkDraft, series: e.target.value, title: `${e.target.value || jkDraft.brand} · ${jkDraft.symptom}` })} placeholder="MX3 · 450 …" className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-bold" />
+                    </label>
+                    <label className="text-xs font-black text-slate-500">증상
+                      <select value={jkDraft.symptom} onChange={(e) => setJkDraft({ ...jkDraft, symptom: e.target.value, title: `${jkDraft.series || jkDraft.brand} · ${e.target.value}` })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-bold">
+                        {Object.keys(SYMPTOM_FILTERS).map((s) => <option key={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-black text-slate-500">제목
+                      <input value={jkDraft.title} onChange={(e) => setJkDraft({ ...jkDraft, title: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-bold" />
+                    </label>
+                  </div>
+                  <label className="block text-xs font-black text-slate-500">한 줄 요약
+                    <input value={jkDraft.summary} onChange={(e) => setJkDraft({ ...jkDraft, summary: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold" />
+                  </label>
+                  {jkDraft.causes.map((c, i) => (
+                    <div key={i} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-400">원인 {i + 1}</span>
+                        <input value={c.cause} onChange={(e) => { const causes = [...jkDraft.causes]; causes[i] = { ...c, cause: e.target.value }; setJkDraft({ ...jkDraft, causes }); }} placeholder="원인/상황 이름" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-bold" />
+                        <select value={c.share} onChange={(e) => { const causes = [...jkDraft.causes]; causes[i] = { ...c, share: e.target.value }; setJkDraft({ ...jkDraft, causes }); }} className="rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs font-bold">
+                          {["높음", "보통", "낮음"].map((s) => <option key={s}>{s}</option>)}
+                        </select>
+                        <button type="button" onClick={() => setJkDraft({ ...jkDraft, causes: jkDraft.causes.filter((_, xi) => xi !== i) })} className="shrink-0 rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-rose-50 hover:text-rose-500">✕</button>
+                      </div>
+                      <textarea value={c.steps.join("\n")} onChange={(e) => { const causes = [...jkDraft.causes]; causes[i] = { ...c, steps: e.target.value.split("\n") }; setJkDraft({ ...jkDraft, causes }); }}
+                        onBlur={(e) => { const causes = [...jkDraft.causes]; causes[i] = { ...c, steps: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) }; setJkDraft({ ...jkDraft, causes }); }}
+                        rows={3} placeholder={"처리 절차 — 한 줄에 한 단계"} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+                      <input value={c.parts.join(", ")} onChange={(e) => { const causes = [...jkDraft.causes]; causes[i] = { ...c, parts: e.target.value.split(",").map((p) => p.trim()).filter(Boolean) }; setJkDraft({ ...jkDraft, causes }); }}
+                        placeholder="필요 부품 (콤마 구분)" className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold" />
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setJkDraft({ ...jkDraft, causes: [...jkDraft.causes, { cause: "", share: "보통", steps: [], parts: [] }] })}
+                    className="rounded-full border border-dashed border-slate-300 px-4 py-1.5 text-xs font-black text-slate-500 hover:border-blue-300 hover:text-blue-600">+ 원인 추가</button>
+                  <label className="block text-xs font-black text-slate-500">주의·꿀팁
+                    <textarea value={jkDraft.tips} onChange={(e) => setJkDraft({ ...jkDraft, tips: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-6" />
+                  </label>
+                </div>
+              </FormModal>
+            )}
+          </div>
+        );
+      })()}
       {view === "guide" && (() => {
         const list = guides || [];
         const brands = ["전체", ...Array.from(new Set(list.map((d) => d.brand).filter(Boolean)))];
