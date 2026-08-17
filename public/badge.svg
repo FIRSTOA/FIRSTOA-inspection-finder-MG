@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 상태바 배지 — 안드로이드는 실루엣(알파)만 그리므로 투명 배경 + 글리프만 -->
+  <rect x="128" y="236" width="196" height="78" rx="24" fill="#FFFFFF"/>
+  <rect x="128" y="84" width="92" height="344" rx="24" fill="#FFFFFF"/>
+  <rect x="128" y="84" width="252" height="92" rx="24" fill="#FFFFFF"/>
+  <circle cx="374" cy="394" r="36" fill="#FFFFFF"/>
+</svg>

@@ -14,7 +14,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, {
     body: data.body || "",
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/badge-96.png", // 상태바용 — 투명 배경 글리프(안드로이드가 실루엣만 그린다. 꽉 찬 아이콘을 주면 흰 네모가 됨)
     tag: data.tag || undefined,
     data: { url: data.url || "/" },
   }));
