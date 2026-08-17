@@ -123,6 +123,39 @@ export default function AutoSchedule({ author }: { author: string }) {
   const toggleGrade = (g: string) => setGrades((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]));
   const toggle = (id: number) => setPicked((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
+  // 같은 코드(사업자)의 지점들 = 같은 회사의 기기들 — 방문 1건으로 묶는다 (빅오션 3층/2층/지하1층 → 카드 1장)
+  type Group = { key: string; rep: string; members: Place[] };
+  const groups = useMemo<Group[]>(() => {
+    const map = new Map<string, Place[]>();
+    const order: string[] = [];
+    rows.forEach((r) => {
+      const key = r.code || `k:${vendorMatchKey(r.vendor || r.place_name).slice(0, 10) || r.id}`;
+      if (!map.has(key)) { map.set(key, []); order.push(key); }
+      map.get(key)!.push(r);
+    });
+    const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i += 1; return a.slice(0, i); };
+    return order.map((key) => {
+      const members = map.get(key)!;
+      let rep = members[0].vendor || members[0].place_name;
+      for (const m of members.slice(1)) rep = commonPrefix(rep, m.vendor || m.place_name);
+      rep = rep.replace(/[\s\-·,(/]+$/, "").trim();
+      if (rep.length < 4) rep = members[0].vendor || members[0].place_name;
+      return { key, rep, members };
+    });
+  }, [rows]);
+  const memberTail = (group: Group, member: Place) => {
+    const name = member.vendor || member.place_name;
+    const tail = name.startsWith(group.rep) ? name.slice(group.rep.length).replace(/^[\s\-·,]+/, "").trim() : "";
+    return tail || parseEquipComment(member.comment).model || `기기 ${group.members.indexOf(member) + 1}`;
+  };
+  const toggleGroup = (group: Group) => setPicked((cur) => {
+    const next = new Set(cur);
+    const allOn = group.members.every((m) => next.has(m.id));
+    group.members.forEach((m) => { if (allOn) next.delete(m.id); else next.add(m.id); });
+    return next;
+  });
+
+
   const [registerConfirm, setRegisterConfirm] = useState(false);
   const register = async () => {
     setRegisterConfirm(false);
@@ -157,38 +190,6 @@ export default function AutoSchedule({ author }: { author: string }) {
       setNotice(`등록 실패: ${(e as Error).message}`);
     } finally { setLoading(false); }
   };
-
-  // 같은 코드(사업자)의 지점들 = 같은 회사의 기기들 — 방문 1건으로 묶는다 (빅오션 3층/2층/지하1층 → 카드 1장)
-  type Group = { key: string; rep: string; members: Place[] };
-  const groups = useMemo<Group[]>(() => {
-    const map = new Map<string, Place[]>();
-    const order: string[] = [];
-    rows.forEach((r) => {
-      const key = r.code || `k:${vendorMatchKey(r.vendor || r.place_name).slice(0, 10) || r.id}`;
-      if (!map.has(key)) { map.set(key, []); order.push(key); }
-      map.get(key)!.push(r);
-    });
-    const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i += 1; return a.slice(0, i); };
-    return order.map((key) => {
-      const members = map.get(key)!;
-      let rep = members[0].vendor || members[0].place_name;
-      for (const m of members.slice(1)) rep = commonPrefix(rep, m.vendor || m.place_name);
-      rep = rep.replace(/[\s\-·,(/]+$/, "").trim();
-      if (rep.length < 4) rep = members[0].vendor || members[0].place_name;
-      return { key, rep, members };
-    });
-  }, [rows]);
-  const memberTail = (group: Group, member: Place) => {
-    const name = member.vendor || member.place_name;
-    const tail = name.startsWith(group.rep) ? name.slice(group.rep.length).replace(/^[\s\-·,]+/, "").trim() : "";
-    return tail || parseEquipComment(member.comment).model || `기기 ${group.members.indexOf(member) + 1}`;
-  };
-  const toggleGroup = (group: Group) => setPicked((cur) => {
-    const next = new Set(cur);
-    const allOn = group.members.every((m) => next.has(m.id));
-    group.members.forEach((m) => { if (allOn) next.delete(m.id); else next.add(m.id); });
-    return next;
-  });
 
   const chip = "rounded-full px-3 py-1.5 text-xs font-black transition";
   const gradeChip = (on: boolean) => `rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
@@ -348,7 +349,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       {allNever ? "마지막 점검 기록 없음" : `마지막 ${lastDate} · ${minDaysSince}일 경과`} · 방문 1건으로 등록됩니다
                     </span>
                     <span className="mt-1 block space-y-0.5">
-                      {group.members.map((m) => {
+                      {group.members.map((m: Place) => {
                         const eq = parseEquipComment(m.comment);
                         const latest = m.last_date ? { date: m.last_date, counts: m.last_pages || "", toner: m.last_toner || "", spare: m.last_spare || "", waste: m.last_waste || "", serial: m.last_serial || "" } : undefined;
                         const previous = m.prev_date ? { date: m.prev_date, counts: m.prev_pages || "", toner: "", spare: "", serial: m.prev_serial || "" } : undefined;
@@ -373,7 +374,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       </div>
       <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => setNotice(msg)} />
       {registerConfirm && (() => {
-        const chosen = groups.map((group) => ({ ...group, members: group.members.filter((m) => picked.has(m.id)) })).filter((group) => group.members.length);
+        const chosen = groups.map((group: Group) => ({ ...group, members: group.members.filter((m: Place) => picked.has(m.id)) })).filter((group: Group) => group.members.length);
         return (
           <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setRegisterConfirm(false)}>
             <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -382,7 +383,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                 <div className="mt-0.5 text-[15px] font-black text-white">{chosen.length}곳 일정 등록</div>
               </div>
               <div className="max-h-[38vh] space-y-1 overflow-y-auto px-5 py-3">
-                {chosen.map((group) => (
+                {chosen.map((group: Group) => (
                   <div key={group.key} className="flex items-center gap-2 text-[12px] font-bold text-slate-700">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                     <span className="truncate">{group.members.length > 1 ? group.rep : (group.members[0].vendor || group.members[0].place_name)}</span>

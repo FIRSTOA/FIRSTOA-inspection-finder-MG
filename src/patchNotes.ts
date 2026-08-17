@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a0963121f4",
+    "date": "2026-08-17",
+    "note": "통합이력 단순화(분석 이관)·최근활동 지역/담당자·자동일정 코드그룹 카드(방문1건 등록)·이력 기번코드 연결(청연 등)·연속발송 시작 확인"
+  },
+  {
     "hash": "4b85516416",
     "date": "2026-08-17",
     "note": "리포트 연속 발송 모드(큐 생성→검토→발송→다음) + 개명 업체 시리얼 교차 사용량 + 발송 모달 머리줄 정리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "6a98f0fbff",
     "date": "2026-08-01",
     "note": "자기개발: 칭찬 색·이니셜 교정 + 부서→이름 선택 + 책 검색(표지) + 목표 도넛"
-  },
-  {
-    "hash": "14f35f4dbc",
-    "date": "2026-08-01",
-    "note": "자기개발 홈을 4분면 보드로 재구성 + 다크 제목부를 5개 허브로 확산"
   }
 ];
