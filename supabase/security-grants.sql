@@ -1,0 +1,9 @@
+-- 익명(anon) 키 권한 원칙 (2026-08-17 중간점검에서 축소 적용)
+-- 앱은 로그인 없이 anon 키로 쓴다 — 돈·원장 데이터는 "숨김 3컬럼"만 허용한다.
+-- 이미 적용된 테이블: jeomgeom, as_records(이전부터), misu, overage(2026-08-17 축소).
+-- 새 원장 테이블을 만들면 같은 패턴을 따를 것:
+--   revoke update, delete on public.<테이블> from anon;
+--   grant update (_hidden, _hidden_by, _hidden_at) on public.<테이블> to anon;
+-- 참고: DELETE는 정책 자체를 만들지 않는다(숨김으로 대체).
+-- workin_vendor_code는 method='manual' 행만 anon 수정 허용(수동 확정 UI용).
+-- service_receptions는 완료 처리 기능이 상태 컬럼을 고쳐야 해 전컬럼 유지 — 2순위 축소 후보.
