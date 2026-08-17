@@ -87,6 +87,7 @@ describe("workinVendorName — 워킨맵 지명에서 표시용 업체명 (SQL w
   });
   it("특이사항(/ 뒤)과 마감 꼬리를 자른다", () => {
     expect(workinVendorName("3NN 아스크스토리디에스 분기점검/토너 챙길 것")).toBe("아스크스토리디에스 분기점검");
+    expect(workinVendorName("30S세무그룹청연-매년마감")).toBe("세무그룹청연"); // "매년" 꼬리 — 청연 이력 미스 수리
   });
   it("영문 괄호 꼬리와 뒤붙은 법인표기를 벗긴다 — 블루닷 이력 키 어긋남 수리", () => {
     expect(workinVendorName("30S블루닷 주식회사(bluedot Inc.)-분기마감")).toBe("블루닷");

@@ -297,12 +297,19 @@ export default function CustomerReport({ author }: { author: string }) {
       setQueueOpen(true);
     } catch (e) { notify(`대상 불러오기 실패: ${(e as Error).message}`, "error"); }
   };
+  const [queueConfirm, setQueueConfirm] = useState<{ includeSent: boolean; count: number } | null>(null);
   const startQueue = (includeSent: boolean) => {
-    const list = queue.filter((entry) => includeSent || !entry.sentAlready);
-    if (!list.length) { notify(`${range.label}에 보낼 남은 업체가 없습니다.`, "error"); return; }
+    const count = queue.filter((entry) => includeSent || !entry.sentAlready).length;
+    if (!count) { notify(`${range.label}에 보낼 남은 업체가 없습니다.`, "error"); return; }
+    setQueueConfirm({ includeSent, count }); // 시작 전 확인 — 대량 흐름은 팝업 안전장치를 거친다
+  };
+  const startQueueConfirmed = () => {
+    if (!queueConfirm) return;
+    const list = queue.filter((entry) => queueConfirm.includeSent || !entry.sentAlready);
     setQueue(list);
     setQueueStats({ sent: 0, skipped: 0 });
     setQueueIdx(0);
+    setQueueConfirm(null);
     setQueueOpen(false);
     void build(list[0].vendor);
   };
@@ -522,6 +529,23 @@ export default function CustomerReport({ author }: { author: string }) {
             <button type="button" onClick={() => setQueueOpen(false)} className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">닫기</button>
             <button type="button" onClick={() => startQueue(false)} className="flex-1 rounded-full bg-emerald-600 py-2.5 text-sm font-black text-white hover:bg-emerald-700">안 보낸 {queue.filter((entry) => !entry.sentAlready).length}곳 시작</button>
             <button type="button" onClick={() => startQueue(true)} className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">전체 {queue.length}곳</button>
+          </div>
+        </div>
+      </div>}
+
+      {queueConfirm && <div className="fixed inset-0 z-[2750] flex items-center justify-center bg-slate-950/50 p-4" onClick={() => setQueueConfirm(null)}>
+        <div className="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="bg-slate-950 px-5 py-4">
+            <div className="text-[15px] font-black text-white">연속 발송을 시작할까요?</div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-400">{range.label} · {queueConfirm.count}곳</div>
+          </div>
+          <div className="px-5 py-4 text-[12.5px] font-semibold leading-5 text-slate-600">
+            업체를 한 곳씩 불러와 리포트를 보여드립니다.<br />
+            <b className="text-slate-900">발송은 업체마다 [문자 발송] → 확인 팝업을 눌러야만 나갑니다</b> — 자동으로 나가는 문자는 없습니다.
+          </div>
+          <div className="flex gap-2 px-4 pb-4">
+            <button type="button" onClick={() => setQueueConfirm(null)} className="flex-1 rounded-full border border-slate-300 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">취소</button>
+            <button type="button" onClick={startQueueConfirmed} className="flex-[2] rounded-full bg-emerald-600 py-2.5 text-sm font-black text-white hover:bg-emerald-700">{queueConfirm.count}곳 시작</button>
           </div>
         </div>
       </div>}

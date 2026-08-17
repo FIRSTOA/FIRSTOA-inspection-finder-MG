@@ -126,28 +126,69 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [registerConfirm, setRegisterConfirm] = useState(false);
   const register = async () => {
     setRegisterConfirm(false);
-    const chosen = rows.filter((r) => picked.has(r.id));
-    if (!chosen.length) return;
+    const chosenGroups = groups.map((group) => ({ ...group, members: group.members.filter((m) => picked.has(m.id)) })).filter((group) => group.members.length);
+    if (!chosenGroups.length) return;
     setLoading(true);
     try {
-      for (const c of chosen) {
-        const eq = parseEquipComment(c.comment);
+      for (const group of chosenGroups) {
+        // 같은 회사 기기 여러 대 = 방문 1건 — 일정 1개로 등록하고 기기 목록은 메모에 (FIELD 점검 양식이 여러 대를 지원한다)
+        const first = group.members[0];
+        const eq = parseEquipComment(first.comment);
+        const multi = group.members.length > 1;
+        const vendorName = multi ? group.rep : (first.vendor || first.place_name);
+        const machineNote = multi
+          ? `기기 ${group.members.length}대 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
+          : "";
+        const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
+        const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
         await upsertRow("as_tickets", {
           id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          team, date, time: "", vendor: c.vendor, contact: "", address: c.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
-          model: eq.model, serial: eq.serial, asset: "", grade: c.grade, keyman: "",
-          issue: kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${c.last_date || "기록 없음"}${c.days_since < 9999 ? ` · ${c.days_since}일 경과` : ""})`,
-          note: "", assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
-          receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${c.vendor}`, source: "autoplan",
+          team, date, time: "", vendor: vendorName, contact: "", address: first.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
+          model: eq.model, serial: eq.serial, asset: "", grade: first.grade, keyman: "",
+          issue: `${kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${lastDate || "기록 없음"}${minDaysSince < 9999 ? ` · ${minDaysSince}일 경과` : ""})`}${multi ? ` · 기기 ${group.members.length}대` : ""}`,
+          note: machineNote, assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
+          receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${vendorName}`, source: "autoplan",
         }, "id");
       }
       setPicked(new Set());
-      setNotice(`${chosen.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.`);
+      setNotice(`${chosenGroups.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.`);
       void loadTickets();
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);
     } finally { setLoading(false); }
   };
+
+  // 같은 코드(사업자)의 지점들 = 같은 회사의 기기들 — 방문 1건으로 묶는다 (빅오션 3층/2층/지하1층 → 카드 1장)
+  type Group = { key: string; rep: string; members: Place[] };
+  const groups = useMemo<Group[]>(() => {
+    const map = new Map<string, Place[]>();
+    const order: string[] = [];
+    rows.forEach((r) => {
+      const key = r.code || `k:${vendorMatchKey(r.vendor || r.place_name).slice(0, 10) || r.id}`;
+      if (!map.has(key)) { map.set(key, []); order.push(key); }
+      map.get(key)!.push(r);
+    });
+    const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i += 1; return a.slice(0, i); };
+    return order.map((key) => {
+      const members = map.get(key)!;
+      let rep = members[0].vendor || members[0].place_name;
+      for (const m of members.slice(1)) rep = commonPrefix(rep, m.vendor || m.place_name);
+      rep = rep.replace(/[\s\-·,(/]+$/, "").trim();
+      if (rep.length < 4) rep = members[0].vendor || members[0].place_name;
+      return { key, rep, members };
+    });
+  }, [rows]);
+  const memberTail = (group: Group, member: Place) => {
+    const name = member.vendor || member.place_name;
+    const tail = name.startsWith(group.rep) ? name.slice(group.rep.length).replace(/^[\s\-·,]+/, "").trim() : "";
+    return tail || parseEquipComment(member.comment).model || `기기 ${group.members.indexOf(member) + 1}`;
+  };
+  const toggleGroup = (group: Group) => setPicked((cur) => {
+    const next = new Set(cur);
+    const allOn = group.members.every((m) => next.has(m.id));
+    group.members.forEach((m) => { if (allOn) next.delete(m.id); else next.add(m.id); });
+    return next;
+  });
 
   const chip = "rounded-full px-3 py-1.5 text-xs font-black transition";
   const gradeChip = (on: boolean) => `rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
@@ -241,41 +282,87 @@ export default function AutoSchedule({ author }: { author: string }) {
             </div>
             <button type="button" disabled={loading || !picked.size} onClick={() => setRegisterConfirm(true)}
               className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-40">
-              <CalendarPlus size={14} />선택 {picked.size}곳 일정 등록
+              <CalendarPlus size={14} />선택 {groups.filter((g) => g.members.some((m) => picked.has(m.id))).length}곳 일정 등록
             </button>
           </div>
           <div className="max-h-[64vh] divide-y divide-slate-100 overflow-y-auto">
-            {rows.map((r) => {
-              const on = picked.has(r.id);
-              const fl = flags.get((r.vendor || r.place_name).trim());
-              // 최근 2회 점검으로 사용량·여분 권장 계산 — MyPlan의 여분 분석과 같은 헬퍼
-              const latest = r.last_date ? { date: r.last_date, counts: r.last_pages || "", toner: r.last_toner || "", spare: r.last_spare || "", waste: r.last_waste || "", serial: r.last_serial || "" } : undefined;
-              const previous = r.prev_date ? { date: r.prev_date, counts: r.prev_pages || "", toner: "", spare: "", serial: r.prev_serial || "" } : undefined;
-              const advice = usageSpareAdvice(latest, previous, parseEquipComment(r.comment).model || r.devices || "");
-              const special = String(r.last_special || "").replace(/[ㅡ\-_.\s]/g, "") ? String(r.last_special).trim() : ""; // "ㅡㅡㅡ" 채움표시는 특이사항 아님
+            {groups.map((group) => {
+              const single = group.members.length === 1;
+              const first = group.members[0];
+              const allOn = group.members.every((m) => picked.has(m.id));
+              const fl = flags.get((first.vendor || first.place_name).trim());
+              if (single) {
+                const r = first;
+                const on = picked.has(r.id);
+                // 최근 2회 점검으로 사용량·여분 권장 계산 — MyPlan의 여분 분석과 같은 헬퍼
+                const latest = r.last_date ? { date: r.last_date, counts: r.last_pages || "", toner: r.last_toner || "", spare: r.last_spare || "", waste: r.last_waste || "", serial: r.last_serial || "" } : undefined;
+                const previous = r.prev_date ? { date: r.prev_date, counts: r.prev_pages || "", toner: "", spare: "", serial: r.prev_serial || "" } : undefined;
+                const advice = usageSpareAdvice(latest, previous, parseEquipComment(r.comment).model || r.devices || "");
+                const special = String(r.last_special || "").replace(/[ㅡ\-_.\s]/g, "") ? String(r.last_special).trim() : ""; // "ㅡㅡㅡ" 채움표시는 특이사항 아님
+                return (
+                  <label key={group.key} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${on ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
+                    <input type="checkbox" checked={on} onChange={() => toggle(r.id)} className="mt-1 h-4 w-4 accent-blue-600" />
+                    <span className="min-w-0 flex-1 overflow-hidden">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
+                        <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
+                        {r.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(r.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{r.grade}</span>}
+                        {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
+                        {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
+                        {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
+                        <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(r)} />
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
+                        {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}
+                        {r.device_count > 0 && <span className="ml-1.5 text-slate-400">🖨 {r.device_count}대{r.devices ? ` · ${r.devices}` : ""}</span>}
+                      </span>
+                      {r.last_pages && <span className="block truncate text-[10px] font-semibold text-slate-500">📊 {r.last_pages.trim()}{r.prev_pages ? ` ｜ 전전(${(r.prev_date || "").slice(5)}) ${r.prev_pages.trim()}` : ""}</span>}
+                      {advice?.usageLine && <span className="block truncate text-[10px] font-bold text-blue-600">📈 {advice.usageLine}</span>}
+                      {(r.last_spare || advice?.adviceLine) && <span className="block truncate text-[10px] font-bold text-emerald-700">🧰 여분 {String(r.last_spare || "-").trim()}{advice?.adviceLine ? ` → ${advice.adviceLine}` : ""}</span>}
+                      {advice?.warning && <span className="block truncate text-[10px] font-bold text-amber-600">⚠ {advice.warning}</span>}
+                      {special && <span className="block truncate text-[10px] font-bold text-rose-600">❗ {special}</span>}
+                      <span className="block truncate text-[10px] font-semibold text-slate-400"><MapPin size={9} className="mr-0.5 inline" />{r.addr || "주소 없음"}</span>
+                    </span>
+                  </label>
+                );
+              }
+              // 같은 회사 기기 여러 대 — 카드 1장, 방문 1건
+              const distances = group.members.map((m) => m.distance_km).filter((d): d is number => d != null);
+              const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
+              const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
+              const allNever = group.members.every((m) => m.never_visited);
               return (
-                <label key={r.id} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${on ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggle(r.id)} className="mt-1 h-4 w-4 accent-blue-600" />
+                <label key={group.key} className={`flex cursor-pointer items-start gap-2.5 px-4 py-2.5 transition ${allOn ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
+                  <input type="checkbox" checked={allOn} onChange={() => toggleGroup(group)} className="mt-1 h-4 w-4 accent-blue-600" />
                   <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="flex flex-wrap items-center gap-1.5">
-                      {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
-                      <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
-                      {r.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(r.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{r.grade}</span>}
-                      {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
-                      {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
-                      {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
-                      <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(r)} />
+                      {distances.length > 0 && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{Math.min(...distances) < 1 ? `${Math.round(Math.min(...distances) * 1000)}m` : `${Math.min(...distances)}km`}</span>}
+                      <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{group.rep}</span>
+                      <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">기기 {group.members.length}대</span>
+                      {first.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(first.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{first.grade}</span>}
+                      {allNever && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
+                      {!first.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
+                      <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(first)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
-                      {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}
-                      {r.device_count > 0 && <span className="ml-1.5 text-slate-400">🖨 {r.device_count}대{r.devices ? ` · ${r.devices}` : ""}</span>}
+                      {allNever ? "마지막 점검 기록 없음" : `마지막 ${lastDate} · ${minDaysSince}일 경과`} · 방문 1건으로 등록됩니다
                     </span>
-                    {r.last_pages && <span className="block truncate text-[10px] font-semibold text-slate-500">📊 {r.last_pages.trim()}{r.prev_pages ? ` ｜ 전전(${(r.prev_date || "").slice(5)}) ${r.prev_pages.trim()}` : ""}</span>}
-                    {advice?.usageLine && <span className="block truncate text-[10px] font-bold text-blue-600">📈 {advice.usageLine}</span>}
-                    {(r.last_spare || advice?.adviceLine) && <span className="block truncate text-[10px] font-bold text-emerald-700">🧰 여분 {String(r.last_spare || "-").trim()}{advice?.adviceLine ? ` → ${advice.adviceLine}` : ""}</span>}
-                    {advice?.warning && <span className="block truncate text-[10px] font-bold text-amber-600">⚠ {advice.warning}</span>}
-                    {special && <span className="block truncate text-[10px] font-bold text-rose-600">❗ {special}</span>}
-                    <span className="block truncate text-[10px] font-semibold text-slate-400"><MapPin size={9} className="mr-0.5 inline" />{r.addr || "주소 없음"}</span>
+                    <span className="mt-1 block space-y-0.5">
+                      {group.members.map((m) => {
+                        const eq = parseEquipComment(m.comment);
+                        const latest = m.last_date ? { date: m.last_date, counts: m.last_pages || "", toner: m.last_toner || "", spare: m.last_spare || "", waste: m.last_waste || "", serial: m.last_serial || "" } : undefined;
+                        const previous = m.prev_date ? { date: m.prev_date, counts: m.prev_pages || "", toner: "", spare: "", serial: m.prev_serial || "" } : undefined;
+                        const advice = usageSpareAdvice(latest, previous, eq.model);
+                        return <span key={m.id} className="block truncate text-[10px] font-semibold text-slate-500">
+                          <span className="rounded bg-slate-100 px-1 py-0.5 font-bold text-slate-600">{memberTail(group, m)}</span>
+                          {eq.model && <span className="ml-1">{eq.model}{eq.serial ? `/${eq.serial}` : ""}</span>}
+                          {m.last_date && <span className="ml-1 text-slate-400">마지막 {m.last_date.slice(2)}</span>}
+                          {advice?.usageLine && <span className="ml-1 font-bold text-blue-600">📈 {advice.usageLine.replace(/^.*\(/, "").replace(/\)$/, "")}</span>}
+                          {advice?.adviceLine && !/기록 없음/.test(advice.adviceLine) && <span className="ml-1 font-bold text-emerald-700">🧰 {advice.adviceLine.replace(/\s*\(.+\)\s*$/, "")}</span>}
+                        </span>;
+                      })}
+                    </span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-400"><MapPin size={9} className="mr-0.5 inline" />{first.addr || "주소 없음"}</span>
                   </span>
                 </label>
               );
@@ -286,7 +373,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       </div>
       <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => setNotice(msg)} />
       {registerConfirm && (() => {
-        const chosen = rows.filter((r) => picked.has(r.id));
+        const chosen = groups.map((group) => ({ ...group, members: group.members.filter((m) => picked.has(m.id)) })).filter((group) => group.members.length);
         return (
           <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setRegisterConfirm(false)}>
             <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -295,11 +382,12 @@ export default function AutoSchedule({ author }: { author: string }) {
                 <div className="mt-0.5 text-[15px] font-black text-white">{chosen.length}곳 일정 등록</div>
               </div>
               <div className="max-h-[38vh] space-y-1 overflow-y-auto px-5 py-3">
-                {chosen.map((c) => (
-                  <div key={c.id} className="flex items-center gap-2 text-[12px] font-bold text-slate-700">
+                {chosen.map((group) => (
+                  <div key={group.key} className="flex items-center gap-2 text-[12px] font-bold text-slate-700">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                    <span className="truncate">{c.vendor || c.place_name}</span>
-                    {c.distance_km != null && <span className="shrink-0 text-[10px] font-black text-slate-400">{c.distance_km < 1 ? `${Math.round(c.distance_km * 1000)}m` : `${c.distance_km}km`}</span>}
+                    <span className="truncate">{group.members.length > 1 ? group.rep : (group.members[0].vendor || group.members[0].place_name)}</span>
+                    {group.members.length > 1 && <span className="shrink-0 rounded bg-indigo-50 px-1.5 text-[10px] font-black text-indigo-600">기기 {group.members.length}대</span>}
+                    {group.members[0].distance_km != null && <span className="shrink-0 text-[10px] font-black text-slate-400">{group.members[0].distance_km < 1 ? `${Math.round(group.members[0].distance_km * 1000)}m` : `${group.members[0].distance_km}km`}</span>}
                   </div>
                 ))}
               </div>
