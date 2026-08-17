@@ -411,16 +411,16 @@ export default function CopierNotes({ author }: { author: string }) {
               {headerTop}
               {/* 다크 필터부 — 칩 무더기 대신 접힌 드롭다운, 상단이 한 덩어리로 읽히게 */}
               <div className="bg-[#151A23] px-5 pb-4 pt-3.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-full bg-white/[0.08] px-4 py-2.5 transition focus-within:bg-white/[0.16] sm:max-w-md">
-                    <span className="shrink-0 text-xs text-slate-500">🔍</span>
+                {/* 기록 탭과 같은 문법 — 윗줄: 검색(좌)+건수(우), 아랫줄: 필터(좌)+작성(우) */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <label className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16] lg:max-w-2xl">
+                    <span className="shrink-0 text-slate-500">🔍</span>
                     <input value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder="제목 · 요약 · 기종 · 부품 검색"
                       className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" />
                   </label>
-                  <span className="rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">가이드 <b className="tabular-nums text-white">{filtered.length}</b></span>
-                  <button type="button" onClick={() => openGuideEditor()} className="ml-auto rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 가이드 작성</button>
+                  <span className="ml-auto rounded-full bg-white/[0.07] px-3 py-1 text-[11px] font-bold text-slate-400">가이드 <b className="tabular-nums text-white">{filtered.length}</b></span>
                 </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
                   <select value={guideBrand} onChange={(e) => setGuideBrand(e.target.value)} className={darkSelect(guideBrand !== "전체")}>
                     {brands.map((name) => <option key={name} value={name}>{name === "전체" ? `브랜드 전체 (${list.length})` : `${name} (${brandCount(name)})`}</option>)}
                   </select>
@@ -433,6 +433,7 @@ export default function CopierNotes({ author }: { author: string }) {
                   <select value={guideDiff} onChange={(e) => setGuideDiff(e.target.value)} className={darkSelect(guideDiff !== "전체")}>
                     {["전체", "쉬움", "보통", "어려움"].map((name) => <option key={name} value={name}>{name === "전체" ? "난이도 전체" : name}</option>)}
                   </select>
+                  <button type="button" onClick={() => openGuideEditor()} className="ml-auto rounded-full bg-blue-600 px-4 py-1.5 text-xs font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700">+ 가이드 작성</button>
                 </div>
               </div>
               {guides === null && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}

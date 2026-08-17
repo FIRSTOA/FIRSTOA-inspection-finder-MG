@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c7bb2f5b36",
+    "date": "2026-08-17",
+    "note": "앱 아이콘 리뉴얼(F. 레터마크) + 복합기 검색줄 좌측 정렬"
+  },
+  {
     "hash": "6a138c8203",
     "date": "2026-08-17",
     "note": "복합기 학습·처리이력 상단 통일 — 다크 한 덩어리 + 필터 드롭다운화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "06b86551fb",
     "date": "2026-08-01",
     "note": "원격이관 처리 저장 가드 — 시작·끝 시각 없이 저장 시 팝업으로 차단 (IT는 종전대로)"
-  },
-  {
-    "hash": "ff75571cb1",
-    "date": "2026-08-01",
-    "note": "원격이관 신규 양식에서 추가대수·처리내용·연동완료 제거 — 시작·끝/처리 저장이 채우는 값, IT 탭에서만 접수 시 기입"
   }
 ];
