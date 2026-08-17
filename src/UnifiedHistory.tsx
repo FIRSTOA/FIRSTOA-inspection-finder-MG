@@ -369,6 +369,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       loc: occs[0].block.loc,
       date: occs[0].date,
       visits: occs.length,
+      snap: snapOf(occs[0]),
       advice: usageSpareAdvice(snapOf(occs[0]), snapOf(occs[1]), occs[0].block.model),
     })).filter((machine) => machine.date && machine.date >= cutoff && machine.key !== "미기재");
     machines.sort((a, b) => (normRegion(a.region) || "Z").localeCompare(normRegion(b.region) || "Z") || b.date.localeCompare(a.date) || a.key.localeCompare(b.key));
@@ -433,6 +434,36 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
       .catch(() => { if (active) setDevices(null); });
     return () => { active = false; };
   }, [open, detail, queryVendor, includedHits]);
+
+  // 개명 업체(이원후 법률사무소→더블유글로리): 이름 검색으론 옛 기록이 안 잡혀 "이전 방문 없음"이 된다.
+  // 같은 시리얼의 다른 이름 기록을 찾아 **사용량 비교에만** 쓴다 — 기기가 남의 회사에서 온 것일 수도 있어
+  // 자동 병합은 하지 않고, 어떤 이름의 기록과 비교했는지 라벨로 밝힌다. 여분(창고)은 회사 귀속이라 제외.
+  const [crossPrev, setCrossPrev] = useState<Record<string, { date: string; counts: string; toner: string; waste: string; name: string }>>({});
+  useEffect(() => {
+    setCrossPrev({});
+    if (!open || !detail) return;
+    const targets = quarterCheck.machines.filter((machine) => machine.visits < 2 && normalizeId(machine.serialNo).length >= 6).slice(0, 3);
+    if (!targets.length) return;
+    let alive = true;
+    const included = new Set([queryVendor, ...includedHits.map((hit) => hit.vendor)].map((name) => coreName(name)));
+    Promise.all(targets.map(async (machine) => {
+      const rows = await selectRows<Record<string, unknown>>("jeomgeom",
+        `select=${encodeURIComponent("작성일,매수,토너잔량,폐통,시리얼넘버,_업체명")}&${encodeURIComponent("시리얼넘버")}=ilike.*${encodeURIComponent(machine.serialNo.trim())}*&_hidden=not.is.true&order=${encodeURIComponent("작성일")}.desc&limit=8`).catch(() => [] as Array<Record<string, unknown>>);
+      const prev = rows.find((row) => normalizeId(String(row["시리얼넘버"] || "")) === normalizeId(machine.serialNo)
+        && displayDate(String(row["작성일"] || "")) < machine.date
+        && !included.has(coreName(String(row["_업체명"] || ""))));
+      if (!prev) return null;
+      return [machine.key, {
+        date: displayDate(String(prev["작성일"] || "")), counts: String(prev["매수"] || ""),
+        toner: String(prev["토너잔량"] || ""), waste: String(prev["폐통"] || ""), name: String(prev["_업체명"] || "").trim(),
+      }] as const;
+    })).then((entries) => {
+      if (!alive) return;
+      const found = entries.filter((entry): entry is NonNullable<typeof entry> => !!entry);
+      if (found.length) setCrossPrev(Object.fromEntries(found));
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [open, detail, quarterCheck, queryVendor, includedHits]);
 
   const selectNewVendor = (nextVendor: string) => {
     setQueryVendor(nextVendor);
@@ -553,6 +584,18 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError 
             if (usage && !usage.includes("약 0매")) {
               const parsed = usage.match(/^(.*?)\s*\((월평균 약 [\d,]+매)\)\s*$/);
               return parsed ? { head: parsed[2], sub: `${parsed[1]} · 같은 기기 직전 방문 대비`, muted: false } : { head: usage, sub: "", muted: false };
+            }
+            // 개명 등으로 이름이 달라진 같은 시리얼의 이전 기록 — 비교하되 출처를 밝힌다
+            const cross = crossPrev[machine.key];
+            if (cross && machine.snap) {
+              const crossAdvice = usageSpareAdvice(machine.snap, { date: cross.date, counts: cross.counts, toner: cross.toner, waste: cross.waste, spare: "", serial: machine.snap.serial }, machine.model);
+              const crossUsage = crossAdvice?.usageLine || "";
+              if (crossUsage && !crossUsage.includes("약 0매")) {
+                const parsed = crossUsage.match(/^(.*?)\s*\((월평균 약 [\d,]+매)\)\s*$/);
+                const source = `이전 이름 '${cross.name}' ${cross.date} 기록 대비 — 개명·기기이동 여부 확인`;
+                return parsed ? { head: parsed[2], sub: `${parsed[1]} · ${source}`, muted: false } : { head: crossUsage, sub: source, muted: false };
+              }
+              return { head: `같은 기기의 이전 기록이 '${cross.name}' 이름으로 있음`, sub: "개명이면 그 이름으로 검색하면 전체 이력이 보입니다", muted: true };
             }
             return { head: machine.visits < 2 ? "이전 방문 기록 없음 — 비교 불가" : "매수 미기재로 계산 불가", sub: "", muted: true };
           };

@@ -122,6 +122,11 @@ export default function CustomerReport({ author }: { author: string }) {
   const [smsSaving, setSmsSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [logs, setLogs] = useState<SendLogRow[]>([]);
+  // ── 연속 발송 모드: 수신자 등록된 업체들을 큐로 잡고, 한 업체씩 생성→검토→발송→다음 (반검수 유지) ──
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [queue, setQueue] = useState<Array<{ vendor: string; sentAlready: boolean }>>([]);
+  const [queueIdx, setQueueIdx] = useState(-1);
+  const [queueStats, setQueueStats] = useState({ sent: 0, skipped: 0 });
 
   const range = useMemo(() => periodRange(periodKind, anchor), [periodKind, anchor]);
 
@@ -279,6 +284,40 @@ export default function CustomerReport({ author }: { author: string }) {
     } finally { setSmsSaving(false); }
   };
 
+  const openQueue = async () => {
+    try {
+      const [recips, sent] = await Promise.all([
+        selectRows<{ vendor: string }>("report_recipients", "select=vendor&active=is.true&limit=3000"),
+        selectRows<{ vendor: string }>("report_send_log", `select=vendor&period=eq.${encodeURIComponent(range.label)}&status=eq.sent&limit=3000`).catch(() => [] as Array<{ vendor: string }>),
+      ]);
+      const sentSet = new Set(sent.map((row) => row.vendor));
+      const vendors = Array.from(new Set(recips.map((row) => row.vendor.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko"));
+      if (!vendors.length) { notify("수신자가 등록된 업체가 없습니다 — 먼저 업체별로 수신자를 추가해 주세요.", "error"); return; }
+      setQueue(vendors.map((vendor) => ({ vendor, sentAlready: sentSet.has(vendor) })));
+      setQueueOpen(true);
+    } catch (e) { notify(`대상 불러오기 실패: ${(e as Error).message}`, "error"); }
+  };
+  const startQueue = (includeSent: boolean) => {
+    const list = queue.filter((entry) => includeSent || !entry.sentAlready);
+    if (!list.length) { notify(`${range.label}에 보낼 남은 업체가 없습니다.`, "error"); return; }
+    setQueue(list);
+    setQueueStats({ sent: 0, skipped: 0 });
+    setQueueIdx(0);
+    setQueueOpen(false);
+    void build(list[0].vendor);
+  };
+  const advanceQueue = (result: "sent" | "skipped") => {
+    setQueueStats((stats) => ({ ...stats, [result]: stats[result] + 1 }));
+    const next = queueIdx + 1;
+    if (next >= queue.length) {
+      setQueueIdx(-1);
+      notify(`연속 발송 끝 — 보냄 ${queueStats.sent + (result === "sent" ? 1 : 0)} · 건너뜀 ${queueStats.skipped + (result === "skipped" ? 1 : 0)}`, "success");
+      return;
+    }
+    setQueueIdx(next);
+    void build(queue[next].vendor);
+  };
+
   const vendorCore = report ? (historyCoreName(report.vendor) || report.vendor) : "";
 
   const loadSendData = async (vendorName: string) => {
@@ -397,9 +436,10 @@ export default function CustomerReport({ author }: { author: string }) {
         }
       }
       setSendOpen(false);
-      void loadSendData(report.vendor);
       if (fails.length) notify(`발송 ${ok}명 완료 · 실패 ${fails.length}명 (${fails.join(", ")})`, "error");
       else notify(`리포트 문자 발송 완료 — ${ok}명 ✓`, "success");
+      if (queueIdx >= 0 && !fails.length) advanceQueue("sent");
+      else void loadSendData(report.vendor);
     } catch (e) {
       notify(`발송 실패: ${(e as Error).message}`, "error");
     } finally { setSending(false); }
@@ -445,6 +485,7 @@ export default function CustomerReport({ author }: { author: string }) {
           </div>
           <input type="month" value={anchor} onChange={(e) => e.target.value && setAnchor(e.target.value)} className="rounded-lg border border-white/15 bg-white/10 px-2 py-2 text-xs font-black text-white outline-none" />
           <span className="rounded-full bg-blue-600/25 px-3 py-1.5 text-xs font-black text-blue-200">{range.label} · {range.start} ~ {range.end}</span>
+          <button type="button" onClick={() => void openQueue()} className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3.5 py-1.5 text-xs font-black text-emerald-300 transition hover:bg-emerald-500/25"><Send size={13} />연속 발송</button>
         </div>
         <div className="relative mt-2 flex max-w-xl gap-2">
           <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void search(); }} placeholder="업체명 검색 (임대중 기기 보유 업체)"
@@ -460,10 +501,42 @@ export default function CustomerReport({ author }: { author: string }) {
         </div>
       </section>
 
+
+      {queueOpen && <div className="fixed inset-0 z-[2700] flex items-center justify-center bg-slate-950/45 p-3" onClick={() => setQueueOpen(false)}>
+        <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="bg-slate-950 px-4 py-3 text-white">
+            <div className="text-sm font-black">연속 발송 — {range.label}</div>
+            <div className="text-[11px] font-semibold text-slate-400">수신자가 등록된 업체를 한 곳씩 생성→검토→발송합니다 (자동 발사 없음)</div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {queue.map((entry) => (
+                <div key={entry.vendor} className="flex items-center gap-2 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800">{entry.vendor}</span>
+                  {entry.sentAlready && <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">{range.label} 발송됨</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2 border-t border-slate-100 p-3">
+            <button type="button" onClick={() => setQueueOpen(false)} className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">닫기</button>
+            <button type="button" onClick={() => startQueue(false)} className="flex-1 rounded-full bg-emerald-600 py-2.5 text-sm font-black text-white hover:bg-emerald-700">안 보낸 {queue.filter((entry) => !entry.sentAlready).length}곳 시작</button>
+            <button type="button" onClick={() => startQueue(true)} className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">전체 {queue.length}곳</button>
+          </div>
+        </div>
+      </div>}
+
       {loading && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm font-bold text-slate-400">리포트를 만드는 중…</div>}
 
       {report && !loading && (
         <>
+          {queueIdx >= 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 shadow-sm">
+            <span className="text-sm font-black text-emerald-800">연속 발송 {queueIdx + 1}/{queue.length}</span>
+            <span className="min-w-0 flex-1 truncate text-xs font-bold text-emerald-700">{queue[queueIdx]?.vendor}{queue[queueIdx]?.sentAlready ? " (이번 기간 발송 이력 있음)" : ""}</span>
+            <span className="shrink-0 text-[11px] font-bold text-emerald-600">보냄 {queueStats.sent} · 건너뜀 {queueStats.skipped}</span>
+            <button type="button" onClick={() => advanceQueue("skipped")} className="shrink-0 whitespace-nowrap rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">건너뛰고 다음</button>
+            <button type="button" onClick={() => setQueueIdx(-1)} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black text-slate-500 hover:bg-white">중단</button>
+          </div>}
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void savePng()} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40"><FileImage size={15} />{saving ? "저장 중…" : "PNG 저장 (장별)"}</button>
             <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Printer size={15} />인쇄 / PDF</button>
@@ -518,16 +591,16 @@ export default function CustomerReport({ author }: { author: string }) {
                   <div className="flex flex-wrap gap-1.5">{sendTargets.map((r) => <span key={r.id} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{r.name || r.phone}</span>)}</div>
                 </div>
                 <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-400">문안 — 바로 수정할 수 있습니다 ({"{업체명}"} {"{기간}"} {"{링크}"} 자동 치환)</span>
-                    <span className="flex items-center gap-1.5">
-                      {smsSavedNote && <span className="text-[10px] font-black text-emerald-600">{smsSavedNote}</span>}
-                      <button type="button" disabled={smsSaving} onClick={() => void saveSmsBody()} className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[10px] font-black text-white hover:bg-slate-800 disabled:opacity-40">{smsSaving ? "저장 중…" : "공용 저장"}</button>
-                      <button type="button" onClick={() => { setSmsBody(DEFAULT_REPORT_SMS); try { localStorage.removeItem(REPORT_SMS_KEY); } catch { /* 무시 */ } }} className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">기본 문구</button>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[11px] font-black text-slate-400" title="{업체명} {기간} {링크}가 발송 때 자동으로 채워집니다">문안 — {"{업체명}"} {"{기간}"} {"{링크}"} 자동 치환</span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <button type="button" disabled={smsSaving} onClick={() => void saveSmsBody()} className="whitespace-nowrap rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-black text-white hover:bg-slate-800 disabled:opacity-40">{smsSaving ? "저장 중…" : "공용 저장"}</button>
+                      <button type="button" onClick={() => { setSmsBody(DEFAULT_REPORT_SMS); try { localStorage.removeItem(REPORT_SMS_KEY); } catch { /* 무시 */ } }} className="whitespace-nowrap rounded-full border border-slate-200 px-2 py-1 text-[10px] font-black text-slate-500 hover:bg-slate-50">기본 문구</button>
                     </span>
                   </div>
                   <textarea value={smsBody} onChange={(e) => { setSmsBody(e.target.value); try { localStorage.setItem(REPORT_SMS_KEY, e.target.value); } catch { /* 무시 */ } }} rows={9}
                     className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700 outline-none focus:border-blue-500" />
+                  {smsSavedNote && <div className="mt-1 text-[11px] font-black text-emerald-600">{smsSavedNote}</div>}
                   <div className="mt-1.5 text-[11px] font-black text-slate-400">받는 사람이 보게 될 내용</div>
                   <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] font-semibold leading-5 text-slate-700">{buildSmsText(["(이미지 링크 자동 첨부)"])}</div>
                 </div>
