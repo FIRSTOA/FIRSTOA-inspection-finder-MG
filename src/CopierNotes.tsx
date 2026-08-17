@@ -211,11 +211,11 @@ export default function CopierNotes({ author }: { author: string }) {
   const [jkDraft, setJkDraft] = useState<PlaybookCard | null>(null); // 수정/새 카드 편집 버퍼
   const [jkBusy, setJkBusy] = useState(false);
   useEffect(() => {
-    if (view !== "jokbo" || playbook !== null) return;
+    if (playbook !== null) return; // 기록 탭 상단 추천에도 쓰이므로 탭과 무관하게 한 번 읽는다
     selectRows<PlaybookCard>("copier_playbook", "select=*&order=case_count.desc,brand.asc&limit=500")
       .then(setPlaybook)
       .catch(() => setPlaybook([]));
-  }, [view, playbook]);
+  }, [playbook]);
   /** 카드의 사례들로 점프 — 기록 탭 필터를 카드 축(브랜드·기종·증상)에 맞춰 놓고 전환 */
   const openCases = (card: PlaybookCard) => {
     setBrand(card.brand in BRANDS ? card.brand : "전체");
@@ -869,6 +869,36 @@ export default function CopierNotes({ author }: { author: string }) {
           </div>
         </div>
 
+        {/* 기록 위에 족보 먼저 — 사례를 20건 훑기 전에 정제된 답을 먼저 보여준다 */}
+        {(() => {
+          const cards = playbook || [];
+          if (!cards.length) return null;
+          const hay = (c: PlaybookCard) => `${c.brand} ${c.series} ${c.symptom} ${c.title} ${c.summary}`.toLowerCase().replace(/\s+/g, "");
+          const tokens = query.trim().toLowerCase().replace(/[\s]+/g, " ").split(" ").filter(Boolean);
+          const hits = cards.filter((c) =>
+            (brand === "전체" || c.brand === brand)
+            && (model === "전체" || c.series === model)
+            && (symptomFilter === "전체" || c.symptom === symptomFilter)
+            && (!tokens.length || tokens.every((t) => hay(c).includes(t.replace(/\s/g, "")))))
+            .sort((a, b) => (a.status === b.status ? b.case_count - a.case_count : a.status === "게시" ? -1 : 1))
+            .slice(0, 3);
+          if (!hits.length) return null;
+          return (
+            <div className="border-b border-blue-100 bg-blue-50/40 px-4 py-3">
+              <div className="mb-1.5 text-[11px] font-black text-blue-700">📖 이 조건의 족보 — 사례를 다 읽기 전에 여기부터</div>
+              <div className="flex flex-wrap gap-1.5">
+                {hits.map((card) => (
+                  <button key={card.id} type="button" onClick={() => { setJkOpen(card); setView("jokbo"); }}
+                    className="flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-black text-slate-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50">
+                    <span>{card.title}</span>
+                    <span className="text-[10px] font-bold text-slate-400">원인 {card.causes.length}개 · 사례 {card.case_count.toLocaleString()}건</span>
+                    {card.status === "초안" && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9.5px] font-black text-amber-700">초안</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
         {loading && !notes.length && <div className="p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
         {!loading && !filtered.length && <div className="p-12 text-center text-sm font-bold text-slate-400">{notes.length || query.trim() ? "조건에 맞는 기록이 없어요." : "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."}</div>}

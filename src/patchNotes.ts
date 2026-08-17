@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ddf6b711df",
+    "date": "2026-08-17",
+    "note": "제록스 기종 매칭 보강 + 족보 증상 필터"
+  },
+  {
     "hash": "d59b75d17a",
     "date": "2026-08-17",
     "note": "복합기 족보 탭 — 시리즈×증상 카드로 12,580건 처리이력을 정제"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a1e8fe2b70",
     "date": "2026-08-02",
     "note": "원격 탭 값 고정 목록에 한조(T열 VLOOKUP) 추가 — 실제 수식 열 대조 반영"
-  },
-  {
-    "hash": "fdd3632c55",
-    "date": "2026-08-02",
-    "note": "원격·IT 접수도 순 조회 열을 값으로 고정 — 복합기와 동일한 스냅샷 방식"
   }
 ];
