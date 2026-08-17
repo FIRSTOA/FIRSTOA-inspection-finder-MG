@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "dd6c72665a",
+    "date": "2026-08-17",
+    "note": "익일 팝업을 일정리스트와 동일하게 — 사유 필수·팀 AS방 카톡·네이버/메모 기록, 팝업 업체명 정제 표기"
+  },
+  {
     "hash": "261bb086c4",
     "date": "2026-08-17",
     "note": "FIELD 전송 UX 개편 2차 — 4방 멀티선택 카드팝업(✓표시)·자가/부품 줄단위 감지·물류 고객사/품목 파서·교육 오탐 수리·window.confirm 28곳 인앱 모달 전환·버튼 리스타일·익일 사유는 다음 커밋"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e1f0d26b6f",
     "date": "2026-08-01",
     "note": "자유 연습도 AI 문제은행으로 — 원본 로그 출제 사실상 퇴역"
-  },
-  {
-    "hash": "ad6c1c6f39",
-    "date": "2026-08-01",
-    "note": "복합기 데일리 퀴즈를 AI 출제·브랜드 트랙제로 + 문제풀이 화면 재설계"
   }
 ];

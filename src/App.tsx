@@ -5503,7 +5503,8 @@ export default function App() {
       const finalPatch = receptionStatus === "완료" && ticket.sentText
         ? { ...patch, note: appendTicketNote(rows[0]?.["note"], ticket.sentText) }
         : reasonBlock
-          ? { ...patch, note: appendTicketNote(rows[0]?.["note"], reasonBlock) }
+          // 익일도 전송한 양식 전문 + 미루는 사유 둘 다 남긴다 — 방문해서 일부 처리하고 미루는 경우가 흔하다
+          ? { ...patch, note: appendTicketNote(rows[0]?.["note"], `${ticket.sentText ? `${ticket.sentText}\n\n` : ""}${reasonBlock}`) }
           : patch;
       await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, finalPatch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
@@ -5523,7 +5524,8 @@ export default function App() {
             } else if (patch.date) {
               if (deferReason.trim()) {
                 const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: naverUid }).catch(() => ({ description: "" }));
-                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date), description: `${cur.description || ""}\n\n[연기] ${deferReason.trim()}` });
+                const deferRecord = `${ticket.sentText ? `${ticket.sentText}\n\n` : ""}[연기] ${deferReason.trim()}`;
+                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date), description: `${cur.description || ""}\n\n${deferRecord}` });
               } else {
                 await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, date: String(patch.date) });
               }
