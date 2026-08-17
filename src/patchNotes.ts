@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c69f867498",
+    "date": "2026-08-17",
+    "note": "일정→FIELD: 티켓 note의 접수원본을 변환 파이프라인에 직접 태움 — 복붙과 동일한 A양식(부서명·키맨·구분 세팅)"
+  },
+  {
     "hash": "09dc0e3ae1",
     "date": "2026-08-17",
     "note": "일정→FIELD 양식 정합 — 제목에서 업체명부·구분(세팅) 추출, 통합이력 '전(前)' 꼬리 제거, FIELD 카드 통합이력 버튼 정리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "9a846452b9",
     "date": "2026-08-01",
     "note": "퀴즈 품질 게이트·가이드 대략 매칭·증상 필터 정밀화"
-  },
-  {
-    "hash": "f0def70cb7",
-    "date": "2026-08-01",
-    "note": "복합기 가이드·퀴즈 탭 신식 개편 + 기록·가이드 탐색성 강화"
   }
 ];

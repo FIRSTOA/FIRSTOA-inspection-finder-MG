@@ -12,7 +12,7 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
-import { historyCoreName } from "./ids";
+import { fieldTicketVendor, historyCoreName, vendorMatchKey } from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
@@ -43,7 +43,7 @@ import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
 import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type WorkKind } from "./visits";
-import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination } from "./api";
+import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination , notifyDeferToAsRoom } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus } from "./api";
 import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
@@ -3805,6 +3805,16 @@ function AirPurifierFormPanel({
 // 생성된 양식/결과 텍스트에서 "업체명: X" 줄을 찾아 거래처명을 뽑는다.
 const DIRECTORY_NAMES = new Set(COMPANY_MEMBERS.map((member) => member.name));
 
+// ※자가신청※/※부품신청※ 섹션에 실제 내용이 적혔는지 — 통합 전송 팝업의 자동 체크는 매번 현재 양식에서 새로 감지한다
+function sectionFilled(text: string, header: "※자가신청※" | "※부품신청※"): boolean {
+  const at = text.indexOf(header);
+  if (at < 0) return false;
+  const rest = text.slice(at + header.length);
+  const next = rest.indexOf("※");
+  const seg = next >= 0 ? rest.slice(0, next) : rest;
+  return /(물품명?|수량)\s*[:：]\s*\S/.test(seg);
+}
+
 // 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
 function extractVendorFromText(text: string): string {
   const m = text.match(/^\s*업체명\s*[:：]\s*(.+)$/m);
@@ -4380,7 +4390,7 @@ export default function App() {
     workKinds: [], minutes: {}, salesIt: "", salesCopier: "", commute: "", note: "",
   });
   const clearPreviousVendorWork = (clearVendor = true) => {
-    pendingAsTicketRef.current = null; // 새 원본 작업 — 이전 일정 연결(완료 팝업 대상) 해제
+    setPendingTicket(null); // 새 원본 작업 — 이전 일정 연결(완료 팝업 대상) 해제
     setItemForms([{ ...EMPTY_ITEM_FORM }]);
     setSharedForm(mode === "inspection" ? { ...EMPTY_SHARED_FORM, level: FIXED_INSPECTION_LEVEL } : EMPTY_SHARED_FORM);
     setAirForm(EMPTY_AIR_FORM);
@@ -4661,7 +4671,33 @@ export default function App() {
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
   const FIELD_NAVER_BUTTON = false;
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
-  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string } | null>(null);
+  // 통합 전송 팝업은 "일정리스트에서 넘어온 세션"에서만 — ref는 리렌더를 못 일으켜 상태를 병행한다
+  const [linkedTicket, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  const setPendingTicket = (t: { id: string; receptionId: string; vendor: string } | null) => {
+    pendingAsTicketRef.current = t;
+    setLinkedTicket(t);
+  };
+  // 통합 전송 팝업(일정 연결 세션 전용): 열 때마다 현재 양식에서 방·신청을 새로 감지한다
+  const [sendPicker, setSendPicker] = useState<{ main: SendDestination; self: boolean; parts: boolean } | null>(null);
+  const openSendPicker = () => {
+    const text = buildResultText();
+    if (!text) { showToast("보낼 내용이 없어요", "error"); return; }
+    setSendPicker({
+      main: mode === "inspection" || reportTypes.includes("점검") ? "inspection" : "as",
+      self: sectionFilled(text, "※자가신청※"),
+      parts: sectionFilled(text, "※부품신청※"),
+    });
+  };
+  const runSendPicker = async () => {
+    if (!sendPicker) return;
+    const picked = sendPicker;
+    setSendPicker(null);
+    const mainOk = await handleSendAll("normal", picked.main, true);
+    if (!mainOk) return; // 주 보고 실패 — 자가·부품 부속 전송 중단
+    if (picked.self) await handleSendAll("자가", undefined, true);
+    if (picked.parts) await handleSendAll("부품", undefined, true);
+  };
+  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string; matched?: boolean } | null>(null);
   const praiseSubmitRef = useRef<(() => void) | null>(null); // 칭찬 폼 제출 — 미리보기 버튼줄 [보내기]가 호출
   const [praiseReady, setPraiseReady] = useState(false);
   const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5061,27 +5097,27 @@ export default function App() {
     return result;
   };
 
-  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false) => {
+  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false): Promise<boolean> => {
     let target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
-      return;
+      return false;
     }
     if (mode === "replacement") {
       showToast(`${config.label}은 복사 전용입니다. 복사한 내용을 지정 채널에 붙여넣어 주세요.`, "error");
-      return;
+      return false;
     }
     if (kind === "normal" && fieldFormIssue) {
       showToast(fieldFormIssue === "vendor"
         ? "업체명을 확인해주세요\n양식에서 업체명을 읽지 못해 전송할 수 없습니다.\n결과 미리보기에서 '업체명' 줄을 확인해 주세요."
         : "지역을 넣어주세요\n양식의 '지역' 값이 있어야 팀 점검·AS방으로 전송됩니다.\n결과 미리보기에서 '지역' 줄을 채우면 바로 보낼 수 있어요.", "error");
-      return;
+      return false;
     }
     if (!skipPhotoCheck && kind === "normal" && (destination === "inspection" || destination === "as") && photos.length === 0) {
       setPhotoPrompt({ kind, destination });
-      return;
+      return false;
     }
-    if (sending) return;
+    if (sending) return false;
     setSending(true);
     showToast(kind === "normal" ? "보내는 중…" : `${kind} 요청 보내는 중…`);
     try {
@@ -5090,7 +5126,7 @@ export default function App() {
     } catch (e) {
       setSending(false);
       showToast("사진 업로드 실패: " + ((e as Error).message || "오류"), "error");
-      return;
+      return false;
     }
 
     if (mode === "contact-change") {
@@ -5104,7 +5140,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "담당자/주소 변경방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
-      return;
+      return Boolean(res.ok);
     }
 
     // 확장성: IT는 PC확장성, 복합기(기타)는 복합기확장성으로 저장/전송.
@@ -5122,7 +5158,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
-      return;
+      return Boolean(res.ok);
     }
 
     if (mode === "logistics") {
@@ -5145,7 +5181,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "물류방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
-      return;
+      return Boolean(res.ok);
     }
 
     // 카테고리(불만/재계약/초과조정): 테이블 저장 + 방 전송
@@ -5165,7 +5201,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
-      return;
+      return Boolean(res.ok);
     }
 
     const modeLabel =
@@ -5202,10 +5238,12 @@ export default function App() {
     }
     setSending(false);
     // 일정리스트·내 일정에서 [FIELD]로 넘어온 건만 — 전송 성공 시 일정 정리(완료/익일) 팝업.
-    // 필드탭을 직접 쓰는 경우(검색·원문 붙여넣기)는 pendingAsTicketRef가 없어 아무 변화 없다.
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
+    } else if (res.ok && kind === "normal" && destination === "as") {
+      // 카톡 접수내용을 원문에 복붙해 쓰는 직원 — 일정리스트에 같은 업체 미완료 AS가 있으면 완료 처리를 제안한다
+      void offerTicketMatchAfterSend(target);
     }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
@@ -5221,6 +5259,7 @@ export default function App() {
     } else {
       showToast("전송 실패: " + (res.error || "알 수 없는 오류"), "error");
     }
+    return Boolean(res.ok);
   };
 
   const handleReset = () => {
@@ -5341,11 +5380,29 @@ export default function App() {
     setScreen("field");
     handleLoadForm(rawText);
     // handleLoadForm 내부의 초기화가 연결을 지우므로 그 뒤에 건다
-    pendingAsTicketRef.current = ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null;
+    setPendingTicket(ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null);
+  };
+
+  // 납품·철수·교체 일정 → FIELD 물류탭으로: 구분은 제목 키워드로, 거래처·품목은 티켓에서 미리 채운다
+  const openLogisticsTicketInField = (t: { id: string; receptionId?: string; vendor?: string; issue?: string; model?: string; note?: string }) => {
+    const cleaned = fieldTicketVendor(t.vendor || "");
+    const title = `${t.vendor || ""} ${t.issue || ""}`;
+    const category = /철수/.test(title) ? "철수" : /교체/.test(title) ? "교체" : "납품";
+    setScreen("field");
+    handleModeChange("logistics");
+    setLogisticsForm({
+      ...EMPTY_LOGISTICS_FORM,
+      category,
+      vendor: cleaned.vendor,
+      item: t.model || "",
+      notes: String(t.issue || "").slice(0, 200),
+    });
+    setPendingTicket(t.id ? { id: t.id, receptionId: t.receptionId || "", vendor: t.vendor || "" } : null);
+    showToast(`물류 양식으로 불러왔어요 — 구분 ${category} · 전송하면 일정 정리(완료/익일)를 물어봅니다`, "success");
   };
 
   const openAsTicketInField = (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
-    pendingAsTicketRef.current = ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null;
+    setPendingTicket(ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null);
     if (mode !== "blank-report") {
       modeStateRef.current[mode] = {
         inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm,
@@ -5383,6 +5440,37 @@ export default function App() {
   const appendTicketNote = (existing: unknown, formText: string) =>
     `${String(existing || "").trim() ? `${String(existing).trim()}\n\n` : ""}[${kstDate()} 전송 양식]\n${formText}`;
 
+  // 복붙 전송(일정 연결 없음) → 일정리스트에서 같은 업체의 미완료 AS 일정을 찾아 완료 처리를 제안.
+  // 자동 완료는 안 한다(다른 건일 수 있음) — 정확히 1건일 때만 물어보고, 여러 건이면 안내만.
+  const offerTicketMatchAfterSend = async (formText: string) => {
+    try {
+      const vendorLine = extractVendorFromText(formText);
+      const core = historyCoreName(vendorLine) || vendorLine.trim();
+      const key = vendorMatchKey(core);
+      if (!key || key.length < 2) return;
+      const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+      const statusList = ["접수", "배정", "익일"].map(encodeURIComponent).join(",");
+      const typeList = ["AS", "익일AS"].map(encodeURIComponent).join(",");
+      const rows = await selectRows<Record<string, unknown>>("as_tickets",
+        `select=id,vendor,date,team,status,scheduleType,receptionId&date=gte.${from}&date=lte.${until}&status=in.(${statusList})&scheduleType=in.(${typeList})&limit=200`).catch(() => []);
+      const matches = rows.filter((row) => {
+        const cleanVendor = fieldTicketVendor(String(row.vendor || "")).vendor;
+        const rowKey = vendorMatchKey(historyCoreName(cleanVendor) || cleanVendor);
+        return rowKey.length >= 2 && (rowKey.includes(key) || key.includes(rowKey));
+      });
+      if (matches.length === 1) {
+        const matchRow = matches[0];
+        setTicketDonePrompt({
+          id: String(matchRow.id), receptionId: String(matchRow.receptionId || ""),
+          vendor: String(matchRow.vendor || ""), sentText: formText, matched: true,
+        });
+      } else if (matches.length > 1) {
+        showToast(`일정리스트에 이 업체 미완료 일정이 ${matches.length}건 있어요 — 일정리스트에서 완료 처리해 주세요`, "warning", { duration: 7000 });
+      }
+    } catch { /* 매칭은 부가 기능 — 실패해도 전송 흐름에 영향 없음 */ }
+  };
+
   const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string) => {
     try {
       const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch(() => []);
@@ -5392,6 +5480,11 @@ export default function App() {
         : patch;
       await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}`, finalPatch);
       if (ticket.receptionId) await setServiceReceptionStatus(ticket.receptionId, receptionStatus).catch(() => {});
+      // 익일 이관은 담당 팀 AS방에도 알린다 — "왜 안 왔지"가 방에서 바로 보이게
+      if (receptionStatus !== "완료" && patch.date) {
+        const deferVendor = fieldTicketVendor(String(rows[0]?.["vendor"] || "")).vendor || String(rows[0]?.["vendor"] || "");
+        void notifyDeferToAsRoom(String(rows[0]?.["team"] || ""), deferVendor, String(patch.date), author).catch(() => {});
+      }
       // 네이버 미러 정리: 완료면 접수양식 밑에 처리내용을 잇고 팀 완료 캘린더로 이동, 미루기면 날짜만 변경
       const naverUid = String(rows[0]?.["naverUid"] || "");
       const naverTeam = String(rows[0]?.["team"] || "");
@@ -5465,7 +5558,7 @@ export default function App() {
       };
     }
     delete modeStateRef.current["inspection"]; // 이전 점검탭 저장본이 복원돼 섞이지 않게 비운다
-    pendingAsTicketRef.current = null; // 자가신청 진입 — 일정 완료 팝업 대상 아님
+    setPendingTicket(null); // 자가신청 진입 — 일정 완료 팝업 대상 아님
     setMode("inspection");
     setScreen("field");
     // "4 ." 처럼 숫자와 점 사이에 공백이 있으면 기기 시작줄로 인식되지 않아 앞 블록에 붙어버린다 — 정규화.
@@ -5786,16 +5879,56 @@ export default function App() {
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "calendar" && <CsCalendar />}
-        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} />}
+        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
 
+        {sendPicker && (() => {
+          const previewText = buildResultText();
+          const selfOk = sectionFilled(previewText, "※자가신청※");
+          const partsOk = sectionFilled(previewText, "※부품신청※");
+          const sendLabel = [sendPicker.main === "inspection" ? "점검방" : "AS방", sendPicker.self ? "자가" : "", sendPicker.parts ? "부품" : ""].filter(Boolean).join(" + ");
+          return (
+            <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setSendPicker(null)}>
+              <div className="flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="border-b border-slate-100 px-5 py-4">
+                  <div className="text-lg font-black text-slate-950">카톡방 전송</div>
+                  <div className="mt-0.5 text-[12px] font-semibold text-slate-500">내용을 확인하고 보낼 방을 고르세요 · 사진 {photos.length}장{photos.length === 0 ? " (사진 없이 전송)" : ""}</div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+                  <pre className="whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-sans text-[12px] font-medium leading-5 text-slate-700">{previewText}</pre>
+                </div>
+                <div className="space-y-2.5 border-t border-slate-100 px-5 py-3">
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setSendPicker({ ...sendPicker, main: "inspection" })} className={`flex-1 rounded-lg py-2.5 text-sm font-black ${sendPicker.main === "inspection" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>점검방</button>
+                    <button type="button" onClick={() => setSendPicker({ ...sendPicker, main: "as" })} className={`flex-1 rounded-lg py-2.5 text-sm font-black ${sendPicker.main === "as" ? "bg-rose-600 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>AS방</button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                    <label className={`flex cursor-pointer items-center gap-1.5 text-sm font-bold ${selfOk ? "text-teal-700" : "cursor-not-allowed text-slate-300"}`}>
+                      <input type="checkbox" checked={sendPicker.self} disabled={!selfOk} onChange={() => setSendPicker({ ...sendPicker, self: !sendPicker.self })} className="h-4 w-4 accent-teal-600" />
+                      자가신청 함께{selfOk ? "" : " (작성 안 됨)"}
+                    </label>
+                    <label className={`flex cursor-pointer items-center gap-1.5 text-sm font-bold ${partsOk ? "text-amber-700" : "cursor-not-allowed text-slate-300"}`}>
+                      <input type="checkbox" checked={sendPicker.parts} disabled={!partsOk} onChange={() => setSendPicker({ ...sendPicker, parts: !sendPicker.parts })} className="h-4 w-4 accent-amber-600" />
+                      부품신청 함께{partsOk ? "" : " (작성 안 됨)"}
+                    </label>
+                  </div>
+                </div>
+                <div className="flex gap-2 border-t border-slate-100 p-4">
+                  <button type="button" onClick={() => setSendPicker(null)} className="flex-1 rounded-full border border-slate-300 py-3 text-sm font-black text-slate-600">취소</button>
+                  <button type="button" onClick={() => void runSendPicker()} className="flex-[2] rounded-full bg-slate-900 py-3 text-sm font-black text-white">{sendLabel}로 보내기</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         {ticketDonePrompt && (
           <div className="fixed inset-0 z-[300] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTicketDonePrompt(null)}>
             <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDonePrompt.vendor || "이 일정"}</div>
+              {ticketDonePrompt.matched && <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">방금 보낸 양식과 같은 업체의 미완료 일정을 일정리스트에서 찾았어요. 같은 건이면 완료로 정리하세요 — 다른 건이면 [그대로 두기].</div>}
               <div className="mt-5 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
+                <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
                 <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>
               </div>
               <button type="button" onClick={() => setTicketDonePrompt(null)} className="mt-2 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-500">그대로 두기</button>
@@ -5809,14 +5942,14 @@ export default function App() {
               <div className="mt-1 text-sm font-semibold text-slate-500">{ticketDeferPrompt.vendor || "이 일정"}</div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 {([["익일", nextBizYmd(kstDate())], ["1주 뒤", addDaysYmd(kstDate(), 7)]] as [string, string][]).map(([label, date]) => (
-                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+                  <button key={label} type="button" onClick={() => { const t = ticketDeferPrompt; setTicketDeferPrompt(null); setPendingTicket(null); void finishTicket(t, { date, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg border border-slate-200 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
                     {label}<div className="mt-0.5 text-xs font-bold text-slate-400">{date}</div>
                   </button>
                 ))}
               </div>
               <div className="mt-2 flex gap-2">
                 <input type="date" value={ticketDeferDate} onChange={(e) => setTicketDeferDate(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); pendingAsTicketRef.current = null; void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
+                <button type="button" onClick={() => { if (!ticketDeferDate) return; const t = ticketDeferPrompt; setTicketDeferPrompt(null); setPendingTicket(null); void finishTicket(t, { date: ticketDeferDate, status: "익일", scheduleType: "익일AS" }, "익일"); }} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-black text-white">직접선택</button>
               </div>
             </div>
           </div>
@@ -6156,6 +6289,10 @@ export default function App() {
             {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요 (전송 안 됨)" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)"}</div>}
             <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
+                linkedTicket ? (
+                  /* 일정리스트에서 넘어온 세션 — 방 선택·자가/부품 자동 감지가 담긴 통합 전송 팝업 (필드 직접 사용은 기존 버튼 유지) */
+                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-6 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+                ) : (
                 <>
                   <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-blue-700 py-3 text-sm font-black text-white disabled:bg-slate-200">점검방 보내기</button>
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-lg bg-rose-600 py-3 text-sm font-black text-white disabled:bg-slate-200">AS방 보내기</button>
@@ -6163,6 +6300,7 @@ export default function App() {
                   <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-lg border py-3 text-sm font-black disabled:opacity-40`} style={{ borderColor: "#b45309", color: "#b45309", background: "#fff" }}>부품신청</button>
                   {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>}
                 </>
+                )
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
@@ -6266,17 +6404,19 @@ export default function App() {
           </div>
           {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요"}</div>}
           <div className="flex flex-wrap gap-2">
-            {(mode === "inspection" || mode === "blank-report") ? <>
+            {(mode === "inspection" || mode === "blank-report") ? (linkedTicket ? <>
+              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+            </> : <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-blue-700 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-lg bg-rose-600 py-3 text-sm font-bold text-white disabled:bg-slate-200">{sending ? "전송 중…" : "AS방 보내기"}</button>
               {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>}
-            </> : mode === "replacement" ? (
+            </>) : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
               <button onClick={() => mode === "praise" ? praiseSubmitRef.current?.() : handleSendAll("normal")} disabled={mode === "praise" ? !praiseReady : (!hasOutput || sending)} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>
               {fieldSheetUrl && <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트</a>}
             </>}
-            {(mode === "inspection" || mode === "blank-report") && (
+            {(mode === "inspection" || mode === "blank-report") && !linkedTicket && (
               <>
                 <button
                   onClick={() => handleSendAll("자가")}

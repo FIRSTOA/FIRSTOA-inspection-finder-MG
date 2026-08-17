@@ -720,6 +720,16 @@ const REGION_ROOMS: Record<string, Record<string, string>> = {
   },
 };
 
+// 일정 익일 이관 알림 — 담당 팀 AS방에 짧게 알린다 (완료/익일 팝업의 '익일' 선택 시)
+export async function notifyDeferToAsRoom(team: string, vendor: string, date: string, author: string): Promise<void> {
+  const cfg = await getConfig();
+  const map = await getRoomMap();
+  const key = normRegion(team);
+  const room = isTestModeValue(cfg.TEST_MODE) ? (cfg.TEST_ROOM || "테스트 전용방") : (map[`AS|${key}`] || "");
+  if (!room) return;
+  await enqueueOutbox(room, `[익일 이관] ${vendor}\n→ ${date}로 이동${author ? ` (${author})` : ""}`);
+}
+
 function regionRoom(schemaKey: string, region: string, fallback: string): string {
   const key = normRegion(region);
   return REGION_ROOMS[schemaKey]?.[key] || fallback;
