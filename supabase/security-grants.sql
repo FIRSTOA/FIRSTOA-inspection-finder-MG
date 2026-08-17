@@ -13,3 +13,8 @@
 --   vendor_info(_raw+_hidden — 주소 변경 기능이 _raw 갱신). 전부 DELETE 회수.
 -- storage: photos 버킷의 public UPDATE 정책 제거(익명 덮어쓰기 차단 — 업로드는 유니크 경로 INSERT만으로 동작).
 -- 남겨둔 예외(기능 필요): workin_map_places(주소·라벨 편집), app_config/room_map(관리 탭), outbox(봇 소비 경로 미확인), message_templates(공용 문구 수정).
+
+-- 2026-08-17: Supabase linter "Security Definer View" 경고 해소 —
+-- all_vendor_tabs(통합이력 검색 색인 뷰)에 security_invoker=true 적용.
+-- 뷰가 소유자 권한으로 실행되며 RLS를 우회하던 잠재 뒷문 제거 (기반 13개 테이블은 어차피 익명 읽기 허용이라 동작 변화 없음 — 익명 RPC 실검색으로 확인).
+--   alter view public.all_vendor_tabs set (security_invoker = true);
