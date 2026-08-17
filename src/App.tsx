@@ -5255,10 +5255,11 @@ export default function App() {
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
-    } else if (res.ok && kind === "normal" && destination === "as") {
-      // 카톡 접수내용을 원문에 복붙해 쓰는 직원 — 일정리스트에 같은 업체 미완료 AS가 있으면 완료 처리를 제안한다
-      void offerTicketMatchAfterSend(target);
     }
+    // (보류) 복붙으로 쓰는 직원 대상 "같은 업체 미완료 일정 완료 제안"은 꺼둔다 —
+    // FIELD에서 그냥 AS방에 보내려던 직원에게 일정 완료·익일 팝업이 떠서 헷갈린다는 피드백.
+    // 일정 정리는 일정리스트 → FIELD로 들어온 건(pendingAsTicketRef)에서만 물어본다.
+    void offerTicketMatchAfterSend;
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
       showToast(

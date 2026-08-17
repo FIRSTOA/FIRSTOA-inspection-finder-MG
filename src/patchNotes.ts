@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "130c35e1b9",
+    "date": "2026-08-18",
+    "note": "족보 검수를 분산형으로 — 혼자 100장 검토 대신 쓰는 사람이 한 번 탭"
+  },
+  {
     "hash": "e6bf049a4a",
     "date": "2026-08-17",
     "note": "3층 구조 정리 — 기록/족보/가이드 순 + 족보에서 가이드로 연결"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d3762d1b8c",
     "date": "2026-08-02",
     "note": "원격 값 기입 확장(Z·AA·AD·AF) + A열 순번 직접 기입 + 구간 일괄 기입으로 속도 개선"
-  },
-  {
-    "hash": "e405d5c811",
-    "date": "2026-08-02",
-    "note": "원격 탭도 임대리스트 직접 조회로 값 기입 — 재계산 의존(계산-고정) 방식 폐기"
   }
 ];
