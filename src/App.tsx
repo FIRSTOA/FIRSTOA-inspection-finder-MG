@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
 import {
   Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2,
@@ -58,6 +58,8 @@ import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+// 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
+const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
@@ -4673,7 +4675,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -5688,7 +5690,7 @@ export default function App() {
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["recontract", "재계약 준비"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["lookup", "조회"], ["operations", "관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
@@ -5942,6 +5944,11 @@ export default function App() {
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}
+        {screen === "recontract" && (
+          <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-bold text-slate-400">재계약 준비를 불러오는 중…</div>}>
+            <RecontractPrep />
+          </Suspense>
+        )}
 
         {sendPicker && (() => {
           const previewText = buildResultText();
