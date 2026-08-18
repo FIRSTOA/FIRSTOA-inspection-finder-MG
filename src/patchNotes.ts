@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "653c45f91b",
+    "date": "2026-08-18",
+    "note": "워킨맵 모바일 성능 — 지도 드래그 11.2초 → 3.2초(CPU 4배 감속 기준 3회)"
+  },
+  {
     "hash": "a18aad871a",
     "date": "2026-08-18",
     "note": "거래처 특이사항 확장(출근·점심·기재정보·사진) + 조회 탭 추가 + 모바일 필터 재배치"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d7dfe7d17d",
     "date": "2026-08-02",
     "note": "naver-calendar-push: 대상 캘린더를 app_config(NAVER_CALENDAR_ID)에서 읽도록 — 직전 커밋에서 누락된 함수 쪽 반영"
-  },
-  {
-    "hash": "99f50b8eff",
-    "date": "2026-08-02",
-    "note": "관리 탭에 네이버 캘린더 토글·캘린더 ID 설정 추가 — 엣지 함수는 app_config 우선 (재배포 없이 변경 가능)"
   }
 ];

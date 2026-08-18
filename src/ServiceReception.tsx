@@ -122,6 +122,21 @@ function deptFromAddress(text: string): string {
   const ho = text.match(/(\d+호)/);
   return ho ? ho[1] : "";
 }
+/**
+ * 임대리스트 담당지역 값 → 팀. 임대리스트에는 "지방/강남/강북/강서"만 있고 **경기(D)를 나타내는 값이 없다**
+ * (실측 분포: 지방 7,471 · 강남 5,859 · 강북 4,494 · 강서 4,008). 그래서 경기·인천 건이 지방으로 나갔다.
+ * 담당지역이 비었거나 "지방"일 때는 주소를 보고 D(경기·인천권)를 살려 준다 — 그래도 최종 판단은 사람이
+ * 주소 옆 "팀 지역" 선택으로 덮어쓸 수 있다(임대리스트가 옛 주소·옛 지역인 경우가 흔하다).
+ */
+const REGION_TEAM_LABEL: Record<"A" | "B" | "C" | "D" | "E", string> = { A: "강북", B: "강서", C: "강남", D: "경기·인천", E: "지방" };
+
+function regionFromAddress(address: string) {
+  const a = String(address || "").trim();
+  if (!a) return "";
+  for (const [key, team] of DISTRICT_TEAM) if (a.includes(key)) return `수도권${team}`;
+  return "";
+}
+
 function teamFromRegion(region: string) {
   // 판정은 공용 normRegion 하나로: 수도권A~E는 그 글자, 지방(충청·경상·전라 등)은 E.
   // (예전엔 문자열 아무 데서나 A~E 글자를 주워 오판했다)
@@ -236,6 +251,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [searched, setSearched] = useState(false);
   const [lease, setLease] = useState<LeaseHit | null>(null);
   const [manual, setManual] = useState<Manual>(EMPTY_MANUAL);
+  // 팀 지역 수동 지정 — 임대리스트가 옛 지역이거나(이전한 업체) 경기·인천을 "지방"으로만 적어둔 경우를
+  // 접수하는 사람이 그 자리에서 바로잡는다. 비우면 임대리스트·주소 판정을 그대로 쓴다.
+  const [regionPick, setRegionPick] = useState<"" | "A" | "B" | "C" | "D" | "E">("");
   // 접수 시트 기입용: 기존(임대리스트 순번으로 시트 함수 자동 채움) / 신규(직접 기재 — 준비 중)
   const [custKind, setCustKind] = useState<"기존" | "신규">("기존");
   const [firstNo, setFirstNo] = useState("");
@@ -580,6 +598,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const exactVendor = pick(hit, "_업체명");
     setManual((prev) => ({ ...prev, 주소: pick(hit, "주소(실납품주소,도로명주소)", "주소") }));
+    setRegionPick(""); // 이전 업체에서 고른 팀 글자가 남으면 엉뚱한 방으로 접수된다
     const serial = pick(hit, "시리얼번호(기번)", "기번");
     const assetNo = pick(hit, "자산번호");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
@@ -631,7 +650,12 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     } as LeaseHit;
   }, [custKind, type, vendorName, newLease, newRemote]);
   const reportSource = lease ?? pseudoLease;
-  const region = regionLabel(pick(reportSource, "담당지역")) || (custKind === "신규" ? regionLabel(manual.주소) : "");
+  // 지역 결정 우선순위: ① 사람이 고른 팀 글자(주소 옆) ② 임대리스트 담당지역 ③ 주소로 유추(경기·인천=D)
+  const leaseRegionLabel = regionLabel(pick(reportSource, "담당지역"));
+  const addressRegionLabel = regionFromAddress(manual.주소 || pick(reportSource, "주소(실납품주소,도로명주소)", "주소"));
+  const region = regionPick
+    ? (regionPick === "E" ? "지방" : `수도권${regionPick}`)
+    : (leaseRegionLabel && leaseRegionLabel !== "지방" ? leaseRegionLabel : (addressRegionLabel || leaseRegionLabel || (custKind === "신규" ? regionLabel(manual.주소) : "")));
   // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
   const resultVendorCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -774,7 +798,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setRegionPick(""); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
     setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setNewRemote({}); setRemote({ hanjoCustom: "", hanjoDirect: false });
   };
@@ -817,7 +841,11 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     try {
       // 자동 입력값(수정 패널에서 고친 값 포함)을 시트에 "값"으로 기입 — GAS가 임대리스트 조회 시 이 값 우선
       const LEASE_FIX_KEYS = ["거래처명", "모델명", "시리얼번호(기번)", "자산번호", "등급", "담당지역", "종료일", "일반전화", "키맨", "미수개월수", "주소(실납품주소,도로명주소)", "코드"];
-      const leaseFix = lease ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, String(lease[key] ?? "")]))) : "";
+      // 담당지역은 화면에서 확정한 값(수동 지정·주소 보정 포함)으로 덮어 보낸다 —
+      // 임대리스트가 옛 지역이면 시트에도 옛 지역이 들어가 다음 접수에서 같은 오배정이 반복된다
+      const leaseFix = lease
+        ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, key === "담당지역" ? (region || String(lease[key] ?? "")) : String(lease[key] ?? "")])))
+        : "";
       const base = {
         author, vendor: vendorName, firstNo: firstNo.trim(), route, field: fieldFinal,
         paid: paidFinal, receiverName: manual.접수자성함.trim(), receiverPhone: manual.접수자연락처.trim(),
@@ -1606,10 +1634,30 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                 <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
                   <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                {type !== "원격이관" && <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
-                  <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
+                {type !== "원격이관" && <div className="sm:col-span-2 lg:col-span-3">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="min-w-[220px] flex-1 text-[11px] font-black text-slate-500">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
+                      <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
+                    </label>
+                    {/* 팀 지역 — 임대리스트가 옛 지역이거나 경기·인천을 "지방"으로만 적어둔 경우를 여기서 바로잡는다.
+                        비워두면 임대리스트 → 주소 순으로 자동 판정한 값(오른쪽 안내)이 그대로 나간다. */}
+                    <label className="text-[11px] font-black text-slate-500">팀 지역
+                      <select value={regionPick} onChange={(e) => setRegionPick(e.target.value as typeof regionPick)}
+                        className={`mt-1 block rounded-lg border px-3 py-2.5 text-sm font-black outline-none transition focus:ring-4 ${regionPick ? "border-blue-500 bg-blue-50 text-blue-800 focus:ring-blue-500/10" : "border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-blue-500/10"}`}>
+                        <option value="">자동 ({region || "판정 불가"})</option>
+                        {(["A", "B", "C", "D", "E"] as const).map((letter) => (
+                          <option key={letter} value={letter}>{letter === "E" ? "E 지방" : `${letter} ${REGION_TEAM_LABEL[letter]}`}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
-                </label>}
+                  {regionPick
+                    ? <span className="mt-1 block text-[11px] font-black text-blue-700">· 지역을 {regionPick}로 지정했습니다 — 접수 시트·일정·카톡방이 이 팀으로 갑니다{leaseRegionLabel && leaseRegionLabel !== region ? ` (임대리스트: ${leaseRegionLabel})` : ""}</span>
+                    : leaseRegionLabel === "지방" && addressRegionLabel && addressRegionLabel !== "지방"
+                      ? <span className="mt-1 block text-[11px] font-black text-amber-700">· 임대리스트는 "지방"인데 주소는 {addressRegionLabel} 권역입니다 — {addressRegionLabel}로 접수합니다. 다르면 팀 지역에서 고르세요</span>
+                      : null}
+                </div>}
                 {type !== "원격이관" && <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
                   <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => (
