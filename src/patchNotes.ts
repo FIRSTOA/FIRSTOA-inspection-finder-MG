@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "d14ea9edf5",
+    "date": "2026-08-18",
+    "note": "야간 감사 지적 수리 — 무음 실패·중복 누적·입력 유실"
+  },
+  {
     "hash": "7b87832ba6",
     "date": "2026-08-18",
     "note": "족보↔가이드 연결 정밀화 + 가이드 증상 필터 + 모달 Esc 닫기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7199d33316",
     "date": "2026-08-02",
     "note": "접수 삭제 경쟁 조건 봉인 — 삭제 직전 출발한 재조회 응답이 행을 되살리던 문제"
-  },
-  {
-    "hash": "99c189c820",
-    "date": "2026-08-02",
-    "note": "접수 행 재사용 방식 전환 + 상태 필터 [전체] 칩"
   }
 ];
