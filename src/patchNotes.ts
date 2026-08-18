@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ce0d5a5814",
+    "date": "2026-08-18",
+    "note": "접수 지역 배정 — 주소 옆 팀 지역(A~E) 지정 + 경기·인천이 지방으로 가던 문제 보정"
+  },
+  {
     "hash": "653c45f91b",
     "date": "2026-08-18",
     "note": "워킨맵 모바일 성능 — 지도 드래그 11.2초 → 3.2초(CPU 4배 감속 기준 3회)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8dabf6beff",
     "date": "2026-08-02",
     "note": "네이버 캘린더 등록 실오류 수정 — DTSTAMP는 UTC 고정(TZID 금지) + 네이버의 200-fail 응답 본문 검증"
-  },
-  {
-    "hash": "d7dfe7d17d",
-    "date": "2026-08-02",
-    "note": "naver-calendar-push: 대상 캘린더를 app_config(NAVER_CALENDAR_ID)에서 읽도록 — 직전 커밋에서 누락된 함수 쪽 반영"
   }
 ];

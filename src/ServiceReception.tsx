@@ -130,6 +130,21 @@ function deptFromAddress(text: string): string {
  */
 const REGION_TEAM_LABEL: Record<"A" | "B" | "C" | "D" | "E", string> = { A: "강북", B: "강서", C: "강남", D: "경기·인천", E: "지방" };
 
+/**
+ * 임대리스트 '관리 담당자'(AV열) = 팀 배정의 정답 컬럼. 값이 곧 "수도권A~E" 또는 도 이름이다.
+ * 실측 분포: 수도권C 6,049 · 수도권D 4,911 · 수도권A 4,551 · 수도권B 4,066 · 충청도 1,059 · 경상도 859 …
+ * 웹앱이 그동안 '담당지역'(강남/강북/강서/지방 — D 개념이 없다)을 읽어 경기 건이 전부 지방으로 접수됐다.
+ * 대소문자 변형(수도권c·수도권b)도 시트에 있어 함께 흡수한다.
+ */
+function regionFromLeaseTeam(value: string) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const letter = v.match(/수도권\s*([A-Ea-e])/);
+  if (letter) return `수도권${letter[1].toUpperCase()}`;
+  if (/충청|경상|전라|강원|제주|지방/.test(v)) return "지방";
+  return "";
+}
+
 function regionFromAddress(address: string) {
   const a = String(address || "").trim();
   if (!a) return "";
@@ -651,11 +666,15 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   }, [custKind, type, vendorName, newLease, newRemote]);
   const reportSource = lease ?? pseudoLease;
   // 지역 결정 우선순위: ① 사람이 고른 팀 글자(주소 옆) ② 임대리스트 담당지역 ③ 주소로 유추(경기·인천=D)
-  const leaseRegionLabel = regionLabel(pick(reportSource, "담당지역"));
+  const leaseTeamLabel = regionFromLeaseTeam(pick(reportSource, "관리 담당자")); // AV열 — 팀 배정의 정답
+  const leaseRegionLabel = regionLabel(pick(reportSource, "담당지역"));            // 권역 이름(강남/강북…) — D 개념이 없어 보조로만
   const addressRegionLabel = regionFromAddress(manual.주소 || pick(reportSource, "주소(실납품주소,도로명주소)", "주소"));
   const region = regionPick
     ? (regionPick === "E" ? "지방" : `수도권${regionPick}`)
-    : (leaseRegionLabel && leaseRegionLabel !== "지방" ? leaseRegionLabel : (addressRegionLabel || leaseRegionLabel || (custKind === "신규" ? regionLabel(manual.주소) : "")));
+    : (leaseTeamLabel
+      || (leaseRegionLabel && leaseRegionLabel !== "지방" ? leaseRegionLabel : "")
+      || addressRegionLabel || leaseRegionLabel
+      || (custKind === "신규" ? regionLabel(manual.주소) : ""));
   // 검색 결과 안에서 같은 업체가 몇 행(기기)인지 — 여러 대면 표시해 오선택을 막는다.
   const resultVendorCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -840,11 +859,11 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     if (custKind === "기존" && !firstNo.trim()) return " · 퍼스트순 미입력 — 시트 기입 생략";
     try {
       // 자동 입력값(수정 패널에서 고친 값 포함)을 시트에 "값"으로 기입 — GAS가 임대리스트 조회 시 이 값 우선
-      const LEASE_FIX_KEYS = ["거래처명", "모델명", "시리얼번호(기번)", "자산번호", "등급", "담당지역", "종료일", "일반전화", "키맨", "미수개월수", "주소(실납품주소,도로명주소)", "코드"];
+      const LEASE_FIX_KEYS = ["거래처명", "모델명", "시리얼번호(기번)", "자산번호", "등급", "담당지역", "관리 담당자", "종료일", "일반전화", "키맨", "미수개월수", "주소(실납품주소,도로명주소)", "코드"];
       // 담당지역은 화면에서 확정한 값(수동 지정·주소 보정 포함)으로 덮어 보낸다 —
       // 임대리스트가 옛 지역이면 시트에도 옛 지역이 들어가 다음 접수에서 같은 오배정이 반복된다
       const leaseFix = lease
-        ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, key === "담당지역" ? (region || String(lease[key] ?? "")) : String(lease[key] ?? "")])))
+        ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, (key === "담당지역" || key === "관리 담당자") ? (region || String(lease[key] ?? "")) : String(lease[key] ?? "")])))
         : "";
       const base = {
         author, vendor: vendorName, firstNo: firstNo.trim(), route, field: fieldFinal,
@@ -1469,7 +1488,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                         <span>{pick(hit, "모델명", "기종") || "-"}</span>
                         <span className="text-slate-400">자산 <span className="font-mono text-slate-600">{pick(hit, "자산번호") || "-"}</span></span>
                         <span className="text-slate-400">기번 <span className="font-mono text-slate-600">{pick(hit, "시리얼번호(기번)") || "-"}</span></span>
-                        <span>{pick(hit, "담당지역")}</span>
+                        <span>{regionFromLeaseTeam(pick(hit, "관리 담당자")) || pick(hit, "담당지역")}</span>
                       </span>
                     </span>
                     <ChevronRight size={16} className="shrink-0 text-slate-300" />
@@ -1506,7 +1525,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
               <details className="border-t border-slate-100 bg-slate-50/60">
                 <summary className="cursor-pointer select-none px-4 py-2.5 text-[11px] font-black text-slate-500 transition hover:text-slate-700">⚙️ 자동 입력값 수정 <span className="font-bold text-slate-400">— 임대리스트에서 채워짐 · 틀리면 펼쳐서 바로 고치세요</span></summary>
                 <div className="grid grid-cols-2 gap-1.5 px-4 pb-3 sm:grid-cols-3 2xl:grid-cols-4">
-                  {([["거래처명", "거래처명"], ["모델명", "모델명"], ["시리얼번호(기번)", "시리얼(기번)"], ["자산번호", "자산번호"], ["등급", "등급"], ["담당지역", "담당지역"], ["종료일", "종료일"], ["일반전화", "일반전화"], ["키맨", "키맨"], ["미수개월수", "미수개월"], ["주소(실납품주소,도로명주소)", "임대리스트 주소"], ["코드", "한조코드"]] as [string, string][]).map(([col, label]) => (
+                  {([["거래처명", "거래처명"], ["모델명", "모델명"], ["시리얼번호(기번)", "시리얼(기번)"], ["자산번호", "자산번호"], ["등급", "등급"], ["관리 담당자", "담당팀(AV열)"], ["담당지역", "권역"], ["종료일", "종료일"], ["일반전화", "일반전화"], ["키맨", "키맨"], ["미수개월수", "미수개월"], ["주소(실납품주소,도로명주소)", "임대리스트 주소"], ["코드", "한조코드"]] as [string, string][]).map(([col, label]) => (
                     <label key={col} className="text-[10px] font-bold text-slate-500">{label}
                       <input value={String(lease[col] ?? "")} onChange={(e) => setLease({ ...lease, [col]: e.target.value })}
                         className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
