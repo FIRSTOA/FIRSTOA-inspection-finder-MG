@@ -5489,16 +5489,39 @@ export default function App() {
   const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string, deferReason = "") => {
     try {
       const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch(() => []);
-      // 익일 사유 블록 — 일정리스트의 연기 처리와 같은 양식으로 팀 AS방·네이버·일정 메모에 남긴다
-      const reasonBlock = deferReason.trim() && patch.date ? [
-        `업체명: ${String(rows[0]?.["vendor"] || "-")}`,
-        `배정자: ${String(rows[0]?.["assignee"] || author || "-")}`,
-        `기종: ${String(rows[0]?.["model"] || "-")}`,
-        `자산기번: ${String(rows[0]?.["asset"] || "-")}`,
-        `시리얼번호: ${String(rows[0]?.["serial"] || "-")}`,
-        `접수내용: ${String(rows[0]?.["issue"] || "-")}`,
-        `처리내용: ${deferReason.trim()} (${Number(String(patch.date).slice(5, 7))}/${Number(String(patch.date).slice(8, 10))}로 연기)`,
-      ].join("\n") : "";
+      // 익일 사유 블록 — 일정리스트의 연기 처리와 같은 양식으로 팀 AS방·네이버·일정 메모에 남긴다.
+      // 네이버에서 수입한 일정은 기종·기번이 컬럼이 아니라 제목·메모에만 있어 "-"만 나갔다 → 원문에서 뽑아 채운다.
+      // 배정자는 넣지 않는다 — 미루는 시점엔 내일 누가 갈지 정해지지 않는다.
+      const reasonBlock = (() => {
+        if (!deferReason.trim() || !patch.date) return "";
+        const row = rows[0] || {};
+        const rawText = `${String(row["vendor"] || "")}\n${String(row["calendarTitle"] || "")}\n${String(row["note"] || "")}`
+          .replace(/_x000d_/g, " ");
+        const pick = (label: RegExp, min = 3) => {
+          const hit = rawText.match(label);
+          const value = (hit?.[1] || "").trim();
+          return value.length >= min ? value : "";
+        };
+        // 업체명을 깔끔히 뽑아낸 경우만 "업체명:", 못 뽑으면 라벨을 "캘린더제목:"으로 — 제목을 그대로 쓰면서
+        // 업체명이라고 적으면 읽는 사람이 오해한다(사용자 지적)
+        const cleanVendor = fieldTicketVendor(String(row["calendarTitle"] || row["vendor"] || "")).vendor.trim();
+        const titleLine = String(row["calendarTitle"] || row["vendor"] || "")
+          .replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
+        const model = String(row["model"] || "").trim() || pick(/(?:^|[\t\s])((?:ECOSYS|APEOS|ApeosPort|Apeos|DocuCentre|DocuPrint|SL-|CLX|MX|ES|CM|HP|D)[A-Za-z0-9-]*\d[A-Za-z0-9()-]*)/);
+        const asset = String(row["asset"] || "").trim() || pick(/자산번호[\t\s]*([A-Za-z0-9-]{3,})/);
+        const serial = String(row["serial"] || "").trim() || pick(/기번[\t\s]*([A-Za-z0-9-]{5,})/, 5);
+        const issue = String(row["issue"] || "").trim() || pick(/접수분야[\t\s]*([^\t\n]+)/) || pick(/^([^\t\n]{2,20}?)[\t]/, 2);
+        const when = `${Number(String(patch.date).slice(5, 7))}/${Number(String(patch.date).slice(8, 10))}`;
+        // 값이 없는 줄은 "-"로 채우지 않고 아예 빼서 읽기 쉽게 한다
+        return [
+          cleanVendor ? `업체명: ${cleanVendor}` : `캘린더제목: ${titleLine || "-"}`,
+          model && `기종: ${model}`,
+          asset && `자산기번: ${asset}`,
+          serial && `시리얼번호: ${serial}`,
+          issue && `접수내용: ${issue}`,
+          `처리내용: ${deferReason.trim()} (${when}로 연기)`,
+        ].filter(Boolean).join("\n");
+      })();
       if (reasonBlock) {
         void sendServiceReception("AS", `수도권${String(rows[0]?.["team"] || "")}`, reasonBlock)
           .then((r) => { if (!r.ok) showToast(`사유 카톡 전송 실패: ${r.error || "오류"}`, "error"); })
