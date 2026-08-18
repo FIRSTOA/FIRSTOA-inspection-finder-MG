@@ -269,6 +269,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   // 팀 지역 수동 지정 — 임대리스트가 옛 지역이거나(이전한 업체) 경기·인천을 "지방"으로만 적어둔 경우를
   // 접수하는 사람이 그 자리에서 바로잡는다. 비우면 임대리스트·주소 판정을 그대로 쓴다.
   const [regionPick, setRegionPick] = useState<"" | "A" | "B" | "C" | "D" | "E">("");
+  const leaseAddressRef = useRef(""); // 거래처 선택 시점의 임대리스트 주소 원본
   // 접수 시트 기입용: 기존(임대리스트 순번으로 시트 함수 자동 채움) / 신규(직접 기재 — 준비 중)
   const [custKind, setCustKind] = useState<"기존" | "신규">("기존");
   const [firstNo, setFirstNo] = useState("");
@@ -603,6 +604,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   const selectLease = async (hit: LeaseHit) => {
     setLease(hit);
+    leaseAddressRef.current = pick(hit, "주소(실납품주소,도로명주소)", "주소"); // 시트 기입 때 "고쳐졌는지" 판단 기준
     setResults([]);
     setAsHistory([]);
     setSnapshots([]);
@@ -817,7 +819,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
 
   const resetForm = () => {
-    setLease(null); setManual(EMPTY_MANUAL); setRegionPick(""); setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
+    setLease(null); setManual(EMPTY_MANUAL); setRegionPick(""); leaseAddressRef.current = ""; setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
     setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
     setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setNewRemote({}); setRemote({ hanjoCustom: "", hanjoDirect: false });
   };
@@ -862,8 +864,19 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       const LEASE_FIX_KEYS = ["거래처명", "모델명", "시리얼번호(기번)", "자산번호", "등급", "담당지역", "관리 담당자", "종료일", "일반전화", "키맨", "미수개월수", "주소(실납품주소,도로명주소)", "코드"];
       // 담당지역은 화면에서 확정한 값(수동 지정·주소 보정 포함)으로 덮어 보낸다 —
       // 임대리스트가 옛 지역이면 시트에도 옛 지역이 들어가 다음 접수에서 같은 오배정이 반복된다
+      // 방문 주소를 고쳐 접수했으면 시트 행에도 그 주소가 들어가야 한다 —
+      // 카톡 보고양식·일정에는 수정 주소가 가는데 시트만 임대리스트 옛 주소면 같은 접수가 두 주소로 남는다.
+      // (임대리스트 원본은 건드리지 않는다 — 접수 시트 행의 VLOOKUP 자리에 값으로만 기입)
+      const leaseAddressNow = pick(lease, "주소(실납품주소,도로명주소)", "주소");
+      const panelEdited = leaseAddressNow !== leaseAddressRef.current; // 수정 패널에서 직접 고쳤으면 그 값이 이긴다
+      const finalAddress = panelEdited ? leaseAddressNow : (manual.주소.trim() || leaseAddressNow);
+      const addressFix = lease && finalAddress && finalAddress !== leaseAddressRef.current ? finalAddress : "";
+      const addressParts = addressFix ? splitCityDistrict(addressFix) : { city: "", district: "" };
       const leaseFix = lease
-        ? JSON.stringify(Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, (key === "담당지역" || key === "관리 담당자") ? (region || String(lease[key] ?? "")) : String(lease[key] ?? "")])))
+        ? JSON.stringify({
+          ...Object.fromEntries(LEASE_FIX_KEYS.map((key) => [key, (key === "담당지역" || key === "관리 담당자") ? (region || String(lease[key] ?? "")) : String(lease[key] ?? "")])),
+          ...(addressFix ? { "주소(실납품주소,도로명주소)": addressFix, 주소: addressFix, 시: addressParts.city, 구: addressParts.district } : {}),
+        })
         : "";
       const base = {
         author, vendor: vendorName, firstNo: firstNo.trim(), route, field: fieldFinal,

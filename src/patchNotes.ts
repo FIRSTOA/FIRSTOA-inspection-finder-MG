@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6e291fd7a1",
+    "date": "2026-08-19",
+    "note": "모바일 워킨맵 헤더에 현재 조건 한 줄 + 캘린더 상단 콤팩트화"
+  },
+  {
     "hash": "44a04a9feb",
     "date": "2026-08-19",
     "note": "워킨맵 컨트롤 지도 우측 상단 복귀 + 헤더는 조건 요약·검색, 특이사항·조회 버그 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "6396cf7c00",
     "date": "2026-08-02",
     "note": "구분 변경을 실제 전환으로 — 새 탭 시트 자동 기입·한조처리 동기화·일정 정리"
-  },
-  {
-    "hash": "009a78e777",
-    "date": "2026-08-02",
-    "note": "신규 접수는 주소확인(시트 반영 완료) 목록에서 제외 — 임대리스트에 원래 없는 주소라 정비 대상이 아님"
   }
 ];
