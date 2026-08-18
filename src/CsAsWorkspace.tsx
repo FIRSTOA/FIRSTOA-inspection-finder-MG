@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
@@ -1229,65 +1230,76 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       {view === "calendar" ? (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex min-h-[720px] flex-col lg:flex-row">
-            {/* 필터 사이드 — 다크 헤더 디자인을 세로로 (팀·업무 칩 토글 + 일정 추가) */}
-            <aside className="border-b border-slate-700 bg-[#1E252F] p-3.5 lg:w-52 lg:flex-none lg:border-b-0 lg:border-r">
+            {/* 필터 — PC는 세로 사이드바, 모바일은 한 줄 툴바(팀·검색·추가) + 업무 칩 */}
+            <aside className="border-b border-slate-700 bg-[#1E252F] px-3 py-2.5 lg:w-52 lg:flex-none lg:border-b-0 lg:border-r lg:p-3.5">
               {(() => {
-                const pill = (on: boolean) => `flex w-auto items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[11px] font-black transition lg:w-full lg:px-3.5 lg:py-2 ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`;
+                const pill = (on: boolean) => `flex w-auto items-center justify-between gap-2 rounded-full px-2 py-1 text-[11px] font-black transition lg:w-full lg:px-3.5 lg:py-2 ${on ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`;
                 const allTypesOn = displayFilters.every((f) => visibleScheduleTypes.includes(f));
+                // 모바일 칩은 한 줄에 들어와야 읽힌다 — 캘린더 원래 이름(납품철수교체휴가교육 등)은 PC에서만
+                const shortFilterLabel: Partial<Record<DisplayFilter, string>> = { 익일통합as: "익일AS", 납품철수교체휴가교육: "납품·철수" };
                 return (<>
-                  <button type="button" onClick={() => openSimpleAdd(todayYmd)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700"><span className="text-base leading-none">＋</span> 일정 추가</button>
-                  <div className="relative mt-2.5">
-                    <input value={calSearch} onChange={(e) => setCalSearch(e.target.value)} placeholder="🔍 일정 검색 (업체·제목·주소)"
-                      className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15" />
-                    {calSearch.trim().length >= 2 && (
-                      <div className="absolute left-0 right-0 z-[70] mt-1.5 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.25)] lg:w-80">
-                        {calSearchResults.map((r) => (
-                          <button key={r.key} type="button" onClick={() => { setCalSearch(""); if (r.kind === "ticket") setDetailId(r.id); else { const ev = naverEvents.find((x) => x.uid === r.id); if (ev) setNaverDetail({ ...ev }); } }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50">
-                            <span className="w-16 shrink-0 text-[10px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
-                            <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{r.title}</span>
-                          </button>
-                        ))}
-                        {!calSearchResults.length && <div className="px-3 py-3 text-center text-[11px] font-semibold text-slate-400">검색 결과 없음</div>}
-                      </div>
-                    )}
+                  {/* 모바일: [팀 ▾][검색][＋] 한 줄 / PC: 세로 스택 */}
+                  <div className="flex items-center gap-1.5 lg:block">
+                    <button type="button" onClick={() => openSimpleAdd(todayYmd)} aria-label="일정 추가"
+                      className="order-3 flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl bg-blue-600 px-2.5 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 lg:order-none lg:h-auto lg:w-full lg:gap-1.5 lg:rounded-full lg:px-4 lg:py-2.5 lg:text-sm">
+                      <span className="text-base leading-none">＋</span><span className="lg:hidden">추가</span><span className="hidden lg:inline">일정 추가</span>
+                    </button>
+                    <div className="relative order-2 min-w-0 flex-1 lg:mt-2.5">
+                      <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input value={calSearch} onChange={(e) => setCalSearch(e.target.value)} placeholder="업체·제목 검색"
+                        className="w-full rounded-lg border border-white/15 bg-white/10 py-2 pl-7 pr-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15" />
+                      {calSearch.trim().length >= 2 && (
+                        <div className="absolute right-0 z-[70] mt-1.5 max-h-72 w-[min(20rem,calc(100vw_-_6.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.25)] lg:left-0 lg:right-0 lg:w-80">
+                          {calSearchResults.map((r) => (
+                            <button key={r.key} type="button" onClick={() => { setCalSearch(""); if (r.kind === "ticket") setDetailId(r.id); else { const ev = naverEvents.find((x) => x.uid === r.id); if (ev) setNaverDetail({ ...ev }); } }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50">
+                              <span className="w-16 shrink-0 text-[10px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
+                              <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{r.title}</span>
+                            </button>
+                          ))}
+                          {!calSearchResults.length && <div className="px-3 py-3 text-center text-[11px] font-semibold text-slate-400">검색 결과 없음</div>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="order-1 shrink-0 lg:mt-4">
+                      <div className="mb-1.5 hidden text-[10px] font-black uppercase tracking-wider text-slate-500 lg:block">팀 <span className="normal-case text-slate-600">— 내 팀만 보기</span></div>
+                      {(() => {
+                        // 단일 선택: 전체 / 특정 팀(+종일은 팀 무관 정보라 함께) / E팀 / 종일만
+                        const pickValue = (() => {
+                          const allOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일", "기타"].every((x) => visibleExtra.includes(x));
+                          if (allOn) return "전체";
+                          if (visibleTeams.length === 1 && !visibleExtra.length) return visibleTeams[0];
+                          if (!visibleTeams.length && visibleExtra.includes("E")) return "E";
+                          if (!visibleTeams.length && visibleExtra.includes("종일")) return "종일";
+                          return "전체";
+                        })();
+                        return (
+                          <PortalSelect tone="dark" direction="down" className="w-[8.75rem] py-1.5 font-semibold lg:w-full lg:py-2" width={200}
+                            value={pickValue}
+                            onChange={(v) => {
+                              if (v === "전체") { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일", "기타"]); }
+                              else if (v === "종일") { setVisibleTeams([]); setVisibleExtra(["종일"]); }
+                              else if (v === "E") { setVisibleTeams([]); setVisibleExtra(["E"]); }
+                              else if (v === "기타") { setVisibleTeams([]); setVisibleExtra(["기타"]); }
+                              else { setVisibleTeams([v as Team]); setVisibleExtra([]); } // 팀 선택 = 그 팀만 (종일 제외)
+                            }}
+                            options={[
+                              { value: "전체", label: "전체 팀" },
+                              ...teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` })),
+                              { value: "E", label: "E팀 · 오후 9시" },
+                              { value: "기타", label: "기타 시간 (11시 등)" },
+                              { value: "종일", label: "종일만 (연차 등)" },
+                            ]} />
+                        );
+                      })()}
+                    </div>
                   </div>
-                  <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">팀 <span className="normal-case text-slate-600">— 내 팀만 보기</span></div>
-                  {(() => {
-                    // 단일 선택: 전체 / 특정 팀(+종일은 팀 무관 정보라 함께) / E팀 / 종일만
-                    const pickValue = (() => {
-                      const allOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일", "기타"].every((x) => visibleExtra.includes(x));
-                      if (allOn) return "전체";
-                      if (visibleTeams.length === 1 && !visibleExtra.length) return visibleTeams[0];
-                      if (!visibleTeams.length && visibleExtra.includes("E")) return "E";
-                      if (!visibleTeams.length && visibleExtra.includes("종일")) return "종일";
-                      return "전체";
-                    })();
-                    return (
-                      <PortalSelect tone="dark" direction="down" className="w-full py-2 font-semibold" width={200}
-                        value={pickValue}
-                        onChange={(v) => {
-                          if (v === "전체") { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일", "기타"]); }
-                          else if (v === "종일") { setVisibleTeams([]); setVisibleExtra(["종일"]); }
-                          else if (v === "E") { setVisibleTeams([]); setVisibleExtra(["E"]); }
-                          else if (v === "기타") { setVisibleTeams([]); setVisibleExtra(["기타"]); }
-                          else { setVisibleTeams([v as Team]); setVisibleExtra([]); } // 팀 선택 = 그 팀만 (종일 제외)
-                        }}
-                        options={[
-                          { value: "전체", label: "전체 팀" },
-                          ...teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` })),
-                          { value: "E", label: "E팀 · 오후 9시" },
-                          { value: "기타", label: "기타 시간 (11시 등)" },
-                          { value: "종일", label: "종일만 (연차 등)" },
-                        ]} />
-                    );
-                  })()}
-                  <div className="mt-4 mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">업무</div>
-                  <div className="flex flex-wrap gap-1 lg:flex-col">
+                  <div className="mb-1.5 hidden text-[10px] font-black uppercase tracking-wider text-slate-500 lg:mt-4 lg:block">업무</div>
+                  <div className="mt-2 flex flex-wrap gap-1 lg:mt-0 lg:flex-col">
                     <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={pill(allTypesOn)}><span>전체</span></button>
                     {displayFilters.map((f) => (
                       <button key={f} type="button" onClick={() => toggleScheduleFilter(f)} className={pill(visibleScheduleTypes.includes(f))}>
-                        <span className="flex min-w-0 items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${f === "익일통합as" ? "bg-lime-500" : f === "AS[완료]" ? "bg-blue-500" : f === "납품철수교체휴가교육" ? "bg-rose-500" : "bg-amber-500"}`} /><span className="truncate">{f === "AS[완료]" ? (visibleTeams.length === 1 && !visibleExtra.includes("E") ? DONE_CAL_LABEL[visibleTeams[0]] : "as완료") : f}</span></span>
+                        <span className="flex min-w-0 items-center gap-1 lg:gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full lg:h-2 lg:w-2 ${f === "익일통합as" ? "bg-lime-500" : f === "AS[완료]" ? "bg-blue-500" : f === "납품철수교체휴가교육" ? "bg-rose-500" : "bg-amber-500"}`} /><span className="truncate lg:hidden">{f === "AS[완료]" ? (visibleTeams.length === 1 && !visibleExtra.includes("E") ? DONE_CAL_LABEL[visibleTeams[0]] : "as완료") : (shortFilterLabel[f] || f)}</span><span className="hidden truncate lg:inline">{f === "AS[완료]" ? (visibleTeams.length === 1 && !visibleExtra.includes("E") ? DONE_CAL_LABEL[visibleTeams[0]] : "as완료") : f}</span></span>
                       </button>
                     ))}
                   </div>
@@ -1295,16 +1307,16 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               })()}
             </aside>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => { setCurrentMonth(monthStart(todayYmd)); window.setTimeout(() => document.getElementById(`cal-day-${todayYmd}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">오늘</button>
-                  <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">‹</button>
-                  <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-slate-500 transition hover:bg-slate-100">›</button>
-                  <h2 className="ml-1 text-lg font-black text-slate-950 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button type="button" onClick={() => { setCurrentMonth(monthStart(todayYmd)); window.setTimeout(() => document.getElementById(`cal-day-${todayYmd}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-50 sm:px-3.5 sm:py-1.5 sm:text-xs">오늘</button>
+                  <button type="button" aria-label="이전 달" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-bold text-slate-500 transition hover:bg-slate-100 sm:h-9 sm:w-9 sm:text-xl">‹</button>
+                  <button type="button" aria-label="다음 달" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-bold text-slate-500 transition hover:bg-slate-100 sm:h-9 sm:w-9 sm:text-xl">›</button>
+                  <h2 className="ml-0.5 whitespace-nowrap text-base font-black text-slate-950 sm:ml-1 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
                 </div>
-                <div className="rounded-full bg-slate-100 p-1">
+                <div className="rounded-full bg-slate-100 p-0.5 sm:p-1">
                   {(["calendar", "list"] as ViewMode[]).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "달력" : "목록"}</button>
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-2.5 py-1 text-[11px] font-black sm:px-3 sm:py-1.5 sm:text-xs ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "달력" : "목록"}</button>
                   ))}
                 </div>
               </div>

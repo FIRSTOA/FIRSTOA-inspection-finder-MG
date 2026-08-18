@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "44a04a9feb",
+    "date": "2026-08-19",
+    "note": "워킨맵 컨트롤 지도 우측 상단 복귀 + 헤더는 조건 요약·검색, 특이사항·조회 버그 수리"
+  },
+  {
     "hash": "902239a43d",
     "date": "2026-08-19",
     "note": "일정리스트 필터 두 줄 + 예정도 사람 박스 구조로 통일, 워킨맵 컨트롤 헤더 이동, 따옴표 검색 버그"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "009a78e777",
     "date": "2026-08-02",
     "note": "신규 접수는 주소확인(시트 반영 완료) 목록에서 제외 — 임대리스트에 원래 없는 주소라 정비 대상이 아님"
-  },
-  {
-    "hash": "102e2ca312",
-    "date": "2026-08-02",
-    "note": "IT 접수를 복합기AS와 동일 플로우로 — 카톡 전송 버튼·전체 실행에 AS방 전송 포함(같은 팀 AS방), IT·원격 신규 지역 칩 A~E"
   }
 ];

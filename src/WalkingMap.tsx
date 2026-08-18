@@ -2382,7 +2382,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
    */
   const headerControls = headerSlot && createPortal(
     mapSearchOpen ? (
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         <div className="relative min-w-0 flex-1">
           <input
             autoFocus
@@ -2406,16 +2406,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           )}
         </div>
         <button type="button" onClick={() => { setMapSearchOpen(false); setMapQuery(""); }}
-          className="shrink-0 rounded-lg bg-white/10 px-2.5 py-2 text-[12px] font-black text-slate-300">닫기</button>
+          className="-mr-1 shrink-0 rounded-lg px-1.5 py-2 text-[12px] font-black text-slate-400 active:text-white">닫기</button>
       </div>
     ) : (
       <>
-        {/* 지금 보고 있는 조건 — 지도만 보면 어느 팀·분기·업무인지 알 수 없다 */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[12.5px] font-black text-white">
-          <span className="rounded bg-white/15 px-1.5 py-0.5">{teamFilter}</span>
-          <span className="rounded bg-white/15 px-1.5 py-0.5 tabular-nums">{quarterFilter}Q</span>
-          <span className="truncate text-slate-300">{kindFilter === "ALL" ? "전체" : (workKinds.find((k) => k.value === kindFilter)?.label || "")}</span>
-          {labelFilters.length > 0 && <span className="shrink-0 rounded bg-blue-600 px-1.5 py-0.5 text-[11px]">색상 {labelFilters.length}</span>}
+        {/* 지금 보고 있는 워킨맵 — 제목 자리에 한 줄로 (색상 개수는 지도 버튼에 이미 보이므로 넣지 않는다) */}
+        <span className="min-w-0 flex-1 truncate text-[14px] font-bold tracking-tight text-white">
+          {teamFilter} {quarterFilter}Q {kindFilter === "ALL" ? "전체" : (workKinds.find((k) => k.value === kindFilter)?.label || "")}
         </span>
         <button type="button" onClick={() => setMapSearchOpen(true)} aria-label="거래처 검색"
           className="ml-auto flex h-9 shrink-0 items-center gap-1 rounded-lg bg-white/10 px-3 text-[12px] font-black text-white transition active:scale-95">

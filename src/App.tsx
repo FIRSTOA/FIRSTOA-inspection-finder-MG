@@ -5888,7 +5888,7 @@ export default function App() {
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0B0F17] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}
         <header className={`flex items-center justify-between ${screen === "walkingMap" ? "h-14 bg-[#0B0F17] px-3 shadow-sm lg:px-4" : screen !== "field" ? "-mx-3 -mt-4 mb-5 h-14 bg-[#0B0F17] px-3 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:px-8" : "mb-2.5"}`}>
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className={`flex min-w-0 items-center gap-2.5 ${screen === "walkingMap" ? "flex-1" : ""}`}>
             <button type="button" onClick={() => setMenuOpen(true)} aria-label="메뉴"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/20 active:scale-95 lg:hidden">
               <span className="flex flex-col gap-[3px]"><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /><span className="h-0.5 w-4 rounded bg-white" /></span>
