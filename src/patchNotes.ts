@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b1183316a5",
+    "date": "2026-08-18",
+    "note": "익일 미루기 카톡 문구 수리 — 배정자 제거·기종·기번 채우기·라벨 정직화"
+  },
+  {
     "hash": "610552b394",
     "date": "2026-08-18",
     "note": "야간 감사 지적사항 수리 — 특이사항 중복 누적·Esc 입력 유실·무음 실패"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "29633bbb8a",
     "date": "2026-08-02",
     "note": "시트 잡 재시도에 만료 가드 — 옛 잡 재기입 사고 방지"
-  },
-  {
-    "hash": "b0d68ccf09",
-    "date": "2026-08-02",
-    "note": "접수 파이프라인 안정화 일괄 — 멀티유저(원격 5·CS 15 동시) 대비"
   }
 ];

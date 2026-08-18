@@ -1096,7 +1096,70 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [naverEvents, tickets, listTypes, team, dayFilter, todayYmd, tomorrowYmd]);
   // 행에서 바로 전화 — 접수자 연락처·키맨의 첫 번호만. 없으면 버튼을 만들지 않는다 (제목에서 긁으면 엉뚱한 숫자가 잡힘)
-  const firstPhoneOf = (t: AsTicket) => (`${t.contact || ""}\n${t.keyman || ""}`.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/) || [])[0] || "";
+  /**
+   * 행에서 바로 전화 — 접수자·키맨 번호.
+   * 컬럼(contact·keyman)이 비어 있는 일정(네이버 수입 건)은 번호가 접수 원문(note)에만 있어
+   * 통화 버튼이 아예 안 나왔다 → 원문의 "접수자성함/접수자연락처", "★키맨성함/번호"에서 이름까지 뽑는다.
+   * 제목에서 숫자를 긁으면 엉뚱한 번호(기번·자산번호)가 잡히므로 라벨 옆 번호만 인정한다.
+   */
+  const PHONE_RE = /01\d[- ]?\d{3,4}[- ]?\d{4}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/;
+  const phonesOf = (t: AsTicket): Array<{ label: string; name: string; number: string }> => {
+    const out: Array<{ label: string; name: string; number: string }> = [];
+    const push = (label: string, name: string, raw: string) => {
+      const number = (raw.match(PHONE_RE) || [])[0] || "";
+      if (!number) return;
+      const digits = number.replace(/[^0-9]/g, "");
+      if (out.some((p) => p.number.replace(/[^0-9]/g, "") === digits)) return;
+      // 양식 라벨이 값에 섞여 오는 건이 있다("★키맨성함/번호 정수호주") — 라벨·기호를 걷어낸 이름만 남긴다
+      const clean = name
+        .replace(PHONE_RE, "")
+        .replace(/★|키맨성함\/?번호|키맨|접수자성함|접수자연락처|일반전화|[()]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      out.push({ label, name: clean.slice(0, 14), number });
+    };
+    push("접수자", "", t.contact || "");
+    push("키맨", (t.keyman || "").replace(PHONE_RE, ""), t.keyman || "");
+    const raw = String(t.note || "").replace(/_x000d_/g, " ");
+    const field = (label: RegExp) => (raw.match(label) || [])[1] || "";
+    push("접수자", field(/접수자성함[\t ]*([^\t\n]*)/), field(/접수자연락처[\t ]*([^\t\n]*)/));
+    push("키맨", field(/키맨성함\/번호[\t ]*([^\t\n]*)/).replace(PHONE_RE, "").replace(/[()]/g, ""), field(/키맨성함\/번호[\t ]*([^\t\n]*)/));
+    push("일반전화", "", field(/일반전화[\t ]*([^\t\n]*)/));
+    return out;
+  };
+
+  /** 통화 버튼 — 번호가 하나면 바로 연결, 접수자·키맨이 둘 다 있으면 골라 걸도록 (잘못된 상대에게 걸리지 않게) */
+  const CallButton = ({ ticket, compact }: { ticket: AsTicket; compact?: boolean }) => {
+    const list = phonesOf(ticket);
+    const [open, setOpen] = useState(false);
+    if (!list.length) return null;
+    const cls = compact
+      ? "flex-1 rounded-full bg-emerald-600 px-2 py-1.5 text-center text-[11px] font-black text-white"
+      : "shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700";
+    if (list.length === 1) {
+      return (
+        <a href={`tel:${list[0].number.replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className={cls}
+          title={`${list[0].label}${list[0].name ? ` ${list[0].name}` : ""} ${list[0].number}`}>📞</a>
+      );
+    }
+    return (
+      <span className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={() => setOpen((v) => !v)} className={cls} title="통화 — 접수자·키맨 선택">📞 {list.length}</button>
+        {open && (
+          <span className="absolute bottom-full right-0 z-30 mb-1 flex min-w-[190px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            {list.map((phone) => (
+              <a key={phone.number} href={`tel:${phone.number.replace(/[^0-9]/g, "")}`} onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 text-left text-xs font-black text-slate-800 transition hover:bg-emerald-50">
+                <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">{phone.label}</span>
+                <span className="min-w-0 flex-1 truncate">{phone.name || phone.number}</span>
+                {phone.name && <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-400">{phone.number.slice(-4)}</span>}
+              </a>
+            ))}
+          </span>
+        )}
+      </span>
+    );
+  };
   // 상태 요약 바: 전체/미배정/진행/완료 — 클릭하면 그 상태만 (아침에 "뭐부터"가 바로 보이게)
   const [statusPick, setStatusPick] = useState<"" | "미배정" | "배정" | "완료">("");
   const statusOf = (t: AsTicket) => (t.status === "완료" ? "완료" : t.assignee ? "배정" : "미배정");
@@ -1435,7 +1498,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
                 <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
                 <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
-                  {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full bg-emerald-600 px-2 py-1.5 text-center text-[11px] font-black text-white">📞</a>}
+                  <CallButton ticket={ticket} compact />
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
                   {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="flex-1 rounded-full bg-slate-700 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-600">FIELD</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
@@ -1515,7 +1578,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5" onClick={(event) => event.stopPropagation()}>
                     <div className="flex flex-nowrap justify-end gap-1.5">
-                      {firstPhoneOf(ticket) && <a href={`tel:${firstPhoneOf(ticket).replace(/[^0-9]/g, "")}`} onClick={(e) => e.stopPropagation()} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700" title={firstPhoneOf(ticket)}>📞</a>}
+                      <CallButton ticket={ticket} />
                       {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
                       {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="shrink-0 rounded-full bg-slate-700 transition hover:bg-slate-600 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
                       <button type="button" onClick={() => setAssignId(ticket.id)} className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">배정</button>
