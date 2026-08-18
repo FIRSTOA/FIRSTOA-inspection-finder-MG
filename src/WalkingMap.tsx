@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { askConfirm } from "./confirmModal";
 import L from "leaflet";
 import { LocateFixed } from "lucide-react";
@@ -630,6 +630,10 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const canvasRendererRef = useRef<L.Canvas | null>(null);
   const markerByIdRef = useRef(new Map<number, L.Marker | L.CircleMarker>());
+  // 좌표·주소 그룹키 사전계산 — 지도 이동·선택마다 전체를 다시 정규화하지 않도록 (모바일 밀림의 원인)
+  const geoPlaces = useMemo(() => places
+    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude))
+    .map((place) => ({ place, gkey: addressGroupKey(place) })), [places]);
   const markerSignatureRef = useRef(new Map<number, string>());
   const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
   const locationLayerRef = useRef<L.LayerGroup | null>(null);
@@ -734,14 +738,15 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     // 모바일은 화면 가장자리에서 마커를 자주 제거·생성하면 이동이 끊겨 보인다.
     // 넉넉한 완충 범위를 유지해 작은 지도 이동에서는 기존 마커를 재사용한다.
     const renderBounds = map.getBounds().pad(mobile ? 0.08 : 0.12);
-    const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && renderBounds.contains([place.latitude, place.longitude]));
-    const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
-      const key = addressGroupKey(place);
-      const current = groups.get(key) || [];
-      current.push(place);
-      groups.set(key, current);
-      return groups;
-    }, new Map<string, MapPlace[]>()).values());
+    const visiblePlaces: MapPlace[] = [];
+    const groups = new Map<string, MapPlace[]>();
+    for (const { place, gkey } of geoPlaces) {
+      if (!renderBounds.contains([place.latitude, place.longitude])) continue;
+      visiblePlaces.push(place);
+      const bucket = groups.get(gkey);
+      if (bucket) bucket.push(place); else groups.set(gkey, [place]);
+    }
+    const groupedPlaces = Array.from(groups.values());
     const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
     const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
     markerByIdRef.current.forEach((marker, id) => {
@@ -844,7 +849,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
       markerSignatureRef.current.set(place.id, signature);
       if (tooltip) group.forEach((item) => labelByIdRef.current.set(item.id, tooltip));
     });
-  }, [places, onSelect, selectedId, viewportRevision]);
+  }, [geoPlaces, onSelect, selectedId, viewportRevision]);
 
   useEffect(() => {
     new Set(labelByIdRef.current.values()).forEach((element) => styleMapLabel(element, false));
@@ -978,6 +983,15 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [team, viewStorageKey]);
 
+  /**
+   * 지도용 사전계산 — 좌표가 있는 곳과 주소 그룹키를 places가 바뀔 때만 만든다.
+   * 예전에는 지도를 조금 움직이거나 한 곳을 탭할 때마다(선택 상태가 의존성) 3,642곳 전체를
+   * 다시 필터링하고 주소 문자열을 정규화해 모바일에서 눈에 보이게 밀렸다.
+   */
+  const geoPlaces = useMemo(() => places
+    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude))
+    .map((place) => ({ place, gkey: addressGroupKey(place) })), [places]);
+
   // 핀 렌더 — 화면(+여유) 안만 생성, 시그니처 같으면 재사용
   useEffect(() => {
     const map = mapRef.current;
@@ -988,12 +1002,16 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const latPad = (ne.getLat() - sw.getLat()) * 0.12, lngPad = (ne.getLng() - sw.getLng()) * 0.12;
     const contains = (lat: number, lng: number) =>
       lat >= sw.getLat() - latPad && lat <= ne.getLat() + latPad && lng >= sw.getLng() - lngPad && lng <= ne.getLng() + lngPad;
-    const visiblePlaces = places.filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && contains(place.latitude, place.longitude));
-    const groupedPlaces = Array.from(visiblePlaces.reduce((groups, place) => {
-      const key = addressGroupKey(place);
-      groups.set(key, [...(groups.get(key) || []), place]);
-      return groups;
-    }, new Map<string, MapPlace[]>()).values());
+    // 좌표·그룹키는 사전계산분을 쓰고, 그룹에 담을 때 배열을 복사하지 않는다(복사하면 곳 수의 제곱으로 느려진다)
+    const visiblePlaces: MapPlace[] = [];
+    const groups = new Map<string, MapPlace[]>();
+    for (const { place, gkey } of geoPlaces) {
+      if (!contains(place.latitude, place.longitude)) continue;
+      visiblePlaces.push(place);
+      const bucket = groups.get(gkey);
+      if (bucket) bucket.push(place); else groups.set(gkey, [place]);
+    }
+    const groupedPlaces = Array.from(groups.values());
     const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
     const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
     overlaysRef.current.forEach((overlay, id) => {
@@ -1096,7 +1114,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       if (permanentLabel) group.forEach((item) => labelByIdRef.current.set(item.id, container.firstChild as HTMLDivElement));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places, onSelect, selectedId, viewportRevision]);
+  }, [geoPlaces, onSelect, selectedId, viewportRevision]);
 
   // 선택 변경: 라벨 하이라이트 + 지도 이동
   useEffect(() => {
@@ -1742,12 +1760,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return rows;
   }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor]);
 
+  // 검색은 한 글자마다 수백 곳을 재계산해 모바일에서 입력이 밀렸다 — 화면 갱신을 한 박자 늦춘다(입력은 즉시 반응)
+  const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
+    const keyword = deferredQuery.trim().toLowerCase();
     if (!keyword) return scopedPlaces;
     return scopedPlaces.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
       .some((value) => value.toLowerCase().includes(keyword)));
-  }, [query, scopedPlaces]);
+  }, [deferredQuery, scopedPlaces]);
+
+  // 목록은 한 번에 다 그리지 않는다 — 600곳이면 카드 600개(각 80여 개 노드)가 즉시 만들어져 모바일이 멈춘다
+  const LIST_PAGE = 60;
+  const [listLimit, setListLimit] = useState(LIST_PAGE);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [deferredQuery, teamFilter, quarterFilter, kindFilter, labelFilters]);
+  const listRows = filtered.slice(0, listLimit);
+  const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]); // includes()는 행마다 O(n) — 목록이 커지면 제곱으로 느려진다
 
   const mapSearchResults = useMemo(() => {
     const keyword = mapQuery.trim().toLowerCase();
@@ -2209,9 +2236,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         {syncState === "loading" && (
           <div className="bg-blue-50 px-4 py-2 text-center text-[11px] font-black text-blue-600">서버와 동기화 중… 핀·미수·초과 표시가 잠시 뒤 채워집니다</div>
         )}
-        {filtered.map((place) => {
+        {listRows.map((place) => {
           const meta = labelMeta(place.label);
-          const checked = checkedIds.includes(place.id);
+          const checked = checkedSet.has(place.id);
           const lastInspection = latestInspectionByPlace.get(place.id) || "";
           const inspectionDays = lastInspection ? daysBetween(lastInspection, kstDate()) : null;
           const renewalMatch = renewalMatchByPlaceId.get(place.id);
@@ -2222,9 +2249,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
           const historyLoading = expandedId === place.id && place.kind === "quarter" && onDemandHistory === undefined;
-          const historyEntries = onDemandHistory !== undefined && onDemandHistory.length ? onDemandHistory : (onDemandHistory !== undefined ? [] : (inspectionHistoryByPlace.get(place.id) || []));
+          // 점검 원문 파싱·여분 판정은 무겁고 "펼친 카드"에서만 쓰인다 — 접힌 행까지 계산하면 목록이 밀린다
+          const rowExpanded = expandedId === place.id && !editMode;
+          const historyEntries = !rowExpanded ? [] : (onDemandHistory !== undefined && onDemandHistory.length ? onDemandHistory : (onDemandHistory !== undefined ? [] : (inspectionHistoryByPlace.get(place.id) || [])));
           const inspectionSnapshots = historyEntries.map((visit) => visitSnapshot(visit, place));
-          const spareAdviceResult = place.label === "G7" || historyLoading ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
+          const spareAdviceResult = !rowExpanded || place.label === "G7" || historyLoading ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
           return (
             <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
@@ -2311,6 +2340,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             </div>
           );
         })}
+        {filtered.length > listRows.length && (
+          <button type="button" onClick={() => setListLimit((n) => n + 60)}
+            className="w-full border-t border-slate-100 py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50">
+            더 보기 ({listRows.length.toLocaleString()} / {filtered.length.toLocaleString()}곳)
+          </button>
+        )}
         {!filtered.length && <div className="p-10 text-center text-sm font-semibold text-slate-400">검색 결과가 없습니다.</div>}
       </div>
     </div>
