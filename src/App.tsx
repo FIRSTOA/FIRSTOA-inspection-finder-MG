@@ -6156,8 +6156,14 @@ export default function App() {
           const renewal = fieldVendorFlags?.renewal || null;
           const overage = fieldVendorFlags?.overage || null;
           const bulman = fieldVendorFlags?.bulman || null;
-          if (!inspectionLine && !misu && !renewal && !overage && !bulman) return null;
+          const vendorNote = fieldVendorFlags?.note || null;
+          if (!inspectionLine && !misu && !renewal && !overage && !bulman && !vendorNote) return null;
           return <div className={`rounded-xl border px-4 py-3 ${inspectionLine?.wrap || "border-slate-200 bg-white"}`}>
+            {/* 거래처 특이사항 — 방문 규칙(출입·카드키·점검 제외)은 FIELD에서 양식 쓰는 시점에도 봐야 한다 */}
+            {vendorNote && <div className="mb-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+              <div className="text-[10px] font-black text-violet-700">📌 거래처 특이사항</div>
+              <div className="mt-0.5 whitespace-pre-wrap text-xs font-bold leading-5 text-slate-800">{vendorNote.text.slice(0, 400)}{vendorNote.text.length > 400 ? " …" : ""}</div>
+            </div>}
             {inspectionLine && <div className={`text-sm font-black ${inspectionLine.tone}`}>{inspectionLine.text}</div>}
             {misu && (misu.cleared
               ? <div className="mt-1 text-xs font-black text-slate-400">미수 완납 · 현재 0원{misu.date ? ` (마지막 입력 ${misu.date})` : ""}</div>

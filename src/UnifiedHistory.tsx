@@ -326,27 +326,42 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   const [noteEdit, setNoteEdit] = useState<string | null>(null);
   const [noteBusy, setNoteBusy] = useState(false);
   useEffect(() => { setNoteEdit(null); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
+  /**
+   * 특이사항 저장 — 화면에 보이던 그 행(flags.note.ids)만 고친다.
+   * 표시는 별칭·부분일치까지 끌어와 여러 행을 이어 붙여 보여주므로, 새 행을 덧쓰면 같은 내용이
+   * 계속 중복 누적되고("리본즈" 2행 사례) 지울 때는 일부만 지워져 메모가 남는다.
+   */
   const saveVendorNote = async () => {
     if (noteEdit === null || noteBusy) return;
     const text = noteEdit.trim();
     const key = vendorMatchKey(queryVendor);
     if (!key) { notify("업체를 먼저 선택하세요.", "error"); return; }
+    const ids = flags?.note?.ids || [];
     setNoteBusy(true);
     try {
-      const rows = await selectRows<{ id: string }>("vendor_notes", `select=id&vendor_key=eq.${encodeURIComponent(key)}&order=updated_at.desc&limit=1`);
       if (!text) {
-        if (rows[0]) await deleteRows("vendor_notes", `id=eq.${rows[0].id}`);
-        notify("특이사항을 지웠습니다.");
-      } else if (rows[0]) {
-        await updateRows("vendor_notes", `id=eq.${rows[0].id}`, { note: text, author: author || "미지정", updated_at: new Date().toISOString() });
+        if (ids.length) await deleteRows("vendor_notes", `id=in.(${ids.map((id) => `"${id}"`).join(",")})`);
+        notify(ids.length ? "특이사항을 지웠습니다." : "지울 특이사항이 없습니다.", ids.length ? "success" : "error");
+      } else if (ids.length) {
+        // 여러 행이 합쳐져 보이던 경우: 첫 행에 합본을 남기고 나머지 행은 지운다(중복 방지)
+        await updateRows("vendor_notes", `id=eq.${ids[0]}`, { note: text, author: author || "미지정", updated_at: new Date().toISOString() });
+        if (ids.length > 1) await deleteRows("vendor_notes", `id=in.(${ids.slice(1).map((id) => `"${id}"`).join(",")})`);
         notify("특이사항을 저장했습니다 ✓");
       } else {
         await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: text, author: author || "미지정", source: "webapp" });
         notify("특이사항을 등록했습니다 ✓");
       }
-      setFlags((cur) => (cur ? { ...cur, note: text ? { text, grade: cur.note?.grade || "", count: 1 } : null } : cur));
-      resetVendorFlagsCache(); // 일정리스트 배지도 새 내용으로
+      // flags가 null이어도 낙관적 표시가 유지되게 기본 객체로 시작한다 (저장했는데 '없음'으로 돌아가 보이던 문제)
+      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
+      setFlags((cur) => {
+        const base = cur || blank;
+        if (!text) return { ...base, note: null };
+        const keepIds = ids.length ? [ids[0]] : [];
+        return { ...base, note: { text, grade: base.note?.grade || "", count: 1, ids: keepIds } };
+      });
+      resetVendorFlagsCache(); // 다음 화면 진입 때 배지·목록이 새 내용으로 (이미 떠 있는 화면은 재진입 후 반영)
       setNoteEdit(null);
+      if (!ids.length && text) void getVendorFlagsBatch([queryVendor]).catch(() => undefined); // 새로 만든 행의 id를 다음 조회에서 확보
     } catch (e) {
       notify(`저장 실패: ${(e as Error).message}`, "error");
     } finally {

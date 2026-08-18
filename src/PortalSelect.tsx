@@ -50,7 +50,8 @@ export default function PortalSelect({
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setSpot(null);
     };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSpot(null); };
+    // Esc는 드롭다운만 닫고 멈춘다 — preventDefault를 안 하면 상위 모달(FormModal)까지 닫혀 작성 중 내용이 사라진다
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setSpot(null); } };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", place);

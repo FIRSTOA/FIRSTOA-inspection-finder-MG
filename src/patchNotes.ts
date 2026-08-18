@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7b87832ba6",
+    "date": "2026-08-18",
+    "note": "족보↔가이드 연결 정밀화 + 가이드 증상 필터 + 모달 Esc 닫기"
+  },
+  {
     "hash": "49b5e23300",
     "date": "2026-08-18",
     "note": "가이드 태깅·분류 어휘 공용화·백업·코드 매칭 — 품질 라운드"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "99c189c820",
     "date": "2026-08-02",
     "note": "접수 행 재사용 방식 전환 + 상태 필터 [전체] 칩"
-  },
-  {
-    "hash": "d094d275ce",
-    "date": "2026-08-02",
-    "note": "IT도 처리 저장 시 시작·끝 필수 — 원격이관과 동일 팝업 차단"
   }
 ];

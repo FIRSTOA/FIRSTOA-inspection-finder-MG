@@ -1,5 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+
+// 열려 있는 모달 스택 — Esc는 "가장 위(마지막에 열린)" 모달만 닫아야 한다.
+// window 리스너는 등록 순서로 실행되므로 스택 없이는 먼저 열린(뒤쪽) 모달이 먼저 닫혔다.
+let modalSeq = 0;
+const openModals: number[] = [];
 
 /**
  * 등록/작성·상세 모달 공통 틀 — 다크 헤더 + 흰 본문 + 연회색 푸터.
@@ -17,15 +22,25 @@ export default function FormModal({
   footer: ReactNode;
   wide?: boolean | "xl";
 }) {
-  // Esc로 닫기 — 바깥 클릭·X만 되던 것을 키보드로도. 여러 모달이 겹치면 가장 위(마지막 마운트)만 닫힌다
+  // Esc로 닫기 — 바깥 클릭·X만 되던 것을 키보드로도.
+  const idRef = useRef(0);
+  if (!idRef.current) idRef.current = ++modalSeq;
   useEffect(() => {
+    const id = idRef.current;
+    openModals.push(id);
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.isComposing) return;                        // 한글 조합 중 Esc는 조합 취소용이다
+      if (openModals[openModals.length - 1] !== id) return;  // 위에 다른 모달이 있으면 그쪽이 닫힌다
       event.preventDefault();
       onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const at = openModals.lastIndexOf(id);
+      if (at >= 0) openModals.splice(at, 1);
+    };
   }, [onClose]);
 
   return (

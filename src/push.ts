@@ -118,6 +118,10 @@ export async function setPushPref(category: PushCategory, on: boolean): Promise<
   const prefs = (await getPushPrefs()) || {};
   prefs[category] = on;
   await updateRows("push_subscriptions", `endpoint=eq.${encodeURIComponent(endpoint)}`, { prefs, updated_at: new Date().toISOString() });
+  // PATCH는 0행이 맞아도 성공(204)이다 — 브라우저가 구독을 갈아끼웠거나 행이 지워졌으면 저장된 척만 하고
+  // 새로고침하면 되돌아간다. 실제로 남았는지 확인해서 아니면 알린다.
+  const after = await getPushPrefs();
+  if (!after || after[category] !== on) throw new Error("이 기기의 알림 등록이 만료됐어요 — 알림을 껐다 다시 켜주세요.");
 }
 
 /**

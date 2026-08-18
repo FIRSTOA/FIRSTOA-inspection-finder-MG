@@ -211,7 +211,12 @@ export default function CopierNotes({ author }: { author: string }) {
         summary: d.summary.trim(), causes: d.causes.filter((c) => c.cause.trim()), tips: d.tips.trim(),
         case_count: d.case_count || 0, status: d.status || "초안", updated_at: new Date().toISOString(),
       };
-      if (d.id) await updateRows("copier_playbook", `id=eq.${d.id}`, payload);
+      if (d.id) {
+        // 원인·절차가 바뀌면 앞서 받은 "N명 확인"은 새 내용을 보증하지 않는다 — 초기화하고 다시 받는다
+        const before = (playbook || []).find((c) => c.id === d.id);
+        const changed = before && (JSON.stringify(before.causes) !== JSON.stringify(payload.causes) || (before.summary || "") !== payload.summary);
+        await updateRows("copier_playbook", `id=eq.${d.id}`, changed ? { ...payload, confirmed_by: [], status: "초안" } : payload);
+      }
       else await insertRow("copier_playbook", { ...payload, author: author || "미지정", source: "manual" });
       notify(d.id ? "족보 카드를 수정했습니다." : "족보 카드를 만들었습니다.");
       setJkDraft(null); setJkOpen(null); setPlaybook(null); // 다시 불러오기
@@ -516,14 +521,20 @@ export default function CopierNotes({ author }: { author: string }) {
                 }
                 subtitle={`실제 사례 ${jkOpen.case_count.toLocaleString()}건 기반 · ${jkOpen.author}${jkOpen.updated_at ? ` · ${jkOpen.updated_at.slice(0, 10)}` : ""}`}
                 footer={<>
-                  <button type="button" onClick={() => { void (async () => { if (await askConfirm("이 족보 카드를 삭제할까요?", { danger: true, okLabel: "삭제" })) { await deleteRows("copier_playbook", `id=eq.${jkOpen.id}`).catch(() => undefined); setJkOpen(null); setPlaybook(null); } })(); }}
+                  <button type="button" onClick={() => { void (async () => {
+                    if (!await askConfirm("이 족보 카드를 삭제할까요?", { danger: true, okLabel: "삭제" })) return;
+                    try { await deleteRows("copier_playbook", `id=eq.${jkOpen.id}`); } catch (e) { notify(`삭제 실패: ${(e as Error).message}`, "error"); return; } // 실패를 삼키면 카드가 되살아난 것처럼 보인다
+                    setJkOpen(null); setPlaybook(null);
+                  })(); }}
                     className="mr-auto rounded-full px-3 py-2 text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-500">삭제</button>
                   <button type="button" onClick={() => openCases(jkOpen)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">사례 {jkOpen.case_count.toLocaleString()}건 보기</button>
                   <button type="button" onClick={() => setJkDraft({ ...jkOpen, causes: jkOpen.causes.map((c) => ({ ...c })) })} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">✎ 수정</button>
                   <button type="button" disabled={jkBusy} onClick={() => { void (async () => {
                     if (!author) { notify("우측 상단에서 본인 이름을 먼저 선택하세요.", "error"); return; }
                     setJkBusy(true);
-                    const list = confirmersOf(jkOpen);
+                    // 화면의 값은 몇 분 전 조회분일 수 있다 — 통째로 덮으면 그 사이 남이 누른 확인이 지워진다
+                    const fresh = await selectRows<{ confirmed_by: string[] | null }>("copier_playbook", `select=confirmed_by&id=eq.${jkOpen.id}&limit=1`).catch(() => []);
+                    const list = Array.isArray(fresh[0]?.confirmed_by) ? fresh[0].confirmed_by.filter(Boolean) : confirmersOf(jkOpen);
                     const mine = list.includes(author);
                     const next = mine ? list.filter((n) => n !== author) : [...list, author];
                     try {
