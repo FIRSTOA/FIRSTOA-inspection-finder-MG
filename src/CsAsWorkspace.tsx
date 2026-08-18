@@ -1461,19 +1461,22 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 ))}
               </div>
             </div>
-            {/* ③ 상태 + 유형 한 줄 — 둘 다 "무엇을 볼지" 필터라 같은 줄에 두고 구분선으로 나눈다 */}
+            {/* ③ 상태 ④ 유형 — 한 줄에 몰면 가로 스크롤해야 해서 불편하다는 피드백(2026-08-19) → 두 줄로 나누고
+                줄바꿈 허용(스크롤 없음). 칩 높이는 그대로 얇게 유지. */}
             {!myPlanOpen && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <>
+              <div className="flex flex-wrap items-center gap-1">
                 {([["", `전체 ${statusCounts.전체}`, "bg-white text-slate-950", "bg-white/[0.07] text-slate-300"],
                    ["미배정", `미배정 ${statusCounts.미배정}`, "bg-rose-500 text-white", "bg-white/[0.07] text-rose-300"],
                    ["배정", `배정 ${statusCounts.배정}`, "bg-emerald-500 text-white", "bg-white/[0.07] text-emerald-300"],
                    ["완료", `완료 ${statusCounts.완료}`, "bg-blue-500 text-white", "bg-white/[0.07] text-blue-300"]] as const).map(([key, label, onCls, offCls]) => (
                   <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-black tabular-nums transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
+                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-black tabular-nums transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
                 ))}
-                <span className="mx-1 h-3.5 w-px shrink-0 bg-white/15" />
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
                 <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-300"}`}>전체</button>
+                  className={`rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-300"}`}>전체</button>
                 {LIST_TYPE_OPTIONS.map((name) => {
                   const full = name === "AS" ? "익일통합as"
                     : name === "AS[완료]" ? (team !== "ALL" && team !== "종일" ? DONE_CAL_LABEL[team] : "as완료")
@@ -1481,45 +1484,57 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   const short = name === "납품철수교체휴가교육" ? "납품·철수" : name === "AS" ? "익일as" : full;
                   return (
                     <button key={name} type="button" onClick={() => toggleListType(name)}
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-500"}`}>
+                      className={`rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-500"}`}>
                       <span className="lg:hidden">{short}</span><span className="hidden lg:inline">{full}</span>
                     </button>
                   );
                 })}
               </div>
+              </>
             )}
           </div>
 
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm}
             onRemove={(t) => { const target = tickets.find((x) => x.id === t.id); if (target) removeTicket(target); }} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
-            {/* 묶는 축을 탭마다 바꾼다 — 금일·익일은 "누가" 가는지가 관심사(사람 박스),
-                예정은 "언제"가 관심사(날짜 띠). 예정에서 사람 박스 안에 날짜 박스를 또 넣으니 어수선했다. */}
+            {/* 한 구조로 통일(2026-08-19) — 예정 일정은 익일로 넘어올 때까지 배정을 거의 하지 않아
+                사실상 '미배정' 한 박스이고, 그 안에서 날짜로 끊는 게 자연스럽다는 판단.
+                위계: 사람(얇은 색 띠) > 날짜(흰 라벨, 스크롤에 붙음). */}
             {(() => {
-              if (dayFilter === "scheduled") {
-                const byDate: Array<{ date: string; rows: AsTicket[] }> = [];
-                for (const t of [...scheduleRows].sort((a, b) => a.date.localeCompare(b.date) || (a.assignee || "").localeCompare(b.assignee || "", "ko"))) {
-                  const last = byDate[byDate.length - 1];
-                  if (last && last.date === t.date) last.rows.push(t);
-                  else byDate.push({ date: t.date, rows: [t] });
-                }
-                const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-                return byDate.map(({ date, rows }) => {
-                  const dow = new Date(`${date}T00:00:00`).getDay();
-                  return (
-                    <div key={date} className="space-y-2">
-                      {/* 날짜 띠 — 스크롤에 붙어 지금 보는 날짜를 항상 알려준다(얇게: h-8) */}
-                      <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-1 py-1.5 backdrop-blur">
-                        <span className={`rounded-md px-2 py-0.5 text-[13px] font-black tabular-nums text-white ${dow === 0 ? "bg-rose-500" : dow === 6 ? "bg-blue-500" : "bg-slate-800"}`}>
-                          {Number(date.slice(5, 7))}/{Number(date.slice(8, 10))}
-                        </span>
-                        <span className={`text-[12px] font-black ${dow === 0 ? "text-rose-600" : dow === 6 ? "text-blue-600" : "text-slate-500"}`}>{DOW[dow]}</span>
-                        <span className="text-[11px] font-bold tabular-nums text-slate-400">{rows.length}건</span>
-                        {/* 그 날 미배정이 남았으면 바로 보이게 */}
-                        {rows.some((r) => !r.assignee) && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">미배정 {rows.filter((r) => !r.assignee).length}</span>}
-                      </div>
-                      {rows.map((ticket) => (
+              const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+              const sorted = dayFilter === "scheduled"
+                ? [...scheduleRows].sort((a, b) => (a.assignee || "").localeCompare(b.assignee || "", "ko") || a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""))
+                : scheduleRows;
+              const groups: Array<{ key: string; rows: AsTicket[] }> = [];
+              for (const t of sorted) {
+                const key = t.assignee || "";
+                const last = groups[groups.length - 1];
+                if (last && last.key === key) last.rows.push(t);
+                else groups.push({ key, rows: [t] });
+              }
+              return groups.map((group) => (
+                // 스티키 날짜 띠가 잘리지 않게 박스에 overflow-hidden을 쓰지 않는다
+                <section key={`${group.key}-${group.rows[0].id}`} className={`rounded-xl border shadow-sm ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
+                  <div className={`flex items-center justify-between rounded-t-xl px-3 py-1 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
+                    <span className="text-[12px] font-black text-white">{group.key || "미배정"}</span>
+                    <span className="text-[10.5px] font-bold tabular-nums text-white/75">{group.rows.length}건</span>
+                  </div>
+                  <div className="space-y-2 rounded-b-xl bg-slate-50/60 p-2">
+                    {group.rows.map((ticket, gi) => {
+                      const dow = new Date(`${ticket.date}T00:00:00`).getDay();
+                      const newDate = dayFilter === "scheduled" && (gi === 0 || group.rows[gi - 1].date !== ticket.date);
+                      return (
                         <div key={ticket.id}>
+                          {newDate && (
+                            <div className="sticky top-0 z-10 -mx-2 mb-1.5 flex items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-2 py-1 backdrop-blur">
+                              <span className={`rounded px-1.5 py-0.5 text-[12px] font-black tabular-nums text-white ${dow === 0 ? "bg-rose-500" : dow === 6 ? "bg-blue-500" : "bg-slate-700"}`}>
+                                {Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}
+                              </span>
+                              <span className={`text-[11px] font-black ${dow === 0 ? "text-rose-600" : dow === 6 ? "text-blue-600" : "text-slate-500"}`}>{DOW[dow]}</span>
+                              <span className="text-[10.5px] font-bold tabular-nums text-slate-400">{group.rows.filter((r) => r.date === ticket.date).length}건</span>
+                              <span className="h-px flex-1 bg-slate-200" />
+                            </div>
+                          )}
                                         <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
@@ -1545,54 +1560,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </div>
               </article>
                         </div>
-                      ))}
-                    </div>
-                  );
-                });
-              }
-              // 금일·익일 — 사람별 박스(머리에 이름·건수). 날짜가 하나뿐이라 날짜 띠는 필요 없다
-              const groups: Array<{ key: string; rows: AsTicket[] }> = [];
-              for (const t of scheduleRows) {
-                const key = t.assignee || "";
-                const last = groups[groups.length - 1];
-                if (last && last.key === key) last.rows.push(t);
-                else groups.push({ key, rows: [t] });
-              }
-              return groups.map((group) => (
-                <section key={`${group.key}-${group.rows[0].id}`} className={`overflow-hidden rounded-xl border shadow-sm ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
-                  <div className={`flex items-center justify-between px-3 py-1 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
-                    <span className="text-[12px] font-black text-white">{group.key || "미배정"}</span>
-                    <span className="text-[10.5px] font-bold tabular-nums text-white/75">{group.rows.length}건</span>
-                  </div>
-                  <div className="space-y-2 bg-slate-50/60 p-2">
-                    {group.rows.map((ticket) => (
-                      <div key={ticket.id}>
-                                      <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
-                  <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
-                  {/* PC 표와 같은 구분 칩 — 모바일에서도 익일as(연두)/납품(로즈)/점검(호박)이 한눈에 갈리게 */}
-                  <span className={`rounded px-1.5 py-0.5 ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                    {ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? "점검" : "납품"}
-                  </span>
-                  <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
-                  <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
-                  {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}
-                </div>
-                <div className={`mt-1.5 truncate text-sm font-black leading-snug ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div>
-                {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
-                <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
-                <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
-                  <CallButton ticket={ticket} compact />
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
-                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="flex-1 rounded-full bg-slate-700 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-600">FIELD</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
-                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
-                </div>
-              </article>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               ));

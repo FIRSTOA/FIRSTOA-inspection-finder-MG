@@ -50,7 +50,9 @@ export function historyCoreName(raw: string) {
   const noAssignee = String(raw || "").replace(/^[가-힣]{2,4}\s*[-–—]\s+/, "");
   // 주의: workinVendorName은 첫 "/"에서 자른다 — "제목/캘린더제목 …" 같은 접수 제목이 "제목"으로 뭉개지므로
   // 토큰 분해는 슬래시를 구분자로만 쓰는 원문 기준으로 한다.
-  const flat = noAssignee.replace(/_x000d_|\r|\n/g, " ").replace(/\s+/g, " ").trim();
+  // 임대리스트·시트 원문에는 엑셀 잔재로 큰따옴표가 섞인다("4N주식회사 …) — 그러면 등급 접두 규칙이
+  // 깨져 그 토큰(`"4N주식회사`)이 그대로 검색어가 됐다(2026-08-19 사고). 따옴표류는 구분자로 취급한다.
+  const flat = noAssignee.replace(/_x000d_|\r|\n/g, " ").replace(/["'“”„‟]/g, " ").replace(/\s+/g, " ").trim();
   const tokens = flat.split(/[\s|·,~()/\-]+/);
   // 1순위: "30S제이드자산운용"·"20#SS한불엠앤에스"처럼 순번+등급 접두 토큰 — 임대리스트 표기라 업체명일 확률이 가장 높다
   for (let i = 0; i < tokens.length; i += 1) {

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "57b261dede",
+    "date": "2026-08-18",
+    "note": "워킨맵 모바일 — 컨트롤을 상단 다크바로, 검색은 토글, 마커 개수 상한"
+  },
+  {
     "hash": "0a37c414cf",
     "date": "2026-08-18",
     "note": "일정리스트 구조 개선 — 필터 3줄로 압축 + 예정은 날짜 축(스티키 띠)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cb87f2873a",
     "date": "2026-08-02",
     "note": "접수 버튼 단계 분리 + 신규 지역 칩 + 캘린더 제목·지역 인식 개선"
-  },
-  {
-    "hash": "af13025d8c",
-    "date": "2026-08-02",
-    "note": "신규 거래처도 카톡 보고양식 생성 — 신규 양식 입력을 임대 레코드 형태로 변환(pseudoLease), 복합기·IT 공통"
   }
 ];

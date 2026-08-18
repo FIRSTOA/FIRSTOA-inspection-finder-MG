@@ -678,9 +678,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
             맨 위에 세우고, 누구나 바로 고칠 수 있게 한다(현장에서 알게 된 규칙이 바로 쌓이도록). */}
         {!loading && queryVendor && activeCat === "전체" && (flags?.note || noteEdit !== null) && (
           <section className="mb-3 overflow-hidden rounded-2xl border-2 border-violet-300 bg-violet-50/50 shadow-sm">
-            <div className="flex items-center justify-between gap-2 bg-violet-700 px-4 py-2.5 sm:px-5">
-              <h3 className="text-[14px] font-black text-white">📌 거래처 특이사항</h3>
-              <span className="text-[10px] font-bold text-violet-200">방문 규칙·출입·유무상 범위 — 그날 기기 상태는 아래 방문 메모</span>
+            {/* 모바일에서 부제가 제목 밑으로 지저분하게 꺾여 내려왔다(사용자 지적) →
+                좁은 화면에서는 부제를 숨기고 제목만, 넓은 화면에서만 부제를 오른쪽에 둔다 */}
+            <div className="flex items-center justify-between gap-2 bg-violet-700 px-4 py-2 sm:px-5">
+              <h3 className="text-[13.5px] font-black text-white">📌 거래처 특이사항</h3>
+              <span className="hidden shrink-0 text-[10px] font-bold text-violet-200 lg:inline">방문 규칙·출입·유무상 범위 — 그날 기기 상태는 아래 방문 메모</span>
             </div>
             {noteEdit === null ? (
               <div className="px-4 py-3.5 sm:px-5">

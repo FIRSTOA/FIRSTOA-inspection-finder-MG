@@ -55,6 +55,12 @@ describe("vendorMatchKey — 업체명 매칭 키", () => {
 });
 
 describe("historyCoreName — 통합이력 검색어 핵심 토큰", () => {
+  // 임대리스트 원문에 엑셀 잔재 큰따옴표가 섞이면 등급 접두 규칙이 깨져 `"4N주식회사`가 검색어로 나갔다
+  it("따옴표가 섞인 제목에서도 업체명을 뽑는다", () => {
+    const raw = '여분요청\t N\tECOSYS-MA2100CFX\t"4N주식회사 그리드엔터테인먼트-전 주식회사 일삼일 / 전전 아이오케이엠 마포구매월마감"';
+    expect(historyCoreName(raw)).toBe("그리드엔터테인먼트");
+  });
+
   it("접수 제목에서 업체명만 뽑는다 (퍼뮤니티 사례 — 통째 검색 0건 사고)", () => {
     expect(historyCoreName("여분요청 N SL-X3220NR 14N주식회사 퍼뮤니티 (Furmunity Corp.)-분기마감 종료일 28. 5. 14 지역 수도권C 접수")).toBe("퍼뮤니티");
     expect(historyCoreName("주식회사 무암 (Mooam)")).toBe("무암");

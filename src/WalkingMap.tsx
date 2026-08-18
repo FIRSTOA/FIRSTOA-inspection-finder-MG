@@ -2415,6 +2415,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           className={`flex h-9 w-9 items-center justify-center rounded-lg transition active:scale-95 ${locationTracking ? "bg-blue-600 text-white" : "bg-white/10 text-white"}`}>
           <LocateFixed size={16} strokeWidth={2.4} />
         </button>
+        {/* 지도 위에 떠 있던 조건·색상·진행률도 헤더로 — 지도를 가리는 요소를 없앤다 */}
+        {([["조건", conditionMenuOpen, () => { setConditionMenuOpen((v) => !v); setColorMenuOpen(false); setProgressMenuOpen(false); }, kindFilter !== "ALL"],
+           ["색상", colorMenuOpen, () => { setColorMenuOpen((v) => !v); setConditionMenuOpen(false); setProgressMenuOpen(false); }, labelFilters.length > 0],
+           ["진행률", progressMenuOpen, () => { setProgressMenuOpen((v) => !v); setConditionMenuOpen(false); setColorMenuOpen(false); }, false]] as Array<[string, boolean, () => void, boolean]>).map(([label, open, toggle, active]) => (
+          <button key={label} type="button" onClick={toggle}
+            className={`flex h-9 shrink-0 items-center rounded-lg px-2.5 text-[12px] font-black transition active:scale-95 ${open || active ? "bg-white text-slate-950" : "bg-white/10 text-white"}`}>
+            {label}{label === "색상" && labelFilters.length ? ` ${labelFilters.length}` : ""}
+          </button>
+        ))}
       </>
     ),
     headerSlot,
@@ -2427,7 +2436,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         : kakaoNs
           ? <MapCanvasKakao kakao={kakaoNs} places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
           : <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />}
-      <div className="absolute left-14 top-3 z-[900] hidden w-[145px] sm:w-[240px] lg:block">
+      <div className="absolute left-[7.25rem] top-3 z-[900] hidden w-[260px] lg:block">
         <div className="relative">
           <input
             value={mapQuery}
@@ -2466,15 +2475,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         onClick={toggleLocationTracking}
         title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"}
         aria-pressed={locationTracking}
-        className={`absolute left-3 top-[5.75rem] z-[900] hidden h-10 w-10 items-center justify-center rounded-lg border text-xl font-black shadow-lg lg:flex ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+        className={`absolute left-[3.5rem] top-3 z-[900] hidden h-10 w-10 items-center justify-center rounded-xl border shadow-lg lg:flex ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
       >
         <LocateFixed size={19} strokeWidth={2.4} />
       </button>
-      <div className="absolute right-3 top-3 z-[900]">
+      {/* 조건·색상·진행률 — 모바일에서는 버튼을 상단 다크바로 올리고(아래 headerControls) 이 컨테이너는
+          패널 위치 기준으로만 쓴다(헤더 바로 아래 고정). 넓은 화면은 기존처럼 지도 위. */}
+      <div className="fixed right-2 top-[52px] z-[1100] lg:absolute lg:right-3 lg:top-3 lg:z-[900]">
         <div className="relative flex gap-1">
+          <div className="hidden gap-1 lg:flex">
           <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`rounded-full border px-2 py-2.5 text-[11px] font-black shadow-lg sm:px-3 sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
+          </div>
 
           {conditionMenuOpen && (
             <div className="absolute right-0 top-12 z-[1200] w-[280px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
