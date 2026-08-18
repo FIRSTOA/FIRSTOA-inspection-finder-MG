@@ -1501,20 +1501,22 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               }
               return groups.map((group) => (
                 <section key={`${group.key}-${group.rows[0].id}`} className={`overflow-hidden rounded-xl border-2 shadow-sm ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
-                  <div className={`flex items-center justify-between px-3 py-2 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
-                    <span className="text-[13.5px] font-black text-white">{group.key || "미배정"}</span>
-                    <span className="text-[11px] font-black text-white/80">{group.rows.length}건</span>
+                  {/* 사람 띠 = 상위 구분(얇은 색 띠), 아래 날짜 띠 = 하위 구분(연한 라벨). 둘 다 굵으면 위계가 안 잡힌다 */}
+                  <div className={`flex items-center justify-between px-3 py-1 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
+                    <span className="text-[12px] font-black text-white">{group.key || "미배정"}</span>
+                    <span className="text-[10.5px] font-bold text-white/75">{group.rows.length}건</span>
                   </div>
                   <div className="space-y-2 bg-slate-50/60 p-2">
                     {group.rows.map((ticket, gi) => (
                       <div key={ticket.id}>
                 {dayFilter === "scheduled" && (gi === 0 || group.rows[gi - 1].date !== ticket.date) && (
-                  <div className="mb-1.5 mt-2.5 flex items-center justify-between rounded-lg bg-slate-800 px-3.5 py-2 first:mt-0">
-                    <span className="text-[13.5px] font-black text-white">
+                  <div className="mb-1 mt-2 flex items-center gap-2 first:mt-0">
+                    <span className="rounded-md bg-white px-2 py-0.5 text-[11.5px] font-black text-slate-700 ring-1 ring-slate-200">
                       {Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}
-                      <span className="ml-1.5 text-[12px] text-slate-300">({["일", "월", "화", "수", "목", "금", "토"][new Date(`${ticket.date}T00:00:00`).getDay()]})</span>
+                      <span className="ml-1 text-[10.5px] font-bold text-slate-400">({["일", "월", "화", "수", "목", "금", "토"][new Date(`${ticket.date}T00:00:00`).getDay()]})</span>
                     </span>
-                    <span className="text-[11px] font-bold text-slate-400">{group.rows.filter((r) => r.date === ticket.date).length}건</span>
+                    <span className="text-[10.5px] font-bold text-slate-400">{group.rows.filter((r) => r.date === ticket.date).length}건</span>
+                    <span className="h-px flex-1 bg-slate-200" />
                   </div>
                 )}
               <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
