@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "452d0fa4db",
+    "date": "2026-08-19",
+    "note": "재계약 준비 탭 — 종료 임박 레이더 + 거래처 브리핑"
+  },
+  {
     "hash": "5a35a27f01",
     "date": "2026-08-19",
     "note": "접수 시트에도 고친 방문 주소가 들어가게 (기존 거래처)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d3a222474b",
     "date": "2026-08-02",
     "note": "빠른 스탬프 완료 오발사 방지 + 잘못 찍은 완료 되돌리기"
-  },
-  {
-    "hash": "483915855b",
-    "date": "2026-08-02",
-    "note": "rpc 헬퍼: 빈 응답(204, void 함수) 처리 — 시작·끝 스탬프의 'Unexpected end of JSON input' 수정"
   }
 ];

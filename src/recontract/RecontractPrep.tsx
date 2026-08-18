@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ClipboardCopy, RefreshCw, Search } from "lucide-react";
 import { notify } from "../toast";
+import ProposalSheet from "./ProposalSheet";
 import {
   ddayOf, fetchBriefing, fetchExpiringDevices, getSignalIndex, groupTargets, clearSignalCache,
   type RcBriefing, type RcTarget,
@@ -322,6 +323,8 @@ function Briefing({ target, onBack }: { target: RcTarget; onBack: () => void }) 
       </section>
 
       {!!failed && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">상세를 불러오지 못했습니다 — {failed}</div>}
+
+      <ProposalSheet vendorKey={target.key} vendorName={target.vendor} />
 
       <Section title="거래처" hint="임대리스트 기준">
         <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4">
