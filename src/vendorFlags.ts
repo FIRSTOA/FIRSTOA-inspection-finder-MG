@@ -114,10 +114,12 @@ async function loadSources(): Promise<Sources> {
   for (const row of noteRows) {
     const key = row.vendor_key || vendorMatchKey(row.vendor);
     const text = String(row.note || "").trim();
-    if (!key || !text) continue;
+    // 출근·점심시간만 적어둔 업체도 있다 — 본문이 비었다고 버리면 화면에 아무것도 안 뜬다(2026-08-19 버그)
+    const hasHours = !!String(row.work_start || "").trim() || !!String(row.lunch_time || "").trim();
+    if (!key || (!text && !hasHours)) continue;
     const prev = notes.get(key);
     if (prev) {
-      notes.set(key, { ...prev, text: `${prev.text}\n\n${text}`, grade: prev.grade || row.grade || "", count: prev.count + 1, ids: [...prev.ids, row.id],
+      notes.set(key, { ...prev, text: [prev.text, text].filter(Boolean).join("\n\n"), grade: prev.grade || row.grade || "", count: prev.count + 1, ids: [...prev.ids, row.id],
         workStart: prev.workStart || String(row.work_start || ""), lunchTime: prev.lunchTime || String(row.lunch_time || "") });
     } else {
       notes.set(key, { text, grade: row.grade || "", count: 1, ids: [row.id],

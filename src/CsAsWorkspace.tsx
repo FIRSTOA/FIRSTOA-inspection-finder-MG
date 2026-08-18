@@ -1449,10 +1449,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <button type="button" onClick={() => setMyPlanOpen(true)}
                   className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-black transition sm:px-4 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
               </div>
-              {/* 대상 날짜 + 건수를 한 덩어리로 — 예전엔 아래쪽에 떠 있어 위치가 애매했다 */}
-              {!myPlanOpen && <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
-                {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
-              </span>}
               {/* 넓은 화면은 팀 칩을 여기 나란히 (모바일은 위 줄) */}
               <div className="ml-auto hidden gap-0.5 rounded-full bg-white/[0.07] p-0.5 sm:flex">
                 {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, `${t}팀`] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
@@ -1489,6 +1485,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </button>
                   );
                 })}
+                {/* 대상 날짜 + 건수 — 필터 맨 아랫줄 오른쪽(사용자 요청: 아래로 내림) */}
+                <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
+                  {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
+                </span>
               </div>
               </>
             )}

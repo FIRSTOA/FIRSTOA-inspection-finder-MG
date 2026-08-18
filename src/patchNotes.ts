@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "902239a43d",
+    "date": "2026-08-19",
+    "note": "일정리스트 필터 두 줄 + 예정도 사람 박스 구조로 통일, 워킨맵 컨트롤 헤더 이동, 따옴표 검색 버그"
+  },
+  {
     "hash": "57b261dede",
     "date": "2026-08-18",
     "note": "워킨맵 모바일 — 컨트롤을 상단 다크바로, 검색은 토글, 마커 개수 상한"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "102e2ca312",
     "date": "2026-08-02",
     "note": "IT 접수를 복합기AS와 동일 플로우로 — 카톡 전송 버튼·전체 실행에 AS방 전송 포함(같은 팀 AS방), IT·원격 신규 지역 칩 A~E"
-  },
-  {
-    "hash": "cb87f2873a",
-    "date": "2026-08-02",
-    "note": "접수 버튼 단계 분리 + 신규 지역 칩 + 캘린더 제목·지역 인식 개선"
   }
 ];

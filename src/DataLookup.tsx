@@ -69,7 +69,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   );
 
   useEffect(() => { window.localStorage.setItem("cs_lookup_category_v1", categoryKey); }, [categoryKey]);
-  useEffect(() => { setRows([]); setReachedEnd(false); setChip(""); }, [categoryKey, team]);
+  // 분류를 바꾸면 검색어도 비운다 — 표마다 검색 대상 컬럼이 달라, 남은 검색어가 엉뚱한 표에 적용됐다
+  // (거래처 특이사항에서 '오전'을 찾고 미수로 옮기면 미수가 '오전' 기준으로 걸러지던 버그, 2026-08-19)
+  useEffect(() => { setRows([]); setReachedEnd(false); setChip(""); setQuery(""); setQueryDraft(""); }, [categoryKey, team]);
 
   // 조회 한 번에 필요한 쿼리를 만든다. offset만 바꿔 "더 보기"에 재사용.
   const buildQuery = useCallback((offset: number) => {
