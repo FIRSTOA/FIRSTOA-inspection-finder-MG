@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0a37c414cf",
+    "date": "2026-08-18",
+    "note": "일정리스트 구조 개선 — 필터 3줄로 압축 + 예정은 날짜 축(스티키 띠)"
+  },
+  {
     "hash": "bb7321c5fe",
     "date": "2026-08-18",
     "note": "특이사항 항목별 날짜 누적 + 같은 업체 여러 사업장 좌표 오배치 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "af13025d8c",
     "date": "2026-08-02",
     "note": "신규 거래처도 카톡 보고양식 생성 — 신규 양식 입력을 임대 레코드 형태로 변환(pseudoLease), 복합기·IT 공통"
-  },
-  {
-    "hash": "75215bc978",
-    "date": "2026-08-02",
-    "note": "보고양식 첫 줄에 마감 표기 복원 — {마감일}{등급}{업체명} + 매월/분기마감 (임대리스트 발행·누적방식) — 카톡·네이버캘린더 제목 공통"
   }
 ];

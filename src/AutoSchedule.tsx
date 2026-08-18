@@ -157,6 +157,8 @@ export default function AutoSchedule({ author }: { author: string }) {
 
 
   const [registerConfirm, setRegisterConfirm] = useState(false);
+  const [candLimit, setCandLimit] = useState(12); // 후보 목록 표시 개수 — '더 보기'로 늘린다
+  useEffect(() => { setCandLimit(12); }, [kind, team, rows.length]);
   const register = async () => {
     setRegisterConfirm(false);
     const chosenGroups = groups.map((group) => ({ ...group, members: group.members.filter((m) => picked.has(m.id)) })).filter((group) => group.members.length);
@@ -311,8 +313,10 @@ export default function AutoSchedule({ author }: { author: string }) {
               <CalendarPlus size={14} />선택 {groups.filter((g) => g.members.some((m) => picked.has(m.id))).length}곳 일정 등록
             </button>
           </div>
-          <div className="max-h-[64vh] divide-y divide-slate-100 overflow-y-auto">
-            {groups.map((group) => {
+          {/* 내부 스크롤(64vh)이 카드를 중간에서 자르고 페이지 스크롤과 겹쳐 답답했다(사용자 지적) →
+              페이지 흐름으로 두고 12곳씩 '더 보기'로 늘린다(후보가 수십 곳이어도 렌더가 가볍다) */}
+          <div className="divide-y divide-slate-100">
+            {groups.slice(0, candLimit).map((group) => {
               const single = group.members.length === 1;
               const first = group.members[0];
               const allOn = group.members.every((m: Place) => picked.has(m.id));
@@ -403,6 +407,12 @@ export default function AutoSchedule({ author }: { author: string }) {
               );
             })}
             {!rows.length && <div className="p-12 text-center text-xs font-bold text-slate-400">좌측에서 조건을 고르고 [가까운 순으로 추천]을 눌러 주세요.</div>}
+            {groups.length > candLimit && (
+              <button type="button" onClick={() => setCandLimit((n) => n + 12)}
+                className="w-full py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50">
+                더 보기 ({candLimit} / {groups.length}곳)
+              </button>
+            )}
           </div>
         </section>
       </div>

@@ -5897,9 +5897,12 @@ export default function App() {
               const Icon = SCREEN_ICON[screen] || FileText;
               return <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] text-slate-300 lg:flex"><Icon size={17} /></span>;
             })()}
-            <h1 className="truncate text-[17px] font-bold tracking-tight text-white lg:text-[18px]">
+            <h1 className={`truncate text-[17px] font-bold tracking-tight text-white lg:text-[18px] ${screen === "walkingMap" ? "hidden sm:block" : ""}`}>
               {screenTitle}
             </h1>
+            {/* 워킨맵 전용 슬롯 — 지도 위에 떠 있던 검색·내 위치 버튼을 이 헤더로 올린다(지도를 넓게 쓰려고).
+                WalkingMap이 createPortal로 여기에 넣는다. */}
+            {screen === "walkingMap" && <div id="map-header-actions" className="flex min-w-0 flex-1 items-center justify-end gap-1.5 lg:hidden" />}
           </div>
           {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[11px] font-bold text-slate-400 lg:flex">
             <span className="tabular-nums">{todayLabel}</span>

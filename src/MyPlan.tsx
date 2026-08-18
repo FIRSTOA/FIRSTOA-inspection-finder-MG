@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { selectAllRows } from "./supabase";
-import { vendorMatchKey } from "./ids";
+import { fieldTicketVendor, vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
@@ -240,8 +240,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   const markerHtml = (i: number, isPinned: boolean) =>
     `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
+  // 카카오 오버레이는 nowrap을 상속해 긴 제목이 지도 밖까지 한 줄로 뻗었다 — 줄바꿈을 명시하고
+  // 업체명은 캘린더 제목 원문(구분·모델·마감 꼬리표 포함)이라 회사명만 잘라 쓴다
+  const popupName = (vendor: string) => {
+    const clean = fieldTicketVendor(vendor).vendor.trim() || String(vendor || "").replace(/_x000d_|\r|\n/g, " ").trim();
+    return (clean.length > 26 ? `${clean.slice(0, 26)}…` : clean).replace(/[<>&]/g, "");
+  };
   const popupHtml = (i: number, t: MyPlanTicket) =>
-    `<b>${i + 1}. ${t.vendor}</b><br/><span style="font-size:11px">${t.time || ""} ${planTypeLabel(t)}${t.issue ? `<br/>${String(t.issue).slice(0, 60)}` : ""}</span>`;
+    `<div style="white-space:normal;word-break:keep-all;line-height:1.45;max-width:200px">`
+    + `<b>${i + 1}. ${popupName(t.vendor)}</b><br/><span style="font-size:11px;color:#475569">${t.time || ""} ${planTypeLabel(t)}`
+    + `${t.issue ? `<br/>${String(t.issue).replace(/[<>&]/g, "").slice(0, 50)}` : ""}</span></div>`;
 
   useEffect(() => {
     if (engine === "leaflet") {
@@ -282,7 +290,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       el.onclick = () => {
         if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
         const box = document.createElement("div");
-        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:220px";
+        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:220px;white-space:normal;word-break:keep-all";
         box.innerHTML = popupHtml(i, t);
         infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: 1, zIndex: 30 });
         infoOverlay.setMap(map);

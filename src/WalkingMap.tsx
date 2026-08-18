@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { askConfirm } from "./confirmModal";
 import L from "leaflet";
-import { LocateFixed } from "lucide-react";
+import { createPortal } from "react-dom";
+import { LocateFixed, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
@@ -1011,7 +1012,21 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       const bucket = groups.get(gkey);
       if (bucket) bucket.push(place); else groups.set(gkey, [place]);
     }
-    const groupedPlaces = Array.from(groups.values());
+    let groupedPlaces = Array.from(groups.values());
+    // 카카오 마커는 DOM 오버레이라 개수가 곧 속도다 — 넓게 볼 때(level ≥ 8, 핀이 겹쳐 읽지도 못하는 배율)만
+    // 화면 중심에서 가까운 순으로 180곳까지 그린다. 확대하면 전부 나온다.
+    if (mobile && map.getLevel() >= 8 && groupedPlaces.length > 180) {
+      const center = map.getCenter();
+      const cLat = center.getLat(), cLng = center.getLng();
+      groupedPlaces = groupedPlaces
+        .map((group) => {
+          const dLat = group[0].latitude - cLat, dLng = (group[0].longitude - cLng) * 0.79; // 위도 보정
+          return { group, d: dLat * dLat + dLng * dLng };
+        })
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 180)
+        .map((x) => x.group);
+    }
     const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
     const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
     overlaysRef.current.forEach((overlay, id) => {
@@ -1189,6 +1204,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     }
   };
   const [mapQuery, setMapQuery] = useState("");
+  // 모바일: 지도 위에 떠 있던 검색창·내 위치 버튼을 상단 다크바로 올린다(지도를 넓게).
+  // 검색은 버튼 → 누르면 헤더가 검색창으로 바뀌는 방식(항상 떠 있으면 지도를 가린다).
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  const [mapSearchOpen, setMapSearchOpen] = useState(false);
+  useEffect(() => {
+    const find = () => setHeaderSlot(document.getElementById("map-header-actions"));
+    find();
+    const timer = window.setTimeout(find, 60); // 헤더가 늦게 붙는 경우 한 번 더
+    return () => window.clearTimeout(timer);
+  }, []);
   const [mapSearchFocused, setMapSearchFocused] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
@@ -2351,6 +2376,50 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     </div>
   );
 
+  /** 상단 다크바에 얹는 모바일 컨트롤 — 평소엔 [검색][내 위치] 버튼, 검색을 켜면 헤더가 검색창이 된다 */
+  const headerControls = headerSlot && createPortal(
+    mapSearchOpen ? (
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <input
+            autoFocus
+            value={mapQuery}
+            onChange={(event) => setMapQuery(event.target.value)}
+            placeholder="거래처·주소 검색"
+            className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-[13px] font-bold text-white placeholder:text-slate-400 outline-none focus:border-blue-400"
+          />
+          {mapQuery.trim() && (
+            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[1300] max-h-[52vh] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl">
+              {mapSearchResults.map((place) => (
+                <button key={place.id} type="button"
+                  onClick={() => { selectMapPlace(place.id); setMapQuery(place.name); setMapSearchOpen(false); }}
+                  className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 active:bg-blue-100">
+                  <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                </button>
+              ))}
+              {!mapSearchResults.length && <div className="px-3 py-3 text-xs font-bold text-slate-400">현재 조건에 맞는 거래처가 없습니다.</div>}
+            </div>
+          )}
+        </div>
+        <button type="button" onClick={() => { setMapSearchOpen(false); setMapQuery(""); }}
+          className="shrink-0 rounded-lg bg-white/10 px-2.5 py-2 text-[12px] font-black text-slate-300">닫기</button>
+      </div>
+    ) : (
+      <>
+        <button type="button" onClick={() => setMapSearchOpen(true)} aria-label="거래처 검색"
+          className="flex h-9 items-center gap-1 rounded-lg bg-white/10 px-3 text-[12px] font-black text-white transition active:scale-95">
+          <Search size={15} />검색
+        </button>
+        <button type="button" onClick={toggleLocationTracking} aria-label="내 위치" aria-pressed={locationTracking}
+          className={`flex h-9 w-9 items-center justify-center rounded-lg transition active:scale-95 ${locationTracking ? "bg-blue-600 text-white" : "bg-white/10 text-white"}`}>
+          <LocateFixed size={16} strokeWidth={2.4} />
+        </button>
+      </>
+    ),
+    headerSlot,
+  );
+
   const mapPanel = (
     <div className="relative h-full min-h-0 overflow-hidden bg-slate-100 lg:min-h-[540px]">
       {!engineReady
@@ -2358,7 +2427,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         : kakaoNs
           ? <MapCanvasKakao kakao={kakaoNs} places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
           : <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />}
-      <div className="absolute left-14 top-3 z-[900] w-[145px] sm:w-[240px]">
+      <div className="absolute left-14 top-3 z-[900] hidden w-[145px] sm:w-[240px] lg:block">
         <div className="relative">
           <input
             value={mapQuery}
@@ -2397,7 +2466,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         onClick={toggleLocationTracking}
         title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"}
         aria-pressed={locationTracking}
-        className={`absolute left-3 top-[5.75rem] z-[900] flex h-10 w-10 items-center justify-center rounded-lg border text-xl font-black shadow-lg ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+        className={`absolute left-3 top-[5.75rem] z-[900] hidden h-10 w-10 items-center justify-center rounded-lg border text-xl font-black shadow-lg lg:flex ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
       >
         <LocateFixed size={19} strokeWidth={2.4} />
       </button>
@@ -2513,6 +2582,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   return (
     <div>
+      {mobileView === "map" && headerControls}
       <section className="overflow-hidden bg-white">
         {desktopLayout ? <div className="grid h-[calc(100dvh-48px)] min-h-[520px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
