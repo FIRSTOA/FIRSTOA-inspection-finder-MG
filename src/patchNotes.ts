@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9c1dc73855",
+    "date": "2026-08-18",
+    "note": "예정일정 중첩 위계 정리 — 사람 띠는 얇게, 날짜는 연한 서브 라벨로"
+  },
+  {
     "hash": "27cd77395a",
     "date": "2026-08-18",
     "note": "모바일 일정리스트 — 팀 선택 팝업 제거 + 배정자별 박스로 확실히 구분"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "88cb54adf4",
     "date": "2026-08-02",
     "note": "네이버 캘린더 미러를 수기 관행에 맞춤 — 팀별 시간(A09/B12/C15/D18) + 제목·설명을 보고양식 형식으로"
-  },
-  {
-    "hash": "0a69300103",
-    "date": "2026-08-02",
-    "note": "관리 탭 문구 명확화 — 테스트 방이 카카오톡 방임을 표기"
   }
 ];

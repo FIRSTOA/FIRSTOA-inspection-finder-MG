@@ -367,8 +367,49 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   // 거래처 특이사항 편집 — null이면 보기 모드
   const [noteEdit, setNoteEdit] = useState<string | null>(null);
   const [noteHours, setNoteHours] = useState({ work: "", lunch: "" }); // 출근·점심 — 같은 틀에서 함께 기재
+  const [noteAdd, setNoteAdd] = useState("");   // 항목 추가 — 쓸 때마다 날짜·작성자를 붙여 본문 끝에 쌓는다
   const [noteBusy, setNoteBusy] = useState(false);
-  useEffect(() => { setNoteEdit(null); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
+  useEffect(() => { setNoteEdit(null); setNoteAdd(""); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
+  /**
+   * 특이사항 항목 추가 — 규칙은 시간이 지나며 쌓인다(카드키 → 주차 → 담당자 변경…).
+   * 전체 수정은 "최종 수정일" 하나만 남아 언제 생긴 규칙인지 알 수 없었다(사용자 지적) →
+   * 추가한 항목마다 날짜·작성자를 앞에 붙여 본문 끝에 이어 붙인다.
+   */
+  const appendVendorNote = async () => {
+    const text = noteAdd.trim();
+    if (!text || noteBusy) return;
+    const key = vendorMatchKey(queryVendor);
+    if (!key) { notify("업체를 먼저 선택하세요.", "error"); return; }
+    const kst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const stamp = `[${Number(kst.slice(5, 7))}/${Number(kst.slice(8, 10))} ${author || "미지정"}]`;
+    const prev = (flags?.note?.text || "").trim();
+    const merged = prev ? `${prev}\n${stamp} ${text}` : `${stamp} ${text}`;
+    const ids = flags?.note?.ids || [];
+    setNoteBusy(true);
+    try {
+      if (ids.length) {
+        await updateRows("vendor_notes", `id=eq.${ids[0]}`, { note: merged, author: author || "미지정", updated_at: new Date().toISOString() });
+        if (ids.length > 1) await deleteRows("vendor_notes", `id=in.(${ids.slice(1).map((id) => `"${id}"`).join(",")})`);
+      } else {
+        await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: merged, author: author || "미지정", source: "webapp" });
+      }
+      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
+      setFlags((cur) => {
+        const base = cur || blank;
+        return { ...base, note: { text: merged, grade: base.note?.grade || "", count: 1, ids: ids.length ? [ids[0]] : [],
+          workStart: base.note?.workStart || "", lunchTime: base.note?.lunchTime || "",
+          author: author || "미지정", updatedAt: kst } };
+      });
+      resetVendorFlagsCache();
+      setNoteAdd("");
+      notify("특이사항에 추가했습니다 ✓");
+    } catch (e) {
+      notify(`추가 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
   /**
    * 특이사항 저장 — 화면에 보이던 그 행(flags.note.ids)만 고친다.
    * 표시는 별칭·부분일치까지 끌어와 여러 행을 이어 붙여 보여주므로, 새 행을 덧쓰면 같은 내용이
@@ -651,7 +692,16 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
                   </div>
                 )}
                 <NoteBody text={flags?.note?.text || ""} />
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {/* 항목 추가 — 규칙이 새로 생기면 여기에. 날짜·작성자가 자동으로 붙어 쌓인다 */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  <input value={noteAdd} onChange={(e) => setNoteAdd(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && noteAdd.trim()) { e.preventDefault(); void appendVendorNote(); } }}
+                    placeholder="새로 알게 된 규칙 추가 — 예) 지하주차장 카드키 필요"
+                    className="min-w-[200px] flex-1 rounded-lg border border-violet-300 bg-white px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10" />
+                  <button type="button" disabled={noteBusy || !noteAdd.trim()} onClick={() => void appendVendorNote()}
+                    className="rounded-lg bg-violet-700 px-3.5 py-2 text-[12px] font-black text-white transition hover:bg-violet-800 disabled:bg-slate-300">+ 추가</button>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => { setNoteEdit(flags?.note?.text || ""); setNoteHours({ work: flags?.note?.workStart || "", lunch: flags?.note?.lunchTime || "" }); }}
                     className="rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-black text-violet-700 transition hover:bg-violet-50">✎ 수정</button>
                   {/* 누가 언제 적었는지 — 오래된 규칙인지 판단해야 방문 전에 믿을 수 있다 */}

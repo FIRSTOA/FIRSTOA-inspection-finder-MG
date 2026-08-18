@@ -121,11 +121,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     && (t.assignee === author || (includeUnassigned && !t.assignee))
   ), [tickets, date, author, includeUnassigned]);
 
+  /**
+   * 좌표는 "이 일정의 주소"가 1순위 — 업체명 매칭은 주소가 없을 때만.
+   * 같은 업체가 여러 사업장을 쓰는 경우(빅오션이엔엠: 일산·청담·덕양빌딩)에 이름으로 찾으면
+   * 엉뚱한 지점 좌표가 붙는다(강남 일정이 일산에 찍히던 사고).
+   */
   const getGeo = useCallback((t: MyPlanTicket): Geo | null => {
-    const fromMap = lookupGeo(t.vendor);
-    if (fromMap) return fromMap;
     const fb = geoFallback.get(t.id);
-    return fb && Number.isFinite(fb.lat) ? fb : null;
+    if (fb && Number.isFinite(fb.lat)) return fb;
+    if (t.address?.trim()) return null;      // 주소가 있으면 그 주소로 잡힐 때까지 기다린다(이름 매칭 금지)
+    return lookupGeo(t.vendor);
   }, [lookupGeo, geoFallback]);
 
   useEffect(() => {
@@ -133,7 +138,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     void (async () => {
       for (const t of myTickets) {
         if (stop) return;
-        if (lookupGeo(t.vendor) || geoFallback.has(t.id)) continue;
+        if (geoFallback.has(t.id)) continue;
+        if (!t.address?.trim() && lookupGeo(t.vendor)) continue; // 주소 없는 건만 이름 매칭에 맡긴다
         // 주소가 비어 있으면 임대리스트에서 실납품 주소를 끌어온다 — 전엔 그냥 건너뛰어 지도에 안 올랐다
         const address = t.address?.trim() || await leaseAddressOf(t.vendor);
         if (stop) return;
