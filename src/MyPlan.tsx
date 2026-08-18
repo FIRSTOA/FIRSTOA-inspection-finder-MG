@@ -12,7 +12,7 @@ import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getInspForms, getRecentInspections, type InspectionSnapshot, type InspForm } from "./api";
+import { getInspForms, getRecentInspections, leaseAddressOf, type InspectionSnapshot, type InspForm } from "./api";
 import { selectRows } from "./supabase";
 import VendorSearch from "./VendorSearch";
 import { notify } from "./toast";
@@ -39,7 +39,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onRemove }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onRemove?: (ticket: MyPlanTicket) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -133,8 +133,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     void (async () => {
       for (const t of myTickets) {
         if (stop) return;
-        if (lookupGeo(t.vendor) || geoFallback.has(t.id) || !t.address?.trim()) continue;
-        const hit = await geocodeKR(t.address);
+        if (lookupGeo(t.vendor) || geoFallback.has(t.id)) continue;
+        // 주소가 비어 있으면 임대리스트에서 실납품 주소를 끌어온다 — 전엔 그냥 건너뛰어 지도에 안 올랐다
+        const address = t.address?.trim() || await leaseAddressOf(t.vendor);
+        if (stop) return;
+        if (!address) { setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); continue; }
+        const hit = await geocodeKR(address);
         if (stop) return;
         if (hit) setGeoFallback((cur) => new Map(cur).set(t.id, { lat: hit.lat, lng: hit.lng }));
         else setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); // 재시도 방지 표식
@@ -416,7 +420,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
           const f = flags.get(t.vendor.trim());
           return (
-            <div key={t.id} onClick={() => focusTicket(t.id)} className={`flex flex-wrap items-center gap-2 px-3 py-2.5 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
+            <div key={t.id} onClick={() => focusTicket(t.id)} className={`relative flex flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className="min-w-0 flex-1 basis-[55%] overflow-hidden">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
@@ -433,6 +437,11 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
                 })()}
                 <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
+                {onRemove && (
+                  // 잘못 들어온 일정·빼고 싶은 일정을 동선에서 바로 정리 (일정리스트까지 가지 않게)
+                  <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(t); }}
+                    className="absolute right-2 top-2 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-400 transition hover:border-rose-300 hover:text-rose-600">삭제</button>
+                )}
                 {f && (
                   <span className="mt-1 flex flex-wrap gap-1">
                     {f.inspection && !f.inspection.done && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">점검 {f.inspection.quarter}분기</span>}

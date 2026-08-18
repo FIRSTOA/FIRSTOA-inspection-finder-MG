@@ -128,7 +128,7 @@ function deptFromAddress(text: string): string {
  * 담당지역이 비었거나 "지방"일 때는 주소를 보고 D(경기·인천권)를 살려 준다 — 그래도 최종 판단은 사람이
  * 주소 옆 "팀 지역" 선택으로 덮어쓸 수 있다(임대리스트가 옛 주소·옛 지역인 경우가 흔하다).
  */
-const REGION_TEAM_LABEL: Record<"A" | "B" | "C" | "D" | "E", string> = { A: "강북", B: "강서", C: "강남", D: "경기·인천", E: "지방" };
+const REGION_TEAM_LABEL: Record<"A" | "B" | "C" | "D" | "E", string> = { A: "강북", B: "강서", C: "강남", D: "경기", E: "지방" };
 
 /**
  * 임대리스트 '관리 담당자'(AV열) = 팀 배정의 정답 컬럼. 값이 곧 "수도권A~E" 또는 도 이름이다.
@@ -1658,17 +1658,26 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                     <label className="min-w-[220px] flex-1 text-[11px] font-black text-slate-500">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
                       <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
                     </label>
-                    {/* 팀 지역 — 임대리스트가 옛 지역이거나 경기·인천을 "지방"으로만 적어둔 경우를 여기서 바로잡는다.
-                        비워두면 임대리스트 → 주소 순으로 자동 판정한 값(오른쪽 안내)이 그대로 나간다. */}
-                    <label className="text-[11px] font-black text-slate-500">팀 지역
-                      <select value={regionPick} onChange={(e) => setRegionPick(e.target.value as typeof regionPick)}
-                        className={`mt-1 block rounded-lg border px-3 py-2.5 text-sm font-black outline-none transition focus:ring-4 ${regionPick ? "border-blue-500 bg-blue-50 text-blue-800 focus:ring-blue-500/10" : "border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-blue-500/10"}`}>
-                        <option value="">자동 ({region || "판정 불가"})</option>
-                        {(["A", "B", "C", "D", "E"] as const).map((letter) => (
-                          <option key={letter} value={letter}>{letter === "E" ? "E 지방" : `${letter} ${REGION_TEAM_LABEL[letter]}`}</option>
-                        ))}
-                      </select>
-                    </label>
+                  </div>
+                  {/* 팀 지역 — 어느 팀 방·일정으로 갈지. 임대리스트가 옛 지역이거나 권역 칸만 채워진 건을
+                      여기서 한 번 눌러 바로잡는다. 기본은 자동 판정값(관리 담당자 → 권역 → 주소). */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2">
+                    <span className="mr-0.5 text-[11px] font-black text-slate-500">팀 지역</span>
+                    <button type="button" onClick={() => setRegionPick("")}
+                      className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${!regionPick
+                        ? (region ? "bg-slate-900 text-white shadow-sm" : "bg-amber-500 text-white shadow-sm")
+                        : "bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-700"}`}>
+                      자동{region ? ` · ${region.replace("수도권", "")}` : " · 판정 불가"}
+                    </button>
+                    <span className="mx-0.5 h-4 w-px bg-slate-200" />
+                    {(["A", "B", "C", "D", "E"] as const).map((letter) => (
+                      <button key={letter} type="button" onClick={() => setRegionPick(letter)}
+                        className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${regionPick === letter
+                          ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]"
+                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+                        {letter} <span className={regionPick === letter ? "text-blue-100" : "text-slate-400"}>{REGION_TEAM_LABEL[letter]}</span>
+                      </button>
+                    ))}
                   </div>
                   {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
                   {regionPick

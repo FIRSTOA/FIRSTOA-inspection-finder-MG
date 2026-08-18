@@ -1428,20 +1428,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       ) : (
         <section className="space-y-4">
           <div className="space-y-2.5 rounded-xl bg-[#1E252F] px-4 py-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* 모바일 순서 = 팀 → 일정 구분 → 상태 → 캘린더 유형 (사용자 지정). 넓은 화면은 한 줄에 나란히 */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <select value={team} onChange={(e) => setTeam(e.target.value as typeof team)}
+                className="w-full rounded-full bg-white/10 px-4 py-2.5 text-sm font-black text-white outline-none sm:hidden [&>option]:bg-white [&>option]:text-slate-900">
+                <option value="ALL">전체 팀</option>
+                {([...teams, "E", "기타"] as Team[]).map((item) => <option key={item} value={item}>{item === "기타" ? "기타" : `${item}팀`}</option>)}
+                <option value="종일">종일</option>
+              </select>
               <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
                 {([["today", "금일일정"], ["tomorrow", "익일일정"], ["scheduled", "예정일정"]] as [DayFilter, string][]).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-black transition sm:px-4 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
                 ))}
                 <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-black transition sm:px-4 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
               </div>
-              {/* 팀 — 모바일은 칩 8개가 두 줄로 접혀 복잡했다(사용자 지적) → 드롭다운, 넓은 화면은 칩 유지 */}
-              <select value={team} onChange={(e) => setTeam(e.target.value as typeof team)}
-                className="rounded-full bg-white/10 px-3 py-2 text-xs font-black text-white outline-none sm:hidden [&>option]:bg-white [&>option]:text-slate-900">
-                <option value="ALL">전체 팀</option>
-                {([...teams, "E", "기타"] as Team[]).map((item) => <option key={item} value={item}>{item === "기타" ? "기타" : `${item}팀`}</option>)}
-                <option value="종일">종일</option>
-              </select>
               <div className="hidden flex-wrap gap-1 rounded-full bg-white/10 p-1 sm:flex">
                 <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
                 {([...teams, "E", "기타"] as Team[]).map((item) => (
@@ -1461,7 +1461,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
                     className={`rounded-full px-3 py-1.5 text-xs font-black transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
                 ))}
-                <span className="ml-auto text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후`} · {scheduleRows.length + listNaver.length}건</span>
               </div>
               {/* 유형 — 모바일에서 상태 칩 뒤에 붙어 줄이 밀리던 것을 독립 행으로. 긴 라벨은 좁은 화면에서 축약 */}
               <div className="flex flex-wrap items-center gap-1">
@@ -1479,18 +1478,23 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </button>
                   );
                 })}
+                <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 이후`} · {scheduleRows.length + listNaver.length}건</span>
               </div>
               </>
             )}
           </div>
 
-          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} />}
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm}
+            onRemove={(t) => { const target = tickets.find((x) => x.id === t.id); if (target) removeTicket(target); }} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {scheduleRows.map((ticket, ti) => (
               <div key={ticket.id}>
                 {(ti === 0 || (scheduleRows[ti - 1].assignee || "") !== (ticket.assignee || "")) && (
-                  <div className="mb-1 mt-2.5 first:mt-0">
-                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${ticket.assignee ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>{ticket.assignee || "미배정"}</span>
+                  // 이름 칩이 작아 금일·익일에서 사람 구분이 안 된다는 피드백 — 이름을 키우고 건수·구분선을 붙였다
+                  <div className="mb-1.5 mt-3 flex items-center gap-2 first:mt-0">
+                    <span className={`rounded-lg px-3 py-1 text-[13px] font-black ${ticket.assignee ? "bg-emerald-600 text-white shadow-sm" : "bg-slate-500 text-white"}`}>{ticket.assignee || "미배정"}</span>
+                    <span className="text-[11px] font-bold text-slate-400">{scheduleRows.filter((r) => (r.assignee || "") === (ticket.assignee || "")).length}건</span>
+                    <span className="h-px flex-1 bg-slate-200" />
                   </div>
                 )}
                 {/* 예정 탭: 날짜가 바뀔 때마다 다크 바로 확실히 끊는다 (작은 칩은 카드 사이에서 안 보인다는 피드백) */}

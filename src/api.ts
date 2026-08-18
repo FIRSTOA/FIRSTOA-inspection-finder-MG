@@ -303,6 +303,35 @@ export async function getVendorIdentifiers(vendors: string[]): Promise<Record<st
 
 // 같은 업체의 임대중 기기 요약 — 임대종료/소송 행은 제외하고 품목별로 나눠 오선택을 막는다.
 export type LeaseDeviceSummary = { active: number; items: Array<[string, number]> };
+/**
+ * 업체명 → 임대리스트 주소. 일정에 주소가 비어 있으면(네이버 수기 일정·급한 접수) 지도에 못 올렸다 —
+ * "주소 없음 / 좌표 미확인"의 큰 몫이라 임대리스트에서 실납품 주소를 끌어와 대신 쓴다.
+ * 이름 표기가 달라도 붙도록 정확 일치 → 부분 일치 순으로 찾는다.
+ */
+export async function leaseAddressOf(vendor: string): Promise<string> {
+  const v = String(vendor || "").trim();
+  if (v.length < 2) return "";
+  const enc = encodeURIComponent;
+  const cols = enc("_업체명,_raw");
+  const pickAddress = (rows: Array<{ _raw?: Record<string, unknown> | null }>) => {
+    for (const row of rows) {
+      const raw = (row._raw && typeof row._raw === "object" ? row._raw : {}) as Record<string, unknown>;
+      const address = String(raw["주소(실납품주소,도로명주소)"] ?? raw["주소"] ?? "").trim();
+      if (address) return address;
+    }
+    return "";
+  };
+  try {
+    const exact = await selectRows<{ _raw?: Record<string, unknown> | null }>("vendor_info", `select=${cols}&${enc("_업체명")}=eq.${enc(v)}&limit=20`);
+    const hit = pickAddress(exact);
+    if (hit) return hit;
+    const like = await selectRows<{ _raw?: Record<string, unknown> | null }>("vendor_info", `select=${cols}&${enc("_업체명")}=ilike.*${enc(v.slice(0, 8))}*&limit=20`);
+    return pickAddress(like);
+  } catch {
+    return "";
+  }
+}
+
 export async function getLeaseDeviceSummary(vendor: string): Promise<LeaseDeviceSummary> {
   const v = String(vendor || "").trim();
   if (!v) return { active: 0, items: [] };

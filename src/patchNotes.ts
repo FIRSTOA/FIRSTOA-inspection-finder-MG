@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "3412942083",
+    "date": "2026-08-18",
+    "note": "접수 지역 배정 — 정답 컬럼('관리 담당자' AV열)을 읽도록 수리"
+  },
+  {
     "hash": "ce0d5a5814",
     "date": "2026-08-18",
     "note": "접수 지역 배정 — 주소 옆 팀 지역(A~E) 지정 + 경기·인천이 지방으로 가던 문제 보정"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fe1939e6dc",
     "date": "2026-08-02",
     "note": "네이버 캘린더 ID에 공유 URL 붙여넣기 지원 — 함수가 ID로 자동 변환·저장"
-  },
-  {
-    "hash": "8dabf6beff",
-    "date": "2026-08-02",
-    "note": "네이버 캘린더 등록 실오류 수정 — DTSTAMP는 UTC 고정(TZID 금지) + 네이버의 200-fail 응답 본문 검증"
   }
 ];
