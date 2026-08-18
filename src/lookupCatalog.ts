@@ -256,6 +256,23 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
       { key: "updated_at", label: "수정시각", width: "150px", mono: true, hideBelow: "lg" },
     ],
   },
+  {
+    // 거래처 특이사항 — 방문 규칙(출입·카드키·유무상 범위)과 출근·점심시간. 통합이력 보라 블록에서 기재하고
+    // 여기서는 "어느 업체에 어떤 규칙이 있나"를 한 표로 훑는다(기간 필터는 마지막 기재일 기준).
+    key: "vendorNotes", label: "거래처 특이사항", group: "접수·자산", table: "vendor_notes",
+    dateField: "updated_at", orderField: "updated_at", vendorField: "vendor",
+    searchFields: ["vendor", "note", "work_start", "lunch_time", "author", "grade"],
+    note: "출근·점심시간과 방문 규칙 — 통합이력에서 업체를 열면 같은 내용을 고칠 수 있습니다",
+    columns: [
+      { key: "vendor", label: "업체명", width: "minmax(0,1.2fr)", strong: true },
+      { key: "grade", label: "등급", width: "64px", hideBelow: "sm" },
+      { key: "work_start", label: "출근", width: "88px", mono: true },
+      { key: "lunch_time", label: "점심", width: "96px", mono: true },
+      { key: "note", label: "특이사항", width: "minmax(0,2.4fr)" },
+      { key: "author", label: "기재자", width: "84px", hideBelow: "lg" },
+      { key: "updated_at", label: "기재일", width: "150px", mono: true, hideBelow: "lg" },
+    ],
+  },
 ];
 
 export const LOOKUP_GROUPS = ["현장 기록", "영업·관리", "접수·자산"] as const;

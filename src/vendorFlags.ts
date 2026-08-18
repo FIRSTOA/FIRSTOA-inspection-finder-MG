@@ -23,10 +23,10 @@ export type VendorWorkFlags = {
   // 점검 기록의 특이사항 칸(그날 기기 상태)과는 다른 층이라 별도로 싣는다.
   // ids: 이 업체에 실제로 매칭된 vendor_notes 행들 — 수정·삭제는 반드시 이 id로 한다
   //      (표기가 다른 별칭·부분일치로 잡힌 행을 새 행으로 덧쓰면 같은 내용이 계속 중복 누적된다)
-  note: { text: string; grade: string; count: number; ids: string[] } | null;
+  note: { text: string; grade: string; count: number; ids: string[]; workStart: string; lunchTime: string; author: string; updatedAt: string } | null;
 };
 
-type NoteEntry = { text: string; grade: string; count: number; ids: string[] };
+type NoteEntry = { text: string; grade: string; count: number; ids: string[]; workStart: string; lunchTime: string; author: string; updatedAt: string };
 
 type PlaceRow = { id: number; name: string; label: string; quarter: number; kind: string; memos?: unknown };
 
@@ -106,7 +106,7 @@ async function loadSources(): Promise<Sources> {
     selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
     getAliasCodeMap().catch(() => new Map<string, string | null>()),
     getWorkinCodeMap().catch(() => new Map<number, string>()),
-    selectAllRows<{ id: string; vendor: string; vendor_key: string; grade: string; note: string }>("vendor_notes", "select=id,vendor,vendor_key,grade,note&order=updated_at.desc").catch(() => []),
+    selectAllRows<{ id: string; vendor: string; vendor_key: string; grade: string; note: string; work_start?: string; lunch_time?: string; author?: string; updated_at?: string }>("vendor_notes", "select=id,vendor,vendor_key,grade,note,work_start,lunch_time,author,updated_at&order=updated_at.desc").catch(() => []),
   ]);
 
   // 거래처 특이사항 — 한 업체에 여러 건이면 최신부터 이어 붙이고 건수를 남긴다
@@ -116,8 +116,14 @@ async function loadSources(): Promise<Sources> {
     const text = String(row.note || "").trim();
     if (!key || !text) continue;
     const prev = notes.get(key);
-    if (prev) notes.set(key, { text: `${prev.text}\n\n${text}`, grade: prev.grade || row.grade || "", count: prev.count + 1, ids: [...prev.ids, row.id] });
-    else notes.set(key, { text, grade: row.grade || "", count: 1, ids: [row.id] });
+    if (prev) {
+      notes.set(key, { ...prev, text: `${prev.text}\n\n${text}`, grade: prev.grade || row.grade || "", count: prev.count + 1, ids: [...prev.ids, row.id],
+        workStart: prev.workStart || String(row.work_start || ""), lunchTime: prev.lunchTime || String(row.lunch_time || "") });
+    } else {
+      notes.set(key, { text, grade: row.grade || "", count: 1, ids: [row.id],
+        workStart: String(row.work_start || ""), lunchTime: String(row.lunch_time || ""),
+        author: String(row.author || ""), updatedAt: String(row.updated_at || "").slice(0, 10) });
+    }
   }
 
   const misu = new Map<string, MisuEntry>();

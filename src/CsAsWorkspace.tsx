@@ -1435,7 +1435,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 ))}
                 <button type="button" onClick={() => setMyPlanOpen(true)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-black transition sm:px-4 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
               </div>
-              <div className="flex flex-wrap gap-1 rounded-full bg-white/10 p-1">
+              {/* 팀 — 모바일은 칩 8개가 두 줄로 접혀 복잡했다(사용자 지적) → 드롭다운, 넓은 화면은 칩 유지 */}
+              <select value={team} onChange={(e) => setTeam(e.target.value as typeof team)}
+                className="rounded-full bg-white/10 px-3 py-2 text-xs font-black text-white outline-none sm:hidden [&>option]:bg-white [&>option]:text-slate-900">
+                <option value="ALL">전체 팀</option>
+                {([...teams, "E", "기타"] as Team[]).map((item) => <option key={item} value={item}>{item === "기타" ? "기타" : `${item}팀`}</option>)}
+                <option value="종일">종일</option>
+              </select>
+              <div className="hidden flex-wrap gap-1 rounded-full bg-white/10 p-1 sm:flex">
                 <button type="button" onClick={() => setTeam("ALL")} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === "ALL" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>전체</button>
                 {([...teams, "E", "기타"] as Team[]).map((item) => (
                   <button key={item} type="button" onClick={() => setTeam(item)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${team === item ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{item === "기타" ? "기타" : `${item}팀`}</button>
@@ -1444,6 +1451,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               </div>
             </div>
             {!myPlanOpen && (
+              <>
+              {/* 상태 — 아침에 "뭐부터"가 바로 보이게. 날짜·건수는 같은 줄 오른쪽 */}
               <div className="flex flex-wrap items-center gap-1">
                 {([["", `전체 ${statusCounts.전체}`, "bg-white text-slate-950", "bg-white/10 text-slate-300 hover:text-white"],
                    ["미배정", `미배정 ${statusCounts.미배정}`, "bg-rose-500 text-white", "bg-white/10 text-rose-300 hover:text-rose-200"],
@@ -1452,15 +1461,26 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
                     className={`rounded-full px-3 py-1.5 text-xs font-black transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
                 ))}
-                <span className="mx-1.5 h-4 w-px bg-white/15" />
+                <span className="ml-auto text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후`} · {scheduleRows.length + listNaver.length}건</span>
+              </div>
+              {/* 유형 — 모바일에서 상태 칩 뒤에 붙어 줄이 밀리던 것을 독립 행으로. 긴 라벨은 좁은 화면에서 축약 */}
+              <div className="flex flex-wrap items-center gap-1">
                 <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
                   className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:text-white"}`}>전체</button>
-                {LIST_TYPE_OPTIONS.map((name) => (
-                  <button key={name} type="button" onClick={() => toggleListType(name)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/10 text-slate-500 hover:text-slate-300"}`}>{name === "AS" ? "익일통합as" : name === "AS[완료]" ? (team !== "ALL" && team !== "종일" ? DONE_CAL_LABEL[team] : "as완료") : name}</button>
-                ))}
-                <span className="ml-auto text-[11px] font-bold text-slate-400">{dayFilter === "today" ? targetDate : dayFilter === "tomorrow" ? tomorrowYmd : `${tomorrowYmd} 제외 이후 일정`} · {scheduleRows.length + listNaver.length}건</span>
+                {LIST_TYPE_OPTIONS.map((name) => {
+                  const full = name === "AS" ? "익일통합as"
+                    : name === "AS[완료]" ? (team !== "ALL" && team !== "종일" ? DONE_CAL_LABEL[team] : "as완료")
+                    : name;
+                  const short = name === "납품철수교체휴가교육" ? "납품·철수·교체" : full;
+                  return (
+                    <button key={name} type="button" onClick={() => toggleListType(name)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/10 text-slate-500 hover:text-slate-300"}`}>
+                      <span className="lg:hidden">{short}</span><span className="hidden lg:inline">{full}</span>
+                    </button>
+                  );
+                })}
               </div>
+              </>
             )}
           </div>
 

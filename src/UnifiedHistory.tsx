@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Building2,
   ChevronDown,
@@ -16,6 +16,48 @@ import { getVendorFlagsBatch, resetVendorFlagsCache, type VendorWorkFlags } from
 import { normalizeId, parseInspectionBlocks, vendorMatchKey, type InspBlock } from "./ids";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { notify } from "./toast";
+
+/**
+ * 특이사항 본문 렌더 — 노션에서 이관한 글에는 사진·파일이 마크다운 링크로 들어있다.
+ * 그냥 pre-wrap으로 뿌리면 "![image.png](https://…)" 원문이 그대로 보여 읽을 수 없다(사용자 지적).
+ * 사진은 이미지로, 파일·링크는 버튼으로, 나머지는 줄바꿈 살린 글로 그린다.
+ */
+function NoteBody({ text }: { text: string }) {
+  const lines = String(text || "").split("\n");
+  const out: ReactNode[] = [];
+  let buffer: string[] = [];
+  const flush = () => {
+    if (!buffer.length) return;
+    const chunk = buffer.join("\n").trim();
+    if (chunk) out.push(<p key={`t-${out.length}`} className="whitespace-pre-wrap text-[13.5px] font-bold leading-6 text-slate-900">{chunk}</p>);
+    buffer = [];
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const image = trimmed.match(/^!\[[^\]]*\]\(([^)]+)\)$/);
+    const link = trimmed.match(/^\[([^\]]*)\]\((https?:[^)]+)\)$/);
+    if (image) {
+      flush();
+      out.push(
+        <a key={`i-${out.length}`} href={image[1]} target="_blank" rel="noreferrer" className="block">
+          <img src={image[1]} alt="" loading="lazy" className="max-h-[320px] rounded-xl border border-violet-200" />
+        </a>,
+      );
+    } else if (link) {
+      flush();
+      out.push(
+        <a key={`l-${out.length}`} href={link[2]} target="_blank" rel="noreferrer"
+          className="inline-block rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[12px] font-black text-violet-700">
+          📎 {link[1] || "첨부"}
+        </a>,
+      );
+    } else {
+      buffer.push(line);
+    }
+  }
+  flush();
+  return <div className="space-y-2">{out}</div>;
+}
 
 type Props = {
   vendor: string;
@@ -324,6 +366,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   const [flags, setFlags] = useState<VendorWorkFlags | null>(null);
   // 거래처 특이사항 편집 — null이면 보기 모드
   const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  const [noteHours, setNoteHours] = useState({ work: "", lunch: "" }); // 출근·점심 — 같은 틀에서 함께 기재
   const [noteBusy, setNoteBusy] = useState(false);
   useEffect(() => { setNoteEdit(null); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
   /**
@@ -344,11 +387,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
         notify(ids.length ? "특이사항을 지웠습니다." : "지울 특이사항이 없습니다.", ids.length ? "success" : "error");
       } else if (ids.length) {
         // 여러 행이 합쳐져 보이던 경우: 첫 행에 합본을 남기고 나머지 행은 지운다(중복 방지)
-        await updateRows("vendor_notes", `id=eq.${ids[0]}`, { note: text, author: author || "미지정", updated_at: new Date().toISOString() });
+        await updateRows("vendor_notes", `id=eq.${ids[0]}`, { note: text, work_start: noteHours.work.trim(), lunch_time: noteHours.lunch.trim(), author: author || "미지정", updated_at: new Date().toISOString() });
         if (ids.length > 1) await deleteRows("vendor_notes", `id=in.(${ids.slice(1).map((id) => `"${id}"`).join(",")})`);
         notify("특이사항을 저장했습니다 ✓");
       } else {
-        await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: text, author: author || "미지정", source: "webapp" });
+        await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: text, work_start: noteHours.work.trim(), lunch_time: noteHours.lunch.trim(), author: author || "미지정", source: "webapp" });
         notify("특이사항을 등록했습니다 ✓");
       }
       // flags가 null이어도 낙관적 표시가 유지되게 기본 객체로 시작한다 (저장했는데 '없음'으로 돌아가 보이던 문제)
@@ -357,7 +400,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
         const base = cur || blank;
         if (!text) return { ...base, note: null };
         const keepIds = ids.length ? [ids[0]] : [];
-        return { ...base, note: { text, grade: base.note?.grade || "", count: 1, ids: keepIds } };
+        return { ...base, note: { text, grade: base.note?.grade || "", count: 1, ids: keepIds,
+          workStart: noteHours.work.trim(), lunchTime: noteHours.lunch.trim(),
+          author: author || "미지정", updatedAt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) } };
       });
       resetVendorFlagsCache(); // 다음 화면 진입 때 배지·목록이 새 내용으로 (이미 떠 있는 화면은 재진입 후 반영)
       setNoteEdit(null);
@@ -598,12 +643,37 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
             </div>
             {noteEdit === null ? (
               <div className="px-4 py-3.5 sm:px-5">
-                <p className="whitespace-pre-wrap text-[13.5px] font-bold leading-6 text-slate-900">{flags?.note?.text}</p>
-                <button type="button" onClick={() => setNoteEdit(flags?.note?.text || "")}
-                  className="mt-2.5 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-black text-violet-700 transition hover:bg-violet-50">✎ 수정</button>
+                {/* 출근·점심은 방문 시각을 정하는 값이라 본문 위에 칩으로 먼저 보여준다 */}
+                {(flags?.note?.workStart || flags?.note?.lunchTime) && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {flags?.note?.workStart && <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-violet-700 ring-1 ring-violet-200">🕘 출근 {flags.note.workStart}</span>}
+                    {flags?.note?.lunchTime && <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-violet-700 ring-1 ring-violet-200">🍚 점심 {flags.note.lunchTime}</span>}
+                  </div>
+                )}
+                <NoteBody text={flags?.note?.text || ""} />
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => { setNoteEdit(flags?.note?.text || ""); setNoteHours({ work: flags?.note?.workStart || "", lunch: flags?.note?.lunchTime || "" }); }}
+                    className="rounded-full border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-black text-violet-700 transition hover:bg-violet-50">✎ 수정</button>
+                  {/* 누가 언제 적었는지 — 오래된 규칙인지 판단해야 방문 전에 믿을 수 있다 */}
+                  {(flags?.note?.author || flags?.note?.updatedAt) && (
+                    <span className="text-[11px] font-bold text-slate-400">
+                      {flags?.note?.author ? `${flags.note.author} 기재` : "기재"}{flags?.note?.updatedAt ? ` · ${flags.note.updatedAt}` : ""}
+                    </span>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="px-4 py-3.5 sm:px-5">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <label className="text-[11px] font-black text-violet-700">🕘 출근시간
+                    <input value={noteHours.work} onChange={(e) => setNoteHours((h) => ({ ...h, work: e.target.value }))} placeholder="예) 9시 / 9:30~"
+                      className="ml-1.5 w-28 rounded-lg border border-violet-300 px-2 py-1 text-[12px] font-bold text-slate-800 outline-none focus:border-violet-500" />
+                  </label>
+                  <label className="text-[11px] font-black text-violet-700">🍚 점심시간
+                    <input value={noteHours.lunch} onChange={(e) => setNoteHours((h) => ({ ...h, lunch: e.target.value }))} placeholder="예) 12~13시"
+                      className="ml-1.5 w-28 rounded-lg border border-violet-300 px-2 py-1 text-[12px] font-bold text-slate-800 outline-none focus:border-violet-500" />
+                  </label>
+                </div>
                 <textarea value={noteEdit} onChange={(e) => setNoteEdit(e.target.value)} rows={6}
                   placeholder={"예) 매달 방문, 20일 마감\n- 방문 시 OO 대리님께 연락 후 카드키 수령\n- 3층 소형기는 점검 제외"}
                   className="w-full rounded-xl border border-violet-300 bg-white px-3 py-2.5 text-[13.5px] font-semibold leading-6 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10" />
@@ -617,7 +687,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
           </section>
         )}
         {!loading && queryVendor && activeCat === "전체" && !flags?.note && noteEdit === null && (
-          <button type="button" onClick={() => setNoteEdit("")}
+          <button type="button" onClick={() => { setNoteEdit(""); setNoteHours({ work: "", lunch: "" }); }}
             className="mb-3 w-full rounded-2xl border-2 border-dashed border-violet-200 bg-white px-4 py-3 text-[12px] font-black text-violet-600 transition hover:border-violet-400 hover:bg-violet-50/60">
             📌 이 거래처의 특이사항 적기 — 방문 규칙·출입 방법·점검 제외 기기 등
           </button>

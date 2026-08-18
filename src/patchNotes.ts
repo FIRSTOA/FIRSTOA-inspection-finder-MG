@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "8f00addc0f",
+    "date": "2026-08-18",
+    "note": "일정리스트 통화 버튼 — 접수 원문에서 접수자·키맨 번호 추출"
+  },
+  {
     "hash": "b1183316a5",
     "date": "2026-08-18",
     "note": "익일 미루기 카톡 문구 수리 — 배정자 제거·기종·기번 채우기·라벨 정직화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4d8585cbd5",
     "date": "2026-08-02",
     "note": "네이버 캘린더 원클릭 연동 — code 자동 교환(엣지)·refresh token 서버 보관(naver_oauth)·프론트 자동 처리"
-  },
-  {
-    "hash": "29633bbb8a",
-    "date": "2026-08-02",
-    "note": "시트 잡 재시도에 만료 가드 — 옛 잡 재기입 사고 방지"
   }
 ];
