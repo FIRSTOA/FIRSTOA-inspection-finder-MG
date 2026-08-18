@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "16df86dcd5",
+    "date": "2026-08-18",
+    "note": "주소 인식 전면 개선 + 내 일정 삭제 + 모바일 일정리스트 순서 정돈"
+  },
+  {
     "hash": "3412942083",
     "date": "2026-08-18",
     "note": "접수 지역 배정 — 정답 컬럼('관리 담당자' AV열)을 읽도록 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fe5e734314",
     "date": "2026-08-02",
     "note": "네이버 캘린더 운영 메모 — 재연동 주소·캘린더 변경 방법 기록"
-  },
-  {
-    "hash": "fe1939e6dc",
-    "date": "2026-08-02",
-    "note": "네이버 캘린더 ID에 공유 URL 붙여넣기 지원 — 함수가 ID로 자동 변환·저장"
   }
 ];
