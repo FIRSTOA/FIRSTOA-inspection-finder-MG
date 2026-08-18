@@ -5946,7 +5946,7 @@ export default function App() {
         {screen === "serviceReception" && <ServiceReception author={author} />}
         {screen === "recontract" && (
           <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-bold text-slate-400">재계약 준비를 불러오는 중…</div>}>
-            <RecontractPrep />
+            <RecontractPrep author={author} />
           </Suspense>
         )}
 

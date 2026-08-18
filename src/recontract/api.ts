@@ -1,15 +1,25 @@
 /**
  * 재계약 준비 — 데이터 조회.
  *
- * 방문 전에 알아야 할 것을 이미 있는 원장에서 모아 온다(새로 적재하는 것 없음).
- *   대상 발굴: vendor_info(임대리스트) 임대여부=임대중 + 종료일 구간 — 종료일이 ISO라 서버에서 걸러진다
- *   신호:      misu(미수) · overage(초과료) · bulman(불만) · as_records(AS) · recontract(과거 재계약 협상)
+ * 방문 대상은 우리가 새로 만들지 않는다. **워킨맵의 현분기 재계약 목록이 곧 대상**이다
+ * (workin_map_places · kind=renewal · quarter=현분기). 임대리스트 종료일로 따로 뽑으면
+ * 워킨맵과 다른 목록이 나와 "이 업체 왜 여기 있냐"가 된다.
  *
- * 업체 묶기는 vendorMatchKey를 쓴다 — "㈜에코라"·"주식회사 에코라(ECoRALtd)"가 한 업체로 모여야
- * 대수·월 렌탈료 합계가 맞는다. 앱 다른 곳(워킨맵·통합이력)과 같은 키를 쓰므로 판정이 어긋나지 않는다.
+ * CS가 방문하는 등급만 남긴다 — S(일반프로+부파트장)·SS(팀장급). V는 영업부 관할이라 뺀다.
+ * 라벨 G5(완료)·G6·G7(영업부)·G12(이관)도 이번 분기 방문 대상이 아니다.
+ *
+ * 이력은 이미 있는 원장에서 모아 붙인다(새로 적재하는 것 없음):
+ *   misu(미수) · overage(초과료) · bulman(불만) · as_records(AS) · recontract(과거 재계약 협상)
+ *
+ * 업체 묶기는 vendorMatchKey — 같은 업체의 지점 여러 곳(401호·405호)이 한 카드로 모여야
+ * 대장 한 장으로 분석이 된다. 앱 다른 곳과 같은 키라 판정이 어긋나지 않는다.
  */
 import { selectAllRows, selectRows } from "../supabase";
-import { vendorMatchKey } from "../ids";
+import { vendorMatchKey, workinVendorName } from "../ids";
+import {
+  RENEWAL_DONE_LABELS, RENEWAL_LABEL_DESC, addressGroupKey, currentQuarter, renewalEndYmd, renewalGrade,
+  type Quarter,
+} from "../workinPlaces";
 
 /** 한글·기호 섞인 컬럼명을 PostgREST select에 안전하게 싣는다 */
 function cols(...names: string[]) {
@@ -60,6 +70,7 @@ export type RcDevice = {
   순번: string;
   등급: string;
   구: string;
+  품목: string;
   계약일: string;
   종료일: string;
   남은개월: string;
@@ -77,8 +88,14 @@ export type RcDevice = {
   누적방식: string;
 };
 
-const TARGET_COLS = cols(
-  "id", "_업체명", "순번", "등급", "시/구", "계약일", "종료일", "남은개월", "계약기간",
+/** 재계약 대상 품목 — 복합기 계열만. PC·노트북·세단기·공기청정기는 재계약 방문 건이 아니다 */
+export function isCopier(품목: string, 기종 = ""): boolean {
+  const text = `${품목} ${기종}`;
+  return /복합기/.test(text);
+}
+
+const LEASE_COLS = cols(
+  "id", "_업체명", "순번", "등급", "시/구", "품목", "계약일", "종료일", "남은개월", "계약기간",
   "기본금액", "연평균", "모델명", "기종", "제조사", "자산번호", "기번", "추가(컬)", "추가(흑)",
   "추가조건", "누적방식 (월/분/반/년)",
 );
@@ -91,6 +108,7 @@ function toDevice(row: Record<string, unknown>): RcDevice {
     순번: pick("순번"),
     등급: pick("등급"),
     구: pick("시/구"),
+    품목: pick("품목"),
     계약일: pick("계약일"),
     종료일: pick("종료일"),
     남은개월: pick("남은개월"),
@@ -107,15 +125,6 @@ function toDevice(row: Record<string, unknown>): RcDevice {
     추가조건: pick("추가조건"),
     누적방식: pick("누적방식 (월/분/반/년)"),
   };
-}
-
-/** 종료 임박 기기 — 임대중 + 종료일이 오늘~months개월 안 */
-export async function fetchExpiringDevices(months: number): Promise<RcDevice[]> {
-  const query = `select=${TARGET_COLS}&${enc("임대여부")}=eq.${enc("임대중")}`
-    + `&${enc("종료일")}=gte.${kstToday()}&${enc("종료일")}=lte.${ymdAfterMonths(months)}`
-    + `&order=${enc("종료일")}.asc,id.asc`;
-  const rows = await selectAllRows<Record<string, unknown>>("vendor_info", query);
-  return rows.map(toDevice).filter((device) => device.vendor);
 }
 
 // ─── 신호(미수·초과·불만·AS·과거 재계약) ────────────────────────────────────
@@ -234,98 +243,233 @@ async function buildSignalIndex(): Promise<SignalIndex> {
   return index;
 }
 
-// ─── 업체 단위로 묶기 ────────────────────────────────────────────────────────
-
-export type RcTarget = {
-  key: string;
-  vendor: string;        // 표시용 — 같은 업체의 표기 중 가장 긴 것(정보량이 많다)
-  등급: string;
-  구: string;
-  대수: number;
-  월렌탈료합: number;
-  최단종료일: string;
-  dday: number;
-  종료일수: number;      // 종료일이 여러 갈래면 방문 한 번에 못 끝낸다
-  devices: RcDevice[];
-  signals: RcSignals;
-  risk: number;
-  risks: string[];       // 점수의 근거 — 배지로 그대로 보여준다
-};
-
-/** 등급 우선순위 — 업체 대표 등급을 고를 때만 쓴다 */
-const GRADE_RANK = ["SS", "S", "V", "N", "NN"];
-function bestGrade(values: string[]): string {
-  const found = values.map((v) => v.trim().toUpperCase()).filter(Boolean);
-  for (const grade of GRADE_RANK) if (found.includes(grade)) return grade;
-  return found[0] || "";
-}
-
-/** 위험 점수 — 왜 높은지 말할 수 있어야 쓸모가 있다. 점수보다 근거가 본체다 */
-function scoreRisk(signals: RcSignals): { risk: number; risks: string[] } {
-  const risks: string[] = [];
-  let risk = 0;
+/** 이력 배지 — 방문 전에 알아야 할 부가 이력. 점수가 아니라 사실만 적는다 */
+function historyBadges(signals: RcSignals): string[] {
+  const out: string[] = [];
   const misu = signals.misu;
   if (misu && (misu.개월 > 0 || misu.잔액 > 0)) {
-    const months = misu.개월;
-    risk += months >= 3 ? 4 : months >= 2 ? 3 : 2;
-    risks.push(months > 0 ? `미수 ${months}개월` : "미수 있음");
+    out.push(misu.개월 > 0 ? `미수 ${misu.개월}개월` : "미수 있음");
   }
   const bulman = signals.bulman;
-  if (bulman?.건수) {
-    const recent = ddayOf(bulman.최근일) > -190; // 최근 6개월
-    risk += recent ? 3 : 1;
-    risks.push(`불만 ${bulman.건수}건${recent ? " (최근)" : ""}`);
-  }
+  if (bulman?.건수) out.push(`불만 ${bulman.건수}건${ddayOf(bulman.최근일) > -190 ? " (최근)" : ""}`);
   const overage = signals.overage;
-  if (overage && overage.건수 >= 3) { risk += 2; risks.push(`초과 ${overage.건수}회`); }
-  else if (overage?.건수) { risk += 1; risks.push(`초과 ${overage.건수}회`); }
+  if (overage?.건수) out.push(`초과 ${overage.건수}회`);
   const as = signals.as;
-  if (as && as.건수 >= 6) { risk += 2; risks.push(`AS ${as.건수}건`); }
-  else if (as && as.건수 >= 3) { risk += 1; risks.push(`AS ${as.건수}건`); }
+  if (as?.건수) out.push(`AS ${as.건수}건`);
   const 위험도 = signals.history?.갱신위험도;
-  if (위험도 === "상") { risk += 4; risks.push("갱신위험 상"); }
-  else if (위험도 === "중") { risk += 2; risks.push("갱신위험 중"); }
-  return { risk, risks };
+  if (위험도) out.push(`갱신위험 ${위험도}`);
+  return out;
 }
 
-/** 기기 목록 + 신호 → 업체 카드 */
-export function groupTargets(devices: RcDevice[], signals: SignalIndex): RcTarget[] {
-  const buckets = new Map<string, RcDevice[]>();
-  for (const device of devices) {
-    const key = vendorMatchKey(device.vendor) || device.vendor;
+
+/**
+ * 워킨맵 메모에서 계약 조건을 읽는다.
+ *
+ * 메모는 시트에서 붙여온 줄 뭉치라 라벨이 붙은 줄과 자유 메모가 섞여 있다:
+ *   "기본요금150000" "평단가150000" "컬러1000/흑백3000" "컬러100/흑백10" "미수금0원/0개월미수"
+ *   "현재 영업팀이 갱신 진행중. 계약서 발송 완료한 업체"   ← 이게 방문 여부를 가르는 정보다
+ * 앞의 것은 표로 세우고, 뒤의 문장은 그대로 보여준다.
+ */
+export type WorkinTerms = {
+  기본요금: number;
+  평단가: number;
+  컬러기본: number;
+  흑백기본: number;
+  컬러단가: number;
+  흑백단가: number;
+  미수금: number;
+  미수개월: number;
+  진행메모: string[];
+};
+
+export function parseWorkinMemos(memos: string[], vendor: string): WorkinTerms {
+  const terms: WorkinTerms = { 기본요금: 0, 평단가: 0, 컬러기본: 0, 흑백기본: 0, 컬러단가: 0, 흑백단가: 0, 미수금: 0, 미수개월: 0, 진행메모: [] };
+  const pairs: Array<[number, number]> = [];
+  for (const raw of memos) {
+    const line = String(raw || "").trim();
+    if (!line || line === "/") continue;
+    const fee = line.match(/기본요금\s*([\d,]+)/);
+    if (fee) { terms.기본요금 = won(fee[1]); continue; }
+    const avg = line.match(/평단가\s*([\d,]+)/);
+    if (avg) { terms.평단가 = won(avg[1]); continue; }
+    const pair = line.match(/^컬러\s*([\d,]+)\s*\/\s*흑백\s*([\d,]+)$/);
+    if (pair) { pairs.push([won(pair[1]), won(pair[2])]); continue; }
+    const misu = line.match(/미수금\s*([\d,]+)\s*원\s*\/\s*([\d,]+)\s*개월/);
+    if (misu) { terms.미수금 = won(misu[1]); terms.미수개월 = won(misu[2]); continue; }
+    // 라벨 없는 잡줄 걸러내기 — 등급·시/구·주소·순번·상태·업체명·모델/기번
+    if (/^(V|SS|S|NN|N)$/i.test(line)) continue;
+    if (/^계약종료/.test(line)) continue;
+    if (/^(임대중|임대종료|계약갱신|위탁|해지)$/.test(line)) continue;
+    if (/^\d+$/.test(line)) continue;                          // 순번·사업자번호
+    if (/^[가-힣]+\/[가-힣]+$/.test(line)) continue;             // "서울/강남구"
+    if (/^(서울|경기|인천|부산|대구|광주|대전|울산|강원|충북|충남|전북|전남|경북|경남|제주|세종)\s/.test(line)) continue; // 주소
+    if (/^[A-Za-z0-9\-]+\/\d{6,}$/.test(line)) continue;       // "D450/800100607798"
+    // 업체명만 적힌 줄은 버리되, 업체명이 앞에 붙은 긴 메모는 살린다
+    // ("S 바이드뮬러코리아\n현재 영업팀이 갱신 진행중…" 같은 진행 메모가 방문 여부를 가른다)
+    const flat = line.replace(/\s/g, "");
+    const vendorFlat = vendor.replace(/\s/g, "");
+    if (vendorFlat && flat.length <= vendorFlat.length + 4 && flat.includes(vendorFlat.slice(0, 6))) continue;
+    terms.진행메모.push(line);
+  }
+  // 큰 값이 기본매수, 작은 값이 초과 단가 (둘 다 "컬러N/흑백M" 형식이라 값으로 가른다)
+  if (pairs.length) {
+    const sorted = pairs.sort((a, b) => (b[0] + b[1]) - (a[0] + a[1]));
+    [terms.컬러기본, terms.흑백기본] = sorted[0];
+    if (sorted.length > 1) [terms.컬러단가, terms.흑백단가] = sorted[sorted.length - 1];
+  }
+  return terms;
+}
+
+// ─── 현분기 재계약 방문 대상 (워킨맵) ──────────────────────────────────────
+
+export type RcPlace = {
+  id: number;
+  team: string;
+  label: string;         // G1~G12 (진행 색상)
+  진행: string;          // 라벨 뜻 — 완료·영업부·이관이면 방문 대상이 아니다
+  등급: string;
+  원본이름: string;      // "2610/8SS주식회사 한국성간보-매월마감"
+  vendor: string;        // 표시용
+  종료일: string;        // 자동연장 투영 반영 (분기 월이면 올해로)
+  원종료일: string;      // 이름·메모에 적힌 그대로
+  투영: boolean;
+  dday: number;
+  주소: string;
+  전화: string;
+  메모: string[];
+  비고: string;
+};
+
+export type RcTarget = {
+  key: string;           // vendorMatchKey — 대장 한 장으로 묶는 단위
+  vendor: string;
+  등급: string;          // S | SS (섞이면 높은 쪽)
+  team: string;
+  종료일: string;        // 가장 빠른 것 (투영 반영)
+  투영: boolean;         // 자동연장으로 연도를 올해로 읽은 건
+  dday: number;
+  주소: string;
+  같은건물: number;      // 같은 주소에 있는 다른 대상 수 — 한 번에 도는 동선
+  places: RcPlace[];     // 같은 업체의 지점들 (401호·405호)
+  labels: string[];
+  signals: RcSignals;
+  badges: string[];
+  조건: WorkinTerms;      // 워킨맵 메모에서 읽은 계약 조건 (대장 없을 때의 유일한 근거)
+};
+
+type DbPlace = {
+  id: number; team: string; quarter: number; kind: string; label: string | null;
+  name: string; address: string | null; address_detail: string | null;
+  phone: string | null; comment: string | null; memos: string[] | null; visible: boolean | null;
+};
+
+/** CS가 방문하는 등급 — S(일반프로+부파트장) · SS(팀장급). V는 영업부 관할 */
+export const CS_GRADES = ["SS", "S"];
+
+export type RenewalScope = {
+  targets: RcTarget[];
+  quarter: Quarter;
+  제외: { 완료: number; 영업부: number; 이관: number; 등급외: number; 무등급: number };
+};
+
+/**
+ * 현분기 재계약 방문 대상.
+ * 워킨맵 목록 그대로 가져와 CS 등급(S·SS)만 남기고, 업체 단위로 묶는다.
+ */
+export async function fetchRenewalScope(quarter: Quarter = currentQuarter(), team?: string): Promise<RenewalScope> {
+  const query = `select=${cols("id", "team", "quarter", "kind", "label", "name", "address", "address_detail", "phone", "comment", "memos", "visible")}`
+    + `&kind=eq.renewal&quarter=eq.${quarter}${team ? `&team=eq.${enc(team)}` : ""}&order=id.asc`;
+  const [rows, signals] = await Promise.all([
+    selectAllRows<DbPlace>("workin_map_places", query),
+    getSignalIndex(),
+  ]);
+
+  const baseYear = new Date(Date.now() + 9 * 3600_000).getFullYear();
+  const 제외 = { 완료: 0, 영업부: 0, 이관: 0, 등급외: 0, 무등급: 0 };
+  const buckets = new Map<string, RcPlace[]>();
+
+  for (const row of rows) {
+    const memos = Array.isArray(row.memos) ? row.memos.map(String) : [];
+    const place = { name: String(row.name || ""), memos };
+    const label = String(row.label || "");
+    const 등급 = renewalGrade(place);
+    // 방문 대상이 아닌 것부터 걸러낸다 — 왜 빠졌는지 화면에 세어 보여준다
+    if (RENEWAL_DONE_LABELS.has(label)) {
+      if (label === "G5") 제외.완료 += 1;
+      else if (label === "G12") 제외.이관 += 1;
+      else 제외.영업부 += 1;
+      continue;
+    }
+    if (!등급) { 제외.무등급 += 1; continue; }
+    if (!CS_GRADES.includes(등급)) { 제외.등급외 += 1; continue; }
+
+    const end = renewalEndYmd(place, baseYear, quarter);
+    const vendor = workinVendorName(row.name) || String(row.name || "").trim();
+    const entry: RcPlace = {
+      id: row.id,
+      team: String(row.team || ""),
+      label,
+      진행: RENEWAL_LABEL_DESC[label] || "",
+      등급,
+      원본이름: String(row.name || ""),
+      vendor,
+      종료일: end.ymd,
+      원종료일: end.original,
+      투영: end.projected,
+      dday: end.ymd ? ddayOf(end.ymd) : 9999,
+      주소: [String(row.address || "").trim(), String(row.address_detail || "").trim()].filter(Boolean).join(" "),
+      전화: String(row.phone || "").trim(),
+      메모: memos.filter((memo) => memo.trim() && memo.trim() !== "/"),
+      비고: String(row.comment || "").trim(),
+    };
+    const key = vendorMatchKey(vendor) || `place-${row.id}`;
     const list = buckets.get(key);
-    if (list) list.push(device);
-    else buckets.set(key, [device]);
+    if (list) list.push(entry);
+    else buckets.set(key, [entry]);
   }
-  const out: RcTarget[] = [];
-  for (const [key, list] of buckets) {
-    const ends = list.map((d) => d.종료일).filter(Boolean).sort();
-    const 최단종료일 = ends[0] || "";
+
+  // 같은 건물에 대상이 몇 곳인지 — 한 번 가서 여러 곳 도는 동선 파악용
+  const buildingCount = new Map<string, number>();
+  for (const places of buckets.values()) {
+    const seen = new Set<string>();
+    for (const place of places) {
+      const groupKey = addressGroupKey(place.주소);
+      if (!groupKey || seen.has(groupKey)) continue;
+      seen.add(groupKey);
+      buildingCount.set(groupKey, (buildingCount.get(groupKey) || 0) + 1);
+    }
+  }
+
+  const targets: RcTarget[] = Array.from(buckets.entries()).map(([key, places]) => {
+    const sorted = places.sort((a, b) => (a.종료일 || "9999").localeCompare(b.종료일 || "9999"));
+    const first = sorted[0];
     const vendorSignals = signals.get(key) || {};
-    const { risk, risks } = scoreRisk(vendorSignals);
-    out.push({
+    return {
       key,
-      vendor: list.map((d) => d.vendor).sort((a, b) => b.length - a.length)[0] || "",
-      등급: bestGrade(list.map((d) => d.등급)),
-      구: list.map((d) => d.구).find(Boolean) || "",
-      대수: list.length,
-      월렌탈료합: list.reduce((sum, d) => sum + d.월렌탈료, 0),
-      최단종료일,
-      dday: ddayOf(최단종료일),
-      종료일수: new Set(ends).size,
-      devices: list.sort((a, b) => a.종료일.localeCompare(b.종료일)),
+      vendor: sorted.map((place) => place.vendor).sort((a, b) => b.length - a.length)[0] || first.vendor,
+      등급: sorted.some((place) => place.등급 === "SS") ? "SS" : first.등급,
+      team: first.team,
+      종료일: first.종료일,
+      투영: sorted.some((place) => place.투영),
+      dday: first.dday,
+      주소: sorted.map((place) => place.주소).find(Boolean) || "",
+      같은건물: buildingCount.get(addressGroupKey(sorted.map((place) => place.주소).find(Boolean) || "")) || 1,
+      places: sorted,
+      labels: Array.from(new Set(sorted.map((place) => place.label).filter(Boolean))),
       signals: vendorSignals,
-      risk,
-      risks,
-    });
-  }
-  return out;
+      badges: historyBadges(vendorSignals),
+      조건: parseWorkinMemos(sorted.flatMap((place) => place.메모), sorted[0].vendor),
+    };
+  }).sort((a, b) => (a.종료일 || "9999").localeCompare(b.종료일 || "9999") || a.vendor.localeCompare(b.vendor));
+
+  return { targets, quarter, 제외 };
 }
 
 // ─── 업체 브리핑(상세) ───────────────────────────────────────────────────────
 
 export type RcBriefing = {
-  devicesAll: RcDevice[];          // 종료 임박분만이 아니라 그 업체의 임대중 전부
+  copiers: RcDevice[];             // 복합기 — 재계약 대상
+  others: RcDevice[];              // PC·노트북·세단기 등 (참고용, 접어서 보여준다)
   raw: Record<string, string>;     // 임대리스트 _raw — 담당지역·영업담당자·확장성·특이사항 등
   history: RcHistoryRow[];
   misu: Array<Record<string, string>>;
@@ -349,7 +493,7 @@ export async function fetchBriefing(target: RcTarget): Promise<RcBriefing> {
 
   const [leaseRows, historyRows, misuRows, overageRows, bulmanRows] = await Promise.all([
     safe(selectRows<Record<string, unknown>>("vendor_info",
-      `select=${TARGET_COLS},_raw&${like}&${enc("임대여부")}=eq.${enc("임대중")}&limit=200`)),
+      `select=${LEASE_COLS},_raw&${like}&${enc("임대여부")}=eq.${enc("임대중")}&limit=200`)),
     safe(selectRows<Record<string, unknown>>("recontract",
       `select=${cols("id", "날짜", "작성자", "갱신상태", "갱신위험도", "최종상태", "제안조건", "관리포인트", "다음확인일", "원문", "_업체명")}&${like}&order=${enc("날짜")}.desc&limit=40`)),
     safe(selectRows<Record<string, unknown>>("misu",
@@ -365,8 +509,10 @@ export async function fetchBriefing(target: RcTarget): Promise<RcBriefing> {
   const raw: Record<string, string> = {};
   if (rawSource) for (const [key, value] of Object.entries(rawSource._raw as Record<string, unknown>)) raw[key] = String(value ?? "").trim();
 
+  const devices = lease.map(toDevice).sort((a, b) => a.종료일.localeCompare(b.종료일));
   return {
-    devicesAll: lease.map(toDevice).sort((a, b) => a.종료일.localeCompare(b.종료일)),
+    copiers: devices.filter((device) => isCopier(device.품목, device.기종)),
+    others: devices.filter((device) => !isCopier(device.품목, device.기종)),
     raw,
     history: mine(historyRows).map((row) => ({
       id: Number(row.id) || 0,
@@ -380,8 +526,20 @@ export async function fetchBriefing(target: RcTarget): Promise<RcBriefing> {
       다음확인일: normalizeYmd(row["다음확인일"]),
       원문: String(row["원문"] ?? "").trim(),
     })),
-    misu: mine(misuRows).map((row) => textRow(row, ["입력일", "미수개월", "미수잔액", "입금약속일", "고객반응", "방문내용", "특이사항"])),
-    overage: mine(overageRows).map((row) => textRow(row, ["날짜", "합계", "컬러초과료", "흑백초과료", "기본매수", "초과장당금액", "모델명", "접수내용"])),
-    bulman: mine(bulmanRows).map((row) => textRow(row, ["날짜", "불만유형", "불만항목", "불만내용", "대안제시", "재발방지", "고객감정상태"])),
+    misu: mine(misuRows).map((row) => {
+      const text = textRow(row, ["입력일", "미수개월", "미수잔액", "입금약속일", "고객반응", "방문내용", "특이사항"]);
+      text["입력일"] = normalizeYmd(text["입력일"]) || text["입력일"].slice(0, 10);
+      return text;
+    }),
+    overage: mine(overageRows).map((row) => {
+      const text = textRow(row, ["날짜", "합계", "컬러초과료", "흑백초과료", "기본매수", "초과장당금액", "모델명", "접수내용"]);
+      text["날짜"] = normalizeYmd(text["날짜"]) || text["날짜"].slice(0, 10);
+      return text;
+    }),
+    bulman: mine(bulmanRows).map((row) => {
+      const text = textRow(row, ["날짜", "불만유형", "불만항목", "불만내용", "대안제시", "재발방지", "고객감정상태"]);
+      text["날짜"] = normalizeYmd(text["날짜"]) || text["날짜"].slice(0, 10);
+      return text;
+    }),
   };
 }

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "adf6847729",
+    "date": "2026-08-19",
+    "note": "이카운트 대장 분석 + 재계약 제안 한 장 — 옛 파이썬 엔진 이식"
+  },
+  {
     "hash": "452d0fa4db",
     "date": "2026-08-19",
     "note": "재계약 준비 탭 — 종료 임박 레이더 + 거래처 브리핑"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2b91234377",
     "date": "2026-08-02",
     "note": "접수 버튼 단순화 — [접수(저장+시트+웹일정·캘린더)][네이버 캘린더][카톡 전송][⚡ 전체], 원격은 [접수(저장+시트)] 하나"
-  },
-  {
-    "hash": "d3a222474b",
-    "date": "2026-08-02",
-    "note": "빠른 스탬프 완료 오발사 방지 + 잘못 찍은 완료 되돌리기"
   }
 ];
