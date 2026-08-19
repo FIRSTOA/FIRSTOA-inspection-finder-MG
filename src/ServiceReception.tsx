@@ -155,10 +155,9 @@ function regionFromAddress(address: string) {
 function teamFromRegion(region: string) {
   // 판정은 공용 normRegion 하나로: 수도권A~E는 그 글자, 지방(충청·경상·전라 등)은 E.
   // (예전엔 문자열 아무 데서나 A~E 글자를 주워 오판했다)
-  // E는 일정리스트에 팀 열이 없어 A로 취급(네이버 캘린더도 9시) — E팀 규칙이 정해지면 여기서 바꾼다.
+  // E(지방)도 일정리스트·네이버에 자기 시간대(21시)가 있다 — 예전에 A로 접던 임시 규칙은 걷어냈다.
   const letter = normRegion(region);
-  if (letter === "E") return "A";
-  return (["A", "B", "C", "D"].includes(letter) ? letter : "A") as "A" | "B" | "C" | "D";
+  return (["A", "B", "C", "D", "E"].includes(letter) ? letter : "A") as "A" | "B" | "C" | "D" | "E";
 }
 // 증상 사진 업로드용 다운스케일 (원본 폰 사진은 수 MB — 1600px JPEG로 줄여 저장)
 // 접수 당시의 시트 표기값 (접수일 "7월 31일" / 접수시각 "20:22") — 처리 단계 갱신에도 그대로 보낸다
@@ -758,6 +757,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       `제목${T}${manual.제목}`,
       `상태${T}${manual.증상}`,
       `참고사항${T}${manual.참고사항}`,
+      // 카톡은 텍스트만 전송된다(발신 큐가 text 하나) — 사진은 공개 링크로 실어 보낸다
+      ...(photos.length ? [`증상사진(${photos.length}장)`, ...photos.map((photo) => photo.url)] : []),
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
       `AS접수횟수(${basisLabel})${T}${basisEntries.length}회`,
       `AS접수히스토리(${basisLabel})`,
@@ -769,7 +770,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal]);
+  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal, photos]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -1059,7 +1060,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
   // 네이버 캘린더 등록 (단독 실행용 — 실패 시 throw). 팀 시간: A 09시 / B 12시 / C 15시 / D 18시
   const pushNaverCalendar = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null }) => {
-    const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00" };
+    const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00", E: "21:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
     const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
     return await invokeEdgeFunction<{ uid?: string; status?: string }>("naver-calendar-push", {

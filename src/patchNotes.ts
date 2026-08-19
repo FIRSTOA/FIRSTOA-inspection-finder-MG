@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "3a9af8c8eb",
+    "date": "2026-08-19",
+    "note": "네이버 캘린더 문서 갱신 — 현재 양방향 구조와 실시간화 경로"
+  },
+  {
+    "hash": "5a35a27f01",
+    "date": "2026-08-19",
+    "note": "접수 시트에도 고친 방문 주소가 들어가게 (기존 거래처)"
+  },
+  {
     "hash": "6e291fd7a1",
     "date": "2026-08-19",
     "note": "모바일 워킨맵 헤더에 현재 조건 한 줄 + 캘린더 상단 콤팩트화"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d3a222474b",
     "date": "2026-08-02",
     "note": "빠른 스탬프 완료 오발사 방지 + 잘못 찍은 완료 되돌리기"
-  },
-  {
-    "hash": "483915855b",
-    "date": "2026-08-02",
-    "note": "rpc 헬퍼: 빈 응답(204, void 함수) 처리 — 시작·끝 스탬프의 'Unexpected end of JSON input' 수정"
-  },
-  {
-    "hash": "6396cf7c00",
-    "date": "2026-08-02",
-    "note": "구분 변경을 실제 전환으로 — 새 탭 시트 자동 기입·한조처리 동기화·일정 정리"
   }
 ];

@@ -1745,14 +1745,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
       {detailTicket && (() => {
         const ticket = detailTicket;
-        // 접수자·키맨의 모든 연락처를 줄 단위로 뽑아 각각 통화 버튼을 단다 (여러 명이면 선택해서 전화)
-        const phoneEntries = [ticket.contact, ...ticket.keyman.split("\n")]
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .flatMap((line) => {
-            const phones = line.match(/0\d{1,2}[- ]?\d{3,4}[- ]?\d{4}/g) || [];
-            return phones.map((phone) => ({ line, phone }));
-          });
+        // 접수자·키맨 연락처 — 라벨·기호를 걷어낸 이름만 남긴 phonesOf를 쓴다.
+        // 예전엔 원문 줄을 그대로 truncate해서 번호 왼쪽(이름)이 화면에서 잘렸다.
+        const phoneEntries = phonesOf(ticket);
         const reception = detailReception;
         return (
           <div className="fixed inset-0 z-[115] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetailId("")}>
@@ -1828,10 +1823,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                   {view === "as" && phoneEntries.length > 0 && <div className="text-xs font-bold text-slate-500">연락처
                     <div className="mt-1 space-y-1.5">
-                      {phoneEntries.map(({ line, phone }, index) => (
-                        <div key={`${phone}-${index}`} className="flex items-center justify-between gap-2">
-                          <span className="min-w-0 truncate text-xs font-bold text-slate-700">{line}</span>
-                          <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 transition hover:bg-emerald-700 px-3 py-1.5 text-xs font-black text-white">📞 {phone}</a>
+                      {phoneEntries.map(({ label, name, number }, index) => (
+                        <div key={`${number}-${index}`} className="flex items-center gap-2">
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">{label}</span>
+                          {!!name && <span className="min-w-0 flex-1 break-words text-xs font-bold text-slate-700">{name}</span>}
+                          <a href={`tel:${number.replace(/[^0-9]/g, "")}`} className="ml-auto shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700">📞 {number}</a>
                         </div>
                       ))}
                     </div>
