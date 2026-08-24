@@ -4858,6 +4858,17 @@ export default function App() {
     const primaryKind = recordedKinds[0] || kind;
     const existingMinutes = Number(visitMeta.minutes[primaryKind] || 0);
     const formDuration = mode === "air-purifier" ? Number(airForm.duration || 0) : Number(sharedForm.duration || 0);
+    // 점검+AS 혼합 방문의 소요시간 배분 — 전부 점검에 몰면 AS 시간이 0으로 잡힌다(사용자 지적).
+    // 규칙: 점검은 1대당 10분, 나머지가 AS. 점검분이 총시간을 넘으면 반씩 나눈다.
+    //   예) 60분·3대 점검+AS 1건 → 점검 30분 / AS 30분
+    const mixedMinutes = (() => {
+      const total = existingMinutes || formDuration;
+      if (!total || !(recordedKinds.includes("inspection") && recordedKinds.includes("as"))) return null;
+      const machines = Math.max(1, itemForms.length);
+      const inspectionPlan = 10 * machines;
+      const inspection = inspectionPlan >= total ? Math.ceil(total / 2) : inspectionPlan;
+      return { inspection, as: total - inspection };
+    })();
     const logisticsQuantity = Math.max(0, Number(String(logisticsForm.quantity || "").match(/\d+/)?.[0] || 0));
     const arrivalTime = visitMeta.arrivalTime || (mode === "air-purifier"
       ? (airForm.arrivalHour ? `${airForm.arrivalHour}:${airForm.arrivalMinute || "00"}` : "")
@@ -4871,7 +4882,7 @@ export default function App() {
         ...(!destination && reportTypes.includes("점검") ? ["inspection" as WorkKind] : []),
         ...(!destination && reportTypes.includes("AS") ? ["as" as WorkKind] : []),
       ])),
-      minutes: { ...visitMeta.minutes, [primaryKind]: existingMinutes || formDuration },
+      minutes: mixedMinutes ? { ...visitMeta.minutes, ...mixedMinutes } : { ...visitMeta.minutes, [primaryKind]: existingMinutes || formDuration },
     }, target);
   };
 

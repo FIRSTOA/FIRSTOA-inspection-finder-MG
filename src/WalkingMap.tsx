@@ -1744,9 +1744,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return labelMeta(code).name;
   }, [kindFilter, renewalLabelMonths]);
 
-  const scopedPlaces = useMemo(() => {
+  // 색상 필터를 뺀 범위(팀·분기·업무만) — 검색은 이 안에서 한다. 색상 체크 때문에 못 찾는 일이 없게.
+  const scopedAllColors = useMemo(() => {
     const rows = places.filter((place) => {
-      if (labelFilters.length && !labelFilters.includes(place.label)) return false;
       if (place.team !== teamFilter) return false;
       if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
@@ -1783,16 +1783,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, labelFilters, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor]);
+  }, [places, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor]);
+
+  const scopedPlaces = useMemo(
+    () => (labelFilters.length ? scopedAllColors.filter((place) => labelFilters.includes(place.label)) : scopedAllColors),
+    [scopedAllColors, labelFilters],
+  );
 
   // 검색은 한 글자마다 수백 곳을 재계산해 모바일에서 입력이 밀렸다 — 화면 갱신을 한 박자 늦춘다(입력은 즉시 반응)
   const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(() => {
     const keyword = deferredQuery.trim().toLowerCase();
     if (!keyword) return scopedPlaces;
-    return scopedPlaces.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
+    // 검색할 때는 색상 체크를 넘어 전체에서 찾는다 (색이 뭔지는 목록 카드의 색 띠·이름으로 보인다)
+    return scopedAllColors.filter((place) => [place.name, place.comment, place.phone, place.address, place.addressDetail, ...place.memos]
       .some((value) => value.toLowerCase().includes(keyword)));
-  }, [deferredQuery, scopedPlaces]);
+  }, [deferredQuery, scopedPlaces, scopedAllColors]);
 
   // 목록은 한 번에 다 그리지 않는다 — 600곳이면 카드 600개(각 80여 개 노드)가 즉시 만들어져 모바일이 멈춘다
   const LIST_PAGE = 60;

@@ -55,9 +55,17 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [loading, setLoading] = useState(false);
   // 잘못된 기록 숨김(soft delete) — 원문 보존, 누가·언제 숨겼는지 기록. 지원 테이블에만 노출
   const HIDEABLE = useMemo(() => new Set(["jeomgeom", "as_records", "logistics_records", "bulman", "misu", "overage", "overage_adjust", "recontract", "churn_defense", "mgmt_support", "pc_expansion", "mfp_expansion", "contact_changes", "stock_items"]), []);
+  // 기기 식별자 수정 — 접수팀이 기번·자산번호를 잘못 적으면 그 기록이 이력으로 남아 다음 AS 판단이 틀려진다.
+  // 통합이력·FIELD 검색·접수 AS히스토리가 전부 이 행을 직접 읽으므로 여기서 고치면 모든 화면에 반영된다.
+  const EDITABLE_FIELDS: Record<string, string[]> = useMemo(() => ({
+    jeomgeom: ["업체명", "모델명", "시리얼넘버", "자산기번"],
+    as_records: ["업체명", "모델명", "시리얼넘버", "자산기번"],
+  }), []);
   const [showHidden, setShowHidden] = useState(false);
   const [chip, setChip] = useState(""); // chipFilter 유형 선택 (빈 값 = 전체)
   const [hideBusy, setHideBusy] = useState(false);
+  const [editDraft, setEditDraft] = useState<Record<string, string> | null>(null); // null = 보기 모드
+  const [editBusy, setEditBusy] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
   const [reachedEnd, setReachedEnd] = useState(false);
@@ -287,7 +295,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           {!loading && !rows.length && !error && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 기록이 없습니다.</div>}
 
           {rows.map((row, index) => (
-            <button key={String(row.id ?? index)} type="button" onClick={() => setDetail(row)}
+            <button key={String(row.id ?? index)} type="button" onClick={() => { setEditDraft(null); setDetail(row); }}
               className="block w-full px-4 py-3 text-left transition hover:bg-blue-50/40">
               {/* PC: 표 / 모바일: 카드 */}
               <span className="hidden gap-2 sm:grid" style={{ gridTemplateColumns: template }}>
@@ -325,7 +333,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       </section>}
 
       {detail && (
-        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setDetail(null)}>
+        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { setEditDraft(null); setDetail(null); }}>
           <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
               <div className="min-w-0">
@@ -339,11 +347,15 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               <div className="rounded-lg border border-slate-200 p-3">
                 {detailFields.filter(([key]) => !["_원문", "원문", "source_text", "report_text", "_raw", "photos", "remote_meta"].includes(key)).map(([key, value]) => {
                   const phone = value.match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+                  const editable = editDraft !== null && (EDITABLE_FIELDS[category.table] || []).includes(key);
                   return (
                     <div key={key} className="flex items-start justify-between gap-3 border-b border-slate-50 py-1.5 last:border-0">
                       <span className="w-24 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</span>
-                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>
-                      {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white transition hover:bg-emerald-700">📞</a>}
+                      {editable
+                        ? <input value={editDraft[key] ?? value} onChange={(e) => setEditDraft((cur) => ({ ...(cur || {}), [key]: e.target.value }))}
+                            className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-blue-50/40 px-2 py-1 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                        : <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>}
+                      {!editable && phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white transition hover:bg-emerald-700">📞</a>}
                     </div>
                   );
                 })}
@@ -356,6 +368,39 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               ))}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              {/* 기기 식별자 수정 — 잘못 접수된 기번이 이력으로 남으면 다음 AS 판단이 틀려진다.
+                  이 행이 통합이력·FIELD 검색·접수 AS히스토리의 원본이라 여기서 고치면 전부 반영된다. */}
+              {(EDITABLE_FIELDS[category.table] || []).length > 0 && detail.id != null && (
+                editDraft === null
+                  ? <button type="button" onClick={() => setEditDraft({})}
+                      className="mr-auto rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-100">✏️ 기기정보 수정</button>
+                  : <>
+                      <button type="button" onClick={() => setEditDraft(null)}
+                        className="mr-auto rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
+                      <button type="button" disabled={editBusy || !Object.keys(editDraft).length}
+                        onClick={async () => {
+                          const changed = Object.entries(editDraft).filter(([key, next]) => next.trim() !== String(detail[key] ?? "").trim());
+                          if (!changed.length) { setEditDraft(null); return; }
+                          const summary = changed.map(([key, next]) => `${key}: ${String(detail[key] ?? "") || "(빈값)"} → ${next.trim() || "(빈값)"}`).join("\n");
+                          if (!await askConfirm(`이 기록을 수정할까요?\n\n${summary}\n\n통합이력·FIELD 검색·접수 AS히스토리가 이 기록을 읽으므로 모든 화면에 바로 반영됩니다. 원문(_원문)은 그대로 남습니다.`)) return;
+                          setEditBusy(true);
+                          const patch: Record<string, unknown> = Object.fromEntries(changed.map(([key, next]) => [key, next.trim()]));
+                          // 업체명을 고치면 매칭 키(_업체명)도 함께 — 안 맞추면 검색은 되는데 이력 매칭이 어긋난다
+                          if (typeof patch["업체명"] === "string") patch["_업체명"] = patch["업체명"];
+                          try {
+                            await updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, patch);
+                            setDetail({ ...detail, ...patch });
+                            setRows((cur) => cur.map((row) => (row.id === detail.id ? { ...row, ...patch } : row)));
+                            setEditDraft(null);
+                          } catch (e) {
+                            alert(`수정 실패: ${(e as Error).message}`);
+                          } finally {
+                            setEditBusy(false);
+                          }
+                        }}
+                        className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">{editBusy ? "저장 중…" : "저장"}</button>
+                    </>
+              )}
               <button type="button" onClick={() => { void navigator.clipboard.writeText(detailFields.map(([key, value]) => `${key}: ${value}`).join("\n")); }}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50">전체 복사</button>
               {HIDEABLE.has(category.table) && detail.id != null && (

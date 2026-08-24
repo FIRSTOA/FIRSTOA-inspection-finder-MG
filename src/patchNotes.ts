@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0e56fdc94d",
+    "date": "2026-08-24",
+    "note": "FIELD 복붙 전송도 일정과 연결 + AS 이력 3건으로 축약"
+  },
+  {
     "hash": "a4776e86cb",
     "date": "2026-08-24",
     "note": "납품 일정 완료 — 안내 문구·전송 방 바로잡기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "98a330cdb2",
     "date": "2026-08-02",
     "note": "리스트 상태는 저장된 값만 반영 — 처리여부만 골라도 완료로 보이던 문제 수정 (처리 저장을 눌러야 완료)"
-  },
-  {
-    "hash": "871ee30168",
-    "date": "2026-08-02",
-    "note": "접수리스트 상태 칩에 건수 표시 — 전체/접수/진행중/완료 (유형 필터와 연동된 숫자)"
   }
 ];
