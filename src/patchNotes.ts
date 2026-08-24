@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c513d7d7f0",
+    "date": "2026-08-25",
+    "note": "접수 구분(미수방문·여분요청 등) 줄에 포함 + 빈 칸이 다음 필드명 무는 것 차단"
+  },
+  {
     "hash": "075efb1d46",
     "date": "2026-08-25",
     "note": "접수내용 추출 — 스페이스 구분 양식(제목    값)도 인식"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8a7dc150b2",
     "date": "2026-08-05",
     "note": "숨김 필터를 모든 화면에 확산 + 업무현황판 집계 제외 잔여 UI 제거"
-  },
-  {
-    "hash": "4d23013acb",
-    "date": "2026-08-05",
-    "note": "오발송 처리 일원화 — 조회탭 숨김이 업무 집계·방문 기록까지 함께 제외/복원"
   }
 ];

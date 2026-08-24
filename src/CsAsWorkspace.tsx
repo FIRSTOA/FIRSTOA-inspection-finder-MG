@@ -1204,7 +1204,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const todayTeam = eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
     const diag = pending.length ? undefined
       : `오늘 ${todayYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 0건 · 명단 ${order.join("·")}`;
-    setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true, diag });
+    // 규칙 기반 초안은 화면에 먼저 보여주지 않는다 — 거친 줄이 헷갈리게 한다. AI 실패 시의 대체본으로만 쓴다.
+    const draft = buildMidReport(round, reportTeam);
     const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
       vendor: ticket.vendor,
       title: ticket.calendarTitle || "",
@@ -1214,10 +1215,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       category: extractCategory(ticket.vendor, ticket.calendarTitle, reportAssignee(ticket, order)),
       kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
     }));
-    if (!payload.length) { setMidReport((cur) => (cur ? { ...cur, polishing: false } : cur)); return; }
+    if (!payload.length) { setMidReport({ round, team: reportTeam, text: draft, polishing: false, diag }); return; }
+    setMidReport({ round, team: reportTeam, text: "", polishing: true, diag });
+    const fallback = () => setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text: draft, polishing: false } : cur));
     void invokeEdgeFunction<{ lines: string[] }>("report-polish", { lines: payload })
       .then((res) => {
-        if (midReportSeq.current !== seq || !Array.isArray(res.lines)) return;
+        if (midReportSeq.current !== seq) return;
+        if (!Array.isArray(res.lines)) { fallback(); return; }
         let index = 0;
         const groups: string[] = [];
         for (const name of order) {
@@ -1249,7 +1253,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         ].join("\n");
         setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));
       })
-      .catch(() => setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, polishing: false } : cur)));
+      .catch(fallback);
   };
   const openMidReport = () => {
     const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (team !== "ALL" && team !== "종일" ? team as Team : "C");
@@ -2090,7 +2094,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             <div className="flex items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
               <div>
                 <div className="text-[15px] font-black text-white">중간보고 생성</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 줄을 다듬는 중… (잠시 뒤 자동 교체)" : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 보고를 만드는 중…" : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
               </div>
               <button type="button" onClick={() => setMidReport(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
             </div>
@@ -2106,13 +2110,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               ))}
             </div>
             {midReport.diag && <div className="border-b border-slate-100 bg-amber-50/70 px-4 py-1.5 text-[11px] font-semibold text-slate-500">{midReport.diag}</div>}
-            <textarea value={midReport.text} onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
+            <textarea value={midReport.text} readOnly={midReport.polishing} placeholder="🤖 AI가 보고를 만드는 중… 몇 초만 기다려 주세요" onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
               className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
               <button type="button" onClick={() => composeMidReport(midReport.round, midReport.team)}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">다시 생성</button>
-              <button type="button" onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify("중간보고를 복사했습니다 — 카톡방에 붙여넣으세요 ✓", "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
-                className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700">복사</button>
+              <button type="button" disabled={midReport.polishing} onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify("중간보고를 복사했습니다 — 카톡방에 붙여넣으세요 ✓", "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
+                className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{midReport.polishing ? "생성 중…" : "복사"}</button>
             </div>
           </div>
         </div>
