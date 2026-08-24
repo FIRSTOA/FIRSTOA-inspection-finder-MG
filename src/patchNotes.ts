@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f62aa644d6",
+    "date": "2026-08-24",
+    "note": "재계약 준비 main 합류 — 옛 웹앱 구조 그대로의 '이카운트 분석'이 기본 화면"
+  },
+  {
     "hash": "d7c8b56e0e",
     "date": "2026-08-24",
     "note": "카운터 문자전송 — 팀 공유 마감 목록으로 개편 + 내 메모 저장 버튼"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "0f5dcc4fd1",
     "date": "2026-08-04",
     "note": "홍보물·해피콜 미리보기 넘침 수정 + 칭찬 시트 빈 행 건너뛰고 이어붙이기"
-  },
-  {
-    "hash": "7502fcf231",
-    "date": "2026-08-03",
-    "note": "전송 후 '일정을 정리할까요?' 팝업도 FIELD_NAVER_BUTTON 플래그 뒤로 — 완료 파이프라인 검증 전까지 비활성"
   }
 ];

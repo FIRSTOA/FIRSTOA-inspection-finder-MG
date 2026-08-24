@@ -4,19 +4,25 @@
  * 입력: 이카운트 거래처관리대장 I 화면 전체 복사(Ctrl+A → Ctrl+C) → 붙여넣기 → 분석.
  * 프로그램 설치·자동 로그인 없이 전 직원이 쓸 수 있는 경로다.
  *
- * 화면 순서(원본 InternalView 그대로):
- *   다크 히어로(핵심 판단) → 판정 배지 → 핵심 지표 4칸 → 계약 이력(적요) →
- *   월별 사용량 추이 → 추천 플랜 A/B/C → 위험 플래그 / 권한 밖 → 예상 상담 시나리오
+ * 화면 순서(원본 구조 + 사용자 확정 수정):
+ *   다크 히어로(핵심 판단) → 판정 배지 → 핵심 지표(매출·총 사용량·활용률·초과·미수) →
+ *   계약 이력(적요) → 월별 상세 표(사용·초과 종류/매수/금액·청구·수금) →
+ *   거래처 이력(특이사항·불만·미수·AS·지난 협상 — 업체명으로 자동 조회, 플랜 판단에도 반영) →
+ *   추천 플랜 A/B/C → 위험 플래그/권한 밖 → 원문 그대로 보기(적요·대장 전체)
+ * 시나리오·추이 차트는 사용자 요청으로 뺐다(scenario.ts 엔진은 보존).
  *
  * 분석 결과는 이 기기(localStorage)에 남아 거래처 카드 목록으로 쌓인다.
  */
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ClipboardPaste, TrendingUp, Trash2, X } from "lucide-react";
+import { ChevronLeft, ClipboardPaste, TrendingUp, Trash2, X } from "lucide-react";
 import { notify } from "../toast";
+import { getAsHistory, type AsHistoryEntry } from "../api";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "../vendorFlags";
+import { vendorMatchKey } from "../ids";
 import { analyzeLedger, type LedgerAnalysis } from "./ledger";
 import { judge, type Judgement } from "./judge";
-import { calcProposals, type Proposal } from "./proposals";
-import { buildCounseling } from "./scenario";
+import { calcProposals, type ExtraSignals, type Proposal } from "./proposals";
+import { fetchBriefing, type RcBriefing, type RcTarget } from "./api";
 
 const STORE_KEY = "recontract_analyze_v1";   // { [vendor]: { raw, at } }
 
@@ -50,45 +56,6 @@ function KPI({ label, value, unit, sub, tone = "gray" }: { label: string; value:
       <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-2xl font-bold ${valueCls}`}>{typeof value === "number" ? value.toLocaleString("ko-KR") : value}{!!unit && <span className="ml-1 text-sm font-normal text-slate-400">{unit}</span>}</div>
       {!!sub && <div className="mt-1.5 text-[11px] leading-relaxed text-slate-500">{sub}</div>}
-    </div>
-  );
-}
-
-/** 월별 사용량 — 컬러·흑백 막대 + 기본매수 선 (원본 UsageChart 자리) */
-function UsageChart({ analysis, kind }: { analysis: LedgerAnalysis; kind: "컬러" | "흑백" }) {
-  const stat = analysis.usage.find((u) => u.kind === kind);
-  const series = analysis.months.map((m) => ({
-    ym: m.ym,
-    used: m.counters.filter((c) => (kind === "컬러" ? c.kind.startsWith("컬러") : c.kind === "흑백")).reduce((s, c) => s + c.사용, 0),
-    over: m.excesses.some((e) => e.kind === kind),
-  }));
-  if (!series.length) return <div className="py-6 text-center text-xs text-slate-400">카운터 데이터 없음</div>;
-  const base = stat?.기본매수 || 0;
-  const peak = Math.max(...series.map((p) => p.used), 1);
-  const showLine = !!base && base <= peak * 2.2;
-  const ceiling = (showLine ? Math.max(peak, base) : peak) * 1.12;
-  const H = 120;
-  return (
-    <div>
-      <div className="relative" style={{ height: H }}>
-        <div className="absolute inset-0 flex items-end gap-[3px]">
-          {series.map((p) => (
-            <div key={p.ym} title={`${p.ym} · ${money(p.used)}매`}
-              className={`flex-1 rounded-t ${p.over ? "bg-red-500" : base && p.used > base ? "bg-amber-400" : kind === "컬러" ? "bg-blue-500" : "bg-slate-400"}`}
-              style={{ height: Math.max(3, Math.round((p.used / ceiling) * H)) }} />
-          ))}
-        </div>
-        {showLine && (
-          <div className="absolute left-0 right-0 border-t border-dashed border-red-400" style={{ bottom: Math.round((base / ceiling) * H) }}>
-            <span className="absolute right-0 top-0.5 rounded bg-white/85 px-1 text-[10px] font-bold text-red-500">기본 {money(base)}매</span>
-          </div>
-        )}
-      </div>
-      <div className="mt-1.5 flex items-center justify-between text-[10px] font-medium text-slate-400">
-        <span>{series[0].ym.replace("-", ".")}</span>
-        <span>월평균 {money(stat?.월평균 || 0)}매{!showLine && base ? ` · 기본 ${money(base)}매 (크게 미달)` : ""}</span>
-        <span>{series[series.length - 1].ym.replace("-", ".")}</span>
-      </div>
     </div>
   );
 }
@@ -134,36 +101,54 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
   );
 }
 
-function ScenarioItem({ scenario, index }: { scenario: { reaction: string; intent: string; response: string; followUp: string }; index: number }) {
-  const [open, setOpen] = useState(index <= 2);
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-100">
-      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-50">
-        <span className="rounded bg-slate-900 px-2 py-1 text-[10px] font-bold tracking-wider text-white">{String(index).padStart(2, "0")}</span>
-        <span className="flex-1 text-sm font-medium text-slate-900">"{scenario.reaction}"</span>
-        <ChevronRight size={15} className={`text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
-      </button>
-      {open && (
-        <div className="space-y-3 border-t border-slate-100 bg-slate-50 px-4 pb-4 pt-3">
-          <div className="grid gap-1 sm:grid-cols-[80px_1fr]"><span className="text-[11px] font-bold text-slate-400">상담 의도</span><span className="text-sm text-slate-700">{scenario.intent}</span></div>
-          <div className="grid gap-1 sm:grid-cols-[80px_1fr]"><span className="text-[11px] font-bold text-slate-400">추천 답변</span><span className="block rounded-lg border border-slate-100 bg-white p-3 text-sm leading-relaxed text-slate-800">{scenario.response}</span></div>
-          <div className="grid gap-1 sm:grid-cols-[80px_1fr]"><span className="text-[11px] font-bold text-slate-400">유도 멘트</span><em className="text-sm text-blue-700">{scenario.followUp}</em></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── 상세 (원본 InternalView 구조) ──────────────────────────────────────────
 
 function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => void; onRemove: () => void }) {
   const { analysis, verdict } = item;
-  const proposals = useMemo(() => calcProposals(analysis, verdict), [analysis, verdict]);
-  const counseling = useMemo(() => buildCounseling(analysis, verdict), [analysis, verdict]);
-  const recommended = proposals.find((p) => p.recommended)!;
   const overCount = analysis.usage.reduce((sum, stat) => sum + stat.초과월수, 0);
   const 미납실질 = analysis.payment.미납월.filter((ym) => ym !== analysis.months[analysis.months.length - 1]?.ym).length;
   const current = analysis.현재계약;
+
+  // 대장 밖 이력 — 업체명으로 AS·불만·미수·초과·특이사항·지난 협상을 자동으로 불러온다
+  const [briefing, setBriefing] = useState<RcBriefing | null>(null);
+  const [asHistory, setAsHistory] = useState<AsHistoryEntry[]>([]);
+  const [flags, setFlags] = useState<VendorWorkFlags | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const pseudo = { key: vendorMatchKey(item.vendor), vendor: item.vendor } as unknown as RcTarget;
+    fetchBriefing(pseudo).then((r) => { if (alive) setBriefing(r); }).catch(() => undefined);
+    getAsHistory(item.vendor, "").then((r) => { if (alive) setAsHistory(r); }).catch(() => undefined);
+    getVendorFlagsBatch([item.vendor]).then((m) => { if (alive) setFlags(m.get(item.vendor) || null); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [item.vendor]);
+
+  // 불러온 이력이 플랜 판단에도 반영된다 — 장비 이슈·불만 누적이면 A안이 바뀐다
+  const extra = useMemo<ExtraSignals>(() => {
+    const recentAs = asHistory[0]?.date || "";
+    const days = recentAs ? Math.round((Date.now() - Date.parse(recentAs)) / 86_400_000) : 9999;
+    return {
+      complaintTotal: briefing?.bulman.length || 0,
+      complaintSevere: (briefing?.bulman || []).filter((row) => /상|심각/.test(row["불만항목"] || "")).length,
+      complaintDevice: (briefing?.bulman || []).some((row) => /장비|출력|하드웨어|기기|품질|소음|잼|프린트|토너|용지/.test(`${row["불만유형"]} ${row["불만내용"]}`)),
+      asTotal: asHistory.length,
+      asRecent: days <= 60,
+    };
+  }, [briefing, asHistory]);
+  const proposals = useMemo(() => calcProposals(analysis, verdict, extra), [analysis, verdict, extra]);
+  const recommended = proposals.find((p) => p.recommended)!;
+  const note = flags?.note;
+
+  // 기간 총 사용량 — 컬러(A4+A3)·흑백
+  const totals = useMemo(() => {
+    const sum = { 컬러: 0, 흑백: 0 };
+    for (const month of analysis.months) {
+      for (const counter of month.counters) {
+        if (counter.kind === "흑백") sum.흑백 += counter.사용;
+        else sum.컬러 += counter.사용;
+      }
+    }
+    return sum;
+  }, [analysis]);
 
   return (
     <div className="space-y-6">
@@ -208,8 +193,12 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
       {/* 핵심 지표 */}
       <section>
         <h2 className="mb-3 text-base font-bold text-slate-900">핵심 지표 <span className="ml-1 text-[11px] font-medium text-slate-400">대장 조회기간 {analysis.기간.from} ~ {analysis.기간.to}</span></h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           <KPI label="누적 매출" value={man(analysis.누계.판매)} unit="만원" sub={`수금 ${man(analysis.누계.수금)}만원`} tone="blue" />
+          <KPI label="컬러 총 사용" value={totals.컬러} unit="매"
+            sub={`월평균 ${money(analysis.usage.find((u) => u.kind === "컬러")?.월평균 || 0)}매 · ${analysis.months.length}개월`} tone="blue" />
+          <KPI label="흑백 총 사용" value={totals.흑백} unit="매"
+            sub={`월평균 ${money(analysis.usage.find((u) => u.kind === "흑백")?.월평균 || 0)}매 · ${analysis.months.length}개월`} />
           <KPI label="컬러 활용률" value={verdict.컬러활용률} unit="%"
             sub={(() => { const c = analysis.usage.find((u) => u.kind === "컬러"); return c ? `평균 ${money(c.월평균)}매 / 기본 ${money(c.기본매수)}매` : ""; })()}
             tone={verdict.컬러활용률 >= 100 ? "red" : verdict.컬러활용률 >= 80 ? "amber" : "gray"} />
@@ -239,14 +228,138 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
         </section>
       )}
 
-      {/* 월별 사용량 추이 */}
+      {/* 월별 상세 — 매달 얼마나 썼고, 초과가 무엇으로 몇 매·얼마인지 */}
       <section className="rounded-2xl border border-slate-100 bg-white p-6">
-        <h2 className="mb-5 text-base font-bold text-slate-900">월별 사용량 추이</h2>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div><div className="mb-2 text-xs font-bold text-blue-600">컬러</div><UsageChart analysis={analysis} kind="컬러" /></div>
-          <div><div className="mb-2 text-xs font-bold text-slate-500">흑백</div><UsageChart analysis={analysis} kind="흑백" /></div>
+        <h2 className="mb-4 text-base font-bold text-slate-900">월별 상세 <span className="ml-1 text-[11px] font-medium text-slate-400">초과가 난 달은 붉게</span></h2>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                <th className="py-2 pr-3">월</th>
+                <th className="py-2 pr-3 text-right">컬러 사용</th>
+                <th className="py-2 pr-3 text-right">흑백 사용</th>
+                <th className="py-2 pr-3">초과</th>
+                <th className="py-2 pr-3 text-right">청구</th>
+                <th className="py-2 text-right">수금</th>
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {analysis.months.map((month) => {
+                const color = month.counters.filter((c) => c.kind !== "흑백").reduce((sum, c) => sum + c.사용, 0);
+                const bw = month.counters.filter((c) => c.kind === "흑백").reduce((sum, c) => sum + c.사용, 0);
+                const hasOver = month.excesses.length > 0;
+                return (
+                  <tr key={month.ym} className={`border-b border-slate-50 last:border-0 ${hasOver ? "bg-red-50/60" : ""}`}>
+                    <td className="py-2 pr-3 font-mono text-xs font-bold text-slate-600">{month.ym.replace("-", ".")}</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-slate-800">{money(color)}</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-slate-600">{money(bw)}</td>
+                    <td className="py-2 pr-3">
+                      {hasOver
+                        ? month.excesses.map((excess, index) => (
+                            <span key={index} className="mr-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">
+                              {excess.kind} {money(excess.초과)}매 · {money(excess.금액)}원
+                            </span>
+                          ))
+                        : <span className="text-[11px] text-slate-300">—</span>}
+                    </td>
+                    <td className="py-2 pr-3 text-right font-semibold text-slate-800">{month.청구 ? money(month.청구) : <span className="text-slate-300">—</span>}</td>
+                    <td className="py-2 text-right">
+                      {month.수금
+                        ? <span className="font-semibold text-emerald-600">{money(month.수금)}{month.지연일 >= 0 ? <span className="ml-1 text-[10px] text-slate-400">+{month.지연일}일</span> : null}</span>
+                        : month.청구 ? <span className="text-[11px] font-bold text-amber-600">미수금</span> : <span className="text-slate-300">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 font-bold text-slate-900">
+                <td className="py-2 pr-3 text-xs">합계</td>
+                <td className="py-2 pr-3 text-right">{money(totals.컬러)}</td>
+                <td className="py-2 pr-3 text-right">{money(totals.흑백)}</td>
+                <td className="py-2 pr-3 text-[11px] text-red-600">{overCount ? `${overCount}회 · ${money(analysis.billing.초과청구합)}원` : "없음"}</td>
+                <td className="py-2 pr-3 text-right">{money(analysis.누계.판매)}</td>
+                <td className="py-2 text-right">{money(analysis.누계.수금)}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </section>
+
+      {/* 거래처 이력 — 업체명으로 자동 조회 (특이사항·불만·미수·AS·지난 협상) */}
+      {!!note?.text && (
+        <section className="rounded-2xl border border-violet-200 bg-violet-50/60 p-6">
+          <h2 className="mb-2 text-sm font-bold text-violet-600">거래처 특이사항{note.author ? ` · ${note.author}` : ""}</h2>
+          {(note.workStart || note.lunchTime) && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {note.workStart && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-violet-700 ring-1 ring-violet-200">출근 {note.workStart}</span>}
+              {note.lunchTime && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-violet-700 ring-1 ring-violet-200">점심 {note.lunchTime}</span>}
+            </div>
+          )}
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-violet-900">{note.text}</div>
+        </section>
+      )}
+
+      {(!!briefing?.bulman.length || !!briefing?.misu.length || asHistory.length > 0 || !!briefing?.history.length) && (
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {!!briefing?.bulman.length && (
+            <div className="rounded-2xl border border-rose-100 bg-white p-5">
+              <h3 className="mb-3 text-sm font-bold text-rose-600">🚨 불만 {briefing.bulman.length}건</h3>
+              <div className="space-y-2">
+                {briefing.bulman.slice(0, 4).map((row, index) => (
+                  <div key={index} className="rounded-lg bg-rose-50/60 px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-mono font-bold text-slate-500">{row["날짜"]}</span>
+                    {!!row["불만유형"] && <span className="ml-2 rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{row["불만유형"]}</span>}
+                    <div className="mt-1">{row["불만내용"]}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!!briefing?.misu.length && (
+            <div className="rounded-2xl border border-amber-100 bg-white p-5">
+              <h3 className="mb-3 text-sm font-bold text-amber-600">💰 미수 {briefing.misu.length}건</h3>
+              <div className="space-y-2">
+                {briefing.misu.slice(0, 4).map((row, index) => (
+                  <div key={index} className="rounded-lg bg-amber-50/60 px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-mono font-bold text-slate-500">{row["입력일"]}</span>
+                    <span className="ml-2 font-bold text-amber-700">{row["미수개월"] || "-"}개월 {row["미수잔액"] ? `${money(Number(row["미수잔액"].replace(/[^0-9]/g, "")) || 0)}원` : ""}</span>
+                    {!!row["방문내용"] && <div className="mt-1">{row["방문내용"]}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {asHistory.length > 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-white p-5">
+              <h3 className="mb-3 text-sm font-bold text-slate-700">🔧 AS 이력 {asHistory.length}건 <span className="text-[10px] font-medium text-slate-400">최근 5건</span></h3>
+              <div className="space-y-1.5">
+                {asHistory.slice(0, 5).map((entry, index) => (
+                  <div key={index} className="flex items-start gap-2 text-xs text-slate-700">
+                    <span className="shrink-0 font-mono font-bold text-slate-400">{entry.date.slice(2)}</span>
+                    <span className="min-w-0 flex-1 truncate">{entry.model && <b className="mr-1 text-slate-500">{entry.model}</b>}{entry.content}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!!briefing?.history.length && (
+            <div className="rounded-2xl border border-blue-100 bg-white p-5">
+              <h3 className="mb-3 text-sm font-bold text-blue-700">📋 지난 재계약 협상 {briefing.history.length}건</h3>
+              <div className="space-y-2">
+                {briefing.history.slice(0, 3).map((row) => (
+                  <div key={row.id} className="rounded-lg bg-blue-50/60 px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-mono font-bold text-slate-500">{row.날짜}</span>
+                    {!!row.갱신상태 && <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{row.갱신상태}</span>}
+                    {!!row.갱신위험도 && <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">위험 {row.갱신위험도}</span>}
+                    {!!row.제안조건 && <div className="mt-1 whitespace-pre-wrap">{row.제안조건}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 추천 플랜 비교 */}
       <section>
@@ -268,17 +381,16 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
         </div>
       </section>
 
-      {/* 예상 상담 시나리오 */}
-      <section className="rounded-2xl border border-slate-100 bg-white p-6">
-        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900">예상 상담 시나리오 ({counseling.scenarios.length}건)</h2>
-          <span className="text-[11px] font-medium text-slate-400">1차 방향 — {counseling.firstApproach}</span>
-        </div>
-        <div className="space-y-2">{counseling.scenarios.map((s, i) => <ScenarioItem key={s.reaction} scenario={s} index={i + 1} />)}</div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          <div className="rounded-xl bg-rose-50 p-3 text-xs leading-relaxed text-rose-700"><b>금지 표현</b> · {counseling.avoidPhrases.join(" / ")}</div>
-          <div className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600"><b>마무리 멘트</b> · {counseling.closing}</div>
-        </div>
+      {/* 원문 그대로 — 적요와 거래내역. 파서가 놓친 게 있어도 여기서 눈으로 확인한다 */}
+      <section className="space-y-3">
+        <details className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+          <summary className="cursor-pointer px-6 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">📜 적요 원문 그대로 보기</summary>
+          <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap border-t border-slate-100 bg-slate-50 p-5 font-mono text-[12px] leading-6 text-slate-700">{analysis.remarks || "적요 없음"}</pre>
+        </details>
+        <details className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+          <summary className="cursor-pointer px-6 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">🧾 붙여넣은 대장 전체 원문 (판매/수금내역 포함)</summary>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre border-t border-slate-100 bg-slate-50 p-5 font-mono text-[11.5px] leading-6 text-slate-700">{item.raw}</pre>
+        </details>
       </section>
     </div>
   );
