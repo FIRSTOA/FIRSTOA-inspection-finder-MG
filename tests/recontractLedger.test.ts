@@ -233,7 +233,8 @@ describe("결제 판정 — CMS 다음 달 출금 업체를 미납으로 오판�
     expect(analysis.payment.cms실패).toBe(1);
   });
   it("실질잔액 = 누계 잔액 - 최근 청구 (수금 전이 정상인 몫)", () => {
-    expect(analysis.payment.실질잔액).toBe(281_600 - 140_800);
+    // 축약 픽스처의 최근 청구월은 2026-06(96,800원 — X3220 전표만 포함)
+    expect(analysis.payment.실질잔액).toBe(281_600 - 96_800);
   });
   it("판정은 잔액·승인실패 기준 — 달 단위 대조가 아니다", () => {
     expect(analysis.payment.판정).toBe("보통"); // 실패 1회 + 잔액 1개월치 — 주의까지는 아니다

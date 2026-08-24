@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "378a9aa0b2",
+    "date": "2026-08-24",
+    "note": "이카운트 분석 3차 — 원문 그대로의 표·결제 오판 수리·월별 사용량 섹션"
+  },
+  {
     "hash": "a4f4e46817",
     "date": "2026-08-24",
     "note": "이카운트 파서 — 3개월 누적 청구·컬러누계 무접두·N월 비교라벨 대응 (실표본)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "0f83734ad7",
     "date": "2026-08-04",
     "note": "일정 완료·연기에 사유 입력 — 팀 AS방 카톡 전송 + 네이버 일정 내용 기록"
-  },
-  {
-    "hash": "ef406f81de",
-    "date": "2026-08-04",
-    "note": "일정리스트 담당자 드롭다운 제거 — 미배정/이름 배지 표시, 변경은 [배정] 버튼(팀원 팝업)으로만"
   }
 ];
