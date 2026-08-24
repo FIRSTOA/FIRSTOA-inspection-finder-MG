@@ -1087,18 +1087,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const issue = (ticket.issue || "").split(/\n/)[0].replace(/\s+/g, " ").trim().slice(0, 34);
       return ["•" + (ticket.assignee || "미배정"), vendor, ticket.model, issue].filter(Boolean).join(" ");
     };
-    const todays = teamTickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
+    // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름이 배정된 건은 그쪽에서 소화한다(보고 대상 아님).
+    // 팀장(신정훈)은 모든 팀 명단에 있어 지역 무관하게 그 팀 보고에 실린다.
     const order = [...teamAssignees[reportTeam].filter((name) => name !== "신정훈"), "신정훈"];
+    const todays = teamTickets.filter((ticket) =>
+      ticket.date === todayYmd && ticket.status !== "완료" && order.includes(ticket.assignee));
     const groups: string[] = [];
     for (const name of order) {
       const mine = todays.filter((ticket) => ticket.assignee === name);
       if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf));
     }
-    const others = todays.filter((ticket) => !order.includes(ticket.assignee));
-    if (others.length) groups.push("#미배정", ...others.map(lineOf));
     // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
     const deferred = teamTickets.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= todayYmd) return false;
+      if (ticket.status !== "익일" || ticket.date <= todayYmd || !order.includes(ticket.assignee)) return false;
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
     });

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "11e7e832ae",
+    "date": "2026-08-25",
+    "note": "중간보고 간략화 — 완료 줄 제거, 빈 섹션(익일변경·특이사항) 생략, 그룹 사이 빈 줄·--- 구분선 제거"
+  },
+  {
     "hash": "90dadc6e39",
     "date": "2026-08-25",
     "note": "일정리스트 — 12시·14시 중간보고 자동 생성"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5b72a527b7",
     "date": "2026-08-04",
     "note": "일정 유형 필터 직관화 — 전체 상태에서 유형 클릭 시 그것만 선택, 이후 클릭은 추가/해제(중복 선택), 전부 끄면 전체 복귀"
-  },
-  {
-    "hash": "7c8e14fa86",
-    "date": "2026-08-04",
-    "note": "칭찬: 폼 안 파란 보내기 제거 — 미리보기 버튼줄의 [보내기]가 실제 제출 (거래처명·칭찬이유 채우면 활성화)"
   }
 ];
