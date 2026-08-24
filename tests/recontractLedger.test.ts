@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
-import { analyzeLedger, machineUsage, moneyKo, parseLedger, parseRemarks, simulateBase, windowAnalysis, ymd } from "../src/recontract/ledger";
+import { analyzeLedger, detectAccumMonths, machineUsage, moneyKo, parseLedger, parseRemarks, simulateBase, windowAnalysis, ymd } from "../src/recontract/ledger";
 
 const sample = readFileSync(new URL("./fixtures/ecount-ledger-sample.txt", import.meta.url), "utf8");
 
@@ -341,5 +341,77 @@ describe("'기존동일' 상속 열쇠 — 임대료 단가", () => {
     const machines = machineUsage(analyzeLedger(quarterly));
     expect(machines.find((machine) => machine.model === "AC2060")?.임대료단가).toBe(59_000);
     expect(machines.find((machine) => machine.model === "X3220")?.임대료단가).toBe(69_000);
+  });
+});
+
+// ─── 2026-08 리뷰에서 잡힌 통계 버그들의 회귀 테스트 ───────────────────────────
+
+describe("월기본료 — 기기별 최신 임대료 합산", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  // 축약 픽스처는 AC2060 청구가 2024-09에 끊긴다(교체·철수와 같은 모양) — 이건 합산하지 않는 게 맞다
+  it("청구가 끊긴 옛 기기는 합산에서 뺀다", () => {
+    expect(analyzeLedger(quarterly).billing.월기본료).toBe(69000);
+  });
+  // 실데이터처럼 두 기기가 최근까지 같이 청구되면 합산한다 (마지막 한 줄만 취하던 버그)
+  it("최근까지 같이 청구된 두 기기는 합산한다", () => {
+    const withSecond = quarterly.replace(
+      "2026/06/30",
+      "2026/06/12 -74\t\t65,000\t \t302,600\n \t복사기임대료(AC2060) [5/28~6/27] / 1 * 59,000\t64,900\t \t \n2026/06/30",
+    );
+    expect(analyzeLedger(withSecond).billing.월기본료).toBe(128000);
+  });
+});
+
+describe("기간 창의 누적 청구 승계 — 마커 전표가 잘려도 기본매수가 안 부푼다", () => {
+  const full = analyzeLedger(readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8"));
+  const win = windowAnalysis(full, "2024-09-20");
+  it("창 분석도 전체 대장의 accumMonths(3)를 쓴다", () => {
+    expect(full.accumMonths).toBe(3);
+    for (const machine of machineUsage(win)) {
+      expect(machine.accumMonths).toBe(3);
+      expect(machine.기본월.컬러).toBe(400); // 1,200으로 부풀던 버그
+    }
+  });
+  it("창 usage의 컬러 기본매수도 기기 합(800) 그대로", () => {
+    expect(win.usage.find((stat) => stat.kind === "컬러")?.기본매수).toBe(800);
+  });
+});
+
+describe("한 전표에 두 기기 — 카운터가 첫 기기로 합쳐지지 않는다", () => {
+  it("두 번째 임대료 줄 뒤의 카운터는 그 기기 것", () => {
+    const merged = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8").replace(
+      "2026/06/30",
+      [
+        "2026/06/12 -74\t\t130,000\t \t302,600",
+        " \t복사기임대료(AC2060) [5/28~6/27] / 1 * 59,000\t64,900\t \t ",
+        " \t컬러누계-5000, 3월-4600 [사용-400] / 1 * 0\t \t \t ",
+        "2026/06/30",
+      ].join("\n"),
+    );
+    const machines = machineUsage(analyzeLedger(merged));
+    const ac = machines.find((machine) => machine.model === "AC2060");
+    const x = machines.find((machine) => machine.model === "X3220");
+    expect(ac?.months.find((month) => month.ym === "2026-06")?.컬러).toBe(400);   // AC2060 몫
+    expect(x?.months.find((month) => month.ym === "2026-06")?.컬러).toBe(1416);   // X3220 몫은 그대로
+  });
+});
+
+describe("누적 청구 간격 폴백 — 마커 문구 없이 카운터 달 간격으로", () => {
+  const voucherAt = (date: string) => ({ date, 판매: 0, 수금: 0, items: [{ label: "컬러누계-1 [사용-100]", counter: { kind: "컬러", 누계: 1, 사용: 100 } }] });
+  it("3개월 간격이 일정하면 3", () => {
+    const vouchers = ["2024-01-05", "2024-04-05", "2024-07-05", "2024-10-05"].map(voucherAt);
+    expect(detectAccumMonths(vouchers as never)).toBe(3);
+  });
+  it("매월 찍히면 1, 간격이 들쭉날쭉해도 1", () => {
+    expect(detectAccumMonths(["2024-01-05", "2024-02-05", "2024-03-05"].map(voucherAt) as never)).toBe(1);
+    expect(detectAccumMonths(["2024-01-05", "2024-04-05", "2024-06-05"].map(voucherAt) as never)).toBe(1);
+  });
+});
+
+describe("적요의 보증금 금액이 월기본료로 오독되지 않는다", () => {
+  it("'보증금 330,000원'만 있는 블록 — 기본료 0, 보증금 330,000", () => {
+    const notes = parseRemarks("재계약 2024.1.1~2027.1.1 (3년)\n보증금 330,000원 입금 확인");
+    expect(notes[0]?.월기본료).toBe(0);
+    expect(notes[0]?.보증금).toBe(330000);
   });
 });

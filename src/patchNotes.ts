@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f5985813e9",
+    "date": "2026-08-25",
+    "note": "중간보고 버그 일괄 수리 — AI 개수검증(40건 캡), 이름 정규식 이스케이프, 연기 판정 완화(물류·재이동·주말), 명단 시드 일원화"
+  },
+  {
     "hash": "76979291c9",
     "date": "2026-08-25",
     "note": "중간보고 — 생성 중엔 완성본만 기다린다 (규칙 초안은 AI 실패 시 대체본으로만)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d1d40faf6a",
     "date": "2026-08-05",
     "note": "인덱스 재생성을 조각 체인으로 전환 — 마스터 대형화로 인한 서비스 타임아웃 해결"
-  },
-  {
-    "hash": "2cc2025c6d",
-    "date": "2026-08-05",
-    "note": "빌드 보정 — 오발송 제거 후 미사용 임포트·상태 정리"
   }
 ];

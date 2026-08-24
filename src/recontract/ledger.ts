@@ -62,8 +62,10 @@ const LABELS = ["교체재계약", "재계약", "신규", "기기교체", "추�
 /** 조건 표기 한 덩이에서 기본료·기본매수·단가를 뽑는다 */
 function readTerms(text: string) {
   const flat = text.replace(/\s+/g, " ");
+  // 보증금 금액이 기본료 폴백("N원")에 잡히지 않게 미리 소거 — "보증금 330,000원"이 월기본료로 오독됐다
+  const flatFee = flat.replace(/보증금\s*[-—:]?\s*[\d,.]+\s*(?:만|원)?/g, "보증금");
   // 월 기본료: "월-12만", "월 12만", "142,000원", "**월-12만"
-  const fee = flat.match(/월\s*[-—]?\s*([\d,.]+만|[\d,]{4,})\s*원?/) || flat.match(/([\d,]{5,})\s*원/);
+  const fee = flatFee.match(/월\s*[-—]?\s*([\d,.]+만|[\d,]{4,})\s*원?/) || flatFee.match(/([\d,]{5,})\s*원/);
   // 컬러/흑백: "칼-500/120", "컬600/100", "컬러기본 300매 추가 100원", "컬1000/100"
   const color = flat.match(/(?:컬러|컬|칼)\s*(?:기본)?\s*[-—]?\s*([\d,]+)\s*매?\s*(?:추가)?\s*[/,]?\s*([\d,]+)\s*원?/);
   // "훅1000/9" — 흑을 훅으로 적은 오타가 실데이터에 있다 (하이어랭크). 흡수한다
@@ -367,6 +369,7 @@ export type PaymentStat = {
 };
 
 export type LedgerAnalysis = LedgerParsed & {
+  accumMonths: number;   // 1=매월 청구, 3=3개월 누적 — 기간 창을 씌워도 전체 대장에서 감지한 값을 이어받는다
   usage: UsageStat[];
   payment: PaymentStat;
   billing: { 월기본료: number; 최근청구: number; 평균청구: number; 초과청구합: number };
@@ -393,11 +396,29 @@ function trendOf(values: number[]): "증가" | "감소" | "유지" {
  * 기본매수도 월 기준으로 환산한다: "기본-400*3=1200매"면 월 400,
  * "기본-1200매"인데 "N개월누적" 문구가 있으면 1200÷N. 기기가 여러 대면 기기별 월 기본을 합산한다.
  */
-function usageStats(months: LedgerMonth[], contracts: ContractNote[], vouchers: LedgerVoucher[]): UsageStat[] {
-  // 누적 청구 감지 — 상세 줄에 "N개월누적" 문구
-  const accumMatch = vouchers.flatMap((voucher) => voucher.items)
+/**
+ * 누적 청구 개월수 감지 — ① 상세 줄의 "N개월누적" 문구가 원본.
+ * ② 문구가 없어도(기간 창이 그 전표를 잘랐거나, 애초에 안 적는 업체) 카운터가 찍힌 달의
+ *    간격이 2~6개월로 일정하면 그 주기를 누적으로 본다. 이게 틀리면 기본매수·월평균이 N배 왜곡된다.
+ */
+export function detectAccumMonths(vouchers: LedgerVoucher[]): number {
+  const marked = vouchers.flatMap((voucher) => voucher.items)
     .map((item) => item.label.match(/(\d+)\s*개월\s*누적/)).find(Boolean);
-  const accumMonths = accumMatch ? Math.max(1, Number(accumMatch[1])) : 1;
+  if (marked) return Math.max(1, Number(marked[1]));
+  const yms = Array.from(new Set(
+    vouchers.filter((voucher) => voucher.items.some((item) => item.counter)).map((voucher) => voucher.date.slice(0, 7)),
+  )).sort();
+  if (yms.length < 3) return 1;
+  const gaps: number[] = [];
+  for (let i = 1; i < yms.length; i++) {
+    const [ay, am] = yms[i - 1].split("-").map(Number);
+    const [by, bm] = yms[i].split("-").map(Number);
+    gaps.push(by * 12 + bm - (ay * 12 + am));
+  }
+  return gaps[0] >= 2 && gaps[0] <= 6 && gaps.every((gap) => gap === gaps[0]) ? gaps[0] : 1;
+}
+
+function usageStats(months: LedgerMonth[], contracts: ContractNote[], vouchers: LedgerVoucher[], accumMonths: number): UsageStat[] {
 
   // 월별 사용 합(그 달에 [사용]이 찍힌 것만) — 매월 청구 업체의 추세·최근 계산용
   const monthlySums = new Map<string, number[]>();
@@ -420,15 +441,17 @@ function usageStats(months: LedgerMonth[], contracts: ContractNote[], vouchers: 
   const baseByModel = new Map<string, Map<string, number>>(); // kind → (model → 월 기본)
   const excessMonths = new Map<string, number>();
   for (const voucher of vouchers) {
-    const model = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model || "?";
+    // 한 전표에 기기 두 대가 같이 청구되기도 한다 — 임대료 줄을 만날 때마다 "현재 기기"를 바꾼다
+    let current = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model || "?";
     for (const item of voucher.items) {
+      if (/임대료/.test(item.label) && item.model) { current = item.model; continue; }
       if (!item.excess) continue;
       const kind = item.excess.kind;
       excessMonths.set(kind, (excessMonths.get(kind) || 0) + 1);
       const monthly = item.excess.기본월 || Math.round(item.excess.기본 / accumMonths);
       if (monthly > 0) {
         const byModel = baseByModel.get(kind) || new Map<string, number>();
-        byModel.set(model, monthly);
+        byModel.set(current, monthly);
         baseByModel.set(kind, byModel);
       }
     }
@@ -485,8 +508,10 @@ function paymentStats(months: LedgerMonth[], vouchers: LedgerVoucher[], 누계: 
   const 미납월 = billed.filter((month) => month.수금 < month.청구).map((month) => month.ym);
   const 평균지연일 = delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : -1;
   const cms실패 = vouchers.flatMap((voucher) => voucher.items).filter((item) => /승인\s*실패/.test(item.label)).length;
-  const 최근청구 = billed.length ? billed[billed.length - 1].청구 : 0;
-  const 실질잔액 = Math.max(0, 누계.잔액 - 최근청구);
+  // 최근 청구 중 "아직 수금 전이 정상"인 몫만 뺀다 — 최근 달이 이미 완납이면 잔액 전부가 진짜 미수다
+  const lastBilled = billed[billed.length - 1];
+  const 최근미수 = lastBilled ? Math.max(0, lastBilled.청구 - lastBilled.수금) : 0;
+  const 실질잔액 = Math.max(0, 누계.잔액 - 최근미수);
   const 월평균청구 = billed.length ? billed.reduce((sum, month) => sum + month.청구, 0) / billed.length : 0;
   const 잔액개월치 = 월평균청구 > 0 ? Math.round((실질잔액 / 월평균청구) * 10) / 10 : 0;
   return {
@@ -502,15 +527,36 @@ function paymentStats(months: LedgerMonth[], vouchers: LedgerVoucher[], 누계: 
   };
 }
 
-function finalize(parsed: LedgerParsed): LedgerAnalysis {
+function finalize(parsed: LedgerParsed, accumMonths = detectAccumMonths(parsed.vouchers)): LedgerAnalysis {
   const 청구목록 = parsed.months.filter((month) => month.청구 > 0).map((month) => month.청구);
-  const 임대료 = parsed.months.flatMap((month) => month.items.filter((item) => /임대료/.test(item.label) && !item.무상 && item.단가 > 0));
+  // 월기본료: 기기별 "최신 임대료 단가"의 합 — 마지막 한 줄만 취하면 다기기 업체
+  // (X3220 69,000 + AC2060 59,000, 서로 다른 달에 청구)의 월기본료가 반토막나
+  // 무상 혜택 가치·플랜 금액·초과수준 임계가 전부 어긋난다.
+  // 교체돼 청구가 끊긴 옛 기기가 합산에 끼지 않게, 마지막 청구달에서 너무 오래된 기기는 뺀다.
+  const isFee = (item: { label: string; 무상?: boolean; 단가: number }) => /임대료/.test(item.label) && !item.무상 && item.단가 > 0;
+  const feeByModel = new Map<string, { 단가: number; ym: string }>();
+  for (const month of parsed.months) {
+    for (const item of month.items) {
+      if (!isFee(item)) continue;
+      feeByModel.set(item.model || "?", { 단가: item.단가, ym: month.ym });
+    }
+  }
+  let 월기본료 = parsed.contracts[0]?.월기본료 || 0;
+  if (feeByModel.size) {
+    const monthsOf = (ym: string) => Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7));
+    const lastYm = Math.max(...Array.from(feeByModel.values()).map((entry) => monthsOf(entry.ym)));
+    const staleLimit = Math.max(accumMonths, 2); // 분기 청구는 기기끼리 청구달이 어긋날 수 있다
+    월기본료 = Array.from(feeByModel.values())
+      .filter((entry) => lastYm - monthsOf(entry.ym) <= staleLimit)
+      .reduce((sum, entry) => sum + entry.단가, 0);
+  }
   return {
     ...parsed,
-    usage: usageStats(parsed.months, parsed.contracts, parsed.vouchers),
+    accumMonths,
+    usage: usageStats(parsed.months, parsed.contracts, parsed.vouchers, accumMonths),
     payment: paymentStats(parsed.months, parsed.vouchers, parsed.누계),
     billing: {
-      월기본료: 임대료.length ? 임대료[임대료.length - 1].단가 : parsed.contracts[0]?.월기본료 || 0,
+      월기본료,
       최근청구: 청구목록.length ? 청구목록[청구목록.length - 1] : 0,
       평균청구: 청구목록.length ? Math.round(청구목록.reduce((a, b) => a + b, 0) / 청구목록.length) : 0,
       초과청구합: parsed.months.reduce((sum, month) => sum + month.excesses.reduce((s, excess) => s + excess.금액, 0), 0),
@@ -540,6 +586,7 @@ export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): Le
   if (!fromYmd) return full;
   const vouchers = full.vouchers.filter((voucher) => voucher.date >= fromYmd);
   const months = buildMonths(vouchers);
+  // 누적 감지는 전체 대장 기준 — 창이 "N개월누적" 마커 전표를 잘라내면 기본매수가 N배 부풀던 버그
   const result = finalize({
     ...full,
     기간: { from: fromYmd, to: full.기간.to },
@@ -550,12 +597,12 @@ export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): Le
       수금: vouchers.reduce((sum, voucher) => sum + voucher.수금, 0),
       잔액: full.누계.잔액,
     },
-  });
+  }, full.accumMonths);
   // 기본매수는 계약 조건이라 기간 창과 무관하다 — 창 안에 초과가 없어 기본을 잃으면
   // 전체 데이터의 기본을 이어받는다 (합산 활용률 126% 왜곡의 원인)
   result.usage = result.usage.map((stat) => {
     const fullStat = full.usage.find((entry) => entry.kind === stat.kind);
-    if (!fullStat || stat.기본매수 >= fullStat.기본매수) return stat;
+    if (!fullStat || stat.기본매수 === fullStat.기본매수) return stat;
     return {
       ...stat,
       기본매수: fullStat.기본매수,
@@ -583,32 +630,50 @@ export type MachineUsage = {
 
 /** 전표 단위로 모델과 카운터·초과가 붙어 있다 — 그 짝을 그대로 살려 기기별로 가른다 */
 export function machineUsage(analysis: LedgerAnalysis): MachineUsage[] {
-  const accumMatch = analysis.vouchers.flatMap((voucher) => voucher.items)
-    .map((item) => item.label.match(/(\d+)\s*개월\s*누적/)).find(Boolean);
-  const accumMonths = accumMatch ? Math.max(1, Number(accumMatch[1])) : 1;
+  const accumMonths = analysis.accumMonths || detectAccumMonths(analysis.vouchers);
+
+  // 전체에서 모델이 하나뿐이면, 임대료 줄 없는 전표(초과·카운터만 별도 청구)도 그 기기 것이다.
+  // 여러 대면 "?"(기기 미상) 버킷에 담아 최소한 화면에서 사라지지는 않게 한다.
+  const allModels = new Set<string>();
+  for (const voucher of analysis.vouchers) for (const item of voucher.items) if (/임대료/.test(item.label) && item.model) allModels.add(item.model);
+  const soleModel = allModels.size === 1 ? Array.from(allModels)[0] : "";
 
   const byModel = new Map<string, MachineUsage>();
-  for (const voucher of analysis.vouchers) {
-    const model = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model;
-    if (!model) continue;
-    const machine = byModel.get(model) || {
-      model, months: [], 임대료단가: 0, total: { 컬러: 0, 흑백: 0 }, 기본월: { 컬러: 0, 흑백: 0 },
-      초과단가: { 컬러: 0, 흑백: 0 }, 초과횟수: 0, 초과금액: 0, accumMonths,
-    };
-    byModel.set(model, machine);
-    const feeItem = voucher.items.find((item) => /임대료/.test(item.label) && item.단가 > 0);
-    if (feeItem) machine.임대료단가 = feeItem.단가;
-    const ym = voucher.date.slice(0, 7);
+  const getMachine = (model: string) => {
+    let machine = byModel.get(model);
+    if (!machine) {
+      machine = {
+        model, months: [], 임대료단가: 0, total: { 컬러: 0, 흑백: 0 }, 기본월: { 컬러: 0, 흑백: 0 },
+        초과단가: { 컬러: 0, 흑백: 0 }, 초과횟수: 0, 초과금액: 0, accumMonths,
+      };
+      byModel.set(model, machine);
+    }
+    return machine;
+  };
+  const rowOf = (machine: MachineUsage, ym: string) => {
     let row = machine.months.find((month) => month.ym === ym);
+    if (!row) { row = { ym, 컬러: 0, 흑백: 0, excesses: [] }; machine.months.push(row); }
+    return row;
+  };
+  for (const voucher of analysis.vouchers) {
+    const ym = voucher.date.slice(0, 7);
+    // 한 전표에 기기 두 대가 같이 청구되기도 한다 — 임대료 줄을 만날 때마다 "현재 기기"를 바꾼다
+    let current = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model || soleModel || "?";
     for (const item of voucher.items) {
+      if (/임대료/.test(item.label)) {
+        if (item.model) current = item.model;
+        if (item.단가 > 0) getMachine(current).임대료단가 = item.단가;
+        continue;
+      }
       if (item.counter && item.counter.사용 !== 0) {
-        if (!row) { row = { ym, 컬러: 0, 흑백: 0, excesses: [] }; machine.months.push(row); }
+        const machine = getMachine(current);
+        const row = rowOf(machine, ym);
         if (item.counter.kind === "흑백") { row.흑백 += item.counter.사용; machine.total.흑백 += item.counter.사용; }
         else { row.컬러 += item.counter.사용; machine.total.컬러 += item.counter.사용; }
       }
       if (item.excess) {
-        if (!row) { row = { ym, 컬러: 0, 흑백: 0, excesses: [] }; machine.months.push(row); }
-        row.excesses.push(item.excess);
+        const machine = getMachine(current);
+        rowOf(machine, ym).excesses.push(item.excess);
         machine.초과횟수 += 1;
         machine.초과금액 += item.excess.금액;
         const monthly = item.excess.기본월 || Math.round(item.excess.기본 / accumMonths);
