@@ -494,6 +494,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
+  // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
+  const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string } | null>(null);
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
   type NaverEventRow = { uid: string; date: string; time: string; title: string; location: string; description: string; calendar_id: string; completed: boolean };
@@ -1071,6 +1073,58 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     })();
   };
 
+  /**
+   * 중간보고 본문 생성 — 팀 관행 양식 그대로:
+   *   "12시 1차 중간보고 / (진행중인 업무는 * 표시) / --- / 금일 처리예정 / #이름 / •이름 업체 기종 내용 …"
+   * 규칙: 완료된 건은 자동으로 빠진다(완료 여부를 눈으로 대조하던 일이 이 기능의 이유).
+   *       오늘 연기 처리한 건은 '익일변경'에 → 날짜와 함께. 진행중 * 표시는 사람이 아는 것이라 손으로.
+   */
+  const buildMidReport = (round: 1 | 2, reportTeam: Team) => {
+    const teamTickets = tickets.filter((ticket) =>
+      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가");
+    const lineOf = (ticket: AsTicket) => {
+      const vendor = fieldTicketVendor(ticket.vendor).vendor || ticket.vendor;
+      const issue = (ticket.issue || "").split(/\n/)[0].replace(/\s+/g, " ").trim().slice(0, 34);
+      return ["•" + (ticket.assignee || "미배정"), vendor, ticket.model, issue].filter(Boolean).join(" ");
+    };
+    const todays = teamTickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
+    const order = [...teamAssignees[reportTeam].filter((name) => name !== "신정훈"), "신정훈"];
+    const groups: string[] = [];
+    for (const name of order) {
+      const mine = todays.filter((ticket) => ticket.assignee === name);
+      if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf), "");
+    }
+    const others = todays.filter((ticket) => !order.includes(ticket.assignee));
+    if (others.length) groups.push("#미배정·기타", ...others.map(lineOf), "");
+    // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
+    const deferred = teamTickets.filter((ticket) => {
+      if (ticket.status !== "익일" || ticket.date <= todayYmd) return false;
+      const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
+      return (ticket.note || "").includes(mark);
+    });
+    const done = teamTickets.filter((ticket) => ticket.date === todayYmd && ticket.status === "완료");
+    return [
+      `${round === 1 ? "12시 1차" : "14시 2차"} 중간보고`,
+      "(진행중인 업무는 * 표시)",
+      "",
+      "---",
+      "금일 처리예정",
+      ...(groups.length ? groups : ["없음", ""]),
+      "---",
+      "익일변경",
+      ...(deferred.length ? deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`) : [""]),
+      "---",
+      "특이사항",
+      "",
+      ...(done.length ? [`(완료 ${done.length}건: ${done.map((ticket) => fieldTicketVendor(ticket.vendor).vendor || ticket.vendor).join(", ")})`] : []),
+    ].join("\n");
+  };
+  const openMidReport = () => {
+    const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (team !== "ALL" && team !== "종일" ? team as Team : "C");
+    const round: 1 | 2 = new Date().getHours() < 13 ? 1 : 2;
+    setMidReport({ round, team: myTeam, text: buildMidReport(round, myTeam) });
+  };
+
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
   // 팀·유형·날짜만 거른 기준 행 — 직원 칩의 건수 배지와 목록이 같은 범위를 본다
   const baseRows = tickets.filter((ticket) => {
@@ -1500,8 +1554,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </button>
                   );
                 })}
-                {/* 대상 날짜 + 건수 — 필터 맨 아랫줄 오른쪽(사용자 요청: 아래로 내림) */}
-                <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
+                {/* 중간보고 — 12시·14시 카톡 보고 자동 생성 */}
+                <button type="button" onClick={openMidReport}
+                  className="ml-auto shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
+                <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
                   {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
                 </span>
               </div>
@@ -1893,6 +1949,38 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             <div className="mt-3 flex gap-2">
               <input type="date" value={dupDate} onChange={(event) => setDupDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               <button type="button" onClick={() => { if (dupDate) duplicateTicket(dupTicket, dupDate); }} className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2 text-sm font-black text-white">이 날짜로 복제</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {midReport && (
+        <div className="fixed inset-0 z-[150] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setMidReport(null)}>
+          <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
+              <div>
+                <div className="text-[15px] font-black text-white">중간보고 생성</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요</div>
+              </div>
+              <button type="button" onClick={() => setMidReport(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+              {([[1, "12시 1차"], [2, "14시 2차"]] as const).map(([round, label]) => (
+                <button key={round} type="button" onClick={() => setMidReport({ round, team: midReport.team, text: buildMidReport(round, midReport.team) })}
+                  className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.round === round ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{label}</button>
+              ))}
+              <span className="mx-1 h-4 w-px bg-slate-200" />
+              {teams.map((value) => (
+                <button key={value} type="button" onClick={() => setMidReport({ round: midReport.round, team: value, text: buildMidReport(midReport.round, value) })}
+                  className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{value}팀</button>
+              ))}
+            </div>
+            <textarea value={midReport.text} onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
+              className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
+            <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+              <button type="button" onClick={() => setMidReport({ ...midReport, text: buildMidReport(midReport.round, midReport.team) })}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">다시 생성</button>
+              <button type="button" onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify("중간보고를 복사했습니다 — 카톡방에 붙여넣으세요 ✓", "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
+                className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700">복사</button>
             </div>
           </div>
         </div>

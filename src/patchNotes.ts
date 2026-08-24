@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "837ade9eaf",
+    "date": "2026-08-25",
+    "note": "활용률은 기기별이 정답 — 합산 스탯 제거 + '기존동일' 기본료 상속"
+  },
+  {
     "hash": "1b9007068c",
     "date": "2026-08-25",
     "note": "흑백 활용률 '—' 마저 수리 — 훅 오타 흡수·폴백 사슬 심화 + 기본매수 배지"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "72e969a04e",
     "date": "2026-08-04",
     "note": "빌드 수정 — 미사용 scheduleFilters·ScheduleFilter 제거 (직전 커밋 tsc 실패 보정)"
-  },
-  {
-    "hash": "2df05f952e",
-    "date": "2026-08-04",
-    "note": "캘린더 유형을 처리 여부 기준으로 — AS[미처리]/AS[완료] + 네이버 완료 체크·복귀"
   }
 ];
