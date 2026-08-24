@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1b9007068c",
+    "date": "2026-08-25",
+    "note": "흑백 활용률 '—' 마저 수리 — 훅 오타 흡수·폴백 사슬 심화 + 기본매수 배지"
+  },
+  {
     "hash": "25aa048259",
     "date": "2026-08-25",
     "note": "기기별 활용률 폴백 사슬 + 시뮬레이터 반올림 오차 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2df05f952e",
     "date": "2026-08-04",
     "note": "캘린더 유형을 처리 여부 기준으로 — AS[미처리]/AS[완료] + 네이버 완료 체크·복귀"
-  },
-  {
-    "hash": "0a649c9aa9",
-    "date": "2026-08-04",
-    "note": "완료·연기 사유 필수화 + 카톡 형식 '업체명 배정자 ⏎ 사유(연기면 +날짜)' — 봇 전송이라 처리자 표기"
   }
 ];

@@ -540,7 +540,7 @@ export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): Le
   if (!fromYmd) return full;
   const vouchers = full.vouchers.filter((voucher) => voucher.date >= fromYmd);
   const months = buildMonths(vouchers);
-  return finalize({
+  const result = finalize({
     ...full,
     기간: { from: fromYmd, to: full.기간.to },
     vouchers,
@@ -551,6 +551,19 @@ export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): Le
       잔액: full.누계.잔액,
     },
   });
+  // 기본매수는 계약 조건이라 기간 창과 무관하다 — 창 안에 초과가 없어 기본을 잃으면
+  // 전체 데이터의 기본을 이어받는다 (합산 활용률 126% 왜곡의 원인)
+  result.usage = result.usage.map((stat) => {
+    const fullStat = full.usage.find((entry) => entry.kind === stat.kind);
+    if (!fullStat || stat.기본매수 >= fullStat.기본매수) return stat;
+    return {
+      ...stat,
+      기본매수: fullStat.기본매수,
+      기본매수출처: fullStat.기본매수출처,
+      여유율: fullStat.기본매수 ? Math.round(((fullStat.기본매수 - stat.월평균) / fullStat.기본매수) * 100) : 0,
+    };
+  });
+  return result;
 }
 
 // ─── 기기별 사용량 — "합산은 이상하다"(사용자 지적): 초과는 기기별 계약인데 사용량만 합치면 어긋난다 ───
@@ -559,6 +572,7 @@ export type MachineMonth = { ym: string; 컬러: number; 흑백: number; excesse
 export type MachineUsage = {
   model: string;
   months: MachineMonth[];          // 카운터가 찍힌 달만
+  임대료단가: number;              // 임대료 줄의 단가 — "기존동일" 계약을 기본료 일치로 찾는 열쇠
   total: { 컬러: number; 흑백: number };
   기본월: { 컬러: number; 흑백: number };   // 월 기준 기본매수 (누적 청구면 환산)
   초과단가: { 컬러: number; 흑백: number }; // 초과금액 ÷ 초과매수 실효 단가
@@ -578,10 +592,12 @@ export function machineUsage(analysis: LedgerAnalysis): MachineUsage[] {
     const model = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model;
     if (!model) continue;
     const machine = byModel.get(model) || {
-      model, months: [], total: { 컬러: 0, 흑백: 0 }, 기본월: { 컬러: 0, 흑백: 0 },
+      model, months: [], 임대료단가: 0, total: { 컬러: 0, 흑백: 0 }, 기본월: { 컬러: 0, 흑백: 0 },
       초과단가: { 컬러: 0, 흑백: 0 }, 초과횟수: 0, 초과금액: 0, accumMonths,
     };
     byModel.set(model, machine);
+    const feeItem = voucher.items.find((item) => /임대료/.test(item.label) && item.단가 > 0);
+    if (feeItem) machine.임대료단가 = feeItem.단가;
     const ym = voucher.date.slice(0, 7);
     let row = machine.months.find((month) => month.ym === ym);
     for (const item of voucher.items) {

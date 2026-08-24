@@ -322,3 +322,24 @@ describe("적요 오타 흡수 — '훅1000/9'(흑의 오타)", () => {
     expect(x3220?.흑백단가).toBe(9);
   });
 });
+
+describe("기간 창의 기본매수 승계 — 창 안에 초과가 없어도 활용률이 왜곡되지 않는다", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const full = analyzeLedger(quarterly);
+  it("창을 씌워도 기본매수는 전체 데이터 값을 이어받는다 (합산 126% 사고)", () => {
+    const win = windowAnalysis(full, "2026-01-01"); // 창 안(2026-06)엔 X3220 초과만
+    const color = win.usage.find((stat) => stat.kind === "컬러")!;
+    const fullColor = full.usage.find((stat) => stat.kind === "컬러")!;
+    expect(color.기본매수).toBe(fullColor.기본매수); // X 400 + AC 400 = 800
+    expect(fullColor.기본매수).toBe(800);
+  });
+});
+
+describe("'기존동일' 상속 열쇠 — 임대료 단가", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  it("기기마다 임대료 단가가 실린다 (AC2060=59,000 → 옛 59,000원 계약의 흑1000/9를 상속)", () => {
+    const machines = machineUsage(analyzeLedger(quarterly));
+    expect(machines.find((machine) => machine.model === "AC2060")?.임대료단가).toBe(59_000);
+    expect(machines.find((machine) => machine.model === "X3220")?.임대료단가).toBe(69_000);
+  });
+});

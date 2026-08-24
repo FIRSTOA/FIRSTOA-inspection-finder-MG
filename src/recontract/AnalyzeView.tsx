@@ -269,9 +269,13 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
   const machinesFull = useMemo(() => machineUsage(full), [full]);
   const machines = useMemo(() => machineUsage(analysis).map((machine) => {
     const fullMachine = machinesFull.find((m) => m.model === machine.model);
-    // 최신 계약이 "기존동일"이거나 오타로 숫자가 비면, 그 기기의 옛 계약까지 최근순으로 거슬러 찾는다
+    // 최신 계약이 "기존동일"이거나 오타로 숫자가 비면, 그 기기의 옛 계약까지 최근순으로 거슬러 찾고,
+    // 그래도 없으면 임대료 단가가 같은 계약에서 이어받는다 — "AC2060 기존동일"의 기존은
+    // 월 59,000원이 같은 옛 계약(컬400/90 흑1000/9)이다 (실데이터 확인)
     const notes2 = contractsFor(machine.model);
-    const fromNotes = (pick: (n: (typeof notes2)[number]) => number) => notes2.map(pick).find((value) => value > 0) || 0;
+    const feeNotes = machine.임대료단가 > 0 ? analysis.contracts.filter((n) => n.월기본료 === machine.임대료단가) : [];
+    const fromNotes = (pick: (n: (typeof notes2)[number]) => number) =>
+      notes2.map(pick).find((value) => value > 0) || feeNotes.map(pick).find((value) => value > 0) || 0;
     const fill = (kind: "컬러" | "흑백") =>
       machine.기본월[kind] || fullMachine?.기본월[kind] || fromNotes((n) => (kind === "컬러" ? n.컬러기본 : n.흑백기본));
     return {
@@ -371,17 +375,38 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
       {tab === "요약" && (
         <>
           <Panel title="한눈 요약" hint={`대장 ${analysis.기간.from} ~ ${analysis.기간.to} · ${analysis.months.length}개월${isAccum ? " · 3개월 누적 청구" : ""}`}>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
               <Stat label="누적 매출" value={man(analysis.누계.판매)} unit="만원" sub={`수금 ${man(analysis.누계.수금)}만원`} color="blue" />
-              <Stat label={machines.length > 1 ? "컬러 활용률 (기기합산)" : "컬러 활용률"} value={`${usage.컬러활용률}%`} sub={`월 ${money(usage.color?.월평균 || 0)} / 기본 ${money(usage.color?.기본매수 || 0)}매`}
-                color={usage.컬러활용률 >= 100 ? "red" : usage.컬러활용률 >= 80 ? "amber" : "slate"} />
-              <Stat label="흑백 활용률" value={`${usage.흑백활용률}%`} sub={`월 ${money(usage.bw?.월평균 || 0)} / 기본 ${money(usage.bw?.기본매수 || 0)}매`}
-                color={usage.흑백활용률 >= 100 ? "red" : "slate"} />
               <Stat label="초과료 누적" value={man(analysis.billing.초과청구합)} unit="만원" sub={`${overCount}회 발생`} color={overCount >= 3 ? "amber" : "slate"} />
               <Stat label="미수 잔액" value={analysis.payment.실질잔액 === 0 ? "없음" : man(analysis.payment.실질잔액)} unit={analysis.payment.실질잔액 ? "만원" : ""}
                 sub={`CMS 실패 ${analysis.payment.cms실패}회 · ${analysis.payment.판정}`}
                 color={analysis.payment.실질잔액 > 0 || analysis.payment.cms실패 > 0 ? "amber" : "green"} />
+              <Stat label="월 기본료" value={money(analysis.billing.월기본료)} unit="원" sub={`최근 청구 ${money(analysis.billing.최근청구)}원`} />
             </div>
+            {/* 활용률은 기기별로 — 기본매수가 기기마다 달라 합산하면 왜곡된다(사용자 지적: 126% 사고) */}
+            {machines.length > 0 && (
+              <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3.5">
+                <div className="text-[11px] font-semibold text-slate-400">기기별 활용률</div>
+                {machines.map((machine) => {
+                  const span = Math.max(1, analysis.months.length);
+                  const avg = (total: number) => Math.round(total / span);
+                  const rate = (kind: "컬러" | "흑백") => (machine.기본월[kind] > 0 ? Math.round((avg(machine.total[kind]) / machine.기본월[kind]) * 100) : null);
+                  const colorRate = rate("컬러");
+                  const bwRate = rate("흑백");
+                  const cls = (value: number | null) => (value === null ? "text-slate-400" : value >= 100 ? "text-red-600" : value >= 80 ? "text-amber-600" : "text-slate-900");
+                  return (
+                    <div key={machine.model} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px]">
+                      <span className="w-24 shrink-0 truncate font-bold text-slate-700">{machine.model}</span>
+                      <span className={`font-bold tabular-nums ${cls(colorRate)}`}>컬러 {colorRate === null ? "기본 미확인" : `${colorRate}%`}</span>
+                      <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.컬러))}{machine.기본월.컬러 ? ` / 기본 ${money(machine.기본월.컬러)}매` : "매"}</span>
+                      <span className={`font-bold tabular-nums ${cls(bwRate)}`}>흑백 {bwRate === null ? "기본 미확인" : `${bwRate}%`}</span>
+                      <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.흑백))}{machine.기본월.흑백 ? ` / 기본 ${money(machine.기본월.흑백)}매` : "매"}</span>
+                      {machine.초과횟수 > 0 && <span className="text-[11px] font-semibold text-red-600">초과 {machine.초과횟수}회 · {money(machine.초과금액)}원</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Panel>
 
           {/* 추천 플랜 — A안 하나만 크게, 대안은 한 줄씩 */}
