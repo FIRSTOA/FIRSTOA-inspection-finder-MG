@@ -80,6 +80,7 @@ const FALLBACK_TEAM_ASSIGNEES: Record<Team, string[]> = {
 };
 
 const storageKey = "cs_as_tickets_v4";
+const REPORT_SEP = "-------------------"; // 중간보고 구분선 — 카톡에서 섹션이 끊어 읽히게
 // 날짜는 호출 시점마다 계산한다 — 모듈 로드 시 고정하면 자정 이후 금일/익일 분류가 전부 어긋난다.
 const getTodayYmd = () => formatDate(new Date());
 const getTomorrowYmd = () => nextBusinessDay(getTodayYmd());
@@ -1147,20 +1148,35 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         groups.push(`#${name}`, ...mine.map(lineOf));
       }
     }
-    // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
-    const deferred = teamTickets.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= todayYmd || !order.includes(assigneeOf(ticket))) return false;
+    // 익일일정 — 다음 영업일에 잡힌 팀 일정 전부. 누가 갈지 아직 모르니 이름 없이 적는다.
+    // 오늘 익일로 넘긴 건도 날짜가 내일이면 자연히 여기 들어오고, 이름 없는 납품은 물류 몫이라 금일과 같은 기준으로 뺀다.
+    const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
+    const tomorrows = teamTickets.filter((ticket) =>
+      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
+    // 모레 이후로 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것만, 날짜를 달아 같이 보여준다
+    const deferredLater = teamTickets.filter((ticket) => {
+      if (ticket.status !== "익일" || ticket.date <= tomorrowYmd) return false;
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
     });
+    const tomorrowLines = [
+      ...tomorrows.map(lineOf),
+      ...deferredLater.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
+    ];
     return [
       `${round === 1 ? "12시 1차" : "14시 2차"} 중간보고`,
       "(진행중인 업무는 * 표시)",
       "",
+      REPORT_SEP,
       "금일 처리예정",
-      ...(groups.length ? groups : ["없음"]),
-      ...(deferred.length ? ["", "익일변경", ...deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`)] : []),
       "",
+      ...(groups.length ? groups : ["없음"]),
+      "",
+      REPORT_SEP,
+      "익일일정",
+      ...(tomorrowLines.length ? ["", ...tomorrowLines] : []),
+      "",
+      REPORT_SEP,
       "특이사항",   // 자동으로 못 채우는 칸 — 보내기 전에 손으로 적거나 비워 둔다
     ].join("\n");
   };
@@ -1176,16 +1192,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
     const eligible = tickets.filter((ticket) =>
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
-      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검" && order.includes(assigneeOf(ticket)));
+      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
     const pending = order.flatMap((name) =>
       eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료" && assigneeOf(ticket) === name)
         .map((ticket) => ({ name, ticket })));
-    const deferred = eligible.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= todayYmd) return false;
+    const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
+    const tomorrows = eligible.filter((ticket) =>
+      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
+    const deferredLater = eligible.filter((ticket) => {
+      if (ticket.status !== "익일" || ticket.date <= tomorrowYmd) return false;
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
-    }).map((ticket) => ({ name: assigneeOf(ticket), ticket }));
-    const payload = [...pending, ...deferred].map(({ ticket }) => ({
+    });
+    const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
       vendor: ticket.vendor,
       model: ticket.model,
       issue: (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim(),
@@ -1204,15 +1223,24 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             groups.push(`#${name}`, ...mine.map(() => `•${res.lines[index++]}`));
           }
         }
-        const deferLines = deferred.map(({ ticket }) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`);
+        const tomorrowLines = [
+          ...tomorrows.map(() => `•${res.lines[index++]}`),
+          ...deferredLater.map((ticket) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
+        ];
         const text = [
           `${round === 1 ? "12시 1차" : "14시 2차"} 중간보고`,
           "(진행중인 업무는 * 표시)",
           "",
+          REPORT_SEP,
           "금일 처리예정",
-          ...(groups.length ? groups : ["없음"]),
-          ...(deferLines.length ? ["", "익일변경", ...deferLines] : []),
           "",
+          ...(groups.length ? groups : ["없음"]),
+          "",
+          REPORT_SEP,
+          "익일일정",
+          ...(tomorrowLines.length ? ["", ...tomorrowLines] : []),
+          "",
+          REPORT_SEP,
           "특이사항",
         ].join("\n");
         setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));

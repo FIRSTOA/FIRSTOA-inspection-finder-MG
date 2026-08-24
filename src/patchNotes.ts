@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b5696ad660",
+    "date": "2026-08-25",
+    "note": "중간보고 담당자 판정 — 네이버 수입이 이름을 calendarTitle에만 남겨 A팀 등이 비던 것 수리"
+  },
+  {
     "hash": "b621bae884",
     "date": "2026-08-25",
     "note": "중간보고·배정 명단을 관리탭 인원(cs_members) 실시간으로 — 타팀 누락 수리 + 하단 특이사항 칸"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "3731e39012",
     "date": "2026-08-05",
     "note": "필드탭 지역 미기재 전송 차단 — 테스트방 폴백 제거"
-  },
-  {
-    "hash": "d55aac4d54",
-    "date": "2026-08-05",
-    "note": "지역 필수 전송 가드 + 완료·연기 처리양식 구조화(3채널 동기) + 제목 입력 굵기 안정화"
   }
 ];
