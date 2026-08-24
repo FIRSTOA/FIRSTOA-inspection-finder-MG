@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4da19b6d0b",
+    "date": "2026-08-25",
+    "note": "중간보고 진단 줄 + 겸직(A·B) 소속을 양쪽 팀 명단에 반영"
+  },
+  {
     "hash": "476e86f35d",
     "date": "2026-08-25",
     "note": "중간보고 — 섹션 구분선 + 익일일정(다음 영업일 전부, 이름 없이)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "9a5a70e5ee",
     "date": "2026-08-05",
     "note": "익일 변경 시 네이버 시간(팀 표기) 불변 + 지역 미기재 감지 정확화"
-  },
-  {
-    "hash": "c3bfa54c56",
-    "date": "2026-08-05",
-    "note": "해피콜·홍보물 문자를 솔라피 직접 발송으로 — HMAC 인증, 즉시·예약 발송 공용, 이메일은 기존 웹훅 유지"
   }
 ];
