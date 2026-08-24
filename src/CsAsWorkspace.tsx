@@ -514,6 +514,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   }, [memberBook]);
   // 보고 순서: 팀장 최상단 → 명단 순서(부파트장이 첫 번째) 그대로
   const reportOrder = (reportTeam: Team) => [...csLeaders, ...teamAssignees[reportTeam].filter((n) => !csLeaders.includes(n))];
+  // 담당자 판정 — 배정 컬럼이 원본. 네이버 수기 일정은 제목 머리에 이름을 적는 관행인데,
+  // 수입할 때 이름을 vendor에서 떼고 calendarTitle에만 남기므로("2차 김정민 …"처럼 접두어 뒤일 수도) 둘 다 본다.
+  const reportAssignee = (ticket: AsTicket, order: string[]) =>
+    ticket.assignee
+    || order.find((name) => new RegExp(`^\s*${name}\s*[-–—:\s]`).test(ticket.vendor))
+    || order.find((name) => new RegExp(`(?:^|[\s/·])${name}(?=[\s\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
+    || "";
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
   type NaverEventRow = { uid: string; date: string; time: string; title: string; location: string; description: string; calendar_id: string; completed: boolean };
@@ -1105,9 +1112,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
     // 순서: 팀장 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
     const order = reportOrder(reportTeam);
-    // 네이버 수기 일정은 배정 컬럼이 비고 제목이 "이름 - 내용"이다 — 제목 접두 이름도 그 사람 것으로 친다
-    const assigneeOf = (ticket: AsTicket) =>
-      ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
+    const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
     const cut = (value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
     // 기종 초단축: 괄호 별명("헤라클래스")이 있으면 그것, 없으면 브랜드 접두를 뗀 짧은 표기
     const shortModel = (model: string) => {
@@ -1168,8 +1173,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true });
     // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
     const order = reportOrder(reportTeam);
-    const assigneeOf = (ticket: AsTicket) =>
-      ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
+    const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
     const eligible = tickets.filter((ticket) =>
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
       && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검" && order.includes(assigneeOf(ticket)));

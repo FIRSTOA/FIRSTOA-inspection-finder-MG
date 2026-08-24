@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b621bae884",
+    "date": "2026-08-25",
+    "note": "중간보고·배정 명단을 관리탭 인원(cs_members) 실시간으로 — 타팀 누락 수리 + 하단 특이사항 칸"
+  },
+  {
     "hash": "7dc7a91e5f",
     "date": "2026-08-25",
     "note": "중간보고 — 이름(#그룹) 사이 빈 줄로 사람별 구분"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d55aac4d54",
     "date": "2026-08-05",
     "note": "지역 필수 전송 가드 + 완료·연기 처리양식 구조화(3채널 동기) + 제목 입력 굵기 안정화"
-  },
-  {
-    "hash": "d916fea6b9",
-    "date": "2026-08-05",
-    "note": "익일 모달: 사유 칸을 맨 위로 + '사유 입력 시 날짜 버튼 활성화' 안내 — 잠금 이유가 보이게"
   }
 ];
