@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "58174438d1",
+    "date": "2026-08-25",
+    "note": "재계약 통계 수술 — 월기본료 기기합산, 누적감지 창 승계+간격 폴백, 다기기 전표 귀속, 보증금 오독, 실질잔액 완납 반영"
+  },
+  {
     "hash": "f5985813e9",
     "date": "2026-08-25",
     "note": "중간보고 버그 일괄 수리 — AI 개수검증(40건 캡), 이름 정규식 이스케이프, 연기 판정 완화(물류·재이동·주말), 명단 시드 일원화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b8bea5d206",
     "date": "2026-08-05",
     "note": "숨김→방문일지 연동 보강 — 업체+작성자+날짜 기준 취소 추가 (중복 전송분의 원문 불일치 누락 해결)"
-  },
-  {
-    "hash": "d1d40faf6a",
-    "date": "2026-08-05",
-    "note": "인덱스 재생성을 조각 체인으로 전환 — 마스터 대형화로 인한 서비스 타임아웃 해결"
   }
 ];

@@ -26,13 +26,21 @@ import type { Judgement } from "./judge";
 import { calcProposals, type ExtraSignals } from "./proposals";
 import { fetchBriefing, fetchRenewalScope, type RcBriefing, type RcTarget, type RenewalScope } from "./api";
 
-const STORE_KEY = "recontract_analyze_v1";   // { [vendor]: { raw, at } }
+const STORE_KEY = "recontract_analyze_v1";   // { [vendor]: { raw, at, target? } }
 
-type Stored = Record<string, { raw: string; at: string }>;
-type Analyzed = { vendor: string; at: string; raw: string; analysis: LedgerAnalysis; verdict: Judgement };
+/** 오늘(로컬, KST) — toISOString은 UTC라 오전 9시 전엔 어제 날짜가 나온다 */
+function localYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type Stored = Record<string, { raw: string; at: string; target?: string }>;
+type Analyzed = { vendor: string; at: string; raw: string; target?: string; analysis: LedgerAnalysis; verdict: Judgement };
 
 // 이카운트 매출·수납 데이터라 기기에 남기지 않는다 — 세션 저장(창을 닫으면 소멸). 사용자 확정.
 function loadStore(): Stored {
+  // 세션 저장 전의 옛 빌드가 남긴 localStorage 잔재(이카운트 매출 데이터)를 지운다 — "기기에 안 남긴다" 원칙
+  try { localStorage.removeItem(STORE_KEY); } catch { /* 무시 */ }
   try { return JSON.parse(sessionStorage.getItem(STORE_KEY) || "{}"); } catch { return {}; }
 }
 function saveStore(store: Stored) {
@@ -86,15 +94,15 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
  * 기본매수 조정 시뮬레이터 — "기본을 N매로 올리면 초과료가 얼마 줄었을까"를 과거 사용량으로 계산.
  * 재계약 구조조정 제안(기본매수 상향 ↔ 기본료 조정)의 숫자 근거가 된다.
  */
-function BaseSimulator({ machine }: { machine: MachineUsage }) {
-  const [newBase, setNewBase] = useState(machine.기본월.컬러 || 0);
-  const result = useMemo(() => simulateBase(machine, "컬러", newBase), [machine, newBase]);
+function BaseSimulator({ machine, kind }: { machine: MachineUsage; kind: "컬러" | "흑백" }) {
+  const [newBase, setNewBase] = useState(machine.기본월[kind] || 0);
+  const result = useMemo(() => simulateBase(machine, kind, newBase), [machine, kind, newBase]);
   return (
     <div className="border-t border-slate-100 bg-blue-50/40 px-5 py-3.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="text-[12px] font-bold text-slate-700">💡 기본매수 조정 시뮬레이션</span>
         <label className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600">
-          컬러 월 기본을
+          {kind} 월 기본을
           <input type="number" value={newBase} min={0} step={100}
             onChange={(event) => setNewBase(Math.max(0, Number(event.target.value) || 0))}
             className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-bold tabular-nums outline-none focus:border-blue-500" />
@@ -106,7 +114,7 @@ function BaseSimulator({ machine }: { machine: MachineUsage }) {
         </span>
       </div>
       <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
-        이 기기의 실제 사용량({machine.months.length}회 검침)에 새 기본을 적용해 재계산 — 초과 단가 {money(machine.초과단가.컬러)}원/매 기준.
+        이 기기의 실제 사용량({machine.months.length}회 검침)에 새 기본을 적용해 재계산 — 초과 단가 {money(machine.초과단가[kind])}원/매 기준.
         "기본매수를 올리는 대신 기본료를 얼마 조정할지" 협상의 숫자 근거로 쓰세요.
       </p>
     </div>
@@ -117,7 +125,7 @@ function BaseSimulator({ machine }: { machine: MachineUsage }) {
 
 type DetailTab = "요약" | "사용량" | "대장" | "계약·적요" | "고객 이력";
 
-function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => void; onRemove: () => void }) {
+function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; workinTarget?: RcTarget | null; onBack: () => void; onRemove: () => void }) {
   const [tab, setTab] = useState<DetailTab>("요약");
 
   // ── 기간 창 — 3년치를 붙여넣어도 최근 1년만 볼 수 있다. 모든 탭이 이 결과를 읽어 자동 동기화 ──
@@ -129,9 +137,10 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
     if (!last || !first) return [] as Array<{ label: string; from: string | null }>;
     const spanMonths = Math.round((Date.parse(last) - Date.parse(first)) / (30.44 * 86_400_000));
     const fromOf = (monthsBack: number) => {
-      const d = new Date(`${last}T00:00:00`);
+      const d = new Date(`${last}T12:00:00`);
       d.setMonth(d.getMonth() - monthsBack + 1, 1);
-      return d.toISOString().slice(0, 10);
+      // toISOString(UTC)으로 자르면 KST에서 하루 밀려 전월 말일 전표가 창에 낀다
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
     };
     const options: Array<{ label: string; from: string | null }> = [{ label: `전체 ${full.months.length}개월`, from: null }];
     for (const [label, monthsBack] of [["2년", 24], ["1년", 12], ["6개월", 6]] as const) {
@@ -243,6 +252,16 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
       "■ 근거",
       `- 누적 매출 ${money(analysis.누계.판매)}원 · 수금 ${money(analysis.누계.수금)}원 · 잔액 ${money(analysis.누계.잔액)}원`,
       ...usageLines,
+      ...machines.map((machine) => {
+        const span = Math.max(1, machine.months.length * machine.accumMonths);
+        const rateOf = (kind: "컬러" | "흑백") =>
+          machine.기본월[kind] > 0 ? `${Math.round((machine.total[kind] / span / machine.기본월[kind]) * 100)}%` : "기본 미확인";
+        const contract = machineContract(machine.model);
+        return `- ${machine.model === "?" ? "기기 미상" : machine.model}: 컬러 ${rateOf("컬러")} · 흑백 ${rateOf("흑백")}`
+          + (machine.기본월.컬러 || machine.기본월.흑백 ? ` (기본 컬${money(machine.기본월.컬러)}·흑${money(machine.기본월.흑백)}매)` : "")
+          + (contract?.to ? ` · 계약 ~${contract.to}` : "");
+      }),
+      ...(current ? [`- 현재 계약: ${current.label || "계약"} ${current.from || "?"}~${current.to || "?"}${current.월기본료 ? ` · 월 ${money(current.월기본료)}원` : ""}${current.무상.length ? ` · 무상 ${current.무상.join(",")}` : ""}`] : []),
       `- 초과료 ${overCount}회 ${money(analysis.billing.초과청구합)}원 · CMS 실패 ${analysis.payment.cms실패}회 · 결제 ${analysis.payment.판정}`,
       ...(verdict.위험신호.length ? ["", "■ 주의", ...verdict.위험신호.map((flag) => `- ${flag}`)] : []),
     ];
@@ -287,7 +306,7 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
       },
     };
   }), [analysis, machinesFull]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const todayYmd = new Date().toISOString().slice(0, 10);
+  const todayYmd = localYmd();
 
   const historyCount = (briefing?.bulman.length || 0) + (briefing?.misu.length || 0) + asHistory.length + (briefing?.history.length || 0);
   const TABS: Array<{ key: DetailTab; badge?: number }> = [
@@ -365,9 +384,19 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
         )}
       </section>
 
+      {workinTarget && workinTarget.조건.기본요금 > 0 && analysis.billing.월기본료 > 0
+        && Math.abs(workinTarget.조건.기본요금 - analysis.billing.월기본료) / Math.max(workinTarget.조건.기본요금, analysis.billing.월기본료) > 0.1 && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800">
+          ⚠ 워킹맵 메모의 기본료는 {money(workinTarget.조건.기본요금)}원인데 대장에서 읽은 월기본료는 {money(analysis.billing.월기본료)}원입니다 —
+          어느 쪽이 현재 조건인지 방문 전에 확인하세요 (기기 추가·철수·조건 변경 가능성).
+        </div>
+      )}
+
       {countersMissing && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800">
-          ⚠ 카운터(누계·사용) 줄을 인식하지 못해 사용량이 0으로 보입니다 — [대장] 탭에서 카운터 줄이 들어왔는지 확인해 주세요. 형식이 다르면 이민구에게 원문을 전달해 주세요.
+          {windowFrom
+            ? "⚠ 이 기간엔 카운터(검침) 전표가 없습니다 — 기간을 넓히거나 [전체]로 보세요."
+            : "⚠ 카운터(누계·사용) 줄을 인식하지 못해 사용량이 0으로 보입니다 — [대장] 탭에서 카운터 줄이 들어왔는지 확인해 주세요. 형식이 다르면 이민구에게 원문을 전달해 주세요."}
         </div>
       )}
 
@@ -388,7 +417,8 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
               <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3.5">
                 <div className="text-[11px] font-semibold text-slate-400">기기별 활용률</div>
                 {machines.map((machine) => {
-                  const span = Math.max(1, analysis.months.length);
+                  // 분모는 그 기기의 검침 월수 × 누적 개월 — 중도 도입·철수 기기를 전체 개월로 나누면 활용률이 반토막난다
+                  const span = Math.max(1, machine.months.length * machine.accumMonths);
                   const avg = (total: number) => Math.round(total / span);
                   const rate = (kind: "컬러" | "흑백") => (machine.기본월[kind] > 0 ? Math.round((avg(machine.total[kind]) / machine.기본월[kind]) * 100) : null);
                   const colorRate = rate("컬러");
@@ -478,13 +508,13 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
             const contract = machineContract(machine.model);
             const ended = !!contract?.to && contract.to < todayYmd;
             const dday = contract?.to ? Math.round((Date.parse(contract.to) - Date.parse(todayYmd)) / 86_400_000) : null;
-            const monthsSpan = Math.max(1, analysis.months.length);
+            const monthsSpan = Math.max(1, machine.months.length * machine.accumMonths);
             const avg = (total: number) => Math.round(total / monthsSpan);
             const rate = (kind: "컬러" | "흑백") => (machine.기본월[kind] > 0 ? Math.round((avg(machine.total[kind]) / machine.기본월[kind]) * 100) : 0);
             return (
               <section key={machine.model} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
-                  <h2 className="text-[14px] font-bold text-slate-900">{machine.model}</h2>
+                  <h2 className="text-[14px] font-bold text-slate-900">{machine.model === "?" ? "기기 미상 (임대료 줄 없는 청구)" : machine.model}</h2>
                   {ended
                     ? <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-600">계약종료 {contract?.to}</span>
                     : dday !== null && dday <= 90
@@ -510,6 +540,11 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
                   <Stat label="컬러 총 사용" value={machine.total.컬러} unit="매" sub={`${monthsSpan}개월`} color="blue" />
                   <Stat label="흑백 총 사용" value={machine.total.흑백} unit="매" sub={`${monthsSpan}개월`} />
                 </div>
+                {machine.기본월.컬러 === 0 && machine.기본월.흑백 === 0 && (
+                  <div className="border-t border-slate-100 bg-amber-50/60 px-5 py-2 text-[12px] font-semibold text-amber-700">
+                    기본매수 미확인 — 대장·적요 어디에도 이 기기의 기본 조건이 없습니다. 임대리스트나 계약서에서 확인해 주세요.
+                  </div>
+                )}
                 <div className="overflow-x-auto border-t border-slate-100 px-5 py-3">
                   <table className="w-full min-w-[420px] text-sm">
                     <thead>
@@ -540,9 +575,9 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
                     </tbody>
                   </table>
                 </div>
-                {machine.초과횟수 > 0 && machine.초과단가.컬러 > 0 && (
-                  <BaseSimulator machine={machine} />
-                )}
+                {(["컬러", "흑백"] as const)
+                  .filter((kind) => machine.months.some((month) => month.excesses.some((excess) => excess.kind === kind && excess.금액 > 0)))
+                  .map((kind) => <BaseSimulator key={kind} machine={machine} kind={kind} />)}
               </section>
             );
           })}
@@ -565,7 +600,7 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
                   <th className="py-2 pr-3 font-semibold">적요</th>
                   <th className="w-24 py-2 pr-3 text-right font-semibold">판매</th>
                   <th className="w-24 py-2 pr-3 text-right font-semibold">수금</th>
-                  <th className="w-24 py-2 text-right font-semibold">잔액</th>
+                  <th className="w-24 py-2 text-right font-semibold">{windowFrom ? "누계(기간 내)" : "잔액"}</th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -729,17 +764,27 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
 
   const analyzed = useMemo<Analyzed[]>(() => {
     return Object.entries(store)
-      .map(([vendor, { raw, at }]) => {
+      .map(([vendor, entry]) => {
+        // 손상된 저장 항목(수동 조작·부분 기록)이 구조분해에서 던지면 목록 전체가 백지가 된다 — 항목 단위로 거른다
+        if (!entry || typeof entry !== "object" || typeof entry.raw !== "string") return null;
         try {
-          const analysis = analyzeLedger(raw);
+          const analysis = analyzeLedger(entry.raw);
           if (!analysis.months.length && !analysis.contracts.length) return null;
-          return { vendor, at, raw, analysis, verdict: judge(analysis) };
+          const item: Analyzed = { vendor, at: entry.at || "", raw: entry.raw, target: entry.target, analysis, verdict: judge(analysis) };
+          return item;
         } catch { return null; }
       })
       .filter((entry): entry is Analyzed => !!entry)
-      .sort((a, b) => b.at.localeCompare(a.at));
+      .sort((a, b) => (b.at || "").localeCompare(a.at || ""));
   }, [store]);
-  const analyzedKeys = useMemo(() => new Map(analyzed.map((entry) => [vendorMatchKey(entry.vendor), entry.vendor])), [analyzed]);
+  const analyzedKeys = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of analyzed) {
+      map.set(vendorMatchKey(entry.vendor), entry.vendor);
+      if (entry.target) map.set(vendorMatchKey(entry.target), entry.vendor);
+    }
+    return map;
+  }, [analyzed]);
 
   const addPaste = (text: string) => {
     const body = text.trim();
@@ -751,7 +796,8 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
         return;
       }
       const vendor = analysis.vendor || `이름미상-${Date.now()}`;
-      const next = { ...store, [vendor]: { raw: body, at: new Date().toISOString() } };
+      // 워킨맵 목록에서 고른 업체명을 함께 저장 — 이카운트 상호가 달라도 그 대상에 "분석됨"이 붙는다
+      const next = { ...store, [vendor]: { raw: body, at: new Date().toISOString(), ...(pendingVendor ? { target: pendingVendor } : {}) } };
       setStore(next); saveStore(next);
       setPasteText(""); setPasteOpen(false); setPendingVendor(""); setPicked(vendor);
       notify(`${vendor} 분석 완료 ✓`, "success");
@@ -773,9 +819,13 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
   };
 
   const detail = analyzed.find((entry) => entry.vendor === picked);
-  if (detail) return <DetailView item={detail} onBack={() => setPicked("")} onRemove={() => removeVendor(detail.vendor)} />;
+  const detailTarget = detail
+    ? scope?.targets.find((entry) => entry.key === vendorMatchKey(detail.target || detail.vendor) || entry.key === vendorMatchKey(detail.vendor)) || null
+    : null;
+  if (detail) return <DetailView item={detail} workinTarget={detailTarget} onBack={() => setPicked("")} onRemove={() => removeVendor(detail.vendor)} />;
 
-  const ddayOf = (ymd: string) => (ymd ? Math.round((Date.parse(`${ymd}T00:00:00+09:00`) - Date.now()) / 86_400_000) : 9999);
+  // 날짜끼리만 뺀다 — Date.now()를 섞으면 종료 당일 오후에 "1일 지남"으로 보인다
+  const ddayOf = (ymd: string) => (ymd ? Math.round((Date.parse(ymd) - Date.parse(localYmd())) / 86_400_000) : 9999);
 
   return (
     <div className="space-y-4">

@@ -71,15 +71,18 @@ export function judge(analysis: LedgerAnalysis, today = new Date()): Judgement {
   const 거래연차 = year ? today.getFullYear() - year : 0;
   const 거래관계: Judgement["거래관계"] = !year ? "판단 불가" : 거래연차 >= 7 ? "장기" : 거래연차 >= 3 ? "일반" : "신규";
 
+  // 분기 누적 청구는 초과 1회가 3개월치다 — 매월 업체와 같은 임계로 재면 매 분기 초과여도 "보통"에 머문다
+  const accum = analysis.accumMonths || 1;
+  const 초과개월환산 = 초과횟수 * accum;
   let 사용패턴: Judgement["사용패턴"];
   let 초과수준: Judgement["초과수준"];
   if (초과횟수 === 0) { 사용패턴 = "안정"; 초과수준 = "없음"; }
-  else if (초과횟수 >= Math.max(6, 사용개월수 * 0.4)) { 사용패턴 = "초과상시"; 초과수준 = "매우많음"; }
-  else if (초과횟수 >= 3) { 사용패턴 = 컬러활용률 > 70 ? "증가" : "편차"; 초과수준 = "많음"; }
+  else if (초과개월환산 >= Math.max(6, 사용개월수 * 0.4)) { 사용패턴 = "초과상시"; 초과수준 = "매우많음"; }
+  else if (초과개월환산 >= 3) { 사용패턴 = 컬러활용률 > 70 ? "증가" : "편차"; 초과수준 = "많음"; }
   else { 사용패턴 = "안정"; 초과수준 = "보통"; }
-  // 초과료 규모가 기본료의 절반을 넘으면 횟수와 무관하게 심각하다
+  // 초과료 규모가 기본료의 절반을 넘으면 횟수와 무관하게 심각하다 (누적 청구는 월 환산으로 비교)
   if (기본료 && analysis.billing.초과청구합 && 초과횟수) {
-    if (analysis.billing.초과청구합 / 초과횟수 >= 기본료 * 0.5) 초과수준 = "매우많음";
+    if (analysis.billing.초과청구합 / 초과횟수 / accum >= 기본료 * 0.5) 초과수준 = "매우많음";
   }
 
   // 결제 판정은 잔액·승인실패 기준 — 달 단위 대조는 CMS(다음 달 출금) 업체를 미납으로 오판한다(실사고)
@@ -180,7 +183,9 @@ export function judge(analysis: LedgerAnalysis, today = new Date()): Judgement {
   // 끼워준 무상 조건은 재계약 때 빠지면 사고가 된다
   for (const note of analysis.contracts) {
     for (const free of note.무상) {
-      const label = `${free} 무상 조건 유지 필요`;
+      // 적요 원문 구절을 같이 보여준다 — "1개월"처럼 토큰만 잘리면 상담에서 바로 못 쓴다
+      const line = (note.raw.split("\n").find((row) => row.includes(free) && row.includes("무상")) || "").trim().slice(0, 44);
+      const label = `${free} 무상 조건 유지 필요${line && line !== free ? ` — "${line}"` : ""}`;
       if (!위험신호.includes(label)) 위험신호.push(label);
     }
   }
