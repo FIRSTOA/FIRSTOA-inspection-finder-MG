@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "e69901dfb7",
+    "date": "2026-08-25",
+    "note": "사용량을 기기별로 — 활용률·초과·사용량이 기기 단위 + 계약종료 표시 + 기본매수 시뮬레이터"
+  },
+  {
     "hash": "de2e7b8ad0",
     "date": "2026-08-25",
     "note": "이카운트 분석 — 기간 창(전체/2년/1년/6개월) + 다크톤 + 한 장 복사"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c0e8e7d16e",
     "date": "2026-08-04",
     "note": "일정리스트 직원 필터를 상단 다크 박스로(모바일 가로스크롤) + 이름별 그룹 표시(미배정 먼저, N건) + 칭찬 버튼줄 복원"
-  },
-  {
-    "hash": "2637b6800d",
-    "date": "2026-08-04",
-    "note": "일정 수정 모달 정리 — 핵심(제목·업체·담당·날짜·시간·팀·캘린더)만 보이고 부서·연락처·주소·기기는 접힘"
   }
 ];

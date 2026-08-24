@@ -613,7 +613,12 @@ export function machineUsage(analysis: LedgerAnalysis): MachineUsage[] {
  * 이 기기의 과거 사용량에 "새 월 기본매수"를 적용하면 초과료가 얼마가 됐을지 재계산한다.
  */
 export function simulateBase(machine: MachineUsage, kind: "컬러" | "흑백", newMonthlyBase: number): { 현재초과료: number; 예상초과료: number; 절감: number } {
-  const rate = machine.초과단가[kind] || 0;
+  // 실효 단가는 반올림 없이 — 매당 단가를 먼저 반올림하면 같은 기본을 넣어도 현재와 어긋난다
+  let 초과매수합 = 0, 초과금액합 = 0;
+  for (const month of machine.months) {
+    for (const excess of month.excesses) if (excess.kind === kind) { 초과매수합 += excess.초과; 초과금액합 += excess.금액; }
+  }
+  const rate = 초과매수합 > 0 ? 초과금액합 / 초과매수합 : machine.초과단가[kind] || 0;
   let 현재 = 0, 예상 = 0;
   for (const month of machine.months) {
     const used = kind === "컬러" ? month.컬러 : month.흑백;

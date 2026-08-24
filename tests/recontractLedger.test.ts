@@ -300,3 +300,15 @@ describe("기기별 사용량 — 초과는 기기별 계약이라 합산하지 
     expect(result.절감).toBe(result.현재초과료);
   });
 });
+
+describe("시뮬레이터 정합성 — 같은 기본을 넣으면 현재 초과료가 그대로 재현된다", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const machines = machineUsage(analyzeLedger(quarterly));
+  const x = machines.find((machine) => machine.model === "X3220")!;
+
+  it("현재 기본(400) 입력 = 현재 초과료 (반올림 오차 없음 — 69,300→69,355 실사고 방지)", () => {
+    const result = simulateBase(x, "컬러", 400);
+    expect(result.예상초과료).toBe(result.현재초과료);
+    expect(result.절감).toBe(0);
+  });
+});

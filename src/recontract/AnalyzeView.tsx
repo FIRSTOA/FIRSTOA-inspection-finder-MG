@@ -255,7 +255,6 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
   };
 
   // 기기별 사용량 — 초과는 기기별 계약이라 합산하면 어긋난다(사용자 지적). 계약 상태도 기기별로 알려준다
-  const machines = useMemo(() => machineUsage(analysis), [analysis]);
   const machineContract = (model: string) => {
     const key = model.replace(/[^0-9a-z]/gi, "").toLowerCase();
     if (!key) return undefined;
@@ -264,6 +263,23 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
       return mk && (mk.includes(key) || key.includes(mk));
     }));
   };
+  // 기본매수는 초과가 난 달의 대장 줄에서만 알 수 있다 — 기간 창 안에 초과가 없으면 잃는다.
+  // 폴백 사슬: 창 안 대장 → 창 밖(전체) 대장 → 적요의 그 기기 계약 조건.
+  const machinesFull = useMemo(() => machineUsage(full), [full]);
+  const machines = useMemo(() => machineUsage(analysis).map((machine) => {
+    const fullMachine = machinesFull.find((m) => m.model === machine.model);
+    const note2 = machineContract(machine.model);
+    const fill = (kind: "컬러" | "흑백") =>
+      machine.기본월[kind] || fullMachine?.기본월[kind] || (kind === "컬러" ? note2?.컬러기본 : note2?.흑백기본) || 0;
+    return {
+      ...machine,
+      기본월: { 컬러: fill("컬러"), 흑백: fill("흑백") },
+      초과단가: {
+        컬러: machine.초과단가.컬러 || fullMachine?.초과단가.컬러 || note2?.컬러단가 || 0,
+        흑백: machine.초과단가.흑백 || fullMachine?.초과단가.흑백 || note2?.흑백단가 || 0,
+      },
+    };
+  }), [analysis, machinesFull]);   // eslint-disable-line react-hooks/exhaustive-deps
   const todayYmd = new Date().toISOString().slice(0, 10);
 
   const historyCount = (briefing?.bulman.length || 0) + (briefing?.misu.length || 0) + asHistory.length + (briefing?.history.length || 0);
