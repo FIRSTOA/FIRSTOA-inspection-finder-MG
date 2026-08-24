@@ -473,6 +473,8 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
   useEffect(() => { setTeam((cur) => cur || myTeam); }, [myTeam]);
   const [scope, setScope] = useState<RenewalScope | null>(null);
   const [targetLimit, setTargetLimit] = useState(10);
+  const [gradeFilter, setGradeFilter] = useState<"전체" | "SS" | "S">("전체");
+  const [scopeTick, setScopeTick] = useState(0);   // 새로고침 — 워킨맵에서 완료(G5) 처리한 게 바로 반영되게
   useEffect(() => {
     if (!team) return;
     let alive = true;
@@ -480,7 +482,7 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
     setTargetLimit(10);
     fetchRenewalScope(quarter as Quarter, team).then((r) => { if (alive) setScope(r); }).catch(() => { if (alive) setScope({ targets: [], quarter: quarter as Quarter, 제외: { 완료: 0, 영업부: 0, 이관: 0, 등급외: 0, 무등급: 0 } }); });
     return () => { alive = false; };
-  }, [team, quarter]);
+  }, [team, quarter, scopeTick]);
 
   const analyzed = useMemo<Analyzed[]>(() => {
     return Object.entries(store)
@@ -593,7 +595,7 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-slate-900">{quarter}Q 재계약 방문 대상 <span className="ml-1 text-[11px] font-medium text-slate-400">워킨맵 기준 · S/SS</span></h2>
+            <h2 className="text-sm font-bold text-slate-900">{quarter}Q 재계약 방문 대상{scope ? ` — 총 ${scope.targets.length}곳` : ""} <span className="ml-1 text-[11px] font-medium text-slate-400">워킨맵 기준</span></h2>
           </div>
           {["A", "B", "C", "D"].map((t) => (
             <button key={t} type="button" onClick={() => setTeam(t)}
@@ -601,12 +603,33 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
               {t}팀{t === myTeam ? " ★" : ""}
             </button>
           ))}
+          <button type="button" onClick={() => setScopeTick((n) => n + 1)}
+            className="rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-slate-500 ring-1 ring-slate-200 transition hover:text-slate-800">↻ 새로고침</button>
         </div>
+        {!!scope && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2">
+            {(["전체", "SS", "S"] as const).map((g) => {
+              const count = g === "전체" ? scope.targets.length : scope.targets.filter((t) => t.등급 === g).length;
+              return (
+                <button key={g} type="button" onClick={() => { setGradeFilter(g); setTargetLimit(10); }}
+                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${gradeFilter === g ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:text-slate-800"}`}>
+                  {g} {count}
+                </button>
+              );
+            })}
+            <span className="ml-auto text-[10px] font-semibold text-slate-400">
+              분석됨 {scope.targets.filter((t) => analyzedKeys.has(t.key)).length}/{scope.targets.length}
+              {scope.제외.완료 > 0 && ` · 워킨맵 완료(G5) ${scope.제외.완료}곳 제외됨`}
+            </span>
+          </div>
+        )}
         {scope === null && <div className="px-4 py-8 text-center text-xs font-bold text-slate-400">워킨맵 목록을 불러오는 중…</div>}
         {!!scope && !scope.targets.length && <div className="px-4 py-8 text-center text-xs font-bold text-slate-400">{team}팀 {quarter}Q 방문 대상이 없습니다.</div>}
-        {!!scope && scope.targets.length > 0 && (
+        {!!scope && scope.targets.length > 0 && (() => {
+          const filtered = gradeFilter === "전체" ? scope.targets : scope.targets.filter((t) => t.등급 === gradeFilter);
+          return (
           <div className="divide-y divide-slate-50">
-            {scope.targets.slice(0, targetLimit).map((target) => {
+            {filtered.slice(0, targetLimit).map((target) => {
               const doneVendor = analyzedKeys.get(target.key);
               const dday = ddayOf(target.종료일);
               return (
@@ -630,12 +653,14 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
                 </button>
               );
             })}
-            {scope.targets.length > targetLimit && (
+            {filtered.length > targetLimit && (
               <button type="button" onClick={() => setTargetLimit((n) => n + 20)}
-                className="w-full py-2.5 text-center text-xs font-bold text-blue-600 transition hover:bg-blue-50/40">더 보기 ({scope.targets.length - targetLimit}곳 남음)</button>
+                className="w-full py-2.5 text-center text-xs font-bold text-blue-600 transition hover:bg-blue-50/40">더 보기 ({filtered.length - targetLimit}곳 남음)</button>
             )}
+            {!filtered.length && <div className="px-4 py-6 text-center text-xs font-bold text-slate-400">{gradeFilter}급 대상이 없습니다.</div>}
           </div>
-        )}
+          );
+        })()}
       </section>
     </div>
   );

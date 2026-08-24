@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "617bfcc85f",
+    "date": "2026-08-24",
+    "note": "이카운트 분석 2차 개편 — 파서 견고화·이카운트형 표·워킨맵 통합·세션 저장"
+  },
+  {
     "hash": "9043197794",
     "date": "2026-08-24",
     "note": "이카운트 분석 화면 손질 — 월별 상세 표·총 사용량·이력 자동조회·원문 보기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a468634131",
     "date": "2026-08-04",
     "note": "칭찬 접수 폼 버튼 정리 — [보내기][시트 열기] 두 개로 (자기개발 피드에 잘못 단 버튼은 원복)"
-  },
-  {
-    "hash": "4618fb4067",
-    "date": "2026-08-04",
-    "note": "칭찬 보내기 옆에 [칭찬 시트] 버튼 — 구글시트 원본 바로 열기"
   }
 ];
