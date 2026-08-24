@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "476e86f35d",
+    "date": "2026-08-25",
+    "note": "중간보고 — 섹션 구분선 + 익일일정(다음 영업일 전부, 이름 없이)"
+  },
+  {
     "hash": "b5696ad660",
     "date": "2026-08-25",
     "note": "중간보고 담당자 판정 — 네이버 수입이 이름을 calendarTitle에만 남겨 A팀 등이 비던 것 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c3bfa54c56",
     "date": "2026-08-05",
     "note": "해피콜·홍보물 문자를 솔라피 직접 발송으로 — HMAC 인증, 즉시·예약 발송 공용, 이메일은 기존 웹훅 유지"
-  },
-  {
-    "hash": "3731e39012",
-    "date": "2026-08-05",
-    "note": "필드탭 지역 미기재 전송 차단 — 테스트방 폴백 제거"
   }
 ];

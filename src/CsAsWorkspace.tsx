@@ -499,7 +499,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
-  const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string; polishing?: boolean } | null>(null);
+  const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string; polishing?: boolean; diag?: string } | null>(null);
   const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
   // 팀 명단 — 관리탭 인원(cs_members) 실시간. 신입·퇴사·팀 이동이 보고와 배정에 바로 반영된다.
   const { book: memberBook } = useAuthorBook();
@@ -1186,7 +1186,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
    */
   const composeMidReport = (round: 1 | 2, reportTeam: Team) => {
     const seq = ++midReportSeq.current;
-    setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true });
     // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
     const order = reportOrder(reportTeam);
     const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
@@ -1204,6 +1203,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
     });
+    // 진단 줄 — "왜 안 뜨지?"를 원격으로 잡기 위한 단계별 건수 (모달에만 표시, 복사 안 됨)
+    const todayAll = tickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
+    const todayTeam = eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
+    const diag = `오늘 ${todayYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 ${pending.length}건 · 명단 ${order.join("·")}`;
+    setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true, diag });
     const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
       vendor: ticket.vendor,
       model: ticket.model,
@@ -2101,6 +2105,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{value}팀</button>
               ))}
             </div>
+            {midReport.diag && <div className="border-b border-slate-100 bg-amber-50/70 px-4 py-1.5 text-[11px] font-semibold text-slate-500">{midReport.diag}</div>}
             <textarea value={midReport.text} onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
               className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">

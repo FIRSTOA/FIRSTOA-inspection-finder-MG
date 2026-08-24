@@ -49,9 +49,12 @@ function emptyBook(): Book {
 function bookOf(rows: MemberRow[]): Book {
   const next = emptyBook();
   for (const row of rows.filter((item) => item.active)) {
-    if (!AUTHOR_TEAMS.includes(row.team as AuthorTeam)) continue;
-    const team = row.team as AuthorTeam;
-    if (!next[team].includes(row.name)) next[team].push(row.name);
+    // 겸직 표기("A·B")는 양쪽 팀 모두에 올린다 — 버리면 그 사람 배정 건이 어느 팀 보고에도 안 잡힌다
+    for (const part of row.team.split(/[·/,]/).map((t) => t.trim())) {
+      if (!AUTHOR_TEAMS.includes(part as AuthorTeam)) continue;
+      const team = part as AuthorTeam;
+      if (!next[team].includes(row.name)) next[team].push(row.name);
+    }
   }
   return next;
 }
