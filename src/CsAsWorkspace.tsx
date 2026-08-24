@@ -13,6 +13,7 @@ import { fieldTicketVendor, historyCoreName, logisticsTicketInfo } from "./ids";
 import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
+import { useAuthorBook } from "./authors";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -67,11 +68,13 @@ function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilt
 // AS 완료는 팀별 네이버 완료 캘린더로 이동한다 — 표기도 그 캘린더 이름을 쓴다
 const DONE_CAL_LABEL: Record<Team, string> = { A: "강북A as", B: "강서B as", C: "강남C as", D: "경기D as", E: "지방E as", 기타: "as완료" };
 
-const teamAssignees: Record<Team, string[]> = {
-  A: ["김정민", "심태현", "정웅만", "신정훈"],
-  B: ["권태혁", "조윤", "윤기준", "신정훈"],
-  C: ["이홍진", "박영현", "이민구", "한왕주", "신정훈"],
-  D: ["양승원", "김종희", "이호준", "신정훈"],
+// 명단의 원본은 관리탭 인원(cs_members)이다 — 아래는 DB를 아직 못 읽었을 때의 예비.
+// (예전엔 이 표가 원본이라 A팀 이권선 누락·"정웅만" 오기로 다른 팀 보고가 비어 나왔다)
+const FALLBACK_TEAM_ASSIGNEES: Record<Team, string[]> = {
+  A: ["이권선", "심태현", "김정민", "정웅", "신정훈"],
+  B: ["윤기준", "권태혁", "조윤", "신정훈"],
+  C: ["이홍진", "이민구", "박영현", "한왕주", "신정훈"],
+  D: ["김종희", "이호준", "양승원", "신정훈"],
   E: [], // 충청외 극지방 — 전담 명단 없음(전체에서 선택)
   기타: [],
 };
@@ -497,6 +500,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
   const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string; polishing?: boolean } | null>(null);
   const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
+  // 팀 명단 — 관리탭 인원(cs_members) 실시간. 신입·퇴사·팀 이동이 보고와 배정에 바로 반영된다.
+  const { book: memberBook } = useAuthorBook();
+  const csLeaders = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
+  const teamAssignees = useMemo<Record<Team, string[]>>(() => {
+    const lead = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
+    const of = (t: "A" | "B" | "C" | "D") => {
+      const live = memberBook[t] || [];
+      const names = live.length ? live : FALLBACK_TEAM_ASSIGNEES[t];
+      return [...names.filter((n) => !lead.includes(n)), ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
+    };
+    return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: [], 기타: [] };
+  }, [memberBook]);
+  // 보고 순서: 팀장 최상단 → 명단 순서(부파트장이 첫 번째) 그대로
+  const reportOrder = (reportTeam: Team) => [...csLeaders, ...teamAssignees[reportTeam].filter((n) => !csLeaders.includes(n))];
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
   type NaverEventRow = { uid: string; date: string; time: string; title: string; location: string; description: string; calendar_id: string; completed: boolean };
@@ -1086,8 +1103,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
       && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
     // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
-    // 순서: 팀장(신정훈) 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
-    const order = ["신정훈", ...teamAssignees[reportTeam].filter((name) => name !== "신정훈")];
+    // 순서: 팀장 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
+    const order = reportOrder(reportTeam);
     // 네이버 수기 일정은 배정 컬럼이 비고 제목이 "이름 - 내용"이다 — 제목 접두 이름도 그 사람 것으로 친다
     const assigneeOf = (ticket: AsTicket) =>
       ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
@@ -1138,6 +1155,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       "금일 처리예정",
       ...(groups.length ? groups : ["없음"]),
       ...(deferred.length ? ["", "익일변경", ...deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`)] : []),
+      "",
+      "특이사항",   // 자동으로 못 채우는 칸 — 보내기 전에 손으로 적거나 비워 둔다
     ].join("\n");
   };
   /**
@@ -1148,7 +1167,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const seq = ++midReportSeq.current;
     setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true });
     // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
-    const order = ["신정훈", ...teamAssignees[reportTeam].filter((name) => name !== "신정훈")];
+    const order = reportOrder(reportTeam);
     const assigneeOf = (ticket: AsTicket) =>
       ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
     const eligible = tickets.filter((ticket) =>
@@ -1189,6 +1208,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           "금일 처리예정",
           ...(groups.length ? groups : ["없음"]),
           ...(deferLines.length ? ["", "익일변경", ...deferLines] : []),
+          "",
+          "특이사항",
         ].join("\n");
         setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));
       })

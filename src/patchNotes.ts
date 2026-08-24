@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7dc7a91e5f",
+    "date": "2026-08-25",
+    "note": "중간보고 — 이름(#그룹) 사이 빈 줄로 사람별 구분"
+  },
+  {
     "hash": "8c8f4ebf63",
     "date": "2026-08-25",
     "note": "중간보고 줄을 AI가 다듬는다 — report-polish edge function"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d916fea6b9",
     "date": "2026-08-05",
     "note": "익일 모달: 사유 칸을 맨 위로 + '사유 입력 시 날짜 버튼 활성화' 안내 — 잠금 이유가 보이게"
-  },
-  {
-    "hash": "59ba5c6ceb",
-    "date": "2026-08-04",
-    "note": "first-data GAS: 업체정보 vendor_info 미러 제거(30분 타임아웃·반쪽삭제 위험) + 인덱스 원격복구 액션(rebuildindex)·일일 트리거 보장"
   }
 ];
