@@ -551,3 +551,75 @@ export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): Le
     },
   });
 }
+
+// ─── 기기별 사용량 — "합산은 이상하다"(사용자 지적): 초과는 기기별 계약인데 사용량만 합치면 어긋난다 ───
+
+export type MachineMonth = { ym: string; 컬러: number; 흑백: number; excesses: LedgerExcess[] };
+export type MachineUsage = {
+  model: string;
+  months: MachineMonth[];          // 카운터가 찍힌 달만
+  total: { 컬러: number; 흑백: number };
+  기본월: { 컬러: number; 흑백: number };   // 월 기준 기본매수 (누적 청구면 환산)
+  초과단가: { 컬러: number; 흑백: number }; // 초과금액 ÷ 초과매수 실효 단가
+  초과횟수: number;
+  초과금액: number;
+  accumMonths: number;             // 1=매월 청구, 3=3개월 누적
+};
+
+/** 전표 단위로 모델과 카운터·초과가 붙어 있다 — 그 짝을 그대로 살려 기기별로 가른다 */
+export function machineUsage(analysis: LedgerAnalysis): MachineUsage[] {
+  const accumMatch = analysis.vouchers.flatMap((voucher) => voucher.items)
+    .map((item) => item.label.match(/(\d+)\s*개월\s*누적/)).find(Boolean);
+  const accumMonths = accumMatch ? Math.max(1, Number(accumMatch[1])) : 1;
+
+  const byModel = new Map<string, MachineUsage>();
+  for (const voucher of analysis.vouchers) {
+    const model = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model;
+    if (!model) continue;
+    const machine = byModel.get(model) || {
+      model, months: [], total: { 컬러: 0, 흑백: 0 }, 기본월: { 컬러: 0, 흑백: 0 },
+      초과단가: { 컬러: 0, 흑백: 0 }, 초과횟수: 0, 초과금액: 0, accumMonths,
+    };
+    byModel.set(model, machine);
+    const ym = voucher.date.slice(0, 7);
+    let row = machine.months.find((month) => month.ym === ym);
+    for (const item of voucher.items) {
+      if (item.counter && item.counter.사용 !== 0) {
+        if (!row) { row = { ym, 컬러: 0, 흑백: 0, excesses: [] }; machine.months.push(row); }
+        if (item.counter.kind === "흑백") { row.흑백 += item.counter.사용; machine.total.흑백 += item.counter.사용; }
+        else { row.컬러 += item.counter.사용; machine.total.컬러 += item.counter.사용; }
+      }
+      if (item.excess) {
+        if (!row) { row = { ym, 컬러: 0, 흑백: 0, excesses: [] }; machine.months.push(row); }
+        row.excesses.push(item.excess);
+        machine.초과횟수 += 1;
+        machine.초과금액 += item.excess.금액;
+        const monthly = item.excess.기본월 || Math.round(item.excess.기본 / accumMonths);
+        if (monthly > 0) machine.기본월[item.excess.kind] = monthly;
+        if (item.excess.초과 > 0 && item.excess.금액 > 0) {
+          machine.초과단가[item.excess.kind] = Math.round(item.excess.금액 / item.excess.초과);
+        }
+      }
+    }
+  }
+  return Array.from(byModel.values())
+    .filter((machine) => machine.months.length > 0)
+    .map((machine) => ({ ...machine, months: machine.months.sort((a, b) => a.ym.localeCompare(b.ym)) }))
+    .sort((a, b) => b.total.컬러 + b.total.흑백 - (a.total.컬러 + a.total.흑백));
+}
+
+/**
+ * 기본매수 조정 시뮬레이션 — 재계약 구조조정 카드의 숫자 근거.
+ * 이 기기의 과거 사용량에 "새 월 기본매수"를 적용하면 초과료가 얼마가 됐을지 재계산한다.
+ */
+export function simulateBase(machine: MachineUsage, kind: "컬러" | "흑백", newMonthlyBase: number): { 현재초과료: number; 예상초과료: number; 절감: number } {
+  const rate = machine.초과단가[kind] || 0;
+  let 현재 = 0, 예상 = 0;
+  for (const month of machine.months) {
+    const used = kind === "컬러" ? month.컬러 : month.흑백;
+    for (const excess of month.excesses) if (excess.kind === kind) 현재 += excess.금액;
+    const allowance = newMonthlyBase * machine.accumMonths;
+    if (used > allowance && rate > 0) 예상 += (used - allowance) * rate;
+  }
+  return { 현재초과료: 현재, 예상초과료: Math.round(예상), 절감: Math.round(현재 - 예상) };
+}

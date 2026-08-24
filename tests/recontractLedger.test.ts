@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
-import { analyzeLedger, moneyKo, parseLedger, parseRemarks, windowAnalysis, ymd } from "../src/recontract/ledger";
+import { analyzeLedger, machineUsage, moneyKo, parseLedger, parseRemarks, simulateBase, windowAnalysis, ymd } from "../src/recontract/ledger";
 
 const sample = readFileSync(new URL("./fixtures/ecount-ledger-sample.txt", import.meta.url), "utf8");
 
@@ -267,5 +267,36 @@ describe("기간 창(window) — 3년치를 붙여넣고 최근 1년만 본다",
 
   it("창 없음(null)은 원본 그대로", () => {
     expect(windowAnalysis(full, null)).toBe(full);
+  });
+});
+
+describe("기기별 사용량 — 초과는 기기별 계약이라 합산하지 않는다", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const analysis = analyzeLedger(quarterly);
+  const machines = machineUsage(analysis);
+
+  it("전표의 임대료 모델과 카운터를 짝지어 두 기기로 가른다", () => {
+    expect(machines.map((machine) => machine.model).sort()).toEqual(["AC2060", "X3220"]);
+  });
+  it("X3220: 컬러 5,018매·초과 2회 / AC2060: 컬러 1,459매·초과 1회 — 기기별로 정확히 갈린다", () => {
+    const x = machines.find((machine) => machine.model === "X3220")!;
+    const ac = machines.find((machine) => machine.model === "AC2060")!;
+    expect(x.total.컬러).toBe(5_018);
+    expect(x.초과횟수).toBe(2);           // 2024-09(2,402매) + 2026-06(216매)
+    expect(x.초과금액).toBe(237_600 + 20_900);
+    expect(ac.total.컬러).toBe(1_459);
+    expect(ac.초과횟수).toBe(1);          // 2024-09(259매) — 이 건이 합산 표에선 X3220 것처럼 보였다
+    expect(ac.초과금액).toBe(25_300);
+  });
+  it("월 기본은 기기별 — X3220 400매(1200÷3, 400*3 표기)", () => {
+    const x = machines.find((machine) => machine.model === "X3220")!;
+    expect(x.기본월.컬러).toBe(400);
+    expect(x.accumMonths).toBe(3);
+  });
+  it("기본매수 시뮬레이션 — 기본을 크게 올리면 초과료 0", () => {
+    const x = machines.find((machine) => machine.model === "X3220")!;
+    const result = simulateBase(x, "컬러", 2_000);
+    expect(result.예상초과료).toBe(0);
+    expect(result.절감).toBe(result.현재초과료);
   });
 });

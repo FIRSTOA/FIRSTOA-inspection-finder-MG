@@ -20,7 +20,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "../vendorFlags";
 import { vendorMatchKey } from "../ids";
 import { teamForAuthor } from "../operations";
 import { currentQuarter, type Quarter } from "../workinPlaces";
-import { analyzeLedger, windowAnalysis, type LedgerAnalysis } from "./ledger";
+import { analyzeLedger, machineUsage, simulateBase, windowAnalysis, type LedgerAnalysis, type MachineUsage } from "./ledger";
 import { judge } from "./judge";
 import type { Judgement } from "./judge";
 import { calcProposals, type ExtraSignals } from "./proposals";
@@ -79,6 +79,37 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * 기본매수 조정 시뮬레이터 — "기본을 N매로 올리면 초과료가 얼마 줄었을까"를 과거 사용량으로 계산.
+ * 재계약 구조조정 제안(기본매수 상향 ↔ 기본료 조정)의 숫자 근거가 된다.
+ */
+function BaseSimulator({ machine }: { machine: MachineUsage }) {
+  const [newBase, setNewBase] = useState(machine.기본월.컬러 || 0);
+  const result = useMemo(() => simulateBase(machine, "컬러", newBase), [machine, newBase]);
+  return (
+    <div className="border-t border-slate-100 bg-blue-50/40 px-5 py-3.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="text-[12px] font-bold text-slate-700">💡 기본매수 조정 시뮬레이션</span>
+        <label className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600">
+          컬러 월 기본을
+          <input type="number" value={newBase} min={0} step={100}
+            onChange={(event) => setNewBase(Math.max(0, Number(event.target.value) || 0))}
+            className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-bold tabular-nums outline-none focus:border-blue-500" />
+          매로 하면
+        </label>
+        <span className="text-[13px] font-bold tabular-nums">
+          초과료 {money(result.현재초과료)}원 → <b className={result.예상초과료 === 0 ? "text-emerald-600" : "text-slate-900"}>{money(result.예상초과료)}원</b>
+          {result.절감 > 0 && <b className="ml-1.5 text-blue-600">(-{money(result.절감)}원)</b>}
+        </span>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+        이 기기의 실제 사용량({machine.months.length}회 검침)에 새 기본을 적용해 재계산 — 초과 단가 {money(machine.초과단가.컬러)}원/매 기준.
+        "기본매수를 올리는 대신 기본료를 얼마 조정할지" 협상의 숫자 근거로 쓰세요.
+      </p>
+    </div>
   );
 }
 
@@ -223,6 +254,18 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
     }
   };
 
+  // 기기별 사용량 — 초과는 기기별 계약이라 합산하면 어긋난다(사용자 지적). 계약 상태도 기기별로 알려준다
+  const machines = useMemo(() => machineUsage(analysis), [analysis]);
+  const machineContract = (model: string) => {
+    const key = model.replace(/[^0-9a-z]/gi, "").toLowerCase();
+    if (!key) return undefined;
+    return analysis.contracts.find((note2) => note2.models.some((m) => {
+      const mk = m.replace(/[^0-9a-z]/gi, "").toLowerCase();
+      return mk && (mk.includes(key) || key.includes(mk));
+    }));
+  };
+  const todayYmd = new Date().toISOString().slice(0, 10);
+
   const historyCount = (briefing?.bulman.length || 0) + (briefing?.misu.length || 0) + asHistory.length + (briefing?.history.length || 0);
   const TABS: Array<{ key: DetailTab; badge?: number }> = [
     { key: "요약" },
@@ -311,7 +354,7 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
           <Panel title="한눈 요약" hint={`대장 ${analysis.기간.from} ~ ${analysis.기간.to} · ${analysis.months.length}개월${isAccum ? " · 3개월 누적 청구" : ""}`}>
             <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
               <Stat label="누적 매출" value={man(analysis.누계.판매)} unit="만원" sub={`수금 ${man(analysis.누계.수금)}만원`} color="blue" />
-              <Stat label="컬러 활용률" value={`${usage.컬러활용률}%`} sub={`월 ${money(usage.color?.월평균 || 0)} / 기본 ${money(usage.color?.기본매수 || 0)}매`}
+              <Stat label={machines.length > 1 ? "컬러 활용률 (기기합산)" : "컬러 활용률"} value={`${usage.컬러활용률}%`} sub={`월 ${money(usage.color?.월평균 || 0)} / 기본 ${money(usage.color?.기본매수 || 0)}매`}
                 color={usage.컬러활용률 >= 100 ? "red" : usage.컬러활용률 >= 80 ? "amber" : "slate"} />
               <Stat label="흑백 활용률" value={`${usage.흑백활용률}%`} sub={`월 ${money(usage.bw?.월평균 || 0)} / 기본 ${money(usage.bw?.기본매수 || 0)}매`}
                 color={usage.흑백활용률 >= 100 ? "red" : "slate"} />
@@ -383,52 +426,83 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
         </>
       )}
 
-      {/* ── 사용량 ── */}
+      {/* ── 사용량: 기기별 — 초과는 기기별 계약이라 합산하지 않는다 ── */}
       {tab === "사용량" && (
-        <Panel title="월별 사용량" hint={isAccum ? "3개월 누적 청구 — 분기 달에 3개월 합이 찍힙니다" : "카운터가 찍힌 달 기준"}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[440px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-[11px] font-semibold text-slate-400">
-                  <th className="py-2 pr-3 font-semibold">월</th>
-                  <th className="py-2 pr-3 text-right font-semibold">컬러</th>
-                  <th className="py-2 pr-3 text-right font-semibold">흑백</th>
-                  <th className="py-2 font-semibold">초과</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {analysis.months.filter((month) => month.counters.length > 0).map((month) => {
-                  const color = month.counters.filter((counter) => counter.kind !== "흑백").reduce((sum, counter) => sum + counter.사용, 0);
-                  const bw = month.counters.filter((counter) => counter.kind === "흑백").reduce((sum, counter) => sum + counter.사용, 0);
-                  return (
-                    <tr key={month.ym} className="border-b border-slate-50 last:border-0">
-                      <td className="py-2.5 pr-3 font-mono text-xs font-bold text-slate-500">{month.ym.replace("-", ".")}</td>
-                      <td className="py-2.5 pr-3 text-right font-semibold text-slate-800">{money(color)}</td>
-                      <td className="py-2.5 pr-3 text-right text-slate-500">{money(bw)}</td>
-                      <td className="py-2.5">
-                        {month.excesses.length
-                          ? month.excesses.map((excess, index) => (
-                              <span key={index} className="mr-1 inline-flex items-center gap-1 text-[12px] font-semibold text-red-600">
-                                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />{excess.kind} {money(excess.초과)}매 · {money(excess.금액)}원
-                              </span>
-                            ))
-                          : <span className="text-slate-200">—</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-200 font-bold text-slate-900">
-                  <td className="py-2.5 pr-3 text-xs">합계</td>
-                  <td className="py-2.5 pr-3 text-right">{money(usage.total.컬러)}</td>
-                  <td className="py-2.5 pr-3 text-right">{money(usage.total.흑백)}</td>
-                  <td className="py-2.5 text-[12px] font-semibold text-red-600">{overCount ? `${overCount}회 · ${money(analysis.billing.초과청구합)}원` : ""}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Panel>
+        <>
+          {!machines.length && <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-400">카운터가 찍힌 기기가 없습니다 — [대장] 탭에서 원문을 확인해 주세요.</div>}
+          {machines.map((machine) => {
+            const contract = machineContract(machine.model);
+            const ended = !!contract?.to && contract.to < todayYmd;
+            const dday = contract?.to ? Math.round((Date.parse(contract.to) - Date.parse(todayYmd)) / 86_400_000) : null;
+            const monthsSpan = Math.max(1, analysis.months.length);
+            const avg = (total: number) => Math.round(total / monthsSpan);
+            const rate = (kind: "컬러" | "흑백") => (machine.기본월[kind] > 0 ? Math.round((avg(machine.total[kind]) / machine.기본월[kind]) * 100) : 0);
+            return (
+              <section key={machine.model} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+                  <h2 className="text-[14px] font-bold text-slate-900">{machine.model}</h2>
+                  {ended
+                    ? <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-600">계약종료 {contract?.to}</span>
+                    : dday !== null && dday <= 90
+                      ? <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700">종료 D-{dday} ({contract?.to})</span>
+                      : contract?.to
+                        ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">계약 ~{contract.to}</span>
+                        : <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-400">계약기간 미확인</span>}
+                  {machine.accumMonths > 1 && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">{machine.accumMonths}개월 누적 청구</span>}
+                  <span className="ml-auto text-[11px] font-semibold text-slate-400">초과 {machine.초과횟수}회 · {money(machine.초과금액)}원</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 sm:grid-cols-4">
+                  <Stat label="컬러 활용률" value={machine.기본월.컬러 ? `${rate("컬러")}%` : "—"}
+                    sub={`월 ${money(avg(machine.total.컬러))} / 기본 ${money(machine.기본월.컬러)}매`}
+                    color={rate("컬러") >= 100 ? "red" : rate("컬러") >= 80 ? "amber" : "slate"} />
+                  <Stat label="흑백 활용률" value={machine.기본월.흑백 ? `${rate("흑백")}%` : "—"}
+                    sub={`월 ${money(avg(machine.total.흑백))}매${machine.기본월.흑백 ? ` / 기본 ${money(machine.기본월.흑백)}매` : ""}`}
+                    color={rate("흑백") >= 100 ? "red" : "slate"} />
+                  <Stat label="컬러 총 사용" value={machine.total.컬러} unit="매" sub={`${monthsSpan}개월`} color="blue" />
+                  <Stat label="흑백 총 사용" value={machine.total.흑백} unit="매" sub={`${monthsSpan}개월`} />
+                </div>
+                <div className="overflow-x-auto border-t border-slate-100 px-5 py-3">
+                  <table className="w-full min-w-[420px] text-sm">
+                    <thead>
+                      <tr className="text-left text-[11px] font-semibold text-slate-400">
+                        <th className="py-1.5 pr-3 font-semibold">월</th>
+                        <th className="py-1.5 pr-3 text-right font-semibold">컬러</th>
+                        <th className="py-1.5 pr-3 text-right font-semibold">흑백</th>
+                        <th className="py-1.5 font-semibold">초과</th>
+                      </tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                      {machine.months.map((month) => (
+                        <tr key={month.ym} className="border-t border-slate-50">
+                          <td className="py-2 pr-3 font-mono text-xs font-bold text-slate-500">{month.ym.replace("-", ".")}</td>
+                          <td className="py-2 pr-3 text-right font-semibold text-slate-800">{money(month.컬러)}</td>
+                          <td className="py-2 pr-3 text-right text-slate-500">{money(month.흑백)}</td>
+                          <td className="py-2">
+                            {month.excesses.length
+                              ? month.excesses.map((excess, index) => (
+                                  <span key={index} className="mr-1 inline-flex items-center gap-1 text-[12px] font-semibold text-red-600">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />{excess.kind} {money(excess.초과)}매 · {money(excess.금액)}원
+                                  </span>
+                                ))
+                              : <span className="text-slate-200">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {machine.초과횟수 > 0 && machine.초과단가.컬러 > 0 && (
+                  <BaseSimulator machine={machine} />
+                )}
+              </section>
+            );
+          })}
+          {machines.length > 1 && (
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[12px] font-semibold text-slate-500">
+              기기 합산 — 컬러 {money(machines.reduce((sum, machine) => sum + machine.total.컬러, 0))}매 · 흑백 {money(machines.reduce((sum, machine) => sum + machine.total.흑백, 0))}매 · 초과 {money(machines.reduce((sum, machine) => sum + machine.초과금액, 0))}원
+            </div>
+          )}
+        </>
       )}
 
       {/* ── 대장: 이카운트 원문 그대로 ── */}

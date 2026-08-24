@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "de2e7b8ad0",
+    "date": "2026-08-25",
+    "note": "이카운트 분석 — 기간 창(전체/2년/1년/6개월) + 다크톤 + 한 장 복사"
+  },
+  {
     "hash": "9622c9b697",
     "date": "2026-08-24",
     "note": "이카운트 분석 상세 — \"브리핑 → 근거\" 재설계 (탭 분리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2637b6800d",
     "date": "2026-08-04",
     "note": "일정 수정 모달 정리 — 핵심(제목·업체·담당·날짜·시간·팀·캘린더)만 보이고 부서·연락처·주소·기기는 접힘"
-  },
-  {
-    "hash": "44fb651f50",
-    "date": "2026-08-04",
-    "note": "일정리스트 모바일 카드 컴팩트화 + 직원별 필터 칩 (전체/미배정/이름별, 팀 선택과 연동)"
   }
 ];
