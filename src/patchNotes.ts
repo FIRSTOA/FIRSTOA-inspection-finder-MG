@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "2ca0a7e2f9",
+    "date": "2026-08-25",
+    "note": "중간보고 초단축 — \"•업체 기종 내용\" 한 눈 형식, 팀장 최상단"
+  },
+  {
     "hash": "2ad3339b36",
     "date": "2026-08-25",
     "note": "중간보고 — 자동일정(점검 동선)·매월점검 제외, 필수 일정(AS·납품)만"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "62deef6ae9",
     "date": "2026-08-04",
     "note": "모바일 사진 저장 수리 — blob 가상클릭 → 스토리지 네이티브 다운로드(?download)"
-  },
-  {
-    "hash": "dcf3d195d1",
-    "date": "2026-08-04",
-    "note": "일정 상세 모달 하단 버튼 재배치 — 세로로 꺾이던 원형 알약 → 2줄 균등 버튼(수정·복제·익일·삭제 / FIELD AS·배정·완료 강조), 완료는 사유 모달 경유"
   }
 ];

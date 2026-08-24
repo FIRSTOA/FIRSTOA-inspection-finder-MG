@@ -495,7 +495,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
-  const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string } | null>(null);
+  const [midReport, setMidReport] = useState<{ round: 1 | 2; team: Team; text: string; polishing?: boolean } | null>(null);
+  const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
   type NaverEventRow = { uid: string; date: string; time: string; title: string; location: string; description: string; calendar_id: string; completed: boolean };
@@ -1136,10 +1137,60 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       ...(deferred.length ? ["", "익일변경", ...deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`)] : []),
     ].join("\n");
   };
+  /**
+   * 보고 열기·재생성 — 규칙 기반 본문을 즉시 띄우고, AI(report-polish)가 줄을 사람 수준으로
+   * 다듬어 교체한다("쇼군웨이크스노우보드 3220 용지제거 후 소음"). 실패하면 규칙 기반 그대로.
+   */
+  const composeMidReport = (round: 1 | 2, reportTeam: Team) => {
+    const seq = ++midReportSeq.current;
+    setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true });
+    // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
+    const order = ["신정훈", ...teamAssignees[reportTeam].filter((name) => name !== "신정훈")];
+    const assigneeOf = (ticket: AsTicket) =>
+      ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
+    const eligible = tickets.filter((ticket) =>
+      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
+      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검" && order.includes(assigneeOf(ticket)));
+    const pending = order.flatMap((name) =>
+      eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료" && assigneeOf(ticket) === name)
+        .map((ticket) => ({ name, ticket })));
+    const deferred = eligible.filter((ticket) => {
+      if (ticket.status !== "익일" || ticket.date <= todayYmd) return false;
+      const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
+      return (ticket.note || "").includes(mark);
+    }).map((ticket) => ({ name: assigneeOf(ticket), ticket }));
+    const payload = [...pending, ...deferred].map(({ ticket }) => ({
+      vendor: ticket.vendor,
+      model: ticket.model,
+      issue: (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim(),
+      kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
+    }));
+    if (!payload.length) { setMidReport((cur) => (cur ? { ...cur, polishing: false } : cur)); return; }
+    void invokeEdgeFunction<{ lines: string[] }>("report-polish", { lines: payload })
+      .then((res) => {
+        if (midReportSeq.current !== seq || !Array.isArray(res.lines)) return;
+        let index = 0;
+        const groups: string[] = [];
+        for (const name of order) {
+          const mine = pending.filter((entry) => entry.name === name);
+          if (mine.length) groups.push(`#${name}`, ...mine.map(() => `•${res.lines[index++]}`));
+        }
+        const deferLines = deferred.map(({ ticket }) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`);
+        const text = [
+          `${round === 1 ? "12시 1차" : "14시 2차"} 중간보고`,
+          "(진행중인 업무는 * 표시)",
+          "",
+          "금일 처리예정",
+          ...(groups.length ? groups : ["없음"]),
+          ...(deferLines.length ? ["", "익일변경", ...deferLines] : []),
+        ].join("\n");
+        setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));
+      })
+      .catch(() => setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, polishing: false } : cur)));
+  };
   const openMidReport = () => {
     const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (team !== "ALL" && team !== "종일" ? team as Team : "C");
-    const round: 1 | 2 = new Date().getHours() < 13 ? 1 : 2;
-    setMidReport({ round, team: myTeam, text: buildMidReport(round, myTeam) });
+    composeMidReport(new Date().getHours() < 13 ? 1 : 2, myTeam);
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
@@ -1976,25 +2027,25 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             <div className="flex items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
               <div>
                 <div className="text-[15px] font-black text-white">중간보고 생성</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 줄을 다듬는 중… (잠시 뒤 자동 교체)" : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
               </div>
               <button type="button" onClick={() => setMidReport(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
               {([[1, "12시 1차"], [2, "14시 2차"]] as const).map(([round, label]) => (
-                <button key={round} type="button" onClick={() => setMidReport({ round, team: midReport.team, text: buildMidReport(round, midReport.team) })}
+                <button key={round} type="button" onClick={() => composeMidReport(round, midReport.team)}
                   className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.round === round ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{label}</button>
               ))}
               <span className="mx-1 h-4 w-px bg-slate-200" />
               {teams.map((value) => (
-                <button key={value} type="button" onClick={() => setMidReport({ round: midReport.round, team: value, text: buildMidReport(midReport.round, value) })}
+                <button key={value} type="button" onClick={() => composeMidReport(midReport.round, value)}
                   className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{value}팀</button>
               ))}
             </div>
             <textarea value={midReport.text} onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
               className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
-              <button type="button" onClick={() => setMidReport({ ...midReport, text: buildMidReport(midReport.round, midReport.team) })}
+              <button type="button" onClick={() => composeMidReport(midReport.round, midReport.team)}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">다시 생성</button>
               <button type="button" onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify("중간보고를 복사했습니다 — 카톡방에 붙여넣으세요 ✓", "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700">복사</button>
