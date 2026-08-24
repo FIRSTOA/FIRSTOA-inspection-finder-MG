@@ -94,3 +94,28 @@ describe("접수내용 추출 — 스페이스 구분 양식 (신도아톰파이
     expect(extractIssue("", "내용 좀 봐줘요 이건 그냥 메모")).toBe("");
   });
 });
+
+import { extractCategory } from "../src/reportAssignee";
+
+describe("접수 구분 추출 — 방문 목적이 줄에서 빠지면 안 되는 것들", () => {
+  it("미수방문 (이지스 실사고 — 이름 접두 뒤 구분)", () => {
+    expect(extractCategory("미수방문\t N\tSL-X3280NR\t5N이지스-단순마감마감", "양승원 미수방문    N   SL-X3280NR   5N이지스-단순마감마감", "양승원")).toBe("미수방문");
+  });
+
+  it("여분요청·기기교체/사양변경", () => {
+    expect(extractCategory("여분요청\t V\tSL-X7500LX\t12#V주식회사 디쉐어", "", "")).toBe("여분요청");
+    expect(extractCategory("S\t 기기교체/사양변경\tApeosPort-C2060", "윤기준 - S\t 기기교체/사양변경\tApeosPort-C2060", "윤기준")).toBe("");
+  });
+
+  it("A/S·점검요청·일반 제목은 뽑지 않는다", () => {
+    expect(extractCategory("A/S\t N\tSL-K3250NR\t7N김경식세무회계사무소", "", "")).toBe("");
+    expect(extractCategory("점검요청\t SS\tSL-X3220NR\t공간코리아", "", "")).toBe("");
+    expect(extractCategory("2차체크/효성산업", "심태현 2차체크/효성산업", "심태현")).toBe("");
+  });
+});
+
+describe("접수내용 추출 — 빈 칸이 다음 필드명을 물지 않는다", () => {
+  it("'제목' 칸이 비어 '상태'가 값으로 잡히던 것 (에이스에스타워 실사고)", () => {
+    expect(extractIssue("", "제목      상태    \n참고사항         ")).toBe("");
+  });
+});

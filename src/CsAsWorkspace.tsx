@@ -14,7 +14,7 @@ import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./ac
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { useAuthorBook } from "./authors";
-import { extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
+import { extractCategory, extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -1131,7 +1131,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       if (name) raw = raw.replace(new RegExp(`^\\s*${name}\\s*[-–—:\\s]*`), "");
       const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
       const issue = extractIssue(ticket.issue, ticket.note).replace(/\s+/g, " ");
-      return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", cut(issue, 14)].filter(Boolean).join(" ");
+      const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);
+      return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", category, cut(issue, 14)].filter(Boolean).join(" ");
     };
     const todays = teamTickets.filter((ticket) =>
       ticket.date === todayYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
@@ -1210,6 +1211,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       note: (ticket.note || "").split(/\n/).slice(0, 3).join(" ").slice(0, 240),
       model: ticket.model,
       issue: extractIssue(ticket.issue, ticket.note),
+      category: extractCategory(ticket.vendor, ticket.calendarTitle, reportAssignee(ticket, order)),
       kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
     }));
     if (!payload.length) { setMidReport((cur) => (cur ? { ...cur, polishing: false } : cur)); return; }

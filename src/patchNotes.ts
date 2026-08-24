@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "075efb1d46",
+    "date": "2026-08-25",
+    "note": "접수내용 추출 — 스페이스 구분 양식(제목    값)도 인식"
+  },
+  {
     "hash": "3dc7c6c41e",
     "date": "2026-08-25",
     "note": "접수내용 추출기 — note 양식의 제목/상태/내용에서 확정적으로 (분기마감 오답 제거)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4d23013acb",
     "date": "2026-08-05",
     "note": "오발송 처리 일원화 — 조회탭 숨김이 업무 집계·방문 기록까지 함께 제외/복원"
-  },
-  {
-    "hash": "6471542dc2",
-    "date": "2026-08-05",
-    "note": "조회탭 기록 숨김(soft delete) — 잘못된 기록을 원문 보존한 채 목록·집계에서 제외"
   }
 ];

@@ -14,7 +14,7 @@ const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
 const INSTRUCTION = `복합기 CS팀의 카톡 중간보고 한 줄 요약기다. 각 일정을 "업체명 기종 핵심내용" 한 줄로 압축한다.
 
-입력 필드: vendor(담당자 이름을 뗀 제목), title(캘린더 원제목), note(접수 메모·양식 원문), model, issue, kind.
+입력 필드: vendor(담당자 이름을 뗀 제목), title(캘린더 원제목), note(접수 메모·양식 원문), model, issue, category(접수 구분), kind.
 model·issue가 비어 있으면 title·note의 접수양식 원문에서 업체·기종·내용을 찾는다.
 단, note가 접수양식이 아니라 손으로 쓴 협상·개인 메모로 보이면 무시한다(보고에 새면 안 된다).
 
@@ -24,6 +24,7 @@ model·issue가 비어 있으면 title·note의 접수양식 원문에서 업체
 - 내용: 증상·작업을 2~6단어로. "용지제거했는데 엄청 큰 갈리는소음이난다고함"→"용지제거 후 소음", "원격확인시 평판으로는 스캔이상없으나 ADF급지에서 스캔시 검정으로 스캔"→"ADF 스캔시 검정".
 - 납품·교체(kind=물류): "업체 품목 수량 구분" 형태. 예: "뉴트리원 갤북5 노트북 2대 납품", "디아트치과 9010→8730 교체".
 - 접수 제목이 양식 원문("A/S⇥등급⇥모델⇥…")이면 그 안의 실제 업체명을 찾아 쓴다. "종료일·지역·접수일·기번·자산번호·시리얼" 꼬리 필드는 전부 무시한다.
+- category(미수방문·여분요청·토너납품·CMS작성 등)가 있으면 방문 목적이므로 내용에 반드시 넣는다. issue가 함께 있으면 구분을 앞에: "미수방문 — 8월 내내 부재중". 지어내지 말고 입력의 category만 쓴다.
 - 마감 표기(분기마감·매월마감·단순마감)는 계약 구분일 뿐 방문 내용이 아니다 — 업체명에서 떼고 내용으로도 쓰지 않는다. issue가 있으면 그게 내용이다. 증상·작업이 정말 없으면 구분만 쓴다(A/S→"점검", 기기교체/사양변경→"기기교체").
 - 제목이 "이름 - 내용 / 등급 / 업체 / …"꼴이면 업체와 내용을 찾아 "업체 내용"으로. 예: "신정훈 - 전자계약서 작성 확인 / SS / 포바이포 / 김준탁…" → "포바이포 전자계약서 작성 확인"
 - 지어내지 않는다: 입력에 없는 부품명·원인을 추가하지 않는다. 확실치 않으면 원문 표현을 짧게 줄이는 데서 멈춘다.
@@ -47,6 +48,7 @@ Deno.serve(async (req) => {
       note: String(line.note || "").slice(0, 240),
       model: String(line.model || "").slice(0, 60),
       issue: String(line.issue || "").slice(0, 300),
+      category: String(line.category || "").slice(0, 20),
       kind: line.kind === "물류" ? "물류" : "as",
     }));
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {

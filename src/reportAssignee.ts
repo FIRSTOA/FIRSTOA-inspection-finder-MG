@@ -28,7 +28,22 @@ export function extractIssue(issue: string | undefined, note: string | undefined
     // 구분자: 탭·콜론 또는 스페이스 2개 이상 — 양식에 따라 "제목⇥값"도 "제목    값"도 있다
     const m = (note || "").match(new RegExp(`(?:^|\\n)\\s*"?${key}"?(?:\\s*[\\t:]+|[ ]{2,})\\s*([^\\t\\n"]+)`));
     const val = (m?.[1] || "").trim();
-    if (val && !/^[-–—.]*$/.test(val)) return val;
+    // 칸이 비면 다음 칸 이름("상태" 등)이 값으로 잡힌다 — 필드명 자체는 값이 아니다
+    if (val && !/^[-–—.]*$/.test(val) && !/^(접수내용|내용|제목|상태|참고사항|기기상태)$/.test(val)) return val;
   }
   return "";
+}
+
+/**
+ * 접수 구분 추출 — 제목 머리 낱말이 방문 목적 자체인 경우(미수방문·여분요청 등).
+ * 이게 빠지면 줄이 오해를 부른다: "이지스 3280 8월 부재중"은 AS처럼 읽히지만 실제론 미수 수금 방문.
+ * A/S·점검요청은 기본 업무라 뽑지 않는다(증상이 내용을 대신한다).
+ */
+const CATEGORY_WORDS = ["미수방문", "여분요청", "토너납품", "CMS작성", "셋팅요청", "기기교체"];
+
+export function extractCategory(vendor: string, title: string | undefined, assignee: string): string {
+  let head = ((title || "").trim() || vendor || "").trim();
+  if (assignee) head = head.replace(new RegExp(`^\\s*${assignee}\\s*[-–—:\\s]*`), "");
+  const first = head.split(/\s+/)[0] || "";
+  return CATEGORY_WORDS.find((word) => first.startsWith(word)) || "";
 }
