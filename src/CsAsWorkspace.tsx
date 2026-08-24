@@ -1080,8 +1080,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
    *       오늘 연기 처리한 건은 '익일변경'에 → 날짜와 함께. 진행중 * 표시는 사람이 아는 것이라 손으로.
    */
   const buildMidReport = (round: 1 | 2, reportTeam: Team) => {
+    // 필수 일정만 — 자동일정으로 만든 점검 동선(source=autoplan)과 매월점검은 개인 계획이지 보고 대상이 아니다
     const teamTickets = tickets.filter((ticket) =>
-      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가");
+      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
+      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
     // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
     // 팀장(신정훈)은 모든 팀 명단에 있어 지역 무관하게 그 팀 보고에 실린다.
     const order = [...teamAssignees[reportTeam].filter((name) => name !== "신정훈"), "신정훈"];

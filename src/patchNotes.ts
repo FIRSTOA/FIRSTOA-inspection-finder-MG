@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "edc9dc46a8",
+    "date": "2026-08-25",
+    "note": "중간보고 줄 압축 — 업체명·내용 꼬리 제거, 납품은 고객사·품목만, 제목 이름 인식"
+  },
+  {
     "hash": "d7a4b838b3",
     "date": "2026-08-25",
     "note": "중간보고 — CS 팀원 이름이 배정된 건만 (물류 인원·미배정 제외, 팀장은 전 팀 포함)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "517188dcfb",
     "date": "2026-08-04",
     "note": "직원 칩을 현황판으로 — 칩에 건수 배지, 0건 직원 숨김(드래그 제거), 그룹 헤더는 이름만"
-  },
-  {
-    "hash": "f131251ed3",
-    "date": "2026-08-04",
-    "note": "일정 상세 모달 개선 — 다크 헤더 + 제목 인라인 수정, 캘린더·모달 표시를 업체명 대신 제목으로"
   }
 ];
