@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "8c8f4ebf63",
+    "date": "2026-08-25",
+    "note": "중간보고 줄을 AI가 다듬는다 — report-polish edge function"
+  },
+  {
     "hash": "2ca0a7e2f9",
     "date": "2026-08-25",
     "note": "중간보고 초단축 — \"•업체 기종 내용\" 한 눈 형식, 팀장 최상단"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "59ba5c6ceb",
     "date": "2026-08-04",
     "note": "first-data GAS: 업체정보 vendor_info 미러 제거(30분 타임아웃·반쪽삭제 위험) + 인덱스 원격복구 액션(rebuildindex)·일일 트리거 보장"
-  },
-  {
-    "hash": "62deef6ae9",
-    "date": "2026-08-04",
-    "note": "모바일 사진 저장 수리 — blob 가상클릭 → 스토리지 네이티브 다운로드(?download)"
   }
 ];

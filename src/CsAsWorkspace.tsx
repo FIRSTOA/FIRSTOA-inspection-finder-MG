@@ -1120,7 +1120,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const groups: string[] = [];
     for (const name of order) {
       const mine = todays.filter((ticket) => assigneeOf(ticket) === name);
-      if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf));
+      if (mine.length) {
+        if (groups.length) groups.push("");   // 이름 사이 빈 줄 — 카톡에서 사람별로 끊어 읽힌다
+        groups.push(`#${name}`, ...mine.map(lineOf));
+      }
     }
     // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
     const deferred = teamTickets.filter((ticket) => {
@@ -1173,7 +1176,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         const groups: string[] = [];
         for (const name of order) {
           const mine = pending.filter((entry) => entry.name === name);
-          if (mine.length) groups.push(`#${name}`, ...mine.map(() => `•${res.lines[index++]}`));
+          if (mine.length) {
+            if (groups.length) groups.push("");   // 이름 사이 빈 줄
+            groups.push(`#${name}`, ...mine.map(() => `•${res.lines[index++]}`));
+          }
         }
         const deferLines = deferred.map(({ ticket }) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`);
         const text = [
