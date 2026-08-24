@@ -17,6 +17,7 @@ import { notify } from "../toast";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "../vendorFlags";
 import { currentQuarter, type Quarter } from "../workinPlaces";
 import ProposalSheet from "./ProposalSheet";
+import AnalyzeView from "./AnalyzeView";
 import {
   clearSignalCache, ddayOf, fetchBriefing, fetchRenewalScope,
   type RcBriefing, type RcDevice, type RcTarget, type RenewalScope,
@@ -71,6 +72,36 @@ function Kpi({ label, value, unit, sub, tone = "text-slate-900" }: { label: stri
 }
 
 export default function RecontractPrep({ author = "" }: { author?: string }) {
+  // 기본은 이카운트 분석(옛 재계약 웹앱 구조 그대로 — 사용자 확정). 방문 대상(워킨맵)은 보조 모드.
+  const [mode, setMode] = useState<"analyze" | "targets">(() => {
+    try { return (localStorage.getItem("recontract_mode") as "analyze" | "targets") || "analyze"; } catch { return "analyze"; }
+  });
+  useEffect(() => { try { localStorage.setItem("recontract_mode", mode); } catch { /* 무시 */ } }, [mode]);
+  const modeChips = (
+    <div className="flex items-center gap-1.5">
+      <button type="button" onClick={() => setMode("analyze")}
+        className={`rounded-full px-4 py-2 text-[13px] font-black transition ${mode === "analyze" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-800"}`}>이카운트 분석</button>
+      <button type="button" onClick={() => setMode("targets")}
+        className={`rounded-full px-4 py-2 text-[13px] font-black transition ${mode === "targets" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-800"}`}>방문 대상 (워킨맵)</button>
+    </div>
+  );
+  if (mode === "analyze") {
+    return (
+      <div className="space-y-4">
+        {modeChips}
+        <AnalyzeView />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {modeChips}
+      <TargetsView author={author} />
+    </div>
+  );
+}
+
+function TargetsView({ author = "" }: { author?: string }) {
   const quarter = currentQuarter();
   const [team, setTeam] = useState<string>(() => {
     try { return localStorage.getItem("recontract_team") || "C"; } catch { return "C"; }
