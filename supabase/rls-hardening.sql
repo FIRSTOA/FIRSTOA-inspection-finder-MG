@@ -71,3 +71,10 @@ revoke update, delete on table field_sheet_sync_jobs from anon;
 grant update ("업체명", "_업체명", "모델명", "시리얼넘버", "자산기번") on public.as_records to anon;
 grant update ("업체명", "_업체명", "모델명", "시리얼넘버", "자산기번") on public.jeomgeom   to anon;
 -- 내용·처리내용·작성자·날짜는 계속 차단 — 이력 위조 방지. 열려면 여기에 컬럼을 추가.
+
+-- 2026-08-25 후속 (실행 완료): 수정 시 원문 동기화 + 수정 이력
+-- FIELD 불러오기·통합이력이 _원문을 읽으므로 컬럼만 고치면 옛 값이 남는다(실제 지적).
+alter table public.as_records add column if not exists _edit_log jsonb not null default '[]'::jsonb;
+alter table public.jeomgeom   add column if not exists _edit_log jsonb not null default '[]'::jsonb;
+grant update ("_원문", "_edit_log") on public.as_records to anon;
+grant update ("_원문", "_edit_log") on public.jeomgeom   to anon;

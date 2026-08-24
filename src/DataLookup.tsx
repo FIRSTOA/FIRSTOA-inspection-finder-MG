@@ -162,7 +162,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const detailFields = useMemo(() => {
     if (!detail) return [] as Array<[string, string]>;
     return Object.entries(detail)
-      .filter(([key]) => !key.startsWith("_dupKey") && key !== "id")
+      .filter(([key]) => !key.startsWith("_dupKey") && key !== "id" && key !== "_edit_log")
       .map(([key, value]) => [key, value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)] as [string, string])
       .filter(([, value]) => value.trim());
   }, [detail]);
@@ -360,6 +360,19 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                   );
                 })}
               </div>
+              {Array.isArray(detail["_edit_log"]) && (detail["_edit_log"] as unknown[]).length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="mb-1 text-[10px] font-black tracking-wide text-amber-700">수정 이력</div>
+                  {(detail["_edit_log"] as Array<{ at?: string; by?: string; changes?: Record<string, [string, string]> }>).map((entry, index) => (
+                    <div key={index} className="border-b border-amber-100 py-1 text-[11px] font-bold text-amber-900 last:border-0">
+                      <span className="tabular-nums text-amber-700">{String(entry.at || "").slice(0, 16).replace("T", " ")}</span> · {entry.by || "미지정"}
+                      {Object.entries(entry.changes || {}).map(([key, [before, after]]) => (
+                        <span key={key} className="ml-2 inline-block">{key}: {before || "(빈값)"} → <b>{after || "(빈값)"}</b></span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
               {detailFields.filter(([key]) => ["_원문", "원문", "source_text", "report_text"].includes(key)).map(([key, value]) => (
                 <div key={key} className="rounded-lg border border-slate-200 p-3">
                   <div className="mb-1 text-[10px] font-black tracking-wide text-slate-400">{key.replace(/^_/, "")}</div>
@@ -380,13 +393,51 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                       <button type="button" disabled={editBusy || !Object.keys(editDraft).length}
                         onClick={async () => {
                           const changed = Object.entries(editDraft).filter(([key, next]) => next.trim() !== String(detail[key] ?? "").trim());
-                          if (!changed.length) { setEditDraft(null); return; }
-                          const summary = changed.map(([key, next]) => `${key}: ${String(detail[key] ?? "") || "(빈값)"} → ${next.trim() || "(빈값)"}`).join("\n");
-                          if (!await askConfirm(`이 기록을 수정할까요?\n\n${summary}\n\n통합이력·FIELD 검색·접수 AS히스토리가 이 기록을 읽으므로 모든 화면에 바로 반영됩니다. 원문(_원문)은 그대로 남습니다.`)) return;
+                          // _원문에도 같은 라벨 줄이 있으면 함께 고친다 — FIELD 불러오기·통합이력이 원문을 읽어서,
+                          // 컬럼만 고치면 거기엔 옛 값이 그대로 남는다(실제 지적). 변경 전 값은 _edit_log에 남긴다.
+                          const raw = typeof detail["_원문"] === "string" ? String(detail["_원문"]) : "";
+                          const rewriteRaw = () => {
+                            if (!raw.trim()) return "";
+                            const lines = raw.split("\n");
+                            let touched = false;
+                            for (const key of EDITABLE_FIELDS[category.table] || []) {
+                              const next = (editDraft[key] ?? String(detail[key] ?? "")).trim();
+                              if (!next) continue;
+                              const hits = lines.map((line, index) => ({ index, m: line.match(new RegExp(`^(\\s*${key}\\s*[:：]\\s*)(.*)$`)) }))
+                                .filter((h): h is { index: number; m: RegExpMatchArray } => !!h.m);
+                              const oldVal = String(detail[key] ?? "").trim();
+                              for (const h of hits) {
+                                const cur = h.m[2].trim();
+                                if (cur === next) continue;
+                                // 여러 기기 블록이 한 원문에 있을 수 있다 — 이 행의 옛 값과 같은 줄만 고친다.
+                                // (옛 값을 모르면 줄이 하나뿐일 때만 — 다른 기기 줄을 건드리면 안 된다)
+                                if (oldVal ? cur === oldVal : hits.length === 1) {
+                                  lines[h.index] = h.m[1] + next;
+                                  touched = true;
+                                }
+                              }
+                            }
+                            return touched ? lines.join("\n") : "";
+                          };
+                          const newRaw = rewriteRaw();
+                          if (!changed.length && !newRaw) { setEditDraft(null); return; }
+                          const summary = [
+                            ...changed.map(([key, next]) => `${key}: ${String(detail[key] ?? "") || "(빈값)"} → ${next.trim() || "(빈값)"}`),
+                            ...(newRaw ? ["원문 속 해당 줄도 함께 수정"] : []),
+                          ].join("\n");
+                          if (!await askConfirm(`이 기록을 수정할까요?\n\n${summary}\n\n통합이력·FIELD 불러오기·접수 AS히스토리가 전부 이 기록을 읽으므로 모든 화면에 바로 반영됩니다. 변경 전 값은 수정 이력에 남습니다.`)) return;
                           setEditBusy(true);
                           const patch: Record<string, unknown> = Object.fromEntries(changed.map(([key, next]) => [key, next.trim()]));
                           // 업체명을 고치면 매칭 키(_업체명)도 함께 — 안 맞추면 검색은 되는데 이력 매칭이 어긋난다
                           if (typeof patch["업체명"] === "string") patch["_업체명"] = patch["업체명"];
+                          if (newRaw) patch["_원문"] = newRaw;
+                          // 수정 이력 — 누가 언제 무엇을 바꿨는지 (원문 원본 추적은 이 로그가 담당한다)
+                          const prevLog = Array.isArray(detail["_edit_log"]) ? detail["_edit_log"] as unknown[] : [];
+                          patch["_edit_log"] = [...prevLog, {
+                            at: new Date().toISOString(), by: author || "미지정",
+                            changes: Object.fromEntries(changed.map(([key, next]) => [key, [String(detail[key] ?? ""), next.trim()]])),
+                            ...(newRaw ? { rawRewritten: true } : {}),
+                          }];
                           try {
                             await updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, patch);
                             setDetail({ ...detail, ...patch });

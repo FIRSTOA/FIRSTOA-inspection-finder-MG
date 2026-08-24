@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "167b9ca322",
+    "date": "2026-08-24",
+    "note": "조회탭 기기정보 수정 401 — 컬럼 단위 UPDATE 개방 (DB 실행 완료)"
+  },
+  {
+    "hash": "dce8e563ec",
+    "date": "2026-08-24",
+    "note": "워킨맵 거래처 검색 결과에 색 점 + 이 드롭다운도 전체 색상에서 검색"
+  },
+  {
     "hash": "b988a8c2d0",
     "date": "2026-08-24",
     "note": "워킨맵 검색 전체색상 + 점검·AS 시간배분 + 불만 업체단위 카운트 + 조회탭 기기정보 수정"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "25a87d3639",
     "date": "2026-08-02",
     "note": "일정리스트 [네이버 캘린더] 버튼을 엣지 함수로 통합 — 옛 /api/naver-add(미설정 Vercel 라우트) 제거 경로, uid 저장으로 수정·삭제 연동. 수정 모달 버튼명도 '네이버 캘린더'로 통일"
-  },
-  {
-    "hash": "612e308f68",
-    "date": "2026-08-02",
-    "note": "네이버 CalDAV 실측 기반 재작성 — 직접 주소 방식으로 조회·수정·삭제 완전 동작"
-  },
-  {
-    "hash": "d9930435f7",
-    "date": "2026-08-02",
-    "note": "네이버 캘린더 일정 조회·수정·삭제 — CalDAV 경유 (실험적)"
   }
 ];
