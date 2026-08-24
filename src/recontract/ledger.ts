@@ -135,8 +135,8 @@ export function parseRemarks(remarks: string): ContractNote[] {
 
 // ─── 판매/수금내역 ──────────────────────────────────────────────────────────
 
-export type LedgerCounter = { kind: "컬러A4" | "컬러A3" | "흑백"; 누계: number; 전월: number; 사용: number };
-export type LedgerExcess = { kind: "컬러" | "흑백"; 초과: number; 기본: number; 금액: number };
+export type LedgerCounter = { kind: "컬러" | "컬러A4" | "컬러A3" | "흑백"; 누계: number; 전월: number; 사용: number };
+export type LedgerExcess = { kind: "컬러" | "흑백"; 초과: number; 기본: number; 기본월: number; 금액: number };
 export type LedgerItem = {
   label: string;
   model: string;
@@ -171,16 +171,23 @@ function parseItem(label: string, amount: number): LedgerItem {
     금액: amount,
     무상: /\[무상\]/.test(label),
   };
-  const counter = label.match(/(컬러A4|컬러A3|흑백)누계\s*[-—]\s*([\d,]+)\s*,\s*전월\s*[-—]\s*([\d,]+)\s*\[사용\s*[-—]\s*(-?[\d,]+)\]/);
+  // 비교 기준 라벨이 업체마다 다르다: "전월-15909" / "9월-13564" / "6월-9962" (3개월 누적 청구).
+  // [사용-N]이 없는 줄(누적 중간 달)은 카운터로 세지 않는다 — 그 달 사용량을 모르는 게 사실이다.
+  const counter = label.match(/(컬러A4|컬러A3|컬러|흑백)누계\s*[-–—]?\s*([\d,]*)\s*,\s*[^[]*?\[사용\s*[-–—]?\s*(-?[\d,]+)\]/);
   if (counter) {
     item.counter = {
       kind: counter[1] as LedgerCounter["kind"],
-      누계: num(counter[2]), 전월: num(counter[3]), 사용: num(counter[4]),
+      누계: num(counter[2]), 전월: 0, 사용: num(counter[3]),
     };
   }
-  const excess = label.match(/(컬러|흑백)초과사용료\s*\[초과\s*[-—]\s*([\d,]+)\s*\(기본\s*[-—]\s*([\d,]+)\s*매\)\]/);
+  const excess = label.match(/(컬러|흑백)초과사용료\s*\[초과\s*[-–—]?\s*([\d,]+)\s*\(기본([^)]*)\)\]/);
   if (excess) {
-    item.excess = { kind: excess[1] as LedgerExcess["kind"], 초과: num(excess[2]), 기본: num(excess[3]), 금액: amount };
+    // 기본 표기: "기본-1200매" / "기본-400*3=1200매"(3개월 누적) — 월 기본을 따로 뽑는다
+    const inside = excess[3];
+    const mult = inside.match(/([\d,]+)\s*\*\s*(\d+)\s*=\s*([\d,]+)/);
+    const total = mult ? num(mult[3]) : num((inside.match(/([\d,]+)\s*매/) || [])[1] || inside);
+    const monthly = mult ? num(mult[1]) : 0; // 곱셈 표기가 없으면 0 — 누적 개월수는 usageStats에서 판단
+    item.excess = { kind: excess[1] as LedgerExcess["kind"], 초과: num(excess[2]), 기본: total, 기본월: monthly, 금액: amount };
   }
   return item;
 }
@@ -205,6 +212,7 @@ function parseVouchers(lines: string[]): LedgerVoucher[] {
     if (stamp) {
       const firstIdx = cells.indexOf(first);
       const rest = first.slice(stamp[0].length).trim();       // 날짜 셀에 적요가 붙어 온 경우
+      if (/^(오전|오후)\s*\d/.test(rest)) continue;            // 화면 하단의 출력 시각 — 전표가 아니다
       const after = cells.slice(firstIdx + 1);
       // 적요 셀 다음부터는 위치가 곧 뜻이다: [판매, 수금, 잔액].
       // 빈 셀을 걸러내면 잔액이 수금 자리로 밀린다 — 위치를 지키고 빈 칸은 0으로 둔다.
@@ -368,28 +376,56 @@ function trendOf(values: number[]): "증가" | "감소" | "유지" {
   return change > 0.12 ? "증가" : change < -0.12 ? "감소" : "유지";
 }
 
-/** 카운터 종류별 사용량 통계. 컬러는 A4·A3를 합쳐 본다 — 기본매수는 합산으로 계약된다 */
-function usageStats(months: LedgerMonth[], contracts: ContractNote[]): UsageStat[] {
-  const series = new Map<string, number[]>();
-  const excessBase = new Map<string, number>();
-  const excessMonths = new Map<string, number>();
+/**
+ * 카운터 종류별 사용량 통계. 컬러는 A4·A3를 합쳐 본다.
+ *
+ * 청구 방식이 업체마다 다르다:
+ *  - 매월 청구: 매달 [사용-N]이 찍힌다 → 다달이 합산
+ *  - 3개월 누적 청구: 분기 달에만 [사용-N](3개월치 합)이 찍힌다 → 월평균 = 총사용 ÷ 대장 개월수
+ * 기본매수도 월 기준으로 환산한다: "기본-400*3=1200매"면 월 400,
+ * "기본-1200매"인데 "N개월누적" 문구가 있으면 1200÷N. 기기가 여러 대면 기기별 월 기본을 합산한다.
+ */
+function usageStats(months: LedgerMonth[], contracts: ContractNote[], vouchers: LedgerVoucher[]): UsageStat[] {
+  // 누적 청구 감지 — 상세 줄에 "N개월누적" 문구
+  const accumMatch = vouchers.flatMap((voucher) => voucher.items)
+    .map((item) => item.label.match(/(\d+)\s*개월\s*누적/)).find(Boolean);
+  const accumMonths = accumMatch ? Math.max(1, Number(accumMatch[1])) : 1;
+
+  // 월별 사용 합(그 달에 [사용]이 찍힌 것만) — 매월 청구 업체의 추세·최근 계산용
+  const monthlySums = new Map<string, number[]>();
+  const usageMonthCount = new Map<string, number>();
   for (const month of months) {
     const sums = new Map<string, number>();
     for (const counter of month.counters) {
-      const kind = counter.kind.startsWith("컬러") ? "컬러" : "흑백";
+      const kind = counter.kind === "흑백" ? "흑백" : "컬러";
       sums.set(kind, (sums.get(kind) || 0) + counter.사용);
     }
     for (const [kind, used] of sums) {
-      const list = series.get(kind);
-      if (list) list.push(used);
-      else series.set(kind, [used]);
-    }
-    for (const excess of month.excesses) {
-      excessBase.set(excess.kind, excess.기본);
-      excessMonths.set(excess.kind, (excessMonths.get(excess.kind) || 0) + 1);
+      const list = monthlySums.get(kind) || [];
+      list.push(used);
+      monthlySums.set(kind, list);
+      usageMonthCount.set(kind, (usageMonthCount.get(kind) || 0) + 1);
     }
   }
-  // "APC2060 기존동일"처럼 조건을 안 적은 재계약이 흔하다 — 숫자가 적힌 가장 최근 계약까지 거슬러 찾는다
+
+  // 기기별 월 기본매수 — 전표 안에서 임대료 줄의 모델과 초과 줄을 짝지어 최신값을 남긴다
+  const baseByModel = new Map<string, Map<string, number>>(); // kind → (model → 월 기본)
+  const excessMonths = new Map<string, number>();
+  for (const voucher of vouchers) {
+    const model = voucher.items.find((item) => /임대료/.test(item.label) && item.model)?.model || "?";
+    for (const item of voucher.items) {
+      if (!item.excess) continue;
+      const kind = item.excess.kind;
+      excessMonths.set(kind, (excessMonths.get(kind) || 0) + 1);
+      const monthly = item.excess.기본월 || Math.round(item.excess.기본 / accumMonths);
+      if (monthly > 0) {
+        const byModel = baseByModel.get(kind) || new Map<string, number>();
+        byModel.set(model, monthly);
+        baseByModel.set(kind, byModel);
+      }
+    }
+  }
+
   const fromRemarks = (kind: string) => {
     for (const note of contracts) {
       const value = kind === "컬러" ? note.컬러기본 : note.흑백기본;
@@ -397,22 +433,28 @@ function usageStats(months: LedgerMonth[], contracts: ContractNote[]): UsageStat
     }
     return 0;
   };
+
+  const span = Math.max(1, months.length);
   const out: UsageStat[] = [];
-  for (const [kind, values] of series) {
-    const 개월수 = values.length;
-    const 월평균 = 개월수 ? Math.round(values.reduce((a, b) => a + b, 0) / 개월수) : 0;
+  for (const [kind, values] of monthlySums) {
+    const total = values.reduce((a, b) => a + b, 0);
+    const usageMonths = usageMonthCount.get(kind) || 0;
+    // "N개월누적" 문구가 있으면 누적 청구 확정 — 총사용 ÷ 대장 개월수.
+    // 문구가 없고 매달 찍히면 매월 청구 — 그 달들 평균(기존 계산).
+    const monthlyPattern = accumMonths === 1 && usageMonths >= span - 1;
+    const 월평균 = monthlyPattern ? Math.round(total / Math.max(1, usageMonths)) : Math.round(total / span);
     const recent = values.slice(-3);
-    const fromLedger = excessBase.get(kind) || 0;
-    const base = fromLedger || fromRemarks(kind);
+    const ledgerBase = Array.from((baseByModel.get(kind) || new Map()).values()).reduce((a, b) => a + b, 0);
+    const base = ledgerBase || fromRemarks(kind);
     out.push({
       kind,
       월평균,
-      최근3평균: recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 0,
+      최근3평균: monthlyPattern && recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 월평균,
       최대: Math.max(...values, 0),
       최소: Math.min(...values, 0),
-      개월수,
+      개월수: span,
       기본매수: base,
-      기본매수출처: fromLedger ? "대장" : base ? "적요" : "없음",
+      기본매수출처: ledgerBase ? "대장" : base ? "적요" : "없음",
       여유율: base ? Math.round(((base - 월평균) / base) * 100) : 0,
       초과월수: excessMonths.get(kind) || 0,
       추세: trendOf(values),
@@ -444,7 +486,7 @@ export function analyzeLedger(text: string): LedgerAnalysis {
   const 임대료 = parsed.months.flatMap((month) => month.items.filter((item) => /임대료/.test(item.label) && !item.무상 && item.단가 > 0));
   return {
     ...parsed,
-    usage: usageStats(parsed.months, parsed.contracts),
+    usage: usageStats(parsed.months, parsed.contracts, parsed.vouchers),
     payment: paymentStats(parsed.months),
     billing: {
       월기본료: 임대료.length ? 임대료[임대료.length - 1].단가 : parsed.contracts[0]?.월기본료 || 0,

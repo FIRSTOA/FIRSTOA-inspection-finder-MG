@@ -157,6 +157,8 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
     return { color, bw, total, 컬러활용률: rate(color), 흑백활용률: rate(bw) };
   }, [analysis]);
   const countersMissing = analysis.months.length > 0 && usage.total.컬러 + usage.total.흑백 === 0;
+  // 3개월 누적 청구 업체 — 사용량이 분기에만 찍히므로 월별 표의 빈 달이 정상이라는 안내가 필요하다
+  const isAccum = useMemo(() => analysis.vouchers.some((voucher) => voucher.items.some((it) => /개월\s*누적/.test(it.label))), [analysis]);
 
   // 판매/수금내역 원문 — 붙여넣은 텍스트에서 그 부분만 잘라 이카운트 그대로 보여준다
   const rawTable = useMemo(() => {
@@ -319,7 +321,7 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
 
       {/* 핵심 지표 */}
       <section>
-        <h2 className="mb-3 text-base font-bold text-slate-900">핵심 지표 <span className="ml-1 text-[11px] font-medium text-slate-400">대장 조회기간 {analysis.months.length}개월 기준</span></h2>
+        <h2 className="mb-3 text-base font-bold text-slate-900">핵심 지표 <span className="ml-1 text-[11px] font-medium text-slate-400">대장 조회기간 {analysis.months.length}개월 기준{isAccum ? " · 카운터 3개월 누적 청구 업체 — 사용량은 분기 합이 찍히고 월평균으로 환산했습니다" : ""}</span></h2>
         {countersMissing && (
           <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800">
             ⚠ 카운터(누계·사용) 줄을 인식하지 못해 사용량이 0으로 보입니다 — 아래 [판매/수금내역 원문]을 열어 카운터 줄이 들어왔는지 확인해 주세요. 원문 형식이 다르면 이민구에게 전달해 주시면 인식기를 맞추겠습니다.

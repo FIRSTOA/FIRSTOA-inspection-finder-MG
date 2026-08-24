@@ -90,12 +90,12 @@ describe("판매/수금내역", () => {
   it("초과가 붙은 달은 청구가 늘어난다", () => {
     const sep = parsed.months.find((month) => month.ym === "2025-09");
     expect(sep?.청구).toBe(143_000);
-    expect(sep?.excesses).toEqual([{ kind: "컬러", 초과: 86, 기본: 500, 금액: 11_000 }]);
+    expect(sep?.excesses).toEqual([{ kind: "컬러", 초과: 86, 기본: 500, 기본월: 0, 금액: 11_000 }]);
   });
   it("카운터 사용량 — 누계 차이와 맞는다", () => {
     const aug = parsed.months.find((month) => month.ym === "2025-08");
     const color4 = aug?.counters.find((counter) => counter.kind === "컬러A4");
-    expect(color4).toEqual({ kind: "컬러A4", 누계: 16_801, 전월: 16_376, 사용: 425 });
+    expect(color4).toEqual({ kind: "컬러A4", 누계: 16_801, 전월: 0, 사용: 425 }); // 전월 라벨은 업체마다 달라("9월-") 따로 담지 않는다
   });
   it("수금일과 지연일", () => {
     const aug = parsed.months.find((month) => month.ym === "2025-08");
@@ -177,5 +177,50 @@ describe("붙여넣기 형태 변형 — 브라우저 복사는 탭 배치가 �
     expect(first?.수금).toBe(0);      // 판매 전표 — 수금은 별도 전표
     const pay = parsed.vouchers.find((v) => v.date === "2025-08-19");
     expect(pay?.수금).toBe(132_000);
+  });
+});
+
+describe("3개월 누적 청구 업체 (하이어랭크형 실사용 표본)", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const parsed = parseLedger(quarterly);
+  const analysis = analyzeLedger(quarterly);
+
+  it("'컬러누계'(A4 접두 없음)와 '6월-' 비교 라벨을 읽는다 — 사용량 0 사고의 원인", () => {
+    const sep = parsed.months.find((month) => month.ym === "2024-09");
+    const colors = sep?.counters.filter((counter) => counter.kind !== "흑백") || [];
+    expect(colors.reduce((sum, counter) => sum + counter.사용, 0)).toBe(3_602 + 1_422 + 37);
+    expect(sep?.counters.find((counter) => counter.kind === "흑백" && counter.사용 === 1_152)).toBeTruthy();
+  });
+
+  it("[사용]이 없는 누적 중간 달은 카운터로 세지 않는다", () => {
+    const jul = parsed.months.find((month) => month.ym === "2024-07");
+    expect(jul?.counters).toHaveLength(0);
+  });
+
+  it("초과 기본 표기 두 형태를 다 읽는다: '기본-1200매'와 '기본-400*3=1200매'", () => {
+    const sep = parsed.months.find((month) => month.ym === "2024-09");
+    expect(sep?.excesses.map((excess) => excess.기본)).toEqual([1_200, 1_200]);
+    const jun = parsed.months.find((month) => month.ym === "2026-06");
+    expect(jun?.excesses[0]).toMatchObject({ 초과: 216, 기본: 1_200, 기본월: 400 });
+  });
+
+  it("기본매수는 월 기준으로 환산된다 — 기기 2대(X3220+AC2060) 합산 월 800매", () => {
+    const color = analysis.usage.find((stat) => stat.kind === "컬러");
+    expect(color?.기본매수).toBe(800);   // X3220 400 (400*3 표기) + AC2060 400 (1200÷3개월누적)
+    expect(color?.기본매수출처).toBe("대장");
+  });
+
+  it("월평균은 총사용 ÷ 대장 개월수 — 분기에만 찍혀도 평균이 맞다", () => {
+    const color = analysis.usage.find((stat) => stat.kind === "컬러");
+    // 총 컬러 사용 3602+1422+37+1416 = 6477, 대장 5개월(청구월 기준)
+    expect(color?.월평균).toBe(Math.round(6_477 / parsed.months.length));
+  });
+
+  it("화면 하단의 출력 시각(오후 9:57:54)은 전표가 아니다", () => {
+    expect(parsed.vouchers.some((voucher) => /^오후|^오전/.test(voucher.memo))).toBe(false);
+  });
+
+  it("CMS 승인실패 줄이 있어도 죽지 않고, 누계는 표 그대로", () => {
+    expect(parsed.누계).toEqual({ 판매: 4_516_600, 수금: 4_235_000, 잔액: 281_600 });
   });
 });

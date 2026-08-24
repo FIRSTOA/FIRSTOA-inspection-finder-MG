@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "10c772d04c",
+    "date": "2026-08-24",
+    "note": "방문 대상 목록 — 등급별 보기·총 개수·완료 동기화 표시"
+  },
+  {
     "hash": "617bfcc85f",
     "date": "2026-08-24",
     "note": "이카운트 분석 2차 개편 — 파서 견고화·이카운트형 표·워킨맵 통합·세션 저장"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a1b859399f",
     "date": "2026-08-04",
     "note": "칭찬 [시트 열기]를 다른 탭과 같은 미리보기쪽 버튼줄로 통일 (폼 안 버튼은 보내기만)"
-  },
-  {
-    "hash": "a468634131",
-    "date": "2026-08-04",
-    "note": "칭찬 접수 폼 버튼 정리 — [보내기][시트 열기] 두 개로 (자기개발 피드에 잘못 단 버튼은 원복)"
   }
 ];
