@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5e49a082d4",
+    "date": "2026-08-25",
+    "note": "중간보고 AI 재료 보강 — 원제목·note 전달, 마감 방문은 '분기마감'이 내용, 규칙 줄 A/S 잘림 수리"
+  },
+  {
     "hash": "df25f79cf2",
     "date": "2026-08-25",
     "note": "이름 판정 정규식 \\s 이스케이프 사고 수리 — 순수 모듈 추출 + 실사고 케이스 테스트 7개"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5db4a3b93e",
     "date": "2026-08-05",
     "note": "지역 없으면 팝업 차단 — 테스트 모드보다 우선 (알림+전송 모두), api 이중 방어"
-  },
-  {
-    "hash": "6f00fd271e",
-    "date": "2026-08-05",
-    "note": "필드 지역 배너를 전송 텍스트 기준으로 + 해피콜 문구 플래시 제거"
   }
 ];

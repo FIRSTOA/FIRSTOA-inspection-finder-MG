@@ -15,3 +15,19 @@ export function matchReportAssignee(ticket: AssigneeSource, order: string[]): st
     || order.find((name) => new RegExp(`(?:^|[\\s/·])${name}(?=[\\s\\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
     || "";
 }
+
+/**
+ * 접수내용 찾기 — issue 칸이 비면 note의 접수양식에서 뽑는다.
+ * 임대리스트 양식은 "제목⇥ 용지 씹힘" 꼴로 수십 줄 아래에 있고, FIELD 양식은 "내용: …" 꼴.
+ * ("분기마감·매월마감"은 계약 구분 표기지 방문 내용이 아니다 — 내용은 반드시 이 칸들에서 찾는다)
+ */
+export function extractIssue(issue: string | undefined, note: string | undefined): string {
+  const direct = (issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim();
+  if (direct) return direct;
+  for (const key of ["접수내용", "내용", "제목", "상태"]) {
+    const m = (note || "").match(new RegExp(`(?:^|\\n)\\s*"?${key}"?\\s*[\\t:]+\\s*([^\\t\\n"]+)`));
+    const val = (m?.[1] || "").trim();
+    if (val && !/^[-–—.]*$/.test(val)) return val;
+  }
+  return "";
+}

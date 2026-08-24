@@ -39,3 +39,40 @@ describe("중간보고 담당자 판정", () => {
     expect(matchReportAssignee({ vendor: "정웅빌딩 점검" }, ORDER)).toBe("");
   });
 });
+
+import { extractIssue } from "../src/reportAssignee";
+
+describe("접수내용 추출 — issue 칸이 비면 note의 접수양식에서", () => {
+  const LEASE_FORM = [
+    "A/S\t N\tSL-K3250NR\t7N김경식세무회계사무소-분기마감\t종료일\t27. 3. 25",
+    "기번\t0A6VBJMT6000G5Y\t자산번호\tX9239",
+    "기본임대료\t₩55,000\t평균임대료\t₩ 57,000",
+    '일반전화\t"T:02-2647-0750',
+    'F:02-2647-0753"',
+    "기종\tSL-K3250NR\t기기상태\t중고기",
+    "제목\t 용지 씹힘",
+    "상태\t 용지 씹힘",
+    "참고사항\t",
+  ].join("\n");
+
+  it("임대리스트 양식의 '제목' 줄을 찾는다 (김경식 실사고 — '분기마감'이 아니라 '용지 씹힘')", () => {
+    expect(extractIssue("", LEASE_FORM)).toBe("용지 씹힘");
+  });
+
+  it("FIELD 양식의 '내용:' 줄을 찾는다", () => {
+    expect(extractIssue(undefined, "모델명: ApeosPort-3060\n내용: 글자체가 겹쳐서 출력이 됩니다.\n처리내용: 드럼 교환")).toBe("글자체가 겹쳐서 출력이 됩니다.");
+  });
+
+  it("issue 칸이 있으면 그게 우선", () => {
+    expect(extractIssue("검은줄 묻어나옴", LEASE_FORM)).toBe("검은줄 묻어나옴");
+  });
+
+  it("'접수내용'이 '내용'보다 우선하고, 빈 값·대시는 건너뛴다", () => {
+    expect(extractIssue("", "접수내용\t용지걸림 반복\n내용\t기타")).toBe("용지걸림 반복");
+    expect(extractIssue("", "제목\t-\n상태\t 소음 발생")).toBe("소음 발생");
+  });
+
+  it("아무 데도 없으면 빈값", () => {
+    expect(extractIssue("", "기번\t0A6VBJ\n주소\t서울 양천구")).toBe("");
+  });
+});
