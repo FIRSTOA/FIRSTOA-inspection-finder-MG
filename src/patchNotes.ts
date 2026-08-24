@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "90dadc6e39",
+    "date": "2026-08-25",
+    "note": "일정리스트 — 12시·14시 중간보고 자동 생성"
+  },
+  {
     "hash": "837ade9eaf",
     "date": "2026-08-25",
     "note": "활용률은 기기별이 정답 — 합산 스탯 제거 + '기존동일' 기본료 상속"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7c8e14fa86",
     "date": "2026-08-04",
     "note": "칭찬: 폼 안 파란 보내기 제거 — 미리보기 버튼줄의 [보내기]가 실제 제출 (거래처명·칭찬이유 채우면 활성화)"
-  },
-  {
-    "hash": "72e969a04e",
-    "date": "2026-08-04",
-    "note": "빌드 수정 — 미사용 scheduleFilters·ScheduleFilter 제거 (직전 커밋 tsc 실패 보정)"
   }
 ];

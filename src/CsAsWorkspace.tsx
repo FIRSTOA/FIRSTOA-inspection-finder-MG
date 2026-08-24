@@ -1092,31 +1092,23 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const groups: string[] = [];
     for (const name of order) {
       const mine = todays.filter((ticket) => ticket.assignee === name);
-      if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf), "");
+      if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf));
     }
     const others = todays.filter((ticket) => !order.includes(ticket.assignee));
-    if (others.length) groups.push("#미배정·기타", ...others.map(lineOf), "");
+    if (others.length) groups.push("#미배정", ...others.map(lineOf));
     // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
     const deferred = teamTickets.filter((ticket) => {
       if (ticket.status !== "익일" || ticket.date <= todayYmd) return false;
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
     });
-    const done = teamTickets.filter((ticket) => ticket.date === todayYmd && ticket.status === "완료");
     return [
       `${round === 1 ? "12시 1차" : "14시 2차"} 중간보고`,
       "(진행중인 업무는 * 표시)",
       "",
-      "---",
       "금일 처리예정",
-      ...(groups.length ? groups : ["없음", ""]),
-      "---",
-      "익일변경",
-      ...(deferred.length ? deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`) : [""]),
-      "---",
-      "특이사항",
-      "",
-      ...(done.length ? [`(완료 ${done.length}건: ${done.map((ticket) => fieldTicketVendor(ticket.vendor).vendor || ticket.vendor).join(", ")})`] : []),
+      ...(groups.length ? groups : ["없음"]),
+      ...(deferred.length ? ["", "익일변경", ...deferred.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`)] : []),
     ].join("\n");
   };
   const openMidReport = () => {
