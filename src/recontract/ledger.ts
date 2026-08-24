@@ -185,33 +185,50 @@ function parseItem(label: string, amount: number): LedgerItem {
   return item;
 }
 
-const VOUCHER_DATE = /^(\d{4})[./-](\d{2})[./-](\d{2})(?:\s+(-?\d+))?$/;
+const VOUCHER_DATE = /^(\d{4})[./-](\d{2})[./-](\d{2})(?:\s+(-?\d+))?\s*/;
 
-/** 표 영역 → 전표 목록 */
+/** 셀이 금액(숫자·쉼표·원)뿐인지 */
+function isAmountCell(cell: string): boolean {
+  const t = cell.trim();
+  return !!t && /^[-₩\d,.]+원?$/.test(t) && /\d/.test(t);
+}
+
+/** 표 영역 → 전표 목록. 복사 형태(선행 탭 유무, 날짜+적요 한 셀)가 제각각이라 셀 위치를 못 박지 않는다 */
 function parseVouchers(lines: string[]): LedgerVoucher[] {
   const out: LedgerVoucher[] = [];
   for (const line of lines) {
     if (!line.trim()) continue;
     const cells = line.split("\t").map((cell) => cell.replace(/ /g, " ").trim());
-    const first = cells[0] || "";
+    const first = cells.find((cell) => cell) || "";           // 선행 빈 셀은 건너뛴다
     if (/^(일자|이월잔액|누계)/.test(first) || /^\d{4}[./-]\d{2}\s*계$/.test(first)) continue; // 머리·이월·월계·누계 줄
     const stamp = first.match(VOUCHER_DATE);
-    const label = cells[1] || "";
-    const 판매 = num(cells[2]);
-    const 수금 = num(cells[3]);
     if (stamp) {
+      const firstIdx = cells.indexOf(first);
+      const rest = first.slice(stamp[0].length).trim();       // 날짜 셀에 적요가 붙어 온 경우
+      const after = cells.slice(firstIdx + 1);
+      // 적요 셀 다음부터는 위치가 곧 뜻이다: [판매, 수금, 잔액].
+      // 빈 셀을 걸러내면 잔액이 수금 자리로 밀린다 — 위치를 지키고 빈 칸은 0으로 둔다.
+      const memoIdx = after.findIndex((cell) => cell && !isAmountCell(cell));
+      const memoCell = memoIdx >= 0 ? after[memoIdx] : "";
+      // 적요가 빈 전표도 적요 "자리"는 있다 — 첫 셀이 빈칸이면 그게 적요 자리다
+      const tail = memoIdx >= 0 ? after.slice(memoIdx + 1) : (after[0] === "" ? after.slice(1) : after);
       out.push({
         date: `${stamp[1]}-${stamp[2]}-${stamp[3]}`,
         no: stamp[4] || "",
-        memo: label,
-        판매, 수금,
+        memo: [rest, memoCell].filter(Boolean).join(" ").trim(),
+        판매: isAmountCell(tail[0] || "") ? num(tail[0]) : 0,
+        수금: isAmountCell(tail[1] || "") ? num(tail[1]) : 0,
         items: [],
       });
       continue;
     }
-    // 일자 칸이 빈 줄 = 앞 전표의 상세
+    // 날짜가 없는 줄 = 앞 전표의 상세 — 글자가 있는 첫 셀이 라벨이다
     const current = out[out.length - 1];
-    if (current && label) current.items.push(parseItem(label, 판매));
+    if (!current) continue;
+    const label = cells.find((cell) => cell && !isAmountCell(cell)) || "";
+    if (!label) continue;
+    const amounts = cells.filter(isAmountCell);
+    current.items.push(parseItem(label, num(amounts[0] ?? "")));
   }
   return out;
 }
@@ -223,6 +240,7 @@ export type LedgerParsed = {
   info: Record<string, string>;
   remarks: string;
   contracts: ContractNote[];
+  vouchers: LedgerVoucher[];   // 전표 그대로 — 이카운트형 표(일자/적요/판매/수금) 렌더용
   months: LedgerMonth[];
   누계: { 판매: number; 수금: number; 잔액: number };
 };
@@ -301,6 +319,7 @@ export function parseLedger(text: string): LedgerParsed {
     info,
     remarks,
     contracts: parseRemarks(remarks),
+    vouchers,
     months,
     누계: { 판매: totals[1] || 0, 수금: totals[2] || 0, 잔액: totals[3] || 0 },
   };

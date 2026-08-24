@@ -148,3 +148,34 @@ describe("분석", () => {
     expect(analysis.billing.초과청구합).toBe(11_000);
   });
 });
+
+describe("붙여넣기 형태 변형 — 브라우저 복사는 탭 배치가 제각각이다", () => {
+  const sample = readFileSync(new URL("./fixtures/ecount-ledger-sample.txt", import.meta.url), "utf8");
+
+  it("상세 줄의 선행 탭이 사라져도 카운터를 읽는다 (실사용: 사용량 0 사고)", () => {
+    // 상세 줄 맨 앞의 빈 셀(탭)이 복사 과정에서 사라진 형태
+    const variant = sample.split("\n").map((line) => (line.startsWith(" \t") ? line.slice(2) : line)).join("\n");
+    const parsed = parseLedger(variant);
+    const aug = parsed.months.find((month) => month.ym === "2025-08");
+    expect(aug?.counters.length).toBe(3);
+    expect(aug?.counters.find((c) => c.kind === "컬러A4")?.사용).toBe(425);
+  });
+
+  it("날짜 셀에 적요가 붙어 와도 전표를 읽는다", () => {
+    const variant = sample.replace("2025/09/08 -108\t25.6.4 재계약> 전자확인", "2025/09/08 -108 25.6.4 재계약> 전자확인");
+    const parsed = parseLedger(variant);
+    const sep = parsed.months.find((month) => month.ym === "2025-09");
+    expect(sep?.청구).toBe(143_000);
+    expect(sep?.memo).toContain("재계약");
+  });
+
+  it("전표 목록(vouchers)이 이카운트형 표 렌더용으로 그대로 노출된다", () => {
+    const parsed = parseLedger(sample);
+    expect(parsed.vouchers.length).toBeGreaterThan(20); // 청구 14 + 수금 12 + α
+    const first = parsed.vouchers.find((v) => v.date === "2025-08-07");
+    expect(first?.판매).toBe(132_000);
+    expect(first?.수금).toBe(0);      // 판매 전표 — 수금은 별도 전표
+    const pay = parsed.vouchers.find((v) => v.date === "2025-08-19");
+    expect(pay?.수금).toBe(132_000);
+  });
+});
