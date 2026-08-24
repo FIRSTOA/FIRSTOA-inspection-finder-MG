@@ -119,3 +119,18 @@ describe("접수내용 추출 — 빈 칸이 다음 필드명을 물지 않는�
     expect(extractIssue("", "제목      상태    \n참고사항         ")).toBe("");
   });
 });
+
+describe("명단 이름의 정규식 특수문자", () => {
+  it("괄호 든 이름('김광태(IT)')이 있어도 죽지 않고 정확히 잡는다", () => {
+    const order = ["김광태(IT)", "심태현"];
+    expect(matchReportAssignee({ vendor: "김광태(IT) - 서버실 점검" }, order)).toBe("김광태(IT)");
+    expect(matchReportAssignee({ vendor: "심태현 점검요청", calendarTitle: "심태현 점검요청" }, order)).toBe("심태현");
+  });
+});
+
+describe("접수내용 추출 — 빈 칸이 다음 줄 라벨을 물지 않는다", () => {
+  it("값이 빈 '제목' 다음 줄의 '지역'을 접수내용으로 잡지 않는다", () => {
+    expect(extractIssue("", "제목\t\n지역\t서울 양천구")).toBe("");
+    expect(extractIssue("", "내용:\t\n접수자성함\t홍길동")).toBe("");
+  });
+});

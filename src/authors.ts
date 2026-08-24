@@ -12,10 +12,10 @@ export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "IT"]; 
 /** DB를 못 읽을 때 쓰는 최소 명단 (초기 시드와 동일) */
 export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
   "팀장": ["신정훈"],
-  A: ["김정민", "심태현", "정웅"],
-  B: ["권태혁", "조윤", "윤기준"],
-  C: ["이홍진", "박영현", "이민구", "한왕주"],
-  D: ["양승원", "김종희", "이호준"],
+  A: ["이권선", "심태현", "김정민", "정웅"],
+  B: ["윤기준", "권태혁", "조윤"],
+  C: ["이홍진", "이민구", "박영현", "한왕주"],
+  D: ["김종희", "이호준", "양승원"],
   IT: ["김광태", "김담우", "김정식", "문종주", "손영근", "신동원", "지경민"],
 };
 
@@ -142,13 +142,15 @@ export function useAuthorBook() {
   useEffect(() => {
     let alive = true;
     const sync = () => { if (alive && cache) setBook(cache); };
+    // storage 이벤트는 다른 탭의 쓰기에서 온다 — 이 탭의 cache를 미러에서 다시 읽어야 실제로 반영된다
+    const onStorage = () => { const mirrored = readMirror(); if (mirrored) cache = mirrored; sync(); };
     window.addEventListener(CHANGE_EVENT, sync);
-    window.addEventListener("storage", sync);
+    window.addEventListener("storage", onStorage);
     void refresh().then(sync).catch(() => {});
     return () => {
       alive = false;
       window.removeEventListener(CHANGE_EVENT, sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 

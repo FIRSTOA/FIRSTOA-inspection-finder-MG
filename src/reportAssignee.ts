@@ -9,10 +9,15 @@
  */
 export type AssigneeSource = { assignee?: string; vendor: string; calendarTitle?: string };
 
+/** 이름을 정규식에 끼울 때 특수문자를 무력화 — 명단은 자유 입력이라 "김광태(IT)" 같은 표기가 올 수 있다 */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function matchReportAssignee(ticket: AssigneeSource, order: string[]): string {
   return ticket.assignee
-    || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor))
-    || order.find((name) => new RegExp(`(?:^|[\\s/·])${name}(?=[\\s\\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
+    || order.find((name) => new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]`).test(ticket.vendor))
+    || order.find((name) => new RegExp(`(?:^|[\\s/·])${escapeRegExp(name)}(?=[\\s\\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
     || "";
 }
 
@@ -25,8 +30,9 @@ export function extractIssue(issue: string | undefined, note: string | undefined
   const direct = (issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim();
   if (direct) return direct;
   for (const key of ["접수내용", "내용", "제목", "상태"]) {
-    // 구분자: 탭·콜론 또는 스페이스 2개 이상 — 양식에 따라 "제목⇥값"도 "제목    값"도 있다
-    const m = (note || "").match(new RegExp(`(?:^|\\n)\\s*"?${key}"?(?:\\s*[\\t:]+|[ ]{2,})\\s*([^\\t\\n"]+)`));
+    // 구분자: 탭·콜론 또는 스페이스 2개 이상 — 양식에 따라 "제목⇥값"도 "제목    값"도 있다.
+    // 값은 라벨과 같은 줄에서만 찾는다(\s가 개행을 넘으면 빈 칸 다음 줄의 라벨이 값으로 잡힌다).
+    const m = (note || "").match(new RegExp(`(?:^|\\n)[^\\S\\n]*"?${key}"?(?:[^\\S\\n]*[\\t:]+|[ ]{2,})[^\\S\\n]*([^\\t\\n"]+)`));
     const val = (m?.[1] || "").trim();
     // 칸이 비면 다음 칸 이름("상태" 등)이 값으로 잡힌다 — 필드명 자체는 값이 아니다
     if (val && !/^[-–—.]*$/.test(val) && !/^(접수내용|내용|제목|상태|참고사항|기기상태)$/.test(val)) return val;
@@ -43,7 +49,7 @@ const CATEGORY_WORDS = ["미수방문", "여분요청", "토너납품", "CMS작�
 
 export function extractCategory(vendor: string, title: string | undefined, assignee: string): string {
   let head = ((title || "").trim() || vendor || "").trim();
-  if (assignee) head = head.replace(new RegExp(`^\\s*${assignee}\\s*[-–—:\\s]*`), "");
+  if (assignee) head = head.replace(new RegExp(`^\\s*${escapeRegExp(assignee)}\\s*[-–—:\\s]*`), "");
   const first = head.split(/\s+/)[0] || "";
   return CATEGORY_WORDS.find((word) => first.startsWith(word)) || "";
 }

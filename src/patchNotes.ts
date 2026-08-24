@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "76979291c9",
+    "date": "2026-08-25",
+    "note": "중간보고 — 생성 중엔 완성본만 기다린다 (규칙 초안은 AI 실패 시 대체본으로만)"
+  },
+  {
     "hash": "c513d7d7f0",
     "date": "2026-08-25",
     "note": "접수 구분(미수방문·여분요청 등) 줄에 포함 + 빈 칸이 다음 필드명 무는 것 차단"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2cc2025c6d",
     "date": "2026-08-05",
     "note": "빌드 보정 — 오발송 제거 후 미사용 임포트·상태 정리"
-  },
-  {
-    "hash": "8a7dc150b2",
-    "date": "2026-08-05",
-    "note": "숨김 필터를 모든 화면에 확산 + 업무현황판 집계 제외 잔여 UI 제거"
   }
 ];

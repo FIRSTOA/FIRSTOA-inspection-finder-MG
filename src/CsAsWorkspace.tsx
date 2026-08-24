@@ -14,7 +14,7 @@ import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./ac
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { useAuthorBook } from "./authors";
-import { extractCategory, extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
+import { escapeRegExp, extractCategory, extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -68,17 +68,6 @@ function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilt
 }
 // AS 완료는 팀별 네이버 완료 캘린더로 이동한다 — 표기도 그 캘린더 이름을 쓴다
 const DONE_CAL_LABEL: Record<Team, string> = { A: "강북A as", B: "강서B as", C: "강남C as", D: "경기D as", E: "지방E as", 기타: "as완료" };
-
-// 명단의 원본은 관리탭 인원(cs_members)이다 — 아래는 DB를 아직 못 읽었을 때의 예비.
-// (예전엔 이 표가 원본이라 A팀 이권선 누락·"정웅만" 오기로 다른 팀 보고가 비어 나왔다)
-const FALLBACK_TEAM_ASSIGNEES: Record<Team, string[]> = {
-  A: ["이권선", "심태현", "김정민", "정웅", "신정훈"],
-  B: ["윤기준", "권태혁", "조윤", "신정훈"],
-  C: ["이홍진", "이민구", "박영현", "한왕주", "신정훈"],
-  D: ["김종희", "이호준", "양승원", "신정훈"],
-  E: [], // 충청외 극지방 — 전담 명단 없음(전체에서 선택)
-  기타: [],
-};
 
 const storageKey = "cs_as_tickets_v4";
 const REPORT_SEP = "-------------------"; // 중간보고 구분선 — 카톡에서 섹션이 끊어 읽히게
@@ -508,8 +497,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const teamAssignees = useMemo<Record<Team, string[]>>(() => {
     const lead = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
     const of = (t: "A" | "B" | "C" | "D") => {
-      const live = memberBook[t] || [];
-      const names = live.length ? live : FALLBACK_TEAM_ASSIGNEES[t];
+      const names = memberBook[t] || []; // DB를 못 읽어도 authors.ts의 시드(AUTHOR_BOOK)가 채워준다 — 예비 명단을 두 벌 두면 서로 어긋난다
       return [...names.filter((n) => !lead.includes(n)), ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
     };
     return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: [], 기타: [] };
@@ -1128,7 +1116,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const name = assigneeOf(ticket);
       // "A/S"의 슬래시는 구분자가 아니다 — 잠깐 다른 글자로 바꿔 보호하고 자른 뒤 되돌린다
       let raw = ticket.vendor.replace(/A\/S/g, "A\u2044S").split(/\s*>\s*/)[0].split("/")[0].replace(/A\u2044S/g, "A/S");
-      if (name) raw = raw.replace(new RegExp(`^\\s*${name}\\s*[-–—:\\s]*`), "");
+      if (name) raw = raw.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "");
       const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
       const issue = extractIssue(ticket.issue, ticket.note).replace(/\s+/g, " ");
       const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);
@@ -1149,12 +1137,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
     const tomorrows = teamTickets.filter((ticket) =>
       ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
-    // 모레 이후로 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것만, 날짜를 달아 같이 보여준다
-    const deferredLater = teamTickets.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= tomorrowYmd) return false;
-      const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
-      return (ticket.note || "").includes(mark);
-    });
+    // 모레 이후(주말 포함)로 연기한 건 — 연기 기록 "(M/D로 연기)"가 남아 있으면 연기 이력으로 본다.
+    // 마크의 날짜를 현재 날짜와 정확 대조하던 방식은 물류 건(status가 익일이 안 됨)과
+    // 연기 후 날짜를 다시 옮긴 건, 토요일로 연기한 건을 보고에서 통째로 빠뜨렸다.
+    const deferredLater = teamTickets.filter((ticket) =>
+      ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
+      && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
     const tomorrowLines = [
       ...tomorrows.map(lineOf),
       ...deferredLater.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
@@ -1194,11 +1182,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
     const tomorrows = eligible.filter((ticket) =>
       ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
-    const deferredLater = eligible.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= tomorrowYmd) return false;
-      const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
-      return (ticket.note || "").includes(mark);
-    });
+    const deferredLater = eligible.filter((ticket) =>
+      ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
+      && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
     // 진단 줄 — "왜 안 뜨지?"를 원격으로 잡기 위한 단계별 건수 (모달에만 표시, 복사 안 됨)
     const todayAll = tickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
     const todayTeam = eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
@@ -1221,7 +1207,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void invokeEdgeFunction<{ lines: string[] }>("report-polish", { lines: payload })
       .then((res) => {
         if (midReportSeq.current !== seq) return;
-        if (!Array.isArray(res.lines)) { fallback(); return; }
+        // 개수 불일치(edge는 40건까지만 다듬는다)·빈 줄이면 통째로 초안 폴백 — "•undefined" 방지
+        if (!Array.isArray(res.lines) || res.lines.length !== payload.length
+          || res.lines.some((line) => typeof line !== "string" || !line.trim())) { fallback(); return; }
         let index = 0;
         const groups: string[] = [];
         for (const name of order) {
@@ -1256,7 +1244,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       .catch(fallback);
   };
   const openMidReport = () => {
-    const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (team !== "ALL" && team !== "종일" ? team as Team : "C");
+    const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (teams.includes(team as Team) ? team as Team : "C");
     composeMidReport(new Date().getHours() < 13 ? 1 : 2, myTeam);
   };
 
