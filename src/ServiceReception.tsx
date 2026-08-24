@@ -33,8 +33,22 @@ function pick(lease: LeaseHit | null, ...keys: string[]) {
 }
 
 // "2025-04-03" / "2025.4.3" → "2025. 4. 3"
-function fmtDot(value: string) {
-  const m = String(value).match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
+/**
+ * 엑셀·시트 날짜 시리얼(45992) → YYYY-MM-DD.
+ * 시트에서 날짜 서식이 풀리면 숫자만 넘어와 "납품/교체일 45992"처럼 그대로 나갔다.
+ * 1900년 윤년 버그 때문에 기준일은 1899-12-30이다. 1954~2064 범위만 날짜로 본다(순번·금액 오인 방지).
+ */
+export function fromExcelSerial(value: string): string {
+  const raw = String(value ?? "").trim();
+  if (!/^\d{5}(\.\d+)?$/.test(raw)) return "";
+  const serial = Number(raw);
+  if (serial < 20000 || serial > 60000) return "";
+  const ms = Date.UTC(1899, 11, 30) + Math.round(serial) * 86400_000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+export function fmtDot(value: string) {
+  const source = fromExcelSerial(value) || String(value ?? "");
+  const m = source.match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
   return m ? `${m[1]}. ${Number(m[2])}. ${Number(m[3])}` : String(value || "").trim();
 }
 function fmtDotYY(value: string) {
@@ -44,9 +58,18 @@ function korYMD(date: string) {
   const m = String(date).match(/(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[1].slice(2)}년 ${Number(m[2])}월 ${Number(m[3])}일` : String(date || "");
 }
-function fmtWon(value: string) {
-  const digits = String(value).replace(/[^\d]/g, "");
-  return digits ? `₩${Number(digits).toLocaleString()}` : String(value || "").trim();
+export function fmtWon(value: string) {
+  // 소수점을 지우면 "97666.66667"(9만7천원)이 97억이 된다 — 실제로 접수 양식에 그렇게 나갔다.
+  // 임대리스트 연평균은 나눗셈 결과라 소수가 붙는다. 원 단위로 반올림한다.
+  const cleaned = String(value ?? "").replace(/[^0-9.]/g, "");
+  if (!cleaned || !/\d/.test(cleaned)) return String(value ?? "").trim();
+  const amount = Number(cleaned.split(".").slice(0, 2).join("."));
+  return Number.isFinite(amount) ? `₩${Math.round(amount).toLocaleString()}` : String(value ?? "").trim();
+}
+/** 임대리스트에 값이 없는 칸 — 빈칸으로 내보내면 누락인지 없는 값인지 알 수 없다 */
+function orMissing(value: string) {
+  const v = String(value ?? "").trim();
+  return v || "미기재";
 }
 function withMonths(value: string) {
   const v = String(value || "").trim();
@@ -736,12 +759,13 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     const T = "\t";
     const lines = [
       `${구분}${T}${등급}${T}${모델명}${T}${마감일 ? `${마감일}${등급}` : ""}${업체명}${마감구분 ? `${T}${마감구분}` : ""}${T}종료일${T}${fmtDotYY(종료일)}${T}지역${T}${region}${T}접수일${T}${receiptDay()}`,
+      `작성자${T}${author || "-"}`,
       `기번${T}${기번}${T}자산번호${T}${자산번호}`,
       `접수유형${T}${route}${T}접수분야${T}${구분}`,
       `임대리스트순번${T}${순}${T}장비소유주${T}${장비소유주}`,
-      `계약일${T}${fmtDot(계약일)}${T}사용개월${T}${사용개월}`,
-      `종료일${T}${fmtDot(종료일)}${T}남은개월${T}${withMonths(남은개월)}`,
-      `납품/교체일${T}${fmtDot(교체일)}${T}방문주기${T}${withMonths(방문주기)}`,
+      `계약일${T}${orMissing(fmtDot(계약일))}${T}사용개월${T}${orMissing(사용개월)}`,
+      `종료일${T}${orMissing(fmtDot(종료일))}${T}남은개월${T}${orMissing(withMonths(남은개월))}`,
+      `납품/교체일${T}${orMissing(fmtDot(교체일))}${T}방문주기${T}${orMissing(withMonths(방문주기))}`,
       `기본임대료${T}${fmtWon(기본임대료)}${T}평균임대료${T}${fmtWon(평균임대료)}`,
       `설치업체${T}${장비소유주}${T}유지보수업체${T}${유지보수}`,
       `접수자성함${T}${manual.접수자성함}`,
@@ -770,7 +794,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal, photos]);
+  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal, photos, author]);
 
   const copyReport = async () => {
     if (!report) return;

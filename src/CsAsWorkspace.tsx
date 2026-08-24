@@ -10,6 +10,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { fieldTicketVendor, historyCoreName } from "./ids";
+import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 
@@ -998,16 +999,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
   // 완료·연기 사유 공유: 팀 AS방으로 "업체명 - 라벨 / 줄바꿈 / 내용" 전송 + 네이버 일정 내용에 기록.
   // 사유를 비우면 아무 것도 보내지 않는다 (조용한 완료/연기 — 기존 동작 유지)
-  // 처리 양식(완료·연기 공통) — 카톡방·네이버 일정 내용·웹앱 일정 메모가 전부 같은 블록으로 동기화된다
-  const buildActionBlock = (ticket: AsTicket, reason: string, deferLabel?: string) => [
-    `업체명: ${ticket.vendor || "-"}`,
-    `배정자: ${ticket.assignee || author || "-"}`,
-    `기종: ${ticket.model || "-"}`,
-    `자산기번: ${ticket.asset || "-"}`,
-    `시리얼번호: ${ticket.serial || "-"}`,
-    `접수내용: ${ticket.issue || "-"}`,
-    `처리내용: ${reason.trim()}${deferLabel ? ` (${deferLabel})` : ""}`,
-  ].join("\n");
+  // 처리 양식(완료·연기 공통) — 카톡방·네이버 일정 내용·웹앱 일정 메모가 전부 같은 블록으로 동기화된다.
+  // 양식 만들기는 actionBlock.ts에 모아 뒀다 (FIELD 익일 미루기와 같은 함수 — 예전엔 따로 만들어
+  // 한쪽만 고쳐지고 일정리스트 완료 건은 계속 "기종: - / 자산기번: -"로 나갔다)
+  const buildActionBlock = (ticket: AsTicket, reason: string, deferLabel?: string, condense = true) =>
+    buildShareBlock(ticket as unknown as ActionTicketLike, { author: author || ticket.assignee, reason, deferLabel, condense });
   const shareActionReason = async (ticket: AsTicket, label: string, reason: string) => {
     const text = reason.trim();
     if (!text) return;
@@ -1063,7 +1059,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void (async () => {
       const deferLabel = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`;
       await shareActionReason(ticket, deferLabel, reason);
-      const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel)}` } : {};
+      const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel, false)}` } : {};
       update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch });
     })();
   };

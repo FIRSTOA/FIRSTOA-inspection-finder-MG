@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "548359bc8c",
+    "date": "2026-08-19",
+    "note": "접수 3건 수리 — E팀 시간, 키맨 이름 잘림, 카톡에 사진 누락"
+  },
+  {
     "hash": "3a9af8c8eb",
     "date": "2026-08-19",
     "note": "네이버 캘린더 문서 갱신 — 현재 양방향 구조와 실시간화 경로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2b91234377",
     "date": "2026-08-02",
     "note": "접수 버튼 단순화 — [접수(저장+시트+웹일정·캘린더)][네이버 캘린더][카톡 전송][⚡ 전체], 원격은 [접수(저장+시트)] 하나"
-  },
-  {
-    "hash": "d3a222474b",
-    "date": "2026-08-02",
-    "note": "빠른 스탬프 완료 오발사 방지 + 잘못 찍은 완료 되돌리기"
   }
 ];

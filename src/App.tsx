@@ -58,6 +58,7 @@ import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { buildActionBlock } from "./actionBlock";
 import type { AuthorTeam } from "./authors";
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
@@ -5495,32 +5496,9 @@ export default function App() {
       const reasonBlock = (() => {
         if (!deferReason.trim() || !patch.date) return "";
         const row = rows[0] || {};
-        const rawText = `${String(row["vendor"] || "")}\n${String(row["calendarTitle"] || "")}\n${String(row["note"] || "")}`
-          .replace(/_x000d_/g, " ");
-        const pick = (label: RegExp, min = 3) => {
-          const hit = rawText.match(label);
-          const value = (hit?.[1] || "").trim();
-          return value.length >= min ? value : "";
-        };
-        // 업체명을 깔끔히 뽑아낸 경우만 "업체명:", 못 뽑으면 라벨을 "캘린더제목:"으로 — 제목을 그대로 쓰면서
-        // 업체명이라고 적으면 읽는 사람이 오해한다(사용자 지적)
-        const cleanVendor = fieldTicketVendor(String(row["calendarTitle"] || row["vendor"] || "")).vendor.trim();
-        const titleLine = String(row["calendarTitle"] || row["vendor"] || "")
-          .replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
-        const model = String(row["model"] || "").trim() || pick(/(?:^|[\t\s])((?:ECOSYS|APEOS|ApeosPort|Apeos|DocuCentre|DocuPrint|SL-|CLX|MX|ES|CM|HP|D)[A-Za-z0-9-]*\d[A-Za-z0-9()-]*)/);
-        const asset = String(row["asset"] || "").trim() || pick(/자산번호[\t\s]*([A-Za-z0-9-]{3,})/);
-        const serial = String(row["serial"] || "").trim() || pick(/기번[\t\s]*([A-Za-z0-9-]{5,})/, 5);
-        const issue = String(row["issue"] || "").trim() || pick(/접수분야[\t\s]*([^\t\n]+)/) || pick(/^([^\t\n]{2,20}?)[\t]/, 2);
         const when = `${Number(String(patch.date).slice(5, 7))}/${Number(String(patch.date).slice(8, 10))}`;
-        // 값이 없는 줄은 "-"로 채우지 않고 아예 빼서 읽기 쉽게 한다
-        return [
-          cleanVendor ? `업체명: ${cleanVendor}` : `캘린더제목: ${titleLine || "-"}`,
-          model && `기종: ${model}`,
-          asset && `자산기번: ${asset}`,
-          serial && `시리얼번호: ${serial}`,
-          issue && `접수내용: ${issue}`,
-          `처리내용: ${deferReason.trim()} (${when}로 연기)`,
-        ].filter(Boolean).join("\n");
+        // 양식은 actionBlock.ts 한 곳에서만 만든다 (일정리스트 완료·연기와 같은 함수)
+        return buildActionBlock(row, { author, reason: deferReason, deferLabel: `${when}로 연기` });
       })();
       if (reasonBlock) {
         void sendServiceReception("AS", `수도권${String(rows[0]?.["team"] || "")}`, reasonBlock)
