@@ -253,6 +253,37 @@ export type LedgerParsed = {
   누계: { 판매: number; 수금: number; 잔액: number };
 };
 
+/** 전표 → 월 묶음 — 청구 전표와 수금 전표가 같은 달에 따로 있다. 기간 창(window)에서도 재사용 */
+export function buildMonths(vouchers: LedgerVoucher[]): LedgerMonth[] {
+  const byMonth = new Map<string, LedgerVoucher[]>();
+  for (const voucher of vouchers) {
+    const ym = voucher.date.slice(0, 7);
+    const list = byMonth.get(ym);
+    if (list) list.push(voucher);
+    else byMonth.set(ym, [voucher]);
+  }
+  return Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([ym, list]) => {
+    const billing = list.find((voucher) => voucher.items.length) || list[0];
+    const paid = list.filter((voucher) => voucher.수금 > 0);
+    const 수금일 = paid.length ? paid[paid.length - 1].date : "";
+    const items = list.flatMap((voucher) => voucher.items);
+    return {
+      ym,
+      청구일: billing?.date || "",
+      청구: list.reduce((sum, voucher) => sum + voucher.판매, 0),
+      수금: list.reduce((sum, voucher) => sum + voucher.수금, 0),
+      수금일,
+      지연일: 수금일 && billing?.date
+        ? Math.round((Date.parse(수금일) - Date.parse(billing.date)) / 86_400_000)
+        : -1,
+      memo: billing?.memo || "",
+      items,
+      counters: items.map((item) => item.counter).filter((counter): counter is LedgerCounter => !!counter),
+      excesses: items.map((item) => item.excess).filter((excess): excess is LedgerExcess => !!excess),
+    };
+  });
+}
+
 const INFO_LABELS = ["사업자등록번호", "대표자", "여신한도", "전화", "Email", "Fax", "주 소", "주소"];
 
 /** 대장 텍스트 전체 → 구조 */
@@ -288,34 +319,7 @@ export function parseLedger(text: string): LedgerParsed {
 
   const vouchers = tableStart >= 0 ? parseVouchers(lines.slice(tableStart + 1)) : [];
 
-  // 월 단위로 묶는다 — 청구 전표와 수금 전표가 같은 달에 따로 있다
-  const byMonth = new Map<string, LedgerVoucher[]>();
-  for (const voucher of vouchers) {
-    const ym = voucher.date.slice(0, 7);
-    const list = byMonth.get(ym);
-    if (list) list.push(voucher);
-    else byMonth.set(ym, [voucher]);
-  }
-  const months: LedgerMonth[] = Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([ym, list]) => {
-    const billing = list.find((voucher) => voucher.items.length) || list[0];
-    const paid = list.filter((voucher) => voucher.수금 > 0);
-    const 수금일 = paid.length ? paid[paid.length - 1].date : "";
-    const items = list.flatMap((voucher) => voucher.items);
-    return {
-      ym,
-      청구일: billing?.date || "",
-      청구: list.reduce((sum, voucher) => sum + voucher.판매, 0),
-      수금: list.reduce((sum, voucher) => sum + voucher.수금, 0),
-      수금일,
-      지연일: 수금일 && billing?.date
-        ? Math.round((Date.parse(수금일) - Date.parse(billing.date)) / 86_400_000)
-        : -1,
-      memo: billing?.memo || "",
-      items,
-      counters: items.map((item) => item.counter).filter((counter): counter is LedgerCounter => !!counter),
-      excesses: items.map((item) => item.excess).filter((excess): excess is LedgerExcess => !!excess),
-    };
-  });
+  const months = buildMonths(vouchers);
 
   const totalLine = lines.find((line) => /^누계\t/.test(line)) || "";
   const totals = totalLine.split("\t").map((cell) => num(cell));
@@ -497,8 +501,7 @@ function paymentStats(months: LedgerMonth[], vouchers: LedgerVoucher[], 누계: 
   };
 }
 
-export function analyzeLedger(text: string): LedgerAnalysis {
-  const parsed = parseLedger(text);
+function finalize(parsed: LedgerParsed): LedgerAnalysis {
   const 청구목록 = parsed.months.filter((month) => month.청구 > 0).map((month) => month.청구);
   const 임대료 = parsed.months.flatMap((month) => month.items.filter((item) => /임대료/.test(item.label) && !item.무상 && item.단가 > 0));
   return {
@@ -518,4 +521,33 @@ export function analyzeLedger(text: string): LedgerAnalysis {
       .map((note) => ({ 시점: note.from, 월기본료: note.월기본료, 컬러기본: note.컬러기본, 흑백기본: note.흑백기본, label: note.label }))
       .sort((a, b) => (a.시점 || "").localeCompare(b.시점 || "")),
   };
+}
+
+export function analyzeLedger(text: string): LedgerAnalysis {
+  return finalize(parseLedger(text));
+}
+
+/**
+ * 기간 창 — 3년치를 붙여넣고 "최근 1년만" 볼 수 있게 전표를 날짜로 자르고 통계를 다시 계산한다.
+ * 모든 탭(요약·사용량·대장·이력 KPI)이 이 결과 하나를 읽으므로 자동으로 동기화된다.
+ *
+ * 창을 씌워도 그대로 두는 것:
+ *  - 계약 이력·적요: 계약은 기간 밖이라도 현재를 설명한다 (거래연차 판정도 적요 기준)
+ *  - 잔액: 시점 값이라 창과 무관하게 "지금 잔액" 그대로 (판매·수금 합계만 창 기준)
+ */
+export function windowAnalysis(full: LedgerAnalysis, fromYmd: string | null): LedgerAnalysis {
+  if (!fromYmd) return full;
+  const vouchers = full.vouchers.filter((voucher) => voucher.date >= fromYmd);
+  const months = buildMonths(vouchers);
+  return finalize({
+    ...full,
+    기간: { from: fromYmd, to: full.기간.to },
+    vouchers,
+    months,
+    누계: {
+      판매: vouchers.reduce((sum, voucher) => sum + voucher.판매, 0),
+      수금: vouchers.reduce((sum, voucher) => sum + voucher.수금, 0),
+      잔액: full.누계.잔액,
+    },
+  });
 }

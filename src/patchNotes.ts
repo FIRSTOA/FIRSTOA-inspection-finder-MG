@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9622c9b697",
+    "date": "2026-08-24",
+    "note": "이카운트 분석 상세 — \"브리핑 → 근거\" 재설계 (탭 분리)"
+  },
+  {
     "hash": "bc7a69e6c7",
     "date": "2026-08-24",
     "note": "결제 테스트 기대값 — 축약 픽스처의 최근 청구월(96,800원) 기준으로"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "44fb651f50",
     "date": "2026-08-04",
     "note": "일정리스트 모바일 카드 컴팩트화 + 직원별 필터 칩 (전체/미배정/이름별, 팀 선택과 연동)"
-  },
-  {
-    "hash": "4af98e7921",
-    "date": "2026-08-04",
-    "note": "캘린더 제목 ↔ 일정리스트 동기화 — 배정자 이름 접두사 자동"
   }
 ];

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
-import { analyzeLedger, moneyKo, parseLedger, parseRemarks, ymd } from "../src/recontract/ledger";
+import { analyzeLedger, moneyKo, parseLedger, parseRemarks, windowAnalysis, ymd } from "../src/recontract/ledger";
 
 const sample = readFileSync(new URL("./fixtures/ecount-ledger-sample.txt", import.meta.url), "utf8");
 
@@ -238,5 +238,34 @@ describe("결제 판정 — CMS 다음 달 출금 업체를 미납으로 오판�
   });
   it("판정은 잔액·승인실패 기준 — 달 단위 대조가 아니다", () => {
     expect(analysis.payment.판정).toBe("보통"); // 실패 1회 + 잔액 1개월치 — 주의까지는 아니다
+  });
+});
+
+describe("기간 창(window) — 3년치를 붙여넣고 최근 1년만 본다", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const full = analyzeLedger(quarterly);      // 2024-07 ~ 2026-06
+
+  it("창 밖 전표·월이 잘리고 통계가 다시 계산된다", () => {
+    const win = windowAnalysis(full, "2026-01-01");
+    expect(win.months.map((month) => month.ym)).toEqual(["2026-06"]);
+    expect(win.누계.판매).toBe(96_800);
+    // 창 안 컬러 사용 1,416 / 1개월
+    const color = win.usage.find((stat) => stat.kind === "컬러");
+    expect(color?.월평균).toBe(1_416);
+  });
+
+  it("잔액은 시점 값 — 창을 씌워도 지금 잔액 그대로", () => {
+    const win = windowAnalysis(full, "2026-01-01");
+    expect(win.누계.잔액).toBe(full.누계.잔액);
+  });
+
+  it("계약 이력·적요는 창과 무관하게 전체 유지 (거래연차 판정 근거)", () => {
+    const win = windowAnalysis(full, "2026-01-01");
+    expect(win.contracts.length).toBe(full.contracts.length);
+    expect(win.remarks).toBe(full.remarks);
+  });
+
+  it("창 없음(null)은 원본 그대로", () => {
+    expect(windowAnalysis(full, null)).toBe(full);
   });
 });

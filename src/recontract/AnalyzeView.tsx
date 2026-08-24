@@ -13,15 +13,16 @@
  *   판매/수금내역 원문 → 추천 플랜 A/B/C → 위험 플래그/권한 밖
  */
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ClipboardPaste, Trash2 } from "lucide-react";
+import { ChevronLeft, ClipboardCopy, ClipboardPaste, Trash2 } from "lucide-react";
 import { notify } from "../toast";
 import { getAsHistory, type AsHistoryEntry } from "../api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "../vendorFlags";
 import { vendorMatchKey } from "../ids";
 import { teamForAuthor } from "../operations";
 import { currentQuarter, type Quarter } from "../workinPlaces";
-import { analyzeLedger, type LedgerAnalysis } from "./ledger";
-import { judge, type Judgement } from "./judge";
+import { analyzeLedger, windowAnalysis, type LedgerAnalysis } from "./ledger";
+import { judge } from "./judge";
+import type { Judgement } from "./judge";
 import { calcProposals, type ExtraSignals } from "./proposals";
 import { fetchBriefing, fetchRenewalScope, type RcBriefing, type RcTarget, type RenewalScope } from "./api";
 
@@ -86,8 +87,30 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
 type DetailTab = "요약" | "사용량" | "대장" | "계약·적요" | "고객 이력";
 
 function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => void; onRemove: () => void }) {
-  const { analysis, verdict } = item;
   const [tab, setTab] = useState<DetailTab>("요약");
+
+  // ── 기간 창 — 3년치를 붙여넣어도 최근 1년만 볼 수 있다. 모든 탭이 이 결과를 읽어 자동 동기화 ──
+  const [windowFrom, setWindowFrom] = useState<string | null>(null);
+  const full = item.analysis;
+  const periodOptions = useMemo(() => {
+    const last = full.vouchers[full.vouchers.length - 1]?.date || full.기간.to;
+    const first = full.vouchers[0]?.date || full.기간.from;
+    if (!last || !first) return [] as Array<{ label: string; from: string | null }>;
+    const spanMonths = Math.round((Date.parse(last) - Date.parse(first)) / (30.44 * 86_400_000));
+    const fromOf = (monthsBack: number) => {
+      const d = new Date(`${last}T00:00:00`);
+      d.setMonth(d.getMonth() - monthsBack + 1, 1);
+      return d.toISOString().slice(0, 10);
+    };
+    const options: Array<{ label: string; from: string | null }> = [{ label: `전체 ${full.months.length}개월`, from: null }];
+    for (const [label, monthsBack] of [["2년", 24], ["1년", 12], ["6개월", 6]] as const) {
+      if (spanMonths > monthsBack) options.push({ label, from: fromOf(monthsBack) });
+    }
+    return options;
+  }, [full]);
+  const analysis = useMemo(() => windowAnalysis(full, windowFrom), [full, windowFrom]);
+  const verdict = useMemo(() => judge(analysis), [analysis]);
+
   const overCount = analysis.usage.reduce((sum, stat) => sum + stat.초과월수, 0);
   const current = analysis.현재계약;
 
@@ -172,6 +195,34 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
     return withSub;
   }, [analysis]);
 
+  // 카톡 보고용 한 장 — 지금 보고 있는 기간 창 기준 그대로
+  const copySheet = async () => {
+    const usageLines = analysis.usage.map((stat) =>
+      `- ${stat.kind} 월평균 ${money(stat.월평균)}매${stat.기본매수 ? ` / 기본 ${money(stat.기본매수)}매` : ""}${stat.초과월수 ? ` · 초과 ${stat.초과월수}회` : ""}`);
+    const lines = [
+      `[재계약 분석] ${item.vendor}`,
+      `기간 ${analysis.기간.from} ~ ${analysis.기간.to} (${analysis.months.length}개월${windowFrom ? " · 기간 필터" : ""})`,
+      `${verdict.거래연차}년차 ${verdict.거래관계} · ${verdict.거래처유형} · 난이도 ${verdict.난이도}`,
+      "",
+      `■ 추천: ${recommended.label}`,
+      `- ${recommended.reason}`,
+      `- 회사 매출 ${money(recommended.companyRevenue)}원 · 혜택 비용 ${money(recommended.benefitValue)}원 · ROI ×${recommended.companyROI}`,
+      ...alternatives.map((p) => `- ${p.rank}안: ${p.label} (${p.reason})`),
+      "",
+      "■ 근거",
+      `- 누적 매출 ${money(analysis.누계.판매)}원 · 수금 ${money(analysis.누계.수금)}원 · 잔액 ${money(analysis.누계.잔액)}원`,
+      ...usageLines,
+      `- 초과료 ${overCount}회 ${money(analysis.billing.초과청구합)}원 · CMS 실패 ${analysis.payment.cms실패}회 · 결제 ${analysis.payment.판정}`,
+      ...(verdict.위험신호.length ? ["", "■ 주의", ...verdict.위험신호.map((flag) => `- ${flag}`)] : []),
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      notify("분석 한 장을 복사했습니다 ✓", "success");
+    } catch {
+      notify("복사 실패 — 화면에서 직접 선택해 복사하세요.", "error");
+    }
+  };
+
   const historyCount = (briefing?.bulman.length || 0) + (briefing?.misu.length || 0) + asHistory.length + (briefing?.history.length || 0);
   const TABS: Array<{ key: DetailTab; badge?: number }> = [
     { key: "요약" },
@@ -183,48 +234,69 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
 
   return (
     <div className="space-y-4">
-      {/* 머리 — 업체명·핵심 판단·탭. 여기만 보면 어디를 보고 있는지 안다 */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {/* 머리 — 다크 브리핑 카드 (앱 공통 톤 #1E252F). 여기만 보면 방문 준비의 반이 끝난다 */}
+      <section className="overflow-hidden rounded-2xl bg-[#1E252F] shadow-sm">
         <div className="flex items-start gap-3 p-5 pb-4">
           <button type="button" onClick={onBack} aria-label="목록으로"
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800">
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-slate-300 transition hover:bg-white/20 hover:text-white">
             <ChevronLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{item.vendor}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">{item.vendor}</h1>
               <span className="text-[12px] text-slate-400">{current?.models[0] || ""} · 월 {money(analysis.billing.월기본료)}원{current?.from ? ` · ${current.from} ~ ${current.to}` : ""}</span>
             </div>
-            {/* 핵심 판단 한 문장 — 색은 판단 결과에만 */}
-            <p className="mt-1.5 text-[14px] leading-relaxed text-slate-600">
-              <b className="text-slate-900">{verdict.거래연차}년차 {verdict.거래관계}</b> · {verdict.거래처유형} · 난이도 <b className={verdict.난이도 === "쉬움" ? "text-emerald-600" : verdict.난이도.includes("어려") ? "text-red-600" : "text-slate-900"}>{verdict.난이도}</b>
-              <span className="mx-1.5 text-slate-300">→</span>
-              1순위 <b className="text-blue-600">{recommended.label}</b>
+            <p className="mt-1.5 text-[14px] leading-relaxed text-slate-300">
+              <b className="text-white">{verdict.거래연차}년차 {verdict.거래관계}</b> · {verdict.거래처유형} · 난이도 <b className={verdict.난이도 === "쉬움" ? "text-emerald-400" : verdict.난이도.includes("어려") ? "text-red-400" : "text-white"}>{verdict.난이도}</b>
+              <span className="mx-1.5 text-slate-500">→</span>
+              1순위 <b className="text-amber-300">{recommended.label}</b>
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">
-              <span className={`rounded-full px-2 py-0.5 ${["많음", "매우많음"].includes(verdict.초과수준) ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"}`}>초과 {verdict.초과수준}</span>
-              <span className={`rounded-full px-2 py-0.5 ${verdict.결제안정성 === "안정" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-700"}`}>결제 {verdict.결제안정성}</span>
-              {!!note?.text && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-600">특이사항</span>}
-              {!!briefing?.bulman.length && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-600">불만 {briefing.bulman.length}</span>}
-              {!!briefing?.misu.length && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">미수기록 {briefing.misu.length}</span>}
-              {asHistory.length > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">AS {asHistory.length}</span>}
+              <span className={`rounded-full px-2 py-0.5 ${["많음", "매우많음"].includes(verdict.초과수준) ? "bg-red-500/20 text-red-300" : "bg-white/10 text-slate-300"}`}>초과 {verdict.초과수준}</span>
+              <span className={`rounded-full px-2 py-0.5 ${verdict.결제안정성 === "안정" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>결제 {verdict.결제안정성}</span>
+              {!!note?.text && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-violet-300">특이사항</span>}
+              {!!briefing?.bulman.length && <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-red-300">불만 {briefing.bulman.length}</span>}
+              {!!briefing?.misu.length && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-300">미수기록 {briefing.misu.length}</span>}
+              {asHistory.length > 0 && <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-300">AS {asHistory.length}</span>}
             </div>
           </div>
-          <button type="button" onClick={onRemove} aria-label="분석 지우기"
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-300 transition hover:bg-red-50 hover:text-red-500">
-            <Trash2 size={16} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={() => void copySheet()}
+              className="mt-0.5 flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-[12px] font-bold text-white transition hover:bg-blue-500">
+              <ClipboardCopy size={14} /> 한 장 복사
+            </button>
+            <button type="button" onClick={onRemove} aria-label="분석 지우기"
+              className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-red-500/15 hover:text-red-400">
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
-        {/* 탭 — 한 화면에 한 가지만 */}
-        <div className="flex gap-1 overflow-x-auto border-t border-slate-100 bg-slate-50/60 px-3 py-2">
+        {/* 탭 + 기간 창 — 기간을 바꾸면 모든 탭의 수치가 그 기간 기준으로 다시 계산된다 */}
+        <div className="flex flex-wrap items-center gap-1 border-t border-white/10 bg-[#151A23] px-3 py-2">
           {TABS.map(({ key, badge }) => (
             <button key={key} type="button" onClick={() => setTab(key)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${tab === key ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-800"}`}>
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:bg-white/10 hover:text-white"}`}>
               {key}
-              {badge !== undefined && <span className={`rounded-full px-1.5 text-[10px] font-bold ${tab === key ? "bg-white/20 text-white" : "bg-slate-200 text-slate-500"}`}>{badge}</span>}
+              {badge !== undefined && <span className={`rounded-full px-1.5 text-[10px] font-bold ${tab === key ? "bg-slate-900/10 text-slate-600" : "bg-white/10 text-slate-400"}`}>{badge}</span>}
             </button>
           ))}
+          {periodOptions.length > 1 && (
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <span className="mr-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">기간</span>
+              {periodOptions.map((option) => (
+                <button key={option.label} type="button" onClick={() => setWindowFrom(option.from)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${windowFrom === option.from ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`}>
+                  {option.label}
+                </button>
+              ))}
+            </span>
+          )}
         </div>
+        {!!windowFrom && (
+          <div className="border-t border-white/10 bg-blue-950/40 px-4 py-1.5 text-[11px] font-semibold text-blue-300">
+            {windowFrom} 이후만 보는 중 — 모든 수치·판정이 이 기간 기준입니다 (계약 이력·잔액은 전체 기준)
+          </div>
+        )}
       </section>
 
       {countersMissing && (
@@ -586,24 +658,24 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
     <div className="space-y-4">
       {/* 붙여넣기 — 워킨맵 목록에서 업체를 고르면 여기로 안내된다 */}
       {(pasteOpen || !analyzed.length) && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">이카운트 붙여넣기</div>
-          {pendingVendor && <div className="mb-1 text-sm font-bold text-blue-700">▶ {pendingVendor} 의 관리대장을 붙여넣으세요</div>}
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">이카운트 화면을 통째로 붙여넣으세요</h2>
-          <p className="mt-1 text-sm leading-relaxed text-slate-500">
-            이카운트 → 회계 I → 출력물 → <b className="text-slate-700">거래처관리대장 I</b>에서 거래처 조회 →
-            <b className="text-slate-700"> 전체 선택(Ctrl+A) → 복사(Ctrl+C)</b> → 아래에 붙여넣기(Ctrl+V).
-            분석 기록은 <b className="text-slate-700">이 창을 닫으면 남지 않습니다</b>.
+        <section className="overflow-hidden rounded-2xl bg-[#1E252F] p-5 shadow-sm sm:p-6">
+          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-300">이카운트 붙여넣기</div>
+          {pendingVendor && <div className="mb-1 text-sm font-bold text-amber-300">▶ {pendingVendor} 의 관리대장을 붙여넣으세요</div>}
+          <h2 className="text-xl font-bold tracking-tight text-white sm:text-2xl">이카운트 화면을 통째로 붙여넣으세요</h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-400">
+            이카운트 → 회계 I → 출력물 → <b className="text-slate-200">거래처관리대장 I</b>에서 거래처 조회 →
+            <b className="text-slate-200"> 전체 선택(Ctrl+A) → 복사(Ctrl+C)</b> → 아래에 붙여넣기(Ctrl+V).
+            분석 기록은 <b className="text-slate-200">이 창을 닫으면 남지 않습니다</b>.
           </p>
           <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={7}
             placeholder="여기에 붙여넣기 — 적요와 판매/수금내역이 모두 들어와야 합니다"
-            className="mt-3 w-full resize-y rounded-xl border-2 border-transparent bg-slate-50 p-4 font-mono text-[12px] leading-5 outline-none transition focus:border-blue-500 focus:bg-white" />
+            className="mt-3 w-full resize-y rounded-xl border border-white/10 bg-white/5 p-4 font-mono text-[12px] leading-5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/10" />
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => addPaste(pasteText)}
-              className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition hover:bg-blue-700">분석하기</button>
+              className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-900/40 transition hover:bg-blue-500">분석하기</button>
             <button type="button" onClick={async () => { try { addPaste(await navigator.clipboard.readText()); } catch { notify("클립보드를 읽지 못했습니다 — 입력창에 직접 붙여주세요.", "info"); } }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"><ClipboardPaste size={15} />클립보드에서 바로 분석</button>
-            {analyzed.length > 0 && <button type="button" onClick={() => { setPasteOpen(false); setPendingVendor(""); }} className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-600">닫기</button>}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/20"><ClipboardPaste size={15} />클립보드에서 바로 분석</button>
+            {analyzed.length > 0 && <button type="button" onClick={() => { setPasteOpen(false); setPendingVendor(""); }} className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-300">닫기</button>}
           </div>
         </section>
       )}
@@ -641,31 +713,31 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
 
       {/* 이번 분기 방문 대상 — 워킨맵 재계약 목록 (S·SS) */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 bg-[#1E252F] px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-slate-900">{quarter}Q 재계약 방문 대상{scope ? ` — 총 ${scope.targets.length}곳` : ""} <span className="ml-1 text-[11px] font-medium text-slate-400">워킨맵 기준</span></h2>
+            <h2 className="text-sm font-bold text-white">{quarter}Q 재계약 방문 대상{scope ? ` — 총 ${scope.targets.length}곳` : ""} <span className="ml-1 text-[11px] font-medium text-slate-400">워킨맵 기준</span></h2>
           </div>
           {["A", "B", "C", "D"].map((t) => (
             <button key={t} type="button" onClick={() => setTeam(t)}
-              className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition ${team === t ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-800"}`}>
+              className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition ${team === t ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`}>
               {t}팀{t === myTeam ? " ★" : ""}
             </button>
           ))}
           <button type="button" onClick={() => setScopeTick((n) => n + 1)}
-            className="rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-slate-500 ring-1 ring-slate-200 transition hover:text-slate-800">↻ 새로고침</button>
+            className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold text-slate-300 transition hover:bg-white/20 hover:text-white">↻ 새로고침</button>
         </div>
         {!!scope && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2">
+          <div className="flex flex-wrap items-center gap-1.5 bg-[#151A23] px-4 py-2">
             {(["전체", "SS", "S"] as const).map((g) => {
               const count = g === "전체" ? scope.targets.length : scope.targets.filter((t) => t.등급 === g).length;
               return (
                 <button key={g} type="button" onClick={() => { setGradeFilter(g); setTargetLimit(10); }}
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${gradeFilter === g ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:text-slate-800"}`}>
+                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${gradeFilter === g ? "bg-white text-slate-950" : "bg-white/10 text-slate-400 hover:text-white"}`}>
                   {g} {count}
                 </button>
               );
             })}
-            <span className="ml-auto text-[10px] font-semibold text-slate-400">
+            <span className="ml-auto text-[10px] font-semibold text-slate-500">
               분석됨 {scope.targets.filter((t) => analyzedKeys.has(t.key)).length}/{scope.targets.length}
               {scope.제외.완료 > 0 && ` · 워킨맵 완료(G5) ${scope.제외.완료}곳 제외됨`}
             </span>
