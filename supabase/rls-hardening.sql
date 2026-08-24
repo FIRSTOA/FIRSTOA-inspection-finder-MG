@@ -78,3 +78,11 @@ alter table public.as_records add column if not exists _edit_log jsonb not null 
 alter table public.jeomgeom   add column if not exists _edit_log jsonb not null default '[]'::jsonb;
 grant update ("_원문", "_edit_log") on public.as_records to anon;
 grant update ("_원문", "_edit_log") on public.jeomgeom   to anon;
+
+-- 2026-08-25 내 일정 개인 메모 (실행 완료): 폰·PC 공유를 위해 DB 저장
+create table if not exists public.plan_memos (
+  author text not null, ticket_id text not null,
+  memo text not null default '', updated_at timestamptz not null default now(),
+  primary key (author, ticket_id)
+);
+grant select, insert, update on public.plan_memos to anon;

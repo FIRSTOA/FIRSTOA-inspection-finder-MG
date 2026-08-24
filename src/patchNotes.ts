@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b5c219a3d7",
+    "date": "2026-08-24",
+    "note": "기기정보 수정이 원문(_원문)도 함께 고친다 — FIELD 불러오기 동기화"
+  },
+  {
     "hash": "167b9ca322",
     "date": "2026-08-24",
     "note": "조회탭 기기정보 수정 401 — 컬럼 단위 UPDATE 개방 (DB 실행 완료)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "9535321b0f",
     "date": "2026-08-02",
     "note": "네이버 캘린더 운영 플로우 완성 — 완료 시 팀 캘린더 이동·연기 시 날짜 변경"
-  },
-  {
-    "hash": "25a87d3639",
-    "date": "2026-08-02",
-    "note": "일정리스트 [네이버 캘린더] 버튼을 엣지 함수로 통합 — 옛 /api/naver-add(미설정 Vercel 라우트) 제거 경로, uid 저장으로 수정·삭제 연동. 수정 모달 버튼명도 '네이버 캘린더'로 통일"
   }
 ];

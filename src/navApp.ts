@@ -18,3 +18,17 @@ export function kakaoMapRouteLink(name: string, lat: number, lng: number): strin
     ? `kakaomap://route?ep=${lat},${lng}&by=CAR`
     : `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
 }
+
+// 네이버 길찾기 — 좌표가 있으면 목적지 지정, PC는 검색으로 (웹 길찾기 URL은 좌표계가 달라 불안정)
+export function naverMapRouteLink(name: string, lat?: number, lng?: number): string {
+  if (isMobileDevice && lat != null && lng != null) {
+    return `nmap://route/car?dlat=${lat}&dlng=${lng}&dname=${encodeURIComponent(name)}&appname=com.firstoa.cs`;
+  }
+  return naverMapLink(name);
+}
+
+// T맵 길찾기 — 앱 전용 스킴 (PC에는 T맵이 없어 눌러도 무반응이지만, 일정리스트 상세와 표기를 맞춘다)
+export function tmapRouteLink(name: string, lat?: number, lng?: number): string {
+  if (lat != null && lng != null) return `tmap://route?goalname=${encodeURIComponent(name)}&goaly=${lat}&goalx=${lng}`;
+  return `tmap://search?name=${encodeURIComponent(name)}`;
+}

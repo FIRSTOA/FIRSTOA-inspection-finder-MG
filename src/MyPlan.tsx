@@ -10,10 +10,10 @@ import { selectAllRows } from "./supabase";
 import { fieldTicketVendor, vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
-import { kakaoMapRouteLink, kakaoMapSearchLink, isMobileDevice } from "./navApp";
+import { kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink, naverMapRouteLink, tmapRouteLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { getInspForms, getRecentInspections, leaseAddressOf, type InspectionSnapshot, type InspForm } from "./api";
-import { selectRows } from "./supabase";
+import { selectRows, upsertRow } from "./supabase";
 import VendorSearch from "./VendorSearch";
 import { notify } from "./toast";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
@@ -52,6 +52,21 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const savePinned = (next: string[]) => {
     setPinned(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* 무시 */ }
+  };
+
+  // 일정별 개인 메모 — "까먹지 않게" 적어두는 것이라 폰·PC 어디서든 보여야 한다 → DB(plan_memos)
+  const [memos, setMemos] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!author.trim()) return;
+    let alive = true;
+    selectRows<{ ticket_id: string; memo: string }>("plan_memos", `select=ticket_id,memo&author=eq.${encodeURIComponent(author)}`)
+      .then((rows) => { if (alive) setMemos(new Map(rows.filter((r) => r.memo.trim()).map((r) => [r.ticket_id, r.memo]))); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [author]);
+  const saveMemo = (ticketId: string, memo: string) => {
+    setMemos((cur) => { const next = new Map(cur); if (memo.trim()) next.set(ticketId, memo); else next.delete(ticketId); return next; });
+    void upsertRow("plan_memos", { author, ticket_id: ticketId, memo, updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
   };
 
   // 워킨맵 좌표 사전 — 업체명 정규화 키로 매칭 (팀 무관 전체, 한 번만)
@@ -451,6 +466,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
                 })()}
                 <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
+                {memos.has(t.id) && <span className="mt-0.5 block whitespace-pre-wrap break-words rounded bg-amber-50 px-1.5 py-1 text-[11px] font-bold leading-4 text-amber-800">📝 {memos.get(t.id)}</span>}
                 {onRemove && (
                   // 잘못 들어온 일정·빼고 싶은 일정을 동선에서 바로 정리 (일정리스트까지 가지 않게)
                   <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(t); }}
@@ -471,7 +487,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
               <span className="flex w-full items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
                 {onUseField && <button type="button" onClick={() => openFieldPick(t)} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
-                <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">길찾기</a>
+                {/* 길찾기 — 팀마다 쓰는 지도가 다르다(네이버 사용자 다수). 일정리스트 상세의 N/K/T와 같은 구성 */}
+                <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(t.address || t.vendor)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#03C75A] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">N</a>
+                <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">K</a>
+                <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(t.address || t.vendor)} className="flex-1 rounded-lg bg-[#2C5FD8] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">T</a>
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                   {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
@@ -561,6 +580,27 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     </div>
                   ))}
                 </div>
+                {/* 거래처 특이사항 — 출입비번·전달 규칙은 도착해서 알면 늦다 */}
+                {!!f?.note?.text || f?.note?.workStart || f?.note?.lunchTime ? (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+                    <div className="text-[11px] font-black text-violet-500">거래처 특이사항{f.note.author ? ` · ${f.note.author}` : ""}</div>
+                    {(f.note.workStart || f.note.lunchTime) && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {f.note.workStart && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-violet-700 ring-1 ring-violet-200">출근 {f.note.workStart}</span>}
+                        {f.note.lunchTime && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-violet-700 ring-1 ring-violet-200">점심 {f.note.lunchTime}</span>}
+                      </div>
+                    )}
+                    {f.note.text && <div className="mt-1.5 whitespace-pre-wrap text-[12.5px] font-bold leading-5 text-violet-900">{f.note.text}</div>}
+                  </div>
+                ) : null}
+                {/* 내 메모 — 이 일정에 붙는 개인 메모. 입력을 벗어나면 저장, 폰·PC 어디서든 보인다 */}
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="text-[11px] font-black text-amber-600">📝 내 메모 <span className="font-bold text-amber-500">— 입력창을 벗어나면 저장</span></div>
+                  <textarea defaultValue={memos.get(detail.id) || ""} rows={2}
+                    onBlur={(e) => saveMemo(detail.id, e.target.value)}
+                    placeholder="이 방문에서 잊으면 안 되는 것 (예: 카운터 전달 13층 오른쪽 분께)"
+                    className="mt-1.5 w-full resize-y rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10" />
+                </div>
                 {f && (
                   <div className="rounded-xl border border-slate-200 p-3">
                     <div className="text-[11px] font-black text-slate-400">체크 포인트</div>
@@ -631,11 +671,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   })()}
                 </div>
               </div>
-              <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
-                {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-center text-sm font-black text-slate-700">📞 전화</a>}
+              <div className="flex shrink-0 gap-1.5 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+                {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-center text-sm font-black text-slate-700">📞</a>}
+                <a href={g ? naverMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(detail.address || detail.vendor)}
+                  {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })}
+                  className="flex-[2] rounded-full bg-[#03C75A] py-2.5 text-center text-sm font-black text-white">네이버</a>
                 <a href={g ? kakaoMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(detail.address || detail.vendor)}
                   {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })}
-                  className="flex-[2] rounded-full bg-[#FEE500] py-2.5 text-center text-sm font-black text-slate-900">길찾기</a>
+                  className="flex-[2] rounded-full bg-[#FEE500] py-2.5 text-center text-sm font-black text-slate-900">카카오</a>
+                <a href={g ? tmapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(detail.address || detail.vendor)}
+                  className="flex-[2] rounded-full bg-[#2C5FD8] py-2.5 text-center text-sm font-black text-white">티맵</a>
               </div>
             </div>
           </div>
