@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b988a8c2d0",
+    "date": "2026-08-24",
+    "note": "워킨맵 검색 전체색상 + 점검·AS 시간배분 + 불만 업체단위 카운트 + 조회탭 기기정보 수정"
+  },
+  {
     "hash": "0e56fdc94d",
     "date": "2026-08-24",
     "note": "FIELD 복붙 전송도 일정과 연결 + AS 이력 3건으로 축약"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d9930435f7",
     "date": "2026-08-02",
     "note": "네이버 캘린더 일정 조회·수정·삭제 — CalDAV 경유 (실험적)"
-  },
-  {
-    "hash": "98a330cdb2",
-    "date": "2026-08-02",
-    "note": "리스트 상태는 저장된 값만 반영 — 처리여부만 골라도 완료로 보이던 문제 수정 (처리 저장을 눌러야 완료)"
   }
 ];

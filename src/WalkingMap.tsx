@@ -1810,9 +1810,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const mapSearchResults = useMemo(() => {
     const keyword = mapQuery.trim().toLowerCase();
     if (!keyword) return [];
-    return scopedPlaces.filter((place) => [place.name, place.comment, place.address, place.addressDetail]
+    // 색상 체크를 넘어 전체에서 찾는다 — 결과 줄 왼쪽 색 점이 어떤 색인지 알려준다
+    return scopedAllColors.filter((place) => [place.name, place.comment, place.address, place.addressDetail]
       .some((value) => value.toLowerCase().includes(keyword))).slice(0, 8);
-  }, [mapQuery, scopedPlaces]);
+  }, [mapQuery, scopedAllColors]);
 
 
   const buildCompareData = useCallback((placeId: number | null) => {
@@ -2402,9 +2403,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               {mapSearchResults.map((place) => (
                 <button key={place.id} type="button"
                   onClick={() => { selectMapPlace(place.id); setMapQuery(place.name); setMapSearchOpen(false); }}
-                  className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 active:bg-blue-100">
-                  <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
-                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                  className="flex w-full items-center gap-2.5 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 active:bg-blue-100">
+                  <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: labelMeta(place.label).color }} title={labelDesc(place.label, place.kind) || place.label} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
+                    <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                  </span>
                 </button>
               ))}
               {!mapSearchResults.length && <div className="px-3 py-3 text-xs font-bold text-slate-400">현재 조건에 맞는 거래처가 없습니다.</div>}
@@ -2459,10 +2463,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     setMapQuery(place.name);
                     setMapSearchFocused(false);
                   }}
-                  className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50 active:bg-blue-100"
+                  className="flex w-full items-center gap-2.5 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50 active:bg-blue-100"
                 >
-                  <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
-                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                  <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: labelMeta(place.label).color }} title={labelDesc(place.label, place.kind) || place.label} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
+                    <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
+                  </span>
                 </button>
               ))}
               {!mapSearchResults.length && <div className="px-3 py-3 text-xs font-bold text-slate-400">현재 조건에 맞는 거래처가 없습니다.</div>}
