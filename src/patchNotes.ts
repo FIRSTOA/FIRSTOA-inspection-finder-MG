@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "3dc7c6c41e",
+    "date": "2026-08-25",
+    "note": "접수내용 추출기 — note 양식의 제목/상태/내용에서 확정적으로 (분기마감 오답 제거)"
+  },
+  {
     "hash": "5e49a082d4",
     "date": "2026-08-25",
     "note": "중간보고 AI 재료 보강 — 원제목·note 전달, 마감 방문은 '분기마감'이 내용, 규칙 줄 A/S 잘림 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "6471542dc2",
     "date": "2026-08-05",
     "note": "조회탭 기록 숨김(soft delete) — 잘못된 기록을 원문 보존한 채 목록·집계에서 제외"
-  },
-  {
-    "hash": "5db4a3b93e",
-    "date": "2026-08-05",
-    "note": "지역 없으면 팝업 차단 — 테스트 모드보다 우선 (알림+전송 모두), api 이중 방어"
   }
 ];

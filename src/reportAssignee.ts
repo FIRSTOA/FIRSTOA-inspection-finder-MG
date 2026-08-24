@@ -25,7 +25,8 @@ export function extractIssue(issue: string | undefined, note: string | undefined
   const direct = (issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim();
   if (direct) return direct;
   for (const key of ["접수내용", "내용", "제목", "상태"]) {
-    const m = (note || "").match(new RegExp(`(?:^|\\n)\\s*"?${key}"?\\s*[\\t:]+\\s*([^\\t\\n"]+)`));
+    // 구분자: 탭·콜론 또는 스페이스 2개 이상 — 양식에 따라 "제목⇥값"도 "제목    값"도 있다
+    const m = (note || "").match(new RegExp(`(?:^|\\n)\\s*"?${key}"?(?:\\s*[\\t:]+|[ ]{2,})\\s*([^\\t\\n"]+)`));
     const val = (m?.[1] || "").trim();
     if (val && !/^[-–—.]*$/.test(val)) return val;
   }
