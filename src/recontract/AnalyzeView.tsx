@@ -109,7 +109,6 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
 function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => void; onRemove: () => void }) {
   const { analysis, verdict } = item;
   const overCount = analysis.usage.reduce((sum, stat) => sum + stat.초과월수, 0);
-  const 미납실질 = analysis.payment.미납월.filter((ym) => ym !== analysis.months[analysis.months.length - 1]?.ym).length;
   const current = analysis.현재계약;
 
   // 대장 밖 이력 — 업체명으로 특이사항·불만·미수·AS·지난 협상을 자동으로 불러온다
@@ -160,39 +159,35 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
   // 3개월 누적 청구 업체 — 사용량이 분기에만 찍히므로 월별 표의 빈 달이 정상이라는 안내가 필요하다
   const isAccum = useMemo(() => analysis.vouchers.some((voucher) => voucher.items.some((it) => /개월\s*누적/.test(it.label))), [analysis]);
 
-  // 판매/수금내역 원문 — 붙여넣은 텍스트에서 그 부분만 잘라 이카운트 그대로 보여준다
-  const rawTable = useMemo(() => {
-    const idx = item.raw.indexOf("판매/수금내역");
-    return idx >= 0 ? item.raw.slice(idx) : item.raw;
-  }, [item.raw]);
-
-  // 이카운트형 전표 표 — 잔액은 판매-수금 누적으로 계산
+  // 이카운트형 전표 표 — 상세 줄(임대료·카운터·초과)을 원문 그대로 행으로 싣는다.
+  // 수치가 달라질 걱정이 없도록 라벨을 가공하지 않는다. 잔액은 판매-수금 누적.
   const voucherRows = useMemo(() => {
     let balance = 0;
-    const rows: Array<{ kind: "v" | "sub"; date: string; no: string; memo: string; 판매: number; 수금: number; 잔액: number; chips: string[] }> = [];
+    type Row = { kind: "v" | "item" | "sub"; date: string; no: string; memo: string; 판매: number; 수금: number; 잔액: number; excess: boolean };
+    const rows: Row[] = [];
     const monthAgg = new Map<string, { 판매: number; 수금: number }>();
     for (const voucher of analysis.vouchers) {
       balance += voucher.판매 - voucher.수금;
-      const chips: string[] = [];
-      const color = voucher.items.filter((it) => it.counter && it.counter.kind !== "흑백").reduce((sum, it) => sum + (it.counter?.사용 || 0), 0);
-      const bw = voucher.items.filter((it) => it.counter?.kind === "흑백").reduce((sum, it) => sum + (it.counter?.사용 || 0), 0);
-      if (color || bw) chips.push(`컬 ${money(color)}매 · 흑 ${money(bw)}매`);
-      for (const it of voucher.items) if (it.excess) chips.push(`⚠ ${it.excess.kind} ${money(it.excess.초과)}매 초과 · ${money(it.excess.금액)}원`);
-      rows.push({ kind: "v", date: voucher.date, no: voucher.no, memo: voucher.memo, 판매: voucher.판매, 수금: voucher.수금, 잔액: balance, chips });
+      rows.push({ kind: "v", date: voucher.date, no: voucher.no, memo: voucher.memo, 판매: voucher.판매, 수금: voucher.수금, 잔액: balance, excess: false });
+      for (const it of voucher.items) {
+        rows.push({ kind: "item", date: "", no: "", memo: it.label, 판매: it.금액, 수금: 0, 잔액: 0, excess: !!it.excess });
+      }
       const ym = voucher.date.slice(0, 7);
       const agg = monthAgg.get(ym) || { 판매: 0, 수금: 0 };
       agg.판매 += voucher.판매; agg.수금 += voucher.수금;
       monthAgg.set(ym, agg);
     }
-    // 월계 줄 삽입 — 이카운트 화면과 같은 리듬
-    const withSub: typeof rows = [];
+    const withSub: Row[] = [];
+    let lastYm = "";
     for (let i = 0; i < rows.length; i += 1) {
       withSub.push(rows[i]);
-      const ym = rows[i].date.slice(0, 7);
-      const nextYm = rows[i + 1]?.date.slice(0, 7);
-      if (ym !== nextYm) {
-        const agg = monthAgg.get(ym)!;
-        withSub.push({ kind: "sub", date: ym, no: "", memo: "", 판매: agg.판매, 수금: agg.수금, 잔액: rows[i].잔액, chips: [] });
+      if (rows[i].kind === "v") lastYm = rows[i].date.slice(0, 7);
+      const next = rows.slice(i + 1).find((row) => row.kind === "v");
+      const isMonthEnd = rows[i + 1]?.kind !== "item" && (!next || next.date.slice(0, 7) !== lastYm);
+      if (isMonthEnd && lastYm && (rows[i].kind === "v" || rows[i].kind === "item")) {
+        const agg = monthAgg.get(lastYm)!;
+        withSub.push({ kind: "sub", date: lastYm, no: "", memo: "", 판매: agg.판매, 수금: agg.수금, 잔액: 0, excess: false });
+        lastYm = "";
       }
     }
     return withSub;
@@ -336,92 +331,135 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
             sub={`월평균 ${money(usage.bw?.월평균 || 0)}매 / 기본 ${money(usage.bw?.기본매수 || 0)}매 → 활용률 ${usage.흑백활용률}%`}
             tone={usage.흑백활용률 >= 100 ? "red" : "gray"} />
           <KPI label="초과료 누적" value={man(analysis.billing.초과청구합)} unit="만원" sub={`${overCount}회 발생`} tone={overCount >= 3 ? "amber" : "gray"} />
-          <KPI label="미수 잔액" value={analysis.누계.잔액 === 0 ? "없음" : man(analysis.누계.잔액)} unit={analysis.누계.잔액 === 0 ? "" : "만원"}
-            sub={`미납 ${미납실질}개월 · 수금 ${analysis.payment.판정}`} tone={미납실질 > 0 ? "amber" : "green"} />
+          <KPI label="미수 잔액" value={analysis.payment.실질잔액 === 0 ? "없음" : man(analysis.payment.실질잔액)} unit={analysis.payment.실질잔액 === 0 ? "" : "만원"}
+            sub={`CMS 승인실패 ${analysis.payment.cms실패}회 · 수금 ${analysis.payment.판정}${analysis.payment.잔액개월치 >= 1 ? ` · 약 ${analysis.payment.잔액개월치}개월치` : ""}`}
+            tone={analysis.payment.실질잔액 > 0 || analysis.payment.cms실패 > 0 ? "amber" : "green"} />
           <KPI label="월 기본료" value={money(analysis.billing.월기본료)} unit="원" sub={`최근 청구 ${money(analysis.billing.최근청구)}원`} />
         </div>
       </section>
 
-      {/* 계약 이력 + 적요 상세 — 블록별 분석과 그 원문을 함께 */}
-      {!!analysis.contracts.length && (
+      {/* 월별 사용량 정리 — [사용]이 찍힌 달만. 누적 청구 업체는 분기 합이다 */}
+      {(usage.total.컬러 > 0 || usage.total.흑백 > 0) && (
         <section className="rounded-2xl border border-slate-100 bg-white p-6">
-          <h2 className="mb-4 text-base font-bold text-slate-900">계약 이력 · 적요 상세 <span className="ml-1 text-[11px] font-medium text-slate-400">적요에서 읽음 · 최근 먼저 · 각 블록 아래는 원문</span></h2>
-          <div className="space-y-3">
-            {analysis.contracts.map((note2, index) => (
-              <div key={`${note2.from}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="font-mono text-sm font-bold tabular-nums text-slate-800">{note2.from || "?"} ~ {note2.to || "?"}</span>
-                  {!!note2.label && <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white">{note2.label}</span>}
-                  {!!note2.models.length && <span className="text-xs font-semibold text-slate-600">{note2.models.join(", ")}</span>}
-                  {!!note2.years && <span className="text-[11px] text-slate-400">만 {note2.years}년</span>}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                  {!!note2.월기본료 && <span>기본료 <b className="text-slate-900">{money(note2.월기본료)}원</b></span>}
-                  {!!note2.컬러기본 && <span>컬러 <b className="text-slate-900">{money(note2.컬러기본)}매</b> / 초과 {note2.컬러단가}원</span>}
-                  {!!note2.흑백기본 && <span>흑백 <b className="text-slate-900">{money(note2.흑백기본)}매</b> / 초과 {note2.흑백단가}원</span>}
-                  {!!note2.보증금 && <span>보증금 <b className="text-slate-900">{money(note2.보증금)}원</b></span>}
-                  {!!note2.무상.length && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{note2.무상.join("·")} 무상 — 재계약 때 유지 확인</span>}
-                </div>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-[11px] font-semibold text-slate-400 hover:text-slate-600">이 블록의 적요 원문</summary>
-                  <pre className="mt-1.5 whitespace-pre-wrap rounded-lg bg-white p-3 font-mono text-[11.5px] leading-5 text-slate-600 ring-1 ring-slate-100">{note2.raw}</pre>
-                </details>
-              </div>
-            ))}
+          <h2 className="mb-4 text-base font-bold text-slate-900">월별 사용량 <span className="ml-1 text-[11px] font-medium text-slate-400">{isAccum ? "3개월 누적 청구 — 분기 달에 3개월 합이 찍힙니다" : "카운터가 찍힌 달 기준"}</span></h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  <th className="py-2 pr-3">월</th>
+                  <th className="py-2 pr-3 text-right">컬러 사용</th>
+                  <th className="py-2 pr-3 text-right">흑백 사용</th>
+                  <th className="py-2 pr-3">초과</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {analysis.months.filter((month) => month.counters.length > 0).map((month) => {
+                  const color = month.counters.filter((counter) => counter.kind !== "흑백").reduce((sum, counter) => sum + counter.사용, 0);
+                  const bw = month.counters.filter((counter) => counter.kind === "흑백").reduce((sum, counter) => sum + counter.사용, 0);
+                  return (
+                    <tr key={month.ym} className={`border-b border-slate-50 last:border-0 ${month.excesses.length ? "bg-red-50/60" : ""}`}>
+                      <td className="py-2 pr-3 font-mono text-xs font-bold text-slate-600">{month.ym.replace("-", ".")}</td>
+                      <td className="py-2 pr-3 text-right font-semibold text-blue-700">{money(color)}</td>
+                      <td className="py-2 pr-3 text-right font-semibold text-slate-600">{money(bw)}</td>
+                      <td className="py-2 pr-3">
+                        {month.excesses.length
+                          ? month.excesses.map((excess, index) => (
+                              <span key={index} className="mr-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">{excess.kind} {money(excess.초과)}매 · {money(excess.금액)}원</span>
+                            ))
+                          : <span className="text-[11px] text-slate-300">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 font-bold text-slate-900">
+                  <td className="py-2 pr-3 text-xs">합계</td>
+                  <td className="py-2 pr-3 text-right">{money(usage.total.컬러)}</td>
+                  <td className="py-2 pr-3 text-right">{money(usage.total.흑백)}</td>
+                  <td className="py-2 pr-3 text-[11px] text-red-600">{overCount ? `${overCount}회 · ${money(analysis.billing.초과청구합)}원` : "없음"}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-bold text-slate-500 hover:text-slate-700">📜 적요 전체 원문 그대로 보기</summary>
-            <pre className="mt-2 max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-[12px] leading-6 text-slate-700">{analysis.remarks || "적요 없음"}</pre>
-          </details>
         </section>
       )}
 
-      {/* 월별 상세 — 이카운트 그대로: 일자 | 적요 | 판매 | 수금 | 잔액 (+사용량·초과 칩) */}
+      {/* 계약 이력 · 적요 — 분석 요약 줄과 원문을 한 화면에 (블록 카드 없이) */}
+      {(!!analysis.contracts.length || !!analysis.remarks) && (
+        <section className="rounded-2xl border border-slate-100 bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-slate-900">계약 이력 · 적요 <span className="ml-1 text-[11px] font-medium text-slate-400">위: 분석 요약(최근 먼저) · 아래: 적요 원문 그대로</span></h2>
+          {!!analysis.contracts.length && (
+            <div className="mb-4 space-y-1.5">
+              {analysis.contracts.map((note2, index) => (
+                <div key={`${note2.from}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-slate-50 pb-1.5 last:border-0 last:pb-0">
+                  <span className="font-mono text-sm font-bold tabular-nums text-slate-800">{note2.from || "?"} ~ {note2.to || "?"}</span>
+                  {!!note2.label && <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white">{note2.label}</span>}
+                  {!!note2.models.length && <span className="text-xs font-semibold text-slate-600">{note2.models.join(", ")}</span>}
+                  {!!note2.월기본료 && <span className="text-xs text-slate-600">기본료 <b className="text-slate-900">{money(note2.월기본료)}원</b></span>}
+                  {!!note2.컬러기본 && <span className="text-xs text-slate-600">컬 <b className="text-slate-900">{money(note2.컬러기본)}</b>/{note2.컬러단가}</span>}
+                  {!!note2.흑백기본 && <span className="text-xs text-slate-600">흑 <b className="text-slate-900">{money(note2.흑백기본)}</b>/{note2.흑백단가}</span>}
+                  {!!note2.보증금 && <span className="text-xs text-slate-600">보증금 <b className="text-slate-900">{money(note2.보증금)}원</b></span>}
+                  {!!note2.무상.length && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{note2.무상.join("·")} 무상 유지 확인</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-[12px] leading-6 text-slate-700">{analysis.remarks || "적요 없음"}</pre>
+        </section>
+      )}
+
+      {/* 월별 상세 — 이카운트 화면 그대로. 상세 줄(임대료·카운터·초과)을 가공 없이 싣는다 */}
       <section className="rounded-2xl border border-slate-100 bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-slate-900">월별 상세 <span className="ml-1 text-[11px] font-medium text-slate-400">이카운트 화면과 같은 배열 · 초과가 난 전표는 붉게</span></h2>
+        <h2 className="mb-4 text-base font-bold text-slate-900">월별 상세 <span className="ml-1 text-[11px] font-medium text-slate-400">이카운트 원문 그대로 · 초과 줄은 붉게</span></h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                <th className="py-2 pr-3">일자</th>
+                <th className="w-24 py-2 pr-3">일자</th>
                 <th className="py-2 pr-3">적요</th>
-                <th className="py-2 pr-3 text-right">판매</th>
-                <th className="py-2 pr-3 text-right">수금</th>
-                <th className="py-2 text-right">잔액</th>
+                <th className="w-24 py-2 pr-3 text-right">판매</th>
+                <th className="w-24 py-2 pr-3 text-right">수금</th>
+                <th className="w-24 py-2 text-right">잔액</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
-              {voucherRows.map((row, index) => row.kind === "sub" ? (
-                <tr key={`s-${row.date}`} className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold text-slate-500">
-                  <td className="py-1.5 pr-3 font-mono">{row.date.replace("-", "/")} 계</td>
-                  <td className="py-1.5 pr-3" />
-                  <td className="py-1.5 pr-3 text-right">{row.판매 ? money(row.판매) : ""}</td>
-                  <td className="py-1.5 pr-3 text-right">{row.수금 ? money(row.수금) : ""}</td>
-                  <td className="py-1.5 text-right" />
-                </tr>
-              ) : (
-                <tr key={`${row.date}-${row.no}-${index}`} className={`border-b border-slate-50 last:border-0 ${row.chips.some((chip) => chip.startsWith("⚠")) ? "bg-red-50/60" : ""}`}>
-                  <td className="py-2 pr-3 font-mono text-xs font-bold text-slate-600">{row.date.slice(2).replace(/-/g, "/")}</td>
-                  <td className="py-2 pr-3">
-                    <div className="text-xs font-medium text-slate-700">{row.memo || <span className="text-slate-300">—</span>}</div>
-                    {row.chips.length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap gap-1">
-                        {row.chips.map((chip) => (
-                          <span key={chip} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${chip.startsWith("⚠") ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"}`}>{chip}</span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-semibold text-slate-800">{row.판매 ? money(row.판매) : <span className="text-slate-300">—</span>}</td>
-                  <td className="py-2 pr-3 text-right font-semibold text-emerald-700">{row.수금 ? money(row.수금) : <span className="text-slate-300">—</span>}</td>
-                  <td className="py-2 text-right font-semibold text-slate-500">{row.잔액 ? money(row.잔액) : <span className="text-slate-300">0</span>}</td>
-                </tr>
-              ))}
+              {voucherRows.map((row, index) => {
+                if (row.kind === "sub") {
+                  return (
+                    <tr key={`s-${row.date}-${index}`} className="border-b border-slate-200 bg-slate-100/80 text-xs font-bold text-slate-600">
+                      <td className="py-1.5 pr-3 font-mono" colSpan={2}>{row.date.replace("-", "/")} 계</td>
+                      <td className="py-1.5 pr-3 text-right">{row.판매 ? money(row.판매) : ""}</td>
+                      <td className="py-1.5 pr-3 text-right">{row.수금 ? money(row.수금) : ""}</td>
+                      <td className="py-1.5 text-right" />
+                    </tr>
+                  );
+                }
+                if (row.kind === "item") {
+                  return (
+                    <tr key={`i-${index}`} className={`border-b border-slate-50 last:border-0 ${row.excess ? "bg-red-50" : ""}`}>
+                      <td className="py-1 pr-3" />
+                      <td className={`py-1 pr-3 font-mono text-[11.5px] leading-5 ${row.excess ? "font-bold text-red-700" : "text-slate-500"}`}>{row.memo}</td>
+                      <td className={`py-1 pr-3 text-right text-xs ${row.excess ? "font-bold text-red-700" : "text-slate-500"}`}>{row.판매 ? money(row.판매) : ""}</td>
+                      <td className="py-1 pr-3" />
+                      <td className="py-1" />
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={`v-${row.date}-${row.no}-${index}`} className="border-b border-slate-100 bg-blue-50/30">
+                    <td className="py-2 pr-3 font-mono text-xs font-bold text-blue-800">{row.date.replace(/-/g, "/")}{row.no ? ` ${row.no}` : ""}</td>
+                    <td className="py-2 pr-3 text-xs font-semibold text-slate-800">{row.memo || <span className="text-slate-300">—</span>}</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-slate-900">{row.판매 ? money(row.판매) : ""}</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-emerald-700">{row.수금 ? money(row.수금) : ""}</td>
+                    <td className="py-2 text-right font-semibold text-slate-600">{row.잔액 ? money(row.잔액) : ""}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-slate-200 font-bold text-slate-900">
-                <td className="py-2 pr-3 text-xs">누계</td>
-                <td className="py-2 pr-3 text-[11px] text-red-600">{overCount ? `초과 ${overCount}회 · ${money(analysis.billing.초과청구합)}원` : ""}</td>
+              <tr className="border-t-2 border-slate-300 font-bold text-slate-900">
+                <td className="py-2 pr-3 text-xs" colSpan={2}>누계{overCount ? <span className="ml-2 text-[11px] font-bold text-red-600">초과 {overCount}회 · {money(analysis.billing.초과청구합)}원 (빨간 줄)</span> : null}</td>
                 <td className="py-2 pr-3 text-right">{money(analysis.누계.판매)}</td>
                 <td className="py-2 pr-3 text-right">{money(analysis.누계.수금)}</td>
                 <td className="py-2 text-right">{money(analysis.누계.잔액)}</td>
@@ -429,11 +467,6 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
             </tfoot>
           </table>
         </div>
-        {/* 판매/수금내역 원문 — 표 바로 아래 (이카운트 화면 그대로) */}
-        <details className="mt-3">
-          <summary className="cursor-pointer text-xs font-bold text-slate-500 hover:text-slate-700">🧾 판매/수금내역 원문 그대로 보기</summary>
-          <pre className="mt-2 max-h-[60vh] overflow-auto whitespace-pre rounded-xl bg-slate-50 p-4 font-mono text-[11.5px] leading-6 text-slate-700">{rawTable}</pre>
-        </details>
       </section>
 
       {/* 추천 플랜 비교 */}

@@ -86,19 +86,19 @@ export function calcProposals(analysis: LedgerAnalysis, verdict: Judgement, extr
   const overCount = analysis.usage.reduce((sum, stat) => sum + stat.초과월수, 0);
   const overTotal = analysis.billing.초과청구합;
   const years = verdict.거래연차;
-  const 미납 = analysis.payment.미납월.length > 1 ? analysis.payment.미납월.length - 1 : 0; // 마지막 청구월 제외
-  const finalBalance = analysis.누계.잔액;
+  const cmsFails = analysis.payment.cms실패;
+  const finalBalance = analysis.payment.실질잔액;
   const severeComplaints = extra.complaintSevere || 0;
   const totalComplaints = extra.complaintTotal || 0;
   const totalAS = extra.asTotal || 0;
   const heavyAS = totalAS >= 5;
 
   // ── 상황 분류 (우선순위 — 원본 룰 그대로) ──
-  const isLongStable = years >= 7 && severeComplaints === 0 && totalAS < 3 && 미납 === 0;
+  const isLongStable = years >= 7 && severeComplaints === 0 && totalAS < 3 && cmsFails === 0 && finalBalance === 0;
   const hasDeviceIssue = heavyAS || !!extra.complaintDevice;
   const hasIssue = severeComplaints > 0;
   const hasHeavyOverage = overTotal >= 500_000 || overCount >= 4;
-  const hasPaymentRisk = 미납 > 0 || (finalBalance >= 500_000 && analysis.payment.판정 !== "우량");
+  const hasPaymentRisk = cmsFails > 0 || finalBalance >= 500_000;
   const isNewVendor = years > 0 && years <= 2;
 
   let a: Card, b: Card, c: Card;
@@ -112,7 +112,7 @@ export function calcProposals(analysis: LedgerAnalysis, verdict: Judgement, extr
     b = cardFree1(base, 2); bR = "2년 단기 + 신뢰 회복";
     c = cardDeviceSwap(base, 3); cR = "장비 동반 불만 시 대안";
   } else if (hasPaymentRisk) {
-    a = cardNoFreebie(base, 2); aR = `결제 불안 (미납 ${미납}개월${finalBalance ? ` / 잔액 ${fmt(finalBalance)}원` : ""}) — 보수적 접근`;
+    a = cardNoFreebie(base, 2); aR = `결제 불안 (CMS 실패 ${cmsFails}회${finalBalance ? ` / 미수 ${fmt(finalBalance)}원` : ""}) — 보수적 접근`;
     b = cardFree1(base, 2); bR = "거래처 부담 호소 시 1개월 무상";
     c = cardNoFreebie(base, 1); cR = "리스크 통제 — 1년 단기";
   } else if (hasHeavyOverage) {

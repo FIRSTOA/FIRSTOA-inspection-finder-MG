@@ -59,14 +59,6 @@ function earliestYear(analysis: LedgerAnalysis): number | null {
   return first ? Number(first.slice(0, 4)) : null;
 }
 
-/** 마지막 청구월은 아직 수금 전인 게 정상 — 그 달 미수는 실질 미수로 세지 않는다 */
-function realBalance(analysis: LedgerAnalysis): number {
-  const billed = analysis.months.filter((month) => month.청구 > 0);
-  const last = billed[billed.length - 1];
-  const pending = last && last.수금 < last.청구 ? last.청구 - last.수금 : 0;
-  return Math.max(0, analysis.누계.잔액 - pending);
-}
-
 export function judge(analysis: LedgerAnalysis, today = new Date()): Judgement {
   const color = analysis.usage.find((stat) => stat.kind === "컬러");
   const 컬러활용률 = color?.기본매수 ? Math.round((color.월평균 / color.기본매수) * 100) : 0;
@@ -90,10 +82,11 @@ export function judge(analysis: LedgerAnalysis, today = new Date()): Judgement {
     if (analysis.billing.초과청구합 / 초과횟수 >= 기본료 * 0.5) 초과수준 = "매우많음";
   }
 
-  const 미납 = analysis.payment.미납월.filter((ym) => ym !== analysis.months[analysis.months.length - 1]?.ym);
-  const 잔액 = realBalance(analysis);
-  const 결제안정성: Judgement["결제안정성"] = 미납.length === 0 && 잔액 === 0 ? "안정"
-    : 미납.length >= 3 || 잔액 > 500_000 ? "잦은불안" : "가끔불안";
+  // 결제 판정은 잔액·승인실패 기준 — 달 단위 대조는 CMS(다음 달 출금) 업체를 미납으로 오판한다(실사고)
+  const cms실패 = analysis.payment.cms실패;
+  const 잔액 = analysis.payment.실질잔액;
+  const 결제안정성: Judgement["결제안정성"] = cms실패 === 0 && 잔액 === 0 ? "안정"
+    : cms실패 >= 3 || 잔액 > 500_000 ? "잦은불안" : "가끔불안";
 
   const signals: string[] = [];
   if (초과수준 === "많음" || 초과수준 === "매우많음") signals.push("가격형");
@@ -180,10 +173,9 @@ export function judge(analysis: LedgerAnalysis, today = new Date()): Judgement {
   else if (컬러활용률 >= 80) 위험신호.push(`컬러 활용률 ${컬러활용률}% (기본매수 한계 근접)`);
   if (초과횟수 >= 5) 위험신호.push(`초과료 ${초과횟수}회 누계 ${analysis.billing.초과청구합.toLocaleString("ko-KR")}원 (반복 발생)`);
   else if (초과횟수 >= 3) 위험신호.push(`초과료 ${초과횟수}회 누계 ${analysis.billing.초과청구합.toLocaleString("ko-KR")}원`);
-  if (미납.length >= 3) 위험신호.push(`미납 ${미납.length}개월 (반복적)`);
-  else if (미납.length) 위험신호.push(`미납 ${미납.length}개월`);
-  if (잔액 > 0) 위험신호.push(`미수 잔액 ${잔액.toLocaleString("ko-KR")}원`);
-  if (analysis.payment.평균지연일 > 25) 위험신호.push(`수금 평균 ${analysis.payment.평균지연일}일 지연`);
+  if (cms실패 >= 3) 위험신호.push(`CMS 승인실패 ${cms실패}회 (반복적)`);
+  else if (cms실패) 위험신호.push(`CMS 승인실패 ${cms실패}회`);
+  if (잔액 > 0) 위험신호.push(`미수 잔액 ${잔액.toLocaleString("ko-KR")}원${analysis.payment.잔액개월치 >= 1 ? ` (약 ${analysis.payment.잔액개월치}개월치)` : ""}`);
   if (거래관계 === "신규") 위험신호.push("거래 관계 신규 — 혜택 신중");
   // 끼워준 무상 조건은 재계약 때 빠지면 사고가 된다
   for (const note of analysis.contracts) {

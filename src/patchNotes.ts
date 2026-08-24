@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a4f4e46817",
+    "date": "2026-08-24",
+    "note": "이카운트 파서 — 3개월 누적 청구·컬러누계 무접두·N월 비교라벨 대응 (실표본)"
+  },
+  {
     "hash": "10c772d04c",
     "date": "2026-08-24",
     "note": "방문 대상 목록 — 등급별 보기·총 개수·완료 동기화 표시"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ef406f81de",
     "date": "2026-08-04",
     "note": "일정리스트 담당자 드롭다운 제거 — 미배정/이름 배지 표시, 변경은 [배정] 버튼(팀원 팝업)으로만"
-  },
-  {
-    "hash": "a1b859399f",
-    "date": "2026-08-04",
-    "note": "칭찬 [시트 열기]를 다른 탭과 같은 미리보기쪽 버튼줄로 통일 (폼 안 버튼은 보내기만)"
   }
 ];

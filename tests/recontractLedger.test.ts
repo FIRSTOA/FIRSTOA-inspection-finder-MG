@@ -224,3 +224,18 @@ describe("3개월 누적 청구 업체 (하이어랭크형 실사용 표본)", (
     expect(parsed.누계).toEqual({ 판매: 4_516_600, 수금: 4_235_000, 잔액: 281_600 });
   });
 });
+
+describe("결제 판정 — CMS 다음 달 출금 업체를 미납으로 오판하지 않는다", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  const analysis = analyzeLedger(quarterly);
+
+  it("승인실패 줄을 센다", () => {
+    expect(analysis.payment.cms실패).toBe(1);
+  });
+  it("실질잔액 = 누계 잔액 - 최근 청구 (수금 전이 정상인 몫)", () => {
+    expect(analysis.payment.실질잔액).toBe(281_600 - 140_800);
+  });
+  it("판정은 잔액·승인실패 기준 — 달 단위 대조가 아니다", () => {
+    expect(analysis.payment.판정).toBe("보통"); // 실패 1회 + 잔액 1개월치 — 주의까지는 아니다
+  });
+});

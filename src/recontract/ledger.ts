@@ -352,9 +352,12 @@ export type UsageStat = {
 export type PaymentStat = {
   청구월수: number;
   완납월수: number;
-  미납월: string[];
+  미납월: string[];        // 같은 달 안에 수금 안 된 달 — CMS는 다음 달 출금이 정상이라 판정에는 쓰지 않는다
   평균지연일: number;
   최대지연일: number;
+  cms실패: number;         // "승인실패" 줄 수 — 진짜 결제 불안 신호
+  실질잔액: number;        // 누계 잔액 - 최근 청구(아직 수금 전이 정상인 몫)
+  잔액개월치: number;      // 실질잔액이 월평균 청구의 몇 달치인가
   판정: "우량" | "보통" | "주의";
 };
 
@@ -463,20 +466,34 @@ function usageStats(months: LedgerMonth[], contracts: ContractNote[], vouchers: 
   return out.sort((a, b) => (a.kind === "컬러" ? -1 : 1) - (b.kind === "컬러" ? -1 : 1));
 }
 
-function paymentStats(months: LedgerMonth[]): PaymentStat {
+/**
+ * 결제 신뢰도 — 달 단위 대조가 아니라 잔액 기준으로 본다.
+ *
+ * CMS 업체는 청구가 이달, 출금이 다음 달인 게 정상 주기라 "같은 달 수금 여부"로 재면
+ * 성실 결제 업체가 미납 8개월로 찍힌다(실사고). 믿을 신호는 두 가지뿐이다:
+ *   ① 승인실패 줄("CMS 6/30 승인실패 [잔액부족]") — 실제로 출금이 튕긴 기록
+ *   ② 실질잔액 — 누계 잔액에서 최근 청구(아직 수금 전이 정상인 몫)를 뺀 나머지
+ */
+function paymentStats(months: LedgerMonth[], vouchers: LedgerVoucher[], 누계: { 판매: number; 수금: number; 잔액: number }): PaymentStat {
   const billed = months.filter((month) => month.청구 > 0);
   const delays = billed.filter((month) => month.지연일 >= 0).map((month) => month.지연일);
   const 미납월 = billed.filter((month) => month.수금 < month.청구).map((month) => month.ym);
   const 평균지연일 = delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : -1;
-  // 마지막 달은 아직 수금 전일 수 있다 — 판정에서 뺀다
-  const 실미납 = 미납월.filter((ym) => ym !== billed[billed.length - 1]?.ym);
+  const cms실패 = vouchers.flatMap((voucher) => voucher.items).filter((item) => /승인\s*실패/.test(item.label)).length;
+  const 최근청구 = billed.length ? billed[billed.length - 1].청구 : 0;
+  const 실질잔액 = Math.max(0, 누계.잔액 - 최근청구);
+  const 월평균청구 = billed.length ? billed.reduce((sum, month) => sum + month.청구, 0) / billed.length : 0;
+  const 잔액개월치 = 월평균청구 > 0 ? Math.round((실질잔액 / 월평균청구) * 10) / 10 : 0;
   return {
     청구월수: billed.length,
     완납월수: billed.length - 미납월.length,
     미납월,
     평균지연일,
     최대지연일: delays.length ? Math.max(...delays) : -1,
-    판정: 실미납.length >= 2 || 평균지연일 > 40 ? "주의" : 실미납.length || 평균지연일 > 25 ? "보통" : "우량",
+    cms실패,
+    실질잔액,
+    잔액개월치,
+    판정: cms실패 >= 3 || 잔액개월치 >= 2 ? "주의" : cms실패 >= 1 || 실질잔액 > 0 ? "보통" : "우량",
   };
 }
 
@@ -487,7 +504,7 @@ export function analyzeLedger(text: string): LedgerAnalysis {
   return {
     ...parsed,
     usage: usageStats(parsed.months, parsed.contracts, parsed.vouchers),
-    payment: paymentStats(parsed.months),
+    payment: paymentStats(parsed.months, parsed.vouchers, parsed.누계),
     billing: {
       월기본료: 임대료.length ? 임대료[임대료.length - 1].단가 : parsed.contracts[0]?.월기본료 || 0,
       최근청구: 청구목록.length ? 청구목록[청구목록.length - 1] : 0,
