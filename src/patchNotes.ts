@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "be32db15f0",
+    "date": "2026-08-24",
+    "note": "완료·연기 양식 공유 + 접수 양식 표기 수리"
+  },
+  {
     "hash": "548359bc8c",
     "date": "2026-08-19",
     "note": "접수 3건 수리 — E팀 시간, 키맨 이름 잘림, 카톡에 사진 누락"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "0a320498c5",
     "date": "2026-08-02",
     "note": "캘린더 필터 숨김 경고 — 체크 해제로 이번 달 일정이 가려져 있으면 '필터로 N건 숨김 — 모두 표시' 버튼 노출"
-  },
-  {
-    "hash": "2b91234377",
-    "date": "2026-08-02",
-    "note": "접수 버튼 단순화 — [접수(저장+시트+웹일정·캘린더)][네이버 캘린더][카톡 전송][⚡ 전체], 원격은 [접수(저장+시트)] 하나"
   }
 ];

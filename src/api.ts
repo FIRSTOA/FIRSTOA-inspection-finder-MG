@@ -422,7 +422,7 @@ export async function updateServiceReception(id: string, patch: Partial<Pick<Ser
 }
 
 // 서비스접수 보고 양식 → 카톡 전송. IT AS는 PC/IT방, 복합기 AS는 지역 AS방. TEST_MODE면 테스트방.
-export async function sendServiceReception(kind: "IT" | "AS", region: string, text: string): Promise<SaveResp> {
+export async function sendServiceReception(kind: "IT" | "AS" | "물류", region: string, text: string): Promise<SaveResp> {
   try {
     if (!text.trim()) return { ok: false, error: "전송할 양식이 없습니다." };
     const cfg = await getConfig();
@@ -433,6 +433,9 @@ export async function sendServiceReception(kind: "IT" | "AS", region: string, te
       const map = await getRoomMap();
       if (kind === "IT") {
         room = map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt;
+      } else if (kind === "물류") {
+        // 납품·철수·교체는 영업부 소관이라 팀 AS방이 아니라 완료방으로 간다
+        room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
       } else {
         const mapped = map[`AS|${normRegion(region)}`];
         // 방 매핑이 없는 지역(지방 등)을 테스트방으로 조용히 보내고 '전송완료'로 남기면 접수가 누락된다 — 차단.
