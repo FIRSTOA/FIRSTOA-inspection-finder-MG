@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "d7a4b838b3",
+    "date": "2026-08-25",
+    "note": "중간보고 — CS 팀원 이름이 배정된 건만 (물류 인원·미배정 제외, 팀장은 전 팀 포함)"
+  },
+  {
     "hash": "11e7e832ae",
     "date": "2026-08-25",
     "note": "중간보고 간략화 — 완료 줄 제거, 빈 섹션(익일변경·특이사항) 생략, 그룹 사이 빈 줄·--- 구분선 제거"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "f131251ed3",
     "date": "2026-08-04",
     "note": "일정 상세 모달 개선 — 다크 헤더 + 제목 인라인 수정, 캘린더·모달 표시를 업체명 대신 제목으로"
-  },
-  {
-    "hash": "5b72a527b7",
-    "date": "2026-08-04",
-    "note": "일정 유형 필터 직관화 — 전체 상태에서 유형 클릭 시 그것만 선택, 이후 클릭은 추가/해제(중복 선택), 전부 끄면 전체 복귀"
   }
 ];

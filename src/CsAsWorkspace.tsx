@@ -9,7 +9,7 @@ import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatu
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
-import { fieldTicketVendor, historyCoreName } from "./ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo } from "./ids";
 import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
@@ -1082,24 +1082,37 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const buildMidReport = (round: 1 | 2, reportTeam: Team) => {
     const teamTickets = tickets.filter((ticket) =>
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가");
-    const lineOf = (ticket: AsTicket) => {
-      const vendor = fieldTicketVendor(ticket.vendor).vendor || ticket.vendor;
-      const issue = (ticket.issue || "").split(/\n/)[0].replace(/\s+/g, " ").trim().slice(0, 34);
-      return ["•" + (ticket.assignee || "미배정"), vendor, ticket.model, issue].filter(Boolean).join(" ");
-    };
-    // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름이 배정된 건은 그쪽에서 소화한다(보고 대상 아님).
+    // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
     // 팀장(신정훈)은 모든 팀 명단에 있어 지역 무관하게 그 팀 보고에 실린다.
     const order = [...teamAssignees[reportTeam].filter((name) => name !== "신정훈"), "신정훈"];
+    // 네이버 수기 일정은 배정 컬럼이 비고 제목이 "이름 - 내용"이다 — 제목 접두 이름도 그 사람 것으로 친다
+    const assigneeOf = (ticket: AsTicket) =>
+      ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
+    const cut = (value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
+    const lineOf = (ticket: AsTicket) => {
+      const name = assigneeOf(ticket) || "미배정";
+      // 납품·철수 건은 양식 원문("교체(일반)/퍼스트/운영팀/…")이 아니라 고객사·품목·구분만
+      if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
+        const info = logisticsTicketInfo(ticket.vendor);
+        if (info.vendor) return `•${name} ${cut(info.vendor, 14)} ${cut(info.item, 22)} ${info.category}`.replace(/\s+/g, " ").trim();
+      }
+      // 업체명은 이전 메모·위치 꼬리(">", "/")를 버리고 짧게
+      let vendor = (fieldTicketVendor(ticket.vendor).vendor || ticket.vendor).split(/\s*>\s*/)[0].split("/")[0].trim();
+      if (name !== "미배정") vendor = vendor.replace(new RegExp(`^${name}\\s*[-–—:\\s]*`), "").trim();
+      // 내용은 첫 줄에서 "(마지막 … 경과)" 꼬리를 떼고 짧게
+      const issue = (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").replace(/\s+/g, " ").trim();
+      return ["•" + name, cut(vendor, 16), ticket.model, cut(issue, 18)].filter(Boolean).join(" ");
+    };
     const todays = teamTickets.filter((ticket) =>
-      ticket.date === todayYmd && ticket.status !== "완료" && order.includes(ticket.assignee));
+      ticket.date === todayYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
     const groups: string[] = [];
     for (const name of order) {
-      const mine = todays.filter((ticket) => ticket.assignee === name);
+      const mine = todays.filter((ticket) => assigneeOf(ticket) === name);
       if (mine.length) groups.push(`#${name}`, ...mine.map(lineOf));
     }
     // 오늘 연기한 건 — 연기 기록("(M/D로 연기)")의 날짜가 지금 일정 날짜와 같은 것
     const deferred = teamTickets.filter((ticket) => {
-      if (ticket.status !== "익일" || ticket.date <= todayYmd || !order.includes(ticket.assignee)) return false;
+      if (ticket.status !== "익일" || ticket.date <= todayYmd || !order.includes(assigneeOf(ticket))) return false;
       const mark = `(${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}로 연기)`;
       return (ticket.note || "").includes(mark);
     });
