@@ -1085,25 +1085,34 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
       && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
     // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
-    // 팀장(신정훈)은 모든 팀 명단에 있어 지역 무관하게 그 팀 보고에 실린다.
-    const order = [...teamAssignees[reportTeam].filter((name) => name !== "신정훈"), "신정훈"];
+    // 순서: 팀장(신정훈) 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
+    const order = ["신정훈", ...teamAssignees[reportTeam].filter((name) => name !== "신정훈")];
     // 네이버 수기 일정은 배정 컬럼이 비고 제목이 "이름 - 내용"이다 — 제목 접두 이름도 그 사람 것으로 친다
     const assigneeOf = (ticket: AsTicket) =>
       ticket.assignee || order.find((name) => new RegExp(`^\\s*${name}\\s*[-–—:\\s]`).test(ticket.vendor)) || "";
     const cut = (value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
+    // 기종 초단축: 괄호 별명("헤라클래스")이 있으면 그것, 없으면 브랜드 접두를 뗀 짧은 표기
+    const shortModel = (model: string) => {
+      const nick = model.match(/\(([가-힣A-Za-z0-9]{2,8})\)/)?.[1];
+      if (nick) return nick;
+      return cut(model.replace(/^(SL-|APEOS-|ApeosPort-?V?\s*|ECOSYS-|DocuCentre-?V?\s*|DocuPrint-?)/i, "").trim(), 9);
+    };
     const lineOf = (ticket: AsTicket) => {
-      const name = assigneeOf(ticket) || "미배정";
-      // 납품·철수 건은 양식 원문("교체(일반)/퍼스트/운영팀/…")이 아니라 고객사·품목·구분만
+      // 납품·철수: 고객사 + 품목(괄호 설명 제거) + 구분만 — "•뉴트리원 노트북 2대 납품"
       if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
         const info = logisticsTicketInfo(ticket.vendor);
-        if (info.vendor) return `•${name} ${cut(info.vendor, 14)} ${cut(info.item, 22)} ${info.category}`.replace(/\s+/g, " ").trim();
+        if (info.vendor) {
+          const item = info.item.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+          return `•${cut(historyCoreName(info.vendor) || info.vendor, 12)} ${cut(item, 14)} ${info.category}`.replace(/\s+/g, " ").trim();
+        }
       }
-      // 업체명은 이전 메모·위치 꼬리(">", "/")를 버리고 짧게
-      let vendor = (fieldTicketVendor(ticket.vendor).vendor || ticket.vendor).split(/\s*>\s*/)[0].split("/")[0].trim();
-      if (name !== "미배정") vendor = vendor.replace(new RegExp(`^${name}\\s*[-–—:\\s]*`), "").trim();
-      // 내용은 첫 줄에서 "(마지막 … 경과)" 꼬리를 떼고 짧게
+      // 업체명: 법인표기·위치 꼬리를 벗긴 핵심 이름만
+      const name = assigneeOf(ticket);
+      let raw = ticket.vendor.split(/\s*>\s*/)[0].split("/")[0];
+      if (name) raw = raw.replace(new RegExp(`^\\s*${name}\\s*[-–—:\\s]*`), "");
+      const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
       const issue = (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").replace(/\s+/g, " ").trim();
-      return ["•" + name, cut(vendor, 16), ticket.model, cut(issue, 18)].filter(Boolean).join(" ");
+      return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", cut(issue, 14)].filter(Boolean).join(" ");
     };
     const todays = teamTickets.filter((ticket) =>
       ticket.date === todayYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
