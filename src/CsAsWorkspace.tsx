@@ -1126,7 +1126,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       }
       // 업체명: 법인표기·위치 꼬리를 벗긴 핵심 이름만
       const name = assigneeOf(ticket);
-      let raw = ticket.vendor.split(/\s*>\s*/)[0].split("/")[0];
+      // "A/S"의 슬래시는 구분자가 아니다 — 잠깐 다른 글자로 바꿔 보호하고 자른 뒤 되돌린다
+      let raw = ticket.vendor.replace(/A\/S/g, "A\u2044S").split(/\s*>\s*/)[0].split("/")[0].replace(/A\u2044S/g, "A/S");
       if (name) raw = raw.replace(new RegExp(`^\\s*${name}\\s*[-–—:\\s]*`), "");
       const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
       const issue = (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").replace(/\s+/g, " ").trim();
@@ -1200,10 +1201,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 진단 줄 — "왜 안 뜨지?"를 원격으로 잡기 위한 단계별 건수 (모달에만 표시, 복사 안 됨)
     const todayAll = tickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
     const todayTeam = eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
-    const diag = `오늘 ${todayYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 ${pending.length}건 · 명단 ${order.join("·")}`;
+    const diag = pending.length ? undefined
+      : `오늘 ${todayYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 0건 · 명단 ${order.join("·")}`;
     setMidReport({ round, team: reportTeam, text: buildMidReport(round, reportTeam), polishing: true, diag });
     const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
       vendor: ticket.vendor,
+      title: ticket.calendarTitle || "",
+      note: (ticket.note || "").split(/\n/).slice(0, 3).join(" ").slice(0, 240),
       model: ticket.model,
       issue: (ticket.issue || "").split(/\n/)[0].replace(/\(마지막[^)]*\)/g, "").trim(),
       kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",

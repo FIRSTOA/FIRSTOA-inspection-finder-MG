@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "df25f79cf2",
+    "date": "2026-08-25",
+    "note": "이름 판정 정규식 \\s 이스케이프 사고 수리 — 순수 모듈 추출 + 실사고 케이스 테스트 7개"
+  },
+  {
     "hash": "4da19b6d0b",
     "date": "2026-08-25",
     "note": "중간보고 진단 줄 + 겸직(A·B) 소속을 양쪽 팀 명단에 반영"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "6f00fd271e",
     "date": "2026-08-05",
     "note": "필드 지역 배너를 전송 텍스트 기준으로 + 해피콜 문구 플래시 제거"
-  },
-  {
-    "hash": "9a5a70e5ee",
-    "date": "2026-08-05",
-    "note": "익일 변경 시 네이버 시간(팀 표기) 불변 + 지역 미기재 감지 정확화"
   }
 ];
