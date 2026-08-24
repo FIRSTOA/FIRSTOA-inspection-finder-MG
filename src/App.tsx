@@ -5257,10 +5257,13 @@ export default function App() {
       setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
     }
-    // (보류) 복붙으로 쓰는 직원 대상 "같은 업체 미완료 일정 완료 제안"은 꺼둔다 —
-    // FIELD에서 그냥 AS방에 보내려던 직원에게 일정 완료·익일 팝업이 떠서 헷갈린다는 피드백.
-    // 일정 정리는 일정리스트 → FIELD로 들어온 건(pendingAsTicketRef)에서만 물어본다.
-    void offerTicketMatchAfterSend;
+    // 복붙으로 양식을 만들어 보낸 경우 — 일정리스트에 같은 업체 미완료 일정이 있으면 정리를 묻는다.
+    // 예전엔 꺼뒀다("그냥 AS방에 보내려는데 팝업이 뜬다"는 피드백). FIELD 전송으로 통일하면서 다시 켰고,
+    // 대신 팝업에 왜 떴는지·[그대로 두기]가 있다는 설명을 붙였다.
+    // 일정리스트에서 넘어온 건은 위에서 이미 물었으니 중복으로 묻지 않는다.
+    if (res.ok && kind === "normal" && !pendingAsTicketRef.current) {
+      void offerTicketMatchAfterSend(target);
+    }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
       showToast(
@@ -5469,12 +5472,30 @@ export default function App() {
       const statusList = ["접수", "배정", "익일"].map(encodeURIComponent).join(",");
       const typeList = ["AS", "익일AS"].map(encodeURIComponent).join(",");
       const rows = await selectRows<Record<string, unknown>>("as_tickets",
-        `select=id,vendor,date,team,status,scheduleType,receptionId&date=gte.${from}&date=lte.${until}&status=in.(${statusList})&scheduleType=in.(${typeList})&limit=200`).catch(() => []);
-      const matches = rows.filter((row) => {
+        `select=id,vendor,date,team,status,scheduleType,receptionId,serial,asset&date=gte.${from}&date=lte.${until}&status=in.(${statusList})&scheduleType=in.(${typeList})&limit=200`).catch(() => []);
+      // 양식의 기번·자산번호 — 있으면 업체명보다 확실한 열쇠다
+      const idsInForm = new Set(
+        Array.from(String(formText).matchAll(/(?:시리얼넘버|자산기번|기번|자산번호)\s*:?\s*([A-Za-z0-9-]{5,})/g))
+          .map((m) => m[1].replace(/[^0-9A-Za-z]/g, "").toUpperCase())
+          .filter((v) => v.length >= 5),
+      );
+      const nameMatches = rows.filter((row) => {
         const cleanVendor = fieldTicketVendor(String(row.vendor || "")).vendor;
         const rowKey = vendorMatchKey(historyCoreName(cleanVendor) || cleanVendor);
-        return rowKey.length >= 2 && (rowKey.includes(key) || key.includes(rowKey));
+        if (rowKey.length < 3 || key.length < 3) return false;
+        if (rowKey === key) return true;
+        // 부분일치는 양쪽이 5자 이상일 때만 — "한국"·"주식" 같은 짧은 키가 엉뚱한 업체를 잡는다
+        return rowKey.length >= 5 && key.length >= 5 && (rowKey.includes(key) || key.includes(rowKey));
       });
+      const idMatches = idsInForm.size
+        ? rows.filter((row) => {
+            const rowIds = [String(row.serial || ""), String(row.asset || "")]
+              .map((v) => v.replace(/[^0-9A-Za-z]/g, "").toUpperCase()).filter((v) => v.length >= 5);
+            return rowIds.some((v) => idsInForm.has(v));
+          })
+        : [];
+      // 기번이 맞는 건이 있으면 그것만 본다 (한 업체에 여러 대여도 정확히 그 기기)
+      const matches = idMatches.length ? idMatches : nameMatches;
       if (matches.length === 1) {
         const matchRow = matches[0];
         setTicketDonePrompt({
@@ -5974,7 +5995,14 @@ export default function App() {
             <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 truncate text-sm font-semibold text-slate-500">{fieldTicketVendor(ticketDonePrompt.vendor || "").vendor || ticketDonePrompt.vendor || "이 일정"}</div>
-              {ticketDonePrompt.matched && <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">방금 보낸 양식과 같은 업체의 미완료 일정을 일정리스트에서 찾았어요. 같은 건이면 완료로 정리하세요 — 다른 건이면 [그대로 두기].</div>}
+              {ticketDonePrompt.matched
+                ? <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">
+                    카톡방 전송은 <b>이미 끝났습니다</b>. 방금 보낸 양식과 같은 업체의 <b>미완료 일정</b>이 일정리스트에 있어서 정리할지 묻는 것뿐입니다.<br />
+                    같은 건이면 <b>완료</b>, 다음에 다시 가야 하면 <b>익일로</b>, 관계없는 일정이면 <b>그대로 두기</b>를 누르세요.
+                  </div>
+                : <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[12px] font-bold leading-5 text-slate-600">
+                    카톡방 전송은 <b>이미 끝났습니다</b>. 일정리스트에서 열어 온 일정을 어떻게 정리할지만 고르세요.
+                  </div>}
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
                 <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>

@@ -82,6 +82,8 @@ function monthsBetween(from: string, to: string) {
   const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
   return months >= 0 ? `${months}개월` : "";
 }
+/** 양식에 실을 AS 이력 건수 — 15건이 전부 붙으면 카톡방에서 정작 증상이 묻힌다 */
+const AS_HISTORY_SHOWN = 3;
 function receiptDay() {
   const d = kstDate();
   return `${Number(d.slice(5, 7))}. ${Number(d.slice(8, 10))}`;
@@ -784,9 +786,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       // 카톡은 텍스트만 전송된다(발신 큐가 text 하나) — 사진은 공개 링크로 실어 보낸다
       ...(photos.length ? [`증상사진(${photos.length}장)`, ...photos.map((photo) => photo.url)] : []),
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
-      `AS접수횟수(${basisLabel})${T}${basisEntries.length}회`,
+      `AS접수횟수(${basisLabel})${T}${basisEntries.length}회${basisEntries.length > AS_HISTORY_SHOWN ? ` (아래 최근 ${AS_HISTORY_SHOWN}건)` : ""}`,
       `AS접수히스토리(${basisLabel})`,
-      basisEntries.length ? basisEntries.map((h) => {
+      basisEntries.length ? basisEntries.slice(0, AS_HISTORY_SHOWN).map((h) => {
         const device = [h.model, h.asset && `자산 ${h.asset}`, h.serial && `기번 ${h.serial}`].filter(Boolean).join(" / ");
         return `■ 날짜: ${korYMD(h.date)}${device ? `\n■ 기기: ${device}` : ""}\n■ 내용: ${h.content}`;
       }).join("\n\n") : "없음",

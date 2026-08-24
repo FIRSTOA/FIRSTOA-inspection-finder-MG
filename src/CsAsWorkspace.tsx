@@ -858,8 +858,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       } else if (uncompletedNow && isDelivery) {
         void invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, calId: "75632617", done: false }).catch(() => undefined);
       } else if (completedNow) {
-        void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
-          .then((r) => { if (r.status === "moved") notify(`네이버: ${DONE_CAL_LABEL[changed.team]} 캘린더로 이동 + 완료 체크 ✓`, "success"); })
+        void invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
+          // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
+          .then((r) => {
+            if (r.status !== "moved") return;
+            const moved = !!r.toCalendarId && r.toCalendarId !== NAVER_CAL_LIST[0].id;
+            notify(moved ? `네이버: ${DONE_CAL_LABEL[changed.team]} 캘린더로 이동 + 완료 체크 ✓` : "네이버: 완료 체크 ✓ (완료 캘린더 미설정 — 제자리 체크)", "success");
+          })
           .catch((e) => notify(`네이버 완료 이동 실패: ${(e as Error).message}`, "error"));
       } else if (uncompletedNow) {
         void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team, direction: "back" })
@@ -2174,7 +2179,7 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         {!!ticket.naverUid && (isDelivery
           ? <div className="mt-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">납품·철수·교체는 영업부 캘린더 소관입니다 — 네이버 일정은 <b>옮기지 않고 제자리에서 완료 체크</b>만 합니다.</div>
-          : <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정도 {ticket.team}팀 완료 캘린더로 이동되고 완료 체크됩니다.</div>)}
+          : <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정에 완료 체크됩니다. {ticket.team}팀 완료 캘린더가 등록돼 있으면 그 캘린더로 옮겨집니다.</div>)}
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
           placeholder={`처리 내용 (필수) — ${isDelivery ? "완료방(납품,철수,교체)" : "팀 AS방"}으로 전송되고 네이버 일정에도 기록됩니다`}
           className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />

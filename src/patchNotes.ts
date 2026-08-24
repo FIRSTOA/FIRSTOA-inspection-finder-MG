@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a4776e86cb",
+    "date": "2026-08-24",
+    "note": "납품 일정 완료 — 안내 문구·전송 방 바로잡기"
+  },
+  {
     "hash": "be32db15f0",
     "date": "2026-08-24",
     "note": "완료·연기 양식 공유 + 접수 양식 표기 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "871ee30168",
     "date": "2026-08-02",
     "note": "접수리스트 상태 칩에 건수 표시 — 전체/접수/진행중/완료 (유형 필터와 연동된 숫자)"
-  },
-  {
-    "hash": "0a320498c5",
-    "date": "2026-08-02",
-    "note": "캘린더 필터 숨김 경고 — 체크 해제로 이번 달 일정이 가려져 있으면 '필터로 N건 숨김 — 모두 표시' 버튼 노출"
   }
 ];
