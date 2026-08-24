@@ -9,6 +9,8 @@ import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } f
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
+// 등급·계약종료월·라벨 뜻은 재계약 준비 탭과 공유한다 (규칙이 어긋나면 방문 대상이 화면마다 달라진다)
+import { RENEWAL_LABEL_DESC, contractEnd, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
@@ -106,7 +108,6 @@ const QUARTER_LABEL_DESC: Record<string, string> = {
   G5: "점검 완료", G6: "SS·V급", G7: "공기청정기", G12: "다음분기 이관",
 };
 const MONTHLY_LABEL_DESC: Record<string, string> = { G1: "시작 전", G2: "1개월 완료", G3: "2개월 완료", G5: "3개월 완료" };
-const RENEWAL_LABEL_DESC: Record<string, string> = { G5: "재계약 완료", G6: "영업부 관할", G7: "영업부 관할", G12: "이관" };
 
 type MapPreferences = {
   team: Team;
@@ -230,34 +231,6 @@ function dailyTarget(remaining: number, businessDays: number, members: number) {
   return `${(remaining / businessDays / members).toFixed(1)}건/일`;
 }
 
-function contractEnd(place: MapPlace, baseYear: number) {
-  const source = [place.name, ...place.memos].join(" ");
-  const marked = source.match(/계약종료(?:년월)?\s*[-/:.]?\s*(\d{2,4})\s*[-년/.]?\s*(\d{1,2})?/);
-  const leading = place.name.match(/^(\d{2})(\d{2})\//);
-  let year = 0;
-  let month = 0;
-  if (marked) {
-    const digits = marked[1];
-    if (digits.length === 4 && !marked[2]) {
-      year = 2000 + Number(digits.slice(0, 2));
-      month = Number(digits.slice(2));
-    } else {
-      year = digits.length === 2 ? 2000 + Number(digits) : Number(digits);
-      month = Number(marked[2] || 0);
-    }
-  } else if (leading) {
-    year = 2000 + Number(leading[1]);
-    month = Number(leading[2]);
-  }
-  if (!year || month < 1 || month > 12) return null;
-  if (year < 1900 || year > baseYear + 20) return null;
-  return { year, month, key: year * 100 + month, label: `${String(year).slice(2)}년 ${month}월`, date: `${year}.${String(month).padStart(2, "0")}.${new Date(year, month, 0).getDate()}` };
-}
-
-function renewalQuarterMonths(quarter: Quarter) {
-  return quarter === 1 ? [2, 3, 4] : quarter === 2 ? [5, 6, 7] : quarter === 3 ? [8, 9, 10] : [11, 12, 1];
-}
-
 function fmtDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -308,27 +281,6 @@ function monthlyClosingDay(name: string) {
   if (!match) return null;
   const day = Number(match[1]);
   return day >= 1 && day <= 31 ? day : null;
-}
-
-// 진행률 요약에서만 자동연장된 계약의 종료월을 현재 주기로 투영한다.
-function projectedContractEnd(place: MapPlace, baseYear: number, quarter: Quarter) {
-  const original = contractEnd(place, baseYear);
-  const months = renewalQuarterMonths(quarter);
-  if (!original || !months.includes(original.month)) return null;
-  const year = quarter === 4 && original.month === 1 ? baseYear + 1 : baseYear;
-  return {
-    year,
-    month: original.month,
-    key: months.indexOf(original.month),
-    label: `${original.month}월`,
-    date: `${year}.${String(original.month).padStart(2, "0")}.${new Date(year, original.month, 0).getDate()}`,
-  };
-}
-
-function renewalGrade(place: MapPlace) {
-  const memoGrade = place.memos.map((memo) => memo.trim().toUpperCase()).find((memo) => /^(V|SS|S|NN|N)$/.test(memo));
-  if (memoGrade) return memoGrade;
-  return place.name.match(/^(?:\d{4}\/)?\d*(SS|NN|S|N|V)(?=[^A-Z]|$)/i)?.[1]?.toUpperCase() || "";
 }
 
 function addressGroupKey(place: MapPlace) {

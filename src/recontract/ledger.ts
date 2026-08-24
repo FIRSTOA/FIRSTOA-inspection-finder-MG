@@ -1,0 +1,443 @@
+/**
+ * 이카운트 거래처관리대장 I (거래명세서별) 파서 — 재계약 협상 카드의 재료를 뽑는다.
+ *
+ * 임대리스트에는 "현재 조건 한 줄"만 있다. 조건을 어떻게 올려왔는지·실제로 얼마나 쓰는지·
+ * 돈을 제때 넣는지는 이 대장에만 있다. 그래서 재계약 판단의 본체는 여기다.
+ *
+ * 대장은 두 부분이다.
+ *   ① 적요 — 사람이 몇 년간 손으로 쌓은 계약 이력. 표기가 자유롭다:
+ *        "mpc2003 **월-12만(칼-500/120,흑-3000/12) **초카-0"
+ *        "D450 ... 142,000원(컬600/100 흑 3000/10)"  "→24.8.20 매수수정 (컬1000/100 흑4000/10)"
+ *   ② 판매/수금내역 — 월별 청구·수금과 카운터. 재계약에 결정적인 건 이 카운터다:
+ *        "컬러A4누계-16801, 전월-16376 [사용-425] / 1 * 0"
+ *        "컬러초과사용료 [초과-86(기본-500매)] / 1 * 10,000"
+ *
+ * 원문에는 오타(기간 "110/11~12/10")·빈 셀·전각 공백이 섞인다. 형식을 믿지 말고 견디게 짠다.
+ * 회귀 테스트: tests/recontractLedger.test.ts (tests/fixtures/ecount-ledger-sample.txt)
+ */
+
+/** "12만"·"142,000"·"33만" → 숫자 */
+export function moneyKo(raw: string): number {
+  const text = String(raw || "").replace(/\s/g, "");
+  const man = text.match(/^([\d,.]+)만/);
+  if (man) return Math.round(Number(man[1].replace(/,/g, "")) * 10_000);
+  const plain = text.replace(/[^0-9]/g, "");
+  return plain ? Number(plain) : 0;
+}
+
+function num(raw: unknown): number {
+  const digits = String(raw ?? "").replace(/[^0-9-]/g, "");
+  const value = Number(digits);
+  return Number.isFinite(value) ? value : 0;
+}
+
+/** "26.6.23"·"2026/06/23" → 2026-06-23 (2자리 연도는 2000년대로) */
+export function ymd(raw: string): string {
+  const m = String(raw || "").match(/(\d{2,4})[.\-/](\d{1,2})[.\-/](\d{1,2})/);
+  if (!m) return "";
+  const year = m[1].length === 2 ? `20${m[1]}` : m[1];
+  return `${year}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
+
+// ─── 적요: 계약 이력 ────────────────────────────────────────────────────────
+
+export type ContractNote = {
+  label: string;          // 재계약 / 교체재계약 / 신규 …
+  models: string[];       // APC2060, D450, mpc2003 …
+  from: string;
+  to: string;
+  years: number;
+  월기본료: number;
+  컬러기본: number;
+  컬러단가: number;
+  흑백기본: number;
+  흑백단가: number;
+  보증금: number;
+  무상: string[];         // "공기청정기 무상" 같은 끼워준 조건 — 재계약 때 반드시 이어받아야 한다
+  raw: string;
+};
+
+const LABELS = ["교체재계약", "재계약", "신규", "기기교체", "추가", "임대", "연장", "해지"];
+
+/** 조건 표기 한 덩이에서 기본료·기본매수·단가를 뽑는다 */
+function readTerms(text: string) {
+  const flat = text.replace(/\s+/g, " ");
+  // 월 기본료: "월-12만", "월 12만", "142,000원", "**월-12만"
+  const fee = flat.match(/월\s*[-—]?\s*([\d,.]+만|[\d,]{4,})\s*원?/) || flat.match(/([\d,]{5,})\s*원/);
+  // 컬러/흑백: "칼-500/120", "컬600/100", "컬러기본 300매 추가 100원", "컬1000/100"
+  const color = flat.match(/(?:컬러|컬|칼)\s*(?:기본)?\s*[-—]?\s*([\d,]+)\s*매?\s*(?:추가)?\s*[/,]?\s*([\d,]+)\s*원?/);
+  const bw = flat.match(/(?:흑백|흑)\s*(?:기본)?\s*[-—]?\s*([\d,]+)\s*매?\s*(?:추가)?\s*[/,]?\s*([\d,]+)\s*원?/);
+  const deposit = /보증금\s*없음/.test(flat) ? 0 : moneyKo((flat.match(/보증금\s*[-—]?\s*([\d,.]+만|[\d,]{4,})/) || [])[1] || "");
+  return {
+    월기본료: fee ? moneyKo(fee[1]) : 0,
+    컬러기본: color ? num(color[1]) : 0,
+    컬러단가: color ? num(color[2]) : 0,
+    흑백기본: bw ? num(bw[1]) : 0,
+    흑백단가: bw ? num(bw[2]) : 0,
+    보증금: deposit,
+  };
+}
+
+/** 모델명 후보 — 영문+숫자 조합(APC2060, D450, SCX-5545N, mpc2003) */
+function readModels(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\b([A-Za-z]{1,5}[-]?\d{3,5}[A-Za-z]{0,3}(?:-[A-Za-z0-9]+)?)\b/g)) {
+    const token = m[1];
+    if (/^\d+$/.test(token)) continue;
+    found.add(token);
+  }
+  return Array.from(found);
+}
+
+/**
+ * 적요 → 계약 이력. 빈 줄과 구분선(-----, =====)으로 덩이를 나눈다.
+ * 한 덩이에 "계약기간 + 조건"이 함께 적히는 관행을 그대로 따른다.
+ */
+export function parseRemarks(remarks: string): ContractNote[] {
+  const blocks = String(remarks || "")
+    .split(/\n\s*\n|\n\s*[-=]{3,}\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const out: ContractNote[] = [];
+  for (const block of blocks) {
+    // 한 덩이 안에 기간이 여러 개면(재계약 이력이 이어 적힌 경우) 기간마다 한 줄로 쪼갠다
+    const periods = Array.from(block.matchAll(/(\d{2,4}[.\-/]\d{1,2}[.\-/]\d{1,2})\s*~\s*(\d{2,4}[.\-/]\d{1,2}[.\-/]\d{1,2})/g));
+    const terms = readTerms(block);
+    const head = block.split("\n")[0];
+    const label = LABELS.find((candidate) => head.includes(candidate))
+      || LABELS.find((candidate) => block.includes(candidate)) || "";
+    const models = readModels(block);
+    const 무상 = Array.from(block.matchAll(/([가-힣A-Za-z0-9()]+)\s*(?:무상임대|무상)/g)).map((m) => m[1]);
+    if (!periods.length) {
+      if (!terms.월기본료 && !models.length) continue; // 연락처·메모만 있는 덩이는 계약이 아니다
+      out.push({ label, models, from: "", to: "", years: 0, ...terms, 무상, raw: block });
+      continue;
+    }
+    for (const period of periods) {
+      const from = ymd(period[1]);
+      const to = ymd(period[2]);
+      const yearText = block.slice(period.index || 0).match(/\(?만?\s*(\d)\s*년/);
+      // 그 기간이 적힌 줄의 라벨이 가장 정확하다 (한 덩이에 신규·재계약이 이어 적힌다)
+      const lineStart = block.lastIndexOf("\n", period.index || 0) + 1;
+      const lineEnd = block.indexOf("\n", period.index || 0);
+      const line = block.slice(lineStart, lineEnd < 0 ? undefined : lineEnd);
+      const lineLabel = LABELS.find((candidate) => line.includes(candidate)) || label;
+      out.push({
+        label: lineLabel, models, from, to,
+        years: yearText ? Number(yearText[1]) : (from && to ? Math.round((Date.parse(to) - Date.parse(from)) / 31_536_000_000) : 0),
+        ...terms, 무상, raw: block,
+      });
+    }
+  }
+  // 최근 계약이 위 — 협상 때 현재 조건부터 본다
+  return out.sort((a, b) => (b.from || "").localeCompare(a.from || ""));
+}
+
+// ─── 판매/수금내역 ──────────────────────────────────────────────────────────
+
+export type LedgerCounter = { kind: "컬러A4" | "컬러A3" | "흑백"; 누계: number; 전월: number; 사용: number };
+export type LedgerExcess = { kind: "컬러" | "흑백"; 초과: number; 기본: number; 금액: number };
+export type LedgerItem = {
+  label: string;
+  model: string;
+  기간: string;
+  단가: number;
+  금액: number;
+  counter?: LedgerCounter;
+  excess?: LedgerExcess;
+  무상: boolean;
+};
+export type LedgerVoucher = { date: string; no: string; memo: string; 판매: number; 수금: number; items: LedgerItem[] };
+export type LedgerMonth = {
+  ym: string;
+  청구일: string;
+  청구: number;
+  수금: number;
+  수금일: string;
+  지연일: number;         // 청구일 → 수금일. 미수면 -1
+  memo: string;
+  items: LedgerItem[];
+  counters: LedgerCounter[];
+  excesses: LedgerExcess[];
+};
+
+/** 상세 줄 하나 → 항목. "복사기임대료(APC2060) [6/11~7/10] / 1 * 120,000" 꼴 */
+function parseItem(label: string, amount: number): LedgerItem {
+  const item: LedgerItem = {
+    label,
+    model: (label.match(/\(([^)]+)\)/) || [])[1] || "",
+    기간: (label.match(/\[([^\]]*~[^\]]*)\]/) || [])[1] || "",
+    단가: num((label.match(/\*\s*([\d,]+)\s*$/) || [])[1] || ""),
+    금액: amount,
+    무상: /\[무상\]/.test(label),
+  };
+  const counter = label.match(/(컬러A4|컬러A3|흑백)누계\s*[-—]\s*([\d,]+)\s*,\s*전월\s*[-—]\s*([\d,]+)\s*\[사용\s*[-—]\s*(-?[\d,]+)\]/);
+  if (counter) {
+    item.counter = {
+      kind: counter[1] as LedgerCounter["kind"],
+      누계: num(counter[2]), 전월: num(counter[3]), 사용: num(counter[4]),
+    };
+  }
+  const excess = label.match(/(컬러|흑백)초과사용료\s*\[초과\s*[-—]\s*([\d,]+)\s*\(기본\s*[-—]\s*([\d,]+)\s*매\)\]/);
+  if (excess) {
+    item.excess = { kind: excess[1] as LedgerExcess["kind"], 초과: num(excess[2]), 기본: num(excess[3]), 금액: amount };
+  }
+  return item;
+}
+
+const VOUCHER_DATE = /^(\d{4})[./-](\d{2})[./-](\d{2})(?:\s+(-?\d+))?$/;
+
+/** 표 영역 → 전표 목록 */
+function parseVouchers(lines: string[]): LedgerVoucher[] {
+  const out: LedgerVoucher[] = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells = line.split("\t").map((cell) => cell.replace(/ /g, " ").trim());
+    const first = cells[0] || "";
+    if (/^(일자|이월잔액|누계)/.test(first) || /^\d{4}[./-]\d{2}\s*계$/.test(first)) continue; // 머리·이월·월계·누계 줄
+    const stamp = first.match(VOUCHER_DATE);
+    const label = cells[1] || "";
+    const 판매 = num(cells[2]);
+    const 수금 = num(cells[3]);
+    if (stamp) {
+      out.push({
+        date: `${stamp[1]}-${stamp[2]}-${stamp[3]}`,
+        no: stamp[4] || "",
+        memo: label,
+        판매, 수금,
+        items: [],
+      });
+      continue;
+    }
+    // 일자 칸이 빈 줄 = 앞 전표의 상세
+    const current = out[out.length - 1];
+    if (current && label) current.items.push(parseItem(label, 판매));
+  }
+  return out;
+}
+
+export type LedgerParsed = {
+  vendor: string;
+  담당: string;
+  기간: { from: string; to: string };
+  info: Record<string, string>;
+  remarks: string;
+  contracts: ContractNote[];
+  months: LedgerMonth[];
+  누계: { 판매: number; 수금: number; 잔액: number };
+};
+
+const INFO_LABELS = ["사업자등록번호", "대표자", "여신한도", "전화", "Email", "Fax", "주 소", "주소"];
+
+/** 대장 텍스트 전체 → 구조 */
+export function parseLedger(text: string): LedgerParsed {
+  const clean = String(text || "").replace(/\r\n?/g, "\n").replace(/ /g, " ");
+  const lines = clean.split("\n");
+
+  const titleLine = lines.find((line) => /관리대장\(거래명세서별\)/.test(line)) || "";
+  const vendor = titleLine.replace(/\s*관리대장\(거래명세서별\).*$/, "").trim();
+  const ownerLine = lines.find((line) => /회사명\s*:/.test(line)) || "";
+  const 담당 = (ownerLine.match(/담당\s*:\s*([^\t]+)/) || [])[1]?.trim() || "";
+  const span = ownerLine.match(/(\d{4}[./-]\d{2}[./-]\d{2})\s*~\s*(\d{4}[./-]\d{2}[./-]\d{2})/);
+
+  // 라벨 줄 다음의 첫 내용 줄이 값 — 사이에 빈 줄이 끼는 출력 형식
+  const info: Record<string, string> = {};
+  for (let i = 0; i < lines.length; i += 1) {
+    const label = lines[i].trim();
+    if (!INFO_LABELS.includes(label)) continue;
+    for (let j = i + 1; j < Math.min(i + 5, lines.length); j += 1) {
+      const value = lines[j].trim();
+      if (!value) continue;
+      if (INFO_LABELS.includes(value) || value === "적요") break;
+      info[label === "주 소" ? "주소" : label] = value;
+      break;
+    }
+  }
+
+  const remarkStart = lines.findIndex((line) => line.trim() === "적요");
+  const tableStart = lines.findIndex((line) => /^판매\/수금내역/.test(line.trim()));
+  const remarks = remarkStart >= 0
+    ? lines.slice(remarkStart + 1, tableStart > remarkStart ? tableStart : undefined).join("\n").trim()
+    : "";
+
+  const vouchers = tableStart >= 0 ? parseVouchers(lines.slice(tableStart + 1)) : [];
+
+  // 월 단위로 묶는다 — 청구 전표와 수금 전표가 같은 달에 따로 있다
+  const byMonth = new Map<string, LedgerVoucher[]>();
+  for (const voucher of vouchers) {
+    const ym = voucher.date.slice(0, 7);
+    const list = byMonth.get(ym);
+    if (list) list.push(voucher);
+    else byMonth.set(ym, [voucher]);
+  }
+  const months: LedgerMonth[] = Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([ym, list]) => {
+    const billing = list.find((voucher) => voucher.items.length) || list[0];
+    const paid = list.filter((voucher) => voucher.수금 > 0);
+    const 수금일 = paid.length ? paid[paid.length - 1].date : "";
+    const items = list.flatMap((voucher) => voucher.items);
+    return {
+      ym,
+      청구일: billing?.date || "",
+      청구: list.reduce((sum, voucher) => sum + voucher.판매, 0),
+      수금: list.reduce((sum, voucher) => sum + voucher.수금, 0),
+      수금일,
+      지연일: 수금일 && billing?.date
+        ? Math.round((Date.parse(수금일) - Date.parse(billing.date)) / 86_400_000)
+        : -1,
+      memo: billing?.memo || "",
+      items,
+      counters: items.map((item) => item.counter).filter((counter): counter is LedgerCounter => !!counter),
+      excesses: items.map((item) => item.excess).filter((excess): excess is LedgerExcess => !!excess),
+    };
+  });
+
+  const totalLine = lines.find((line) => /^누계\t/.test(line)) || "";
+  const totals = totalLine.split("\t").map((cell) => num(cell));
+
+  return {
+    vendor,
+    담당,
+    기간: { from: span ? ymd(span[1]) : "", to: span ? ymd(span[2]) : "" },
+    info,
+    remarks,
+    contracts: parseRemarks(remarks),
+    months,
+    누계: { 판매: totals[1] || 0, 수금: totals[2] || 0, 잔액: totals[3] || 0 },
+  };
+}
+
+// ─── 분석 ───────────────────────────────────────────────────────────────────
+
+export type UsageStat = {
+  kind: string;
+  월평균: number;
+  최근3평균: number;
+  최대: number;
+  최소: number;
+  개월수: number;
+  기본매수: number;      // 대장 초과료 줄이나 적요에서 알아낸 기본 매수
+  기본매수출처: "대장" | "적요" | "없음"; // 대장 초과료 줄이 가장 믿을 만하다 — 적요는 옛 조건일 수 있다
+  여유율: number;        // (기본 - 평균) / 기본. 음수면 상시 초과
+  초과월수: number;
+  추세: "증가" | "감소" | "유지";
+};
+
+export type PaymentStat = {
+  청구월수: number;
+  완납월수: number;
+  미납월: string[];
+  평균지연일: number;
+  최대지연일: number;
+  판정: "우량" | "보통" | "주의";
+};
+
+export type LedgerAnalysis = LedgerParsed & {
+  usage: UsageStat[];
+  payment: PaymentStat;
+  billing: { 월기본료: number; 최근청구: number; 평균청구: number; 초과청구합: number };
+  현재계약?: ContractNote;
+  인상이력: Array<{ 시점: string; 월기본료: number; 컬러기본: number; 흑백기본: number; label: string }>;
+};
+
+function trendOf(values: number[]): "증가" | "감소" | "유지" {
+  if (values.length < 6) return "유지";
+  const half = Math.floor(values.length / 2);
+  const early = values.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const late = values.slice(-half).reduce((a, b) => a + b, 0) / half;
+  if (!early) return "유지";
+  const change = (late - early) / early;
+  return change > 0.12 ? "증가" : change < -0.12 ? "감소" : "유지";
+}
+
+/** 카운터 종류별 사용량 통계. 컬러는 A4·A3를 합쳐 본다 — 기본매수는 합산으로 계약된다 */
+function usageStats(months: LedgerMonth[], contracts: ContractNote[]): UsageStat[] {
+  const series = new Map<string, number[]>();
+  const excessBase = new Map<string, number>();
+  const excessMonths = new Map<string, number>();
+  for (const month of months) {
+    const sums = new Map<string, number>();
+    for (const counter of month.counters) {
+      const kind = counter.kind.startsWith("컬러") ? "컬러" : "흑백";
+      sums.set(kind, (sums.get(kind) || 0) + counter.사용);
+    }
+    for (const [kind, used] of sums) {
+      const list = series.get(kind);
+      if (list) list.push(used);
+      else series.set(kind, [used]);
+    }
+    for (const excess of month.excesses) {
+      excessBase.set(excess.kind, excess.기본);
+      excessMonths.set(excess.kind, (excessMonths.get(excess.kind) || 0) + 1);
+    }
+  }
+  // "APC2060 기존동일"처럼 조건을 안 적은 재계약이 흔하다 — 숫자가 적힌 가장 최근 계약까지 거슬러 찾는다
+  const fromRemarks = (kind: string) => {
+    for (const note of contracts) {
+      const value = kind === "컬러" ? note.컬러기본 : note.흑백기본;
+      if (value > 0) return value;
+    }
+    return 0;
+  };
+  const out: UsageStat[] = [];
+  for (const [kind, values] of series) {
+    const 개월수 = values.length;
+    const 월평균 = 개월수 ? Math.round(values.reduce((a, b) => a + b, 0) / 개월수) : 0;
+    const recent = values.slice(-3);
+    const fromLedger = excessBase.get(kind) || 0;
+    const base = fromLedger || fromRemarks(kind);
+    out.push({
+      kind,
+      월평균,
+      최근3평균: recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 0,
+      최대: Math.max(...values, 0),
+      최소: Math.min(...values, 0),
+      개월수,
+      기본매수: base,
+      기본매수출처: fromLedger ? "대장" : base ? "적요" : "없음",
+      여유율: base ? Math.round(((base - 월평균) / base) * 100) : 0,
+      초과월수: excessMonths.get(kind) || 0,
+      추세: trendOf(values),
+    });
+  }
+  return out.sort((a, b) => (a.kind === "컬러" ? -1 : 1) - (b.kind === "컬러" ? -1 : 1));
+}
+
+function paymentStats(months: LedgerMonth[]): PaymentStat {
+  const billed = months.filter((month) => month.청구 > 0);
+  const delays = billed.filter((month) => month.지연일 >= 0).map((month) => month.지연일);
+  const 미납월 = billed.filter((month) => month.수금 < month.청구).map((month) => month.ym);
+  const 평균지연일 = delays.length ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : -1;
+  // 마지막 달은 아직 수금 전일 수 있다 — 판정에서 뺀다
+  const 실미납 = 미납월.filter((ym) => ym !== billed[billed.length - 1]?.ym);
+  return {
+    청구월수: billed.length,
+    완납월수: billed.length - 미납월.length,
+    미납월,
+    평균지연일,
+    최대지연일: delays.length ? Math.max(...delays) : -1,
+    판정: 실미납.length >= 2 || 평균지연일 > 40 ? "주의" : 실미납.length || 평균지연일 > 25 ? "보통" : "우량",
+  };
+}
+
+export function analyzeLedger(text: string): LedgerAnalysis {
+  const parsed = parseLedger(text);
+  const 청구목록 = parsed.months.filter((month) => month.청구 > 0).map((month) => month.청구);
+  const 임대료 = parsed.months.flatMap((month) => month.items.filter((item) => /임대료/.test(item.label) && !item.무상 && item.단가 > 0));
+  return {
+    ...parsed,
+    usage: usageStats(parsed.months, parsed.contracts),
+    payment: paymentStats(parsed.months),
+    billing: {
+      월기본료: 임대료.length ? 임대료[임대료.length - 1].단가 : parsed.contracts[0]?.월기본료 || 0,
+      최근청구: 청구목록.length ? 청구목록[청구목록.length - 1] : 0,
+      평균청구: 청구목록.length ? Math.round(청구목록.reduce((a, b) => a + b, 0) / 청구목록.length) : 0,
+      초과청구합: parsed.months.reduce((sum, month) => sum + month.excesses.reduce((s, excess) => s + excess.금액, 0), 0),
+    },
+    현재계약: parsed.contracts[0],
+    // 조건이 어떻게 올라왔는지 — 협상에서 "지난번에 이만큼 올려드렸다"의 근거
+    인상이력: parsed.contracts
+      .filter((note) => note.월기본료 > 0)
+      .map((note) => ({ 시점: note.from, 월기본료: note.월기본료, 컬러기본: note.컬러기본, 흑백기본: note.흑백기본, label: note.label }))
+      .sort((a, b) => (a.시점 || "").localeCompare(b.시점 || "")),
+  };
+}
