@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "25aa048259",
+    "date": "2026-08-25",
+    "note": "기기별 활용률 폴백 사슬 + 시뮬레이터 반올림 오차 수리"
+  },
+  {
     "hash": "e69901dfb7",
     "date": "2026-08-25",
     "note": "사용량을 기기별로 — 활용률·초과·사용량이 기기 단위 + 계약종료 표시 + 기본매수 시뮬레이터"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "0a649c9aa9",
     "date": "2026-08-04",
     "note": "완료·연기 사유 필수화 + 카톡 형식 '업체명 배정자 ⏎ 사유(연기면 +날짜)' — 봇 전송이라 처리자 표기"
-  },
-  {
-    "hash": "c0e8e7d16e",
-    "date": "2026-08-04",
-    "note": "일정리스트 직원 필터를 상단 다크 박스로(모바일 가로스크롤) + 이름별 그룹 표시(미배정 먼저, N건) + 칭찬 버튼줄 복원"
   }
 ];

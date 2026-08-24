@@ -312,3 +312,13 @@ describe("시뮬레이터 정합성 — 같은 기본을 넣으면 현재 초과
     expect(result.절감).toBe(0);
   });
 });
+
+describe("적요 오타 흡수 — '훅1000/9'(흑의 오타)", () => {
+  const quarterly = readFileSync(new URL("./fixtures/ecount-ledger-quarterly.txt", import.meta.url), "utf8");
+  it("훅 표기도 흑백 기본·단가로 읽는다 (X3220 흑백 활용률 '—' 사고의 원인)", () => {
+    const notes = parseLedger(quarterly).contracts;
+    const x3220 = notes.find((note) => note.models.includes("X3220") && note.흑백기본 > 0);
+    expect(x3220?.흑백기본).toBe(1_000);
+    expect(x3220?.흑백단가).toBe(9);
+  });
+});

@@ -255,28 +255,31 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
   };
 
   // 기기별 사용량 — 초과는 기기별 계약이라 합산하면 어긋난다(사용자 지적). 계약 상태도 기기별로 알려준다
-  const machineContract = (model: string) => {
+  const contractsFor = (model: string) => {
     const key = model.replace(/[^0-9a-z]/gi, "").toLowerCase();
-    if (!key) return undefined;
-    return analysis.contracts.find((note2) => note2.models.some((m) => {
+    if (!key) return [] as typeof analysis.contracts;
+    return analysis.contracts.filter((note2) => note2.models.some((m) => {
       const mk = m.replace(/[^0-9a-z]/gi, "").toLowerCase();
       return mk && (mk.includes(key) || key.includes(mk));
     }));
   };
+  const machineContract = (model: string) => contractsFor(model)[0];
   // 기본매수는 초과가 난 달의 대장 줄에서만 알 수 있다 — 기간 창 안에 초과가 없으면 잃는다.
   // 폴백 사슬: 창 안 대장 → 창 밖(전체) 대장 → 적요의 그 기기 계약 조건.
   const machinesFull = useMemo(() => machineUsage(full), [full]);
   const machines = useMemo(() => machineUsage(analysis).map((machine) => {
     const fullMachine = machinesFull.find((m) => m.model === machine.model);
-    const note2 = machineContract(machine.model);
+    // 최신 계약이 "기존동일"이거나 오타로 숫자가 비면, 그 기기의 옛 계약까지 최근순으로 거슬러 찾는다
+    const notes2 = contractsFor(machine.model);
+    const fromNotes = (pick: (n: (typeof notes2)[number]) => number) => notes2.map(pick).find((value) => value > 0) || 0;
     const fill = (kind: "컬러" | "흑백") =>
-      machine.기본월[kind] || fullMachine?.기본월[kind] || (kind === "컬러" ? note2?.컬러기본 : note2?.흑백기본) || 0;
+      machine.기본월[kind] || fullMachine?.기본월[kind] || fromNotes((n) => (kind === "컬러" ? n.컬러기본 : n.흑백기본));
     return {
       ...machine,
       기본월: { 컬러: fill("컬러"), 흑백: fill("흑백") },
       초과단가: {
-        컬러: machine.초과단가.컬러 || fullMachine?.초과단가.컬러 || note2?.컬러단가 || 0,
-        흑백: machine.초과단가.흑백 || fullMachine?.초과단가.흑백 || note2?.흑백단가 || 0,
+        컬러: machine.초과단가.컬러 || fullMachine?.초과단가.컬러 || fromNotes((n) => n.컬러단가),
+        흑백: machine.초과단가.흑백 || fullMachine?.초과단가.흑백 || fromNotes((n) => n.흑백단가),
       },
     };
   }), [analysis, machinesFull]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -464,6 +467,11 @@ function DetailView({ item, onBack, onRemove }: { item: Analyzed; onBack: () => 
                       : contract?.to
                         ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">계약 ~{contract.to}</span>
                         : <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-400">계약기간 미확인</span>}
+                  {(machine.기본월.컬러 > 0 || machine.기본월.흑백 > 0) && (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[12px] font-bold text-blue-700">
+                      월 기본 {machine.기본월.컬러 ? `컬 ${money(machine.기본월.컬러)}` : ""}{machine.기본월.컬러 && machine.기본월.흑백 ? " · " : ""}{machine.기본월.흑백 ? `흑 ${money(machine.기본월.흑백)}` : ""}매
+                    </span>
+                  )}
                   {machine.accumMonths > 1 && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">{machine.accumMonths}개월 누적 청구</span>}
                   <span className="ml-auto text-[11px] font-semibold text-slate-400">초과 {machine.초과횟수}회 · {money(machine.초과금액)}원</span>
                 </div>
