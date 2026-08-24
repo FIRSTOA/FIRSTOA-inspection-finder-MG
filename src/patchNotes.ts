@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0726935f73",
+    "date": "2026-08-24",
+    "note": "내 일정 — 네이버·카카오·티맵 길찾기 + 거래처 특이사항 + 일정별 개인 메모"
+  },
+  {
     "hash": "b5c219a3d7",
     "date": "2026-08-24",
     "note": "기기정보 수정이 원문(_원문)도 함께 고친다 — FIELD 불러오기 동기화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "bcf48fb967",
     "date": "2026-08-02",
     "note": "필드탭 [네이버 캘린더] 버튼 — 완료/익일(날짜 선택) 정리 + 네이버 미러 연동"
-  },
-  {
-    "hash": "9535321b0f",
-    "date": "2026-08-02",
-    "note": "네이버 캘린더 운영 플로우 완성 — 완료 시 팀 캘린더 이동·연기 시 날짜 변경"
   }
 ];

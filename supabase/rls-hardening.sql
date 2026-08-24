@@ -86,3 +86,20 @@ create table if not exists public.plan_memos (
   primary key (author, ticket_id)
 );
 grant select, insert, update on public.plan_memos to anon;
+
+-- 2026-08-25 카운터 문자전송 팀 공유 목록 (실행 완료)
+-- 관리부가 팀 마감 목록을 한 번 올리면 팀원 모두 보고 전송 — 전송 표시(sent_*)가 공유돼 이중 발송 방지
+create table if not exists public.counter_sms_batches (
+  id text primary key, team text not null, title text not null default '',
+  raw text not null default '', created_by text not null default '', created_at timestamptz not null default now()
+);
+create table if not exists public.counter_sms_targets (
+  id text primary key, batch_id text not null, team text not null,
+  vendor text not null default '', grade_group text not null default 's_group',
+  phones jsonb not null default '[]'::jsonb, labels jsonb not null default '{}'::jsonb,
+  machines jsonb not null default '[]'::jsonb, vendor_names jsonb not null default '[]'::jsonb,
+  sent_at timestamptz, sent_by text, sent_phone text
+);
+create index if not exists counter_sms_targets_batch_idx on public.counter_sms_targets(batch_id);
+grant select, insert, update, delete on public.counter_sms_batches to anon;
+grant select, insert, update, delete on public.counter_sms_targets to anon;

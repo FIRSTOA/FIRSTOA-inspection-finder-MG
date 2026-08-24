@@ -593,14 +593,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     {f.note.text && <div className="mt-1.5 whitespace-pre-wrap text-[12.5px] font-bold leading-5 text-violet-900">{f.note.text}</div>}
                   </div>
                 ) : null}
-                {/* 내 메모 — 이 일정에 붙는 개인 메모. 입력을 벗어나면 저장, 폰·PC 어디서든 보인다 */}
-                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                  <div className="text-[11px] font-black text-amber-600">📝 내 메모 <span className="font-bold text-amber-500">— 입력창을 벗어나면 저장</span></div>
-                  <textarea defaultValue={memos.get(detail.id) || ""} rows={2}
-                    onBlur={(e) => saveMemo(detail.id, e.target.value)}
-                    placeholder="이 방문에서 잊으면 안 되는 것 (예: 카운터 전달 13층 오른쪽 분께)"
-                    className="mt-1.5 w-full resize-y rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10" />
-                </div>
+                {/* 내 메모 — 이 일정에 붙는 개인 메모. 저장 버튼으로 확실히(모바일은 blur가 불안정), 폰·PC 어디서든 보인다 */}
+                <MemoBox ticketId={detail.id} value={memos.get(detail.id) || ""} onSave={saveMemo} />
                 {f && (
                   <div className="rounded-xl border border-slate-200 p-3">
                     <div className="text-[11px] font-black text-slate-400">체크 포인트</div>
@@ -686,6 +680,30 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+/** 내 메모 입력 박스 — 저장 버튼 방식. 모바일에선 blur 저장이 불안정하고, 눌러서 저장돼야 안심이 된다 */
+function MemoBox({ ticketId, value, onSave }: { ticketId: string; value: string; onSave: (id: string, memo: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [savedAt, setSavedAt] = useState(0);
+  useEffect(() => { setDraft(value); setSavedAt(0); }, [ticketId, value]);
+  const dirty = draft !== value;
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+      <div className="text-[11px] font-black text-amber-600">📝 내 메모</div>
+      <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2}
+        placeholder="이 방문에서 잊으면 안 되는 것 (예: 카운터 전달 13층 오른쪽 분께)"
+        className="mt-1.5 w-full resize-y rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10" />
+      <div className="mt-1.5 flex items-center gap-2">
+        <button type="button" disabled={!dirty} onClick={() => { onSave(ticketId, draft); setSavedAt(Date.now()); }}
+          className="rounded-full bg-amber-500 px-4 py-1.5 text-[12px] font-black text-white transition hover:bg-amber-600 disabled:opacity-40">
+          {dirty ? "메모 저장" : savedAt ? "저장됨 ✓" : "저장됨"}
+        </button>
+        {!!value && <button type="button" onClick={() => { setDraft(""); onSave(ticketId, ""); }}
+          className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[12px] font-black text-amber-600">지우기</button>}
+      </div>
     </div>
   );
 }
