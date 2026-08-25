@@ -422,20 +422,24 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
   // 코드가 붙은 일정은 마스터 대표명으로 검색(정확) — 없으면 제목에서 업체명 토큰 추출(폴백)
-  const openTicketHistory = (t: { vendor: string; vendor_code?: string; assignee?: string }) => {
-    // 네이버 수기 제목은 "이름 제목"으로 시작하는 관행 — 배정자 또는 회사 명단과 대조해 사람 이름을 벗긴다
+  // 이력 검색·특이사항 플래그가 같이 쓰는 업체명 질의 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행이라
+  // 배정자 또는 회사 명단과 대조해 사람 이름을 벗기고, "계약갱신제안 / SS급 / 한국농어민신문 / 조은유 차장" 꼴이면
+  // 등급 칸 다음(업체 칸)을 쓴다 — 첫 칸(내용)으로 찾으면 엉뚱한 결과가 났다(실사고)
+  const historyQueryOf = (t: { vendor: string; assignee?: string }) => {
     let raw = t.vendor.trim();
     const who = (t.assignee || "").trim();
     const firstToken = raw.split(/\s+/)[0] || "";
     if (who && raw.startsWith(who)) raw = raw.slice(who.length).replace(/^[\s\-–—:]+/, "");
     else if (MEMBER_NAMES.has(firstToken.replace(/[-–—:]+$/, ""))) raw = raw.slice(firstToken.length).replace(/^[\s\-–—:]+/, "");
-    // "계약갱신제안 / SS급 / 한국농어민신문 / 조은유 차장" 꼴 — 등급 칸 다음이 업체다. 첫 칸(내용)으로 검색하면 엉뚱한 결과가 난다
-    const fallback = historyCoreName(slashTrainVendor(raw) || raw);
+    return slashTrainVendor(raw) || raw;
+  };
+  const openTicketHistory = (t: { vendor: string; vendor_code?: string; assignee?: string }) => {
+    const fallback = historyCoreName(historyQueryOf(t));
     if (!t.vendor_code) { setHistVendor(fallback); return; }
     void vendorNameByCode(t.vendor_code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
   };
   useEffect(() => {
-    const vendors = Array.from(new Set(tickets.map((ticket) => ticket.vendor.trim()).filter(Boolean)));
+    const vendors = Array.from(new Set(tickets.map((ticket) => historyQueryOf(ticket)).filter(Boolean)));
     if (!vendors.length) { setVendorFlags(new Map()); return; }
     let active = true;
     getVendorFlagsBatch(vendors)
@@ -1877,7 +1881,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[560px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(ticket.vendor.trim())} onOpen={() => openTicketHistory(ticket)} /></div>
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[560px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
                   </td>
                   <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ticket.issue || ""}>{ticket.issue || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
@@ -2014,7 +2018,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{ticket.assignee}</span>}
                   {titleDraft === null ? (<>
                     <span className="min-w-0 flex-1 truncate px-1 text-[15px] font-bold text-white">{(ticket.calendarTitle || "").trim() || ticket.vendor}</span>
-                    <VendorAlertChip flags={vendorFlags.get(ticket.vendor.trim())} onOpen={() => openTicketHistory(ticket)} />
+                    <VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} />
                     <button type="button" onClick={() => setTitleDraft((ticket.calendarTitle || "").trim() || ticket.vendor)} className="shrink-0 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black text-slate-200 transition hover:bg-white/20">수정</button>
                   </>) : (<>
                     <input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} autoFocus
