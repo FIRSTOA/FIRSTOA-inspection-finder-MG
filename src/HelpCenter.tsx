@@ -36,6 +36,9 @@ const GROUPS = Array.from(new Set(GUIDES.map((g) => g.group)));
 
 export default function HelpCenter() {
   const [picked, setPicked] = useState<Guide>(GUIDES.find((g) => g.key === "schedule") || GUIDES[0]);
+  // 그룹 접기/펼치기 — 21편이 다 펼쳐져 있으면 스크롤이 길다. 처음엔 선택된 편의 그룹만 열어 둔다
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ [picked.group]: true });
+  const toggleGroup = (group: string) => setOpenGroups((cur) => ({ ...cur, [group]: !cur[group] }));
   const fullUrl = picked.url ? `${window.location.origin}${picked.url}` : "";
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(fullUrl); notify("링크를 복사했습니다 — 카톡방에 붙여넣으면 누구나 열 수 있어요", "success"); }
@@ -50,8 +53,12 @@ export default function HelpCenter() {
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-3">
           {GROUPS.map((group) => (<div key={group} className="space-y-1.5">
-          <div className="px-1 text-[11px] font-black uppercase tracking-wider text-slate-400">{group}</div>
-          {GUIDES.filter((g) => g.group === group).map((g) => (
+          <button type="button" onClick={() => toggleGroup(group)}
+            className="flex w-full items-center justify-between rounded-xl bg-slate-100 px-3 py-2 text-left text-[12px] font-black text-slate-600 hover:bg-slate-200">
+            <span>{group} <span className="ml-1 font-bold text-slate-400">{GUIDES.filter((g) => g.group === group).length}</span></span>
+            <span className="text-[13px] leading-none">{openGroups[group] ? "−" : "+"}</span>
+          </button>
+          {openGroups[group] && GUIDES.filter((g) => g.group === group).map((g) => (
             <button key={g.key} type="button" onClick={() => setPicked(g)} disabled={!g.url}
               className={`w-full rounded-2xl border px-4 py-3 text-left transition ${picked.key === g.key ? "border-blue-500 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"} disabled:cursor-not-allowed disabled:opacity-60`}>
               <div className="flex items-center gap-2">

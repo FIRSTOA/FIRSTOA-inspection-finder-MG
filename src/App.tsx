@@ -5735,13 +5735,14 @@ export default function App() {
     operations: Settings2, lookup: Database, inbox: Inbox,
   };
   const navGroups = [
-    { title: "소식", items: [["inbox", "공지·요청"]] },
-    { title: "학습·지식", items: [["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
+    // 사용설명서와 같은 묶음 — 매일 쓰는 5개(홈·FIELD·서비스접수·일정리스트·캘린더)는 그룹 없이 위에, 나머지는 접히는 그룹으로
+    { title: "현장·동선", items: [["walkingMap", "워킨맵"], ["autoSchedule", "자동 일정"], ["recontract", "재계약 준비"], ["foodMap", "맛동여지도"]] },
+    { title: "소식·학습", items: [["inbox", "공지·요청"], ["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
     { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["recontract", "재계약 준비"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["foodMap", "맛동여지도"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["field", "FIELD"] as [typeof screen, string], ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["lookup", "조회"], ["operations", "관리"], ["help", "사용설명서"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];

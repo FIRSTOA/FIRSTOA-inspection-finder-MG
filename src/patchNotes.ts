@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "d480e49fbb",
+    "date": "2026-08-26",
+    "note": "사용설명서 — 조회·관리 편 등록, 21편 완성"
+  },
+  {
     "hash": "69764ecbec",
     "date": "2026-08-26",
     "note": "사용설명서 — 자기개발/지식공유 편 등록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7821766e25",
     "date": "2026-08-14",
     "note": "지오코딩을 엣지 프록시로 — 카카오 대비 + 노미나팀 안정화, 내 일정 지도 워킨맵과 통일"
-  },
-  {
-    "hash": "18aa1d0c40",
-    "date": "2026-08-14",
-    "note": "중복 접수 확인을 디자인 모달로 — 다크 헤더+안내 항목, 기본 동작은 [중복이면 취소] 강조"
   }
 ];
