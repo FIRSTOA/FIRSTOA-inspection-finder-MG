@@ -7,7 +7,7 @@
  */
 import { fieldTicketVendor, parseEquipComment } from "./ids";
 import { RENEWAL_DONE_LABELS } from "./workinPlaces";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
@@ -72,7 +72,12 @@ export default function AutoSchedule({ author }: { author: string }) {
   useEffect(() => { void loadTickets(); }, [loadTickets]);
 
   // 앵커 좌표 — 워킨맵에서 업체명으로 찾고(정규화 키 대조), 없으면 주소 지오코딩 폴백
+  // 요청 순번 — 타이핑 중간 글자("파이낸셜늇")로 나간 옛 조회가 매칭 실패 → 지오코딩까지 갔다가 늦게 끝나면
+  // 최종 결과를 null로 덮어써 "좌표 미확인"이 뜨던 실사고. 최신 요청만 결과를 반영한다.
+  const anchorSeq = useRef(0);
   const resolveAnchor = useCallback(async (name: string, address = "") => {
+    const seq = ++anchorSeq.current;
+    const fresh = () => seq === anchorSeq.current;
     const raw = name.trim();
     if (!raw) { setAnchorGeo(null); return; }
     // 법인 접두어·기호를 뺀 핵심 토큰으로 검색 — "주식회사 무암 (Mooam)" → "무암"
@@ -91,20 +96,27 @@ export default function AutoSchedule({ author }: { author: string }) {
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score);
     const hit = scored[0]?.h;
+    if (!fresh()) return;
     if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number, placeId: hit.id }); return; }
     // 워킨맵에 없는 업체(예: 분기점검 대상 아님) — 일정의 주소 → 입력값 순으로 지오코딩
     for (const source of [address, raw]) {
       const q = String(source || "").trim();
       if (!q) continue;
       const found = await geocodeKR(q);
+      if (!fresh()) return;
       if (found) { setAnchorGeo({ name: `${q.slice(0, 20)} (주소)`, lat: found.lat, lng: found.lng }); return; }
     }
+    if (!fresh()) return;
     setAnchorGeo(null);
     setNotice(`"${raw}"의 좌표를 못 찾았습니다 — 업체명 또는 주소로 다시 시도해 보세요 (거리 정렬 없이 경과일 순).`);
   }, []);
 
   const anchorTicket = tickets.find((t) => t.id === anchorId);
-  useEffect(() => { void resolveAnchor(anchorTicket?.vendor || anchorQuery, anchorTicket?.address || ""); }, [anchorTicket?.vendor, anchorTicket?.address, anchorQuery, resolveAnchor]);
+  // 입력 디바운스 350ms — 한글 조합 중간 글자마다 조회하지 않는다 (순번 가드와 함께 경쟁 방지)
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void resolveAnchor(anchorTicket?.vendor || anchorQuery, anchorTicket?.address || ""); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [anchorTicket?.vendor, anchorTicket?.address, anchorQuery, resolveAnchor]);
 
   // 기준 업체 한 줄 만들기: ① 조건 없는 RPC로 그 자리 데이터(최근 점검·기기)를 얻고 ② 그래도 없으면(완료 라벨·타팀) 워킨맵 행으로 최소 구성
   const pinnedAnchorRow = async (placeId: number, lat: number, lng: number): Promise<{ row: Place; reason: string } | null> => {

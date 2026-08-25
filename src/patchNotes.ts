@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6d7840bf9a",
+    "date": "2026-08-25",
+    "note": "자동일정 미니 지도(후보 순번 마커·기준 업체 핀·클릭 선택) + 시트 미러 중단 원인 기록(anon DELETE 회수) + GAS service_role 전환 코드 준비"
+  },
+  {
     "hash": "01657f1844",
     "date": "2026-08-25",
     "note": "자동일정 — 검색한 기준 업체를 조건과 무관하게 맨 위에 고정(사유 배지) 해서 바로 추가 가능"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b97fcaf7f0",
     "date": "2026-08-13",
     "note": "원격팀 피드백 반영 — 시간 직접입력·IT 작성자·메모 시트기입·워킨맵 칩·전체버튼 안내"
-  },
-  {
-    "hash": "a7e6ae4e93",
-    "date": "2026-08-13",
-    "note": "재계약 조회 컬럼 재구성 + 자동 최신화(배너 제거)"
   }
 ];
