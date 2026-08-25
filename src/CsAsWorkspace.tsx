@@ -20,13 +20,14 @@ import { escapeRegExp, extractCategory, extractIssue, matchReportAssignee as rep
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
+import TeamCalendar from "./TeamCalendar";
 
 type Team = "A" | "B" | "C" | "D" | "E" | "기타"; // 기타 = 팀 시간대 밖(11시 등)의 네이버 수입 일정
 type AsStatus = "접수" | "배정" | "완료" | "익일";
 // 분류는 네이버 캘린더 이름과 맞춘다(2026-08-15): 물류·휴가 → '납품철수교체휴가교육'로 통합,
 // AS 미처리 표시는 '익일통합as'. "물류"/"휴가"는 옛 데이터 호환용으로만 남긴다.
 type ScheduleType = "AS" | "익일AS" | "납품철수교체휴가교육" | "매월점검" | "물류" | "휴가";
-type ViewMode = "list" | "calendar" | "mine";
+type ViewMode = "list" | "calendar" | "mine" | "team"; // team = 팀 전용 캘린더(일정리스트·네이버와 무관)
 type DayFilter = "today" | "tomorrow" | "scheduled";
 
 export type AsTicket = {
@@ -502,6 +503,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
   const [midReport, setMidReport] = useState<{ team: Team; text: string; polishing?: boolean; diag?: string } | null>(null);
   const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
+  // 팀 전용 캘린더가 보여줄 팀 — 작성자의 팀(팀장은 칩으로 선택). 명단에 없는 사람은 현재 팀 필터, 그것도 없으면 C
+  const [teamCalTeam, setTeamCalTeam] = useState<Team | null>(null);
   // 팀 명단 — 관리탭 인원(cs_members) 실시간. 신입·퇴사·팀 이동이 보고와 배정에 바로 반영된다.
   const { book: memberBook } = useAuthorBook();
   const csLeaders = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
@@ -513,6 +516,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     };
     return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: [], 기타: [] };
   }, [memberBook]);
+  const teamCalViewTeam: Team = teamCalTeam
+    || ((["A", "B", "C", "D"] as Team[]).find((t) => teamAssignees[t].includes(author) && !csLeaders.includes(author)) as Team | undefined)
+    || (teams.includes(team as Team) ? team as Team : "C");
   // 보고 순서: 팀장 최상단 → 명단 순서(부파트장이 첫 번째) 그대로
   const reportOrder = (reportTeam: Team) => {
     const mine = teamAssignees[reportTeam].filter((n) => !csLeaders.includes(n));
@@ -1548,8 +1554,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <h2 className="ml-0.5 whitespace-nowrap text-base font-black text-slate-950 sm:ml-1 sm:text-xl">{Number(currentMonth.slice(0, 4))}년 {Number(currentMonth.slice(5, 7))}월</h2>
                 </div>
                 <div className="rounded-full bg-slate-100 p-0.5 sm:p-1">
-                  {(["calendar", "list"] as ViewMode[]).map((mode) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-2.5 py-1 text-[11px] font-black sm:px-3 sm:py-1.5 sm:text-xs ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "달력" : "목록"}</button>
+                  {(["calendar", "list", "team"] as ViewMode[]).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`rounded-full px-2.5 py-1 text-[11px] font-black sm:px-3 sm:py-1.5 sm:text-xs ${viewMode === mode ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{mode === "calendar" ? "달력" : mode === "list" ? "목록" : "🔒 팀"}</button>
                   ))}
                 </div>
               </div>
@@ -1584,6 +1590,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     });
                   })()}
                   {!monthTickets.length && !shownNaverEvents.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 일정이 없습니다.</div>}
+                </div>
+              ) : viewMode === "team" ? (
+                <div className="p-3 sm:p-4">
+                  {/* 팀장은 팀을 골라 볼 수 있다 — 팀원은 자기 팀 고정 */}
+                  {csLeaders.includes(author) && (
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {teams.map((t) => (
+                        <button key={t} type="button" onClick={() => setTeamCalTeam(t)} className={`rounded-full px-3 py-1 text-[11px] font-black ${teamCalViewTeam === t ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{t}팀</button>
+                      ))}
+                    </div>
+                  )}
+                  <TeamCalendar team={teamCalViewTeam} author={author} />
                 </div>
               ) : viewMode === "calendar" ? (
                 <>

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "eeadc76f4f",
+    "date": "2026-08-25",
+    "note": "자동일정 기준 업체 검색 — 요청 순번 가드 + 350ms 디바운스 (조합 중 글자 조회가 최종 결과를 덮어쓰던 경쟁 수리)"
+  },
+  {
     "hash": "6d7840bf9a",
     "date": "2026-08-25",
     "note": "자동일정 미니 지도(후보 순번 마커·기준 업체 핀·클릭 선택) + 시트 미러 중단 원인 기록(anon DELETE 회수) + GAS service_role 전환 코드 준비"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "12cad22d5a",
     "date": "2026-08-13",
     "note": "워킨맵 초과 필터 + 원격 화면 정리 + IT 명단 정정"
-  },
-  {
-    "hash": "b97fcaf7f0",
-    "date": "2026-08-13",
-    "note": "원격팀 피드백 반영 — 시간 직접입력·IT 작성자·메모 시트기입·워킨맵 칩·전체버튼 안내"
   }
 ];
