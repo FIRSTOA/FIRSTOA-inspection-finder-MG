@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1ac1c1beea",
+    "date": "2026-08-25",
+    "note": "필드탭 [일정정리] 버튼 제거(전송 후 팝업으로 충분), 정리 팝업 문구 — 네이버 캘린더 완료 이동·익일 사유 별도 전송 안내"
+  },
+  {
     "hash": "888eb2c14b",
     "date": "2026-08-25",
     "note": "모바일 저장 실패 수리(DB 먼저·엣지 타임아웃·에러 원문), 재계약 탭 모바일 6곳, 워킨맵 재연결 재시도, 자동일정 등급별 거리 상한, 내 일정 물류 FIELD 직행"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1f74dafb7d",
     "date": "2026-08-07",
     "note": "재계약 등급 파싱 수정 — 워킨맵 재계약 이름은 '2109/27SS…' 형식이라 앞자리에 슬래시·하이픈 허용 (212건 미분류 → S 91·SS 80·V 32로 정상 인식)"
-  },
-  {
-    "hash": "cadd90691c",
-    "date": "2026-08-07",
-    "note": "빌드 보정 — AutoSchedule 미사용 import 제거"
   }
 ];

@@ -6029,7 +6029,7 @@ export default function App() {
                 카톡방 전송은 끝났습니다. 여기서 정리하면 <b>일정리스트와 네이버 캘린더가 함께</b> 바뀝니다.<br />
                 <b>✓ 완료</b> → 일정 완료 + 네이버 일정이 팀 완료 캘린더로 이동·완료 체크<br />
                 <b>→ 익일로</b> → 사유를 적으면 팀 AS방에 <b>별도 메시지</b>로 나가고, 네이버 일정 날짜도 옮겨집니다
-                {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양체와 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
+                {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양식과 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
