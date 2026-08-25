@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "21d42bb834",
+    "date": "2026-08-25",
+    "note": "맛동여지도 — 팀별(전체/A~E) 분리 보기, 여러 개 붙여넣기 일괄 등록(이름|주소|주차메모, 이름만으로도 좌표 검색)"
+  },
+  {
     "hash": "599805b900",
     "date": "2026-08-25",
     "note": "맛동여지도 — 주차 가능한 맛집 공유 지도(food_places): 지도·목록·주소 지오코딩·주차/메뉴/별점·내 위치 가까운 순·추천"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "03b743be1e",
     "date": "2026-08-13",
     "note": "\"접수시트 기입 중…\" 잔류 수리 — 시트 상태를 별도 상태로 분리"
-  },
-  {
-    "hash": "cca88518f4",
-    "date": "2026-08-13",
-    "note": "접수 중복·시트 지연 수술 — 잠금 재시도 즉시화 + 중복 접수 확인 가드"
   }
 ];

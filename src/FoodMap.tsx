@@ -11,6 +11,7 @@ import { geocodeKR } from "./geocode";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { kakaoMapSearchLink, naverMapLink } from "./navApp";
+import { looksLikeNaverSavedList, parseNaverSavedList, type ImportedPlace } from "./foodImport";
 
 export type FoodPlace = {
   id: string; name: string; address: string; address_detail: string; lat: number | null; lng: number | null; gu: string;
@@ -38,6 +39,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const [teamFilter, setTeamFilter] = useState<string>(/^[A-E]$/.test(team) ? team : "");
   const [bulk, setBulk] = useState<string | null>(null); // 여러 개 한 번에 붙여넣기 (네이버 저장 목록 옮겨 적기)
   const [bulkLog, setBulkLog] = useState<string[]>([]);
+  const [preview, setPreview] = useState<ImportedPlace[] | null>(null); // 붙여넣기 해석 결과 — 확인·삭제 후 올린다
   const [origin, setOrigin] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,28 +114,40 @@ export default function FoodMap({ author, team }: { author: string; team: string
     try { await updateRows("food_places", `id=eq.${p.id}`, { likes: p.likes + 1 }); setPlaces((cur) => cur.map((x) => (x.id === p.id ? { ...x, likes: x.likes + 1 } : x))); }
     catch { /* 추천은 부가 기능 */ }
   };
+  // 1단계: 붙여넣은 텍스트 해석 — 네이버 저장목록 복사본(빈 줄 구분·주소 줄)이면 그 파서, 아니면 "이름 | 주소 | 주차메모" 한 줄 형식
+  const buildPreview = () => {
+    const text = bulk || "";
+    let rows: ImportedPlace[];
+    if (looksLikeNaverSavedList(text)) rows = parseNaverSavedList(text);
+    else {
+      rows = text.split(/\n/).map((l) => l.trim()).filter(Boolean).map((line) => {
+        const [name = "", address = "", parkingMemo = ""] = line.split(/\s*[|｜\t]\s*/);
+        return { name: name.trim(), address: address.trim(), parking: parkingMemo.trim() ? "가능" as const : "모름" as const, parkingMemo: parkingMemo.trim(), memo: "" };
+      }).filter((r) => r.name);
+    }
+    if (!rows.length) { notify("읽어낸 항목이 없어요 — 형식을 확인해 주세요", "error"); return; }
+    setPreview(rows);
+  };
+  // 2단계: 좌표 잡아 올리기 (이미 있는 이름은 건너뜀)
   const runBulk = async () => {
-    if (bulk == null || busy) return;
-    const lines = bulk.split(/\n/).map((l) => l.trim()).filter(Boolean);
-    if (!lines.length) return;
+    if (!preview || busy) return;
     setBusy(true);
     const log: string[] = [];
     try {
-      for (const line of lines.slice(0, 60)) {
-        const [name = "", address = "", parkingMemo = ""] = line.split(/\s*[|｜\t]\s*/);
-        if (!name) continue;
-        if (places.some((p) => p.name === name.trim())) { log.push(`↷ ${name} — 이미 있음`); continue; }
-        const found = await geocodeKR(address.trim() || name.trim());
+      for (const r of preview.slice(0, 120)) {
+        if (places.some((p) => p.name === r.name)) { log.push(`↷ ${r.name} — 이미 있음`); setBulkLog([...log]); continue; }
+        const found = await geocodeKR(r.address || r.name);
         await insertRow("food_places", {
-          name: name.trim(), address: address.trim() || (found?.label || ""), address_detail: "", lat: found?.lat ?? null, lng: found?.lng ?? null,
-          gu: guOf(address.trim() || found?.label || ""), parking: parkingMemo ? "가능" : "모름", parking_memo: parkingMemo.trim(),
-          menu: "", price: "", rating: 0, tags: [], memo: "", author, team, likes: 0, updated_at: new Date().toISOString(),
+          name: r.name, address: r.address || (found?.label || ""), address_detail: "", lat: found?.lat ?? null, lng: found?.lng ?? null,
+          gu: guOf(r.address || found?.label || ""), parking: r.parking, parking_memo: r.parkingMemo,
+          menu: "", price: "", rating: 0, tags: [], memo: r.memo, author, team, likes: 0, updated_at: new Date().toISOString(),
         });
-        log.push(`${found ? "✓" : "⚠ 좌표 없음(목록만)"} ${name}`);
+        log.push(`${found ? "✓" : "⚠ 좌표 없음(목록만)"} ${r.name}`);
         setBulkLog([...log]);
       }
       await load();
       notify(`${log.filter((l) => l.startsWith("✓")).length}곳 지도에 올렸습니다`, "success");
+      setPreview(null); setBulk(null);
     } catch (e) { notify(`일괄 등록 중단: ${(e as Error).message}`, "error"); }
     finally { setBusy(false); }
   };
@@ -292,18 +306,46 @@ export default function FoodMap({ author, team }: { author: string; team: string
       {bulk != null && (
         <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!busy) setBulk(null); }}>
           <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="text-lg font-black text-slate-950">여러 개 한 번에 올리기</div>
-            <div className="mt-1 text-[12px] font-semibold leading-5 text-slate-500">
-              네이버지도 "저장" 목록은 내보내기가 없어 자동으로 못 가져옵니다 — 대신 목록을 보면서 <b>한 줄에 하나</b>씩 옮겨 적으면 좌표를 잡아 한꺼번에 올립니다.<br />
-              형식: <code className="rounded bg-slate-100 px-1">가게명 | 주소 | 주차메모</code> (주소·주차메모는 생략 가능 — 주소가 없으면 가게명으로 검색). 주차메모를 적으면 "주차 가능"으로 올라가고, 나머지는 나중에 [수정]으로 채우면 됩니다.
-            </div>
-            <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={8} autoFocus placeholder={"삼겹살집 | 서울 강남구 테헤란로 152 | 건물 지하 1시간 무료\n국밥집 | | 옆 공영주차장\n초밥집"}
-              className="mt-3 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-[12px] leading-5 outline-none focus:border-blue-500" />
-            {bulkLog.length > 0 && <div className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{bulkLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
-            <div className="mt-4 flex gap-2">
-              <button type="button" disabled={busy} onClick={() => setBulk(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">닫기</button>
-              <button type="button" disabled={busy || !bulk.trim()} onClick={() => void runBulk()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? `올리는 중… ${bulkLog.length}` : `${bulk.split(/\n/).filter((l) => l.trim()).length}곳 올리기`}</button>
-            </div>
+            <div className="text-lg font-black text-slate-950">여러 개 한 번에 올리기{preview ? ` — ${preview.length}곳 확인` : ""}</div>
+            {!preview ? (
+              <>
+                <div className="mt-1 text-[12px] font-semibold leading-5 text-slate-500">
+                  <b>네이버지도 "저장" 목록을 쭉 긁어 붙여넣으면</b> 그대로 읽습니다(가게명·주소·내 메모의 주차 문구까지). 한 줄 형식 <code className="rounded bg-slate-100 px-1">가게명 | 주소 | 주차메모</code>도 됩니다.
+                  주소가 없으면 가게명으로 좌표를 찾습니다.
+                </div>
+                <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={10} autoFocus placeholder={"네이버지도 저장목록 복사본을 여기에…\n\n또는\n삼겹살집 | 서울 강남구 테헤란로 152 | 건물 지하 1시간 무료"}
+                  className="mt-3 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-[12px] leading-5 outline-none focus:border-blue-500" />
+                <div className="mt-4 flex gap-2">
+                  <button type="button" onClick={() => setBulk(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">닫기</button>
+                  <button type="button" disabled={!bulk.trim()} onClick={buildPreview} className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">해석해서 미리보기</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-1 text-[12px] font-semibold text-slate-500">잘못 읽힌 건 ✕로 빼고 올리세요. 업종·메뉴·별점은 올린 뒤 [수정]으로 채울 수 있습니다.</div>
+                <ul className="mt-3 max-h-[46vh] divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+                  {preview.map((r, i) => (
+                    <li key={`${r.name}-${i}`} className="flex items-start gap-2 px-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[13px] font-black text-slate-900">{r.name}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${PARKING_TONE[r.parking]}`}>🅿 {r.parking}</span>
+                          {places.some((p) => p.name === r.name) && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400">이미 있음 → 건너뜀</span>}
+                        </span>
+                        <span className="block truncate text-[11px] text-slate-500">{r.address || "(주소 없음 — 이름으로 검색)"}</span>
+                        {(r.parkingMemo || r.memo) && <span className="block text-[11px] text-emerald-800">{[r.parkingMemo, r.memo].filter(Boolean).join(" · ")}</span>}
+                      </span>
+                      <button type="button" onClick={() => setPreview(preview.filter((_, j) => j !== i))} className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-black text-slate-400 hover:bg-rose-50 hover:text-rose-600">✕</button>
+                    </li>
+                  ))}
+                </ul>
+                {bulkLog.length > 0 && <div className="mt-2 max-h-28 overflow-y-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{bulkLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
+                <div className="mt-4 flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => setPreview(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">← 다시 붙이기</button>
+                  <button type="button" disabled={busy || !preview.length} onClick={() => void runBulk()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? `올리는 중… ${bulkLog.length}/${preview.length}` : `${preview.length}곳 올리기`}</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
