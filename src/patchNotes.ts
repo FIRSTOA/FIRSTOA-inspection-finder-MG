@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5bf11b061a",
+    "date": "2026-08-25",
+    "note": "도움말 탭(조회·관리 옆) — 설명서 목록 + 앱 안 펼쳐보기·링크 복사; 일정리스트 ❔ 버튼 제거"
+  },
+  {
     "hash": "73e86cb4c5",
     "date": "2026-08-25",
     "note": "일정리스트 사용설명서를 웹앱 정적 페이지(/guide/schedule.html)로 — 계정 없이 열람, 헤더 ❔ 사용법 버튼"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b18863e7b6",
     "date": "2026-08-14",
     "note": "유형 전환 개선 + 시트 임대 조회 잘림 버그 수리"
-  },
-  {
-    "hash": "336b6696fb",
-    "date": "2026-08-14",
-    "note": "시트 API 직행 최적화 — 기입 10초+ → 3.2초 (실측)"
   }
 ];

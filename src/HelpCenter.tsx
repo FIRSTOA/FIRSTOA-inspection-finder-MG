@@ -26,8 +26,8 @@ export default function HelpCenter() {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-[#1E252F] px-5 py-4 text-white">
-        <div className="flex items-center gap-2 text-lg font-black"><BookOpen size={18} /> 도움말</div>
-        <p className="mt-0.5 text-[12px] font-semibold text-slate-400">화면별 사용설명서. 처음 쓰는 분 기준으로 버튼 하나하나 설명합니다 · 링크는 로그인 없이 열립니다</p>
+        <div className="flex items-center gap-2 text-lg font-black"><BookOpen size={18} /> 사용설명서</div>
+        <p className="mt-0.5 text-[12px] font-semibold text-slate-400">웹앱 전체 사용설명서 — 화면별로 버튼 하나하나, 처음 쓰는 분 기준 · 링크는 로그인 없이 열립니다</p>
       </section>
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-2">

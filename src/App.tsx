@@ -5743,7 +5743,7 @@ export default function App() {
   const homeItem = ["home", "홈"] as [typeof screen, string];
   const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["recontract", "재계약 준비"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["foodMap", "맛동여지도"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
-  const bottomItems = [["lookup", "조회"], ["operations", "관리"], ["help", "도움말"]] as [typeof screen, string][];
+  const bottomItems = [["lookup", "조회"], ["operations", "관리"], ["help", "사용설명서"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
   const screenTitle = navItems.find(([key]) => key === screen)?.[1] || "홈";
   const isGroupOpen = (group: { title: string; items: [typeof screen, string][] }) => !!openNavGroups[group.title];

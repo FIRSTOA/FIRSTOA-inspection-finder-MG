@@ -217,7 +217,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
   <div class="legend">
     <div class="item"><span class="num">1</span><div><b>팀</b> — 일정 시간대로 정해집니다(A 9시 · B 12시 · C 15시 · D 18시 · E 21시). 상세에서 팀을 바꾸면 시간도 그 팀 시간으로 바뀝니다.</div></div>
     <div class="item"><span class="num">2</span><div><b>구분</b> — <span class="gubun as">익일as</span> AS·점검 미처리 / <span class="gubun deliver">납품</span> 납품·철수·교체 / <span class="gubun done">AS[완료]</span> 처리 끝 / <span class="gubun monthly">매월점검</span> 캘린더 전용(여기선 안 보임)</div></div>
-    <div class="item"><span class="num">3</span><div><b>제목</b> — 네이버에 적힌 제목 그대로. 담당자를 배정하면 앞에 <b>"이름-"</b>이 붙습니다. 접수내용·기기는 접수 양식으로 들어온 건만 채워집니다(네이버 수기 일정은 "-").</div></div>
+    <div class="item"><span class="num">3</span><div><b>제목</b> — 네이버에 적힌 제목 그대로. 담당자를 배정하면 그 사람 묶음으로 내려가고 상세 창에서는 초록 이름 배지가 붙습니다(네이버 캘린더 제목에는 <b>"이름-"</b>이 붙음). 접수내용·기기는 접수 양식으로 들어온 건만 채워집니다(네이버 수기 일정은 "-").</div></div>
     <div class="item"><span class="num">4</span><div><b>처리 버튼</b> — 📞 전화 · FIELD · 배정 · 완료 · 익일 · 삭제. 아래 3번에서 하나씩. 📞 옆 숫자는 등록된 전화번호 개수.</div></div>
   </div>
   <div class="box tip"><b>줄을 누르면</b>상세 창이 열립니다 — 제목·날짜·시간·주소·내용을 여기서 고칩니다(<a href="#edit">4번</a>). 버튼을 누를 때는 상세가 열리지 않습니다.</div>
@@ -251,7 +251,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
         <li><b>이름을 누르면</b> 끝. 그 일정이 그 사람 묶음으로 내려가고 상태가 "배정"으로 바뀝니다.</li>
         <li>되돌리려면 다시 배정 → <b>미배정으로</b>.</li>
       </ol>
-      <div class="box naver"><b>네이버에는</b>제목 앞에 <b>"이름-"</b>이 붙어 저장됩니다(예: <code>심태현-점검요청 SS SL-X3220NR …</code>). 예전에 캘린더에 손으로 이름 적던 일을 대신하는 것이니 따로 적지 마세요. 미배정으로 돌리면 이름이 떼어집니다.</div>
+      <div class="box naver"><b>네이버에는</b>캘린더 제목 앞에 <b>"이름-"</b>이 붙어 저장됩니다(예: <code>심태현-점검요청 SS SL-X3220NR …</code>). 예전에 캘린더에 손으로 이름 적던 일을 대신하는 것이니 따로 적지 마세요. 앱 화면에서는 제목이 아니라 초록 배지·담당자 묶음으로 보이고, 미배정으로 돌리면 네이버 제목의 이름도 떼어집니다.</div>
       <div class="box tip"><b>다른 팀 사람도 배정 가능</b>지원 나간 경우 명단에 없어도 배정할 수 있고, 그 사람이 속한 팀 중간보고에도 함께 잡힙니다.</div>
     </div>
   </div>
@@ -310,15 +310,16 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
     <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 상세 창 위쪽</span>
       <div class="modal" style="max-width:460px">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="gubun as">익일통합as</span><span class="pill" style="background:#ECFDF5;color:#047857;font-size:11px">네이버 ✓</span><span class="pill" style="background:#F1F5F9;color:#64748B;font-size:11px">A팀 · 09:00</span></div>
-        <div class="inp" style="min-height:0;background:#fff;color:#0f172a;font-weight:900;font-size:15px">심태현-점검요청 SS SL-X3220NR 21SS주식회사 공간코리아굿모닝시티분기마감</div>
-        <div class="ms">수정하면 네이버 캘린더에 바로 반영</div>
+        <div style="background:#1E252F;border-radius:12px;padding:10px 12px;display:flex;gap:8px;align-items:center"><span style="background:#059669;color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:900;flex:none">심태현</span><span style="color:#fff;font-weight:900;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">점검요청 SS SL-X3220NR 21SS주식회사 공간코리아굿모닝시티분기마감</span><span class="btn" style="background:rgba(255,255,255,.12);color:#E2E8F0;border-color:rgba(255,255,255,.25);flex:none">수정</span></div>
+        <div style="background:#1E252F;border-radius:12px;padding:10px 12px;display:flex;gap:8px;align-items:center"><span style="flex:1;border:1px solid #60A5FA;border-radius:8px;padding:6px 10px;color:#fff;font-weight:700;font-size:13px;background:rgba(255,255,255,.15)">점검요청 SS SL-X3220NR 공간코리아 8층 (수정 중…)</span><span class="btn" style="background:#2563EB;color:#fff;flex:none">저장</span></div>
+        <div class="ms">위: 보기 상태(초록 배지 = 배정자, 오른쪽 [수정]) · 아래: [수정]을 누른 뒤 — [저장] 또는 Enter로 확정, Esc는 취소</div>
         <div class="grid"><div class="inp" style="min-height:0">날짜 2026-08-25</div><div class="inp" style="min-height:0">팀 A (09:00)</div></div>
         <div class="inp" style="min-height:0">주소 · 서울 중구 장충단로 247 굿모닝시티 8층</div>
         <div class="inp">내용 · 점검요청 SS SL-X3220NR … 기번 0A6XBJPTA0</div>
       </div></div>
     <div style="display:grid;gap:10px">
       <table class="tbl"><thead><tr><th>고치는 것</th><th>어떻게</th><th>네이버에는</th></tr></thead><tbody>
-        <tr><td><b>제목</b></td><td>맨 위 제목 글자를 눌러 고치고 <span class="kbd">Enter</span> 또는 다른 곳 클릭</td><td>제목 그대로 반영("이름-제목" 규칙 유지). 토스트 "제목이 저장됐습니다 · 네이버에도 반영"</td></tr>
+        <tr><td><b>제목</b></td><td>제목 오른쪽 <b>[수정]</b> → 글자 고치기 → <b>[저장]</b> 또는 <span class="kbd">Enter</span> (<span class="kbd">Esc</span>는 취소). 배정자 이름은 제목에 쓰지 않습니다 — 앞의 초록 배지가 그 역할</td><td>네이버 제목은 "이름-제목"으로 반영. 토스트 <b>"제목이 저장됐습니다 — 네이버 캘린더에도 반영 ✓"</b></td></tr>
         <tr><td><b>날짜</b></td><td>날짜 칸에서 고르기 (달력 화면에서 끌어 옮겨도 같음)</td><td>일정이 그 날로 이동</td></tr>
         <tr><td><b>팀</b></td><td>팀 선택 — 시간이 그 팀 시간대로 함께 바뀜</td><td>시간 반영</td></tr>
         <tr><td><b>주소 · 내용</b></td><td>칸에 적고 다른 곳 클릭(저장)</td><td>장소·내용 반영</td></tr>
