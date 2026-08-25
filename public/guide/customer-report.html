@@ -120,6 +120,27 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
 .small{font-size:12.5px;color:var(--muted)}
 @media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 /* ── 추가: 고객·홍보·조회·관리 길잡이 공용 모형 ── */
 .hd{background:#1E252F;border-radius:14px 14px 0 0;padding:12px 14px;color:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
 .hd .t{font-weight:900;font-size:14px} .hd .s{font-size:11px;color:#94A3B8;font-weight:600;margin-top:2px}
@@ -180,15 +201,29 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 
 <section id="benefits">
   <h2>이 화면이 아껴주는 것</h2>
-  <p>리포트에 들어가는 숫자·표·기기 목록은 전부 이미 쌓여 있는 기록(접수·점검·임대리스트)에서 자동으로 채워집니다. 사람이 하는 일은 "맞는지 훑어보고 보내기"만 남습니다.</p>
-  <table class="tbl"><thead><tr><th>예전엔</th><th>지금은</th><th>아끼는 것</th></tr></thead><tbody>
-    <tr><td>업체별로 이번 달 AS·점검 내역을 기록에서 찾아 손으로 정리</td><td>업체명을 고르면 기간 안의 접수(AS·원격·IT)·점검 방문·처리내용이 표로 자동 집계</td><td>정리 시간(예: 업체당 10~20분 → 검토 1~2분)</td></tr>
-    <tr><td>기기 대수·기종·자산번호를 임대리스트에서 따로 옮겨 적기</td><td>임대중 기기가 품목별 대수 + 브랜드·기종·자산기번 표로 자동 삽입</td><td>옮겨 적다 생기는 오타·누락</td></tr>
-    <tr><td>문서를 이미지로 만들고, 수신자 번호를 매번 찾아 문자 앱에서 전송</td><td>[문자 발송] 한 번에 리포트를 한 장 이미지로 합쳐 올리고, 등록된 수신자 전원에게 링크 문자 발송</td><td>사람 수만큼 반복하던 전송 작업</td></tr>
-    <tr><td>누가 어느 업체에 보냈는지 기억에 의존</td><td>발송 성공·실패가 업체별 로그로 남고, 연속 발송 목록에 "발송됨" 표시</td><td>중복 발송·누락</td></tr>
-    <tr><td>수신자를 각자 메모</td><td>업체별 수신자가 전 직원 공용으로 저장되고, 기존 기록(키맨·워킨맵·접수 회신번호)에서 후보를 추천</td><td>번호 찾는 시간, 기기 바꿀 때 사라지는 메모</td></tr>
-  </tbody></table>
-  <div class="box tip"><b>이 화면을 쓰면 좋은 습관</b>월초에 [연속 발송]으로 수신자 등록된 업체를 한 곳씩 넘기며 리포트를 눈으로 훑고 보내면, 지난달 서비스 보고가 한 자리에서 끝납니다.</div>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">리포트 한 장 만들기</div><div class="big"><s>손으로 정리</s> → <em>업체 1클릭</em></div><div class="sub">접수·점검·기기 표가 자동 집계</div></div>
+    <div class="stat green"><div class="lbl">수신자 여러 명에게 문자</div><div class="big"><em>1번</em> 누르기 · <em>1통</em>/번호</div><div class="sub">이미지 링크 자동 첨부 · 대표번호</div></div>
+    <div class="stat purple"><div class="lbl">이번 기간 발송 여부</div><div class="big"><em>발송됨</em> 표시 · 중복 <em>0</em></div><div class="sub">업체별 성공·실패 로그 기준</div></div>
+    <div class="stat amber"><div class="lbl">업체당 검토 시간</div><div class="big"><s>10~20분</s> → <em>1~2분</em></div><div class="sub">예: 정리 대신 눈으로 훑기만</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">리포트 한 장 만들기</div><div class="pills"><span>기간 접수 찾기</span><span>점검 기록 찾기</span><span>기기 목록 옮겨 적기</span><span>표 만들기</span><span>이미지로 저장</span></div><div class="ba-count">5단계</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">리포트 한 장 만들기</div><div class="pills"><span class="hot">월간</span><span class="hot">🔍 검색</span><span class="hot">업체 이름</span></div><div class="ba-count">3번 누르기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">수신자 3명에게 보내기</div><div class="pills"><span>이미지 저장</span><span>번호 찾기</span><span>문자 앱 열기</span><span>한 명씩 전송 ×3</span><span>보냈다고 메모</span></div><div class="ba-count">5단계 · 사람 수만큼 반복</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">수신자 3명에게 보내기</div><div class="pills"><span class="hot">✈ 문자 발송</span><span class="hot">3명에게 발송</span></div><div class="ba-count">2번 누르기 · 로그 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">월초 12곳 보고</div><div class="pills"><span>업체 목록 정리</span><span>보낸 곳 체크</span><span>업체마다 처음부터 반복</span></div><div class="ba-count">3단계 × 12곳</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">월초 12곳 보고</div><div class="pills"><span class="hot">✈ 연속 발송</span><span class="hot">안 보낸 N곳 시작</span><span class="hot">업체마다 문자 발송·확인</span></div><div class="ba-count">업체당 2번 누르기</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>월초에 [연속 발송]으로 수신자 등록된 업체를 한 곳씩 넘기며 훑고 보내면, 지난달 서비스 보고가 한 자리에서 끝납니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
 </section>
 
 <section id="intro">

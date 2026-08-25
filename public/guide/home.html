@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>홈 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border:0;border-radius:18px;padding:20px 18px 17px;color:#fff;display:grid;gap:5px;min-height:132px;align-content:center;text-align:left;box-shadow:0 12px 30px rgba(15,23,42,.14)}
+.impact .stat.blue{background:linear-gradient(135deg,#1E3A8A,#2563EB)} .impact .stat.green{background:linear-gradient(135deg,#065F46,#047857)} .impact .stat.purple{background:linear-gradient(135deg,#581C87,#7E22CE)} .impact .stat.amber{background:linear-gradient(135deg,#78350F,#B45309)}
+.impact .stat .lbl{font-size:12px;font-weight:900;opacity:.95;letter-spacing:.03em}
+.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.68;font-size:22px;text-decoration-thickness:2px}
+.impact .stat .big em{font-style:normal}
+.impact .stat .sub{font-size:12px;font-weight:700;opacity:.95}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.ba + .ba{margin-top:2px}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--dark);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media(max-width:700px){.impact{grid-template-columns:1fr}.impact .stat{min-height:0}.ba{grid-template-columns:1fr}.ba-arrow{transform:rotate(90deg);padding:4px 0}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ba-card.new .ba-title,:root:not([data-theme="light"]) .ba-card.new .ba-count{color:#93C5FD}}
+:root[data-theme="dark"] .ba-card.new .ba-title,:root[data-theme="dark"] .ba-card.new .ba-count{color:#93C5FD}
+@media print{.impact{grid-template-columns:repeat(2,minmax(0,1fr))}.impact .stat{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none;break-inside:avoid}.ba{grid-template-columns:1fr auto 1fr;break-inside:avoid}.ba-arrow{transform:none}.ba-card.new{box-shadow:none}}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 폼·탭·목록·달력·카드 모형 ── */
+.sect{background:#1E252F;color:#fff;border-radius:12px 12px 0 0;padding:10px 14px;display:flex;align-items:center;gap:10px;font-weight:900;font-size:13px}
+.sect .no{width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.sect small{display:block;font-weight:600;color:#94A3B8;font-size:11px}
+.sect .hstat{margin-left:auto;border-radius:999px;padding:3px 10px;font-size:11px;background:rgba(255,255,255,.1);color:#CBD5E1;white-space:nowrap}
+.sect .hstat.ok{background:rgba(52,211,153,.15);color:#6EE7B7}
+.panel{background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 12px 12px;padding:12px 14px;display:grid;gap:10px}
+.panel.top{border-top:1px solid #E2E8F0;border-radius:12px}
+.fld{display:grid;gap:3px;font-size:11px;font-weight:900;color:#64748B}
+.fld .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:#0f172a;background:#fff;min-height:36px}
+.fld .in.ph{color:#94A3B8}
+.fld .in.err{border-color:#FCA5A5;background:#FFF5F6}
+.fgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.seg{display:inline-flex;background:#F1F5F9;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg span{border-radius:999px;padding:5px 12px;font-size:12px;font-weight:900;color:#64748B}
+.seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg.ink{background:#fff;border:1px solid #E2E8F0}.seg.ink span.on{background:#0f172a;color:#fff}
+.lchip{display:inline-block;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;border:1px solid #E2E8F0;background:#fff;color:#64748B;white-space:nowrap}
+.lchip.on{background:#2563EB;color:#fff;border-color:#2563EB}
+.lchip.dark{background:#0f172a;color:#fff;border-color:#0f172a}
+.lchip.gray{background:#F1F5F9;border-color:#F1F5F9}
+.lchip.ok{background:#ECFDF5;color:#059669;border-color:#ECFDF5}.lchip.miss{background:#FFF1F2;color:#F43F5E;border-color:#FFF1F2}
+.lchip.amb{background:#FEF3C7;color:#92400E;border-color:#FEF3C7}
+.tabs{display:flex;border-bottom:1px solid #E2E8F0;background:#fff;border-radius:12px 12px 0 0;overflow:hidden}
+.tabs span{flex:1;text-align:center;padding:11px 8px;font-size:13px;font-weight:900;color:#94A3B8;position:relative;white-space:nowrap}
+.tabs span.on{color:#0f172a}.tabs span.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:#2563EB}
+.tabs .cnt{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F1F5F9;color:#94A3B8}
+.tabs span.on .cnt{background:#2563EB;color:#fff}
+.tabs .rb{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F43F5E;color:#fff}
+.bbtn{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.bbtn.pri{background:#2563EB;color:#fff}.bbtn.line{background:#fff;color:#64748B;border-color:#CBD5E1}.bbtn.ink{background:#fff;color:#1E293B;border-color:#94A3B8}
+.bbtn.green{background:#fff;color:#047857;border-color:#6EE7B7}.bbtn.amber{background:#fff;color:#B45309;border-color:#FCD34D}.bbtn.dark{background:#0f172a;color:#fff}
+.bbtn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3}.bbtn.blue{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}.bbtn.emer{background:#059669;color:#fff}
+.bbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}.bbtn.dis{opacity:.4}.bbtn.ghost{background:rgba(255,255,255,.1);color:#E2E8F0}
+.row-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #F1F5F9;background:#fff;font-size:12px}
+.row-item .tm{text-align:center;font-weight:900;color:#0f172a}
+.row-item .ty{display:block;margin-top:3px;border-radius:4px;padding:1px 4px;font-size:9px;font-weight:900;background:#DBEAFE;color:#1D4ED8}
+.row-item .ty.it{background:#CFFAFE;color:#0E7490}.row-item .ty.rm{background:#EDE9FE;color:#6D28D9}
+.row-item b{display:block;font-size:14px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .sub{display:block;color:#475569;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .meta{display:block;color:#94A3B8;font-weight:700;font-size:11px}
+.st{border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+.st.recv{background:#FFE4E6;color:#BE123C}.st.prog{background:#FEF3C7;color:#92400E}.st.done{background:#E2E8F0;color:#64748B}
+.detail{background:#F8FAFC;border-top:1px solid #F1F5F9;padding:10px 12px;font-size:11px;color:#475569;display:grid;gap:6px;font-weight:600}
+.detail .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;font-size:11px}
+.cal .dh{padding:6px 0;text-align:center;font-weight:900;color:#64748B;background:#F8FAFC;border-bottom:1px solid #E2E8F0}
+.cal .dh.sun{color:#F43F5E;background:#FFF1F2}.cal .dh.sat{color:#3B82F6;background:#EFF6FF}
+.cal .d{min-height:78px;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;padding:5px;display:grid;gap:3px;align-content:start;min-width:0}
+.cal .d.out{background:#F8FAFC}.cal .d .n{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#334155;font-size:11px}
+.cal .d .n.today{background:#2563EB;color:#fff}.cal .d .n.sun{color:#F43F5E}.cal .d .n.sat{color:#2563EB}.cal .d.out .n{color:#CBD5E1}
+.evt{border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.evt.lime{background:#ECFCCB;color:#3F6212}.evt.blue{background:#DBEAFE;color:#1D4ED8;text-decoration:line-through}.evt.rose{background:#FFE4E6;color:#BE123C}.evt.amber{background:#FEF3C7;color:#92400E}
+.evt.n{border:1px solid #D9F99D;background:#F7FEE7;color:#3F6212}.evt.n.rose{border-color:#FECDD3;background:#FFE4E6;color:#BE123C}.evt.n.done{border-color:#E2E8F0;background:#F8FAFC;color:#94A3B8;text-decoration:line-through}
+.evt.tc{background:#DBEAFE;color:#1E40AF;text-decoration:none}
+.evt.more{color:#64748B;text-decoration:underline dotted;background:transparent;padding-left:2px}
+.side{background:#1E252F;border-radius:12px;padding:12px;display:grid;gap:8px;color:#fff;align-content:start}
+.side .spill{border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;background:rgba(255,255,255,.1);color:#CBD5E1;display:flex;align-items:center;gap:6px}
+.side .spill.on{background:#fff;color:#0f172a}
+.dot8{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.side .lab{font-size:10px;font-weight:900;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;margin-top:6px}
+.side .sin{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:8px;padding:7px 10px;font-size:12px;color:#94A3B8}
+.side .sel{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;color:#fff;display:flex;justify-content:space-between}
+.calhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-bottom:0;border-radius:12px 12px 0 0;padding:9px 12px;font-size:12px}
+.calhead .mon{font-weight:900;font-size:15px;color:#0f172a}
+.calhead .rnd{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#64748B;font-weight:900}
+.hcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
+.hcard .ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;flex:none}
+.hcard b{display:block;font-size:13px;color:#0f172a}.hcard small{display:block;font-size:11px;color:#64748B;font-weight:600}
+.hero-mock{background:#0f172a;border-radius:12px;padding:22px 20px;color:#fff;display:grid;gap:8px}
+.hero-mock .h{font-size:20px;font-weight:900;line-height:1.25}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#E2E8F0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden}
+@media(min-width:700px){.grid4{grid-template-columns:repeat(4,1fr)}}
+.grid4 div{background:#fff;padding:12px}.grid4 b{display:block;font-size:16px;color:#0f172a}.grid4 small{font-size:11px;color:#64748B;font-weight:700}
+.dark-card{background:#0f172a;border-radius:12px;padding:14px;color:#E2E8F0;display:grid;gap:8px;font-size:12px}
+.dark-card .tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;background:rgba(255,255,255,.1)}
+.dark-card .tag.new{background:#F43F5E;color:#fff;border-radius:999px}
+.nrow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid #F8FAFC;background:#fff;font-size:12.5px}
+.nrow .dotu{width:6px;height:6px;border-radius:50%;background:#F43F5E;flex:none}.nrow .dotu.read{background:transparent}
+.cat{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.cat.norm{background:#F1F5F9;color:#64748B}.cat.urg{background:#FFF1F2;color:#E11D48}.cat.hr{background:#FFFBEB;color:#B45309}.cat.sys{background:#EFF6FF;color:#1D4ED8}
+.nrow .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900;color:#0f172a}
+.nrow .tt.read{font-weight:700;color:#64748B}
+.tgt{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.tgt.all{background:#EFF6FF;color:#2563EB}.tgt.team{background:#F5F3FF;color:#7C3AED}.tgt.me{background:#D1FAE5;color:#065F46;box-shadow:0 0 0 1px #6EE7B7}.tgt.person{background:#ECFDF5;color:#047857}
+.prog{width:48px;height:4px;border-radius:999px;background:#F1F5F9;overflow:hidden}.prog i{display:block;height:100%;background:#3B82F6}.prog i.full{background:#10B981}
+.rcard{position:relative;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 12px 12px 18px;display:grid;gap:6px;font-size:12px;overflow:hidden}
+.rcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bar,#F43F5E)}
+.rcard.fresh{border-color:#93C5FD;box-shadow:0 0 0 2px #DBEAFE}
+.timeline{display:grid;gap:10px;border:1px solid #F1F5F9;border-radius:12px;padding:12px 14px;font-size:12px;background:#fff}
+.timeline .tl{display:flex;gap:10px;align-items:flex-start}.timeline .tl i{width:11px;height:11px;border-radius:50%;border:2px solid #E2E8F0;background:#fff;margin-top:3px;flex:none}
+.timeline .tl i.b{border-color:#3B82F6;background:#3B82F6}.timeline .tl i.a{border-color:#FBBF24;background:#FBBF24}.timeline .tl i.g{border-color:#10B981;background:#10B981}
+.dbar{background:#151A23;border-radius:12px;padding:9px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#94A3B8;font-size:11px;font-weight:700}
+.dbar .c{border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.07)}.dbar .c b{color:#fff}.dbar .c.warn{background:rgba(251,113,133,.15);color:#FDA4AF}.dbar .c.warn b{color:#FDA4AF}
+.dbar .live{color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;gap:6px}
+.dbar .live i{width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.ui .muted{color:#94A3B8;font-weight:700;font-size:11px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#banner">2. 맨 위 배너 버튼 두 개</a>
+  <a href="#quick">3. 바로 시작 4장</a>
+  <a href="#numbers">4. 핵심 효율 · BEFORE → NOW</a>
+  <a href="#patch">5. PATCH NOTES</a>
+  <a href="#flow">6. 업무 흐름 5칸</a>
+  <a href="#allmenu">7. 전체 업무 메뉴</a>
+  <a href="#manual">8. 빠른 사용 안내</a>
+  <a href="#faq">9. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 홈</div>
+  <h1>홈 길잡이</h1>
+  <p>사이드바 맨 위 <b style="color:#fff">홈</b>입니다. 이 화면은 무엇을 저장하거나 보내지 않습니다 — <b style="color:#fff">다른 화면으로 가장 빨리 가는 문</b>이고, 앱이 어떻게 바뀌고 있는지(패치노트)와 처음 쓰는 사람을 위한 짧은 안내가 있습니다. 어느 카드가 어느 화면으로 가는지 전부 적었습니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">자주 쓰는 화면까지</div><div class="big"><s>메뉴 펼치기</s> → <em>1클릭</em></div><div class="sub">서비스접수 · 일정리스트 · 워킨맵 · FIELD 카드</div></div>
+    <div class="stat green"><div class="lbl">"뭐가 바뀌었어요?"</div><div class="big"><em>자동</em> 기록</div><div class="sub">배포마다 패치노트가 저절로 쌓임 — 따로 공지 안 해도 됨</div></div>
+    <div class="stat purple"><div class="lbl">전체 메뉴</div><div class="big"><em>3묶음</em> · <em>15개</em></div><div class="sub">현장 운영 · 학습·지식 · 기록·성과 한 장에</div></div>
+    <div class="stat amber"><div class="lbl">처음 쓰는 사람 안내</div><div class="big"><em>4가지</em> · 각 <em>4단계</em></div><div class="sub">접수→현장, 접수→일정→FIELD, FIELD, 방문 이후</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">오늘 할 일 시작</div><div class="pills"><span>사이드바 열기</span><span>메뉴 묶음 펼치기</span><span>화면 찾기</span></div><div class="ba-count">3단계</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">오늘 할 일 시작</div><div class="pills"><span class="hot">FIELD 바로 작성</span><span class="hot">오늘 일정 확인</span></div><div class="ba-count">1번 누르기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">업데이트 내용 알기</div><div class="pills"><span>단톡 공지 찾기</span><span>누가 물어보면 답하기</span></div><div class="ba-count">사람이 알림</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">업데이트 내용 알기</div><div class="pills"><span class="hot">홈 → PATCH NOTES</span></div><div class="ba-count">0번 · 빌드 때 자동 생성</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>앱을 켜면 첫 화면은 FIELD입니다. 하루를 시작할 땐 <b>홈 → 오늘 일정 확인</b>으로 캘린더를 먼저 보고, PATCH NOTES의 <b>NEW</b>가 바뀌었으면 한 번 읽어 두세요.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 홈은 "문"이고, 앱의 첫 화면은 FIELD입니다</h2>
+  <p class="lead">앱을 열면 사이드바의 <b>FIELD</b>가 먼저 켜집니다. 홈은 사이드바 맨 위 <b>홈</b>을 눌러야 나옵니다. 홈에서 누르는 것은 전부 <b>다른 화면으로 이동</b>이며, 네이버 캘린더·카톡방·시트·DB 어디에도 아무것도 쓰지 않습니다.</p>
+  <div class="sync">
+    <div class="n">홈<small>카드 · 버튼 = 이동만</small></div>
+    <div class="arr">→</div>
+    <div class="n">각 화면<small>서비스접수 · 일정리스트 · 캘린더 · FIELD …</small></div>
+    <div class="arr">→</div>
+    <div class="n">거기서 저장·전송<small>홈에서는 일어나지 않음</small></div>
+  </div>
+  <div class="box tip"><b>홈에서 유일하게 "바뀌는" 것</b>화면 안에서 펼치고 접는 것(패치노트 더 보기, 전체 업무 메뉴, 빠른 사용 안내)만 있습니다. 이 상태는 저장되지 않아 다음에 열면 다시 접혀 있습니다.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성 — 위에서 아래로 9덩이</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 축약</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:150px">2</span>
+    <span class="badge" style="left:26px;top:214px">3</span>
+    <span class="badge" style="left:26px;top:300px">4</span>
+    <span class="badge" style="left:26px;top:372px">5</span>
+    <div style="display:grid;gap:8px">
+      <div class="hero-mock"><div style="font-size:11px;color:#93C5FD;font-weight:900">8월 25일 (월) │ 3분기 운영 중</div><div class="h">현장 기록 한 번으로<br>전송부터 보고까지</div><div style="font-size:12px;color:#CBD5E1;font-weight:600">카톡 원본을 다시 고치고, 여러 방에 보내고, 일지에 또 적던 반복 업무를 하나의 흐름으로 연결합니다.</div><div style="display:flex;gap:6px;margin-top:4px"><span class="bbtn pri">＋ FIELD 바로 작성</span><span class="bbtn ghost" style="border:1px solid rgba(255,255,255,.25)">오늘 일정 확인</span></div></div>
+      <div class="grid4"><div><b>한 번 입력</b><small>양식·전송·집계 연결</small></div><div><b>4개 업무방</b><small>점검·AS·자가·부품 분기</small></div><div><b>자동 집계</b><small>일일·주간 재작성 제거</small></div><div><b>약 10분+</b><small>방문 1건 반복업무 절감 예상</small></div></div>
+      <div><div style="font-weight:900;font-size:13px">바로 시작</div><div class="muted">현장과 이동 중 가장 자주 쓰는 메뉴입니다.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px"><div class="hcard"><span class="ic" style="background:#E11D48">접수</span><span><b>서비스접수</b><small>접수·확인 팝업·일정 자동등록</small></span></div><div class="hcard"><span class="ic" style="background:#7C3AED">목록</span><span><b>일정리스트</b><small>상세 팝업·통화·네비·FIELD 변환</small></span></div><div class="hcard"><span class="ic" style="background:#059669">지도</span><span><b>워킨맵</b><small>점검·재계약·미수·여분 분석</small></span></div><div class="hcard"><span class="ic" style="background:#020617">필드</span><span><b>FIELD 작성</b><small>양식·사진·업무방 전송</small></span></div></div></div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;font-size:12px"><div style="color:#2563EB;font-weight:900;font-size:11px">BEFORE → NOW</div><b style="font-size:14px">반복 업무가 어떻게 줄었는지</b> <span class="lchip ok" style="float:right">건당 약 11~19분 절감 여지</span></div>
+      <div class="dark-card"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="color:#93C5FD;font-size:10px;letter-spacing:.18em;font-weight:900">✦ PATCH NOTES</div><b style="font-size:14px;color:#fff">이 앱은 매일 자라고 있습니다</b></div><div style="display:flex;gap:6px"><span class="tag" style="background:rgba(37,99,235,.2);color:#93C5FD;border-radius:999px">누적 업데이트 412건+</span><span class="tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-radius:999px">최신 2026-08-25</span></div></div><div><span class="tag">v2026.08.25</span> <span class="tag new">NEW</span> <span style="color:#64748B;font-size:10px">7건</span></div><div style="color:#CBD5E1">• 재계약 화면 수리·개선 — KST 날짜 2건, 기기별 분모 …</div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>배너</b> — 오늘 날짜 · N분기, 제목, 버튼 <b>[＋ FIELD 바로 작성]</b> <b>[오늘 일정 확인]</b>. <a href="#banner">2번</a>.</div></div>
+    <div class="item"><span class="num">2</span><div><b>핵심 효율 4칸</b> — 한 번 입력 · 4개 업무방 · 자동 집계 · 약 10분+. 누르는 것 아님(설명 표시). <a href="#numbers">4번</a>.</div></div>
+    <div class="item"><span class="num">3</span><div><b>바로 시작</b> — 서비스접수 · 일정리스트 · 워킨맵 · FIELD 작성 카드 4장. 누르면 그 화면. <a href="#quick">3번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>BEFORE → NOW 표</b> — 양식 작성 · 업무방 전송 · 업무 보고 세 줄. <a href="#numbers">4번</a>.</div></div>
+    <div class="item"><span class="num">5</span><div><b>PATCH NOTES</b> — 최신 배포 묶음과 <b>[이전 패치 모두 보기]</b>. <a href="#patch">5번</a>. 그 아래로 <b>업무 흐름 5칸</b>(<a href="#flow">6번</a>) → <b>가치 카드 3장</b>(반복 시간 감소 · 누락과 오기입 감소 · 팀 운영 가시화, 설명만) → <b>전체 업무 메뉴</b>(<a href="#allmenu">7번</a>) → <b>빠른 사용 안내</b>(<a href="#manual">8번</a>)가 이어집니다.</div></div>
+  </div>
+</section>
+
+<section id="banner">
+  <h2>2. 맨 위 배너 버튼 두 개</h2>
+  <table class="tbl"><thead><tr><th>버튼</th><th>누르면</th><th>어디까지 바뀌나</th></tr></thead><tbody>
+    <tr><td><span class="bbtn pri">＋ FIELD 바로 작성</span></td><td>사이드바의 <b>FIELD</b> 화면으로 이동합니다(양식 붙여넣기·사진·업무방 전송 화면).</td><td>이동만. 저장·전송은 FIELD 화면에서 [카톡방 전송]을 눌러야 일어남</td></tr>
+    <tr><td><span class="bbtn ghost" style="border:1px solid #94A3B8;color:#334155">오늘 일정 확인</span></td><td><b>캘린더</b> 화면(월 보기)으로 이동합니다. 일정리스트가 아닙니다 — 오늘 줄 목록이 필요하면 바로 시작의 [일정리스트] 카드.</td><td>이동만</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>배너의 날짜와 분기</b>"8월 25일 (월) │ 3분기 운영 중"은 기기 시계 기준으로 자동 표시됩니다. 사진 배경 위에 어두운 막이 깔려 글자가 잘 보이게 되어 있습니다.</div>
+</section>
+
+<section id="quick">
+  <h2>3. 바로 시작 — 카드 4장</h2>
+  <p>"현장과 이동 중 가장 자주 쓰는 메뉴입니다." 카드를 누르면 그 화면으로 갑니다. 카드에 마우스를 올리면 살짝 떠오르고 테두리가 파랗게 됩니다.</p>
+  <table class="tbl"><thead><tr><th>카드</th><th>카드에 적힌 설명</th><th>가는 화면</th></tr></thead><tbody>
+    <tr><td><span class="lchip" style="background:#E11D48;color:#fff;border-color:#E11D48">서비스접수</span></td><td>접수·확인 팝업·일정 자동등록</td><td>서비스접수(사이드바 "서비스접수")</td></tr>
+    <tr><td><span class="lchip" style="background:#7C3AED;color:#fff;border-color:#7C3AED">일정리스트</span></td><td>상세 팝업·통화·네비·FIELD 변환</td><td>일정리스트(사이드바 "일정리스트")</td></tr>
+    <tr><td><span class="lchip" style="background:#059669;color:#fff;border-color:#059669">워킨맵</span></td><td>점검·재계약·미수·여분 분석</td><td>워킨맵(사이드바 "워킨맵")</td></tr>
+    <tr><td><span class="lchip dark">FIELD 작성</span></td><td>양식·사진·업무방 전송</td><td>FIELD(사이드바 "FIELD")</td></tr>
+  </tbody></table>
+</section>
+
+<section id="numbers">
+  <h2>4. 핵심 효율 4칸 · BEFORE → NOW 표 — 읽는 법</h2>
+  <p>둘 다 <b>설명용</b>입니다. 누르는 곳이 없고 값이 계산되는 것도 아닙니다. 표 머리에 "기존 현장 흐름을 기준으로 한 예상 시간이며 실제 운영 데이터로 조정할 수 있습니다."라고 적혀 있듯 <b>예상치</b>입니다.</p>
+  <div class="grid2">
+    <div class="grid4" style="grid-template-columns:repeat(2,1fr)"><div><b>한 번 입력</b><small>양식·전송·집계 연결</small></div><div><b>4개 업무방</b><small>점검·AS·자가·부품 분기</small></div><div><b>자동 집계</b><small>일일·주간 재작성 제거</small></div><div><b>약 10분+</b><small>방문 1건 반복업무 절감 예상</small></div></div>
+    <table class="tbl"><thead><tr><th>업무</th><th>기존 방식 → 예상</th><th>현재 웹앱 → 예상</th></tr></thead><tbody>
+      <tr><td><b>양식 작성</b></td><td>카톡 복사 → 삼성노트 → 불필요 내용 삭제·수정 <span style="color:var(--rose);font-weight:900">5~8분</span></td><td>원본 붙여넣기·사진·검색으로 자동 변환 <span style="color:var(--green);font-weight:900">1~2분</span></td></tr>
+      <tr><td><b>업무방 전송</b></td><td>점검·AS·자가·부품방을 찾아 내용과 사진을 각각 전송 <span style="color:var(--rose);font-weight:900">3~5분</span></td><td>업무 종류 선택 한 번으로 지정 방에 내용·사진 전송 <span style="color:var(--green);font-weight:900">1~2분</span></td></tr>
+      <tr><td><b>업무 보고</b></td><td>방문 내용을 일일방문일지와 주간현황판에 다시 작성 <span style="color:var(--rose);font-weight:900">5~10분</span></td><td>FIELD 기록이 일일·주간 실적으로 자동 집계 <span style="color:var(--green);font-weight:900">자동</span></td></tr>
+    </tbody></table>
+  </div>
+  <p class="small">표 오른쪽 위 초록 알약 "건당 약 11~19분 절감 여지"는 세 줄의 차이를 더한 것입니다. 휴대폰에서는 "기존 / 현재" 라벨이 각 칸 위에 따로 붙어 세로로 보입니다.</p>
+</section>
+
+<section id="patch">
+  <h2>5. PATCH NOTES — "이 앱은 매일 자라고 있습니다"</h2>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="dark-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:6px"><div><div style="color:#93C5FD;font-size:10px;letter-spacing:.18em;font-weight:900">✦ PATCH NOTES</div><b style="font-size:15px;color:#fff">이 앱은 매일 자라고 있습니다</b><div style="color:#94A3B8;font-size:11px">현장 피드백이 들어오면 고치고, 고치면 여기에 자동으로 기록됩니다.</div></div><div style="display:flex;gap:6px"><span class="tag" style="background:rgba(37,99,235,.2);color:#93C5FD;border-radius:999px">누적 업데이트 412건+</span><span class="tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-radius:999px">최신 2026-08-25</span></div></div>
+        <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:8px"><span class="tag">v2026.08.25</span> <span class="tag new">NEW</span> <span style="color:#64748B;font-size:10px">3건</span>
+          <div style="margin-top:6px;display:grid;gap:3px;color:#CBD5E1;font-size:12px"><div>• 재계약 화면 수리·개선 — KST 날짜 2건, 기기별 분모, 종류별 시뮬레이터 …</div><div>• 재계약 통계 수술 — 월기본료 기기합산, 누적감지 창 승계 …</div><div>• 중간보고 버그 일괄 수리 — AI 개수검증(40건 캡) …</div></div></div>
+        <div style="border-top:1px solid rgba(255,255,255,.1);text-align:center;color:#CBD5E1;font-size:11px;font-weight:900;padding-top:8px">이전 패치 모두 보기 ⌄</div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>배포할 때마다 <b>git 기록에서 자동으로</b> 만들어지는 목록입니다(사람이 적는 게 아님). 날짜별로 묶여 있고 <b>v2026.08.25</b>처럼 날짜가 버전 이름입니다.</li>
+        <li>오른쪽 위 알약: <b>누적 업데이트 N건+</b>(전체 기록 수), <b>최신 날짜</b>. 첫 묶음에는 빨간 <b>NEW</b>가 붙고 옆에 "N건".</li>
+        <li>기본으로는 <b>최신 날짜 묶음만</b>(최대 12줄) 보입니다. 아래 <b>[이전 패치 모두 보기]</b>를 누르면 최근 30일치 묶음이 펼쳐지고 버튼이 <b>[접기]</b>로 바뀝니다. 한 묶음이 12줄을 넘으면 "… 외 N건".</li>
+      </ol>
+      <div class="box tip"><b>어떤 줄이 나에게 중요한가</b>화면 이름(재계약·중간보고·접수·일정리스트 …)이 앞에 오는 줄을 보면 어느 화면이 바뀌었는지 알 수 있습니다. 모르는 말이 있으면 관리자에게 그 줄을 그대로 보내 물어보세요.</div>
+    </div>
+  </div>
+</section>
+
+<section id="flow">
+  <h2>6. 업무 흐름 5칸 — "한 번의 현장 기록이 이어지는 곳"</h2>
+  <p>"단순 양식 작성 앱이 아니라 일정, 현장, 고객, 보고를 연결하는 CS 운영 시스템입니다." 다섯 칸은 <b>순서</b>이자 <b>바로가기</b>입니다.</p>
+  <div class="flow">
+    <div class="node"><div class="dot">1</div><div class="body"><b>접수</b> — 서비스접수·확인 팝업 → 누르면 <b>서비스접수</b> 화면</div></div>
+    <div class="node"><div class="dot">2</div><div class="body"><b>일정 배정</b> — 일정리스트 자동 등록 → <b>일정리스트</b> 화면</div></div>
+    <div class="node"><div class="dot">3</div><div class="body"><b>현장 처리</b> — FIELD·워킨맵 → <b>FIELD</b> 화면</div></div>
+    <div class="node"><div class="dot">4</div><div class="body"><b>자동 집계</b> — 일일·주간·업무관리 → <b>일일방문일지</b> 화면</div></div>
+    <div class="node"><div class="dot">5</div><div class="body"><b>지식 축적</b> — 복합기 이력·자기개발 → <b>복합기 학습·처리이력</b> 화면</div></div>
+  </div>
+</section>
+
+<section id="allmenu">
+  <h2>7. 전체 업무 메뉴 — 접힌 목록</h2>
+  <p>"전체 업무 메뉴 / 현장 운영·고객 관리·기록 성과 기능 보기" 줄을 누르면 세 묶음이 펼쳐집니다(다시 누르면 접힘). 각 줄을 누르면 그 화면으로 갑니다. 사이드바에 있는 것과 같은 화면들입니다.</p>
+  <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
+    <table class="tbl"><thead><tr><th>현장 운영</th></tr></thead><tbody>
+      <tr><td><b>서비스접수</b><br><span class="small">임대리스트 검색·접수·일정 연동</span></td></tr>
+      <tr><td><b>일정리스트</b><br><span class="small">상세 팝업·상태 동기화·배지</span></td></tr>
+      <tr><td><b>CS 캘린더</b><br><span class="small">팀별 일정 등록·수정·완료</span> → 사이드바 "캘린더"</td></tr>
+      <tr><td><b>워킨맵</b><br><span class="small">점검·재계약·미수·자가신청</span></td></tr>
+      <tr><td><b>FIELD</b><br><span class="small">현장 양식 작성·사진·전송</span></td></tr>
+    </tbody></table>
+    <table class="tbl"><thead><tr><th>학습·지식</th></tr></thead><tbody>
+      <tr><td><b>복합기 학습·처리이력</b><br><span class="small">브랜드·기종별 사례 + 기술 퀴즈</span></td></tr>
+      <tr><td><b>IT 학습·처리이력</b><br><span class="small">PC 처리이력·기술 퀴즈</span></td></tr>
+      <tr><td><b>자기개발/지식공유</b><br><span class="small">독서·배움 공유·목표·칭찬 릴레이</span></td></tr>
+    </tbody></table>
+    <table class="tbl"><thead><tr><th>기록·성과</th></tr></thead><tbody>
+      <tr><td><b>일일방문일지</b><br><span class="small">기간별 방문·업무시간 집계</span></td></tr>
+      <tr><td><b>주간현황판</b><br><span class="small">목표·병목·실적·성장 기록</span></td></tr>
+      <tr><td><b>성장기록</b><br><span class="small">분기 결과·미션·골든미팅카드</span></td></tr>
+      <tr><td><b>업무관리</b><br><span class="small">팀 운영 현황·담당자/주소 변경이력</span> → 사이드바 "관리"</td></tr>
+      <tr><td><b>해피콜</b><br><span class="small">방문 후 문자·예약 발송</span></td></tr>
+      <tr><td><b>홍보물 발송·인쇄</b><br><span class="small">홍보자료 문자·메일·인쇄</span></td></tr>
+      <tr><td><b>카운터 문자전송</b><br><span class="small">카톡 목록 → 업체별 카운터 요청 문자</span></td></tr>
+    </tbody></table>
+  </div>
+  <div class="box warn"><b>홈에 없는 화면도 있습니다</b>재계약 준비 · 자동 일정 · 맛동여지도 · 고객 리포트 · 공지·요청 · 조회 · 사용설명서 등은 홈 목록에 없고 <b>사이드바</b>에서만 갑니다. 홈은 자주 쓰는 것만 모아 둔 곳입니다.</div>
+</section>
+
+<section id="manual">
+  <h2>8. 빠른 사용 안내 — 4가지, 펼쳐서 읽기</h2>
+  <p>"필요한 업무만 펼쳐 확인하세요." 제목 줄을 누르면 그 항목만 펼쳐지고(아이콘이 파랗게), 다른 것을 누르면 이전 것은 접힙니다. 안내문은 아래와 똑같습니다.</p>
+  <div class="grid2">
+    <div class="box"><b>처음 사용할 때 — 접수부터 현장 완료까지</b>
+      <ol class="steps" style="margin-top:6px"><li>서비스접수에서 임대리스트를 검색해 접수하고, 확인 팝업에서 주소·접수자를 점검합니다.</li><li>저장하면 일정리스트에 자동 등록됩니다 — 담당자를 배정하고 상세 팝업에서 통화·네비를 씁니다.</li><li>워킨맵·FIELD에서 현장 처리 후 해당 업무방으로 전송합니다.</li><li>처리 결과는 일일방문일지·주간현황판·업무관리에 자동 집계됩니다.</li></ol></div>
+    <div class="box"><b>접수 → 일정 → FIELD 연동 — 접수 한 번으로 일정·양식까지</b>
+      <ol class="steps" style="margin-top:6px"><li>접수 저장 시 '일정리스트에도 등록'을 켜두면 오늘 날짜로 일정이 생깁니다.</li><li>일정리스트에서 완료·익일 처리하면 접수 현황 상태도 함께 바뀝니다.</li><li>일정 상세 팝업의 FIELD AS 버튼으로 접수 내용이 채워진 양식을 바로 만듭니다.</li><li>주소가 임대리스트와 다르면 접수 현황 📍 필터에서 모아 워킨맵·임대리스트에 반영합니다.</li></ol></div>
+    <div class="box"><b>FIELD 작성·전송 — 원본 변환, 기기 수정, 사진, 전송</b>
+      <ol class="steps" style="margin-top:6px"><li>원본 붙여넣기, 사진 변환 또는 거래처 검색으로 양식을 불러옵니다.</li><li>기기선택에서 위치·모델·시리얼·자산기번·내용을 확인합니다.</li><li>작성 칸과 결과 미리보기가 같은 내용인지 최종 확인합니다.</li><li>사진을 첨부하고 점검·AS·물류 등 해당 업무방으로 전송합니다.</li></ol></div>
+    <div class="box"><b>방문 이후 관리 — 이력, 해피콜, 홍보물, 성과 기록</b>
+      <ol class="steps" style="margin-top:6px"><li>통합이력에서 거래처의 점검·AS·불만·미수 등 전체 기록을 찾습니다.</li><li>최근 방문 업체에는 해피콜을 즉시 또는 예약 발송할 수 있습니다.</li><li>필요한 홍보물을 문자·메일로 보내거나 현장에서 인쇄해 활용합니다.</li><li>주간현황과 성장기록을 분기 결과 및 골든미팅카드 자료로 이어갑니다.</li></ol></div>
+  </div>
+  <div class="box tip"><b>더 자세한 설명서</b>사이드바 맨 아래 <b>사용설명서</b>에 화면별 길잡이(이 문서 같은 것)가 모여 있습니다. 홈의 빠른 안내는 4줄 요약입니다.</div>
+</section>
+
+<section id="faq">
+  <h2>9. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>앱을 켰는데 홈이 아니라 FIELD가 나와요</summary><p>정상입니다. 첫 화면은 FIELD로 정해져 있습니다(현장에서 가장 자주 쓰는 화면). 홈은 사이드바 맨 위 <b>홈</b>을 누르세요. 휴대폰은 왼쪽 위 ≡ 메뉴를 열어 홈.</p></details>
+    <details><summary>[오늘 일정 확인]을 눌렀는데 목록이 아니라 달력이 나와요</summary><p>그 버튼은 <b>캘린더</b>(월 보기)로 갑니다. 오늘 줄 목록·배정·완료 버튼은 <b>일정리스트</b>입니다 — 바로 시작의 [일정리스트] 카드나 사이드바를 쓰세요.</p></details>
+    <details><summary>PATCH NOTES에 오늘 배포한 게 없어요</summary><p>패치노트는 빌드(배포) 때 만들어지므로 배포 전 변경은 보이지 않습니다. 새로고침 뒤에도 없으면 아직 배포 전입니다.</p></details>
+    <details><summary>홈에서 카드를 눌러도 아무 것도 저장되지 않나요</summary><p>네. 홈의 모든 버튼·카드는 화면 이동만 합니다. 저장·카톡·네이버·시트는 각 화면 안의 버튼에서만 일어납니다.</p></details>
+    <details><summary>전체 업무 메뉴에 찾는 화면이 없어요</summary><p>홈 목록은 15개 화면만 담습니다. 재계약 준비·자동 일정·맛동여지도·고객 리포트·공지·요청·조회·관리·사용설명서는 사이드바에서 가세요.</p></details>
+    <details><summary>핵심 효율의 "약 10분+"는 어디서 나온 숫자인가요</summary><p>BEFORE → NOW 표의 세 줄 차이를 어림한 <b>예상치</b>입니다(표 머리에 "실제 운영 데이터로 조정할 수 있습니다"라고 적혀 있음). 실제 측정값이 아니니 보고 자료에는 그대로 쓰지 마세요.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">홈 길잡이 · 서비스접수·일정리스트·캘린더·공지 길잡이도 같은 형식으로 이어집니다</p>
+</main>
+</div>
+</body>
+</html>

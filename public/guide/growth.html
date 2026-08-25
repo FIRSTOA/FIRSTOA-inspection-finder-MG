@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>성장기록 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border:0;border-radius:18px;padding:20px 18px 17px;color:#fff;display:grid;gap:5px;min-height:132px;align-content:center;text-align:left;box-shadow:0 12px 30px rgba(15,23,42,.14)}
+.impact .stat.blue{background:linear-gradient(135deg,#1E3A8A,#2563EB)} .impact .stat.green{background:linear-gradient(135deg,#065F46,#047857)} .impact .stat.purple{background:linear-gradient(135deg,#581C87,#7E22CE)} .impact .stat.amber{background:linear-gradient(135deg,#78350F,#B45309)}
+.impact .stat .lbl{font-size:12px;font-weight:900;opacity:.95;letter-spacing:.03em}
+.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.68;font-size:22px;text-decoration-thickness:2px}
+.impact .stat .big em{font-style:normal}
+.impact .stat .sub{font-size:12px;font-weight:700;opacity:.95}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.ba + .ba{margin-top:2px}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--dark);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media(max-width:700px){.impact{grid-template-columns:1fr}.impact .stat{min-height:0}.ba{grid-template-columns:1fr}.ba-arrow{transform:rotate(90deg);padding:4px 0}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ba-card.new .ba-title,:root:not([data-theme="light"]) .ba-card.new .ba-count{color:#93C5FD}}
+:root[data-theme="dark"] .ba-card.new .ba-title,:root[data-theme="dark"] .ba-card.new .ba-count{color:#93C5FD}
+@media print{.impact{grid-template-columns:repeat(2,minmax(0,1fr))}.impact .stat{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none;break-inside:avoid}.ba{grid-template-columns:1fr auto 1fr;break-inside:avoid}.ba-arrow{transform:none}.ba-card.new{box-shadow:none}}
+/* ── 추가: 성장기록 재현 ── */
+.stats{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+.stat{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:8px 10px;text-align:center}
+.stat .v{font-size:15px;font-weight:900;color:#0f172a} .stat .l{font-size:10px;font-weight:700;color:#94A3B8}
+.wcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;font-size:12.5px;color:#334155}
+.wtag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900}
+.wtag.blue{background:#EFF6FF;color:#1D4ED8} .wtag.slate{background:#F1F5F9;color:#475569} .wtag.amber{background:#FFFBEB;color:#B45309} .wtag.emerald{background:#ECFDF5;color:#047857} .wtag.dark{background:#0f172a;color:#fff}
+.ubtn{display:inline-block;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap}
+.ubtn.primary{background:#2563EB;color:#fff} .ubtn.dark{background:#0f172a;color:#fff} .ubtn.ghost{background:#fff;color:#475569;border-color:#CBD5E1} .ubtn.amber{background:#F59E0B;color:#fff} .ubtn.soft{background:#F1F5F9;color:#64748B} .ubtn.on{background:#0f172a;color:#fff}
+.tabs2{display:flex;background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 14px 14px;overflow-x:auto}
+.tabs2 span{padding:9px 14px;font-size:12.5px;font-weight:900;color:#94A3B8;white-space:nowrap} .tabs2 span.on{color:#0f172a;box-shadow:inset 0 -3px 0 #2563EB}
+.dsel{border-radius:10px;padding:5px 11px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)}
+.field{border:1px solid #CBD5E1;border-radius:10px;padding:7px 10px;font-size:12.5px;color:#64748B;background:#fff}
+.field b{display:block;font-size:10.5px;color:#94A3B8;font-weight:900}
+.list{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.list .li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155} .list .li:first-child{border-top:0}
+.list .li .t{font-weight:900;color:#0f172a} .list .li .m{color:#94A3B8;font-size:11.5px;margin-left:auto;white-space:nowrap}
+.minitbl{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0}
+.minitbl th{font-size:10.5px;color:#64748B;padding:7px 8px;text-align:left;border-bottom:1px solid #E2E8F0;background:#F8FAFC;font-weight:900}
+.minitbl td{padding:7px 8px;text-align:left;border-bottom:1px solid #F1F5F9;color:#475569;vertical-align:top}
+.dots{display:inline-flex;gap:3px;align-items:center;vertical-align:middle} .dots i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.qtab{border-radius:8px;padding:6px 10px;font-size:11px;font-weight:900;background:#F8FAFC;color:#64748B} .qtab.on{background:#0f172a;color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#records">2. 성장기록 모아보기</a>
+  <a class="sub" href="#r-filter">범위·유형·검색</a>
+  <a class="sub" href="#r-list">목록과 표</a>
+  <a class="sub" href="#r-gather">성장노트 모음 · 배운점 모음</a>
+  <a href="#plan">3. 계획표</a>
+  <a class="sub" href="#p-add">기본업무 · 미션업무 추가</a>
+  <a class="sub" href="#p-color">목표 글자 색칠</a>
+  <a class="sub" href="#p-paste">엑셀 붙여넣기</a>
+  <a href="#result">4. 분기결과표</a>
+  <a href="#mission">5. 미션결과표</a>
+  <a href="#golden">6. 골든미팅카드</a>
+  <a class="sub" href="#g-ai">최신분기 AI변환</a>
+  <a href="#save">7. 저장은 어떻게 되나</a>
+  <a href="#faq">8. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 기록·성과 › 성장기록</div>
+  <h1>성장기록 길잡이</h1>
+  <p>매주 <b style="color:#fff">주간현황판</b>에 적은 성장노트·배운 점·아이디어·특이사항을 팀 전체·기간별로 <b style="color:#fff">모아 보고</b>, 분기 <b style="color:#fff">계획표 → 분기결과표 · 미션결과표 → 골든미팅카드</b>로 이어 가는 화면입니다. 탭 5개가 한 줄로 연결되어 있어서, 앞 탭에서 적은 것이 뒤 탭의 재료가 됩니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p class="lead">분기마다 "지난 석 달 뭘 했지?"를 기억에서 꺼내는 대신, 이미 적힌 주간 기록을 끌어다 씁니다.</p>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">분기 기록 모으기</div><div class="big"><s>예: 1~2시간</s> → <em>한 화면</em></div><div class="sub">월·분기 × 사람 × 유형으로 보고 모음 텍스트를 복사·txt 저장</div></div>
+    <div class="stat green"><div class="lbl">목표 10개 옮기기</div><div class="big"><s>예: 15분</s> → <em>약 1분</em></div><div class="sub">엑셀 범위 한 번 붙이면 구분·등급·목표·레벨 열을 자동 추정</div></div>
+    <div class="stat purple"><div class="lbl">골든미팅카드 초안</div><div class="big"><s>예: 1~2시간</s> → <em>검토 약 20분</em></div><div class="sub">이번 분기 계획·결과·주간 기록과 지난 분기 카드로 AI 초안</div></div>
+    <div class="stat amber"><div class="lbl">저장하고 다시 찾기</div><div class="big"><em>0.7초</em> 자동 저장</div><div class="sub">검색 한 줄 + 주간현황판 바로가기 · 목표 문구는 결과표까지 이어짐</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">분기 기록 모으기</div><div class="pills"><span>주간 회고 파일 모으기</span><span>몇 주차인지 찾기</span><span>내용 복사·붙이기</span><span>분기 문서 다시 편집</span></div><div class="ba-count">예: 분기당 1~2시간</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">분기 기록 모으기</div><div class="pills"><span class="hot">기간·사람·유형 선택</span><span class="hot">성장노트·배운점 모음</span><span class="hot">복사·txt 저장</span><span class="hot">주간현황판 ↗</span></div><div class="ba-count">한 화면에서 바로</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">목표 10개 옮기기</div><div class="pills"><span>엑셀 한 칸씩 입력</span><span>결과표에 목표 다시 입력</span><span>저장 버튼 확인</span></div><div class="ba-count">예: 약 15분 · 불일치 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">목표 10개 옮기기</div><div class="pills"><span class="hot">엑셀 붙여넣기</span><span class="hot">열 역할 자동 추정</span><span class="hot">결과표까지 그대로</span><span class="hot">0.7초 뒤 자동 저장</span></div><div class="ba-count">예: 약 1분 · 목표 문구 한 번</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">골든미팅카드 초안</div><div class="pills"><span>빈 종이에서 시작</span><span>4문항 × 6분야 작성</span><span>주간 기록 다시 찾기</span><span>지난 카드 확인</span></div><div class="ba-count">예: 초안 1~2시간</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">골든미팅카드 초안</div><div class="pills"><span class="hot">최신분기 AI변환</span><span class="hot">초안 검토</span><span class="hot">필요한 곳만 수정</span></div><div class="ba-count">예: 검토 약 20분</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>분기 첫 주에 계획표를 채우고, 매달 말 결과표에 그 달 칸만 적고, 분기 마지막 주에 [최신분기 AI변환]을 누르세요 — 골든미팅카드가 거의 완성된 채로 열립니다.</div>
+  <p class="small">시간은 기존 설명서의 작업 예시를 시각화한 어림값이며, 기록량과 익숙함에 따라 달라집니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 다섯 탭은 한 줄로 이어집니다</h2>
+  <p class="lead">왼쪽 탭에 적은 것이 오른쪽 탭의 재료입니다. 특히 <b>주간현황판 기록</b>이 출발점이라, 매주 적어둘수록 이 화면이 쉬워집니다.</p>
+  <div class="sync">
+    <div class="n">주간현황판<small>성장노트 · 배운 점 · 아이디어 · 특이사항</small></div>
+    <div class="arr">→</div>
+    <div class="n">성장기록 모아보기<small>월·분기 × 사람 × 유형</small></div>
+    <div class="arr">→</div>
+    <div class="n">계획표 → 결과표<small>기본업무 · 미션업무 · 월별 결과</small></div>
+  </div>
+  <div class="sync" style="grid-template-columns:1fr auto 1fr">
+    <div class="n" style="grid-column:1 / span 3;display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap"><span>↓ 전부 모아서</span><span style="background:var(--ink);color:#fff;border-radius:999px;padding:4px 14px">골든미팅카드 [최신분기 AI변환]</span></div>
+  </div>
+  <div class="grid2">
+    <div class="box naver"><b>어디에 저장되나</b>모아보기는 주간현황판 저장소(weekly_notes)를 읽기만 합니다. 계획표·분기결과표·미션결과표는 <b>사람 + 연도 + 분기</b>당 한 장(quarterly_plans), 골든미팅카드도 <b>사람 + 연도 + 분기</b>당 한 장(golden_cards)입니다.</div>
+    <div class="box warn"><b>사람을 골라야 쓸 수 있습니다</b>상단 직원 선택이 "전체 직원"이면 모아보기는 되지만 계획표·결과표·골든카드의 추가 버튼은 잠기고 "작성자 직원을 선택하세요."가 보입니다. 처음 열면 내 이름이 선택돼 있습니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 상단</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:230px;top:26px">2</span>
+    <span class="badge" style="right:26px;top:26px">3</span>
+    <span class="badge" style="left:26px;top:96px">4</span>
+    <div class="bar" style="border-radius:14px 14px 0 0">
+      <div class="row"><div><div style="font-size:15px;font-weight:900">성장기록</div><div style="font-size:10.5px;color:#94A3B8;font-weight:700">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</div></div><span class="spacer"></span><span class="dsel">2026년 ▾</span><span style="display:inline-flex;gap:2px;background:rgba(255,255,255,.1);border-radius:999px;padding:3px"><span class="tab" style="padding:3px 9px">1Q</span><span class="tab" style="padding:3px 9px">2Q</span><span class="tab on" style="padding:3px 9px">3Q</span><span class="tab" style="padding:3px 9px">4Q</span></span><span class="dsel">홍길동 ▾ <span style="color:#94A3B8;font-size:10px">A팀</span></span></div>
+    </div>
+    <div class="tabs2"><span class="on">성장기록 모아보기</span><span>계획표</span><span>분기결과표</span><span>미션결과표</span><span>골든미팅카드</span></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목·설명</b> — 검은 띠. 그 아래 흰 줄이 탭 5개입니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>연도 · 분기</b> — 연도는 올해 앞뒤 6개. <b>1Q~4Q</b>는 모아보기 탭에서는 숨겨지고(모아보기는 자기 조회 범위를 따로 가짐) 나머지 4탭에서 보입니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>직원 선택</b> — "전체 직원" 또는 팀별 이름. 고른 사람이 어느 팀인지 옆에 작게 표시. 모아보기는 이 사람 기록만, 계획표 이하는 이 사람의 분기 장을 엽니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>탭</b> — 성장기록 모아보기 · 계획표 · 분기결과표 · 미션결과표 · 골든미팅카드. 파란 밑줄이 현재 탭.</div></div>
+  </div>
+  <div class="box tip"><b>파란 안내 상자</b>탭 바로 아래에 가끔 파란 줄이 뜹니다("레벨업계획을 저장했습니다." 등). 이 화면의 알림은 전부 그 자리 한 곳에 나타납니다. 불러오는 동안에는 "불러오는 중입니다."</div>
+</section>
+
+<section id="records">
+  <h2>2. 성장기록 모아보기</h2>
+  <p>팀원들이 주간현황판에 적은 성장노트·배운 점·아이디어·특이사항을 기간·사람·유형으로 걸러 봅니다. 여기서는 <b>읽기만</b> 합니다 — 고치려면 [주간현황판 ↗]으로.</p>
+
+  <h3 id="r-filter">범위 · 유형 · 검색</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="wcard" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;letter-spacing:.06em;color:#94A3B8">조회 범위</span><span class="ubtn soft" style="padding:4px 12px">월별</span><span class="ubtn primary" style="padding:4px 12px">분기</span><span style="display:inline-flex;gap:2px;background:#F1F5F9;border-radius:999px;padding:3px"><span class="ubtn" style="padding:3px 9px;color:#64748B">1Q</span><span class="ubtn" style="padding:3px 9px;color:#64748B">2Q</span><span class="ubtn" style="padding:3px 9px;background:#fff;color:#0f172a">3Q</span><span class="ubtn" style="padding:3px 9px;color:#64748B">4Q</span></span></div>
+    <div class="wcard" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="ubtn on" style="padding:4px 12px">전체</span><span class="ubtn soft" style="padding:4px 12px">성장노트</span><span class="ubtn soft" style="padding:4px 12px">배운 점</span><span class="ubtn soft" style="padding:4px 12px">아이디어</span><span class="ubtn soft" style="padding:4px 12px">특이사항</span><span class="spacer"></span><span class="ubtn ghost" style="padding:4px 12px">성장노트 모음</span><span class="ubtn ghost" style="padding:4px 12px">배운점 모음</span><span class="field" style="min-width:180px">내용 또는 직원 검색</span></div>
+    <div class="stats" style="margin-top:8px;grid-template-columns:repeat(7,1fr)">
+      <div class="stat"><div class="v">31개</div><div class="l">총 기록</div></div><div class="stat"><div class="v">6명</div><div class="l">참여 인원</div></div><div class="stat"><div class="v">14건</div><div class="l">기록 주차</div></div><div class="stat"><div class="v">11개</div><div class="l">성장노트</div></div><div class="stat"><div class="v">9개</div><div class="l">배운 점</div></div><div class="stat"><div class="v">6개</div><div class="l">아이디어</div></div><div class="stat"><div class="v">5개</div><div class="l">특이사항</div></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>조작</th><th>무슨 일이</th></tr></thead><tbody>
+    <tr><td><b>월별 / 분기</b></td><td>월별을 누르면 월 선택칸(1월~12월), 분기를 누르면 1Q~4Q. 처음엔 이번 분기.</td></tr>
+    <tr><td><b>유형 칩</b> 전체 · 성장노트 · 배운 점 · 아이디어 · 특이사항</td><td>"전체"는 사람·주차별 묶음 목록, 특정 유형은 그 유형만 <b>표</b>로(아래 참고). 그 유형이 빈 주차는 목록에서 빠집니다.</td></tr>
+    <tr><td><b>검색칸</b> "내용 또는 직원 검색"</td><td>작성자 이름·주차 날짜·네 유형 본문 전체에서 글자 포함 검색. 대소문자 무시.</td></tr>
+    <tr><td><b>통계 7칸</b></td><td>지금 걸러진 결과 기준. 총 기록=네 유형 채운 칸 수 합, 참여 인원=사람 수, 기록 주차=사람×주차 줄 수, 나머지는 유형별 개수.</td></tr>
+  </tbody></table>
+
+  <h3 id="r-list">목록과 표</h3>
+  <div class="shot ui"><span class="cap">화면 재현 · 유형 "전체"</span>
+    <div class="list">
+      <div class="li"><span><span class="t" style="font-size:13px">8/17~8/21 · 3주차 <span style="color:#94A3B8">·</span> 홍길동</span><br><span style="font-size:10.5px;color:#94A3B8;font-weight:700">기록 3개</span></span><span class="m" style="display:inline-flex;gap:6px"><span class="ubtn ghost" style="padding:3px 9px;font-size:10.5px">주간현황판 ↗</span><span class="ubtn soft" style="padding:3px 9px;font-size:10.5px">펼치기</span></span></div>
+      <div class="li" style="background:#F8FAFC;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="wcard"><div style="font-size:10.5px;font-weight:900;color:#64748B">성장노트</div><div style="margin-top:4px;white-space:pre-wrap;font-size:12px">상황: 급한 AS인데 부품이 없어 재방문
+문제점: 출발 전 재고 미확인
+개선해야 할 점: 일정 확인 때 부품 체크
+실행: 아침 스케줄에 재고 점검 추가</div></div>
+        <div class="wcard"><div style="font-size:10.5px;font-weight:900;color:#64748B">배운 점</div><div style="margin-top:4px;font-size:12px">8/19 삼성 MX3 전사롤러 교체 순서 이대리 30분</div></div>
+      </div>
+      <div class="li"><span><span class="t" style="font-size:13px">8/17~8/21 · 3주차 <span style="color:#94A3B8">·</span> 김민수</span><br><span style="font-size:10.5px;color:#94A3B8;font-weight:700">기록 1개</span></span><span class="m" style="display:inline-flex;gap:6px"><span class="ubtn ghost" style="padding:3px 9px;font-size:10.5px">주간현황판 ↗</span><span class="ubtn soft" style="padding:3px 9px;font-size:10.5px">펼치기</span></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>줄 제목</b> — "8/17~8/21 · 3주차 · 이름" (월~금 날짜, 그 달의 몇 번째 주). 아래 "기록 N개"는 채운 유형 수. 최신 주차가 위, 같은 주차면 이름순.</div></div>
+    <div class="item"><span class="num">•</span><div><b>[펼치기]/[접기]</b> — 그 주차에 채운 유형만 카드로 펼쳐 보입니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>[주간현황판 ↗]</b> — 주간현황판 화면으로 넘어가며 <b>그 주차</b>가 자동 선택됩니다. 다른 사람 줄이면 그 사람 기록을 읽기 전용으로 보게 됩니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>빈 상태</b> — "선택한 기간의 성장기록이 없습니다."</div></div>
+  </div>
+  <p>유형을 하나 고르면 표로 바뀝니다. 열은 유형마다 다릅니다:</p>
+  <table class="tbl"><thead><tr><th>유형</th><th>표의 열 (주차 · 작성자 뒤에)</th><th>어떻게 나누나</th></tr></thead><tbody>
+    <tr><td><b>성장노트</b></td><td>상황 · 문제점 · 개선해야 할 점 · 실행</td><td>본문에서 "상황:" "문제점:" 같은 머리말을 찾아 나눕니다. 머리말이 하나도 없으면 전부 "상황" 칸에.</td></tr>
+    <tr><td><b>배운 점</b></td><td>날짜 · 브랜드 · 기종 · 배운 점 · 교육자 · 소요시간</td><td>주간현황판 행 편집기로 적은 <b>첫 줄</b>을 나눕니다. 띄어쓰기로 적었으면 "숫자+분/시간" 낱말을 소요시간으로 봅니다.</td></tr>
+    <tr><td><b>아이디어</b> · <b>특이사항</b></td><td>내용</td><td>본문 그대로.</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>휴대폰에서는</b>표 대신 카드로 같은 내용이 보이고, 주차 글자(파란색)를 누르면 [주간현황판 ↗]과 같습니다.</div>
+
+  <h3 id="r-gather">[성장노트 모음] · [배운점 모음] — 복사용 텍스트 만들기</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="mt" style="font-size:15px">성장노트 모음</div><div class="ms">확인 후 복사하거나 txt로 받을 수 있습니다.</div></div><span class="ubtn soft" style="padding:3px 9px;font-size:11px">닫기</span></div>
+        <textarea readonly style="min-height:150px;font-family:ui-monospace,monospace;font-size:11.5px;color:#334155">[8월 3주차]
+[상황]
+-급한 AS인데 부품이 없어 재방문
+[문제점]
+-출발 전 재고 미확인
+[개선해야 할 점]
+-일정 확인 때 부품 체크
+[실행]
+-아침 스케줄에 재고 점검 추가</textarea>
+        <div style="display:flex;justify-content:flex-end;gap:6px"><span class="ubtn ghost">txt 다운로드</span><span class="ubtn dark">복사</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>지금 걸러진 목록(기간·사람·검색 반영)을 대상으로 <b>[성장노트 모음]</b> 또는 <b>[배운점 모음]</b>을 누릅니다.</li>
+        <li>팝업에 정리된 글이 뜹니다. <b>팝업 안에서 직접 고칠 수 있습니다.</b></li>
+        <li><b>[복사]</b> → 파란 안내 "모음 내용을 복사했습니다." / <b>[txt 다운로드]</b> → "성장노트 모음_2026-3Q.txt"처럼 파일로 저장(월별이면 "_2026-08월").</li>
+        <li>모을 게 없으면 팝업 대신 파란 안내 "모을 성장노트가 없습니다." / "모을 배운 점이 없습니다."</li>
+      </ol>
+      <div class="box naver"><b>배운점 모음의 모양</b>모든 줄을 <b>브랜드별</b>로 묶고(브랜드 없으면 "기타"), 각 묶음 안에서 날짜순으로 정렬해 <code>날짜 ⇥ 브랜드 ⇥ 기종 ⇥ 배운 점 ⇥ 교육자 소요시간</code> 탭 구분으로 만듭니다 — 엑셀에 붙이면 열이 나뉩니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="plan">
+  <h2>3. 계획표 — 분기 목표를 표로</h2>
+  <p>제목은 "<b>2026년 3분기 계획표</b>", 설명은 "시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다." PC에서는 <b>기본업무 표</b>와 <b>미션업무 표</b>가 위아래로, 휴대폰에서는 카드로 보입니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현 · PC</span>
+    <div class="wcard" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#F8FAFC"><div><b style="font-size:14px;color:#0f172a">2026년 3분기 계획표</b><div style="font-size:10.5px;color:#94A3B8;font-weight:700">시트 양식처럼 기본업무와 미션업무를 한 행에서 함께 관리합니다.</div></div><span style="display:inline-flex;gap:6px"><span class="ubtn ghost">엑셀 붙여넣기</span><span class="ubtn primary">+ 기본업무</span><span class="ubtn amber">+ 미션업무</span></span></div>
+    <div style="margin-top:8px;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden"><div style="display:flex;justify-content:space-between;background:#EFF6FF;padding:6px 10px;font-size:11px;font-weight:900;color:#1E40AF">기본업무 (우선순위순)<span style="color:#1D4ED8;opacity:.7">2건</span></div>
+    <div style="overflow-x:auto"><table class="minitbl" style="border:0;border-radius:0"><thead><tr><th>구분</th><th>업무등급</th><th>목표</th><th>현재레벨</th><th>목표레벨</th><th>요청예산(분기)</th><th>예산반영</th><th>진도율</th><th></th></tr></thead><tbody>
+      <tr><td>매출증대 ▾</td><td>A ▾</td><td>재계약 대상 <span style="color:#dc2626;font-weight:900">30곳</span> 사전 방문<br><span class="dots"><i style="background:#0f172a"></i><i style="background:#dc2626"></i><i style="background:#2563eb"></i><i style="background:#059669"></i><i style="background:#d97706"></i><i style="background:#7c3aed"></i></span> <span style="font-size:9px;color:#94A3B8">드래그 후 색</span></td><td>12</td><td>30</td><td>0</td><td></td><td>40</td><td style="color:#CBD5E1">×</td></tr>
+      <tr><td>자기개발 ▾</td><td>C ▾</td><td>제록스 세이토 정착기 교체 단독 수행</td><td>1</td><td>3</td><td></td><td></td><td>20</td><td style="color:#CBD5E1">×</td></tr>
+    </tbody></table></div></div>
+    <div style="margin-top:8px;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden"><div style="display:flex;justify-content:space-between;background:#FFFBEB;padding:6px 10px;font-size:11px;font-weight:900;color:#92400E">미션업무<span style="opacity:.7">1건</span></div>
+    <div style="overflow-x:auto"><table class="minitbl" style="border:0;border-radius:0"><thead><tr><th>목표</th><th>업무등급</th><th>요청예산(분기)</th><th>예산반영</th><th>진도율</th><th></th></tr></thead><tbody>
+      <tr><td>점검 사진 아카이브 폴더 규칙 정리</td><td>B ▾</td><td></td><td></td><td>60</td><td style="color:#CBD5E1">×</td></tr>
+    </tbody></table></div></div>
+    <div class="wcard" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 24px rgba(15,23,42,.1)"><span style="font-size:10.5px;font-weight:700;color:#94A3B8">자동저장됨</span><span class="ubtn primary">지금 저장</span></div>
+  </div>
+
+  <h3 id="p-add">기본업무 · 미션업무 추가</h3>
+  <ol class="steps">
+    <li><b>[+ 기본업무]</b> → 표에 빈 줄이 하나 생깁니다(구분 "자기개발", 등급 "C"로 시작). <b>[+ 미션업무]</b> → 미션업무 표에 빈 줄. 사람이 선택되지 않았으면 두 버튼 모두 흐리게 잠깁니다.</li>
+    <li><b>기본업무 열</b>: 구분(AI · 자기개발 · 매출증대 · 매출안정 · 효율성 · 비용절감 · 소통 · 기타) · 업무등급(A~D, "-"는 미정) · 목표(색칠 가능 글상자) · 현재레벨 · 목표레벨 · 요청예산(분기) · 예산반영 · 진도율(숫자, %) · <b>×</b>(줄 삭제 — 확인 없이 바로 지워지니 주의).</li>
+    <li><b>미션업무 열</b>: 목표 · 업무등급 · 요청예산(분기) · 예산반영 · 진도율 · ×. 구분은 항상 "미션"으로 고정.</li>
+    <li>빈 표에는 "기본업무 없음 — 위 "+ 기본업무"로 추가하세요" / "미션업무 없음 — 위 "+ 미션업무"로 추가하세요"가 보입니다.</li>
+    <li>맨 아래 떠 있는 띠: 저장 상태 글자와 <b>[지금 저장]</b>. 저장되면 파란 안내 <b>"레벨업계획을 저장했습니다."</b></li>
+  </ol>
+
+  <h3 id="p-color">목표 글자 색칠 — "드래그 후 색"</h3>
+  <p>목표 칸은 일반 입력칸이 아니라 <b>글자 일부에 색을 입힐 수 있는 상자</b>입니다. 칸 아래 작은 동그라미 6개가 색입니다: <span class="dots"><i style="background:#0f172a"></i></span> 기본 · <span class="dots"><i style="background:#dc2626"></i></span> 빨강 · <span class="dots"><i style="background:#2563eb"></i></span> 파랑 · <span class="dots"><i style="background:#059669"></i></span> 초록 · <span class="dots"><i style="background:#d97706"></i></span> 주황 · <span class="dots"><i style="background:#7c3aed"></i></span> 보라.</p>
+  <ol class="steps">
+    <li>목표 칸에 글을 적습니다. <span class="kbd">Enter</span>로 줄을 바꿀 수 있습니다.</li>
+    <li>강조할 글자를 <b>마우스로 드래그</b>해 선택합니다.</li>
+    <li>아래 동그라미 중 하나를 누르면 그 글자만 색이 바뀝니다. 되돌리려면 다시 선택 후 "기본".</li>
+  </ol>
+  <div class="box tip"><b>색은 결과표에도 그대로</b>계획표에서 칠한 색이 분기결과표·미션결과표의 목표 칸에도 같은 모양으로 보입니다. 월별 결과 칸도 같은 방식으로 색칠할 수 있습니다.</div>
+
+  <h3 id="p-paste">엑셀 붙여넣기 — 여러 셀 한 번에</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:480px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>엑셀 붙여넣기 — 여러 셀 한 번에</b><span class="ubtn soft" style="padding:3px 9px;font-size:11px">닫기</span></div>
+        <div class="ms">엑셀/시트에서 목표 범위를 복사해 아래에 붙여넣으세요. 열 역할은 자동 추정되며 직접 바꿀 수 있습니다.</div>
+        <textarea readonly style="min-height:56px;font-family:ui-monospace,monospace;font-size:11px">엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)</textarea>
+        <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px"><table class="minitbl" style="border:0"><thead><tr><th><span class="field" style="padding:1px 5px;font-size:10px;color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF">구분</span></th><th><span class="field" style="padding:1px 5px;font-size:10px;color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF">등급</span></th><th><span class="field" style="padding:1px 5px;font-size:10px;color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF">목표</span></th><th><span class="field" style="padding:1px 5px;font-size:10px;color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF">현재레벨</span></th><th><span class="field" style="padding:1px 5px;font-size:10px;color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF">목표레벨</span></th><th><span class="field" style="padding:1px 5px;font-size:10px;color:#94A3B8">무시</span></th></tr></thead><tbody>
+          <tr><td>매출증대</td><td>A</td><td>재계약 대상 30곳…</td><td>12</td><td>30</td><td>비고</td></tr>
+          <tr><td>효율성</td><td>B</td><td>점검 동선 최적화</td><td>2</td><td>4</td><td></td></tr>
+        </tbody></table></div>
+        <div style="font-size:10px;color:#94A3B8;font-weight:900">외 3행 — 총 5행 가져옵니다</div>
+        <div style="display:flex;justify-content:flex-end;gap:6px"><span class="ubtn primary">기본업무로 추가</span><span class="ubtn amber">미션업무로 추가</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>엑셀·구글시트에서 목표가 있는 범위를 복사(<span class="kbd">Ctrl</span>+<span class="kbd">C</span>)합니다. 셀 안 줄바꿈이 있어도 한 줄로 잘 들어옵니다.</li>
+        <li><b>[엑셀 붙여넣기]</b> → 팝업의 큰 칸에 <span class="kbd">Ctrl</span>+<span class="kbd">V</span>.</li>
+        <li>표 위에 열마다 <b>역할 선택</b>이 뜹니다: 무시 · 구분 · 등급 · 목표 · 현재레벨 · 목표레벨 · 요청예산 · 예산반영 · 1개월차 · 2개월차 · 3개월차. 자동 추정 규칙 — 값이 전부 구분 이름(AI·자기개발…·미션)이면 "구분", 전부 A~D면 "등급", 글이 가장 긴 열이 "목표", 그 뒤 숫자만 있는 열 두 개가 "현재레벨"·"목표레벨". 파란 칸이 인식된 열, 회색 "무시"는 안 가져오는 열. 틀렸으면 직접 바꾸세요.</li>
+        <li>미리보기는 5행까지, 그 아래 "외 N행 — 총 N행 가져옵니다".</li>
+        <li><b>[기본업무로 추가]</b> 또는 <b>[미션업무로 추가]</b> → 파란 안내 "<b>N개 목표를 추가했습니다. 확인 후 저장을 눌러주세요.</b>" 기존 줄은 그대로 두고 뒤에 붙습니다.</li>
+      </ol>
+      <div class="box warn"><b>이런 안내가 뜨면</b>"어느 열이 '목표'인지 선택해 주세요." → 목표 역할을 고른 열이 없음. "가져올 목표를 찾지 못했습니다. 열 역할을 확인해 주세요." → 목표 열이 전부 비었거나 머리글("목표")만 있음. 구분 열이 비어 있는 줄은 <b>바로 위 줄의 구분</b>을 따라가고, 그것도 없으면 "자기개발"이 됩니다. 구분이 "미션"인 줄은 기본업무로 추가해도 미션업무로 들어갑니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="result">
+  <h2>4. 분기결과표 — 기본업무의 월별 결과</h2>
+  <p>제목 "<b>2026년 3분기 결과표</b>", 설명 "목표별 월간 결과를 기록합니다. 수치와 진행률 %는 반드시 남기세요." 계획표의 <b>기본업무</b>가 한 줄씩 그대로 내려오고, 여기서는 <b>월별 결과 칸</b>만 채웁니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현 · PC</span>
+    <div style="overflow-x:auto"><table class="minitbl"><thead><tr><th>구분</th><th>목표</th><th>등급</th><th>현재</th><th>목표</th><th>진도율</th><th>셀</th><th>7월</th><th>8월</th><th>9월</th></tr></thead><tbody>
+      <tr><td style="font-weight:900;color:#0f172a">매출증대</td><td>재계약 대상 <span style="color:#dc2626;font-weight:900">30곳</span> 사전 방문</td><td>A</td><td>12</td><td>30</td><td><span class="wtag blue" style="font-size:10px">40%</span></td><td><span class="ubtn ghost" style="padding:2px 8px;font-size:10px">합치기</span></td><td><div class="field" style="min-height:70px">방문 8곳<br>연장 의사 5곳</div></td><td><div class="field" style="min-height:70px">방문 4곳<br>계약 2건</div></td><td><div class="field" style="min-height:70px"></div></td></tr>
+      <tr><td style="font-weight:900;color:#0f172a">자기개발</td><td>제록스 세이토 정착기 교체 단독 수행</td><td>C</td><td>1</td><td>3</td><td><span class="wtag blue" style="font-size:10px">20%</span></td><td><span class="ubtn ghost" style="padding:2px 8px;font-size:10px">나누기</span></td><td colspan="3"><div class="field" style="min-height:70px">7~9월 통합: 8/12 이대리 동행 1회, 단독 수행은 9월 예정</div></td></tr>
+    </tbody></table></div>
+  </div>
+  <table class="tbl"><thead><tr><th>열</th><th>어디서 오나 / 무엇을 하나</th></tr></thead><tbody>
+    <tr><td>구분 · 목표 · 등급 · 현재 · 목표 · 진도율</td><td>계획표 값이 <b>읽기 전용</b>으로 보입니다(색칠도 그대로). 고치려면 계획표 탭에서.</td></tr>
+    <tr><td><b>셀</b> — [합치기] / [나누기]</td><td>기본은 7월·8월·9월 세 칸. <b>[합치기]</b>를 누르면 세 칸이 하나로 합쳐져 분기 전체를 한 칸에 적습니다(합친 내용은 첫 달 칸에 저장). <b>[나누기]</b>로 다시 셋으로. 휴대폰에서는 "분기 통합" / "월별 나누기".</td></tr>
+    <tr><td><b>7월 · 8월 · 9월</b></td><td>분기에 맞는 달 이름이 자동으로 붙습니다(1Q면 1·2·3월). 색칠 가능한 글상자 — 계획표 목표 칸과 같은 방식.</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>비어 있으면</b>"계획표에서 목표를 먼저 추가하세요." — 결과표는 스스로 줄을 만들지 않습니다. 저장 상태는 오른쪽 위 회색 배지("자동저장 대기" 등)에 보이며, 여기엔 [지금 저장] 버튼이 없고 자동 저장만 됩니다.</div>
+</section>
+
+<section id="mission">
+  <h2>5. 미션결과표 — 미션업무의 월별 결과</h2>
+  <p>제목 "<b>2026년 3분기 미션결과표</b>", 설명 "미션별 기존 방식·개선 방식·소요시간·진행률을 기록합니다." 계획표의 <b>미션업무</b>가 카드 한 장씩(왼쪽 노란 띠) 내려옵니다. 여기서는 목표도 함께 고칠 수 있습니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="wcard" style="display:flex;justify-content:space-between;align-items:center;background:#F8FAFC"><div><b style="font-size:14px;color:#0f172a">2026년 3분기 미션결과표</b><div style="font-size:10.5px;color:#94A3B8;font-weight:700">미션별 기존 방식·개선 방식·소요시간·진행률을 기록합니다.</div></div><span class="ubtn amber">+ 미션 추가</span></div>
+    <div class="wcard" style="margin-top:8px;border-left:4px solid #FBBF24;background:#F8FAFC">
+      <div style="display:grid;grid-template-columns:32px 1fr 60px 60px 60px 70px 20px;gap:6px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#94A3B8;box-shadow:0 1px 3px rgba(0,0,0,.08)">1</span><span class="field">점검 사진 아카이브 폴더 규칙 정리</span><span class="field">B ▾</span><span class="field">현재</span><span class="field">목표</span><span class="field">60</span><span style="color:#CBD5E1;font-weight:900">×</span></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px"><span class="ubtn ghost" style="padding:3px 10px;font-size:11px">합치기</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;font-size:10.5px;font-weight:900;color:#64748B"><div>7월 미션 결과<div class="field" style="min-height:60px;margin-top:3px;font-weight:400">기존: 직원별 폴더 제각각</div></div><div>8월 미션 결과<div class="field" style="min-height:60px;margin-top:3px;font-weight:400">개선: 업체명/연월 규칙 확정</div></div><div>9월 미션 결과<div class="field" style="min-height:60px;margin-top:3px"></div></div></div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li><b>[+ 미션 추가]</b> — 계획표의 [+ 미션업무]와 같은 동작(같은 저장소). 사람 미선택 시 잠김.</li>
+    <li>카드 첫 줄: 번호 · 목표(색칠 글상자) · 등급(A~D) · 현재 · 목표 · 진도%(숫자) · <b>×</b>(삭제, 확인 없음).</li>
+    <li><b>[합치기]</b>를 누르면 "7~9월 미션 결과" 한 칸, <b>[나누기]</b>로 다시 월별 세 칸.</li>
+    <li>비어 있으면 점선 상자 "미션을 추가하세요." 맨 아래 띠의 <b>[지금 저장]</b> → "레벨업계획을 저장했습니다."(계획표와 한 장이라 문구가 같음).</li>
+  </ol>
+</section>
+
+<section id="golden">
+  <h2>6. 골든미팅카드 — 분기 마무리</h2>
+  <p>제목 "<b>2026년 3분기 골든미팅카드</b>", 설명 "선택 분기의 계획표·분기결과표·미션결과표를 근거로 작성하세요." <b>질문 4개 × 분야 6개 = 24칸</b>을 채우는 표입니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="wcard" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#F8FAFC"><div><b style="font-size:14px;color:#0f172a">2026년 3분기 골든미팅카드</b><div style="font-size:10.5px;color:#94A3B8;font-weight:700">선택 분기의 계획표·분기결과표·미션결과표를 근거로 작성하세요.</div></div><span class="ubtn ghost">최신분기 AI변환</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px"><span class="qtab on">지난 기간 나의 성과</span><span class="qtab">타인의 성과에 내가 기여한 것</span><span class="qtab">성장을 위한 학습·발견한 지식</span><span class="qtab">다음 도전을 위한 지원 요청</span></div>
+    <div class="wcard" style="margin-top:8px"><b style="font-size:14px;color:#0f172a">지난 기간 나의 성과</b>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:10.5px;font-weight:900;color:#64748B">
+        <div>매출증대/안정<div class="field" style="min-height:64px;margin-top:3px;font-weight:400">재계약 대상 12곳 사전 방문, 7곳 연장 의사 확인</div></div>
+        <div>효율성<div class="field" style="min-height:64px;margin-top:3px;font-weight:400">점검 동선을 지역별로 묶어 이동 30분 단축</div></div>
+        <div>비용절감<div class="field" style="min-height:64px;margin-top:3px"></div></div>
+        <div>자기개발<div class="field" style="min-height:64px;margin-top:3px;font-weight:400">세이토 정착기 교체 동행 1회</div></div>
+        <div>소통<div class="field" style="min-height:64px;margin-top:3px"></div></div>
+        <div>AI<div class="field" style="min-height:64px;margin-top:3px"></div></div>
+      </div>
+    </div>
+    <div class="wcard" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 24px rgba(15,23,42,.1)"><span style="font-size:10.5px;font-weight:700;color:#94A3B8">자동저장됨</span><span class="ubtn primary">지금 저장</span></div>
+  </div>
+  <ol class="steps">
+    <li>위쪽 <b>질문 버튼 4개</b> 중 하나를 누릅니다(눌린 것만 검게). 아래 큰 제목이 그 질문으로 바뀌고 분야 6칸이 나옵니다.</li>
+    <li>분야 — <b>매출증대/안정 · 효율성 · 비용절감 · 자기개발 · 소통 · AI</b>. 각 칸은 여러 줄 글상자. 해당 없는 칸은 비워 두면 됩니다.</li>
+    <li>질문을 바꿔 가며 24칸을 채웁니다. 저장은 자동(0.7초), 맨 아래 <b>[지금 저장]</b> → "골든미팅카드를 저장했습니다."</li>
+  </ol>
+
+  <h3 id="g-ai">[최신분기 AI변환] — 초안을 AI가 채워 줍니다</h3>
+  <div class="flow">
+    <div class="node"><div class="dot">1</div><div class="body"><b>[최신분기 AI변환]</b>을 누르면 버튼이 "<b>AI 변환 중…</b>"으로 바뀌고 잠깁니다. 사람이 선택돼 있지 않으면 파란 안내 "작성자를 먼저 선택하세요."</div></div>
+    <div class="node"><div class="dot">2</div><div class="body"><b>재료를 모읍니다</b> — ① 이 분기 계획표의 기본업무(구분·목표·등급·현재·목표·진도율·월별 결과) ② 미션업무 같은 내용 ③ 이 분기 <b>주간현황판 기록</b>(성장노트·배운 점·아이디어·특이사항, 주차별, 최대 12,000자) ④ <b>지난 분기 골든미팅카드</b>(글투 예시로) ⑤ 지금 칸에 적혀 있는 내용.</div></div>
+    <div class="node"><div class="dot">3</div><div class="body"><b>AI 서버가 24칸을 채운 답을 돌려주면</b> 화면의 칸이 전부 그 내용으로 <b>바뀝니다</b>(기존 글은 덮어써짐 — 미리 복사해 두세요). 파란 안내 "<b>골든미팅카드를 AI로 변환했습니다. 사용 모델: ○○</b>". 이후 자동 저장.</div></div>
+    <div class="node"><div class="dot">4</div><div class="body"><b>실패하면</b> "골든미팅카드 AI 변환 실패(상태코드)" 또는 "AI 응답에 answers가 없습니다." — 칸은 그대로 두고 잠시 후 다시 시도하세요. 주간 기록 조회가 실패해도 변환 자체는 진행됩니다.</div></div>
+  </div>
+  <div class="box tip"><b>AI가 잘 쓰게 하려면</b>계획표 진도율과 월별 결과 칸에 숫자를 남기고, 매주 주간현황판 성장노트를 "상황/문제점/개선/실행" 형식으로 적어 두세요. 그게 그대로 AI의 재료가 됩니다.</div>
+</section>
+
+<section id="save">
+  <h2>7. 저장은 어떻게 되나 — 배지 읽기</h2>
+  <table class="tbl"><thead><tr><th>배지 글자</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><b>자동저장 대기</b></td><td>바뀐 게 없거나 방금 불러온 상태.</td></tr>
+    <tr><td><b>자동저장 중...</b></td><td>타이핑을 멈춘 뒤 0.7초 기다리는 중, 또는 서버로 보내는 중.</td></tr>
+    <tr><td><b>자동저장됨</b></td><td>서버에 들어갔음. 화면을 떠나도 됩니다.</td></tr>
+    <tr><td><b>자동저장 실패</b></td><td>서버 오류. 위쪽 파란 안내에 이유가 함께 뜹니다. [지금 저장]을 다시 누르거나 잠시 후 재시도.</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box naver"><b>계획표·분기결과표·미션결과표는 한 장</b>셋은 같은 저장소의 같은 장(사람·연도·분기)을 다른 모양으로 보여줍니다. 어느 탭에서 저장해도 셋 다 반영되고, 배지도 하나(planAutoSave)를 함께 봅니다.</div>
+    <div class="box naver"><b>골든미팅카드는 따로 한 장</b>같은 사람·연도·분기 기준이지만 별도 저장소(golden_cards)이고 배지도 따로입니다.</div>
+  </div>
+  <div class="box warn"><b>연도·분기·사람을 바꾸면</b>그 조합의 장을 새로 불러옵니다. 바꾸기 직전 대기 중이던 0.7초 자동 저장은 취소되니, 배지가 "자동저장됨"인지 보고 바꾸세요. 급하면 [지금 저장].</div>
+</section>
+
+<section id="faq">
+  <h2>8. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>모아보기에 내 기록이 안 보여요</summary><p>① 조회 범위(월별/분기)와 연도가 그 주차를 포함하는지 ② 직원 선택이 내 이름인지 ③ 유형 칩이 "전체"인지 확인하세요. 네 유형이 모두 빈 주차는 목록에 안 나옵니다(목표 숫자·병목만 적은 주차는 여기 안 보임).</p></details>
+    <details><summary>성장노트 표의 칸이 전부 "상황"에 몰려 있어요</summary><p>본문에 "상황:" "문제점:" "개선해야 할 점:" "실행:" 머리말이 없으면 나누지 못해 전부 첫 칸에 넣습니다. 주간현황판에서 [틀 추가] 또는 [✨ AI변환]으로 형식을 맞춰 주세요.</p></details>
+    <details><summary>[+ 기본업무]가 눌리지 않아요</summary><p>상단 직원 선택이 "전체 직원"입니다. 본인 이름을 고르세요. 표 위에 "작성자 직원을 선택하세요."가 보이는 게 그 신호입니다.</p></details>
+    <details><summary>×를 눌렀는데 확인도 없이 지워졌어요</summary><p>계획표·결과표의 ×는 확인 창 없이 바로 지웁니다. 자동 저장 전(0.7초 안)이면 새로고침으로 되돌릴 수 있지만 그 뒤엔 다시 적어야 합니다. 신중히 누르세요.</p></details>
+    <details><summary>엑셀 붙여넣기에서 열 역할이 엉뚱하게 잡혔어요</summary><p>표 머리의 선택칸을 직접 바꾸면 됩니다. 목표 열은 "글이 가장 긴 열"로 추정하므로, 비고 열이 더 길면 그쪽이 목표로 잡힐 수 있습니다.</p></details>
+    <details><summary>AI변환을 눌렀더니 제가 쓴 내용이 사라졌어요</summary><p>AI 결과가 24칸을 통째로 덮어씁니다. 되돌리기 기능은 없으니, 직접 쓴 내용이 있으면 변환 전에 복사해 두세요.</p></details>
+    <details><summary>골든미팅카드 질문이 4개뿐인데 더 있지 않나요</summary><p>현재 화면은 4문항(지난 기간 나의 성과 · 타인의 성과에 내가 기여한 것 · 성장을 위한 학습·발견한 지식 · 다음 도전을 위한 지원 요청)입니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">성장기록 길잡이 · 함께 보기 <a href="weekly.html">주간현황판·일일방문일지</a> · <a href="schedule.html">일정리스트</a></p>
+</main>
+</div>
+</body>
+</html>

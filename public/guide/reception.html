@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>서비스접수 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border:0;border-radius:18px;padding:20px 18px 17px;color:#fff;display:grid;gap:5px;min-height:132px;align-content:center;text-align:left;box-shadow:0 12px 30px rgba(15,23,42,.14)}
+.impact .stat.blue{background:linear-gradient(135deg,#1E3A8A,#2563EB)} .impact .stat.green{background:linear-gradient(135deg,#065F46,#047857)} .impact .stat.purple{background:linear-gradient(135deg,#581C87,#7E22CE)} .impact .stat.amber{background:linear-gradient(135deg,#78350F,#B45309)}
+.impact .stat .lbl{font-size:12px;font-weight:900;opacity:.95;letter-spacing:.03em}
+.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.68;font-size:22px;text-decoration-thickness:2px}
+.impact .stat .big em{font-style:normal}
+.impact .stat .sub{font-size:12px;font-weight:700;opacity:.95}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.ba + .ba{margin-top:2px}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--dark);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media(max-width:700px){.impact{grid-template-columns:1fr}.impact .stat{min-height:0}.ba{grid-template-columns:1fr}.ba-arrow{transform:rotate(90deg);padding:4px 0}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ba-card.new .ba-title,:root:not([data-theme="light"]) .ba-card.new .ba-count{color:#93C5FD}}
+:root[data-theme="dark"] .ba-card.new .ba-title,:root[data-theme="dark"] .ba-card.new .ba-count{color:#93C5FD}
+@media print{.impact{grid-template-columns:repeat(2,minmax(0,1fr))}.impact .stat{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none;break-inside:avoid}.ba{grid-template-columns:1fr auto 1fr;break-inside:avoid}.ba-arrow{transform:none}.ba-card.new{box-shadow:none}}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 폼·탭·목록·달력·카드 모형 ── */
+.sect{background:#1E252F;color:#fff;border-radius:12px 12px 0 0;padding:10px 14px;display:flex;align-items:center;gap:10px;font-weight:900;font-size:13px}
+.sect .no{width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.sect small{display:block;font-weight:600;color:#94A3B8;font-size:11px}
+.sect .hstat{margin-left:auto;border-radius:999px;padding:3px 10px;font-size:11px;background:rgba(255,255,255,.1);color:#CBD5E1;white-space:nowrap}
+.sect .hstat.ok{background:rgba(52,211,153,.15);color:#6EE7B7}
+.panel{background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 12px 12px;padding:12px 14px;display:grid;gap:10px}
+.panel.top{border-top:1px solid #E2E8F0;border-radius:12px}
+.fld{display:grid;gap:3px;font-size:11px;font-weight:900;color:#64748B}
+.fld .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:#0f172a;background:#fff;min-height:36px}
+.fld .in.ph{color:#94A3B8}
+.fld .in.err{border-color:#FCA5A5;background:#FFF5F6}
+.fgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.seg{display:inline-flex;background:#F1F5F9;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg span{border-radius:999px;padding:5px 12px;font-size:12px;font-weight:900;color:#64748B}
+.seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg.ink{background:#fff;border:1px solid #E2E8F0}.seg.ink span.on{background:#0f172a;color:#fff}
+.lchip{display:inline-block;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;border:1px solid #E2E8F0;background:#fff;color:#64748B;white-space:nowrap}
+.lchip.on{background:#2563EB;color:#fff;border-color:#2563EB}
+.lchip.dark{background:#0f172a;color:#fff;border-color:#0f172a}
+.lchip.gray{background:#F1F5F9;border-color:#F1F5F9}
+.lchip.ok{background:#ECFDF5;color:#059669;border-color:#ECFDF5}.lchip.miss{background:#FFF1F2;color:#F43F5E;border-color:#FFF1F2}
+.lchip.amb{background:#FEF3C7;color:#92400E;border-color:#FEF3C7}
+.tabs{display:flex;border-bottom:1px solid #E2E8F0;background:#fff;border-radius:12px 12px 0 0;overflow:hidden}
+.tabs span{flex:1;text-align:center;padding:11px 8px;font-size:13px;font-weight:900;color:#94A3B8;position:relative;white-space:nowrap}
+.tabs span.on{color:#0f172a}.tabs span.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:#2563EB}
+.tabs .cnt{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F1F5F9;color:#94A3B8}
+.tabs span.on .cnt{background:#2563EB;color:#fff}
+.tabs .rb{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F43F5E;color:#fff}
+.bbtn{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.bbtn.pri{background:#2563EB;color:#fff}.bbtn.line{background:#fff;color:#64748B;border-color:#CBD5E1}.bbtn.ink{background:#fff;color:#1E293B;border-color:#94A3B8}
+.bbtn.green{background:#fff;color:#047857;border-color:#6EE7B7}.bbtn.amber{background:#fff;color:#B45309;border-color:#FCD34D}.bbtn.dark{background:#0f172a;color:#fff}
+.bbtn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3}.bbtn.blue{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}.bbtn.emer{background:#059669;color:#fff}
+.bbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}.bbtn.dis{opacity:.4}.bbtn.ghost{background:rgba(255,255,255,.1);color:#E2E8F0}
+.row-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #F1F5F9;background:#fff;font-size:12px}
+.row-item .tm{text-align:center;font-weight:900;color:#0f172a}
+.row-item .ty{display:block;margin-top:3px;border-radius:4px;padding:1px 4px;font-size:9px;font-weight:900;background:#DBEAFE;color:#1D4ED8}
+.row-item .ty.it{background:#CFFAFE;color:#0E7490}.row-item .ty.rm{background:#EDE9FE;color:#6D28D9}
+.row-item b{display:block;font-size:14px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .sub{display:block;color:#475569;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .meta{display:block;color:#94A3B8;font-weight:700;font-size:11px}
+.st{border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+.st.recv{background:#FFE4E6;color:#BE123C}.st.prog{background:#FEF3C7;color:#92400E}.st.done{background:#E2E8F0;color:#64748B}
+.detail{background:#F8FAFC;border-top:1px solid #F1F5F9;padding:10px 12px;font-size:11px;color:#475569;display:grid;gap:6px;font-weight:600}
+.detail .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;font-size:11px}
+.cal .dh{padding:6px 0;text-align:center;font-weight:900;color:#64748B;background:#F8FAFC;border-bottom:1px solid #E2E8F0}
+.cal .dh.sun{color:#F43F5E;background:#FFF1F2}.cal .dh.sat{color:#3B82F6;background:#EFF6FF}
+.cal .d{min-height:78px;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;padding:5px;display:grid;gap:3px;align-content:start;min-width:0}
+.cal .d.out{background:#F8FAFC}.cal .d .n{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#334155;font-size:11px}
+.cal .d .n.today{background:#2563EB;color:#fff}.cal .d .n.sun{color:#F43F5E}.cal .d .n.sat{color:#2563EB}.cal .d.out .n{color:#CBD5E1}
+.evt{border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.evt.lime{background:#ECFCCB;color:#3F6212}.evt.blue{background:#DBEAFE;color:#1D4ED8;text-decoration:line-through}.evt.rose{background:#FFE4E6;color:#BE123C}.evt.amber{background:#FEF3C7;color:#92400E}
+.evt.n{border:1px solid #D9F99D;background:#F7FEE7;color:#3F6212}.evt.n.rose{border-color:#FECDD3;background:#FFE4E6;color:#BE123C}.evt.n.done{border-color:#E2E8F0;background:#F8FAFC;color:#94A3B8;text-decoration:line-through}
+.evt.tc{background:#DBEAFE;color:#1E40AF;text-decoration:none}
+.evt.more{color:#64748B;text-decoration:underline dotted;background:transparent;padding-left:2px}
+.side{background:#1E252F;border-radius:12px;padding:12px;display:grid;gap:8px;color:#fff;align-content:start}
+.side .spill{border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;background:rgba(255,255,255,.1);color:#CBD5E1;display:flex;align-items:center;gap:6px}
+.side .spill.on{background:#fff;color:#0f172a}
+.dot8{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.side .lab{font-size:10px;font-weight:900;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;margin-top:6px}
+.side .sin{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:8px;padding:7px 10px;font-size:12px;color:#94A3B8}
+.side .sel{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;color:#fff;display:flex;justify-content:space-between}
+.calhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-bottom:0;border-radius:12px 12px 0 0;padding:9px 12px;font-size:12px}
+.calhead .mon{font-weight:900;font-size:15px;color:#0f172a}
+.calhead .rnd{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#64748B;font-weight:900}
+.hcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
+.hcard .ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;flex:none}
+.hcard b{display:block;font-size:13px;color:#0f172a}.hcard small{display:block;font-size:11px;color:#64748B;font-weight:600}
+.hero-mock{background:#0f172a;border-radius:12px;padding:22px 20px;color:#fff;display:grid;gap:8px}
+.hero-mock .h{font-size:20px;font-weight:900;line-height:1.25}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#E2E8F0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden}
+@media(min-width:700px){.grid4{grid-template-columns:repeat(4,1fr)}}
+.grid4 div{background:#fff;padding:12px}.grid4 b{display:block;font-size:16px;color:#0f172a}.grid4 small{font-size:11px;color:#64748B;font-weight:700}
+.dark-card{background:#0f172a;border-radius:12px;padding:14px;color:#E2E8F0;display:grid;gap:8px;font-size:12px}
+.dark-card .tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;background:rgba(255,255,255,.1)}
+.dark-card .tag.new{background:#F43F5E;color:#fff;border-radius:999px}
+.nrow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid #F8FAFC;background:#fff;font-size:12.5px}
+.nrow .dotu{width:6px;height:6px;border-radius:50%;background:#F43F5E;flex:none}.nrow .dotu.read{background:transparent}
+.cat{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.cat.norm{background:#F1F5F9;color:#64748B}.cat.urg{background:#FFF1F2;color:#E11D48}.cat.hr{background:#FFFBEB;color:#B45309}.cat.sys{background:#EFF6FF;color:#1D4ED8}
+.nrow .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900;color:#0f172a}
+.nrow .tt.read{font-weight:700;color:#64748B}
+.tgt{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.tgt.all{background:#EFF6FF;color:#2563EB}.tgt.team{background:#F5F3FF;color:#7C3AED}.tgt.me{background:#D1FAE5;color:#065F46;box-shadow:0 0 0 1px #6EE7B7}.tgt.person{background:#ECFDF5;color:#047857}
+.prog{width:48px;height:4px;border-radius:999px;background:#F1F5F9;overflow:hidden}.prog i{display:block;height:100%;background:#3B82F6}.prog i.full{background:#10B981}
+.rcard{position:relative;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 12px 12px 18px;display:grid;gap:6px;font-size:12px;overflow:hidden}
+.rcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bar,#F43F5E)}
+.rcard.fresh{border-color:#93C5FD;box-shadow:0 0 0 2px #DBEAFE}
+.timeline{display:grid;gap:10px;border:1px solid #F1F5F9;border-radius:12px;padding:12px 14px;font-size:12px;background:#fff}
+.timeline .tl{display:flex;gap:10px;align-items:flex-start}.timeline .tl i{width:11px;height:11px;border-radius:50%;border:2px solid #E2E8F0;background:#fff;margin-top:3px;flex:none}
+.timeline .tl i.b{border-color:#3B82F6;background:#3B82F6}.timeline .tl i.a{border-color:#FBBF24;background:#FBBF24}.timeline .tl i.g{border-color:#10B981;background:#10B981}
+.dbar{background:#151A23;border-radius:12px;padding:9px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#94A3B8;font-size:11px;font-weight:700}
+.dbar .c{border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.07)}.dbar .c b{color:#fff}.dbar .c.warn{background:rgba(251,113,133,.15);color:#FDA4AF}.dbar .c.warn b{color:#FDA4AF}
+.dbar .live{color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;gap:6px}
+.dbar .live i{width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.ui .muted{color:#94A3B8;font-weight:700;font-size:11px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#vendor">2. ① 거래처 선택</a>
+  <a class="sub" href="#v-search">임대리스트 검색</a>
+  <a class="sub" href="#v-card">선택된 기기 카드</a>
+  <a class="sub" href="#v-new">신규 거래처</a>
+  <a href="#form">3. ② 접수 내용 입력</a>
+  <a class="sub" href="#f-region">팀 지역</a>
+  <a class="sub" href="#f-photo">증상 사진</a>
+  <a href="#report">4. 카톡 보고용 양식</a>
+  <a href="#buttons">5. 하단 버튼 다섯 개</a>
+  <a class="sub" href="#b-recv">접수</a>
+  <a class="sub" href="#b-naver">네이버 캘린더</a>
+  <a class="sub" href="#b-kakao">카톡 전송</a>
+  <a class="sub" href="#b-all">⚡ 전체</a>
+  <a class="sub" href="#b-dupe">중복 접수 확인</a>
+  <a href="#flow">6. 접수 → 일정 → 네이버 흐름</a>
+  <a href="#list">7. 접수 리스트</a>
+  <a class="sub" href="#l-row">행 열어 보기</a>
+  <a class="sub" href="#l-remote">원격 처리 칸</a>
+  <a class="sub" href="#l-actions">일정 등록·삭제·구분 변경</a>
+  <a class="sub" href="#l-addr">📍 주소확인</a>
+  <a href="#remote">8. 원격·IT 탭은 무엇이 다른가</a>
+  <a href="#faq">9. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 서비스접수</div>
+  <h1>서비스접수 길잡이</h1>
+  <p>고객 전화·카톡으로 들어온 AS를 <b style="color:#fff">접수하는 화면</b>입니다. 임대리스트에서 업체를 고르면 기기 정보가 자동으로 채워지고, 버튼 한 번으로 <b style="color:#fff">접수 저장 · 접수시트 기입 · 팀 AS 카톡방 전송 · 일정리스트 등록 · 네이버 캘린더 등록</b>까지 이어집니다. 어떤 칸이 어디로 흘러가는지 하나씩 설명합니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">기기 정보 옮겨 적기</div><div class="big"><s>13칸 타이핑</s> → <em>클릭 1번</em></div><div class="sub">기번·자산·등급·키맨·주소가 임대리스트에서 자동</div></div>
+    <div class="stat green"><div class="lbl">접수 한 건이 닿는 곳</div><div class="big"><em>1번</em> 저장 · <em>5곳</em> 반영</div><div class="sub">DB · 접수시트 · 팀 AS 카톡방 · 일정리스트 · 네이버</div></div>
+    <div class="stat purple"><div class="lbl">AS 이력·최근 매수 찾기</div><div class="big"><s>시트 2개</s> → <em>자동</em></div><div class="sub">최근 AS 3건 + 전방문·전전방문 매수가 양식에 붙음</div></div>
+    <div class="stat amber"><div class="lbl">중복 접수·방 잘못 고르기</div><div class="big"><em>10분</em> 안 감지 · <em>0</em></div><div class="sub">중복 팝업 + 지역(A~E)으로 방 자동 선택</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">AS 접수 한 건</div><div class="pills"><span>임대리스트에서 기기 찾기</span><span>기번·자산·주소 옮겨 적기</span><span>양식 작성</span><span>팀 방 골라 카톡 전송</span><span>접수시트 한 줄 입력</span><span>캘린더 등록</span></div><div class="ba-count">6단계</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">AS 접수 한 건</div><div class="pills"><span class="hot">검색 → 업체 클릭</span><span class="hot">증상 입력</span><span class="hot">⚡ 전체 → 확인하고 전송</span></div><div class="ba-count">3번 누르기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">이력 확인</div><div class="pills"><span>AS 시트 열기</span><span>업체 검색</span><span>점검 시트 열기</span><span>매수·여분 확인</span></div><div class="ba-count">4단계 · 잊기 쉬움</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">이력 확인</div><div class="pills"><span class="hot">업체 클릭</span></div><div class="ba-count">0번 · 양식 아래 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">접수 뒤 정리</div><div class="pills"><span>일정리스트에 등록</span><span>네이버에 등록</span><span>완료 후 시트에 처리완료 표기</span></div><div class="ba-count">3곳 따로</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">접수 뒤 정리</div><div class="pills"><span class="hot">접수</span><span class="hot">네이버 캘린더</span></div><div class="ba-count">2번 누르기 · 시트 처리완료 자동</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>업체는 꼭 <b>검색해서 고르고</b>(신규는 신규 탭), 방문 주소가 임대리스트와 다르면 그 자리에서 고치세요 — 그러면 카톡·시트·일정·네이버가 전부 같은 주소로 나갑니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 접수 한 번이 다섯 곳으로 갑니다</h2>
+  <p class="lead">이 화면에서 만든 접수는 저장(DB) → 접수시트 → 팀 AS 카톡방 → 일정리스트 → 네이버 캘린더 순서로 퍼집니다. 어느 버튼이 어디까지 가는지가 이 문서의 핵심입니다.</p>
+  <div class="sync">
+    <div class="n">서비스접수<small>이 화면 · 저장 + 접수시트</small></div>
+    <div class="arr">→</div>
+    <div class="n">팀 AS 카톡방<small>보고양식 전문 + 사진 링크</small></div>
+    <div class="arr">→</div>
+    <div class="n">일정리스트 · 네이버<small>오늘 일정 · 팀 시간대</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box kakao"><b>카톡방으로 가는 것</b>"카톡 보고용 양식" 칸에 보이는 글 <b>그대로</b>가 팀 AS방으로 갑니다. 사진은 공개 링크로 함께 실립니다. 지역 글자(A~E)로 방이 정해집니다.</div>
+    <div class="box naver"><b>네이버 캘린더로 가는 것</b>제목 = 양식 첫 줄(예: <code>A/S SS SL-X3220NR SS예시상사 종료일 27. 3. 31 지역 수도권A 접수일 8. 25</code>), 날짜 = 오늘, 시간 = 팀 시간(A 09:00 · B 12:00 · C 15:00 · D 18:00 · E 21:00), 장소 = 방문 주소, 내용 = 양식 전문.</div>
+  </div>
+  <div class="box warn"><b>관리 탭의 두 스위치가 결과를 바꿉니다</b><b>TEST_MODE</b>가 켜져 있으면 카톡은 테스트 전용방으로만 가고 결과에 "(테스트 모드)"가 붙습니다. <b>네이버 캘린더 미러</b>가 꺼져 있으면 [네이버 캘린더] 버튼은 "관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다"라고 실패합니다.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <p>왼쪽은 접수를 <b>쓰는 곳</b>(①거래처 선택 → ②접수 내용 입력), 오른쪽은 접수된 것을 <b>보는 곳</b>(접수 리스트)입니다. 넓은 화면에서는 나란히, 좁은 화면에서는 위아래로 놓입니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:120px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:76px">3</span>
+    <span class="badge" style="left:26px;top:130px">4</span>
+    <span class="badge" style="left:26px;top:214px">5</span>
+    <span class="badge" style="right:26px;top:130px">6</span>
+    <div class="dbar"><span class="live"><i></i>접수 가능</span><span>오늘 접수 <b style="color:#fff">7</b>건 · 원격 처리중 <b style="color:#fff">1</b></span><span class="c" style="background:rgba(251,191,36,.15);color:#FCD34D">📍 주소확인 2</span><span class="spacer"></span><span class="c" style="border:1px solid rgba(255,255,255,.15)">홍길동 ▾</span><span style="color:#CBD5E1">8. 25 (월) 14:32</span></div>
+    <div class="tabs" style="margin-top:8px;border-radius:12px"><span class="on">복합기 AS<span class="cnt">5</span></span><span>원격<span class="cnt">1</span></span><span>IT<span class="cnt">1</span></span></div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px;margin-top:8px">
+      <div style="display:grid;gap:8px">
+        <div><div class="sect"><span class="no">1</span><div>거래처 선택<small>AS 대상 기기를 정확히 고릅니다.</small></div><span class="hstat">🏢 선택 필요</span></div>
+          <div class="panel"><div class="seg"><span class="on">기존</span><span>신규</span></div><div style="display:flex;gap:6px"><div class="fld" style="flex:1"><div class="in ph">임대리스트 검색 — 업체명 / 자산기번 / 순번</div></div><span class="bbtn pri">🔍 검색</span></div></div></div>
+        <div><div class="sect"><span class="no">2</span><div>접수 내용 입력<small>고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</small></div><span class="hstat">2/7 필수 입력</span></div>
+          <div class="panel"><div class="fgrid"><div class="fld">접수자 성함<div class="in"></div></div><div class="fld">접수자 연락처<div class="in"></div></div><div class="fld">제목(짧게)<div class="in"></div></div></div><div class="fld">증상/내용<div class="in" style="min-height:44px"></div></div></div></div>
+      </div>
+      <div><div class="sect" style="border-radius:12px 12px 0 0"><div>접수 리스트<small>행을 열면 상세·일정 등록·원격 처리(시작/끝)까지</small></div><span class="hstat">새로고침</span></div>
+        <div class="panel" style="padding:0"><div style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:5px;border-bottom:1px solid #E2E8F0"><span class="lchip dark">전체 7</span><span class="lchip gray">복합기 5</span><span class="lchip gray">IT 1</span><span class="lchip gray">원격 1</span><span class="lchip amb">📍주소 2</span></div>
+          <div class="row-item" style="border-top:0"><span class="tm">14:20<span class="ty">복합기</span></span><span><b>예시상사</b><span class="sub">용지 걸림 — 급지 시 걸림 반복</span><span class="meta">홍길동 · 수도권A · SL-X3220NR</span></span><span class="st recv">접수</span></div>
+          <div class="row-item"><span class="tm">13:05<span class="ty it">IT</span></span><span><b>샘플무역</b><span class="sub">PC 부팅 불가</span><span class="meta">김접수 · 수도권C</span></span><span class="st prog">진행중</span></div>
+        </div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>상단 상태줄</b> — 초록 점 "접수 가능", 오늘(또는 고른 날짜) 접수 건수, 원격 처리중 건수, <span style="color:var(--amber);font-weight:900">📍 주소확인 N</span>(임대리스트와 다른 주소로 접수돼 정비가 필요한 건). 30초마다 갱신되는 시계.</div></div>
+    <div class="item"><span class="num">2</span><div><b>작성자 선택</b> — 접수 화면에서만 쓰는 작성자입니다. 원격팀(IT 명단)이 사이드바 이름을 바꾸지 않고 자기 이름으로 접수할 수 있게 둔 칸. 여기서 고른 이름이 양식의 "작성자"와 접수 기록에 남습니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>구분 탭</b> — <b>복합기 AS</b> / <b>원격</b> / <b>IT</b>. 탭을 바꾸면 폼의 구분과 오른쪽 리스트 필터가 함께 바뀌고, 마지막 탭은 이 기기에 기억됩니다. 숫자는 그날 접수 건수.</div></div>
+    <div class="item"><span class="num">4</span><div><b>① 거래처 선택</b> — 기존(임대리스트 검색) / 신규(업체명 직접 입력). 오른쪽 위 배지가 "선택 필요" → "선택 완료"로 바뀝니다. <a href="#vendor">2번</a>.</div></div>
+    <div class="item"><span class="num">5</span><div><b>② 접수 내용 입력</b> — 접수자·연락처·제목·증상·주소·사진 등. 오른쪽 위 "N/M 필수 입력" 카운터가 다 차면 초록이 됩니다. <a href="#form">3번</a>.</div></div>
+    <div class="item"><span class="num">6</span><div><b>접수 리스트</b> — 날짜·기간·유형·상태로 걸러 보고, 행을 열면 상세·일정 등록·삭제·구분 변경·원격 처리를 합니다. 60초마다, 창으로 돌아올 때마다 조용히 새로 읽습니다. <a href="#list">7번</a>.</div></div>
+  </div>
+</section>
+
+<section id="vendor">
+  <h2>2. ① 거래처 선택 — 누구 기기인지 정확히 고르기</h2>
+  <p>여기서 고른 기기 한 대가 양식·시트·일정 전부의 기준이 됩니다. 같은 업체에 기기가 여러 대면 <b>자산번호·기번</b>을 꼭 대조하세요.</p>
+
+  <h3 id="v-search">임대리스트 검색</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현 · 검색 결과</span>
+      <div class="panel top">
+        <div class="seg"><span class="on">기존</span><span>신규</span></div>
+        <div style="display:flex;gap:6px"><div class="fld" style="flex:1"><div class="in">예시상사</div></div><span class="bbtn pri">🔍 검색</span></div>
+        <div style="border:1px solid #E2E8F0;border-radius:10px;overflow:hidden">
+          <div style="padding:9px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #F1F5F9"><div><b style="font-size:14px">예시상사 <span class="lchip amb" style="font-size:10px;padding:1px 8px">기기 2대</span></b><div class="muted">순 <span style="color:#475569">1234</span> · SL-X3220NR · 자산 <span style="color:#475569">FT-01234</span> · 기번 <span style="color:#475569">0A6XBJPTA0</span> · 수도권A</div></div><span style="color:#CBD5E1">›</span></div>
+          <div style="padding:9px 12px;display:flex;justify-content:space-between;align-items:center;opacity:.6"><div><b style="font-size:14px">예시상사 <span class="lchip" style="font-size:10px;padding:1px 8px;background:#FFE4E6;color:#E11D48;border-color:#FFE4E6">임대종료</span> <span class="lchip amb" style="font-size:10px;padding:1px 8px">기기 2대</span></b><div class="muted">순 <span style="color:#475569">1188</span> · SL-M4580FX · 자산 <span style="color:#475569">FT-00877</span> · 기번 <span style="color:#475569">ZDN7B8KH</span> · 수도권A</div></div><span style="color:#CBD5E1">›</span></div>
+        </div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>기존</b>이 선택된 상태에서 검색칸에 <b>업체명 / 자산기번 / 순번</b> 중 아무거나 치고 <span class="kbd">Enter</span> 또는 <b>[검색]</b>. 검색 중엔 버튼이 "검색중"으로 바뀝니다.</li>
+        <li>결과는 한 줄에 <b>거래처명 · 순번 · 모델 · 자산 · 기번 · 지역(관리 담당자 팀)</b>. 같은 업체가 여러 줄이면 <span class="lchip amb" style="font-size:10px;padding:1px 8px">기기 N대</span> 배지가 붙고, 임대가 끝난 기기는 흐리게 + <span style="color:var(--rose);font-weight:900">임대종료</span> 배지.</li>
+        <li>맞는 줄을 누르면 그 기기가 선택되고 <b>AS 이력 · 워킨맵 이름 · 최근 점검 · 임대중 기기 수</b>를 한 번에 불러옵니다.</li>
+      </ol>
+      <div class="box tip"><b>결과가 없으면</b>"검색 결과가 없습니다."가 뜹니다. 띄어쓰기·법인 표기(㈜)를 빼고 핵심 단어만 다시 치거나, 순번·자산번호로 찾아 보세요. 임대리스트에 정말 없으면 <a href="#v-new">신규</a>로.</div>
+    </div>
+  </div>
+
+  <h3 id="v-card">선택된 기기 카드 — 자동으로 채워진 값 확인·수정</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:84px">3</span>
+    <span class="badge" style="left:26px;top:150px">4</span>
+    <div class="panel top" style="padding:0;overflow:hidden">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;background:#F8FAFC;border-bottom:1px solid #F1F5F9"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">예시상사</b><span class="lchip" style="background:#FEF3C7;color:#B45309;border-color:#FEF3C7;font-size:10px;padding:1px 8px">⚠ 2</span><span class="lchip ok" style="font-size:10px;padding:1px 8px">워킨맵 매칭</span></div><div style="display:flex;gap:6px;align-items:center"><span class="lchip" style="background:#FFF1F2;color:#E11D48;border-color:#FFF1F2">AS 기기 2회 · 업체 5회</span><span class="bbtn line">다시 검색</span></div></div>
+      <div style="padding:6px 14px;background:#FFFBEB;color:#92400E;font-size:11px;font-weight:700;border-bottom:1px solid #F1F5F9">임대중 2대(복합기 2) — 접수할 기기의 자산·기번이 맞는지 확인하세요</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);font-size:12px">
+        <div style="padding:8px 12px;border-right:1px solid #F1F5F9;border-bottom:1px solid #F1F5F9"><div class="muted">순</div><b>1234</b></div><div style="padding:8px 12px;border-right:1px solid #F1F5F9;border-bottom:1px solid #F1F5F9"><div class="muted">모델</div><b>SL-X3220NR</b></div><div style="padding:8px 12px;border-right:1px solid #F1F5F9;border-bottom:1px solid #F1F5F9"><div class="muted">자산번호</div><b style="font-family:monospace">FT-01234</b></div><div style="padding:8px 12px;border-bottom:1px solid #F1F5F9"><div class="muted">기번</div><b style="font-family:monospace">0A6XBJPTA0</b></div>
+        <div style="padding:8px 12px;border-right:1px solid #F1F5F9"><div class="muted">등급</div><b>SS</b></div><div style="padding:8px 12px;border-right:1px solid #F1F5F9"><div class="muted">지역</div><b>수도권A</b></div><div style="padding:8px 12px;border-right:1px solid #F1F5F9"><div class="muted">종료일</div><b>2027-03-31</b></div><div style="padding:8px 12px"><div class="muted">미수</div><b>0개월</b></div>
+      </div>
+      <div style="padding:8px 14px;background:#F8FAFC;border-top:1px solid #F1F5F9;font-size:11px;font-weight:900;color:#64748B">▸ ⚙️ 자동 입력값 수정 <span style="font-weight:700;color:#94A3B8">— 임대리스트에서 채워짐 · 틀리면 펼쳐서 바로 고치세요</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>업체명 + 배지</b> — <span style="color:var(--amber);font-weight:900">⚠ N</span>은 이 업체에 걸린 것(미수·초과·불만·점검·재계약)의 개수. 누르면 <b>통합이력</b> 팝업이 열립니다. <b>워킨맵 매칭</b>은 워킨맵에 같은 업체가 있어 그 이름을 쓴다는 뜻. 임대가 끝난 기기면 "임대종료 기기" 빨간 배지.</div></div>
+    <div class="item"><span class="num">2</span><div><b>AS 기기 N회 · 업체 N회</b> — 이 기기(기번·자산 일치) AS 이력 횟수와 업체 전체 횟수. <b>[다시 검색]</b>은 폼을 처음 상태로 되돌립니다(입력한 접수 내용도 지워짐).</div></div>
+    <div class="item"><span class="num">3</span><div><b>노란 경고줄</b> — 이 업체가 임대 중인 기기가 2대 이상일 때만 나옵니다. 잘못된 기기로 접수되는 사고를 막기 위한 줄.</div></div>
+    <div class="item"><span class="num">4</span><div><b>8칸 표 + ⚙️ 자동 입력값 수정</b> — 순·모델·자산번호·기번·등급·지역·종료일·미수. 틀린 값은 "⚙️ 자동 입력값 수정"을 펼쳐 13개 칸(거래처명·모델명·시리얼(기번)·자산번호·등급·담당팀(AV열)·권역·종료일·일반전화·키맨·미수개월·임대리스트 주소·한조코드)에서 고치면 <b>보고양식과 접수시트에 고친 값</b>이 들어갑니다. 임대리스트 원본은 바뀌지 않습니다.</div></div>
+  </div>
+  <div class="box warn"><b>지역이 비어 있으면 카톡을 못 보냅니다</b>지역은 ① 아래 "팀 지역"에서 사람이 고른 글자 → ② 임대리스트 관리 담당자(AV열, 수도권A~E) → ③ 권역(강남/강북/강서) → ④ 주소로 유추 순서로 정해집니다. 전부 비면 양식 위에 빨간 경고 <b>"⚠ 지역이 비어 있습니다 — 지역이 있어야 팀 AS방으로 전송됩니다."</b>가 뜹니다.</div>
+
+  <h3 id="v-new">신규 거래처 — 임대리스트에 없는 업체</h3>
+  <ol class="steps">
+    <li>토글을 <b>신규</b>로 바꾸면 검색칸이 사라지고 <b>업체명</b> 칸("신규 거래처 업체명")이 나옵니다. 이름을 적으면 배지가 "선택 완료"가 됩니다.</li>
+    <li>② 접수 내용 입력 위에 노란 상자 <b>"신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)"</b>가 나타납니다. 지역(팀) 칩 <b>A B C D E</b>와 접힌 묶음 <b>기본</b>(임대리스트 순번·임대여부·보증여부·미수개월) / <b>업체</b>(등급·일반전화·현장 업체담당자(AK열)·키맨) / <b>기기</b>(모델명·품목·제조사·기종·자산번호·기번·자산기번·기기상태·한조/틴텍코드) / <b>계약·임대</b>(기본임대료·평균임대료·계약일·종료일·남은개월수·장비소유주·설치업체·방문주기·추가조건) / <b>기타</b>(특이사항). 묶음 제목 옆 숫자는 채운 칸 수.</li>
+    <li>임대여부는 임대중/임대종료/직접기재, 보증여부는 보증O/보증X, 등급은 N·NN·S·SS·V 중 선택. 여기 적은 값으로 같은 보고양식이 만들어지고 접수시트에는 <b>값으로</b> 기입됩니다(기존 거래처처럼 순번 함수가 채우지 않음).</li>
+  </ol>
+  <div class="box tip"><b>신규는 순번이 없어도 시트에 들어갑니다</b>기존 거래처는 순번이 없으면 시트 기입을 건너뛰지만("퍼스트순 미입력 — 시트 기입 생략"), 신규는 직접 기재값으로 항상 기입합니다. 필수 칩에서도 "순번"이 빠집니다.</div>
+</section>
+
+<section id="form">
+  <h2>3. ② 접수 내용 입력 — 칸 하나씩</h2>
+  <div class="shot ui"><span class="cap">화면 재현 · 복합기 AS 탭</span>
+    <div class="sect"><span class="no">2</span><div>접수 내용 입력<small>고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</small></div><span class="hstat ok">7/7 필수 입력</span></div>
+    <div class="panel">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><div class="seg ink"><span class="on">카카오</span><span>전화</span></div><span class="muted">임대리스트 순번</span><span class="lchip" style="min-width:72px">1234</span><span class="muted">접수분야</span><span class="lchip on">A/S</span><span class="lchip">점검요청</span><span class="lchip">여분요청</span><span class="lchip">세팅요청</span><span class="lchip">불만</span><span class="lchip">미수</span><span class="lchip">해지방어</span><span class="lchip">직접기재</span></div>
+      <div class="fgrid"><div class="fld">접수자 성함<div class="in">김담당</div></div><div class="fld">접수자 연락처<div class="in">010-0000-0000</div></div><div class="fld">제목(짧게)<div class="in">용지 걸림</div></div></div>
+      <div class="fld">증상/내용<div class="in" style="min-height:44px">급지 시 용지 걸림 반복, 소음</div></div>
+      <div class="fld">방문 주소 <span class="muted">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span><div class="in">서울 성동구 예시로 12 3층</div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:6px 10px"><span class="muted">팀 지역</span><span class="lchip dark">자동 · A</span><span style="width:1px;height:16px;background:#E2E8F0"></span><span class="lchip">A <span class="muted">강북</span></span><span class="lchip">B <span class="muted">강서</span></span><span class="lchip">C <span class="muted">강남</span></span><span class="lchip">D <span class="muted">경기</span></span><span class="lchip">E <span class="muted">지방</span></span></div>
+      <div class="fld">증상 사진 (최대 6장)<div style="display:flex;gap:6px;align-items:center"><span style="width:52px;height:52px;border:1px dashed #CBD5E1;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#94A3B8">🖼</span><span class="muted">클릭 후 Ctrl+V로 붙여넣기 가능</span></div></div>
+      <div class="fgrid"><div class="fld">유상/무상<div class="in">무상 ▾</div></div><div class="fld">교체이력 (예: 1회)<div class="in"></div></div><div class="fld">참고사항<div class="in">오전 방문 요청</div></div></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>칸</th><th>무엇을 넣나</th><th>어디로 가나</th></tr></thead><tbody>
+    <tr><td><b>카카오 / 전화</b></td><td>접수가 들어온 경로. 기본은 카카오.</td><td>양식 "접수유형", 접수 기록, 접수시트</td></tr>
+    <tr><td><b>임대리스트 순번</b></td><td>기존 거래처를 고르면 자동으로 채워짐(순 열). 손으로 고칠 수 있음. <b>기존 거래처는 필수</b> — 시트 기입의 열쇠.</td><td>접수시트(순번 함수가 나머지 열을 채움), 양식 "임대리스트순번"</td></tr>
+    <tr><td><b>접수분야</b> (복합기만)</td><td>A/S · 점검요청 · 여분요청 · 세팅요청 · 불만 · 미수 · 해지방어 · <b>직접기재</b>(고르면 "분야 입력" 칸이 열림, 비우면 A/S)</td><td>양식 맨 첫 칸과 "접수분야", 접수시트. IT 탭은 항상 "IT A/S"</td></tr>
+    <tr><td><b>접수자 성함 · 연락처</b></td><td>전화한 고객 담당자. 둘 다 <b>필수</b>.</td><td>양식, 일정리스트 "접수자 ○○ 010…", 시트 U열(원격), 일정 📞 버튼</td></tr>
+    <tr><td><b>제목(짧게)</b></td><td>한 줄 요약(복합기만 필수). 예: 용지 걸림</td><td>양식 "제목", 접수 리스트 제목</td></tr>
+    <tr><td><b>증상/내용</b></td><td>고객이 말한 그대로. <b>필수</b>.</td><td>양식 "상태", 일정리스트 접수내용, 네이버 일정 내용, 시트</td></tr>
+    <tr><td><b>방문 주소</b></td><td>임대리스트 주소가 자동으로 들어오지만 <b>실제 방문 주소</b>로 고쳐야 함. 비면 칸이 <span style="color:var(--rose);font-weight:900">빨갛게</span> 되고 "방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요." 원격이관 탭에는 없음.</td><td>양식 "주소", 일정 장소, 네이버 장소, 시트(시·구 자동 분리). 임대리스트와 다르면 접수 기록에 <b>주소 변경 표시(📍)</b></td></tr>
+    <tr><td><b>팀 지역</b></td><td>아래 <a href="#f-region">따로 설명</a></td><td>카톡 방 · 일정 팀 · 네이버 시간 · 시트 담당지역</td></tr>
+    <tr><td><b>증상 사진</b></td><td>최대 6장. 아래 <a href="#f-photo">따로 설명</a></td><td>양식 끝 "증상사진(N장)" + 링크, 접수 기록, 일정 상세</td></tr>
+    <tr><td><b>유상/무상</b> (복합기만)</td><td>무상 · 유상 · 직접기재(↺로 되돌리기). 비우면 시트엔 빈 값, 직접기재를 비우면 "무상".</td><td>양식 "유상/무상", 시트</td></tr>
+    <tr><td><b>교체이력 · 참고사항</b> (복합기만)</td><td>선택. 예: 1회 / 오전 방문 요청</td><td>양식 "교체이력", "참고사항", 접수 메모</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>필수 카운터와 아래 칩은 같은 목록입니다</b>업체 · 접수자 · 연락처 · 제목(복합기) · 내용 · 주소(원격 제외) · 순번(기존만). 하단 바에 <span class="lchip ok" style="font-size:10px;padding:1px 8px">✓ 업체</span> <span class="lchip miss" style="font-size:10px;padding:1px 8px">• 주소</span>처럼 초록/빨강으로 보이고, 전부 초록이어야 <b>[⚡ 전체]</b>가 눌립니다. 사진은 필수가 아닙니다.</div>
+
+  <h3 id="f-region">팀 지역 — 어느 팀 방·일정으로 갈지</h3>
+  <div class="grid2">
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>자동 · A</b>처럼 검은 칩이 기본입니다. 임대리스트 관리 담당자(AV열)가 있으면 그 팀, 없으면 권역·주소로 유추한 결과입니다. 판정이 안 되면 칩이 <span style="color:var(--amber);font-weight:900">노란 "자동 · 판정 불가"</span>가 됩니다.</li>
+        <li>임대리스트가 옛 지역이거나 경기·인천 건이 "지방"으로만 적혀 있으면 <b>A 강북 / B 강서 / C 강남 / D 경기 / E 지방</b> 중 하나를 눌러 덮어씁니다. 파란 안내 "지역을 D로 지정했습니다 — 접수 시트·일정·카톡방이 이 팀으로 갑니다 (임대리스트: 지방)"이 뜹니다.</li>
+        <li>임대리스트는 "지방"인데 주소가 수도권이면 노란 안내 <b>"임대리스트는 "지방"인데 주소는 수도권D 권역입니다 — 수도권D로 접수합니다. 다르면 팀 지역에서 고르세요"</b>가 자동으로 나옵니다.</li>
+      </ol>
+    </div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>지역</th><th>카톡방</th><th>일정 팀 · 네이버 시간</th></tr></thead><tbody>
+        <tr><td>수도권A</td><td>A팀 AS방</td><td>A팀 · 09:00</td></tr><tr><td>수도권B</td><td>B팀 AS방</td><td>B팀 · 12:00</td></tr><tr><td>수도권C</td><td>C팀 AS방</td><td>C팀 · 15:00</td></tr><tr><td>수도권D</td><td>D팀 AS방</td><td>D팀 · 18:00</td></tr><tr><td>지방(E)</td><td>E 매핑이 있을 때만</td><td>E팀 · 21:00</td></tr>
+      </tbody></table>
+      <div class="box warn"><b>다른 업체를 고르면 팀 지역이 자동으로 초기화됩니다</b>이전 업체에서 고른 글자가 남아 엉뚱한 방으로 나가는 사고를 막기 위해서입니다. 업체를 바꿨으면 팀 지역을 다시 확인하세요.</div>
+    </div>
+  </div>
+
+  <h3 id="f-photo">증상 사진 (최대 6장)</h3>
+  <ol class="steps">
+    <li>점선 네모(🖼)를 누르면 파일 선택창이 열립니다. 여러 장 한 번에 고를 수 있고, 6장을 넘는 만큼은 잘립니다.</li>
+    <li>PC에서는 사진 칸을 한 번 클릭한 뒤 <span class="kbd">Ctrl</span>+<span class="kbd">V</span>로 클립보드 이미지를 바로 붙일 수 있습니다("클릭 후 Ctrl+V로 붙여넣기 가능").</li>
+    <li>올리는 동안 네모에 "…"가 보이고, 끝나면 썸네일이 붙습니다. 썸네일 오른쪽 위 <b>×</b>로 빼고, 썸네일을 누르면 원본이 새 탭에 열립니다. 폰 사진(HEIC·고화소)은 1600px로 줄여 올립니다.</li>
+    <li>실패하면 토스트 <b>"사진 업로드 실패: …"</b>. 사진은 카톡에 <b>공개 링크</b>로 실리고(카톡봇은 글만 보냄), 접수 기록·일정 상세에도 남습니다.</li>
+  </ol>
+</section>
+
+<section id="report">
+  <h2>4. 카톡 보고용 양식 — 자동으로 만들어지는 글</h2>
+  <p>업체를 고르면 ② 아래에 회색 <b>읽기 전용</b> 칸이 나타나고, 칸을 고칠 때마다 즉시 다시 만들어집니다. 이 글이 <b>그대로</b> 카톡·네이버 내용·일정 메모로 갑니다. 원격이관 탭에는 양식이 없습니다.</p>
+  <div class="grid2">
+    <div class="quote" style="font-size:12px">A/S  SS  SL-X3220NR  SS예시상사  종료일  27. 3. 31  지역  수도권A  접수일  8. 25
+작성자  홍길동
+기번  0A6XBJPTA0  자산번호  FT-01234
+접수유형  카카오  접수분야  A/S
+임대리스트순번  1234  장비소유주  퍼스트전산
+계약일  2024. 4. 1  사용개월  28개월
+종료일  2027. 3. 31  남은개월  31개월
+납품/교체일  2024. 4. 3  방문주기  3개월
+기본임대료  ₩45,000  평균임대료  ₩52,300
+설치업체  퍼스트전산  유지보수업체  없음
+접수자성함  김담당
+접수자연락처  010-0000-0000
+일반전화  02-000-0000
+미수개월  
+★키맨성함/번호  박키맨 010-1111-2222
+방문담당자  수도권A
+한조/틴텍코드  H123 / T456
+주소  서울 성동구 예시로 12 3층  확장성  
+기종  SL-X3220NR  기기상태  정상
+유상/무상  무상
+제목  용지 걸림
+상태  급지 시 용지 걸림 반복, 소음
+참고사항  오전 방문 요청
+증상사진(1장)
+https://…/reception/….jpg
+교체이력    교체일로부터  28개월사용중
+AS접수횟수(시리얼기준)  2회
+AS접수히스토리(시리얼기준)
+■ 날짜: 26년 5월 12일
+■ 기기: SL-X3220NR / 자산 FT-01234 / 기번 0A6XBJPTA0
+■ 내용: 급지롤러 교체
+
+자가사용내역(최근6개월)
+■ 전방문 2026-07-10 · 매수 12,340 · 여분 K1
+■ 전전방문 2026-04-08 · 매수 10,020 · 여분 -</div>
+    <div style="display:grid;gap:10px">
+      <div class="legend" style="grid-template-columns:1fr">
+        <div class="item"><span class="num">1</span><div><b>첫 줄</b> — "구분 등급 모델 업체명 종료일 지역 접수일". 임대리스트에 마감일이 있으면 업체명 앞에 "29SS예시상사 분기마감"처럼 붙습니다. <b>이 줄이 네이버 캘린더 제목과 일정리스트 제목</b>이 됩니다.</div></div>
+        <div class="item"><span class="num">2</span><div><b>임대리스트 값</b> — 계약일·종료일·임대료 등. 값이 없으면 "미기재"로 나옵니다(빈칸이면 누락인지 알 수 없어서). 금액은 원 단위로 반올림(₩).</div></div>
+        <div class="item"><span class="num">3</span><div><b>AS접수히스토리</b> — 이 기기(시리얼 기준) 이력이 있으면 그것만, 없으면 업체 기준으로 최근 <b>3건</b>만. 15건이 다 붙으면 증상이 묻혀서 3건으로 잘랐습니다.</div></div>
+        <div class="item"><span class="num">4</span><div><b>자가사용내역</b> — 최근 점검 2회(전방문·전전방문)의 매수·여분·폐통과 여분 분석. 이 기기 기록이 없으면 "※ 이 기기(자산·기번) 점검기록이 없어 업체 기록 기준입니다" 줄이 먼저 붙습니다.</div></div>
+      </div>
+      <div class="box tip"><b>[복사] 버튼</b>양식 오른쪽 위 <b>[복사]</b>를 누르면 클립보드에 담기고 1.5초 동안 "복사됨 ✓"로 바뀝니다. 카톡 자동 전송이 막힌 지역(매핑 없음)이면 이걸로 직접 게시하세요. 실패 시 "복사 실패 — 양식을 직접 선택해 복사하세요."</div>
+    </div>
+  </div>
+</section>
+
+<section id="buttons">
+  <h2>5. 하단 버튼 다섯 개 — 누르면 무슨 일이 생기나</h2>
+  <p>폼 맨 아래 흰 띠는 스크롤해도 따라옵니다. 왼쪽엔 필수 칩, 오른쪽에 버튼이 있습니다. <b>어떤 순서로 눌러도 접수는 한 번만 저장</b>되고(같은 업체·순번·구분이면), 그 위에 단계가 쌓입니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현 · 하단 고정 바</span>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <span class="lchip ok">✓ 업체</span><span class="lchip ok">✓ 접수자</span><span class="lchip ok">✓ 연락처</span><span class="lchip ok">✓ 제목</span><span class="lchip ok">✓ 내용</span><span class="lchip miss">• 주소</span><span class="lchip ok">✓ 순번</span>
+      <span class="spacer"></span>
+      <span class="bbtn line">↗ 시트 열기</span><span class="bbtn ink">접수</span><span class="bbtn green">네이버 캘린더</span><span class="bbtn amber">카톡 전송</span><span class="bbtn pri dis">➤ ⚡ 전체</span>
+    </div>
+    <div style="margin-top:8px;background:#ECFDF5;color:#047857;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:900">접수 완료 ✓ + 일정 등록 — 폼 유지 중 (네이버·카톡은 옆 버튼) <span style="color:#B45309">· 접수시트 기입 중…</span></div>
+  </div>
+  <p class="small">버튼 아래 초록 줄이 <b>결과 줄</b>입니다. "실패"라는 말이 들어가면 빨갛게 바뀝니다. 그 옆 노란 글은 시트 반영 상태(아래 표).</p>
+
+  <h3><span class="bbtn line" style="vertical-align:middle">↗ 시트 열기</span> / <span class="bbtn line" style="vertical-align:middle">↗ 원격 시트</span></h3>
+  <p>접수시트를 새 탭으로 엽니다. 복합기 AS 탭은 복합기 시트 탭, 원격·IT 탭은 "원격" 시트 탭으로 갑니다(파일은 하나, 탭만 다름). 아무것도 저장하지 않습니다.</p>
+
+  <h3 id="b-recv"><span class="bbtn ink" style="vertical-align:middle">접수</span> 접수 — 저장 + 시트 + 일정리스트</h3>
+  <ol class="steps">
+    <li>업체가 없으면 결과 줄에 <b>"업체를 선택(또는 입력)하세요."</b>만 뜨고 멈춥니다.</li>
+    <li>접수를 <b>DB에 저장</b>(상태 "접수")하고, 접수 지역 팀에게 웹푸시 "새 접수 — 업체명"이 갑니다(접수자 본인 제외).</li>
+    <li><b>일정리스트에 오늘 일정</b>을 만듭니다 — 팀은 지역 글자, 시간은 지금 시각, 상태 "접수", 접수내용 = 증상, 메모 = 양식 전문, 제목 = 양식 첫 줄. 같은 접수로 이미 일정이 있으면 새로 만들지 않습니다. <b>이 버튼은 네이버에 올리지 않습니다.</b></li>
+    <li>순번이 있거나 신규면 <b>접수시트 기입</b>을 뒤에서 시작합니다(결과 줄 옆 "접수시트 기입 중…").</li>
+    <li>결과: <b>"접수 완료 ✓ + 일정 등록 — 폼 유지 중 (네이버·카톡은 옆 버튼)"</b>. 폼은 지워지지 않으니 이어서 [네이버 캘린더]·[카톡 전송]을 누르면 됩니다.</li>
+  </ol>
+  <div class="box warn"><b>원격이관 탭에서는 버튼 이름이 "접수 (저장+시트)"</b>파란 버튼으로 바뀌고, 저장(상태 "원격대기") + 원격 시트 기입 후 <b>폼이 초기화</b>됩니다. 결과 줄 "원격 접수 저장됨 (대기)". 방문이 없는 건이라 일정도 만들지 않습니다.</div>
+
+  <h3 id="b-naver"><span class="bbtn green" style="vertical-align:middle">네이버 캘린더</span> 네이버 캘린더 — 익일통합as에 등록</h3>
+  <ol class="steps">
+    <li>관리 탭의 "네이버 캘린더 미러" 스위치를 먼저 확인합니다. 꺼져 있으면 <b>"네이버 캘린더 실패: 관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다"</b>.</li>
+    <li>아직 저장 전이면 먼저 접수를 저장합니다(한 번만).</li>
+    <li>네이버 익일통합as 캘린더에 <b>제목 = 양식 첫 줄, 날짜 = 오늘, 시간 = 팀 시간(A09/B12/C15/D18/E21), 장소 = 방문 주소, 내용 = 양식 전문</b>으로 등록합니다. 접수 번호로 고정 키를 쓰기 때문에 두 번 눌러도 중복 등록되지 않습니다.</li>
+    <li>[접수]로 만든 일정리스트 일정이 있으면 그 일정에 네이버 연결(uid)을 저장해, 일정리스트에서 완료·익일·삭제할 때 네이버도 함께 움직입니다.</li>
+    <li>결과: <b>"네이버 캘린더 완료 ✓ — 폼 유지 중, 다음 단계를 이어서 누르거나 [전체 실행]을 쓰세요."</b></li>
+  </ol>
+
+  <h3 id="b-kakao"><span class="bbtn amber" style="vertical-align:middle">카톡 전송</span> 카톡 전송 — 팀 AS방으로 양식 보내기</h3>
+  <ol class="steps">
+    <li>양식이 없으면 <b>"카톡 전송 실패: 보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요"</b>, 지역이 없으면 <b>"…지역이 비어 있어 보낼 팀 방을 정할 수 없습니다 — 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요"</b>.</li>
+    <li>아직 저장 전이면 먼저 저장합니다. 그리고 지역 글자에 맞는 <b>팀 AS방</b>에 양식 전문을 게시 대기열에 넣습니다(카톡봇이 곧 게시).</li>
+    <li>매핑이 없는 지역이면 <b>"지역(지방)의 AS방 매핑이 없어 전송할 수 없습니다. 복사해서 직접 게시해 주세요."</b> — 이때는 [복사]로 수동 게시.</li>
+    <li>성공하면 접수 상태가 <b>"전송완료"</b>가 되고 보낸 방 이름이 기록됩니다. 결과: <b>"카톡 전송 완료 ✓ — {방 이름} — 폼 유지 중…"</b>. 테스트 모드면 "(테스트 모드)"가 붙습니다.</li>
+  </ol>
+
+  <h3 id="b-all"><span class="bbtn pri" style="vertical-align:middle">➤ ⚡ 전체</span> ⚡ 전체 — 확인 팝업 한 번으로 저장·전송·일정·시트</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:440px">
+        <div style="font-size:11px;font-weight:900;color:#2563EB">접수 저장 + AS방 전송 전 확인</div>
+        <div class="mt" style="font-size:16px">예시상사</div>
+        <div style="border:2px solid #FCD34D;background:#FFFBEB;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:900;color:#64748B">🚗 실제 방문 주소</div><div style="font-weight:900;font-size:13px">서울 성동구 예시로 12 3층</div></div>
+        <div class="grid" style="font-size:11px">
+          <div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">접수유형</div><b>카카오</b></div><div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">구분</div><b>복합기 AS</b></div>
+          <div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">업체명</div><b>예시상사</b></div><div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">기종</div><b>SL-X3220NR</b></div>
+          <div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">시리얼(기번)</div><b>0A6XBJPTA0</b></div><div style="background:#F8FAFC;border-radius:8px;padding:6px 10px"><div style="color:#94A3B8;font-size:10px;font-weight:900">자산기번</div><b style="color:#E11D48">미기재</b></div>
+        </div>
+        <div style="background:#FFF1F2;color:#BE123C;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:900">빨간 항목 1개 — 그래도 진행하려면 아래 확인에 체크하세요.</div>
+        <label style="display:flex;gap:8px;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:700"><span>☑</span>저장하면서 일정리스트에도 등록 (오늘 날짜, 담당자 미배정)</label>
+        <label style="display:flex;gap:8px;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;font-size:11.5px;font-weight:700"><span>☐</span>방문 주소와 접수자·기기 정보를 확인했습니다 (AS방으로 전송됩니다)</label>
+        <div class="grid"><div class="mbtn ghost">취소</div><div class="mbtn primary" style="opacity:.4">확인하고 전송</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>필수 칩이 하나라도 빨갛거나 양식이 없으면 버튼이 흐려집니다. 그 자리를 누르면 알림 <b>"필수 입력이 비어 있어요: 주소 (사진은 필수가 아닙니다)"</b>.</li>
+        <li>눌리면 <b>확인 팝업</b>이 뜹니다: 🚗 실제 방문 주소(비면 빨간 "미기재 — 주소를 확인하세요!"), 접수유형·구분·업체명·기종·시리얼(기번)·자산기번·접수자 성함·접수자 연락처·증상·주소 10칸. 신규 거래처는 기종·기번·자산이 필수가 아닙니다.</li>
+        <li>빨간 칸이 있으면 "빨간 항목 N개 — 그래도 진행하려면 아래 확인에 체크하세요."</li>
+        <li>체크 두 개: <b>"저장하면서 일정리스트에도 등록"</b>(기본 켜짐 — 끄면 일정을 만들지 않음) / <b>"방문 주소와 접수자·기기 정보를 확인했습니다 (AS방으로 전송됩니다)"</b>(이걸 켜야 파란 버튼이 살아남).</li>
+        <li><b>[확인하고 전송]</b> → 저장 → 팀 AS방 전송 → 상태 "전송완료" → 일정리스트 등록(+ 네이버 미러가 켜져 있으면 뒤에서 네이버 등록) → 시트 기입 → 결과 <b>"전송 완료 — {방 이름} + 일정 등록됨"</b> → <b>폼 초기화</b>.</li>
+      </ol>
+      <div class="box warn"><b>전송만 실패하면</b>"전송 실패: … — 접수는 저장됐어요. 다시 누르면 전송만 재시도합니다." 저장된 접수를 기억하고 있어서 다시 눌러도 접수가 두 번 생기지 않습니다. 일정 등록이 실패하면 토스트 "일정 등록 실패 — 전송·저장은 완료. 리스트의 [일정 등록]으로 다시 시도하세요."</div>
+    </div>
+  </div>
+
+  <h3 id="b-dupe">중복 접수 확인 팝업</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:360px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center"><span style="width:26px;height:26px;border-radius:50%;background:#F59E0B;display:flex;align-items:center;justify-content:center;font-weight:900">!</span><div><div style="font-size:11px;color:#94A3B8;font-weight:900">중복 접수 확인</div><div style="font-weight:900">예시상사</div></div></div>
+        <div style="padding:12px 16px;display:grid;gap:6px;font-size:12px;font-weight:700;color:#475569"><div>🕐 같은 업체의 복합기 AS 접수가 방금 <b style="color:#0f172a">14:20</b>에 이미 저장돼 있어요.</div><div>📄 시트 반영은 몇 초 걸릴 수 있어요 — 방금 접수가 시트에 아직 안 보여도 곧 자동 기입됩니다.</div></div>
+        <div style="display:flex;gap:8px;padding:0 12px 12px"><div class="mbtn dark" style="flex:2">중복이면 취소</div><div class="mbtn ghost" style="flex:1">한 건 더 접수</div></div>
+      </div></div>
+    <div class="box tip"><b>언제 뜨나</b>[⚡ 전체]나 원격 [접수 (저장+시트)]를 누를 때, <b>같은 업체 · 같은 구분</b> 접수가 <b>10분 안</b>에 이미 있으면 뜹니다. 시트에 아직 안 보여서 다시 접수하는 사고를 막는 장치입니다. 진짜 다른 건이면 [한 건 더 접수].</div>
+  </div>
+
+  <h3>시트 반영 상태 글 읽는 법</h3>
+  <table class="tbl"><thead><tr><th>결과 줄 옆 글</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><span style="color:var(--amber)">접수시트 기입 중…</span></td><td>지금 시트에 쓰는 중. 5~15초 걸릴 수 있음.</td></tr>
+    <tr><td><span style="color:var(--amber)">시트 백그라운드 반영 중 (자동 재시도 — 기다리지 않아도 됩니다)</span></td><td>20초가 넘어 기다림을 끊었을 뿐, 기입은 서버가 이어서 합니다.</td></tr>
+    <tr><td><span style="color:var(--green)">… N행에 기입</span> 등 행 번호가 있는 글</td><td>성공. 완료·익일 처리 때 같은 행에 기록됩니다.</td></tr>
+    <tr><td>시트 반영 대기 (자동 재시도)</td><td>실패했지만 큐에 남아 10분 안에 다시 시도. 관리 탭에서 즉시 재실행 가능.</td></tr>
+    <tr><td>퍼스트순 미입력 — 시트 기입 생략 / 순번 미입력 — 시트 기입 생략</td><td>기존 거래처인데 순번이 비어 시트에 쓰지 않았음. 접수·카톡·일정은 정상.</td></tr>
+    <tr><td>시트 기입 실패(…)</td><td>괄호 안 문구를 그대로 관리자에게 전달.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="flow">
+  <h2>6. 접수 → 일정리스트 → 네이버, 한 번에 흐름 보기</h2>
+  <div class="flow">
+    <div class="node"><div class="dot">1</div><div class="body"><b>업체 검색 → 선택</b> — 기기 정보·이력·양식이 채워짐. 방문 주소·팀 지역 확인.</div></div>
+    <div class="node"><div class="dot">2</div><div class="body"><b>접수자·연락처·제목·증상 입력</b> — 필수 카운터가 7/7(신규는 6/6)이 되면 [⚡ 전체]가 살아남.</div></div>
+    <div class="node"><div class="dot">3</div><div class="body"><b>[⚡ 전체] → 확인 팝업 → [확인하고 전송]</b> — 저장 · 팀 AS방 카톡 · 일정리스트(오늘, 미배정) · 네이버(미러 ON일 때) · 접수시트. 결과 "전송 완료 — {방} + 일정 등록됨".</div></div>
+    <div class="node"><div class="dot">4</div><div class="body"><b>일정리스트 탭</b>에서 담당자 배정 → 방문 → [FIELD]/[완료]/[익일]. 이때 접수 리스트 상태도 <b>접수 → 진행중(배정) → 완료</b>로 따라오고, 접수시트 처리완료 열(BD)에 "완료 8/25 15:10 ○○" / "익일 …"이 기록됩니다.</div></div>
+    <div class="node"><div class="dot">5</div><div class="body"><b>접수 리스트에서 확인</b> — 상태 배지, 완료 시각·처리자, 원본 미리보기.</div></div>
+  </div>
+  <div class="box naver"><b>일정리스트에 만들어지는 일정의 모양</b>팀 = 지역 글자(A~E) · 날짜 = 오늘 · 시간 = 접수 시각 · 업체 = 거래처명(첫 줄만, 엑셀 잔재 제거) · 연락처 = "접수자 ○○ 010…" · 주소·부서(주소의 층/호) · 기종·기번·자산·등급·키맨 · 접수내용 = 증상 · 메모 = 양식 전문 · 캘린더 제목 = 양식 첫 줄 · 상태 접수 · 담당자 없음.</div>
+</section>
+
+<section id="list">
+  <h2>7. 접수 리스트 — 오늘 들어온 것 보기·정리하기</h2>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <span class="badge" style="right:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:78px">2</span>
+    <span class="badge" style="right:26px;top:78px">3</span>
+    <span class="badge" style="left:26px;top:128px">4</span>
+    <span class="badge" style="left:26px;top:186px">5</span>
+    <div class="sect" style="border-radius:12px 12px 0 0"><div>접수 리스트<small>행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 — 미완료 원격·IT는 날짜와 무관하게 위로 이월</small></div><span class="hstat">새로고침</span></div>
+    <div class="panel" style="padding:0">
+      <div style="padding:10px 12px;border-bottom:1px solid #E2E8F0;display:grid;gap:8px">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;align-items:center"><div style="display:flex;gap:4px;align-items:center"><span class="calhead rnd" style="border:1px solid #E2E8F0">‹</span><span class="lchip">2026-08-25</span><span class="calhead rnd" style="border:1px solid #E2E8F0">›</span></div><div class="seg"><span class="on">일일</span><span>주간</span><span>월간</span><span>분기</span></div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span class="lchip dark">전체 7</span><span class="lchip gray">복합기 5</span><span class="lchip gray">IT 1</span><span class="lchip gray">원격 1</span><span class="lchip amb">📍주소 2</span><span style="color:#E2E8F0">|</span><span class="lchip dark">전체 7</span><span class="lchip gray"><span class="dot8" style="background:#F43F5E"></span> 접수 4</span><span class="lchip gray"><span class="dot8" style="background:#FBBF24"></span> 진행중 2</span><span class="lchip gray"><span class="dot8" style="background:#94A3B8"></span> 완료 1</span></div>
+      </div>
+      <div class="row-item" style="border-top:0"><span class="tm">14:20<span class="ty">복합기</span></span><span><b>예시상사</b><span class="sub">용지 걸림 — 급지 시 용지 걸림 반복, 소음</span><span class="meta">홍길동 · 수도권A · SL-X3220NR</span></span><span style="display:flex;gap:6px;align-items:center"><span class="lchip amb" style="padding:2px 7px">📍</span><span class="st recv">접수</span></span></div>
+      <div class="row-item"><span class="tm">11:40<span class="ty">복합기</span></span><span><b>샘플무역</b><span class="sub">토너 없음 — 검정 토너 교체 요청</span><span class="meta">김접수 · 수도권C · SL-M4580FX</span></span><span class="st done">완료</span></div>
+      <div style="padding:10px 12px;background:#F8FAFC;border-top:1px solid #E2E8F0;font-size:11px"><div class="muted">접수자별 처리 (08-25)</div><div style="display:flex;justify-content:space-between;font-weight:700;color:#475569"><span style="color:#0f172a;font-weight:900">홍길동</span><span>총 4 <span style="color:#2563EB">복합기 3</span> · <span style="color:#0891B2">IT 1</span> · <span style="color:#7C3AED">원격 0</span></span></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>[새로고침]</b> — 지금 즉시 다시 읽습니다. 안 눌러도 60초마다·창으로 돌아올 때 조용히 갱신됩니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>날짜 ‹ › 와 오늘</b> — 화살표는 기간 단위(일일이면 하루, 주간이면 7일, 월간 1달, 분기 3달)로 움직입니다. 오늘이 아니면 검은 <b>[오늘]</b> 버튼이 나타납니다. 날짜 칸을 눌러 직접 고를 수도.</div></div>
+    <div class="item"><span class="num">3</span><div><b>일일 / 주간 / 월간 / 분기</b> — 보는 범위. 일일이 아니면 아래에 "2026-08-18 ~ 2026-08-24 · N건"처럼 범위가 표시되고, 행에 날짜(MM/DD)도 붙습니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>유형 칩 | 상태 칩</b> — 전체 N / 복합기 N / IT N / 원격 N / <span style="color:var(--amber);font-weight:900">📍주소 N</span>(주소확인 대상만). 세로줄 뒤는 전체 / <span style="color:var(--rose)">●</span>접수 / <span style="color:#F59E0B">●</span>진행중 / <span style="color:#94A3B8">●</span>완료 — 같은 걸 다시 누르면 전체로 돌아갑니다. 탭(복합기·원격·IT)을 바꾸면 유형 칩도 그 유형으로 맞춰집니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>한 줄</b> — 접수 시각 + 유형 배지(복합기/IT/원격) · 업체명 · "제목 — 증상" · 작성자 · 지역 · 모델 · <span style="color:var(--amber)">📍</span>(임대리스트와 다른 주소) · 상태(접수/진행중/완료). 맨 아래 "접수자별 처리"는 그 기간 사람별 건수.</div></div>
+  </div>
+  <div class="box tip"><b>어제 미완료 원격·IT 건이 사라지지 않는 이유</b>원격·IT 접수는 날짜와 상관없이 <b>최근 30일 미완료 건</b>을 리스트 위로 이월해 보여 줍니다. 처리(끝 시각 또는 처리여부)를 저장하면 그날 목록으로 내려갑니다.</div>
+
+  <h3 id="l-row">행을 누르면 — 상세 펼침</h3>
+  <div class="shot ui"><span class="cap">화면 재현 · 펼친 행</span>
+    <div class="panel top" style="padding:0;overflow:hidden">
+      <div class="row-item" style="border-top:0;background:#F8FAFC"><span class="tm">14:20<span class="ty">복합기</span></span><span><b>예시상사</b><span class="sub">용지 걸림 — 급지 시 용지 걸림 반복, 소음</span><span class="meta">홍길동 · 수도권A · SL-X3220NR</span></span><span class="st recv">접수</span></div>
+      <div class="detail">
+        <div class="kv"><span>경로 카카오</span><span>지역 수도권A</span><span>모델 SL-X3220NR</span><span>기번 0A6XBJPTA0</span><span>순 1234</span><span>자산기번 FT-01234</span><span>접수자 김담당</span><span>연락처 010-0000-0000</span><span>유상/무상 무상</span><span>접수 14:20</span></div>
+        <div><b style="color:#64748B">주소</b> 서울 성동구 예시로 12 3층 <div style="display:flex;gap:5px;margin-top:4px;flex-wrap:wrap"><span class="lchip amb" style="font-size:10px;padding:1px 8px">임대리스트와 다름</span><span class="lchip" style="font-size:10px;padding:1px 6px;background:#EFF6FF;color:#1D4ED8;border-color:#93C5FD;border-radius:4px">워킨맵·임대리스트 반영</span><span class="lchip" style="font-size:10px;padding:1px 6px;background:#ECFDF5;color:#047857;border-color:#6EE7B7;border-radius:4px">시트 반영 완료</span></div></div>
+        <div><b style="color:#64748B">증상</b> 급지 시 용지 걸림 반복, 소음</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:2px"><span class="bbtn line" style="padding:5px 10px;font-size:11px">원본 미리보기</span><span class="bbtn blue" style="padding:5px 10px;font-size:11px">일정 등록</span><span class="bbtn rose" style="padding:5px 10px;font-size:11px">삭제</span><span class="spacer"></span><span class="muted">구분</span><span class="lchip on" style="font-size:10px;padding:2px 8px">복합기</span><span class="lchip" style="font-size:10px;padding:2px 8px">원격</span><span class="lchip" style="font-size:10px;padding:2px 8px">IT</span></div>
+      </div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>펼친 행의 내용</th><th>설명</th></tr></thead><tbody>
+    <tr><td>경로 · 지역 · 모델 · 기번 · 순 · 자산기번 · 접수자 · 연락처 · 유상/무상 · 접수 시각</td><td>접수 당시 값. 완료된 건은 파란 글씨로 <b>"완료 15:10 · 홍길동"</b>(일정리스트에서 완료한 시각·담당자)이 추가됩니다.</td></tr>
+    <tr><td>주소</td><td>방문 주소. 임대리스트와 달랐던 건은 <span style="color:var(--amber);font-weight:900">임대리스트와 다름</span> 배지와 버튼 두 개(<a href="#l-addr">아래</a>). 처리했으면 "시트 반영됨 · 날짜 이름".</td></tr>
+    <tr><td>증상 · 증상 사진 · 메모</td><td>증상 전문, 사진 썸네일(누르면 원본), 참고사항.</td></tr>
+    <tr><td>원격 처리 (IT·원격만)</td><td><a href="#l-remote">아래</a>.</td></tr>
+    <tr><td>[원본 미리보기] [일정 등록] [삭제] · 구분 칩</td><td><a href="#l-actions">아래</a>.</td></tr>
+  </tbody></table>
+
+  <h3 id="l-remote">원격 처리 칸 (IT · 원격이관 접수에만)</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="panel top" style="gap:6px;font-size:11px">
+        <div style="display:flex;justify-content:space-between"><b style="color:#1D4ED8">원격 처리</b><span class="muted">한조처리 IT</span></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="muted">시작</span><span class="lchip" style="min-width:64px">09:30</span><span class="muted">종료</span><span class="lchip ph" style="min-width:64px;color:#94A3B8">10:00</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px"><span class="lchip" style="border-radius:8px">처리여부 ▾</span><span class="lchip ph" style="border-radius:8px;color:#94A3B8">처리자</span><span class="lchip ph" style="border-radius:8px;color:#94A3B8">추가대수</span></div>
+        <div class="fld"><div class="in ph" style="min-height:40px">처리내용</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;color:#475569">☐ 연동완료</span><span class="bbtn pri">처리 저장 · 시트 반영</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>시작 · 종료</b> — 숫자만 치면 콜론이 자동으로 들어갑니다(0930 → 09:30, 9 → 09:00). 이 둘이 시트의 시작·종료 열입니다.</li>
+        <li><b>처리여부</b> — 처리완료 · 접수취소 · 재접수 · 자체해결 · AS이관 · 중복접수 · 방문이관. <b>처리자</b>, <b>추가대수</b>, <b>처리내용</b>, <b>연동완료</b> 체크.</li>
+        <li><b>[처리 저장 · 시트 반영]</b> — 시작·종료가 비어 있으면 알림 <b>"시작·종료 시간을 입력해 주세요 (예: 09:30). 시작·종료 시간이 있어야 처리 저장·시트 반영이 됩니다."</b> 저장되면 토스트 <b>"처리 저장 완료 — 시트 반영은 백그라운드 진행 (실패 시 알림) ✓"</b>.</li>
+        <li>상태는 <b>저장된 값</b>으로만 바뀝니다: 시작만 있으면 진행중, 종료 또는 처리여부가 있으면 완료. 시트는 접수 때 만든 같은 행을 갱신합니다(순번이 없으면 "순번이 없어 시트 반영은 생략됩니다 (DB에는 저장)").</li>
+      </ol>
+      <div class="box tip"><b>여러 명이 같은 건을 만져도 안전</b>빈 칸은 보내지 않고 채운 값만 합치기 때문에 상대가 저장한 칸을 지우지 않습니다. 저장돼 있던 값을 지우고 저장하면 그건 의도적 삭제로 보고 비웁니다(잘못 찍은 종료 시각 되돌리기).</div>
+    </div>
+  </div>
+
+  <h3 id="l-actions">[원본 미리보기] · [일정 등록] · [삭제] · 구분 변경</h3>
+  <table class="tbl"><thead><tr><th>버튼</th><th>누르면</th><th>어디까지 바뀌나</th></tr></thead><tbody>
+    <tr><td><b>원본 미리보기</b></td><td>"원본 보고양식" 팝업 — 카톡으로 나간(또는 나갈) 양식 전문. <b>[복사]</b> → "복사됨 ✓", [닫기].</td><td>아무 것도 바꾸지 않음</td></tr>
+    <tr><td><b>일정 등록</b> (원격이관 제외)</td><td>이 접수로 일정을 만듭니다. 이미 있으면 <b>"이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)"</b>, 오늘 같은 업체 일정이 있으면 <b>"오늘 ○○ 일정이 이미 있습니다. 그래도 추가할까요?"</b>. 성공 토스트 <b>"일정리스트에 등록했습니다. 일정리스트 탭에서 담당자를 배정하세요."</b></td><td>일정리스트 + (미러 ON이면) 네이버 익일통합as</td></tr>
+    <tr><td><b>삭제</b></td><td>확인 <b>"○○ 건을 삭제할까요? (잘못 접수된 건 정리용) 연결된 일정과 네이버 캘린더 미러도 함께 삭제됩니다."</b> → 접수는 숨김(삭제 표시), 연결 일정 삭제, 네이버 미러 삭제. 토스트 "접수와 연결 일정 N건, 네이버 미러까지 정리했습니다."</td><td>접수 리스트 · 일정리스트 · 네이버. <b>접수시트 행은 지워지지 않음</b>(직접 정리)</td></tr>
+    <tr><td><b>구분 칩</b> 복합기 / 원격 / IT</td><td>원격 ↔ IT처럼 같은 시트 탭 안 변경은 확인 <b>"○○를 IT(으)로 바꿀까요?"</b> 후 즉시 바뀌고 시트 L열(한조처리)만 갱신. 원격이관으로 바꾸면 "· 연결된 방문 일정(미완료)은 삭제됩니다." 복합기 ↔ 원격·IT처럼 <b>탭을 건너는</b> 변경은 "내용 넘기기" 팝업(아래).</td><td>접수 유형·상태, 시트 L열, 일정(원격이관 시 미완료 삭제)</td></tr>
+  </tbody></table>
+  <div class="box kakao"><b>"내용 넘기기" 팝업 (예: 원격이관 → 복합기 AS)</b>✅ 원격 접수는 'AS이관'으로 완료 처리됩니다 (처리자: 상단 작성자) · 📄 원격 시트에도 처리여부가 기입돼 정리됩니다 · 📋 접수 내용이 복합기 AS 폼으로 넘어옵니다 · 👆 확인 후 [접수]를 눌러야 복합기 접수·시트 기입이 됩니다. [내용 넘기기]를 누르면 왼쪽 폼이 그 내용으로 채워지고 토스트 <b>"○○ 내용을 복합기 접수 폼으로 불러왔어요 — 확인 후 [접수] 또는 [⚡ 전체]를 눌러야 접수·시트 기입이 됩니다."</b> 반대 방향(복합기 → 원격/IT)은 기존 접수가 그대로 남습니다.</div>
+
+  <h3 id="l-addr">📍 주소확인 — 임대리스트와 다른 주소로 접수된 건</h3>
+  <ol class="steps">
+    <li>방문 주소를 임대리스트 주소와 다르게 고쳐 접수하면 그 건에 <span style="color:var(--amber);font-weight:900">📍</span>가 붙고 상단 "📍 주소확인 N", 유형 칩 "📍주소 N"에 집계됩니다.</li>
+    <li>행을 펼쳐 <b>[워킨맵·임대리스트 반영]</b> → 확인 <b>"워킨맵과 임대리스트(Supabase)의 주소를 아래로 바꿉니다. … 구글시트 원본은 자동으로 바뀌지 않으니 별도 수정 후 '시트 반영 완료'를 눌러주세요. 계속할까요?"</b> → 워킨맵의 같은 업체 지점 주소 + 임대리스트(앱 DB) 주소가 바뀌고 토스트 <b>"반영 완료 — 워킨맵 N곳 · 임대리스트 1건 …"</b>.</li>
+    <li>구글시트 임대리스트 원본을 직접 고친 뒤 <b>[시트 반영 완료]</b> → 확인 <b>"임대리스트 시트의 주소를 수정하셨나요? 확인 목록에서 제외합니다. (처리자와 처리일이 기록됩니다)"</b> → 📍가 내려가고 "시트 반영됨 · 날짜 이름"으로 남습니다.</li>
+  </ol>
+</section>
+
+<section id="remote">
+  <h2>8. 원격 · IT 탭은 무엇이 다른가</h2>
+  <table class="tbl"><thead><tr><th></th><th>복합기 AS</th><th>원격 (원격이관)</th><th>IT</th></tr></thead><tbody>
+    <tr><td>접수분야 / 한조처리</td><td>접수분야 8칩</td><td>한조처리 칩 <b>원격이관</b>(시트 L열 공백) · IT · 직접기재</td><td>한조처리 <b>IT</b>(L열 "IT") · 직접기재</td></tr>
+    <tr><td>방문 주소 · 팀 지역 · 사진</td><td>있음</td><td><b>없음</b>(방문이 없는 건)</td><td>있음</td></tr>
+    <tr><td>카톡 보고용 양식</td><td>있음(첫 칸 = 접수분야)</td><td><b>없음</b></td><td>있음(첫 칸 "IT A/S")</td></tr>
+    <tr><td>필수</td><td>업체·접수자·연락처·제목·내용·주소·순번(기존)</td><td>업체·접수자·연락처·내용·순번(기존)</td><td>업체·접수자·연락처·내용·주소·순번(기존)</td></tr>
+    <tr><td>하단 버튼</td><td>시트 열기 · 접수 · 네이버 캘린더 · 카톡 전송 · ⚡ 전체</td><td>원격 시트 · <b>접수 (저장+시트)</b>만</td><td>원격 시트 · 접수 · 네이버 캘린더 · 카톡 전송 · ⚡ 전체</td></tr>
+    <tr><td>저장 상태</td><td>접수</td><td>원격대기</td><td>접수</td></tr>
+    <tr><td>접수시트</td><td>복합기 탭(순번 함수)</td><td colspan="2">"원격" 탭 한 곳 — 시작·종료·처리여부는 리스트의 원격 처리 칸에서 같은 행에 채움</td></tr>
+    <tr><td>신규 거래처 칸</td><td>기본·업체·기기·계약·기타 5묶음</td><td colspan="2">지역(팀) 칩 + 등급·미수(개월)·마감일·기종·브랜드·자산번호·시리얼번호·특이사항 (IT는 추가대수·처리내용·연동완료도)</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>탭이 기억됩니다</b>마지막으로 열어 둔 탭(복합기/원격/IT)은 이 기기에 저장돼 다음에 접수 화면을 열 때 그 탭으로 열립니다. 폼의 구분과 오른쪽 리스트 유형 필터도 탭에 맞춰집니다.</div>
+</section>
+
+<section id="faq">
+  <h2>9. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>[⚡ 전체]가 눌리지 않아요</summary><p>하단 필수 칩 중 빨간 것이 있거나 양식이 아직 없을 때입니다. 흐린 버튼 자리를 누르면 "필수 입력이 비어 있어요: …"로 빠진 칸을 알려 줍니다. 기존 거래처는 <b>순번</b>도 필수입니다.</p></details>
+    <details><summary>카톡이 "AS방 매핑이 없어 전송할 수 없습니다"라고 해요</summary><p>그 지역(주로 지방) 방이 관리 탭 방 매핑에 없다는 뜻입니다. 접수·일정은 저장돼 있으니 양식 [복사]로 직접 게시하고, 관리자에게 매핑 추가를 요청하세요. 팀 지역을 잘못 자동 판정한 경우면 A~E 칩으로 고쳐 다시 [카톡 전송].</p></details>
+    <details><summary>네이버에 안 올라갔어요</summary><p>[접수]만 누른 경우 네이버는 올라가지 않습니다(옆 [네이버 캘린더]가 담당). [⚡ 전체]는 관리 탭 "네이버 캘린더 미러"가 켜져 있을 때만 뒤에서 올립니다. 스위치가 꺼져 있으면 [네이버 캘린더] 버튼이 "관리 탭에서 '네이버 캘린더 미러'가 꺼져 있습니다"라고 알려 줍니다.</p></details>
+    <details><summary>같은 접수가 시트에 두 줄 생겼어요</summary><p>10분 안에 같은 업체·구분을 다시 접수하면 "중복 접수 확인" 팝업이 뜨는데 [한 건 더 접수]를 누르면 두 건이 됩니다. 잘못 만든 건은 리스트에서 [삭제] — 다만 시트 행은 자동으로 지워지지 않으니 [시트 열기]로 직접 정리하세요.</p></details>
+    <details><summary>지역이 "지방"으로 나오는데 경기 업체예요</summary><p>임대리스트 담당지역에 D(경기) 개념이 없어 생기는 일입니다. 주소로 자동 보정되지만, 안 되면 팀 지역 <b>D 경기</b>를 누르세요. 접수시트 담당지역에도 고친 값이 들어가 다음 접수부터 반복되지 않습니다.</p></details>
+    <details><summary>접수 리스트 상태가 "진행중"인데 원격 건을 아직 안 시작했어요</summary><p>복합기 AS 건은 일정리스트에서 <b>담당자를 배정</b>하면 접수 리스트가 진행중이 됩니다. 원격·IT는 <b>처리 저장</b>된 시작 시각이 있을 때만 진행중입니다(입력만 하고 저장 안 하면 그대로).</p></details>
+    <details><summary>[다시 검색]을 눌렀더니 적어 둔 내용이 다 지워졌어요</summary><p>[다시 검색]은 폼 전체 초기화입니다(접수자·증상·사진 포함). 업체만 바꾸려면 검색칸에 새 업체를 쳐서 다시 고르세요 — 그러면 주소는 새 업체 것으로 바뀌지만 접수자·증상은 남습니다.</p></details>
+    <details><summary>방금 접수했는데 리스트에 안 보여요</summary><p>오른쪽 위 [새로고침]을 누르거나, 날짜·기간·유형 칩을 확인하세요(예: IT 탭에서 접수했는데 유형 칩이 "복합기"로 걸려 있음). 삭제한 건은 이 화면에서 다시 보이지 않습니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">서비스접수 길잡이 · 일정리스트·캘린더·홈·공지 길잡이도 같은 형식으로 이어집니다</p>
+</main>
+</div>
+</body>
+</html>

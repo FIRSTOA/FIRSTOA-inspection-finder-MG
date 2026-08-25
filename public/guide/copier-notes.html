@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>복합기 학습·처리이력 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 지식 화면 재현 ── */
+.wcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;font-size:12.5px;color:#334155}
+.wtag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:900}
+.wtag.blue{background:#EFF6FF;color:#1D4ED8} .wtag.slate{background:#F1F5F9;color:#475569} .wtag.amber{background:#FFFBEB;color:#B45309} .wtag.emerald{background:#ECFDF5;color:#047857} .wtag.dark{background:#0f172a;color:#fff} .wtag.rose{background:#FFE4E6;color:#BE123C} .wtag.soft{background:#F8FAFC;color:#94A3B8}
+.ubtn{display:inline-block;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap}
+.ubtn.primary{background:#2563EB;color:#fff} .ubtn.dark{background:#0f172a;color:#fff} .ubtn.ghost{background:#fff;color:#475569;border-color:#CBD5E1} .ubtn.emerald{background:#059669;color:#fff} .ubtn.soft{background:#F1F5F9;color:#64748B} .ubtn.del{background:transparent;color:#94A3B8}
+.dsel{border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.08);color:#CBD5E1} .dsel.on{background:#2563EB;color:#fff}
+.search{display:flex;align-items:center;gap:8px;border-radius:999px;background:rgba(255,255,255,.1);padding:9px 16px;color:#64748B;font-size:12.5px;font-weight:700;flex:1;min-width:220px}
+.list{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.list .li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155} .list .li:first-child{border-top:0}
+.list .li .t{font-weight:900;color:#0f172a} .list .li .m{color:#94A3B8;font-size:11.5px;margin-left:auto;white-space:nowrap}
+.field{border:1px solid #CBD5E1;border-radius:10px;padding:7px 10px;font-size:12.5px;color:#64748B;background:#fff}
+.field b{display:block;font-size:10.5px;color:#94A3B8;font-weight:900}
+.cause{border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;font-size:12.5px}
+.cause .h{display:flex;gap:8px;align-items:center;background:#F8FAFC;border-bottom:1px solid #F1F5F9;padding:7px 12px;font-weight:900;color:#0f172a}
+.cause .h .n{width:22px;height:22px;border-radius:50%;background:#0f172a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+.cause ol{margin:0;padding:8px 12px 8px 28px;color:#334155} .cause ol li{padding:1px 0}
+.cause .p{display:flex;gap:4px;flex-wrap:wrap;align-items:center;border-top:1px solid #F1F5F9;background:#F8FAFC;padding:6px 12px;font-size:10.5px;color:#94A3B8;font-weight:900}
+.cause .p span{background:#fff;border:1px solid #E2E8F0;border-radius:999px;padding:1px 7px;color:#475569;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에 — 3층 구조</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#notes">2. 기록 탭 — 전체 사례</a>
+  <a class="sub" href="#n-search">검색과 필터</a>
+  <a class="sub" href="#n-list">목록·상세</a>
+  <a class="sub" href="#n-add">+ 기록 추가</a>
+  <a href="#jokbo">3. 족보 탭 — 간추린 정답</a>
+  <a class="sub" href="#j-card">카드 읽기</a>
+  <a class="sub" href="#j-confirm">👍 내용 맞음 — 확인</a>
+  <a class="sub" href="#j-edit">카드 작성·수정</a>
+  <a href="#guide">4. 가이드 탭 — 실제 작업 방법</a>
+  <a class="sub" href="#g-view">가이드 열기</a>
+  <a class="sub" href="#g-write">가이드 작성·수정 (서식·사진)</a>
+  <a href="#links">5. 세 층이 서로 이어지는 길</a>
+  <a href="#faq">6. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 학습·지식 › 복합기 학습·처리이력</div>
+  <h1>복합기 학습·처리이력 길잡이</h1>
+  <p>복합기 수리 노하우를 팀이 함께 쌓고 찾는 곳입니다. 세 층으로 되어 있습니다 — <b style="color:#fff">기록</b>(전체 사례 1만 건 이상), <b style="color:#fff">족보</b>(기종×증상별로 간추린 원인·절차), <b style="color:#fff">가이드</b>(사진이 붙은 실제 작업 방법). 현장에서 막혔을 때 족보부터 열고, 처리가 끝나면 기록을 남기면 됩니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p class="lead">"이 증상 누가 봤었지?" 하고 전화 돌리는 시간을, 검색 한 줄로 바꿉니다.</p>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">비슷한 사례 찾기</div><div class="big"><s>전화·카톡</s> → <em>검색 1줄</em></div><div class="sub">어림 예: 건당 10~20분 대기 · 여러 낱말과 필터를 함께 적용</div></div>
+    <div class="stat green"><div class="lbl">검색 조건에 맞는 족보</div><div class="big"><em>최대 3장</em> 먼저</div><div class="sub">원인 빈도순 · 처리 절차 · 부품까지 카드 한 장에</div></div>
+    <div class="stat purple"><div class="lbl">관련 수리 가이드 찾기</div><div class="big"><s>폴더 찾기</s> → <em>바로 열기</em></div><div class="sub">어림 예: 건당 5분 · 브랜드·분류·부품·증상·난이도 필터</div></div>
+    <div class="stat amber"><div class="lbl">현장에서 내용 검증</div><div class="big"><em>확인 1탭</em></div><div class="sub">N명 확인 배지 · 미확인 카드는 별도로 구분</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">비슷한 증상의 해결 사례 찾기</div><div class="pills"><span>선배에게 전화·카톡</span><span>답 기다리기</span><span>브랜드·기종 다시 설명</span></div><div class="ba-count">어림 예: 10~20분 대기</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">기록 탭에서 바로 좁히기</div><div class="pills"><span class="hot">"3220 줄 CTD" 검색</span><span class="hot">브랜드·기종·증상 필터</span></div><div class="ba-count">검색 1줄 · 조건 겹치기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">예: 사례 20건에서 원인 추리기</div><div class="pills"><span>사례 하나씩 읽기</span><span>원인 직접 묶기</span><span>절차·부품 다시 정리</span></div><div class="ba-count">어림 예: 건당 15분</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">조건에 맞는 족보부터 확인</div><div class="pills"><span class="hot">시리즈×증상 자동 묶음</span><span class="hot">원인 빈도순</span><span class="hot">처리 절차·부품 포함</span></div><div class="ba-count">최대 3장 먼저</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">노하우 저장과 검수</div><div class="pills"><span>개인 메모·머릿속</span><span>노션 폴더 따로 찾기</span><span>한 사람이 전부 검수</span></div><div class="ba-count">정보가 흩어짐</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">기록 한 장이 팀 지식으로</div><div class="pills"><span class="hot">+ 기록 추가</span><span class="hot">🔧 관련 가이드</span><span class="hot">👍 내용 맞음 — 확인</span></div><div class="ba-count">즉시 공유 · 이번 달 +N</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>현장에서 족보 카드를 보고 고쳤다면 나오기 전에 [👍 내용 맞음 — 확인] 한 번, 카드에 없는 원인이었다면 [+ 기록 추가] 한 장 — 다음 사람이 그만큼 빨라집니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 세 층은 같은 낱말을 씁니다</h2>
+  <p class="lead">기록·족보·가이드는 모두 같은 <b>브랜드 · 기종(시리즈) · 증상</b> 이름표를 씁니다. 그래서 한 층에서 걸어 둔 조건이 다른 층으로 그대로 넘어갑니다.</p>
+  <div class="sync">
+    <div class="n">기록<small>전체 사례 · 학습/처리이력 · 누구나 추가</small></div>
+    <div class="arr">→</div>
+    <div class="n">족보<small>시리즈×증상 카드 · 원인 TOP N + 절차</small></div>
+    <div class="arr">→</div>
+    <div class="n">가이드<small>실제 작업 방법 · 사진·토글 · 노션 이관</small></div>
+  </div>
+  <table class="tbl"><thead><tr><th>이름표</th><th>값</th></tr></thead><tbody>
+    <tr><td><b>브랜드</b></td><td>삼성 · 신도 · 제록스 · 교세라 · 브라더 · 오키 · HP · 리코 · 캐논 · 코니카미놀타 · 렉스마크 · 기타</td></tr>
+    <tr><td><b>기종(시리즈)</b> — 팀 관용명</td><td>삼성 MX3 · MX4 · MX7 · 9201 · 흑백기 / 신도 320 · 410 · 420 · 450 · N501 · 600 · bizhub / 제록스 키슈 · 세이토 · 마블 · 베니 · 보탄 · 헤라 · APEOS · SC2022 · 305 · 5005 / 교세라 2100 · 2101 · 5521 · 5526 / 브라더 5700 · 8900 / 오키 5473 / HP 477 · 530 · 650 · 7740 · 8600 · 8610 · 8710 · 8720 · 8730 · 9010 / 렉스마크 MX410</td></tr>
+    <tr><td><b>증상</b></td><td>급지·걸림 / 줄·화질 / 에러코드 / 토너·드럼 / 정착기·롤러 / 스캔·팩스 / 네트워크·드라이버 / 소음</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>기종 칩은 정식 모델명도 잡습니다</b>예를 들어 삼성 "MX3"를 고르면 기록의 기종이 "MX3"인 것뿐 아니라 "SL-X3220NR", "3250" 같은 정식명도 함께 찾습니다(K로 시작하는 흑백기는 제외). 제록스는 "VC3375"처럼 세대 약어로 적힌 기록도 세이토 등 코드명으로 묶습니다.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 상단 공통</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <div class="bar">
+      <div class="row"><div><div style="font-size:15px;font-weight:900">복합기 학습·처리이력</div><div style="font-size:10.5px;color:#94A3B8;font-weight:700">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법)</div></div><span class="spacer"></span><span style="display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:999px;padding:3px"><span class="tab" style="padding:4px 12px">기록</span><span class="tab on" style="padding:4px 12px">족보</span><span class="tab" style="padding:4px 12px">가이드</span></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목·설명</b> — 세 탭 어디서나 같은 검은 띠. 그 아래 짙은 띠에 검색·필터가 붙습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>기록 · 족보 · 가이드 전환</b> — 마지막으로 본 탭을 이 기기에 기억해 다음에 열 때 그 탭으로 시작합니다(처음엔 족보).</div></div>
+  </div>
+  <div class="box warn"><b>이름을 먼저</b>기록 추가·족보 확인·가이드 작성은 우측 상단(FIELD 탭) 작성자 이름이 있어야 합니다. 없으면 "작성자를 먼저 선택하세요." / "우측 상단에서 본인 이름을 먼저 선택하세요."가 뜹니다. 검색·읽기는 이름 없이도 됩니다.</div>
+</section>
+
+<section id="notes">
+  <h2>2. 기록 탭 — 전체 사례</h2>
+  <p>팀이 남긴 모든 사례입니다. <b>학습</b>(배운 것)과 <b>처리이력</b>(실제 처리한 건) 두 구분이 있고, 양이 많아 <b>200건씩</b> 불러옵니다. 검색과 필터는 서버에서 전체를 대상으로 걸립니다.</p>
+
+  <h3 id="n-search">검색과 필터</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 기록 탭 검색·필터 띠</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:70px">3</span>
+    <span class="badge" style="left:26px;top:106px">4</span>
+    <span class="badge" style="right:26px;top:106px">5</span>
+    <div class="bar" style="background:#151A23">
+      <div class="row"><span class="search">🔍 증상 · 에러코드 · 기종 검색 — 띄어 쓰면 모두 포함 (예: 3220 줄 CTD)</span><span class="spacer"></span><span class="chip">전체 <b style="color:#fff">12,584</b></span><span class="chip">학습 <b style="color:#fff">1,210</b></span><span class="chip">처리이력 <b style="color:#fff">11,374</b></span><span class="chip">이번 달 <b style="color:#fff">+37</b></span></div>
+      <div class="row"><span style="font-size:10px;font-weight:900;color:#475569">최근</span><span class="chip" style="padding:2px 9px">3220 줄</span><span class="chip" style="padding:2px 9px">세이토 정착</span><span class="chip" style="padding:2px 9px">SC 541</span></div>
+      <div class="row"><span class="dsel on">삼성</span><span class="dsel on">MX3</span><span class="dsel">증상 전체</span><span class="spacer"></span><span style="display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:999px;padding:2px"><span class="tab on" style="padding:3px 9px;font-size:11px">전체</span><span class="tab" style="padding:3px 9px;font-size:11px">학습</span><span class="tab" style="padding:3px 9px;font-size:11px">처리이력</span></span><span class="dsel">최신순 ↓</span><span class="ubtn primary" style="padding:4px 12px">+ 기록 추가</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>검색칸</b> — 타이핑을 멈추면 0.25초 뒤 서버 검색. <b>띄어 쓴 낱말은 전부 들어간 기록만</b>(예: "3220 줄 CTD"면 셋 다). 제목·내용·기종·작성자에서 찾습니다. 오른쪽 <b>✕</b>로 지우기. 따옴표·쉼표·괄호는 무시됩니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>통계 칩</b> — 전체 / 학습 / 처리이력 / 이번 달(이번 달 추가된 건수, "+N"). 필터와 무관한 전체 기준.</div></div>
+    <div class="item"><span class="num">3</span><div><b>최근</b> — 결과가 있었던 검색어 최대 6개를 이 기기에 기억. 누르면 그 검색어로 다시.</div></div>
+    <div class="item"><span class="num">4</span><div><b>필터 ▾</b> — <b>브랜드 전체</b> → 브랜드를 고르면 옆에 <b>기종 전체</b> 칸이 나타남(기종 목록이 있는 브랜드만) → <b>증상 전체</b>. 걸린 필터는 <span class="dsel on" style="font-size:10px">파란색</span>으로 바뀝니다. 증상 필터는 <b>제목</b>에서만 찾습니다(내용까지 보면 "정기점검 중 에러 언급" 같은 게 섞여서).</div></div>
+    <div class="item"><span class="num">5</span><div><b>구분</b> 전체·학습·처리이력 / <b>최신순 ↓ ⇄ 오래된순 ↑</b> / <b>[+ 기록 추가]</b>(<a href="#n-add">아래</a>).</div></div>
+  </div>
+
+  <h3 id="n-list">목록·상세</h3>
+  <div class="shot ui"><span class="cap">화면 재현 · 족보 추천 띠 + 목록</span>
+    <div style="background:#EFF6FF;border:1px solid #DBEAFE;border-radius:12px 12px 0 0;padding:8px 12px"><div style="font-size:10.5px;font-weight:900;color:#1D4ED8">📖 이 조건의 족보 — 사례를 다 읽기 전에 여기부터</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><span class="ubtn ghost" style="border-color:#BFDBFE;font-size:11.5px">MX3 · 줄·화질 <span style="color:#94A3B8;font-size:10px;font-weight:700">원인 4개 · 사례 312건</span> <span class="wtag emerald" style="font-size:9px;padding:1px 5px">✓3</span></span><span class="ubtn ghost" style="border-color:#BFDBFE;font-size:11.5px">MX3 · 급지·걸림 <span style="color:#94A3B8;font-size:10px;font-weight:700">원인 3개 · 사례 288건</span></span></div></div>
+    <div class="list" style="border-radius:0 0 14px 14px;border-top:0">
+      <div class="li"><span class="wtag emerald">처리이력</span><span class="wtag slate">삼성 SL-X3220NR</span><span class="t">출력물 세로줄 발생</span><span style="color:#94A3B8;font-size:11.5px;font-weight:600">→ CTD 센서 청소 후 정상</span><span class="m">김민수 · 08-21</span></div>
+      <div class="li"><span class="wtag blue">학습</span><span class="wtag slate">삼성 MX3</span><span class="t">전사롤러 교체 순서</span><span style="color:#94A3B8;font-size:11.5px;font-weight:600">→ 1. 후면 커버 탈거 2. …</span><span class="m">홍길동 · 08-19</span></div>
+      <div class="li"><span class="wtag emerald">처리이력</span><span class="wtag slate">삼성 3250</span><span class="t">용지 씹힘 반복</span><span style="color:#94A3B8;font-size:11.5px;font-weight:600">→ 픽업롤러 교체</span><span class="m">이대리 · 08-12</span></div>
+      <div class="li" style="justify-content:center;color:#64748B;font-weight:900">더 보기 (현재 200건 표시)</div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>📖 이 조건의 족보</b> — 지금 걸린 브랜드·기종·증상·검색어에 맞는 족보 카드를 <b>최대 3장</b> 먼저 보여줍니다(확인 많은 순 → 사례 많은 순). 누르면 족보 탭의 그 카드가 열립니다. 맞는 카드가 없으면 띠 자체가 안 보입니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>한 줄</b> — <span class="wtag blue">학습</span>/<span class="wtag emerald">처리이력</span> · 브랜드 기종 · 제목(없으면 내용 첫 줄) · "→ 처리 요약" · 작성자(없으면 "익명") · 월-일. 누르면 상세.</div></div>
+    <div class="item"><span class="num">•</span><div><b>[더 보기 (현재 N건 표시)]</b> — 200건씩 이어서 불러옵니다. 빈 결과는 "조건에 맞는 기록이 없어요.", 아직 아무 기록도 없으면 "첫 기록을 남겨보세요 — 같은 증상에서 팀 전체의 시간이 줄어듭니다."</div></div>
+  </div>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 기록 상세</span>
+      <div class="modal" style="max-width:440px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px;align-items:flex-start"><span style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.1);display:inline-flex;align-items:center;justify-content:center">🔧</span><div style="flex:1"><div style="display:flex;gap:5px"><span class="wtag emerald">처리이력</span><span class="wtag" style="background:rgba(255,255,255,.1);color:#CBD5E1">삼성 SL-X3220NR</span></div><div style="color:#fff;font-weight:900;margin-top:5px">출력물 세로줄 발생</div><div style="font-size:10.5px;color:#94A3B8;font-weight:700">김민수 · 2026-08-21</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:6px"><div style="font-size:11px;font-weight:900;color:#64748B">한빛세무회계 · 지역 마포 · 레벨 2</div><div style="background:#FFF1F2;border-radius:8px;padding:6px 10px"><span style="font-size:9.5px;font-weight:900;color:#F43F5E">증상</span><div style="font-size:12.5px;font-weight:600">컬러 출력 시 세로줄 2개</div></div><div style="background:#ECFDF5;border-radius:8px;padding:6px 10px"><span style="font-size:9.5px;font-weight:900;color:#059669">처리</span><div style="font-size:12.5px;font-weight:600">CTD 센서 청소, 전사벨트 이물 제거 후 정상</div></div></div>
+        <div style="background:#F8FAFC;padding:10px 16px;display:flex;gap:6px;align-items:center"><span class="ubtn del" style="margin-right:auto">삭제</span><span class="ubtn ghost">📋 복사</span><span class="ubtn dark">확인</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>상세 창</th><th>설명</th></tr></thead><tbody>
+        <tr><td><b>본문</b></td><td>내용이 "증상: … / 처리: … / 지역: … / 레벨: … / 업체: …" 형식이면 위처럼 <b>메타 한 줄 + 증상(연분홍) + 처리(연초록)</b>으로 정리해 보여줍니다. 그 형식이 아니면 적은 그대로.</td></tr>
+        <tr><td><b>[📋 복사]</b></td><td>"[브랜드 기종] 제목" 한 줄 + 내용을 클립보드에. 토스트 <span class="toast" style="font-size:12px;padding:5px 10px">내용을 복사했습니다.</span></td></tr>
+        <tr><td><b>[삭제]</b></td><td><b>내가 쓴 기록에만</b> 보입니다. 확인 창 "이 기록을 삭제할까요?" → [확인]. 되돌릴 수 없습니다.</td></tr>
+        <tr><td><b>[확인] · ✕ · Esc · 바깥 클릭</b></td><td>닫기.</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <h3 id="n-add">[+ 기록 추가]</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:440px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>복합기 기록 추가</b><span class="ubtn soft" style="padding:3px 9px;font-size:11px">닫기</span></div>
+        <div class="grid"><div class="field"><b>브랜드</b>삼성 ▾</div><div class="field"><b>구분</b>처리이력 ▾</div></div>
+        <div><div style="font-size:11px;font-weight:900;color:#64748B">기종</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px"><span class="wtag" style="background:#2563EB;color:#fff;border-radius:5px">MX3</span><span class="wtag slate" style="border-radius:5px">MX4</span><span class="wtag slate" style="border-radius:5px">MX7</span><span class="wtag slate" style="border-radius:5px">9201</span><span class="wtag slate" style="border-radius:5px">흑백기</span></div><div class="field" style="margin-top:5px">직접 입력 가능 — 정식 기종명 입력 시 브랜드 자동 선택</div></div>
+        <div class="field"><b>제목 (증상 요약)</b>예: 출력물 세로줄 발생</div>
+        <div class="field" style="min-height:90px;white-space:pre-wrap"><b>내용 (증상 · 원인 · 해결 방법)</b>증상:
+원인:
+해결:</div>
+        <div style="display:flex;justify-content:flex-end;gap:6px"><span class="ubtn ghost">취소</span><span class="ubtn dark">저장</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[+ 기록 추가]</b> — 지금 걸어 둔 브랜드·기종 필터가 미리 채워집니다(브랜드 전체면 "삼성").</li>
+        <li><b>브랜드</b> 선택 → 그 브랜드의 <b>기종 칩</b>이 나옵니다. 칩을 누르거나, 아래 칸에 직접 입력. 정식 기종명(예: SL-X3220NR)을 입력하면 카탈로그에서 브랜드를 알아내 <b>브랜드가 자동으로 바뀝니다</b>.</li>
+        <li><b>구분</b> — 학습 또는 처리이력.</li>
+        <li><b>제목 (증상 요약)</b> — 한 줄. <b>내용</b> — "증상: / 원인: / 해결:" 틀이 미리 보입니다. 처리이력이면 "증상:"과 "처리:"로 적으면 상세 창에서 색 상자로 나뉩니다.</li>
+        <li><b>[저장]</b> — 내용이 비면 눌리지 않습니다. 저장 중엔 "저장 중…", 끝나면 창이 닫히고 목록이 새로 불러와집니다. 통계의 "이번 달 +N"이 하나 늘어납니다.</li>
+      </ol>
+      <div class="box warn"><b>작성자가 없으면</b>저장 대신 빨간 줄 "작성자를 먼저 선택하세요."가 목록 위에 뜹니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="jokbo">
+  <h2>3. 족보 탭 — 간추린 정답</h2>
+  <p class="lead">족보 카드 한 장 = <b>브랜드 · 시리즈 × 증상</b>. 예: "MX3 · 줄·화질". 안에는 원인이 빈도 순으로 있고, 원인마다 처리 절차와 필요 부품이 붙어 있습니다. 대부분 처리이력을 AI가 정리해 만든 카드라서, <b>현장에서 맞다고 확인한 사람 수</b>를 배지로 보여줍니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현 · 족보 탭</span>
+    <div class="bar" style="background:#151A23">
+      <div class="row"><span class="search">🔍 기종 · 증상 · 부품 검색 (예: MX3 급지)</span><span class="spacer"></span><span class="chip">카드 <b style="color:#fff">86</b></span><span class="chip">현장 확인 <b style="color:#6EE7B7">21</b> · 미확인 <b style="color:#CBD5E1">65</b></span></div>
+      <div class="row"><span class="dsel">브랜드 전체</span><span class="dsel on">줄·화질 (14)</span><span class="dsel">확인 여부 전체</span><span class="spacer"></span><span class="ubtn primary" style="padding:4px 12px">+ 카드 작성</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <div class="wcard"><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="wtag dark">삼성</span><span class="wtag emerald">✓ 3명 확인</span><span style="margin-left:auto;font-size:10.5px;color:#94A3B8;font-weight:700">사례 312건</span></div><div style="font-size:15px;font-weight:900;color:#0f172a;margin-top:6px">MX3 · 줄·화질</div><div style="font-size:11px;color:#64748B;font-weight:600;margin-top:2px">세로줄은 CTD·전사벨트, 가로줄은 정착기 순으로 확인</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px"><span class="wtag slate">1. CTD 센서 오염</span><span class="wtag slate">2. 전사벨트 이물</span><span class="wtag slate">3. 정착기 스크래치</span><span class="wtag soft">+1</span></div></div>
+      <div class="wcard"><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="wtag dark">제록스</span><span class="wtag slate">AI 정리 · 미확인</span><span style="margin-left:auto;font-size:10.5px;color:#94A3B8;font-weight:700">사례 97건</span></div><div style="font-size:15px;font-weight:900;color:#0f172a;margin-top:6px">세이토 · 줄·화질</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px"><span class="wtag slate">1. 드럼 카트리지 수명</span><span class="wtag slate">2. LED 헤드 오염</span></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>검색</b> — 브랜드·시리즈·증상·제목·요약·원인·절차·부품 전체에서, 띄어 쓴 낱말 모두 포함(화면 안에서 즉시).</div></div>
+    <div class="item"><span class="num">•</span><div><b>필터 ▾</b> — 브랜드 전체(카드가 있는 브랜드만) · 증상 전체(증상별 카드 수 표시) · 확인 여부 전체(<b>현장 확인됨</b> / <b>아직 확인 안 됨</b>).</div></div>
+    <div class="item"><span class="num">•</span><div><b>칩</b> — "카드 N"은 지금 걸러진 수, "현장 확인 N · 미확인 N"은 전체 기준.</div></div>
+    <div class="item"><span class="num">•</span><div><b>카드</b> — 브랜드 · <span class="wtag emerald">✓ N명 확인</span> 또는 <span class="wtag slate">AI 정리 · 미확인</span> · 사례 N건 · 제목 · 한 줄 요약 · 원인 1~3개 칩(+더 있으면 "+N"). 정렬은 사례 많은 순. 빈 결과: "조건에 맞는 족보 카드가 없어요."</div></div>
+  </div>
+
+  <h3 id="j-card">카드 읽기 — 원인별 절차가 본문</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 카드 상세</span>
+      <div class="modal" style="max-width:460px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px;align-items:flex-start"><span style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.1);display:inline-flex;align-items:center;justify-content:center">📖</span><div style="flex:1"><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="wtag" style="background:rgba(255,255,255,.15);color:#fff">삼성</span><span class="wtag" style="background:#34D399;color:#064E3B">✓ 현장 확인 — 김민수, 이대리, 홍길동</span></div><div style="color:#fff;font-weight:900;margin-top:5px">MX3 · 줄·화질</div><div style="font-size:10.5px;color:#94A3B8;font-weight:700">실제 사례 312건 기반 · AI · 2026-08-18</div></div></div>
+        <div style="padding:14px 16px;display:grid;gap:8px">
+          <div style="background:#F8FAFC;border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:700">세로줄은 CTD·전사벨트, 가로줄은 정착기 순으로 확인</div>
+          <div class="cause"><div class="h"><span class="n">1</span><span style="flex:1">CTD 센서 오염</span><span class="wtag rose">빈도 높음</span></div><ol><li>후면 커버 탈거</li><li>CTD 센서 창 마른 천으로 청소</li><li>테스트 출력으로 확인</li></ol><div class="p">부품 <span>CTD 센서</span></div></div>
+          <div class="cause"><div class="h"><span class="n">2</span><span style="flex:1">전사벨트 이물</span><span class="wtag amber">빈도 보통</span></div><ol><li>전사벨트 유닛 분리</li><li>표면 이물·토너 덩어리 제거</li></ol><div class="p">부품 <span>전사벨트</span></div></div>
+          <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px"><div style="font-size:10.5px;font-weight:900;color:#B45309">⚠ 주의·꿀팁</div><div style="font-size:12px;font-weight:600">청소 후에도 줄이 남으면 정착기 먼저 의심 — 드럼 교체는 마지막</div></div>
+          <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:8px 12px"><div style="font-size:10.5px;font-weight:900;color:#047857">🔧 관련 가이드 — 실제 작업 방법(사진·절차)</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"><span class="ubtn ghost" style="border-color:#A7F3D0;font-size:11px;padding:3px 9px">MX3 전사벨트 탈거·조립 📷</span></div></div>
+        </div>
+        <div style="background:#F8FAFC;padding:10px 12px;display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="ubtn del" style="margin-right:auto">삭제</span><span class="ubtn ghost" style="font-size:11px">사례 312건 보기</span><span class="ubtn ghost" style="font-size:11px">✎ 수정</span><span class="ubtn emerald" style="font-size:11px">👍 내용 맞음 — 확인</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>부분</th><th>뜻</th></tr></thead><tbody>
+        <tr><td><b>헤더 배지</b></td><td><span class="wtag emerald">✓ 현장 확인 — 이름들</span> 확인한 사람 이름 전부 / 아무도 없으면 "AI 정리 · 아직 아무도 확인 안 함 — 맞으면 아래에서 확인 눌러주세요". 부제는 "실제 사례 N건 기반 · 작성자 · 수정일".</td></tr>
+        <tr><td><b>원인 상자</b></td><td>번호 · 원인 이름 · <span class="wtag rose">빈도 높음</span>/<span class="wtag amber">빈도 보통</span>/<span class="wtag slate">빈도 낮음</span> · 절차 1. 2. 3. · 부품 칩.</td></tr>
+        <tr><td><b>⚠ 주의·꿀팁</b></td><td>있을 때만 노란 상자.</td></tr>
+        <tr><td><b>🔧 관련 가이드</b></td><td>같은 브랜드(또는 공용) 가이드 중 시리즈·증상·부품 낱말이 충분히 겹치는 문서 최대 5개. 📷는 사진이 있는 가이드. 누르면 <b>가이드 탭의 그 문서가 열립니다</b>. 맞는 문서가 없으면 상자가 안 보입니다.</td></tr>
+        <tr><td><b>[사례 N건 보기]</b></td><td>기록 탭으로 넘어가며 브랜드·기종·증상 필터가 이 카드 기준으로 걸립니다(검색어는 비움).</td></tr>
+        <tr><td><b>[✎ 수정]</b></td><td>카드 편집 창(<a href="#j-edit">아래</a>).</td></tr>
+        <tr><td><b>[삭제]</b></td><td>빨간 확인 창 "이 족보 카드를 삭제할까요?" → <b>[삭제]</b>. 누구나 지울 수 있으니 신중히. 실패하면 "삭제 실패: …" 토스트.</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <h3 id="j-confirm">[👍 내용 맞음 — 확인] — 한 번 탭으로 검수</h3>
+  <ol class="steps">
+    <li>카드대로 처리해서 맞았다면 상세 창 오른쪽 아래 초록 <b>[👍 내용 맞음 — 확인]</b>.</li>
+    <li>내 이름이 확인자 목록에 추가되고 카드가 "게시" 상태가 됩니다. 토스트 <span class="toast ok" style="font-size:12px;padding:5px 10px">확인 표시했습니다 — 이 카드는 현장에서 검증된 내용으로 표시됩니다 ✓</span></li>
+    <li>이미 확인한 카드에서는 버튼이 회색 <b>[확인 취소]</b>로 보입니다. 누르면 내 이름이 빠지고 토스트 "확인을 취소했습니다". 마지막 확인자가 빠지면 카드는 다시 "초안".</li>
+    <li>확인 직전에 서버에서 최신 명단을 다시 읽어 합치므로, 다른 사람이 방금 누른 확인이 지워지지 않습니다.</li>
+  </ol>
+  <div class="box warn"><b>이름이 없으면</b>"우측 상단에서 본인 이름을 먼저 선택하세요." 토스트가 뜨고 아무 일도 일어나지 않습니다.</div>
+
+  <h3 id="j-edit">카드 작성·수정</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 족보 카드 작성</span>
+      <div class="modal" style="max-width:460px">
+        <div><div class="mt" style="font-size:15px">✏️ 족보 카드 작성</div><div class="ms">절차는 한 줄에 한 단계, 부품은 콤마로 구분</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><div class="field"><b>브랜드</b>삼성 ▾</div><div class="field"><b>기종(시리즈)</b>MX3 · 450 …</div><div class="field"><b>증상</b>급지·걸림 ▾</div><div class="field"><b>제목</b>MX3 · 급지·걸림</div></div>
+        <div class="field"><b>한 줄 요약</b>&nbsp;</div>
+        <div style="border:1px solid #E2E8F0;border-radius:12px;padding:10px;display:grid;gap:6px"><div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;font-weight:900;color:#94A3B8">원인 1</span><span class="field" style="flex:1;padding:4px 8px">원인/상황 이름</span><span class="field" style="padding:4px 8px">높음 ▾</span><span style="color:#94A3B8;font-weight:900">✕</span></div><div class="field" style="min-height:56px">처리 절차 — 한 줄에 한 단계</div><div class="field" style="padding:4px 8px">필요 부품 (콤마 구분)</div></div>
+        <span class="ubtn ghost" style="border-style:dashed;justify-self:start">+ 원인 추가</span>
+        <div class="field" style="min-height:56px"><b>주의·꿀팁</b>&nbsp;</div>
+        <div style="display:flex;justify-content:flex-end;gap:6px"><span class="ubtn ghost">취소</span><span class="ubtn dark">저장</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>족보 탭 <b>[+ 카드 작성]</b>(새 카드) 또는 상세의 <b>[✎ 수정]</b>.</li>
+        <li><b>브랜드 · 기종(시리즈) · 증상</b>을 고르면 <b>제목</b>이 "시리즈 · 증상"으로 자동 채워집니다(직접 고쳐도 됨). 제목은 100자까지.</li>
+        <li><b>한 줄 요약</b> — 카드 목록에 보이는 설명.</li>
+        <li><b>원인 N</b> 상자 — 원인/상황 이름 · 빈도(높음/보통/낮음) · ✕(원인 삭제) · <b>처리 절차</b>(줄바꿈 = 단계 하나, 빈 줄은 저장 시 정리) · <b>필요 부품</b>(콤마 구분). <b>[+ 원인 추가]</b>로 늘립니다. 이름이 빈 원인은 저장 시 빠집니다.</li>
+        <li><b>주의·꿀팁</b> — 있으면 상세에 노란 상자로.</li>
+        <li><b>[저장]</b> → 토스트 "족보 카드를 만들었습니다." / "족보 카드를 수정했습니다." 목록을 다시 불러옵니다.</li>
+      </ol>
+      <div class="box warn"><b>원인·요약을 고치면 확인이 초기화됩니다</b>수정 저장 시 원인 목록이나 한 줄 요약이 바뀌었으면 "N명 확인"이 <b>0으로 돌아가고 카드가 초안</b>이 됩니다 — 이전 확인은 새 내용을 보증하지 않기 때문입니다. 제목·꿀팁만 고치면 그대로입니다.</div>
+      <div class="box tip"><b>이런 토스트가 뜨면</b>"브랜드·증상·제목을 채워주세요." → 셋 중 하나가 빔. "저장 실패: …" → 서버 오류, 잠시 후 재시도.</div>
+    </div>
+  </div>
+</section>
+
+<section id="guide">
+  <h2>4. 가이드 탭 — 실제 작업 방법</h2>
+  <p>탈거·조립·에러 처리 같은 <b>실무 문서</b>입니다. 노션에서 옮겨 온 문서와 여기서 새로 쓴 문서가 함께 있고, 누구나 작성·수정할 수 있습니다(노션처럼).</p>
+  <div class="shot ui"><span class="cap">화면 재현 · 가이드 탭</span>
+    <div class="bar" style="background:#151A23">
+      <div class="row"><span class="search">🔍 제목 · 요약 · 기종 · 부품 검색</span><span class="spacer"></span><span class="chip">가이드 <b style="color:#fff">142</b></span></div>
+      <div class="row"><span class="dsel">브랜드 전체 (142)</span><span class="dsel on">부품 교체</span><span class="dsel">부품 전체</span><span class="dsel">증상 전체</span><span class="dsel">난이도 전체</span><span class="spacer"></span><span class="ubtn primary" style="padding:4px 12px">+ 가이드 작성</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">
+      <div class="wcard"><div style="display:flex;gap:4px;align-items:center"><span class="wtag slate">제록스</span><span class="wtag blue">부품 교체</span><span style="font-size:10px">📷</span></div><div style="font-weight:900;color:#0f172a;margin-top:5px">세이토 정착기 탈거·조립</div><div style="font-size:11px;color:#64748B;font-weight:600;margin-top:2px">커버 4개 → 커넥터 2개 → 레버</div><div style="display:flex;gap:4px;margin-top:6px"><span class="wtag soft">세이토</span><span class="wtag soft">키슈</span><span class="wtag amber">보통</span></div></div>
+      <div class="wcard"><div style="display:flex;gap:4px;align-items:center"><span class="wtag slate">삼성</span><span class="wtag blue">시스템 설정/에러</span></div><div style="font-weight:900;color:#0f172a;margin-top:5px">MX3 스캔 투 이메일 설정</div><div style="display:flex;gap:4px;margin-top:6px"><span class="wtag soft">MX3</span><span class="wtag emerald">쉬움</span></div></div>
+      <div class="wcard"><div style="display:flex;gap:4px;align-items:center"><span class="wtag blue">부품 교체</span><span style="font-size:10px">📷</span></div><div style="font-weight:900;color:#0f172a;margin-top:5px">MX3 전사벨트 탈거·조립</div><div style="display:flex;gap:4px;margin-top:6px"><span class="wtag soft">MX3</span><span class="wtag rose">어려움</span></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>검색</b> — 제목·요약·기종·부품·브랜드·본문에서. 띄어쓰기·하이픈·점을 무시하고 비교하므로 "신도 n501", "SL K3250"도 잡힙니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>필터 ▾</b> — 브랜드 전체(N) · 분류 전체 · 부품 전체(가장 많이 태그된 부품 14개) · 증상 전체(N) · 난이도 전체(쉬움·보통·어려움). 문서에 있는 값만 목록에 나옵니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>카드</b> — 브랜드 · 분류 · 📷(사진 있음) · 제목 · 요약 · 적용 기종 3개 · 난이도(<span class="wtag emerald">쉬움</span> <span class="wtag amber">보통</span> <span class="wtag rose">어려움</span>). 정렬은 브랜드 → 제목순. 빈 결과: "조건에 맞는 가이드가 없어요 — 첫 가이드를 작성해 보세요."</div></div>
+  </div>
+
+  <h3 id="g-view">가이드 열기</h3>
+  <table class="tbl"><thead><tr><th>부분</th><th>설명</th></tr></thead><tbody>
+    <tr><td><b>헤더</b></td><td>브랜드 · 분류 · 난이도 배지, 제목, 부제 "작성자(없으면 '노션 이관') · 작성일".</td></tr>
+    <tr><td><b>요약</b></td><td>파란 상자(있을 때).</td></tr>
+    <tr><td><b>본문</b></td><td>노션식 표기를 보기 좋게 그려 줍니다: <code>##</code> 제목 · <code>###</code> 소제목 · <code>-</code> 목록 · <code>1.</code> 번호 · <code>---</code> 구분선 · <code>::: 제목 ~ :::</code> 접었다 펴는 토글 · 이미지(누르면 원본) · 파일 링크(📎).</td></tr>
+    <tr><td><b>[원본(노션 그대로) 보기] ⇄ [정리본 보기]</b></td><td>노션 이관 문서처럼 정리본이 따로 있는 경우에만 나타나는 토글. 새로 쓴 가이드에는 없습니다.</td></tr>
+    <tr><td><b>[✎ 수정]</b></td><td>편집 창(<a href="#g-write">아래</a>). 정리본이 있으면 정리본을 편집합니다.</td></tr>
+    <tr><td><b>[삭제]</b></td><td>확인 창 "<b>"제목" 가이드를 삭제할까요?<br>모든 직원의 목록에서 사라집니다.</b>" → [확인]. 누구나 지울 수 있습니다.</td></tr>
+    <tr><td><b>[확인]</b></td><td>닫기.</td></tr>
+  </tbody></table>
+
+  <h3 id="g-write">가이드 작성·수정 — 서식 버튼과 사진</h3>
+  <div class="shot ui"><span class="cap">화면 재현 · 새 가이드 작성 (넓은 창)</span>
+    <div class="modal" style="max-width:100%">
+      <div><div class="mt" style="font-size:15px">📘 새 가이드 작성</div><div class="ms">저장하면 모든 직원의 가이드 목록에 바로 반영됩니다</div></div>
+      <div class="field"><b>제목 <span style="color:#F43F5E">*</span></b>예: 세이토 정착기 탈거·조립</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"><div class="field"><b>브랜드</b>공통 ▾</div><div class="field"><b>분류</b>선택 안 함 ▾</div><div class="field"><b>난이도</b>선택 안 함 ▾</div></div>
+      <div class="field"><b>한 줄 요약</b>목록 카드에 보이는 설명</div>
+      <div class="field"><b>적용 기종 — 쉼표로 구분</b>예: 키슈, 세이토</div>
+      <div><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;font-weight:900;color:#64748B">본문 <span style="color:#F43F5E">*</span></span><span style="display:flex;gap:3px;flex-wrap:wrap"><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">H 제목</span><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">h 소제목</span><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">• 목록</span><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">1. 번호</span><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">— 구분선</span><span class="ubtn ghost" style="padding:2px 8px;font-size:10.5px">▸ 토글</span><span class="ubtn" style="padding:2px 8px;font-size:10.5px;background:#EFF6FF;color:#2563EB;border-color:#BFDBFE">📷 사진</span></span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px"><div class="field" style="min-height:130px;white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:11px">위 버튼으로 서식을 넣거나, 캡처한 사진을 Ctrl+V로 바로 붙여넣으세요.
+
+## 준비물
+- 십자드라이버
+
+::: 자세한 순서 (누르면 펼쳐짐)
+1. 전원 차단
+2. 커버 탈거
+:::</div><div style="border:1px solid #F1F5F9;background:#F8FAFC;border-radius:10px;padding:8px 12px;font-size:11.5px"><div style="font-size:9.5px;font-weight:900;color:#CBD5E1;letter-spacing:.06em">미리보기 — 쓰는 대로 바로 적용됩니다</div><div style="color:#CBD5E1;font-weight:700;margin-top:4px">왼쪽에 쓰기 시작하면 완성본이 여기 나타나요.</div></div></div>
+        <div style="font-size:10px;color:#94A3B8;font-weight:600;margin-top:3px">💡 사진은 Ctrl+V 붙여넣기 지원 — 커서 위치에 바로 들어갑니다</div></div>
+      <div style="display:flex;justify-content:flex-end;gap:6px"><span class="ubtn ghost">취소</span><span class="ubtn primary">가이드 등록</span></div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li>가이드 탭 <b>[+ 가이드 작성]</b>(지금 걸린 브랜드·분류 필터가 미리 채워짐) 또는 상세의 <b>[✎ 수정]</b>.</li>
+    <li><b>제목*</b> · 브랜드(공통 또는 브랜드) · 분류(선택 안 함 · 시스템 설정/에러 · 부품 교체 · 기타 · 기존 문서에 있는 분류들) · 난이도(선택 안 함 · 쉬움 · 보통 · 어려움) · 한 줄 요약 · 적용 기종(쉼표).</li>
+    <li><b>본문*</b> — 왼쪽에 쓰면 오른쪽 <b>미리보기</b>에 바로 그려집니다. 서식 버튼은 커서 자리에 틀을 넣어 줍니다: <b>H 제목</b>(<code>## 제목</code>) · <b>h 소제목</b>(<code>### 소제목</code>) · <b>• 목록</b>(<code>- 항목</code>) · <b>1. 번호</b>(<code>1. 첫 단계</code>) · <b>— 구분선</b>(<code>---</code>) · <b>▸ 토글</b>(<code>::: 눌러서 펼치기 / 내용 / :::</code>).</li>
+    <li><b>📷 사진</b> — 파일을 고르면 올라가는 동안 "올리는 중…", 끝나면 커서 자리에 <code>![](주소)</code>가 들어갑니다. <b>캡처한 사진은 본문에 Ctrl+V</b>로 바로 붙여도 같은 동작. 사진은 서버 저장소(photos/guides/연도/)에 올라갑니다. 실패 시 토스트 "사진 업로드 실패: …".</li>
+    <li><b>[가이드 등록]</b>(새 글) / <b>[수정 저장]</b> — 제목·본문이 비면 눌리지 않습니다. 저장 중엔 "저장 중…". 끝나면 토스트 "가이드를 등록했습니다." / "가이드를 수정했습니다."와 함께 목록이 새로 불러와집니다. 노션 원본이 있던 문서를 수정하면 그 뒤로는 정리본 토글이 사라지고 편집한 내용만 남습니다.</li>
+  </ol>
+</section>
+
+<section id="links">
+  <h2>5. 세 층이 서로 이어지는 길</h2>
+  <table class="tbl"><thead><tr><th>여기서</th><th>이걸 누르면</th><th>저기로</th></tr></thead><tbody>
+    <tr><td>기록 탭</td><td>목록 위 <b>📖 이 조건의 족보</b> 칩</td><td>족보 탭 → 그 카드 상세가 열림</td></tr>
+    <tr><td>족보 카드 상세</td><td><b>[사례 N건 보기]</b></td><td>기록 탭 → 브랜드·기종·증상 필터가 카드 기준으로 걸림</td></tr>
+    <tr><td>족보 카드 상세</td><td><b>🔧 관련 가이드</b>의 문서 이름</td><td>가이드 탭 → 그 문서가 열림(정리본 보기)</td></tr>
+    <tr><td>기록 추가 창</td><td>정식 기종명 입력</td><td>브랜드가 자동 선택됨(기기 카탈로그 기준)</td></tr>
+  </tbody></table>
+  <div class="box naver"><b>저장소</b>기록=copier_notes, 족보=copier_playbook, 가이드=knowledge_docs. 모두 팀 공용이며 저장 즉시 모든 직원에게 보입니다.</div>
+</section>
+
+<section id="faq">
+  <h2>6. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>검색했는데 아무것도 안 나와요</summary><p>띄어 쓴 낱말은 <b>모두</b> 들어가야 합니다. 낱말을 줄이거나(예: "3220 줄"), 브랜드·기종·증상 필터를 "전체"로 풀어 보세요. 증상 필터는 제목만 보므로 내용에만 증상이 적힌 기록은 빠집니다 — 그럴 땐 검색칸에 증상 낱말을 직접 넣으세요.</p></details>
+    <details><summary>족보 카드 내용이 틀린 것 같아요</summary><p>[✎ 수정]으로 원인·절차를 고치세요. 원인이나 요약이 바뀌면 이전 "N명 확인"은 자동으로 초기화되어 다시 확인을 받게 됩니다. 아예 잘못 묶인 카드면 [삭제].</p></details>
+    <details><summary>[👍 내용 맞음 — 확인]을 눌렀는데 반응이 없어요</summary><p>토스트에 "우측 상단에서 본인 이름을 먼저 선택하세요."가 떴을 겁니다. FIELD 탭 우측 상단에서 이름을 고른 뒤 다시 누르세요. "저장 실패: …"면 서버 오류로 잠시 후 재시도.</p></details>
+    <details><summary>내 기록에 [삭제] 버튼이 없어요</summary><p>기록의 [삭제]는 작성자 이름이 지금 선택된 이름과 같을 때만 보입니다. 이름이 다르게 선택돼 있는지 확인하세요. 족보 카드·가이드의 [삭제]는 누구에게나 보입니다.</p></details>
+    <details><summary>가이드에 사진을 붙였는데 안 보여요</summary><p>본문에 <code>![](https://…)</code> 한 줄이 그 자리에 있어야 합니다. 업로드 중("올리는 중…")에 창을 닫았거나 "사진 업로드 실패" 토스트가 떴다면 다시 올리세요. 미리보기에서 사진이 보이면 저장 후에도 보입니다.</p></details>
+    <details><summary>기록 탭 통계 숫자와 목록 건수가 달라요</summary><p>통계 칩(전체·학습·처리이력·이번 달)은 필터와 무관한 전체 기준이고, 목록은 지금 걸린 조건 + 200건 단위 페이지입니다. [더 보기]를 누르면 이어서 나옵니다.</p></details>
+    <details><summary>데일리 퀴즈는 어디 있나요</summary><p>복합기 화면에는 퀴즈가 없습니다. 기술 퀴즈는 <a href="it-history.html">IT 학습·처리이력</a> 화면의 "기술 퀴즈" 탭에 있습니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">복합기 학습·처리이력 길잡이 · 함께 보기 <a href="it-history.html">IT 학습·처리이력</a> · <a href="selfdev.html">자기개발/지식공유</a></p>
+</main>
+</div>
+</body>
+</html>

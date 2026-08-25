@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>카운터 문자전송 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+/* ── 추가: 고객·홍보·조회·관리 길잡이 공용 모형 ── */
+.hd{background:#1E252F;border-radius:14px 14px 0 0;padding:12px 14px;color:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.hd .t{font-weight:900;font-size:14px} .hd .s{font-size:11px;color:#94A3B8;font-weight:600;margin-top:2px}
+.hd.solo{border-radius:14px}
+.strip{background:#151A23;border-radius:0 0 14px 14px;padding:9px 14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#C5CDD8;font-size:12px}
+.btn.blue{background:#2563EB;color:#fff} .btn.white{background:#fff;color:#334155;border-color:#CBD5E1} .btn.ghostw{background:rgba(255,255,255,.1);color:#fff} .btn.emerald{background:#059669;color:#fff} .btn.emeraldsoft{background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(52,211,153,.4)} .btn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3} .btn.dark{background:#0f172a;color:#fff} .btn.violet{background:#6D28D9;color:#fff} .btn.bluesoft{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE} .btn.big{padding:8px 14px;font-size:12.5px}
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.card .chead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid #F1F5F9;background:#F8FAFC;font-weight:900;font-size:12.5px;color:#0f172a}
+.card .cbody{padding:10px 14px;display:grid;gap:8px}
+.rowl{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #F1F5F9;font-size:12px;color:#334155} .rowl:first-child{border-top:0}
+.tg{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:900;white-space:nowrap} .tg.g{background:#ECFDF5;color:#047857} .tg.r{background:#FFF1F2;color:#BE123C} .tg.a{background:#FEF3C7;color:#92400E} .tg.b{background:#EFF6FF;color:#1D4ED8} .tg.gr{background:#F1F5F9;color:#64748B} .tg.v{background:#F5F3FF;color:#6D28D9} .tg.i{background:#EEF2FF;color:#4338CA} .tg.dk{background:#0f172a;color:#fff}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .kpi div{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px;text-align:center} .kpi b{display:block;font-size:17px;color:#0f172a} .kpi small{font-size:10.5px;color:#94A3B8;font-weight:900}
+.progress{height:6px;width:140px;border-radius:999px;background:#E2E8F0;overflow:hidden;display:inline-block;vertical-align:middle} .progress i{display:block;height:100%;background:#10B981}
+.inputm{border:1px solid #CBD5E1;border-radius:10px;padding:7px 10px;font-size:12px;color:#64748B;background:#fff;display:inline-block}
+.darkinput{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);color:#94A3B8;border-radius:8px;padding:6px 10px;font-size:12px;display:inline-block}
+.ui .muted{color:#94A3B8;font-size:11px;font-weight:700}
+.grid3c{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.mcard{border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#fff;font-size:12px;color:#334155} .mcard.sent{border-color:#A7F3D0;background:#ECFDF5}
+.ntoast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:8px 12px;font-size:12.5px;font-weight:700;border:1px solid #E2E8F0;background:#fff;color:#1e293b;box-shadow:0 8px 24px rgba(15,23,42,.12)} .ntoast.ok{border-color:#A7F3D0;background:#ECFDF5;color:#065F46} .ntoast.err{border-color:#FECDD3;background:#FFF1F2;color:#9F1239}
+.sw{display:inline-block;width:40px;height:22px;border-radius:999px;background:#E2E8F0;position:relative;vertical-align:middle} .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)} .sw.on{background:#2563EB} .sw.on::after{left:21px} .sw.on.amber{background:#F59E0B}
+.tabu{padding:8px 14px;font-weight:900;font-size:13px;color:#94A3B8;display:inline-block} .tabu.on{color:#0f172a;box-shadow:inset 0 -3px #2563EB}
+.a4{background:#fff;border-radius:6px;box-shadow:0 8px 24px rgba(15,23,42,.12);overflow:hidden;color:#0f172a;font-size:11.5px}
+.a4 .top{background:#1E252F;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;gap:10px}
+.a4 .cells{display:grid;grid-template-columns:repeat(4,1fr);background:#F8FAFC;border-bottom:1px solid #E2E8F0} .a4 .cells div{padding:10px 6px;text-align:center;border-right:1px solid #E2E8F0} .a4 .cells div:last-child{border-right:0} .a4 .cells b{display:block;font-size:20px} .a4 .cells small{font-size:10px;color:#64748B;font-weight:900}
+.a4 .sec{padding:10px 18px}
+.a4 table{width:100%;border-collapse:collapse;font-size:11px} .a4 th{text-align:left;border-bottom:2px solid #0f172a;padding:4px 6px;color:#64748B;font-size:10px} .a4 td{padding:5px 6px;border-bottom:1px solid #F1F5F9}
+.a4 .promo{margin:0 18px 14px;background:linear-gradient(90deg,#1E252F,#2b3a52);color:#fff;border-radius:12px;padding:12px 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#upload">2. 마감 목록 올리기 (관리부)</a>
+  <a href="#list">3. 팀 공유 마감 목록 읽기</a>
+  <a href="#send">4. 업체 카드 → 문자 보내기</a>
+  <a class="sub" href="#s-modal">전송 확인 창</a>
+  <a class="sub" href="#s-mark">전송 표시와 취소</a>
+  <a href="#message">5. 문자 문구는 어떻게 만들어지나</a>
+  <a href="#personal">6. 직접 붙여넣어 변환 (개인용)</a>
+  <a href="#settings">7. 문구 설정</a>
+  <a href="#faq">8. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 고객·홍보 › 카운터 문자전송</div>
+  <h1>카운터 문자전송 길잡이</h1>
+  <p>마감 때 고객에게 "카운터 사진 한 장 보내 주세요" 문자를 보내는 화면입니다. 관리부가 카톡 마감 목록을 <b style="color:#fff">한 번 올리면</b> 팀원 모두가 같은 목록을 보고 <b style="color:#fff">한 업체씩 내 폰 문자앱으로</b> 보냅니다. 보낸 업체에는 <b style="color:#fff">✓(누가·언제)</b>가 전 직원에게 공유되어 두 번 보내는 일이 없습니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">마감 목록 붙여넣기</div><div class="big"><s>직원 수만큼</s> → <em>1번</em></div><div class="sub">관리부가 올리면 팀원 모두 같은 목록</div></div>
+    <div class="stat green"><div class="lbl">같은 업체 두 번 보내기</div><div class="big"><em>✓ 표시</em>로 <em>0</em></div><div class="sub">누가·언제 보냈는지 전 직원 공유</div></div>
+    <div class="stat purple"><div class="lbl">문구 작성</div><div class="big"><s>기종 찾아 타이핑</s> → <em>자동</em></div><div class="sub">기종별 확인 방법 + 등급별 인사말</div></div>
+    <div class="stat amber"><div class="lbl">업체 한 곳 문자</div><div class="big"><s>2~3분</s> → <em>20초</em></div><div class="sub">예: 카드 → 번호 확인 → 문자앱</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">팀 마감 문자 (직원 10여 명)</div><div class="pills"><span>각자 카톡 목록 복사</span><span>붙여넣기</span><span>변환</span><span>누가 어디까지 보냈나 카톡으로 묻기</span><span>전송</span></div><div class="ba-count">5단계 × 사람마다</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">팀 마감 문자</div><div class="pills"><span class="hot">마감 목록 올리기 (1명)</span><span class="hot">업체 카드</span><span class="hot">✅ 문자 보내기</span></div><div class="ba-count">업체당 2번 누르기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">기기 3대 업체 문구</div><div class="pills"><span>기종 3개 확인</span><span>기종별 확인 방법 찾기</span><span>인사말·마무리 붙이기</span><span>대수 적기</span></div><div class="ba-count">4단계 · 오타 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">기기 3대 업체 문구</div><div class="pills"><span class="hot">카드 클릭</span></div><div class="ba-count">1번 · "총 3대" 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">지점 4곳 같은 담당자</div><div class="pills"><span>지점마다 따로 문자 ×4</span></div><div class="ba-count">4통</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">지점 4곳 같은 담당자</div><div class="pills"><span class="hot">"지점 4곳 통합" 카드 1개</span></div><div class="ba-count">1통 · 기종별 방법 한 문자에</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>문자앱에서 실제로 보내지 않았다면 카드의 [전송 취소]를 바로 누르세요 — ✓는 "문자앱을 연 순간" 찍히기 때문입니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 문자는 내 폰에서 나갑니다</h2>
+  <p class="lead">고객 리포트·해피콜과 달리 이 화면의 문자는 <b>회사 서버가 아니라 내 휴대폰 문자앱</b>이 보냅니다. 웹앱은 문구를 만들어 문자앱을 열어 주고, "열었다"는 사실을 ✓로 팀에 공유하는 역할입니다.</p>
+  <div class="sync">
+    <div class="n">카톡 마감 목록<small>관리부가 붙여넣기</small></div>
+    <div class="arr">→</div>
+    <div class="n">팀 공유 목록<small>이 화면 · 업체 카드 · ✓ 공유</small></div>
+    <div class="arr">→</div>
+    <div class="n">내 폰 문자앱<small>번호·문구가 채워진 채 열림</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box naver"><b>저장되는 것(전 직원 공용)</b>팀별 마감 목록(원문·제목·올린 사람), 업체 카드(등급군·번호·기종·통합 지점), 전송 표시(누가·언제·어느 번호로), 지역별 문구 세트.</div>
+    <div class="box warn"><b>저장되지 않는 것</b>실제 문자가 나갔는지 여부. 문자앱에서 보내기를 눌렀는지는 웹앱이 알 수 없습니다. 그래서 [전송 취소]가 있습니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="right:190px;top:24px">1</span>
+    <span class="badge" style="right:60px;top:24px">2</span>
+    <span class="badge" style="left:26px;top:82px">3</span>
+    <div class="hd"><div><div class="t">카운터 문자전송</div><div class="s">카톡 마감 목록을 붙여넣으면 업체별 요청 문자를 만들어 내 휴대폰 문자앱으로 보냅니다.</div></div><span style="display:flex;gap:6px"><span class="btn blue big">⬆ 마감 목록 올리기</span><span class="btn ghostw big">⚙ 문구 설정</span></span></div>
+    <div class="strip"><span class="chip">A팀</span><span class="chip">B팀</span><span class="tab on" style="font-size:11px">C팀 ★</span><span class="chip">D팀</span><span class="chip">E팀</span></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>⬆ 마감 목록 올리기</b> — 관리부(또는 아무나)가 팀 마감 목록을 등록. <a href="#upload">2번</a>.</div></div>
+    <div class="item"><span class="num">2</span><div><b>⚙ 문구 설정</b> — 지역별 인사말·기종별 안내 문구 편집 화면으로 전환(누르면 "💬 돌아가기"로 바뀜). <a href="#settings">7번</a>.</div></div>
+    <div class="item"><span class="num">3</span><div><b>팀 알약</b> — A~E팀. <b>★</b>가 붙은 것이 내 팀(작성자 명단 기준)이고 처음 열면 자동 선택됩니다. 다른 팀 목록을 도와줄 때 바꾸세요. 명단에 팀이 없으면 C팀이 기본.</div></div>
+  </div>
+  <div class="box tip"><b>파란 알림 줄</b>변환·등록·저장 결과는 머리띠 아래 파란 한 줄로 나옵니다(예: "12개 블록을 인식했습니다."). 토스트가 아니라 그 자리에 계속 남아 있습니다.</div>
+</section>
+
+<section id="upload">
+  <h2>2. 마감 목록 올리기 — 관리부가 한 번</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="padding:0;overflow:hidden;max-width:460px">
+        <div class="hd" style="border-radius:0"><div><div class="s">마감 목록 올리기 — 한 번 올리면 팀원 모두가 바로 전송</div><div class="t">C팀 카운터 마감</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:8px;font-size:12px">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tg gr" style="font-size:12px;padding:5px 10px">A팀</span><span class="tg gr" style="font-size:12px;padding:5px 10px">B팀</span><span class="tg dk" style="font-size:12px;padding:5px 10px">C팀</span><span class="tg gr" style="font-size:12px;padding:5px 10px">D팀</span><span class="tg gr" style="font-size:12px;padding:5px 10px">E팀</span><span class="inputm" style="flex:1">제목 (비우면 "8월 마감")</span></div>
+          <div class="inp" style="font-family:monospace;font-size:11px;min-height:70px">11110, 5N주식회사 무암 분기마감
+010-0000-0000 홍길동 과장
+SL-X3220NR
+
+11111, 3V가나다상사
+010-1111-2222 김담당 대리 / D420</div>
+          <div class="card"><div class="chead">인식 결과 2건 — 틀린 곳만 고치고 등록하세요</div><div class="rowl"><span style="flex:1"><span class="muted">업체명(등급)</span><br><span class="inputm" style="width:100%">N 주식회사 무암</span></span><span style="flex:1"><span class="muted">연락처 (쉼표로 여러 개)</span><br><span class="inputm" style="width:100%">01000000000</span></span></div></div>
+        </div>
+        <div style="display:flex;gap:8px;padding:12px 14px;background:#F8FAFC;border-top:1px solid #F1F5F9"><span class="btn bluesoft big">🔍 변환 미리보기</span><span class="btn blue big" style="flex:1;text-align:center">C팀에 등록 (2곳)</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[⬆ 마감 목록 올리기]</b> → "{팀} 카운터 마감" 창. 위 팀 알약으로 어느 팀 목록인지 정합니다(밖의 팀 선택과 같이 움직임).</li>
+        <li><b>제목</b>은 비우면 자동으로 <b>"8월 마감"</b>처럼 이번 달 이름이 붙습니다.</li>
+        <li>카톡 마감 목록을 <b>그대로</b> 붙여넣고 <b>[🔍 변환 미리보기]</b> — "N개 블록을 인식했습니다 — 확인 후 [C팀에 등록]을 누르세요." 비어 있으면 "마감 목록을 붙여넣어 주세요.", 형식이 안 맞으면 "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요."</li>
+        <li><b>인식 결과</b>에서 업체명(등급)과 연락처(쉼표로 여러 개)를 틀린 곳만 고칩니다.</li>
+        <li><b>[C팀에 등록 (N곳)]</b> → 확인 팝업 <i>"{팀}팀에 마감 목록을 등록할까요? 업체 N곳 (기존 목록을 대체하는 게 아니라 최신 목록으로 올라갑니다) 팀원 모두가 이 목록을 보고 바로 전송할 수 있습니다."</i> → [확인]. 알림 "{팀}팀에 N곳을 등록했습니다 — 팀원 모두에게 보입니다."</li>
+      </ol>
+      <div class="box"><b>블록은 어떻게 나뉘나</b><b>"숫자, "</b>로 시작하는 줄(예: <code>11110, 5N주식회사 무암</code>)이 새 업체의 시작입니다. 첫 줄에서 <b>등급</b>(V·SS → 💎 V·SS급, 그 외 → 🟢 S·NN·N급)과 업체명을 읽고, "분기마감·매월방문" 같은 일정 단어와 "/" 뒤는 업체명에서 떼어냅니다. 블록 안 010 번호마다 앞뒤의 "이름 직함"을 붙여 연락처로 잡고, 기종은 <a href="#message">5번</a> 규칙으로 찾습니다.</div>
+      <div class="box tip"><b>화면에는 항상 "가장 최근 올린 목록" 하나</b>팀마다 마지막에 등록한 목록만 보입니다. 이전 달 목록은 덮어쓰이는 게 아니라 뒤로 밀리는 것이지만, 화면에서 볼 수는 없습니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="list">
+  <h2>3. 팀 공유 마감 목록 읽기</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:150px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:74px">3</span>
+    <span class="badge" style="left:26px;top:116px">4</span>
+    <div class="card">
+      <div class="chead"><span style="flex:1">8월 마감 <span class="muted">· 관리부김 · 08-25 09:12</span><br><span class="progress" style="width:120px"><i style="width:40%"></i></span> <span style="color:#059669;font-size:11px">4/10 전송</span></span><span class="btn white">새로고침</span><span class="btn rose">목록 삭제</span></div>
+      <div style="display:flex;gap:4px;padding:6px 10px 0;border-bottom:1px solid #F1F5F9;background:#FAFBFC"><span class="tabu on" style="font-size:12px">🟢 S·NN·N급 7</span><span class="tabu" style="font-size:12px">💎 V·SS급 3</span></div>
+      <div class="cbody" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+        <div class="mcard"><b>✉️ N 주식회사 무암</b><br><span class="muted">1대 · 010-0000-0000</span></div>
+        <div class="mcard"><b>✉️ S 라마바건설</b><br><span class="muted">3대 · 010-3333-4444, 010-5555-6666</span><br><span style="color:#3B82F6;font-size:10px;font-weight:700">지점 3곳 통합</span></div>
+        <div class="mcard sent" style="position:relative"><b>✉️ NN 사아자테크</b> <span class="tg g" style="background:#059669;color:#fff">✓</span><br><span class="muted">1대 · 010-7777-8888</span><br><span style="color:#047857;font-size:10px;font-weight:900">홍길동 · 08-25 10:31 · 010-7777-8888</span><span class="btn" style="position:absolute;right:6px;top:6px;border-color:#A7F3D0;color:#059669;background:#fff;font-size:9px;padding:2px 6px">전송 취소</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>목록 머리</b> — 제목 · 올린 사람 · 올린 시각, 아래 초록 진행 막대와 <b>"N/M 전송"</b>(✓ 찍힌 카드 수).</div></div>
+    <div class="item"><span class="num">2</span><div><b>[새로고침]</b> 다른 팀원이 찍은 ✓를 다시 읽어옴 · <b>[목록 삭제]</b> 확인 팝업 <i>"[C팀] 8월 마감 목록을 삭제할까요? 전송 기록도 함께 지워집니다."</i> → 목록과 ✓ 기록이 모두 삭제(전 직원).</div></div>
+    <div class="item"><span class="num">3</span><div><b>등급군 탭</b> — 🟢 S·NN·N급 / 💎 V·SS급, 숫자는 업체 수. 등급군마다 인사말 세트가 다릅니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>업체 카드</b> — ✉️(일반) 또는 💎(V·SS) + 업체명, "N대 · 번호들"(없으면 "번호 없음"), 지점이 합쳐졌으면 <span style="color:#3B82F6;font-weight:700">지점 N곳 통합</span>. 보낸 카드는 <b>초록 배경 + ✓ + "누가 · 언제 · 어느 번호"</b>와 [전송 취소]. <b>안 보낸 카드가 먼저</b> 정렬됩니다.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box"><b>목록이 없으면</b>점선 상자 "{팀}팀에 올라온 마감 목록이 없습니다 / 관리부(또는 팀원)가 [마감 목록 올리기]로 등록하면 팀원 모두 여기서 바로 전송합니다."</div>
+    <div class="box"><b>"N대"는 어떻게 세나</b>블록마다 기종 하나로 잡히고, 같은 번호로 묶인 블록 수가 대수입니다. 지점 3곳이 같은 담당자 번호면 카드 하나에 3대.</div>
+  </div>
+</section>
+
+<section id="send">
+  <h2>4. 업체 카드 → 문자 보내기</h2>
+  <h3 id="s-modal">전송 확인 창</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="padding:0;overflow:hidden;max-width:440px">
+        <div class="hd" style="border-radius:0"><div><div class="s">문자 전송 대상 확인</div><div class="t">S 라마바건설</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:8px;font-size:12px">
+          <div style="background:#EFF6FF;border:1px solid #DBEAFE;border-radius:10px;padding:8px"><b style="color:#2563EB;font-size:10px">통합된 지점·위치 3곳</b><br>· S 라마바건설<br>· S 라마바건설 2공장<br>· S 라마바건설 사무동</div>
+          <span class="muted" style="font-weight:900">수신 연락처</span>
+          <div style="border:1px solid #3B82F6;background:#EFF6FF;border-radius:10px;padding:7px 10px;display:flex;gap:8px;align-items:center;color:#1E40AF;font-weight:700">◉ <span class="tg g">👤 박과장</span> <span style="font-family:monospace">010-3333-4444</span></div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:7px 10px;display:flex;gap:8px;align-items:center;color:#64748B;font-weight:700">○ <span style="font-family:monospace">010-5555-6666</span></div>
+          <div style="background:#ECFDF5;border:1px solid #D1FAE5;border-radius:10px;padding:8px;color:#065F46;font-size:11px">[문자 보내기]를 누르면 팀 목록에 <b>전송 완료 ✓</b>로 표시됩니다 (누가·언제 보냈는지 팀원 모두에게 보입니다). 실제로 안 보냈으면 카드의 [전송 취소]로 되돌리세요.</div>
+          <span class="muted" style="font-weight:900">전송 문구 미리보기</span>
+          <div class="inp" style="min-height:0;font-size:11px;white-space:pre-wrap">안녕하세요 퍼스트 전산입니다.
+세금계산서 발행을 위해 보유하신 총 3대 기기의 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다.
+…</div>
+        </div>
+        <div style="display:flex;gap:8px;padding:12px 14px;background:#F8FAFC;border-top:1px solid #F1F5F9"><span class="btn white big">복사</span><span class="btn emerald big" style="flex:1;text-align:center">✅ 박과장 에게 문자 보내기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>카드를 누르면</b> "문자 전송 대상 확인" 창. 지점이 합쳐졌으면 위에 <b>통합된 지점·위치</b> 목록이 보입니다.</li>
+        <li><b>수신 연락처</b>에서 받을 번호 하나를 고릅니다(○ 라디오). 이름·직함이 잡힌 번호는 <span class="tg g">👤 이름 직함</span>이 붙습니다. 첫 번호(이미 보낸 카드면 그때 보낸 번호)가 미리 선택되어 있습니다. 번호가 하나도 없으면 빨간 상자 "번호가 없습니다 — 인식 결과에서 연락처를 입력해 주세요."와 함께 보내기 버튼이 없습니다.</li>
+        <li><b>전송 문구 미리보기</b>에서 문장을 확인합니다. 팀 목록 카드는 <b>그 팀의 지역 문구 세트</b>("C팀" → "C지역")로 만들어집니다.</li>
+        <li><b>[복사]</b> — 문구만 복사(알림 "문구를 복사했습니다."). 카톡으로 보내거나 PC에서 쓸 때.</li>
+        <li><b>[✅ 이름 에게 문자 보내기]</b> — 내 폰 <b>문자앱이 열리며 번호와 문구가 채워져</b> 있습니다. 문자앱에서 보내기를 누르면 끝.</li>
+      </ol>
+      <div class="box warn"><b>PC에서 누르면</b>문자앱 링크(sms:)를 처리할 앱이 없어 아무 일도 안 생기거나 다른 앱을 물을 수 있습니다. PC에서는 [복사]로 문구를 옮기고, 실제 전송은 폰에서 하세요.</div>
+    </div>
+  </div>
+
+  <h3 id="s-mark">전송 표시(✓)와 [전송 취소]</h3>
+  <table class="tbl"><thead><tr><th>언제</th><th>무슨 일이</th><th>누가 보나</th></tr></thead><tbody>
+    <tr><td>[✅ … 에게 문자 보내기]를 누른 순간</td><td>창이 닫히고 카드가 초록으로 바뀌며 <b>✓ · 내 이름 · 지금 시각 · 고른 번호</b>가 저장됩니다. 진행 막대의 숫자가 1 올라갑니다.</td><td>팀원 모두([새로고침] 하면 즉시)</td></tr>
+    <tr><td>카드의 [전송 취소]</td><td>✓·이름·시각·번호가 지워지고 카드가 다시 흰색으로. 확인 팝업 없음.</td><td>팀원 모두</td></tr>
+    <tr><td>보낸 카드를 다시 누르면</td><td>같은 창이 열립니다(그때 보낸 번호가 선택됨). 다시 보내면 ✓ 정보가 새 시각으로 덮입니다.</td><td>—</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>✓는 "보냈다"가 아니라 "문자앱을 열었다"</b>문자앱에서 취소했거나 전송이 실패했다면 카드의 [전송 취소]를 눌러 팀원이 헛갈리지 않게 하세요. 반대로 ✓가 있는 업체는 이미 누가 열어 본 것이니 문자앱 기록을 먼저 확인하고 다시 보내세요.</div>
+</section>
+
+<section id="message">
+  <h2>5. 문자 문구는 어떻게 만들어지나</h2>
+  <p>문구 = <b>등급군 인사말</b> + <b>기종별 확인 방법</b> + <b>마무리말</b>. 기종은 원문에서 자동으로 찾고, 문구 세트는 지역(팀)별로 다를 수 있습니다(<a href="#settings">7번</a>).</p>
+  <div class="grid2">
+    <div class="box"><b>기기 1대 (기종 1개)</b>
+<div class="quote" style="margin-top:6px">(인사말 (단일 기기))
+
+▶ 기종: X3220NR
+▶ 방법: 복사기 숫자 키패드 위 카운터 클릭 후 화면에서 인쇄 눌러주시고 나온 출력물 사진찍어 보내주시면 됩니다.
+
+(마무리말 (단일))</div>
+<span class="small">기종 문구 자체가 "안녕하세요"나 "사용량확인차"로 시작하는 완결형(5473 등)이면 인사말 없이 그 문구 + "(기종: …)" + 마무리말만.</span></div>
+    <div class="box"><b>기기 2대 이상</b>
+<div class="quote" style="margin-top:6px">(인사말 (여러 기기) — {total}이 "3"으로)
+
+▶ 기종1: D420 (2대)
+    방법: 기기 메뉴버튼 → 화면 윗쪽 카운터 버튼 → …
+
+▶ 기종2: MA2101
+    방법: 화면 맨 밑 가운데에 점3개(***)를 …
+
+(마무리말 (여러 기기))</div>
+<span class="small">같은 기종은 "(N대)"로 합쳐 한 항목.</span></div>
+  </div>
+  <table class="tbl"><thead><tr><th>원문에 이런 글자가 있으면</th><th>기종으로 잡힘</th></tr></thead><tbody>
+    <tr><td>2101 / MA2101 / MA-2101</td><td>MA2101 (교세라)</td></tr>
+    <tr><td>3250 · 3220 · 9201 · mx6</td><td>K3250 · X3220NR · X-9201 · Mx6 (삼성)</td></tr>
+    <tr><td>X4xxx·K4xxx / X7xxx·K7xxx / sl-</td><td>X4-시리즈 / X7-시리즈 / SL- (삼성)</td></tr>
+    <tr><td>hp / 410 / lexmark·렉스마크</td><td>HP / 410 / Lexmark (신도 D410·D420은 렉스마크 410으로 오인하지 않도록 D 기종을 먼저 봄)</td></tr>
+    <tr><td>c2003 · mp-c2003</td><td>C3003 (리코)</td></tr>
+    <tr><td>설정에 있는 기종 이름이 그대로 포함(N500, C2265, ECOSYS, 5700, L5100 …)</td><td>그 기종</td></tr>
+    <tr><td>아무것도 못 찾으면</td><td><b>기본 기종</b> — "기기 화면의 카운터 메뉴에서 사용량 확인 후 사진 한 장만 문자나 카톡으로 발송 부탁드립니다."</td></tr>
+  </tbody></table>
+  <div class="box"><b>기본 인사말(S·NN·N급과 V·SS급 모두 같은 문장으로 시작)</b>"안녕하세요 퍼스트 전산입니다. / 세금계산서 발행을 위해 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다. / 카운터 한장만 보내주시면 감사하겠습니다." · 여러 기기: "…보유하신 총 {total}대 기기의 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다. 각 기기별 카운터 한장씩 보내주시면 감사하겠습니다." · 마무리: "매번 번거롭게 해드려 죄송합니다." 등급군별로 다르게 고칠 수 있습니다.</div>
+</section>
+
+<section id="personal">
+  <h2>6. ✂️ 직접 붙여넣어 변환 (개인용)</h2>
+  <p>공유 목록에 없는 업체를 급히 보낼 때만 씁니다. 팀 목록 아래 접힌 줄 <b>"✂️ 직접 붙여넣어 변환 (개인용) — 공유 목록에 없는 건을 급히 보낼 때"</b>를 누르면 펼쳐집니다.</p>
+  <ol class="steps">
+    <li>"현재 <b>{지역}</b> 문구 세트로 변환됩니다" — 아래 📍 지역 선택으로 바꿀 수 있습니다(내 선택은 이 브라우저에 기억).</li>
+    <li>카톡 마감 목록을 붙여넣고 <b>[🔍 마감 문자 변환]</b> → "N개 블록을 인식했습니다." 카드 목록(🟢/💎 탭)이 아래에 생깁니다. <b>[초기화]</b>는 붙여넣은 글과 결과를 모두 지움.</li>
+    <li>카드를 누르면 <a href="#s-modal">같은 전송 창</a>이 열립니다. 다만 <b>개인용이라 ✓ 표시가 남지 않습니다</b>(초록 안내 상자도 없음).</li>
+    <li>틀린 곳은 <b>"🔧 인식 결과 수정 (N건)"</b>을 펼쳐 업체명(등급)·기종(드롭다운)·연락처를 고치면 카드가 바로 다시 계산됩니다. 이름·직함이 잡힌 번호는 "👤 홍길동 과장(010-…)"으로 아래에 표시.</li>
+  </ol>
+</section>
+
+<section id="settings">
+  <h2>7. ⚙ 문구 설정 — 지역별 세트 (전 직원 공용)</h2>
+  <p>머리띠의 <b>[⚙ 문구 설정]</b>을 누르면 화면이 설정으로 바뀌고 팀 알약 오른쪽에 <b>📍 지역 선택</b>이 생깁니다. 기본 세트는 A지역~E지역 5개이고, 팀 목록의 문자는 팀 글자와 같은 지역 세트("C팀" → "C지역")를 씁니다.</p>
+  <table class="tbl"><thead><tr><th>구역</th><th>있는 것</th><th>누르면</th></tr></thead><tbody>
+    <tr><td><b>🌍 지역 프로필</b></td><td>"새 지역/담당자 이름" 칸 · [추가] · [현재 지역 삭제]</td><td>[추가] → 기본 문구를 복사한 새 세트가 생기고 그 세트로 이동(같은 이름이면 "이미 있는 지역 이름입니다."). [현재 지역 삭제] → 확인 팝업 "[X지역] 프로필을 삭제할까요?" (세트가 하나만 남으면 비활성)</td></tr>
+    <tr><td><b>🟢 S·NN·N급 문자 양식 / 💎 V·SS급 문자 양식</b></td><td>인사말 (단일 기기) · 마무리말 (단일) · 인사말 (여러 기기) — {total} 사용 가능 · 마무리말 (여러 기기)</td><td>칸을 고치면 아래 [변경사항 저장]이 켜집니다</td></tr>
+    <tr><td><b>🔧 기종별 안내 문구 (방법 설명)</b></td><td>제조사 묶음별 접이식: 📠 신도리코(N/D) · 교세라(ECOSYS/MA2101) · 후지 Apeos(C 시리즈) · 리코 · 삼성 복합기 · HP/렉스마크/브라더 · 기타 단일 모델 · 공통/기본값</td><td>기종마다 확인 방법 문장을 고칩니다</td></tr>
+    <tr><td><b>아래 버튼</b></td><td><span class="btn blue">💾 변경사항 저장</span>(고친 게 없으면 "변경 없음"으로 비활성) · <span class="btn white">↺ 기본값으로</span></td><td>저장 → "[X지역] 문구를 저장했습니다 — 전 직원에게 반영됩니다." / 기본값 → 확인 팝업 "[X지역] 문구를 기본값으로 되돌릴까요?" → "기본값으로 되돌렸습니다."</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>저장 전에 지역을 바꾸거나 [💬 돌아가기]를 누르면</b>고친 내용은 버려집니다(초안은 저장 버튼을 눌러야 DB에 들어감).</div>
+</section>
+
+<section id="faq">
+  <h2>8. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>목록에 내 팀 업체가 안 보여요</summary><p>팀 알약이 다른 팀으로 되어 있거나(★가 내 팀), 등급군 탭(🟢/💎)이 반대쪽일 수 있습니다. 둘을 확인하고 [새로고침]. 그래도 없으면 관리부가 아직 이번 달 목록을 올리지 않은 것입니다.</p></details>
+    <details><summary>업체 두 곳이 한 카드로 합쳐졌어요</summary><p>같은 등급군에서 같은 휴대폰 번호를 쓰면 한 통으로 묶습니다(담당자가 같으면 한 문자에 기종별 방법을 다 넣는 게 맞기 때문). 정말 다른 담당자라면 목록을 올린 사람이 [마감 목록 올리기]의 인식 결과에서 번호를 나눠 다시 등록해야 합니다.</p></details>
+    <details><summary>기종이 "기본 기종"으로 나와요</summary><p>원문에 기종을 알아볼 글자가 없었습니다. 개인용 변환에서는 "🔧 인식 결과 수정"의 기종 드롭다운으로 바꿀 수 있고, 팀 목록은 원문에 기종을 적어 다시 올려야 합니다. 자주 나오는 기종이면 ⚙ 문구 설정의 기종별 안내 문구에 추가를 요청하세요.</p></details>
+    <details><summary>✓가 있는데 고객이 문자를 못 받았대요</summary><p>✓는 문자앱을 연 기록입니다. 보낸 사람의 문자앱 발신 내역을 확인하고, 실제로 안 갔으면 [전송 취소] 후 다시 보내세요.</p></details>
+    <details><summary>번호가 두 개인데 어느 쪽으로 보내나요</summary><p>전송 창에서 하나만 고릅니다(같은 문자를 두 번 보내지 않기 위해). 👤 이름·직함이 붙은 번호가 원문에서 담당자로 읽힌 것입니다.</p></details>
+    <details><summary>문구를 고쳤는데 다른 팀원 화면은 그대로예요</summary><p>[변경사항 저장]을 눌렀는지 확인하세요. 저장했다면 팀원이 이 화면을 다시 열 때 반영됩니다(이미 열어 둔 화면은 새로고침).</p></details>
+    <details><summary>지난달 목록을 다시 보고 싶어요</summary><p>화면에는 팀별로 가장 최근 목록 하나만 보입니다. 지난달 목록은 삭제되지 않았지만 화면으로는 볼 수 없으니 관리자에게 요청하세요.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">카운터 문자전송 길잡이 · 고객 리포트·해피콜·홍보물·조회·관리 길잡이와 같은 형식</p>
+</main>
+</div>
+</body>
+</html>

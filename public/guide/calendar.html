@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>캘린더 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 폼·탭·목록·달력·카드 모형 ── */
+.sect{background:#1E252F;color:#fff;border-radius:12px 12px 0 0;padding:10px 14px;display:flex;align-items:center;gap:10px;font-weight:900;font-size:13px}
+.sect .no{width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.sect small{display:block;font-weight:600;color:#94A3B8;font-size:11px}
+.sect .hstat{margin-left:auto;border-radius:999px;padding:3px 10px;font-size:11px;background:rgba(255,255,255,.1);color:#CBD5E1;white-space:nowrap}
+.sect .hstat.ok{background:rgba(52,211,153,.15);color:#6EE7B7}
+.panel{background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 12px 12px;padding:12px 14px;display:grid;gap:10px}
+.panel.top{border-top:1px solid #E2E8F0;border-radius:12px}
+.fld{display:grid;gap:3px;font-size:11px;font-weight:900;color:#64748B}
+.fld .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:#0f172a;background:#fff;min-height:36px}
+.fld .in.ph{color:#94A3B8}
+.fld .in.err{border-color:#FCA5A5;background:#FFF5F6}
+.fgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.seg{display:inline-flex;background:#F1F5F9;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg span{border-radius:999px;padding:5px 12px;font-size:12px;font-weight:900;color:#64748B}
+.seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg.ink{background:#fff;border:1px solid #E2E8F0}.seg.ink span.on{background:#0f172a;color:#fff}
+.lchip{display:inline-block;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;border:1px solid #E2E8F0;background:#fff;color:#64748B;white-space:nowrap}
+.lchip.on{background:#2563EB;color:#fff;border-color:#2563EB}
+.lchip.dark{background:#0f172a;color:#fff;border-color:#0f172a}
+.lchip.gray{background:#F1F5F9;border-color:#F1F5F9}
+.lchip.ok{background:#ECFDF5;color:#059669;border-color:#ECFDF5}.lchip.miss{background:#FFF1F2;color:#F43F5E;border-color:#FFF1F2}
+.lchip.amb{background:#FEF3C7;color:#92400E;border-color:#FEF3C7}
+.tabs{display:flex;border-bottom:1px solid #E2E8F0;background:#fff;border-radius:12px 12px 0 0;overflow:hidden}
+.tabs span{flex:1;text-align:center;padding:11px 8px;font-size:13px;font-weight:900;color:#94A3B8;position:relative;white-space:nowrap}
+.tabs span.on{color:#0f172a}.tabs span.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:#2563EB}
+.tabs .cnt{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F1F5F9;color:#94A3B8}
+.tabs span.on .cnt{background:#2563EB;color:#fff}
+.tabs .rb{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F43F5E;color:#fff}
+.bbtn{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.bbtn.pri{background:#2563EB;color:#fff}.bbtn.line{background:#fff;color:#64748B;border-color:#CBD5E1}.bbtn.ink{background:#fff;color:#1E293B;border-color:#94A3B8}
+.bbtn.green{background:#fff;color:#047857;border-color:#6EE7B7}.bbtn.amber{background:#fff;color:#B45309;border-color:#FCD34D}.bbtn.dark{background:#0f172a;color:#fff}
+.bbtn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3}.bbtn.blue{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}.bbtn.emer{background:#059669;color:#fff}
+.bbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}.bbtn.dis{opacity:.4}.bbtn.ghost{background:rgba(255,255,255,.1);color:#E2E8F0}
+.row-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #F1F5F9;background:#fff;font-size:12px}
+.row-item .tm{text-align:center;font-weight:900;color:#0f172a}
+.row-item .ty{display:block;margin-top:3px;border-radius:4px;padding:1px 4px;font-size:9px;font-weight:900;background:#DBEAFE;color:#1D4ED8}
+.row-item .ty.it{background:#CFFAFE;color:#0E7490}.row-item .ty.rm{background:#EDE9FE;color:#6D28D9}
+.row-item b{display:block;font-size:14px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .sub{display:block;color:#475569;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .meta{display:block;color:#94A3B8;font-weight:700;font-size:11px}
+.st{border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+.st.recv{background:#FFE4E6;color:#BE123C}.st.prog{background:#FEF3C7;color:#92400E}.st.done{background:#E2E8F0;color:#64748B}
+.detail{background:#F8FAFC;border-top:1px solid #F1F5F9;padding:10px 12px;font-size:11px;color:#475569;display:grid;gap:6px;font-weight:600}
+.detail .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;font-size:11px}
+.cal .dh{padding:6px 0;text-align:center;font-weight:900;color:#64748B;background:#F8FAFC;border-bottom:1px solid #E2E8F0}
+.cal .dh.sun{color:#F43F5E;background:#FFF1F2}.cal .dh.sat{color:#3B82F6;background:#EFF6FF}
+.cal .d{min-height:78px;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;padding:5px;display:grid;gap:3px;align-content:start;min-width:0}
+.cal .d.out{background:#F8FAFC}.cal .d .n{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#334155;font-size:11px}
+.cal .d .n.today{background:#2563EB;color:#fff}.cal .d .n.sun{color:#F43F5E}.cal .d .n.sat{color:#2563EB}.cal .d.out .n{color:#CBD5E1}
+.evt{border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.evt.lime{background:#ECFCCB;color:#3F6212}.evt.blue{background:#DBEAFE;color:#1D4ED8;text-decoration:line-through}.evt.rose{background:#FFE4E6;color:#BE123C}.evt.amber{background:#FEF3C7;color:#92400E}
+.evt.n{border:1px solid #D9F99D;background:#F7FEE7;color:#3F6212}.evt.n.rose{border-color:#FECDD3;background:#FFE4E6;color:#BE123C}.evt.n.done{border-color:#E2E8F0;background:#F8FAFC;color:#94A3B8;text-decoration:line-through}
+.evt.tc{background:#DBEAFE;color:#1E40AF;text-decoration:none}
+.evt.more{color:#64748B;text-decoration:underline dotted;background:transparent;padding-left:2px}
+.side{background:#1E252F;border-radius:12px;padding:12px;display:grid;gap:8px;color:#fff;align-content:start}
+.side .spill{border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;background:rgba(255,255,255,.1);color:#CBD5E1;display:flex;align-items:center;gap:6px}
+.side .spill.on{background:#fff;color:#0f172a}
+.dot8{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.side .lab{font-size:10px;font-weight:900;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;margin-top:6px}
+.side .sin{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:8px;padding:7px 10px;font-size:12px;color:#94A3B8}
+.side .sel{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;color:#fff;display:flex;justify-content:space-between}
+.calhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-bottom:0;border-radius:12px 12px 0 0;padding:9px 12px;font-size:12px}
+.calhead .mon{font-weight:900;font-size:15px;color:#0f172a}
+.calhead .rnd{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#64748B;font-weight:900}
+.hcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
+.hcard .ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;flex:none}
+.hcard b{display:block;font-size:13px;color:#0f172a}.hcard small{display:block;font-size:11px;color:#64748B;font-weight:600}
+.hero-mock{background:#0f172a;border-radius:12px;padding:22px 20px;color:#fff;display:grid;gap:8px}
+.hero-mock .h{font-size:20px;font-weight:900;line-height:1.25}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#E2E8F0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden}
+@media(min-width:700px){.grid4{grid-template-columns:repeat(4,1fr)}}
+.grid4 div{background:#fff;padding:12px}.grid4 b{display:block;font-size:16px;color:#0f172a}.grid4 small{font-size:11px;color:#64748B;font-weight:700}
+.dark-card{background:#0f172a;border-radius:12px;padding:14px;color:#E2E8F0;display:grid;gap:8px;font-size:12px}
+.dark-card .tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;background:rgba(255,255,255,.1)}
+.dark-card .tag.new{background:#F43F5E;color:#fff;border-radius:999px}
+.nrow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid #F8FAFC;background:#fff;font-size:12.5px}
+.nrow .dotu{width:6px;height:6px;border-radius:50%;background:#F43F5E;flex:none}.nrow .dotu.read{background:transparent}
+.cat{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.cat.norm{background:#F1F5F9;color:#64748B}.cat.urg{background:#FFF1F2;color:#E11D48}.cat.hr{background:#FFFBEB;color:#B45309}.cat.sys{background:#EFF6FF;color:#1D4ED8}
+.nrow .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900;color:#0f172a}
+.nrow .tt.read{font-weight:700;color:#64748B}
+.tgt{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.tgt.all{background:#EFF6FF;color:#2563EB}.tgt.team{background:#F5F3FF;color:#7C3AED}.tgt.me{background:#D1FAE5;color:#065F46;box-shadow:0 0 0 1px #6EE7B7}.tgt.person{background:#ECFDF5;color:#047857}
+.prog{width:48px;height:4px;border-radius:999px;background:#F1F5F9;overflow:hidden}.prog i{display:block;height:100%;background:#3B82F6}.prog i.full{background:#10B981}
+.rcard{position:relative;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 12px 12px 18px;display:grid;gap:6px;font-size:12px;overflow:hidden}
+.rcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bar,#F43F5E)}
+.rcard.fresh{border-color:#93C5FD;box-shadow:0 0 0 2px #DBEAFE}
+.timeline{display:grid;gap:10px;border:1px solid #F1F5F9;border-radius:12px;padding:12px 14px;font-size:12px;background:#fff}
+.timeline .tl{display:flex;gap:10px;align-items:flex-start}.timeline .tl i{width:11px;height:11px;border-radius:50%;border:2px solid #E2E8F0;background:#fff;margin-top:3px;flex:none}
+.timeline .tl i.b{border-color:#3B82F6;background:#3B82F6}.timeline .tl i.a{border-color:#FBBF24;background:#FBBF24}.timeline .tl i.g{border-color:#10B981;background:#10B981}
+.dbar{background:#151A23;border-radius:12px;padding:9px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#94A3B8;font-size:11px;font-weight:700}
+.dbar .c{border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.07)}.dbar .c b{color:#fff}.dbar .c.warn{background:rgba(251,113,133,.15);color:#FDA4AF}.dbar .c.warn b{color:#FDA4AF}
+.dbar .live{color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;gap:6px}
+.dbar .live i{width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.ui .muted{color:#94A3B8;font-weight:700;font-size:11px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#colors">2. 일정 칩 색 읽기</a>
+  <a href="#filters">3. 팀 · 업무 필터</a>
+  <a href="#day">4. 날짜 칸을 누르면</a>
+  <a href="#add">5. ＋ 일정 추가</a>
+  <a href="#detail">6. 웹앱 일정 상세 창</a>
+  <a class="sub" href="#d-done">✓ 완료</a>
+  <a class="sub" href="#d-defer">익일</a>
+  <a class="sub" href="#d-dup">복제 · 매월 반복</a>
+  <a class="sub" href="#d-del">삭제</a>
+  <a href="#naver">7. 네이버 직접 일정 (N 칩)</a>
+  <a href="#drag">8. 끌어서 날짜 옮기기</a>
+  <a href="#list">9. 목록 보기</a>
+  <a href="#search">10. 검색</a>
+  <a href="#team">11. 🔒 팀 전용 캘린더</a>
+  <a href="#faq">12. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 캘린더</div>
+  <h1>캘린더 길잡이</h1>
+  <p>한 달을 한눈에 보는 화면입니다. 웹앱 일정(일정리스트와 같은 것)과 <b style="color:#fff">네이버 캘린더에 직접 적은 일정</b>이 한 달력 위에 같이 보이고, 여기서 끌어 옮기거나 완료·복제하면 <b style="color:#fff">네이버 캘린더가 함께 바뀝니다</b>. 맨 끝에는 팀끼리만 보는 <b style="color:#fff">🔒 팀 전용 캘린더</b>도 있습니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">한 달 일정 확인</div><div class="big"><s>2곳</s> → <em>1화면</em></div><div class="sub">웹앱 일정 + 네이버 직접 일정이 한 달력에</div></div>
+    <div class="stat green"><div class="lbl">날짜 바꾸기</div><div class="big"><em>끌어 놓기 1번</em></div><div class="sub">네이버 캘린더 날짜까지 함께 이동</div></div>
+    <div class="stat purple"><div class="lbl">매월 점검 일정</div><div class="big"><s>12번 등록</s> → <em>1번</em></div><div class="sub">매월 반복 체크 → 11개월 자동 생성</div></div>
+    <div class="stat amber"><div class="lbl">네이버 변경 반영</div><div class="big"><em>45초</em> 주기</div><div class="sub">누가 네이버에서 고쳐도 자동으로 따라옴</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">일정 하나 등록</div><div class="pills"><span>네이버 캘린더 열기</span><span>제목·시간 입력</span><span>캘린더 고르기</span><span>웹앱 일정리스트에도 등록</span></div><div class="ba-count">4단계 · 2곳</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">일정 하나 등록</div><div class="pills"><span class="hot">＋ 일정 추가</span><span class="hot">제목·팀 입력</span><span class="hot">등록</span></div><div class="ba-count">3번 누르기 · 네이버 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">매월 같은 날 점검</div><div class="pills"><span>달마다 캘린더 열기</span><span>같은 내용 12번 입력</span></div><div class="ba-count">12단계</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">매월 같은 날 점검</div><div class="pills"><span class="hot">매월 반복 (11개월) 체크</span></div><div class="ba-count">1번 · 날짜 옮기면 전체 이동 선택</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">팀 회식·교육 공유</div><div class="pills"><span>단톡에 올리기</span><span>각자 캘린더에 적기</span><span>다시 물어보기</span></div><div class="ba-count">3단계 · 고객 일정과 섞임</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">팀 회식·교육 공유</div><div class="pills"><span class="hot">🔒 팀</span><span class="hot">+ 일정 추가</span></div><div class="ba-count">2번 누르기 · 팀만 봄</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>고객 일정은 달력·목록에서, 팀 내부 약속은 🔒 팀에서. 섞지 않으면 네이버·카톡에 팀 회식이 올라가는 일이 없습니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 두 종류의 일정이 한 달력에 있습니다</h2>
+  <p class="lead">이 달력에는 <b>웹앱 일정</b>(서비스접수·일정리스트·＋ 일정 추가로 만든 것)과 <b>네이버 직접 일정</b>(네이버 캘린더 앱에서 손으로 적은 것)이 함께 보입니다. 둘은 모양이 조금 다르고, 누르면 열리는 창도 다릅니다.</p>
+  <div class="sync">
+    <div class="n">웹앱 일정<small>일정리스트와 같은 것 · 배경색 칩</small></div>
+    <div class="arr">⇄</div>
+    <div class="n">네이버 캘린더<small>익일통합as · 납품철수교체휴가교육 · 팀 완료</small></div>
+    <div class="arr">⇄</div>
+    <div class="n">네이버 직접 일정<small>테두리 칩(N) · 45초마다 가져옴</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box naver"><b>웹앱 일정을 여기서 고치면</b>제목·날짜·팀(시간)·장소·내용·완료·삭제 전부 네이버 캘린더의 짝(미러) 일정에 바로 반영됩니다("네이버 ✓"가 붙은 일정).</div>
+    <div class="box naver"><b>네이버 직접 일정을 여기서 고치면</b>네이버가 원본이라 <b>네이버에 바로 써넣습니다</b>. 끌어 옮기기·제목·날짜·장소·내용·완료 체크·캘린더 이동·복제·삭제 모두. 창 위에 "수정하면 네이버 캘린더에 바로 반영"이 그 뜻입니다.</div>
+  </div>
+  <div class="box warn"><b>🔒 팀 전용 캘린더는 완전히 별개입니다</b>일정리스트에도, 네이버에도 올라가지 않습니다. 회식·교육·휴무·팀 약속처럼 고객 일정이 아닌 것만 넣으세요. <a href="#team">11번</a>.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <p>왼쪽 검은 띠가 <b>도구·필터</b>, 오른쪽이 <b>달력</b>입니다. 좁은 화면에서는 필터가 위에 한 줄로 접힙니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · PC</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:70px">2</span>
+    <span class="badge" style="left:26px;top:118px">3</span>
+    <span class="badge" style="left:26px;top:196px">4</span>
+    <span class="badge" style="left:236px;top:26px">5</span>
+    <span class="badge" style="right:26px;top:26px">6</span>
+    <span class="badge" style="right:26px;top:150px">7</span>
+    <div style="display:grid;grid-template-columns:190px minmax(0,1fr);gap:10px">
+      <div class="side">
+        <span class="bbtn pri" style="justify-content:center">＋ 일정 추가</span>
+        <div class="sin">🔍 업체·제목 검색</div>
+        <div class="lab">팀 — 내 팀만 보기</div>
+        <div class="sel"><span>전체 팀</span><span>▾</span></div>
+        <div class="lab">업무</div>
+        <span class="spill on">전체</span>
+        <span class="spill on"><i class="dot8" style="background:#84CC16"></i>익일통합as</span>
+        <span class="spill on"><i class="dot8" style="background:#3B82F6"></i>as완료</span>
+        <span class="spill on"><i class="dot8" style="background:#F43F5E"></i>납품철수교체휴가교육</span>
+        <span class="spill on"><i class="dot8" style="background:#F59E0B"></i>매월점검</span>
+      </div>
+      <div>
+        <div class="calhead"><span class="bbtn line" style="padding:4px 10px">오늘</span><span class="rnd">‹</span><span class="rnd">›</span><span class="mon">2026년 8월</span><span class="spacer"></span><div class="seg"><span class="on">달력</span><span>목록</span><span>🔒 팀</span></div></div>
+        <div class="cal" style="border-radius:0 0 12px 12px">
+          <div class="dh sun">일</div><div class="dh">월</div><div class="dh">화</div><div class="dh">수</div><div class="dh">목</div><div class="dh">금</div><div class="dh sat">토</div>
+          <div class="d"><span class="n sun">23</span></div>
+          <div class="d"><span class="n">24</span><span class="evt blue">홍길동-A/S SS SL-X3220NR 예시상사</span><span class="evt rose">IT/납품(일반)/샘플무역/맥북</span></div>
+          <div class="d"><span class="n today">25</span><span class="evt lime">A/S SS SL-X3220NR SS예시상사 종료일…</span><span class="evt lime">김기사-점검요청 SS SL-M4580FX 샘플무역</span><span class="evt amber">매월점검 예시상사 3층</span><span class="evt n">09:00 박키맨 토너 요청 예시빌딩</span><span class="evt more">+N 2개 더</span></div>
+          <div class="d"><span class="n">26</span><span class="evt lime">여분요청 S SL-X4220 예시학원</span><span class="evt n rose">12:00 철수 예시상사 2층</span></div>
+          <div class="d"><span class="n">27</span><span class="evt n done">15:00 예시무역 카운터</span></div>
+          <div class="d"><span class="n">28</span></div>
+          <div class="d"><span class="n sat">29</span><span class="evt n">연차 홍길동</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>＋ 일정 추가</b> — 오늘 날짜로 간소 등록 창이 열립니다. <a href="#add">5번</a>.</div></div>
+    <div class="item"><span class="num">2</span><div><b>업체·제목 검색</b> — 2글자 이상 치면 아래에 결과가 뜹니다(웹앱 + 네이버). <a href="#search">10번</a>.</div></div>
+    <div class="item"><span class="num">3</span><div><b>팀 선택</b> — 전체 팀 / A팀 · 오전 9시 / B팀 · 오후 12시 / C팀 · 오후 3시 / D팀 · 오후 6시 / E팀 · 오후 9시 / 기타 시간 (11시 등) / 종일만 (연차 등). <a href="#filters">3번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>업무 칩</b> — 전체 / <span style="color:#4D7C0F;font-weight:900">익일통합as</span> / <span style="color:#1D4ED8;font-weight:900">AS[완료]</span>(팀을 하나만 골랐으면 그 팀 완료 캘린더 이름, 예: 강남C as) / <span style="color:#BE123C;font-weight:900">납품철수교체휴가교육</span> / <span style="color:#B45309;font-weight:900">매월점검</span>. 눌러서 켜고 끕니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>[오늘] ‹ › 2026년 8월</b> — 오늘로 돌아가기(목록 보기에서는 오늘 위치로 스크롤), 이전·다음 달.</div></div>
+    <div class="item"><span class="num">6</span><div><b>달력 / 목록 / 🔒 팀</b> — 보기 방식. 달력이 기본, 목록은 날짜별 줄로, 🔒 팀은 팀 전용 캘린더.</div></div>
+    <div class="item"><span class="num">7</span><div><b>날짜 칸</b> — 웹앱 일정은 칸당 5개, 네이버 직접 일정은 3개까지 보이고 넘치면 "+N개 더" / "+N N개 더"(초록). 칸의 빈 곳을 누르면 그날 전체 팝업. <a href="#day">4번</a>. 오늘은 파란 동그라미, 일요일 빨강·토요일 파랑, 다른 달은 흐리게.</div></div>
+  </div>
+  <div class="box tip"><b>휴대폰에서는</b>달력 칸에 글자 대신 색 점(웹앱 일정 4개·네이버 2개)만 보이고, 날짜를 누르면 아래에 그날 목록과 <b>[+ 일정]</b> 버튼이 나옵니다.</div>
+</section>
+
+<section id="colors">
+  <h2>2. 일정 칩 색 읽기</h2>
+  <table class="tbl"><thead><tr><th>모양</th><th>무엇</th><th>누르면</th></tr></thead><tbody>
+    <tr><td><span class="evt lime" style="display:inline-block">홍길동-A/S SS 예시상사…</span></td><td><b>웹앱 일정 · 익일통합as</b> — AS·점검 중 아직 처리 안 된 것. 앞의 "이름-"은 배정된 담당자.</td><td>웹앱 일정 상세 창(<a href="#detail">6번</a>)</td></tr>
+    <tr><td><span class="evt blue" style="display:inline-block">홍길동-A/S SS 예시상사…</span></td><td><b>웹앱 일정 · AS[완료]</b> — 처리 끝. 취소선.</td><td>같은 상세 창(완료됨 배지)</td></tr>
+    <tr><td><span class="evt rose" style="display:inline-block">IT/납품(일반)/샘플무역…</span></td><td><b>웹앱 일정 · 납품철수교체휴가교육</b></td><td>같은 상세 창</td></tr>
+    <tr><td><span class="evt amber" style="display:inline-block">매월점검 예시상사 3층</span></td><td><b>웹앱 일정 · 매월점검</b> — 캘린더 전용(일정리스트엔 안 보임, 네이버에도 안 올라감)</td><td>같은 상세 창</td></tr>
+    <tr><td><span class="evt n" style="display:inline-block">09:00 박키맨 토너 요청…</span></td><td><b>네이버 직접 일정 · 익일통합as</b> — 연두 테두리, 앞에 시간</td><td>네이버 일정 창(<a href="#naver">7번</a>)</td></tr>
+    <tr><td><span class="evt n rose" style="display:inline-block">12:00 철수 예시상사 2층</span></td><td><b>네이버 직접 일정 · 납품철수교체휴가교육</b> 캘린더</td><td>네이버 일정 창</td></tr>
+    <tr><td><span class="evt n done" style="display:inline-block">15:00 예시무역 카운터</span></td><td><b>네이버 직접 일정 · 완료 체크됨</b>(또는 팀 완료 캘린더에 있는 것)</td><td>네이버 일정 창(완료됨 배지)</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>네이버 직접 일정의 팀은 시간으로 정해집니다</b>09:00=A · 12:00=B · 15:00=C · 18:00=D · 21:00=E. 그 외 시간(11시 등)은 "기타", 시간이 없으면 "종일"(연차 등). 웹앱 일정에 이미 연결된(미러) 네이버 일정은 두 번 보이지 않게 숨깁니다.</div>
+</section>
+
+<section id="filters">
+  <h2>3. 팀 · 업무 필터 — 내 팀만, 내 업무만</h2>
+  <div class="grid2">
+    <table class="tbl"><thead><tr><th>팀 선택</th><th>보이는 것</th></tr></thead><tbody>
+      <tr><td>전체 팀</td><td>A~D팀 + E팀 + 기타 시간 + 종일 전부</td></tr>
+      <tr><td>A팀 · 오전 9시 (B·C·D 같음)</td><td>그 팀 일정만. 종일·기타는 빠집니다. AS[완료] 칩 이름이 그 팀 완료 캘린더(강북서AB as / 강남C as / 경기 D as)로 바뀝니다.</td></tr>
+      <tr><td>E팀 · 오후 9시</td><td>21시 일정(지방)만</td></tr>
+      <tr><td>기타 시간 (11시 등)</td><td>팀 시간대가 아닌 시간의 일정만</td></tr>
+      <tr><td>종일만 (연차 등)</td><td>시간이 없는 일정만</td></tr>
+    </tbody></table>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>업무 칩</b>은 여러 개를 동시에 켤 수 있습니다. 하나를 누르면 그것만 꺼지거나 켜지고, <b>[전체]</b>를 누르면 네 개가 모두 켜집니다.</li>
+        <li>전부 끄면 아무것도 보이지 않습니다(자동으로 되돌리지 않음). 달력이 비어 보이면 업무 칩을 먼저 확인하세요.</li>
+        <li>팀·업무 필터는 <b>이 기기에 저장</b>돼 다음에 열어도 그대로입니다.</li>
+      </ol>
+      <div class="box tip"><b>일정리스트 화면과 다릅니다</b>여기 필터는 캘린더 전용입니다. 일정리스트의 팀 칩·상태 칩과는 따로 저장됩니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="day">
+  <h2>4. 날짜 칸을 누르면 — 그날 전체 팝업</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:520px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div><div style="font-size:11px;color:#94A3B8;font-weight:900">월요일 일정</div><div style="font-size:16px;font-weight:900">8월 25일 · 5건</div></div><span class="bbtn pri">＋ 일정 추가</span></div>
+        <div style="font-size:12px">
+          <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid #F1F5F9;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">B팀 (오후 12시)</span><span style="width:52px;color:#94A3B8;font-size:11px">성동구</span><span class="evt n rose" style="display:inline-block;width:52px;text-align:center">납품</span><span style="flex:1;font-weight:700">철수 예시상사 2층 ｜ 서울 성동구 …</span></div>
+          <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid #F1F5F9;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">A팀 (오전 9시)</span><span style="width:52px;color:#94A3B8;font-size:11px">성동구</span><span class="evt lime" style="display:inline-block;width:52px;text-align:center">익일as</span><span style="flex:1;font-weight:700">A/S SS SL-X3220NR SS예시상사 ｜ 용지 걸림 ｜ 서울 성동구…</span></div>
+          <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid #F1F5F9;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">A팀 (오전 9시)</span><span style="width:52px;color:#94A3B8;font-size:11px">노원구</span><span class="evt n" style="display:inline-block;width:52px;text-align:center">익일as</span><span style="flex:1;font-weight:700">박키맨 토너 요청 예시빌딩 ｜ 서울 노원구 …</span></div>
+          <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid #F1F5F9;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">C팀 (오후 3시)</span><span style="width:52px;color:#94A3B8;font-size:11px">강남구</span><span class="evt amber" style="display:inline-block;width:52px;text-align:center">매월</span><span style="flex:1;font-weight:700">매월점검 예시상사 3층</span></div>
+        </div>
+        <div style="padding:10px 12px;border-top:1px solid #F1F5F9"><div class="mbtn ghost">닫기</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>날짜 칸의 <b>빈 곳</b>(칩이 아닌 곳)이나 "+N개 더"를 누르면 그날 일정 전체가 한 표로 뜹니다. 웹앱 일정과 네이버 직접 일정이 <b>한 줄기로</b> 섞여 있습니다.</li>
+        <li>정렬은 분류(납품철수교체 → 익일통합as → 완료 → 매월점검) → 종일 먼저 → 시간 → 지역구 순.</li>
+        <li>한 줄 = <b>팀(시간대) · 지역구 · 분류 · 제목 ｜ 접수내용 ｜ 주소</b>. 줄을 누르면 팝업이 닫히고 그 일정의 상세 창이 열립니다(웹앱 일정 창 또는 네이버 일정 창).</li>
+        <li><b>[＋ 일정 추가]</b>는 그 날짜가 미리 채워진 등록 창을 엽니다.</li>
+      </ol>
+      <div class="box tip"><b>지역구</b>주소에서 "○○구"(없으면 "○○시")만 뽑아 보여 줍니다. 동선 짤 때 같은 구끼리 보기 위한 것이고, 필터는 아닙니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="add">
+  <h2>5. ＋ 일정 추가 — 간소 등록</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;color:#fff;padding:12px 16px;font-weight:900;display:flex;justify-content:space-between">＋ 일정 추가<span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:10px">
+          <div class="fld">제목<div class="in ph">예: 신정훈 - 전자계약서 작성 확인</div></div>
+          <div class="grid"><div class="fld">날짜<div class="in">2026-08-25</div></div><div class="fld">팀<div class="in">A팀 · 오전 9시 ▾</div></div></div>
+          <div class="fld">장소<div class="in ph">방문 주소 (선택)</div></div>
+          <div class="fld">내용<div class="in ph" style="min-height:60px">일정 내용 (선택)</div></div>
+          <div class="grid" style="align-items:end"><div class="fld">캘린더<div class="in">익일통합as ▾</div></div><label style="display:flex;gap:8px;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:900;color:#475569">☐ 매월 반복 (11개월)</label></div>
+        </div>
+        <div style="padding:10px 12px;border-top:1px solid #F1F5F9"><div class="mbtn primary">등록</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>칸</th><th>설명</th></tr></thead><tbody>
+        <tr><td><b>제목</b> (필수)</td><td>달력에 보이는 글. 비어 있으면 [등록]이 눌리지 않습니다.</td></tr>
+        <tr><td><b>날짜</b></td><td>누른 날짜가 미리 들어옴. 어디를 눌러도 달력 선택기가 열립니다.</td></tr>
+        <tr><td><b>팀</b></td><td>A팀 · 오전 9시 ~ E팀 · 오후 9시. <b>팀을 고르면 시간이 그 팀 시간으로 정해집니다.</b> 기본값은 지금 켜 둔 팀 필터의 첫 팀.</td></tr>
+        <tr><td><b>장소 · 내용</b></td><td>선택. 네이버 일정의 장소·내용으로도 들어갑니다.</td></tr>
+        <tr><td><b>캘린더</b></td><td>익일통합as / 납품철수교체휴가교육 / 매월점검. 어느 네이버 캘린더로 갈지 = 칩 색.</td></tr>
+        <tr><td><b>매월 반복 (11개월)</b></td><td>켜면 다음 달부터 11개월, 매월 같은 날(31일은 말일로 보정)로 일정이 미리 만들어집니다.</td></tr>
+      </tbody></table>
+      <ol class="steps">
+        <li><b>[등록]</b> → 즉시 달력에 나타나고 토스트 <b>"일정이 추가됐습니다 ✓"</b>. 일정리스트에도 같은 일정이 생깁니다(매월점검은 캘린더 전용).</li>
+        <li>매월점검이 아니면 <b>네이버 캘린더에도 등록</b>합니다(익일통합as 또는 납품철수교체휴가교육 캘린더). 성공하면 <b>"네이버 캘린더에도 등록됐습니다 ✓"</b>, 실패하면 <b>"네이버 등록 실패(웹앱 일정은 정상): …"</b>.</li>
+        <li>매월 반복이면 네이버에도 11개월치 사본이 만들어집니다(개별 수정 연동은 원본만).</li>
+      </ol>
+    </div>
+  </div>
+  <div class="box warn"><b>AS 접수 일정은 여기서 만들지 마세요</b>고객 AS는 <b>서비스접수</b> 화면에서 접수해야 보고양식·접수시트·카톡이 따라옵니다. 이 창은 재계약 방문·교육·매월점검처럼 접수 없는 일정용입니다.</div>
+</section>
+
+<section id="detail">
+  <h2>6. 웹앱 일정 상세 창 — 배경색 칩을 누르면</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:480px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:grid;gap:8px">
+          <div style="display:flex;gap:6px;align-items:center;font-size:11px;font-weight:900"><span style="background:#65A30D;color:#fff;border-radius:4px;padding:1px 6px">익일통합as</span><span style="background:rgba(255,255,255,.1);color:#CBD5E1;border-radius:4px;padding:1px 6px">A팀</span><span class="spacer"></span><span style="color:#94A3B8;font-weight:700">수정하면 네이버 캘린더에 바로 반영</span><span style="color:#94A3B8">✕</span></div>
+          <div style="display:flex;gap:8px;align-items:center"><span style="background:#059669;color:#fff;border-radius:5px;padding:3px 8px;font-size:13px;font-weight:900;flex:none">홍길동</span><span style="color:#fff;font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">A/S SS SL-X3220NR SS예시상사 종료일 27. 3. 31 지역 수도권A</span><span class="bbtn ghost" style="padding:4px 10px;font-size:11px">수정</span></div>
+        </div>
+        <div style="padding:14px 16px;display:grid;gap:10px">
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px;display:grid;gap:8px"><div class="grid"><div class="fld">날짜<div class="in">2026-08-25</div></div><div class="fld">팀<div class="in">A팀 · 오전 9시 ▾</div></div></div><div class="fld">장소<div class="in">서울 성동구 예시로 12 3층</div></div></div>
+          <div class="fld">캘린더 이동<div class="in">익일통합as ▾</div></div>
+          <div class="fld">내용 <span class="muted">— 입력창을 벗어나면 저장</span><div class="in" style="min-height:64px;font-family:monospace;font-size:11px">A/S  SS  SL-X3220NR  SS예시상사 …<br>접수자성함  김담당 …</div></div>
+        </div>
+        <div style="padding:10px 12px;border-top:1px solid #F1F5F9;display:grid;gap:6px"><div style="display:flex;gap:6px"><span class="bbtn purple" style="flex:1;justify-content:center;border-radius:8px">익일</span><span class="bbtn line" style="flex:1;justify-content:center;border-radius:8px">복제</span><span class="bbtn line" style="flex:1;justify-content:center;border-radius:8px">매월 반복</span><span class="bbtn rose" style="flex:1;justify-content:center;border-radius:8px">삭제</span></div><div class="mbtn emerald">✓ 완료</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>부분</th><th>어떻게</th><th>네이버에는</th></tr></thead><tbody>
+        <tr><td><b>머리 배지</b></td><td>익일통합as · 팀 · (완료됨)</td><td>—</td></tr>
+        <tr><td><b>제목</b></td><td>초록 배지 = 배정자(여기선 못 바꿈, 일정리스트 [배정]). <b>[수정]</b> → 고치기 → <b>[저장]</b>/<span class="kbd">Enter</span>(<span class="kbd">Esc</span> 취소). 토스트 "제목이 저장됐습니다 — 네이버 캘린더에도 반영 ✓"</td><td>제목 "이름-제목"으로 반영</td></tr>
+        <tr><td><b>날짜</b></td><td>날짜 선택 → 즉시 이동. 매월 반복 일정이면 "이 일정만 / 전체" 팝업(<a href="#drag">8번</a>)</td><td>날짜 이동</td></tr>
+        <tr><td><b>팀</b></td><td>종일 / A~E팀. 팀을 고르면 시간이 따라감. 토스트 "A팀(오전 9시)으로 변경 ✓" / "종일 일정으로 변경 ✓"</td><td>시간 반영</td></tr>
+        <tr><td><b>장소</b></td><td>적고 <span class="kbd">Enter</span> 또는 다른 곳 클릭. "주소가 저장됐습니다 — 네이버에도 반영 ✓"</td><td>장소 반영</td></tr>
+        <tr><td><b>캘린더 이동</b> (네이버 연결 일정만)</td><td>익일통합as / 납품철수교체휴가교육 / 팀 완료 캘린더들 중 선택. "네이버 미러가 "○○"(으)로 이동됐습니다 ✓"</td><td>네이버 캘린더 간 이동</td></tr>
+        <tr><td><b>내용</b></td><td>입력창을 벗어나면 저장. "내용이 저장됐습니다 — 네이버에도 반영 ✓"</td><td>내용 반영</td></tr>
+      </tbody></table>
+      <div class="box tip"><b>일정리스트 화면의 상세 창과 다른 점</b>여기서는 배정·FIELD·전화·접수 내용 칸이 없고, 대신 <b>[매월 반복]</b>과 <b>[캘린더 이동]</b>이 있습니다. 배정·FIELD는 일정리스트에서.</div>
+    </div>
+  </div>
+
+  <h3 id="d-done"><span class="bbtn emer" style="vertical-align:middle">✓ 완료</span> 완료 / 완료 취소</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal"><div class="mt">✓ 완료 처리하시겠습니까?</div><div class="ms">예시상사</div>
+        <div class="box" style="background:#EFF6FF;border-color:#DBEAFE;font-size:12px;padding:8px 12px;color:#1D4ED8;font-weight:700">네이버 캘린더 일정에 완료 체크됩니다. A팀 완료 캘린더가 등록돼 있으면 그 캘린더로 옮겨집니다.</div>
+        <textarea readonly>처리 내용 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다</textarea>
+        <div class="grid"><div class="mbtn ghost">취소</div><div class="mbtn primary" style="opacity:.4">완료</div></div></div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[✓ 완료]</b> → 처리 내용을 적는 창. <b>처리 내용은 필수</b> — 적어야 [완료]가 살아납니다.</li>
+        <li>[완료] → 일정이 완료(파란 취소선)로 바뀌고, 처리 내용이 "업체명 / 작성자 / 기종 / 처리내용" 양식으로 <b>팀 AS방 카톡</b>에 나가고, 웹앱 일정 내용과 네이버 일정 내용에도 같은 블록이 붙습니다.</li>
+        <li>네이버 미러 일정은 그 팀 <b>완료 캘린더로 이동 + 완료 체크</b>(토스트 "네이버: 강남C as 캘린더로 이동 + 완료 체크 ✓"). 완료 캘린더가 없으면 "네이버: 완료 체크 ✓ (완료 캘린더 미설정 — 제자리 체크)".</li>
+        <li>매월 반복 일정을 완료하면 다음 달 같은 날 일정이 없을 때 자동으로 만들어집니다.</li>
+        <li>완료된 일정의 <b>[완료 취소]</b>는 사유 없이 즉시 되돌리고, 네이버 일정도 원래 캘린더로 복귀("네이버: 일정이 원래 캘린더로 복귀 (완료 체크 해제) ✓").</li>
+      </ol>
+      <div class="box warn"><b>납품·철수·교체 일정은</b>창에 빨간 안내 "납품·철수·교체는 영업부 캘린더 소관입니다 — 네이버 일정은 옮기지 않고 제자리에서 완료 체크만 합니다."가 뜨고, <b>카톡은 나가지 않습니다</b>(웹 일정 상태와 네이버 기록만). 토스트 "네이버: 납품 일정 완료 체크 ✓".</div>
+    </div>
+  </div>
+
+  <h3 id="d-defer"><span class="bbtn purple" style="vertical-align:middle">익일</span> 익일 — 다른 날로 미루기</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal"><div class="mt">익일 일정 변경</div><div class="ms">예시상사</div>
+        <textarea readonly>① 미루는 사유부터 입력하세요 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다</textarea>
+        <div style="font-size:11px;color:#7C3AED;font-weight:900">사유를 입력하면 아래 날짜 버튼이 열립니다</div>
+        <div class="grid"><div class="mbtn ghost" style="opacity:.4">익일<br><small>2026-08-26</small></div><div class="mbtn ghost" style="opacity:.4">1주<br><small>2026-09-01</small></div><div class="mbtn ghost" style="opacity:.4">1달<br><small>2026-09-25</small></div><div class="mbtn ghost" style="opacity:.4">3달<br><small>2026-11-25</small></div></div>
+        <div class="inp" style="min-height:0">2026-08-26</div>
+        <div class="mbtn" style="background:#9333EA;color:#fff;opacity:.4">2026-08-26(으)로 일정 변경</div></div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>사유를 먼저 적어야 날짜 버튼 <b>익일 / 1주 / 1달 / 3달</b>과 날짜 칸이 열립니다. 익일은 다음 영업일(금요일이면 월요일, 공휴일 제외).</li>
+        <li>날짜를 고르고 <b>[○○○○-○○-○○(으)로 일정 변경]</b> → 일정 날짜가 바뀌고 AS 일정이면 상태가 "익일"이 됩니다.</li>
+        <li>사유는 팀 AS방에 별도 카톡으로 나가고("… (8/26로 연기)"), 웹앱 일정 내용과 네이버 일정 내용에도 기록됩니다. 네이버 일정 날짜도 함께 옮겨집니다.</li>
+      </ol>
+      <div class="box tip"><b>납품·철수·교체 일정의 익일</b>날짜는 옮기지만 카톡은 나가지 않습니다(물류방 보고는 FIELD 전송이 담당).</div>
+    </div>
+  </div>
+
+  <h3 id="d-dup"><span class="bbtn line" style="vertical-align:middle">복제</span> 복제 · <span class="bbtn line" style="vertical-align:middle">매월 반복</span> 매월 반복 / 반복 해제</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 복제</span>
+      <div class="modal"><div class="mt">일정 복제</div><div class="ms">예시상사 — 어느 날짜로 복제할까요?</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"><div class="mbtn ghost">같은 날<br><small>08-25</small></div><div class="mbtn ghost">익일<br><small>08-26</small></div><div class="mbtn ghost">다음 달<br><small>09-25</small></div></div>
+        <div style="display:flex;gap:6px"><div class="inp" style="min-height:0;flex:1">2026-08-25</div><div class="mbtn primary" style="padding:8px 12px">이 날짜로 복제</div></div></div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[복제]</b> → 같은 날 / 익일 / 다음 달 / 직접 날짜. 같은 내용의 <b>새 웹앱 일정</b>이 생깁니다(접수 연결은 끊김, 배정자가 있으면 "배정" 상태로). 복제본은 네이버에 자동 등록되지 않습니다.</li>
+        <li><b>[매월 반복]</b> → 즉시 다음 달부터 11개월치가 만들어지고 토스트 <b>"다음 달부터 11개월, 매월 같은 날로 생성했습니다 ✓"</b>. 이후 일정 표에 🔁 배지가 붙고, 새로고침 때마다 오늘+11개월까지 부족분을 자동으로 채워 반복이 무기한 이어집니다.</li>
+        <li><b>[반복 해제]</b> → 아직 오지 않은 미완료 반복 일정이 있으면 확인 <b>"매월 반복을 중지할까요? 예정된 반복 일정 N건이 함께 삭제됩니다."</b> → 이후 것은 삭제, 지난 것은 남되 반복 표시만 꺼집니다.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3 id="d-del"><span class="bbtn rose" style="vertical-align:middle">삭제</span> 삭제</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:360px;padding:0;overflow:hidden"><div style="background:#1E252F;padding:12px 16px"><div style="font-size:11px;color:#FB7185;font-weight:900">🗑 삭제하시겠습니까?</div><div style="color:#fff;font-weight:900">A/S SS SL-X3220NR SS예시상사 …</div></div><div style="padding:12px 16px;font-size:13px;font-weight:700;color:#334155">삭제하면 되돌릴 수 없습니다.<div style="margin-top:6px;background:#FFF1F2;border:1px solid #FFE4E6;border-radius:8px;padding:6px 10px;font-size:11px;color:#E11D48">네이버 캘린더의 미러 일정도 함께 삭제됩니다.</div></div><div style="display:flex;gap:8px;padding:0 12px 12px"><div class="mbtn ghost" style="flex:1">취소</div><div class="mbtn" style="flex:2;background:#E11D48;color:#fff">삭제</div></div></div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[삭제]</b> → 확인 팝업. 네이버에 연결된 일정이면 빨간 안내가 함께 뜹니다.</li>
+        <li>[삭제] → 달력·일정리스트에서 사라지고 네이버 미러도 삭제. 토스트 <b>"일정이 삭제됐습니다 — 네이버 캘린더 미러도 함께 삭제 ✓"</b>.</li>
+        <li>서비스접수 원본은 남습니다(접수 리스트에서 따로 삭제).</li>
+      </ol>
+      <div class="box warn"><b>못 간 일정은 삭제가 아니라 익일</b>삭제하면 중간보고·이력에서 사라집니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="naver">
+  <h2>7. 네이버 직접 일정 (N 칩) — 테두리 칩을 누르면</h2>
+  <p>네이버 캘린더 앱에서 직접 적은 일정입니다. 웹앱은 <b>보기 + 네이버에 바로 써넣기</b> 창을 제공합니다. 45초마다, 창으로 돌아올 때마다 네이버에서 다시 가져옵니다.</p>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:480px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:grid;gap:8px">
+          <div style="display:flex;gap:6px;align-items:center;font-size:11px;font-weight:900"><span style="background:#65A30D;color:#fff;border-radius:4px;padding:1px 6px">익일통합as</span><span style="background:rgba(255,255,255,.1);color:#CBD5E1;border-radius:4px;padding:1px 6px">A팀</span><span class="spacer"></span><span style="color:#94A3B8;font-weight:700">수정하면 네이버 캘린더에 바로 반영</span><span style="color:#94A3B8">✕</span></div>
+          <div style="display:flex;gap:8px;align-items:center"><span style="color:#fff;font-weight:700;font-size:14px;flex:1">박키맨 토너 요청 예시빌딩</span><span class="bbtn ghost" style="padding:4px 10px;font-size:11px">수정</span></div>
+        </div>
+        <div style="padding:14px 16px;display:grid;gap:10px">
+          <div class="grid"><div class="fld">날짜<div class="in">2026-08-25</div></div><div class="fld">팀<div class="in">A팀 · 오전 9시 ▾</div></div></div>
+          <div class="fld">장소<div class="in">서울 노원구 예시길 5</div></div>
+          <div class="fld">내용 <span class="muted">— 입력창을 벗어나면 저장</span><div class="in" style="min-height:56px">검정 토너 1개 요청</div></div>
+          <div class="fld">캘린더 이동<div class="in">익일통합as ▾</div></div>
+        </div>
+        <div style="padding:10px 12px;border-top:1px solid #F1F5F9;display:grid;gap:6px"><div style="display:flex;gap:6px"><span class="bbtn purple" style="flex:1;justify-content:center;border-radius:8px">익일</span><span class="bbtn line" style="flex:1;justify-content:center;border-radius:8px">복제</span><span class="bbtn line" style="flex:1;justify-content:center;border-radius:8px">매월 반복</span><span class="bbtn rose" style="flex:1;justify-content:center;border-radius:8px">삭제</span></div><div class="mbtn emerald">✓ 완료</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>부분</th><th>누르면 · 네이버에는</th></tr></thead><tbody>
+        <tr><td><b>제목 [수정] → [저장]</b></td><td>네이버 제목이 바뀜. 토스트 "저장됐습니다 — 네이버 캘린더에도 반영 ✓"</td></tr>
+        <tr><td><b>날짜</b></td><td>고르면 즉시 네이버 날짜 이동</td></tr>
+        <tr><td><b>팀</b></td><td>종일 / A~E. 팀을 고르면 네이버 시간이 그 팀 시간으로</td></tr>
+        <tr><td><b>장소 · 내용</b></td><td>입력창을 벗어나면 네이버에 저장</td></tr>
+        <tr><td><b>캘린더 이동</b></td><td>익일통합as / 납품철수교체휴가교육 / 팀 완료 캘린더. 확인 <b>"이 일정을 "○○"(으)로 옮길까요?"</b> → 옮기면 분류가 바뀌고, 완료 캘린더로 보내면 달력의 미처리 목록에서 빠짐. 토스트 ""○○"(으)로 이동했습니다 ✓"</td></tr>
+        <tr><td><b>[익일]</b></td><td>"일정 미루기" 창 — 익일 / 1주 / 1달 / 3달 / 직접선택. 사유 없이 날짜만 옮김(카톡 없음)</td></tr>
+        <tr><td><b>[복제]</b></td><td>"일정 복제" — 날짜 하나 골라 <b>[이 날짜로 복제]</b>. 네이버에 사본 생성. "1건 복제됐습니다 — 네이버 캘린더에도 생성 ✓"</td></tr>
+        <tr><td><b>[매월 반복]</b></td><td>"매월 반복 생성" — "이 일정을 다음 달부터 11개월간 매월 같은 날로 복제합니다." → <b>[11개월 반복 생성]</b></td></tr>
+        <tr><td><b>[삭제]</b></td><td>"🗑 삭제하시겠습니까? … 네이버 캘린더에서도 삭제됩니다." → "네이버 캘린더에서 삭제됐습니다 ✓"</td></tr>
+        <tr><td><b>[✓ 완료] / [완료 해제]</b></td><td>"✓ 완료 처리 — 이 일정을 완료 처리할까요? 네이버 캘린더 앱에도 완료 체크로 표시됩니다." → 제자리에서 완료 체크만(캘린더 이동 없음). "네이버 일정 완료 처리 ✓" / "완료 해제됐습니다"</td></tr>
+      </tbody></table>
+      <div class="box warn"><b>웹앱 일정과 다른 점</b>네이버 직접 일정에는 배정·FIELD·처리 사유·카톡 전송이 없습니다. 처리가 필요한 AS 건이면 서비스접수로 정식 접수하거나 일정리스트에서 처리하세요. 여기서는 네이버 값을 고치는 것까지만.</div>
+    </div>
+  </div>
+</section>
+
+<section id="drag">
+  <h2>8. 끌어서 날짜 옮기기</h2>
+  <ol class="steps">
+    <li>PC 달력에서 칩을 <b>누른 채 다른 날짜 칸으로 끌어 놓습니다</b>(마우스가 손 모양으로 바뀜). 웹앱 일정·네이버 직접 일정 모두 됩니다.</li>
+    <li><b>웹앱 일정</b>: 날짜가 바뀌고 네이버 미러도 이동. 팀 시간은 그대로.</li>
+    <li><b>네이버 직접 일정</b>: 네이버에 바로 반영. 토스트 <b>"네이버 일정이 8/27로 이동됐습니다 ✓"</b>. 실패하면 제자리로 돌아오고 "네이버 일정 이동 실패: …".</li>
+    <li><b>매월 반복 웹앱 일정</b>을 옮기면 팝업 <b>🔁 매월 반복 일정 이동</b>: <b>이 일정만 이동</b>(이번 건만) / <b>전체 반복 일정 이동 (N건)</b>(앞으로 오는 미완료 반복 일정을 전부 매월 ○일로 — 완료된 지난 기록은 유지).</li>
+  </ol>
+  <div class="box tip"><b>휴대폰에서는 끌기가 안 됩니다</b>칩을 눌러 상세 창을 열고 <b>날짜</b> 칸에서 바꾸세요. 결과는 같습니다.</div>
+</section>
+
+<section id="list">
+  <h2>9. 목록 보기 — 날짜별 줄로</h2>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div style="display:grid;gap:8px;font-size:12px">
+      <div style="display:flex;gap:8px;align-items:center;background:#DBEAFE;color:#1D4ED8;border-radius:8px;padding:5px 10px;font-weight:900">8/25 (월) <span style="background:#2563EB;color:#fff;border-radius:999px;padding:0 7px;font-size:10px">오늘</span><span style="color:#64748B;font-weight:700;font-size:11px">5건 (네이버 2)</span></div>
+      <div style="border:2px solid #3B82F6;border-radius:10px;background:#fff;box-shadow:0 0 0 3px rgba(59,130,246,.12)">
+        <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid #F1F5F9;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">A팀 (오전 9시)</span><span style="width:52px;color:#94A3B8;font-size:11px">성동구</span><span class="evt lime" style="display:inline-block;width:52px;text-align:center">익일as</span><span style="flex:1;font-weight:700">홍길동-A/S SS SL-X3220NR SS예시상사 ｜ 용지 걸림</span></div>
+        <div style="display:flex;gap:8px;padding:8px 12px;align-items:center"><span style="width:82px;font-weight:900;color:#64748B;font-size:11px">A팀 (오전 9시)</span><span style="width:52px;color:#94A3B8;font-size:11px">노원구</span><span class="evt n" style="display:inline-block;width:52px;text-align:center">익일as</span><span style="flex:1;font-weight:700">박키맨 토너 요청 예시빌딩 ｜ 서울 노원구 …</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;background:#F1F5F9;color:#475569;border-radius:8px;padding:5px 10px;font-weight:900">8/26 (화) <span style="color:#94A3B8;font-weight:700;font-size:11px">2건 (네이버 1)</span></div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li>위 <b>[목록]</b>을 누르면 이 달 일정이 날짜별 묶음으로 줄줄이 보입니다. 필터(팀·업무)는 달력과 같은 것을 씁니다.</li>
+    <li><b>오늘</b> 묶음은 파란 띠 + 파란 테두리. [오늘] 버튼을 누르면 그 위치로 스크롤됩니다.</li>
+    <li>한 줄은 그날 팝업과 같은 구도(팀(시간대) · 지역구 · 분류 · 제목 ｜ 접수내용 ｜ 주소)이고, 누르면 상세 창이 열립니다.</li>
+    <li>이 달에 아무것도 없으면 "이 달의 일정이 없습니다."</li>
+  </ol>
+</section>
+
+<section id="search">
+  <h2>10. 검색 — 업체·제목·주소·내용에서</h2>
+  <ol class="steps">
+    <li>왼쪽 검색칸에 <b>2글자 이상</b> 치면 바로 아래 결과 상자가 열립니다(웹앱 일정 + 네이버 직접 일정, 최근 날짜순 최대 20건). 매월점검은 검색에서 빠집니다.</li>
+    <li>한 줄 = 날짜(MM-DD) + 제목. 누르면 검색칸이 비워지고 그 일정의 상세 창이 열립니다.</li>
+    <li>없으면 "검색 결과 없음".</li>
+  </ol>
+  <div class="box tip"><b>찾는 범위</b>웹앱 일정은 업체·캘린더 제목·주소·접수내용, 네이버 일정은 제목·장소·내용. 지금 화면에 불러온 기간(기본 6개월 전부터 + 열어 본 과거 달) 안에서 찾습니다.</div>
+</section>
+
+<section id="team">
+  <h2>11. 🔒 팀 전용 캘린더 — 팀끼리만 보는 메모 달력</h2>
+  <p class="lead">위 <b>[🔒 팀]</b>을 누르면 나옵니다. 작성자의 팀 달력이 열리고(팀장은 A~D 칩으로 팀을 골라 봄), 여기 적은 것은 <b>같은 팀만</b> 봅니다. <b>일정리스트·네이버 캘린더와 전혀 동기화되지 않습니다.</b></p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:112px">3</span>
+    <span class="badge" style="left:26px;top:236px">4</span>
+    <div class="side" style="flex-direction:row;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><div style="font-weight:900;font-size:14px">🔒 A팀 전용 캘린더</div><div style="font-size:11px;color:#94A3B8;font-weight:600">A팀만 봅니다 · 일정리스트·네이버 캘린더와 동기화되지 않습니다 · 회식·교육·휴무·팀 약속용</div></div><div style="display:flex;gap:6px;align-items:center"><span style="color:#CBD5E1">‹</span><b style="font-size:13px">2026년 8월</b><span style="color:#CBD5E1">›</span><span class="bbtn ghost" style="padding:3px 10px;font-size:11px">오늘</span><span class="bbtn pri" style="padding:5px 12px">+ 일정 추가</span></div></div>
+    <div class="cal" style="margin-top:8px">
+      <div class="dh sun">일</div><div class="dh">월</div><div class="dh">화</div><div class="dh">수</div><div class="dh">목</div><div class="dh">금</div><div class="dh sat">토</div>
+      <div class="d" style="min-height:60px"><span class="n sun">23</span></div><div class="d" style="min-height:60px"><span class="n">24</span></div><div class="d" style="min-height:60px;background:#EFF6FF"><span class="n" style="background:#0f172a;color:#fff">25</span><span class="evt tc"><span style="color:#3B82F6">18:30</span> 팀 회식</span></div><div class="d" style="min-height:60px"><span class="n">26</span></div><div class="d" style="min-height:60px"><span class="n">27</span><span class="evt tc">오전 휴무 김기사</span></div><div class="d" style="min-height:60px"><span class="n">28</span><span class="evt tc"><span style="color:#3B82F6">14:00</span> 신기종 교육</span></div><div class="d" style="min-height:60px"><span class="n sat">29</span></div>
+    </div>
+    <div style="margin-top:8px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid #F1F5F9"><b>8월 25일 (월) · 1건</b><span class="bbtn line" style="padding:3px 10px;font-size:11px">이 날에 추가</span></div>
+      <div style="display:flex;gap:10px;padding:9px 14px;align-items:flex-start"><span style="width:44px;font-weight:900;color:#64748B">18:30</span><span style="flex:1"><b style="display:block">팀 회식</b><span style="color:#475569">장소: 예시식당 (회사 앞)</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:600">홍길동 · 2026-08-20</span></span><span style="display:flex;gap:4px"><span class="bbtn line" style="padding:3px 9px;font-size:11px">수정</span><span class="bbtn rose" style="padding:3px 9px;font-size:11px;background:#fff">삭제</span></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>검은 머리띠</b> — "🔒 A팀 전용 캘린더 / A팀만 봅니다 · 일정리스트·네이버 캘린더와 동기화되지 않습니다 · 회식·교육·휴무·팀 약속용". 팀장에게는 이 위에 A팀·B팀·C팀·D팀 칩이 하나 더 보입니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>‹ 월 › · [오늘] · [+ 일정 추가]</b> — 달 이동, 오늘로, 선택된 날짜로 추가 창 열기.</div></div>
+    <div class="item"><span class="num">3</span><div><b>달력</b> — 파란 칩(시간 + 제목), 칸당 3개 넘으면 "+N". 날짜를 누르면 아래 목록이 그날로 바뀌고(파란 배경), <b>두 번 누르면</b> 그날 추가 창이 열립니다. 오늘은 검은 동그라미.</div></div>
+    <div class="item"><span class="num">4</span><div><b>그날 목록</b> — "8월 25일 (월) · N건", <b>[이 날에 추가]</b>. 줄마다 시간(없으면 "종일") · 제목 · 메모 · 작성자와 만든 날 · <b>[수정] [삭제]</b>. 비어 있으면 "이 날 팀 일정이 없습니다 — 칸을 두 번 누르거나 [이 날에 추가]".</div></div>
+  </div>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 추가 창</span>
+      <div class="modal"><div class="mt">A팀 일정 추가</div><div class="ms">A팀원에게만 보입니다 · 일정리스트·네이버에는 올라가지 않습니다</div>
+        <div style="display:grid;grid-template-columns:1fr 6.5rem;gap:6px"><div class="inp" style="min-height:0">2026-08-25</div><div class="inp" style="min-height:0">18:30</div></div>
+        <div class="inp" style="min-height:0">제목 (예: 팀 회식, 교육, 오전 휴무)</div>
+        <div class="inp">메모 (장소·준비물 등, 선택)</div>
+        <div style="display:flex;gap:8px"><div class="mbtn ghost" style="flex:1">취소</div><div class="mbtn primary" style="flex:2">추가</div></div></div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[+ 일정 추가]</b> 또는 날짜 두 번 클릭 → 날짜 · 시간(선택, 비우면 종일) · 제목(필수) · 메모(선택). 제목이 없으면 "제목을 적어 주세요".</li>
+        <li><b>[추가]</b> → 토스트 <b>"A팀 캘린더에 추가했습니다 (팀원에게만 보입니다)"</b>. 팀원 화면에는 60초 안에(또는 창으로 돌아올 때) 나타납니다.</li>
+        <li><b>[수정]</b> → 같은 창이 "팀 일정 수정"으로 열리고 <b>[수정 저장]</b> → "수정했습니다".</li>
+        <li><b>[삭제]</b> → 확인 <b>""팀 회식" 일정을 지울까요? 팀 전원에게서 사라집니다."</b> [지우기] → "지웠습니다".</li>
+      </ol>
+      <div class="box warn"><b>여기에 고객 일정을 넣으면</b>일정리스트·중간보고·네이버 어디에도 잡히지 않습니다. 고객 방문은 서비스접수 또는 달력의 ＋ 일정 추가로.</div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>12. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>달력이 텅 비어 보여요</summary><p>왼쪽 <b>업무 칩</b>이 전부 꺼져 있거나 <b>팀 선택</b>이 다른 팀일 수 있습니다. 업무 [전체]를 누르고 팀을 "전체 팀"으로 바꿔 보세요. 필터는 이 기기에 저장돼 있어서 어제 끈 것이 그대로 남습니다.</p></details>
+    <details><summary>네이버에서 방금 적은 일정이 안 보여요</summary><p>45초마다 가져오고, 창을 다른 곳에 갔다가 돌아오면 즉시 가져옵니다. 잠시 기다리거나 탭을 한 번 벗어났다 돌아오세요. 그래도 없으면 그 일정이 익일통합as·납품철수교체휴가교육·팀 완료 캘린더 중 하나에 들어 있는지 확인하세요(다른 캘린더는 안 가져옵니다).</p></details>
+    <details><summary>같은 일정이 두 번 보여요</summary><p>웹앱 일정과 그 네이버 미러가 연결(uid)되지 않은 경우입니다. 보통 접수 화면에서 [네이버 캘린더]를 눌러 등록한 뒤 [접수]로 일정을 따로 만들었을 때 생깁니다. 웹앱 일정의 상세 창 머리에 "네이버 ✓"(일정리스트 화면)가 없으면 연결이 없는 것 — 네이버 직접 일정 쪽을 삭제하거나 웹앱 일정을 삭제해 하나만 남기세요.</p></details>
+    <details><summary>끌어 옮겼는데 제자리로 돌아왔어요</summary><p>네이버 반영이 실패한 경우입니다("네이버 일정 이동 실패: …"). 잠시 후 다시 시도하거나 상세 창의 날짜 칸으로 바꿔 보세요. 계속 실패하면 괄호 안 문구를 관리자에게.</p></details>
+    <details><summary>완료를 눌렀는데 [완료] 버튼이 안 눌려요</summary><p>처리 내용이 필수입니다. 한 줄이라도 적으면 파란 버튼이 살아납니다. 처리 내용은 팀 AS방 카톡과 네이버 일정에 남기 때문에 비울 수 없게 했습니다.</p></details>
+    <details><summary>매월점검 일정이 네이버에 없어요</summary><p>정상입니다. 매월점검은 웹앱 캘린더 전용이라 네이버에 올리지 않고 일정리스트에도 나오지 않습니다. 네이버에도 필요하면 캘린더를 익일통합as로 해서 만드세요.</p></details>
+    <details><summary>팀 전용 캘린더에 적었는데 일정리스트에 안 나와요</summary><p>의도된 동작입니다. 🔒 팀 캘린더는 팀 내부 메모용이라 일정리스트·네이버·중간보고와 무관합니다.</p></details>
+    <details><summary>팀장이 아닌데 다른 팀 팀 캘린더를 보고 싶어요</summary><p>팀원은 자기 팀 달력만 열립니다. 팀장(관리 탭 팀장 명단)만 위쪽 A~D팀 칩으로 바꿔 볼 수 있습니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">캘린더 길잡이 · 일정리스트·서비스접수·홈·공지 길잡이도 같은 형식으로 이어집니다</p>
+</main>
+</div>
+</body>
+</html>

@@ -119,6 +119,17 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 .faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
 .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
 .small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.impact .stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .impact .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .impact .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .impact .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.impact .stat .lbl{font-size:12px;font-weight:700;opacity:.85}.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.6;font-size:22px}.impact .stat .big em{font-style:normal}.impact .stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)}.ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}.pills{display:flex;flex-wrap:wrap;gap:6px}.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}.ba-card.new .ba-count{color:var(--blue)}.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media(max-width:700px){.ba{grid-template-columns:1fr}.ba-arrow{transform:rotate(90deg);padding:4px 0}}
 @media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
 /* ── 워킨맵 전용 추가 ── */
 .tblwrap{overflow-x:auto}
@@ -226,16 +237,30 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 
 <section id="benefits">
   <h2>이 화면이 아껴주는 것</h2>
-  <p class="lead">워킨맵은 "엑셀 명단을 지도에 옮겨 그리던 일"과 "다녀와서 색칠하던 일"을 대신합니다. 아래는 소스 코드로 확인되는 자동화만 적었습니다.</p>
-  <div class="tblwrap"><table class="tbl"><thead><tr><th>예전엔</th><th>지금은</th><th>아끼는 것</th></tr></thead><tbody>
-    <tr><td>점검 다녀온 뒤 시트에서 그 거래처를 찾아 완료 색을 손으로 칠함</td><td>FIELD에서 점검 양식을 점검방으로 보내면 <b>시리얼·자산기번·업체명+기종</b>으로 워킨맵 항목을 찾아 <b>G5(완료)</b> 또는 매월점검 <b>G2→G3→G5</b>로 자동 변경 + "[G5 완료] 날짜" 메모 기록</td><td>기기 1대당 색칠·날짜 기록 (예: 건당 1~2분), 빠뜨림 0</td></tr>
-    <tr><td>미수·초과료·불만 시트를 따로 열어 "이 거래처 뭐 있었지"를 확인</td><td>목록 줄에 <b>미수 N개월·잔액 / 초과 금액 / 불만 날짜·내용 / 재계약 종료월</b> 배지가 자동으로 붙음(거래처 코드 우선, 이름 매칭 폴백)</td><td>거래처 1곳당 시트 3~4개 대조 (예: 곳당 2~3분)</td></tr>
-    <tr><td>"이 집 여분 몇 개 줘야 하지?"를 카톡 점검방을 위로 넘기며 찾음</td><td>줄을 펼치면 <b>최근 2회 점검의 매수·토너·여분</b>이 나오고 기준(A3컬러 2세트·폐통2 등)과 비교해 <b>"지급 권장 K1 · 폐통1"</b>까지 계산. [자가신청]을 누르면 FIELD 양식에 물품이 채워짐</td><td>방문 전 확인 + 자가신청 작성 (예: 건당 3~5분)</td></tr>
-    <tr><td>"이번 분기 얼마나 남았지"를 시트 세어 계산</td><td><b>진행률</b> 버튼 — 팀별 완료/전체·%·남은 영업일·하루 목표(3인/4인 기준), <b>주차분석</b>으로 주차별 완료 건수와 순조/주의/스퍼트 판정</td><td>주간 회의 준비 (예: 회당 10분)</td></tr>
-    <tr><td>같은 건물 여러 업체를 한 곳씩 따로 봄</td><td>같은 주소는 <b>핀 하나 + 숫자 배지</b>로 묶이고, 누르면 "같은 주소 · N곳" 목록</td><td>동선 짤 때 빠뜨리는 곳 감소</td></tr>
-    <tr><td>내 컴퓨터 엑셀만 바뀌고 팀원은 옛 명단을 봄</td><td>수정·라벨 변경·엑셀 교체가 모두 <b>공용 DB</b>로 저장되어 30초 안에 팀원 화면에도 반영</td><td>"누가 최신 파일 갖고 있어?" 0</td></tr>
-  </tbody></table></div>
+  <p class="lead">워킨맵은 <b>방문 전 확인 · 현장 동선 · 방문 후 완료 처리</b>를 한 화면에 모읍니다. 아래 수치와 자동화는 실제 화면 동작과 기존 업무 흐름을 기준으로 했습니다.</p>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">점검 후 완료 색칠</div><div class="big"><s>대당 1~2분</s> → <em>자동</em></div><div class="sub">FIELD 전송이 G5·매월점검 라벨과 날짜까지 반영</div></div>
+    <div class="stat green"><div class="lbl">방문 전 업체 확인</div><div class="big"><s>시트 3~4개</s> → <em>한 줄</em></div><div class="sub">미수·초과·불만·재계약 정보가 배지로 모임</div></div>
+    <div class="stat purple"><div class="lbl">여분 판단·자가신청</div><div class="big"><s>3~5분</s> → <em>1번</em></div><div class="sub">최근 2회 비교 → 지급 권장 → FIELD 자동 채움</div></div>
+    <div class="stat amber"><div class="lbl">주간 회의용 진행률</div><div class="big"><s>약 10분</s> → <em>자동 계산</em></div><div class="sub">완료율·남은 영업일·하루 목표·주차 판정까지</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">점검 한 건 마무리</div><div class="pills"><span>시트 열기</span><span>업체 찾기</span><span>완료 색칠</span><span>날짜 메모</span><span>팀 파일 공유</span></div><div class="ba-count">5단계 · 대당 1~2분</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">점검 한 건 마무리</div><div class="pills"><span class="hot">FIELD</span><span class="hot">📨 점검방 전송</span></div><div class="ba-count">보고 1번 · 라벨·날짜 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">업체 한 곳 방문 준비</div><div class="pills"><span>미수 시트</span><span>초과 시트</span><span>불만 기록</span><span>재계약 원장</span><span>점검방 검색</span></div><div class="ba-count">4개 시트 + 카톡 대조</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">업체 한 곳 방문 준비</div><div class="pills"><span class="hot">목록 한 줄 펼치기</span><span class="hot">최근 점검 비교</span></div><div class="ba-count">한 화면 · 약 2~5분 절약</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">이번 분기 동선·진척 확인</div><div class="pills"><span>명단 세기</span><span>완료 수 계산</span><span>남은 날 계산</span><span>주소별로 다시 묶기</span></div><div class="ba-count">수작업 계산 · 같은 건물 누락 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">이번 분기 동선·진척 확인</div><div class="pills"><span class="hot">진행률</span><span class="hot">주차분석</span><span class="hot">숫자 핀</span></div><div class="ba-count">자동 계산 · 같은 주소 한 핀</div></div>
+  </div>
   <div class="box tip"><b>이 화면을 쓰면 좋은 습관</b>점검 보고는 꼭 FIELD로 보내고, 워킨맵은 손으로 색칠하지 않기 — 그래야 완료 날짜가 자동으로 남고 주차분석에 잡힙니다.</div>
+  <p class="small">시간 수치는 기존 설명서에 기록된 업무 기준의 어림한 예시입니다.</p>
 </section>
 
 <section id="intro">

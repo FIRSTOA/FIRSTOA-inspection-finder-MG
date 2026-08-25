@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>맛동여지도 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 맛동여지도 전용 추가 ── */
+.tblwrap{overflow-x:auto}
+.fh{background:#1E252F;color:#fff;border-radius:14px;padding:14px;display:grid;gap:9px}
+.fh .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fh .t{font-size:15px;font-weight:900} .fh .t small{font-size:11px;color:#94A3B8;font-weight:600;margin-left:4px}
+.fh .sub{font-size:10.5px;color:#94A3B8;font-weight:600}
+.fh .inp{flex:1;min-width:160px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.1);border-radius:10px;padding:6px 10px;font-size:11.5px;color:#94A3B8}
+.fbtn{border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.1);color:#E2E8F0;white-space:nowrap}
+.fbtn.blue{background:#2563EB;color:#fff} .fbtn.em{background:#10B981;color:#fff} .fbtn.rose{background:rgba(244,63,94,.2);color:#FDA4AF} .fbtn.on{background:#fff;color:#0f172a} .fbtn.dim{opacity:.4}
+.fbtn i{font-style:normal;opacity:.6;margin-left:3px}
+.two{display:grid;grid-template-columns:1.1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
+.fmap{position:relative;height:250px;background:#DCE8EF;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:30px 30px;border-radius:14px 14px 0 0}
+.fpin{position:absolute;display:inline-flex;align-items:center;gap:3px;color:#fff;border:2px solid #fff;border-radius:999px;padding:2px 7px 2px 5px;font-size:10.5px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap}
+.fcard{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;color:#0f172a}
+.fcard .foc{padding:9px 12px;border-top:1px solid #F1F5F9;display:grid;gap:3px;font-size:11.5px}
+.fcard .foc .nm{font-size:13px;font-weight:900}
+.pk{border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:900}
+.pk.ok{background:#D1FAE5;color:#065F46} .pk.pay{background:#DBEAFE;color:#1E40AF} .pk.val{background:#E0E7FF;color:#3730A3} .pk.st{background:#FEF3C7;color:#92400E} .pk.no{background:#FFE4E6;color:#BE123C} .pk.unk{background:#F1F5F9;color:#64748B}
+.star{color:#F59E0B;font-weight:900;font-size:11px}
+.lnk{border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900}
+.lnk.nv{background:#059669;color:#fff} .lnk.kk{background:#FBBF24;color:#0f172a}
+.flist .lh{padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:11px;font-weight:900;color:#64748B}
+.frow{padding:9px 12px;border-bottom:1px solid #F1F5F9;display:grid;gap:2px;font-size:11.5px}
+.frow.on{background:#EFF6FF99}
+.frow .l1{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.frow .nm{font-size:13px;font-weight:900}
+.dist{border-radius:4px;background:#0f172a;color:#fff;padding:1px 6px;font-size:9.5px;font-weight:900}
+.gu{font-size:10.5px;color:#94A3B8;font-weight:600}
+.pm{color:#065F46;font-weight:900} .mn{color:#334155} .mm{color:#64748B}
+.tg{border-radius:999px;background:#F1F5F9;color:#475569;padding:0 7px;font-size:9.5px;font-weight:700}
+.who{margin-left:auto;font-size:9.5px;color:#94A3B8;font-weight:600}
+.ab{display:flex;gap:5px;margin-top:4px}
+.ab span{border:1px solid #E2E8F0;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:#64748B}
+.ab span.like{border-color:#FECDD3;color:#E11D48}
+.fin{border:1px solid #CBD5E1;border-radius:8px;padding:7px 10px;font-size:12px;color:#94A3B8;background:#fff}
+.fin.em{border-color:#A7F3D0;background:#ECFDF599}
+.fin.nm{color:#0f172a;font-weight:900}
+.pchips{display:flex;flex-wrap:wrap;gap:4px}
+.pchips span{border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900}
+.pchips span.on{background:#0f172a;color:#fff}
+.tgs{display:flex;flex-wrap:wrap;gap:4px}
+.tgs span{border-radius:999px;padding:3px 8px;font-size:10.5px;font-weight:900;background:#F1F5F9;color:#64748B}
+.tgs span.on{background:#2563EB;color:#fff}
+.prev{border:1px solid #E2E8F0;border-radius:10px;overflow:hidden}
+.prev .pr{display:flex;gap:6px;padding:7px 10px;border-bottom:1px solid #F1F5F9;font-size:11px;align-items:flex-start}
+.prev .pr .x{margin-left:auto;color:#94A3B8;font-weight:900}
+.log{background:#F8FAFC;border-radius:8px;padding:6px 10px;font-size:10.5px;color:#475569;font-weight:600;line-height:1.6}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;white-space:pre-wrap;color:#334155;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#read">2. 지도와 목록 읽기</a>
+  <a href="#filter">3. 팀·주차·구·검색·가까운 순</a>
+  <a href="#add">4. + 맛집 올리기 (칸 하나하나)</a>
+  <a href="#act">5. 👍추천 · 수정 · 삭제 · 지도 열기</a>
+  <a href="#bulk">6. 여러 개 붙여넣기</a>
+  <a class="sub" href="#bulk-how">네이버지도 저장목록 → 붙이기</a>
+  <a class="sub" href="#bulk-rules">해석 규칙</a>
+  <a class="sub" href="#bulk-48">88개 중 48개만 들어온 이유</a>
+  <a href="#faq">7. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 맛동여지도</div>
+  <h1>맛동여지도 길잡이</h1>
+  <p>현장 나갔을 때 <b style="color:#fff">주차 되는 밥집</b>을 팀이 함께 쌓는 공유 지도입니다. 누구나 올리고 모두가 봅니다. 마커 색이 곧 주차 상태이고, <b style="color:#fff">내 위치에서 가까운 순</b>으로 정렬해 바로 고를 수 있습니다. 네이버지도에 저장해 둔 목록은 <b style="color:#fff">통째로 붙여넣기</b>로 한 번에 옮깁니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p class="lead">"강남에서 주차 되는 데 어디였지"를 매번 다시 찾던 일을 대신합니다. 아래는 소스 코드로 확인되는 자동화만 적었습니다.</p>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">주차되는 식당 찾기</div><div class="big"><s>지도·전화</s> → <em>색으로 확인</em></div><div class="sub">어림 예: 끼니당 5~10분 · 주차 가능만 바로 필터</div></div>
+    <div class="stat green"><div class="lbl">팀 맛집 정보</div><div class="big"><s>카톡 속</s> → <em>공용 DB</em></div><div class="sub">추천 수 → 별점 순으로 정렬 · 누구나 다시 검색</div></div>
+    <div class="stat purple"><div class="lbl">지금 가까운 곳 결정</div><div class="big"><s>눈대중</s> → <em>거리순</em></div><div class="sub">어림 예: 회당 2~3분 · 내 위치 또는 입력 주소 기준</div></div>
+    <div class="stat amber"><div class="lbl">저장목록 옮기기</div><div class="big"><s>1곳씩</s> → <em>한 번에</em></div><div class="sub">어림 예: 곳당 1~2분 · 중복 이름은 자동으로 건너뜀</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">점심때 주차되는 식당 찾기</div><div class="pills"><span>지도 앱 검색</span><span>가게마다 주차 전화</span><span>카톡에서 추천 다시 찾기</span></div><div class="ba-count">어림 예: 5~10분</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">지도 색과 필터로 바로 고르기</div><div class="pills"><span class="hot">주차 상태 색</span><span class="hot">🅿 주차 가능만</span><span class="hot">추천 수 → 별점 순</span></div><div class="ba-count">한 화면에서 결정</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">현 위치에서 가까운 곳 찾기</div><div class="pills"><span>지도에서 거리 눈대중</span><span>후보를 하나씩 비교</span></div><div class="ba-count">어림 예: 2~3분</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">기준점에서 거리순 정렬</div><div class="pills"><span class="hot">📍 내 위치 가까운 순</span><span class="hot">이 주소 기준</span><span class="hot">m·km 거리 칩</span></div><div class="ba-count">가까운 곳이 목록 맨 앞</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">네이버지도 저장목록 옮기기</div><div class="pills"><span>가게명·주소 한 곳씩 입력</span><span>주차 메모 다시 정리</span><span>도착 전 이름 재검색</span></div><div class="ba-count">어림 예: 곳당 1~2분</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">붙여넣고 지도 앱까지 바로 열기</div><div class="pills"><span class="hot">여러 개 붙여넣기</span><span class="hot">주차 문구 자동 해석</span><span class="hot">네이버지도 · 카카오맵</span></div><div class="ba-count">일괄 등록 · 중복 건너뜀</div></div>
+  </div>
+  <div class="box tip"><b>이 화면을 쓰면 좋은 습관</b>주차 칸은 꼭 채우고, 주차 메모에 "건물 지하 1시간 무료"처럼 <b>어디에·얼마</b>를 적기 — 다음 사람이 그 한 줄로 결정합니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 저장은 한 곳, 보는 사람은 모두</h2>
+  <p class="lead">맛동여지도의 모든 항목은 <b>공용 DB</b>에 저장됩니다. 내가 올리면 팀 전체가 보고, 내가 지우면 모두에게서 사라집니다. 네이버 캘린더·카톡방·시트로는 아무것도 보내지 않습니다.</p>
+  <div class="sync">
+    <div class="n">+ 맛집 올리기 / 여러 개 붙여넣기<small>이름·주소·주차·메뉴·별점·태그</small></div>
+    <div class="arr">→</div>
+    <div class="n">공용 DB (food_places)<small>주소 → 좌표 자동 변환</small></div>
+    <div class="arr">→</div>
+    <div class="n">모두의 지도·목록<small>팀 칩 · 주차 필터 · 가까운 순</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>주소가 좌표로 바뀌는 순간</b>올릴 때 주소를 지도 좌표로 바꿔 저장합니다. 못 바꾸면 목록에만 들어가고 지도에는 안 찍힙니다("지도 미표시" 표시). 주소를 더 정확히 고쳐 [수정]하면 지도에 뜹니다.</div>
+    <div class="box warn"><b>올린 사람·팀이 함께 저장됩니다</b>올릴 때의 내 이름과 내 팀(A~E)이 붙습니다. 팀 칩은 이 값으로 나눕니다. 다른 사람이 올린 것도 누구나 수정·삭제할 수 있으니 조심해서 다루세요.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:150px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:86px">3</span>
+    <span class="badge" style="left:26px;top:124px">4</span>
+    <span class="badge" style="left:26px;top:162px">5</span>
+    <span class="badge" style="left:26px;top:220px">6</span>
+    <span class="badge" style="right:26px;top:220px">7</span>
+    <div class="fh">
+      <div class="row" style="justify-content:space-between">
+        <div><div class="t">🍴 맛동여지도<small>주차 되는 맛집, 같이 쌓기</small></div><div class="sub">누구나 올리고 모두가 봅니다 · 주차 정보가 핵심 · 마커 색 = 주차(초록 가능·파랑 유료·남색 발렛·주황 노상·빨강 불가)</div></div>
+        <div class="row"><span class="fbtn">여러 개 붙여넣기</span><span class="fbtn blue">+ 맛집 올리기</span></div>
+      </div>
+      <div class="row"><span class="fbtn">전체 <i>63</i></span><span class="fbtn">A팀 <i>12</i></span><span class="fbtn">B팀 <i>9</i></span><span class="fbtn on">C팀 <i>31</i></span><span class="fbtn">D팀 <i>8</i></span><span class="fbtn">E팀 <i>3</i></span></div>
+      <div class="row"><span class="inp">가게·메뉴·주소·올린 사람 검색 (주소를 넣고 [이 주소 기준]도 가능)</span><span class="fbtn em">🅿 주차 가능만</span><span class="fbtn">📍 내 위치 가까운 순</span><span class="fbtn dim">이 주소 기준</span><span class="fbtn rose">기준 해제 (내 위치)</span></div>
+      <div class="row"><span class="fbtn on" style="font-size:10.5px">전체 63</span><span class="fbtn" style="font-size:10.5px">강남구 18</span><span class="fbtn" style="font-size:10.5px">서초구 7</span><span class="fbtn" style="font-size:10.5px">성동구 5</span><span class="fbtn" style="font-size:10.5px">중구 9</span></div>
+    </div>
+    <div class="two">
+      <div class="fcard">
+        <div class="fmap">
+          <span class="fpin" style="left:40px;top:60px;background:#059669">🍴 고양진</span>
+          <span class="fpin" style="left:160px;top:110px;background:#2563eb;transform:scale(1.15)">🍴 가츠몽 교대점</span>
+          <span class="fpin" style="left:80px;top:170px;background:#e11d48">🍴 성수족발</span>
+          <span class="fpin" style="left:230px;top:50px;background:#4f46e5">🍴 논현정육식당</span>
+          <span class="fpin" style="left:250px;top:190px;background:#d97706">🍴 을지면옥</span>
+          <span style="position:absolute;left:130px;top:140px;width:12px;height:12px;border-radius:50%;background:#dc2626;border:3px solid #fff;box-shadow:0 0 0 3px rgba(220,38,38,.35)"></span>
+        </div>
+        <div class="foc"><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="nm">가츠몽 교대점</span><span class="pk pay">🅿 유료</span><span class="star">★★★★☆</span></div><div class="pm">주차: 건물 지하 30분 무료, 이후 10분 1천원</div><div class="mm">추천: 로스가츠 · 13,000원</div><div style="display:flex;gap:4px;margin-top:2px"><span class="lnk nv">네이버지도</span><span class="lnk kk">카카오맵</span></div></div>
+      </div>
+      <div class="fcard flist">
+        <div class="lh">31곳 · 내 위치 기준 가까운 순</div>
+        <div class="frow on"><div class="l1"><span class="dist">350m</span><span class="nm">가츠몽 교대점</span><span class="pk pay">🅿 유료</span><span class="star">★★★★☆</span><span class="gu">서초구</span></div><div class="pm">주차 · 건물 지하 30분 무료, 이후 10분 1천원</div><div class="mn">로스가츠 · 13,000원</div><div class="mm">웨이팅 있음, 12시 전 도착 권장</div><div class="l1"><span class="tg">#빨리나옴</span><span class="tg">#혼밥</span><span class="who">이권선 · C팀 · 서울 서초구 서초대로 320</span></div><div class="ab"><span class="like">👍 추천 4</span><span>수정</span><span>삭제</span></div></div>
+        <div class="frow"><div class="l1"><span class="dist">1.2km</span><span class="nm">고양진</span><span class="pk ok">🅿 가능</span><span class="star">★★★★★</span><span class="gu">강남구</span></div><div class="pm">주차 · 가게 앞 3대, 만차면 옆 공영 2천원</div><div class="mn">생갈비 김치찌개 · 11,000원</div><div class="l1"><span class="tg">#단체</span><span class="tg">#회식</span><span class="who">김정민 · C팀 · 서울 강남구 논현로163길 13-4</span></div><div class="ab"><span class="like">👍 추천 7</span><span>수정</span><span>삭제</span></div></div>
+        <div class="frow"><div class="l1"><span class="dist">2.8km</span><span class="nm">성수족발</span><span class="pk no">🅿 불가</span><span class="gu">성동구</span><span class="pk unk">지도 미표시</span></div><div class="pm">주차 · 골목이라 자리 없음, 대로변 공영 이용</div><div class="l1"><span class="who">정웅 · C팀 · 서울 성동구 아차산로17길</span></div><div class="ab"><span class="like">👍 추천 0</span><span>수정</span><span>삭제</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목</b> — 🍴 맛동여지도 · 주차 되는 맛집, 같이 쌓기. 아래 회색 글씨에 마커 색의 뜻이 적혀 있습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>[여러 개 붙여넣기]</b>(<a href="#bulk">6번</a>) · <b>[+ 맛집 올리기]</b>(<a href="#add">4번</a>).</div></div>
+    <div class="item"><span class="num">3</span><div><b>팀 칩</b> — 전체 / A팀~E팀, 숫자는 그 팀이 올린 곳 수. 처음 열면 <b>내 팀</b>이 선택돼 있습니다(팀이 없으면 전체).</div></div>
+    <div class="item"><span class="num">4</span><div><b>검색 · 필터 줄</b> — 검색칸, <b>[🅿 주차 가능만]</b>(켜지면 초록), <b>[📍 내 위치 가까운 순]</b>, <b>[이 주소 기준]</b>(검색칸이 비면 흐리게), 기준이 잡혀 있으면 <b>[기준 해제 (내 위치)]</b>(빨강). <a href="#filter">3번</a>.</div></div>
+    <div class="item"><span class="num">5</span><div><b>구 칩</b> — 주소에서 자동으로 뽑은 구·시·군. "전체 63"과 구별 개수. 하나라도 올라와 있을 때만 보입니다.</div></div>
+    <div class="item"><span class="num">6</span><div><b>지도</b> — 핀은 "🍴 가게이름"(10자까지), 색 = 주차 상태. 핀을 누르면 커지고 아래에 <b>선택 카드</b>가 열립니다. 빨간 점은 지금 기준(내 위치·주소).</div></div>
+    <div class="item"><span class="num">7</span><div><b>목록</b> — 머리에 "N곳 · 추천·별점 순" 또는 "N곳 · 내 위치 기준 가까운 순". 줄을 누르면 지도의 그 핀이 선택됩니다. <a href="#read">2번</a>.</div></div>
+  </div>
+</section>
+
+<section id="read">
+  <h2>2. 지도와 목록 읽기</h2>
+  <div class="grid2">
+    <div style="display:grid;gap:10px">
+      <h3>핀·배지 색 = 주차 상태</h3>
+      <table class="tbl"><thead><tr><th>상태</th><th>배지</th><th>[🅿 주차 가능만]에 남나</th></tr></thead><tbody>
+        <tr><td>가능</td><td><span class="pk ok">🅿 가능</span> 초록</td><td>남음</td></tr>
+        <tr><td>유료</td><td><span class="pk pay">🅿 유료</span> 파랑</td><td>남음</td></tr>
+        <tr><td>발렛</td><td><span class="pk val">🅿 발렛</span> 남색</td><td>남음</td></tr>
+        <tr><td>노상</td><td><span class="pk st">🅿 노상</span> 주황</td><td>빠짐</td></tr>
+        <tr><td>불가</td><td><span class="pk no">🅿 불가</span> 빨강</td><td>빠짐</td></tr>
+        <tr><td>모름</td><td><span class="pk unk">🅿 모름</span> 회색</td><td>빠짐</td></tr>
+      </tbody></table>
+    </div>
+    <div style="display:grid;gap:10px">
+      <h3>목록 한 줄</h3>
+      <div class="box"><b>첫 줄</b><span class="dist">350m</span> 기준이 있을 때만 거리(1km 미만 m, 이상 km) · <b>가게 이름</b> · 🅿 배지 · <span class="star">★★★★☆</span>(별점 0이면 안 보임) · 구 · 좌표 없으면 <span class="pk unk">지도 미표시</span>.</div>
+      <div class="box"><b>둘째~넷째 줄</b><span class="pm">주차 · 메모</span>(초록 굵게, 주차 메모가 있을 때) · 추천 메뉴 · 1인 가격 · 한 줄 메모.</div>
+      <div class="box"><b>마지막 줄</b>#태그들 · 오른쪽 끝에 <span class="who" style="margin:0">올린 사람 · 팀 · 주소(22자)</span>.</div>
+      <div class="box"><b>버튼</b><span class="ab" style="display:inline-flex;margin:0"><span class="like">👍 추천 4</span><span>수정</span><span>삭제</span></span> — <a href="#act">5번</a>.</div>
+    </div>
+  </div>
+  <div class="box tip"><b>정렬 규칙</b>기준(내 위치·주소)이 없으면 <b>👍 추천 많은 순 → 별점 높은 순</b>. 기준이 있으면 <b>가까운 순</b>(좌표 없는 곳은 맨 뒤). 지도에는 최대 150곳, 처음 화면은 40곳이 다 보이게 맞춰집니다.</div>
+  <div class="box"><b>지도 아래 선택 카드</b>핀이나 줄을 누르면 지도 아래에 가게 이름 · 🅿 · 별점 · "주차: 메모" · "추천: 메뉴 · 가격"과 <span class="lnk nv">네이버지도</span> <span class="lnk kk">카카오맵</span> 버튼이 나옵니다. 비어 있는 항목은 줄 자체가 안 보입니다.</div>
+</section>
+
+<section id="filter">
+  <h2>3. 팀 · 주차 · 구 · 검색 · 가까운 순</h2>
+  <table class="tbl"><thead><tr><th>누르는 것</th><th>무슨 일이 생기나</th></tr></thead><tbody>
+    <tr><td><b>팀 칩</b> 전체 / A~E팀</td><td>그 팀이 올린 곳만. 모든 필터는 함께(AND) 적용됩니다.</td></tr>
+    <tr><td><b>검색칸</b></td><td>가게 이름·메뉴·주소·한 줄 메모·태그·올린 사람 중 어디든 그 글자가 있으면 남습니다. 글자마다 바로 걸러집니다.</td></tr>
+    <tr><td><b>[🅿 주차 가능만]</b></td><td>켜면 초록으로 바뀌고 가능·유료·발렛만 남습니다. 다시 누르면 해제.</td></tr>
+    <tr><td><b>[📍 내 위치 가까운 순]</b></td><td>휴대폰 GPS로 내 위치를 잡아 빨간 점을 찍고 목록을 가까운 순으로. 위치 기능이 없으면 <span class="toast warnt" style="font-size:11.5px;padding:4px 9px">이 기기는 위치를 지원하지 않습니다</span>, 권한이 없으면 <span class="toast warnt" style="font-size:11.5px;padding:4px 9px">위치 권한이 없어요 — 주소로 기준을 잡아 주세요</span>.</td></tr>
+    <tr><td><b>[이 주소 기준]</b></td><td>검색칸에 적은 글자를 <b>주소</b>로 보고 좌표를 찾아 기준으로 삼습니다(예: 검색칸에 "서울 강남구 테헤란로 152" → [이 주소 기준]). 검색칸이 비면 눌리지 않습니다. 못 찾으면 <span class="toast warnt" style="font-size:11.5px;padding:4px 9px">그 주소의 좌표를 못 찾았어요</span>.</td></tr>
+    <tr><td><b>[기준 해제 (내 위치)]</b></td><td>기준이 잡혀 있을 때만 보이는 빨간 버튼. 누르면 기준이 풀리고 다시 추천·별점 순.</td></tr>
+    <tr><td><b>구 칩</b></td><td>그 구만. 같은 칩을 다시 누르면 해제. "전체 N"은 전체 개수.</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>주소로 기준을 잡은 뒤에는 검색칸을 지워도 됩니다</b>기준은 따로 기억되므로 검색칸을 비우고 다른 글자로 검색해도 가까운 순은 유지됩니다. [기준 해제]를 눌러야 풀립니다.</div>
+</section>
+
+<section id="add">
+  <h2>4. + 맛집 올리기 — 칸 하나하나</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 올리기 창</span>
+      <div class="modal" style="max-width:400px;gap:7px">
+        <div><div class="mt">맛집 올리기</div><div class="ms" style="font-size:10.5px">주소를 넣으면 좌표를 찍어 지도에 올립니다 · 주차 정보를 꼭 적어 주세요</div></div>
+        <div class="fin nm">가츠몽 교대점</div>
+        <div class="fin">주소 (예: 서울 강남구 테헤란로 152)</div>
+        <div class="fin">상세 (건물·층, 선택)</div>
+        <div><div class="ms" style="font-size:10.5px;margin-bottom:3px">주차</div><div class="pchips"><span class="on">가능</span><span class="pk pay" style="padding:4px 10px;font-size:11px">유료</span><span class="pk val" style="padding:4px 10px;font-size:11px">발렛</span><span class="pk st" style="padding:4px 10px;font-size:11px">노상</span><span class="pk no" style="padding:4px 10px;font-size:11px">불가</span><span class="pk unk" style="padding:4px 10px;font-size:11px">모름</span></div></div>
+        <div class="fin em">주차 메모 (예: 건물 지하 1시간 무료, 옆 공영주차장 2천원)</div>
+        <div style="display:grid;grid-template-columns:1fr 6rem;gap:6px"><div class="fin">추천 메뉴</div><div class="fin">1인 가격</div></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="ms" style="font-size:10.5px">별점</span><span style="font-size:18px;color:#FBBF24">★★★★</span><span style="font-size:18px;color:#CBD5E1">★</span></div>
+        <div class="tgs"><span>#혼밥</span><span>#단체</span><span class="on">#빨리나옴</span><span>#조용함</span><span>#가성비</span><span>#회식</span><span>#점심특선</span><span>#24시</span></div>
+        <div class="fin" style="min-height:44px">한 줄 메모 (선택)</div>
+        <div style="display:flex;gap:6px"><span class="mbtn ghost" style="flex:1;padding:8px">취소</span><span class="mbtn primary" style="flex:2;padding:8px">올리기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>칸</th><th>무엇을 적나</th></tr></thead><tbody>
+        <tr><td><b>가게 이름 *</b></td><td>유일한 필수 칸. 비우고 올리면 <span class="toast warnt" style="font-size:11.5px;padding:3px 8px">가게 이름을 적어 주세요</span>. "여러 개 붙여넣기"는 <b>같은 이름</b>이 이미 있으면 건너뛰므로 지점명까지(예: 가츠몽 교대점) 적는 게 좋습니다.</td></tr>
+        <tr><td><b>주소</b></td><td>도로명 주소 권장. 올릴 때 좌표로 바꿔 지도에 찍습니다. 못 찍으면 <span class="toast warnt" style="font-size:11.5px;padding:3px 8px">주소 좌표를 못 찾아 목록에만 올립니다 — 주소를 더 정확히 적으면 지도에 뜹니다</span>가 뜨고 목록에만 들어갑니다. 주소의 "○○구/시/군"이 구 칩이 됩니다.</td></tr>
+        <tr><td><b>상세</b></td><td>건물·층 (선택).</td></tr>
+        <tr><td><b>주차</b></td><td>가능 · 유료 · 발렛 · 노상 · 불가 · 모름 중 하나. 처음 값은 <b>가능</b>. 고른 것은 검게 칠해집니다.</td></tr>
+        <tr><td><b>주차 메모</b></td><td>초록 칸. "건물 지하 1시간 무료, 옆 공영주차장 2천원"처럼 <b>어디에 얼마</b>. 목록에서 초록 굵은 글씨로 보이는 가장 중요한 줄입니다.</td></tr>
+        <tr><td><b>추천 메뉴 · 1인 가격</b></td><td>자유 입력. 목록에 "메뉴 · 가격"으로 한 줄.</td></tr>
+        <tr><td><b>별점</b></td><td>★ 1~5개, 처음 값 4. 누른 별까지 노랗게.</td></tr>
+        <tr><td><b>태그</b></td><td>#혼밥 #단체 #빨리나옴 #조용함 #가성비 #회식 #점심특선 #24시 — 여러 개 켜기(파랑).</td></tr>
+        <tr><td><b>한 줄 메모</b></td><td>선택. 웨이팅·브레이크타임 같은 것.</td></tr>
+      </tbody></table>
+      <div class="box naver"><b>[올리기]를 누르면</b>주소 → 좌표 변환 → 공용 DB에 저장(내 이름·내 팀 함께) → 목록 새로 읽기 → <span class="toast ok" style="font-size:11.5px;padding:3px 8px">맛동여지도에 올렸습니다 — 모두에게 보입니다</span>. 저장 중엔 버튼이 "저장 중…". 실패하면 "저장 실패: …". 창 밖을 누르거나 [취소]는 저장하지 않고 닫습니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="act">
+  <h2>5. 👍추천 · 수정 · 삭제 · 지도 앱 열기</h2>
+  <table class="tbl"><thead><tr><th>버튼</th><th>누르면</th><th>어디까지 바뀌나</th></tr></thead><tbody>
+    <tr><td><span class="ab" style="display:inline-flex;margin:0"><span class="like">👍 추천 4</span></span></td><td>숫자가 바로 1 올라갑니다. 확인 창 없음, 취소 버튼 없음(다시 누르면 또 +1).</td><td>공용 DB의 추천 수. 목록 정렬(추천 순)에 바로 영향.</td></tr>
+    <tr><td><span class="ab" style="display:inline-flex;margin:0"><span>수정</span></span></td><td>4번과 같은 창이 "<b>맛집 수정</b>" 제목으로 열리고 칸이 채워져 있습니다. <b>[수정 저장]</b> → <span class="toast ok" style="font-size:11.5px;padding:3px 8px">수정했습니다</span>. 주소를 바꾸면 좌표도 다시 찍습니다.</td><td>공용 DB. 올린 사람·팀은 그대로 유지(수정한 사람으로 바뀌지 않음).</td></tr>
+    <tr><td><span class="ab" style="display:inline-flex;margin:0"><span>삭제</span></span></td><td>확인 창 <span class="quote" style="display:inline-block;padding:3px 9px">"가츠몽 교대점"을(를) 지도에서 지울까요? 모두에게서 사라집니다.</span> → 빨간 <b>[지우기]</b> → <span class="toast ok" style="font-size:11.5px;padding:3px 8px">지웠습니다</span>.</td><td>공용 DB에서 삭제. 되돌리기 없음. 누가 올렸든 누구나 지울 수 있습니다.</td></tr>
+    <tr><td><span class="lnk nv">네이버지도</span> <span class="lnk kk">카카오맵</span></td><td>지도 아래 선택 카드에만 있음. "가게이름 주소"로 검색을 열어 줍니다. 휴대폰은 앱, PC는 웹 지도(새 탭).</td><td>바깥 앱만 열림. 저장되는 것 없음.</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>수정·삭제는 모두에게 적용됩니다</b>내 것만 지우는 기능이 아닙니다. 다른 사람이 올린 걸 고칠 땐 주차 정보처럼 사실이 바뀐 것만 고치세요.</div>
+</section>
+
+<section id="bulk">
+  <h2>6. 여러 개 붙여넣기 — 네이버지도 저장목록 통째로</h2>
+  <p class="lead">네이버지도에는 "저장" 목록 내보내기가 없습니다. 그래서 <b>화면에 보이는 목록을 쭉 긁어 복사해 붙이는</b> 방법을 씁니다. 붙이면 해석 결과를 먼저 보여주고, 확인한 뒤 올립니다.</p>
+
+  <h3 id="bulk-how">순서</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 1단계 → 2단계</span>
+      <div style="display:grid;gap:10px;max-width:420px">
+        <div class="modal" style="gap:7px">
+          <div class="mt" style="font-size:15px">여러 개 한 번에 올리기</div>
+          <div class="ms" style="font-size:10.5px;line-height:1.5"><b>네이버지도 "저장" 목록을 쭉 긁어 붙여넣으면</b> 그대로 읽습니다(가게명·주소·내 메모의 주차 문구까지). 한 줄 형식 <code style="background:#F1F5F9;padding:0 4px;border-radius:3px">가게명 | 주소 | 주차메모</code>도 됩니다. 주소가 없으면 가게명으로 좌표를 찾습니다.</div>
+          <div class="mono" style="font-size:11px;min-height:70px;color:#94A3B8">네이버지도 저장목록 복사본을 여기에…
+
+또는
+삼겹살집 | 서울 강남구 테헤란로 152 | 건물 지하 1시간 무료</div>
+          <div style="display:flex;gap:6px"><span class="mbtn ghost" style="flex:1;padding:8px">닫기</span><span class="mbtn dark" style="flex:2;padding:8px">해석해서 미리보기</span></div>
+        </div>
+        <div class="modal" style="gap:7px">
+          <div class="mt" style="font-size:15px">여러 개 한 번에 올리기 — 3곳 확인</div>
+          <div class="ms" style="font-size:10.5px">잘못 읽힌 건 ✕로 빼고 올리세요. 업종·메뉴·별점은 올린 뒤 [수정]으로 채울 수 있습니다.</div>
+          <div class="prev">
+            <div class="pr"><span><b>가츠몽 교대점</b> <span class="pk no">🅿 불가</span><br><span style="color:#64748B">서울 강남구 논현로163길 13-4</span><br><span style="color:#065F46">주차자리 빡셈</span></span><span class="x">✕</span></div>
+            <div class="pr"><span><b>고양진</b> <span class="pk ok">🅿 가능</span> <span class="pk unk">이미 있음 → 건너뜀</span><br><span style="color:#64748B">서울 강남구 논현로163길 13-4</span><br><span style="color:#065F46">1,b1,b2 식당가 주차1시간</span></span><span class="x">✕</span></div>
+            <div class="pr"><span><b>을지면옥</b> <span class="pk unk">🅿 모름</span><br><span style="color:#64748B">(주소 없음 — 이름으로 검색)</span><br><span style="color:#065F46">은마상가 지하</span></span><span class="x">✕</span></div>
+          </div>
+          <div class="log">✓ 가츠몽 교대점<br>↷ 고양진 — 이미 있음<br>⚠ 좌표 없음(목록만) 을지면옥</div>
+          <div style="display:flex;gap:6px"><span class="mbtn ghost" style="flex:1;padding:8px">← 다시 붙이기</span><span class="mbtn primary" style="flex:2;padding:8px">3곳 올리기</span></div>
+        </div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>네이버지도(PC 웹 권장)에서 <b>저장 → 그 목록</b>을 열고 <b>목록을 끝까지 스크롤해 전부 그려지게</b> 한 뒤(<a href="#bulk-48">아래 참고</a>), 첫 항목부터 마지막까지 마우스로 쭉 선택 → <span class="kbd">Ctrl</span>+<span class="kbd">C</span>.</li>
+        <li>맛동여지도 <b>[여러 개 붙여넣기]</b> → 큰 칸에 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> → <b>[해석해서 미리보기]</b>. 읽어낸 게 없으면 <span class="toast warnt" style="font-size:11.5px;padding:3px 8px">읽어낸 항목이 없어요 — 형식을 확인해 주세요</span>.</li>
+        <li><b>미리보기 — N곳 확인</b>: 각 줄에 가게명 · 🅿 해석된 주차 · 주소(없으면 "(주소 없음 — 이름으로 검색)") · 메모. 이미 같은 이름이 있으면 <span class="pk unk">이미 있음 → 건너뜀</span>. 잘못 읽힌 줄은 오른콽 <b>✕</b>로 빼세요. <b>[← 다시 붙이기]</b>는 1단계로.</li>
+        <li><b>[N곳 올리기]</b> → 한 곳씩 좌표를 찾아 올리며 버튼이 "올리는 중… 3/12"로 바뀌고 아래 기록이 쌓입니다: <b>✓ 이름</b>(지도에 올림) · <b>⚠ 좌표 없음(목록만) 이름</b> · <b>↷ 이름 — 이미 있음</b>. 끝나면 <span class="toast ok" style="font-size:11.5px;padding:3px 8px">N곳 지도에 올렸습니다</span>(✓ 개수). 한 번에 최대 120곳.</li>
+      </ol>
+      <div class="box tip"><b>붙여넣기로 들어온 곳은</b>별점 0 · 태그 없음 · 메뉴 빈칸으로 들어갑니다(올린 사람은 나, 팀은 내 팀). 나중에 [수정]으로 채우세요. 중간에 오류가 나면 "일괄 등록 중단: …"이 뜨고 그때까지 올라간 것은 남습니다.</div>
+    </div>
+  </div>
+
+  <h3 id="bulk-rules">해석 규칙 — 복사본을 어떻게 읽나</h3>
+  <div class="grid2">
+    <div class="mono">1,b1,b2 식당가 주차1시간
+고양진 생갈비 김치찌개찌개,전골
+서울 강남구 논현로163길 13-4
+서울특별시 강남구 신사동 569-12
+
+가츠몽,주차자리 빡셈
+가츠몽 교대점돈가스
+서울 서초구 서초대로 320
+메모은마상가 지하</div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>줄</th><th>어떻게 읽나</th></tr></thead><tbody>
+        <tr><td>항목 사이 <b>빈 줄</b></td><td>빈 줄로 항목을 나눕니다. 빈 줄이 없으면 한 덩이로 붙습니다.</td></tr>
+        <tr><td><b>주소 줄</b></td><td>"서울 / 서울특별시 / 경기 / 인천 / 부산 …"으로 시작하는 줄. 여러 개면 <b>짧은 도로명형("서울 강남구 …")</b>을 우선(좌표 찍기에 가장 잘 맞음).</td></tr>
+        <tr><td><b>"메모…" 줄</b></td><td>네이버 메모. "메모" 글자를 떼고 한 줄 메모로.</td></tr>
+        <tr><td><b>그 밖의 줄</b> 2개 이상</td><td><b>앞 줄 = 내 메모</b>(주차 문구), <b>뒤 줄 = 가게명</b>. 가게명 끝의 업종 꼬리("돈가스", "찌개,전골", "육류,고기요리", "카페" 등 사전에 있는 것)는 떼어냅니다.</td></tr>
+        <tr><td><b>그 밖의 줄</b> 1개</td><td>"주차·식당가·밥집·맛집·뷔페·먹자·쉴곳·지하"가 들어 있고 주소가 있으면 메모로 보고 이름은 주소에서 만듭니다. 아니면 그 줄이 가게명.</td></tr>
+        <tr><td><b>주차 상태</b>(내 메모에서)</td><td>주차·무료·시간·천원·발렛·주차장 같은 단어가 없으면 <b>모름</b> → "불가·빡·어렵·힘들·없음·안됨" 있으면 <b>불가</b> → "발렛" <b>발렛</b> → "유료·천원·만원·N원"(무료 없이) <b>유료</b> → "노상·골목·길가" <b>노상</b> → 그 외 <b>가능</b>. 주차로 읽힌 메모는 <b>주차 메모</b> 칸에, 아니면 한 줄 메모에 들어갑니다.</td></tr>
+        <tr><td><b>한 줄 형식</b></td><td>주소 줄이 2개 미만이거나 "|"가 있으면 <code>가게명 | 주소 | 주차메모</code>(탭도 됨)로 읽습니다. 주차메모가 있으면 <b>가능</b>, 없으면 <b>모름</b>.</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <h3 id="bulk-48">88개 저장했는데 48개만 들어왔어요 — 왜?</h3>
+  <div class="grid2">
+    <div class="box warn"><b>네이버지도 목록은 스크롤한 만큼만 화면에 그려집니다</b>저장 목록이 길면 네이버지도는 아래로 내려갈 때마다 항목을 추가로 그립니다. <b>끝까지 내려가지 않은 상태에서 전체 선택·복사</b>하면 그때까지 화면에 그려진 항목(예: 48개)만 복사됩니다. 나머지 40개는 애초에 클립보드에 없었던 것이지, 해석에서 빠진 게 아닙니다.</div>
+    <div class="box tip"><b>이렇게 하세요</b>① 목록 맨 아래까지 스크롤해 더 안 늘어나는지 확인 → ② 다시 맨 위로 올라가 첫 항목부터 끝까지 드래그 선택 → 복사. 그래도 부족하면 목록을 <b>둘로 나눠</b> 두 번 붙이면 됩니다 — 이미 들어간 이름은 <b>"이미 있음 → 건너뜀"</b>으로 자동 제외되니 겹쳐도 중복이 생기지 않습니다. 미리보기의 "N곳 확인" 숫자를 네이버 저장 개수와 먼저 비교해 보세요.</div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>7. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>올렸는데 지도에 안 보여요 (목록엔 있어요)</summary><p>주소를 좌표로 못 바꾼 경우로, 목록에 "지도 미표시"가 붙습니다. [수정]에서 주소를 도로명(예: 서울 강남구 테헤란로 152)으로 고치고 [수정 저장]하면 다시 좌표를 찍습니다. 팀 칩·구 칩·주차 필터에 걸려 안 보이는 것일 수도 있으니 "전체"로 바꿔 확인하세요.</p></details>
+    <details><summary>가까운 순이 안 돼요</summary><p>휴대폰 위치 권한이 꺼져 있으면 "위치 권한이 없어요 — 주소로 기준을 잡아 주세요"가 뜹니다. 설정에서 브라우저 위치 권한을 허용하거나, 검색칸에 지금 있는 곳 주소를 적고 [이 주소 기준]을 누르세요.</p></details>
+    <details><summary>붙여넣기 미리보기에서 가게명과 메모가 바뀌어 들어왔어요</summary><p>네이버 복사본은 "내 메모 줄 → 가게명 줄" 순서가 원칙인데, 메모가 없는 항목은 가게명 한 줄만 있어 그대로 이름이 됩니다. 반대로 메모에 "주차" 같은 단어가 없으면 메모가 가게명으로 읽힐 수 있습니다. 그 줄은 ✕로 빼고 [+ 맛집 올리기]로 직접 올리세요.</p></details>
+    <details><summary>같은 가게가 두 번 올라갔어요</summary><p>이름이 조금 다르면(예: "가츠몽"과 "가츠몽 교대점") 다른 가게로 봅니다. 하나를 [삭제]하고, 남긴 것에 추천·메모를 [수정]으로 옮기세요.</p></details>
+    <details><summary>추천을 잘못 눌렀어요</summary><p>추천은 취소 버튼이 없습니다. 크게 문제되지 않지만, 정말 필요하면 관리자에게 알려 주세요.</p></details>
+    <details><summary>다른 팀 맛집도 보고 싶어요</summary><p>팀 칩에서 [전체]를 누르세요. 처음 열면 내 팀만 선택되어 있습니다. 올릴 때는 항상 내 팀으로 저장됩니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">맛동여지도 길잡이 · 워킨맵 · 자동 일정 · 재계약 준비 길잡이와 같은 형식</p>
+</main>
+</div>
+</body>
+</html>

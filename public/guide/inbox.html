@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>공지·요청 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border:0;border-radius:18px;padding:20px 18px 17px;color:#fff;display:grid;gap:5px;min-height:132px;align-content:center;text-align:left;box-shadow:0 12px 30px rgba(15,23,42,.14)}
+.impact .stat.blue{background:linear-gradient(135deg,#1E3A8A,#2563EB)} .impact .stat.green{background:linear-gradient(135deg,#065F46,#047857)} .impact .stat.purple{background:linear-gradient(135deg,#581C87,#7E22CE)} .impact .stat.amber{background:linear-gradient(135deg,#78350F,#B45309)}
+.impact .stat .lbl{font-size:12px;font-weight:900;opacity:.95;letter-spacing:.03em}
+.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.68;font-size:22px;text-decoration-thickness:2px}
+.impact .stat .big em{font-style:normal}
+.impact .stat .sub{font-size:12px;font-weight:700;opacity:.95}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+.ba + .ba{margin-top:2px}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--dark);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media(max-width:700px){.impact{grid-template-columns:1fr}.impact .stat{min-height:0}.ba{grid-template-columns:1fr}.ba-arrow{transform:rotate(90deg);padding:4px 0}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ba-card.new .ba-title,:root:not([data-theme="light"]) .ba-card.new .ba-count{color:#93C5FD}}
+:root[data-theme="dark"] .ba-card.new .ba-title,:root[data-theme="dark"] .ba-card.new .ba-count{color:#93C5FD}
+@media print{.impact{grid-template-columns:repeat(2,minmax(0,1fr))}.impact .stat{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none;break-inside:avoid}.ba{grid-template-columns:1fr auto 1fr;break-inside:avoid}.ba-arrow{transform:none}.ba-card.new{box-shadow:none}}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 폼·탭·목록·달력·카드 모형 ── */
+.sect{background:#1E252F;color:#fff;border-radius:12px 12px 0 0;padding:10px 14px;display:flex;align-items:center;gap:10px;font-weight:900;font-size:13px}
+.sect .no{width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.sect small{display:block;font-weight:600;color:#94A3B8;font-size:11px}
+.sect .hstat{margin-left:auto;border-radius:999px;padding:3px 10px;font-size:11px;background:rgba(255,255,255,.1);color:#CBD5E1;white-space:nowrap}
+.sect .hstat.ok{background:rgba(52,211,153,.15);color:#6EE7B7}
+.panel{background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 12px 12px;padding:12px 14px;display:grid;gap:10px}
+.panel.top{border-top:1px solid #E2E8F0;border-radius:12px}
+.fld{display:grid;gap:3px;font-size:11px;font-weight:900;color:#64748B}
+.fld .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:#0f172a;background:#fff;min-height:36px}
+.fld .in.ph{color:#94A3B8}
+.fld .in.err{border-color:#FCA5A5;background:#FFF5F6}
+.fgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.seg{display:inline-flex;background:#F1F5F9;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg span{border-radius:999px;padding:5px 12px;font-size:12px;font-weight:900;color:#64748B}
+.seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg.ink{background:#fff;border:1px solid #E2E8F0}.seg.ink span.on{background:#0f172a;color:#fff}
+.lchip{display:inline-block;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;border:1px solid #E2E8F0;background:#fff;color:#64748B;white-space:nowrap}
+.lchip.on{background:#2563EB;color:#fff;border-color:#2563EB}
+.lchip.dark{background:#0f172a;color:#fff;border-color:#0f172a}
+.lchip.gray{background:#F1F5F9;border-color:#F1F5F9}
+.lchip.ok{background:#ECFDF5;color:#059669;border-color:#ECFDF5}.lchip.miss{background:#FFF1F2;color:#F43F5E;border-color:#FFF1F2}
+.lchip.amb{background:#FEF3C7;color:#92400E;border-color:#FEF3C7}
+.tabs{display:flex;border-bottom:1px solid #E2E8F0;background:#fff;border-radius:12px 12px 0 0;overflow:hidden}
+.tabs span{flex:1;text-align:center;padding:11px 8px;font-size:13px;font-weight:900;color:#94A3B8;position:relative;white-space:nowrap}
+.tabs span.on{color:#0f172a}.tabs span.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:#2563EB}
+.tabs .cnt{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F1F5F9;color:#94A3B8}
+.tabs span.on .cnt{background:#2563EB;color:#fff}
+.tabs .rb{display:inline-block;margin-left:5px;border-radius:999px;padding:1px 6px;font-size:10px;background:#F43F5E;color:#fff}
+.bbtn{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.bbtn.pri{background:#2563EB;color:#fff}.bbtn.line{background:#fff;color:#64748B;border-color:#CBD5E1}.bbtn.ink{background:#fff;color:#1E293B;border-color:#94A3B8}
+.bbtn.green{background:#fff;color:#047857;border-color:#6EE7B7}.bbtn.amber{background:#fff;color:#B45309;border-color:#FCD34D}.bbtn.dark{background:#0f172a;color:#fff}
+.bbtn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3}.bbtn.blue{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}.bbtn.emer{background:#059669;color:#fff}
+.bbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}.bbtn.dis{opacity:.4}.bbtn.ghost{background:rgba(255,255,255,.1);color:#E2E8F0}
+.row-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #F1F5F9;background:#fff;font-size:12px}
+.row-item .tm{text-align:center;font-weight:900;color:#0f172a}
+.row-item .ty{display:block;margin-top:3px;border-radius:4px;padding:1px 4px;font-size:9px;font-weight:900;background:#DBEAFE;color:#1D4ED8}
+.row-item .ty.it{background:#CFFAFE;color:#0E7490}.row-item .ty.rm{background:#EDE9FE;color:#6D28D9}
+.row-item b{display:block;font-size:14px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .sub{display:block;color:#475569;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-item .meta{display:block;color:#94A3B8;font-weight:700;font-size:11px}
+.st{border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+.st.recv{background:#FFE4E6;color:#BE123C}.st.prog{background:#FEF3C7;color:#92400E}.st.done{background:#E2E8F0;color:#64748B}
+.detail{background:#F8FAFC;border-top:1px solid #F1F5F9;padding:10px 12px;font-size:11px;color:#475569;display:grid;gap:6px;font-weight:600}
+.detail .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;font-size:11px}
+.cal .dh{padding:6px 0;text-align:center;font-weight:900;color:#64748B;background:#F8FAFC;border-bottom:1px solid #E2E8F0}
+.cal .dh.sun{color:#F43F5E;background:#FFF1F2}.cal .dh.sat{color:#3B82F6;background:#EFF6FF}
+.cal .d{min-height:78px;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;padding:5px;display:grid;gap:3px;align-content:start;min-width:0}
+.cal .d.out{background:#F8FAFC}.cal .d .n{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#334155;font-size:11px}
+.cal .d .n.today{background:#2563EB;color:#fff}.cal .d .n.sun{color:#F43F5E}.cal .d .n.sat{color:#2563EB}.cal .d.out .n{color:#CBD5E1}
+.evt{border-radius:6px;padding:2px 6px;font-size:10px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.evt.lime{background:#ECFCCB;color:#3F6212}.evt.blue{background:#DBEAFE;color:#1D4ED8;text-decoration:line-through}.evt.rose{background:#FFE4E6;color:#BE123C}.evt.amber{background:#FEF3C7;color:#92400E}
+.evt.n{border:1px solid #D9F99D;background:#F7FEE7;color:#3F6212}.evt.n.rose{border-color:#FECDD3;background:#FFE4E6;color:#BE123C}.evt.n.done{border-color:#E2E8F0;background:#F8FAFC;color:#94A3B8;text-decoration:line-through}
+.evt.tc{background:#DBEAFE;color:#1E40AF;text-decoration:none}
+.evt.more{color:#64748B;text-decoration:underline dotted;background:transparent;padding-left:2px}
+.side{background:#1E252F;border-radius:12px;padding:12px;display:grid;gap:8px;color:#fff;align-content:start}
+.side .spill{border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;background:rgba(255,255,255,.1);color:#CBD5E1;display:flex;align-items:center;gap:6px}
+.side .spill.on{background:#fff;color:#0f172a}
+.dot8{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.side .lab{font-size:10px;font-weight:900;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;margin-top:6px}
+.side .sin{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:8px;padding:7px 10px;font-size:12px;color:#94A3B8}
+.side .sel{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;color:#fff;display:flex;justify-content:space-between}
+.calhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-bottom:0;border-radius:12px 12px 0 0;padding:9px 12px;font-size:12px}
+.calhead .mon{font-weight:900;font-size:15px;color:#0f172a}
+.calhead .rnd{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#64748B;font-weight:900}
+.hcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
+.hcard .ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;flex:none}
+.hcard b{display:block;font-size:13px;color:#0f172a}.hcard small{display:block;font-size:11px;color:#64748B;font-weight:600}
+.hero-mock{background:#0f172a;border-radius:12px;padding:22px 20px;color:#fff;display:grid;gap:8px}
+.hero-mock .h{font-size:20px;font-weight:900;line-height:1.25}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#E2E8F0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden}
+@media(min-width:700px){.grid4{grid-template-columns:repeat(4,1fr)}}
+.grid4 div{background:#fff;padding:12px}.grid4 b{display:block;font-size:16px;color:#0f172a}.grid4 small{font-size:11px;color:#64748B;font-weight:700}
+.dark-card{background:#0f172a;border-radius:12px;padding:14px;color:#E2E8F0;display:grid;gap:8px;font-size:12px}
+.dark-card .tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;background:rgba(255,255,255,.1)}
+.dark-card .tag.new{background:#F43F5E;color:#fff;border-radius:999px}
+.nrow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid #F8FAFC;background:#fff;font-size:12.5px}
+.nrow .dotu{width:6px;height:6px;border-radius:50%;background:#F43F5E;flex:none}.nrow .dotu.read{background:transparent}
+.cat{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.cat.norm{background:#F1F5F9;color:#64748B}.cat.urg{background:#FFF1F2;color:#E11D48}.cat.hr{background:#FFFBEB;color:#B45309}.cat.sys{background:#EFF6FF;color:#1D4ED8}
+.nrow .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900;color:#0f172a}
+.nrow .tt.read{font-weight:700;color:#64748B}
+.tgt{border-radius:999px;padding:1px 8px;font-size:10px;font-weight:900;flex:none;display:inline-block}
+.tgt.all{background:#EFF6FF;color:#2563EB}.tgt.team{background:#F5F3FF;color:#7C3AED}.tgt.me{background:#D1FAE5;color:#065F46;box-shadow:0 0 0 1px #6EE7B7}.tgt.person{background:#ECFDF5;color:#047857}
+.prog{width:48px;height:4px;border-radius:999px;background:#F1F5F9;overflow:hidden}.prog i{display:block;height:100%;background:#3B82F6}.prog i.full{background:#10B981}
+.rcard{position:relative;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 12px 12px 18px;display:grid;gap:6px;font-size:12px;overflow:hidden}
+.rcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bar,#F43F5E)}
+.rcard.fresh{border-color:#93C5FD;box-shadow:0 0 0 2px #DBEAFE}
+.timeline{display:grid;gap:10px;border:1px solid #F1F5F9;border-radius:12px;padding:12px 14px;font-size:12px;background:#fff}
+.timeline .tl{display:flex;gap:10px;align-items:flex-start}.timeline .tl i{width:11px;height:11px;border-radius:50%;border:2px solid #E2E8F0;background:#fff;margin-top:3px;flex:none}
+.timeline .tl i.b{border-color:#3B82F6;background:#3B82F6}.timeline .tl i.a{border-color:#FBBF24;background:#FBBF24}.timeline .tl i.g{border-color:#10B981;background:#10B981}
+.dbar{background:#151A23;border-radius:12px;padding:9px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#94A3B8;font-size:11px;font-weight:700}
+.dbar .c{border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.07)}.dbar .c b{color:#fff}.dbar .c.warn{background:rgba(251,113,133,.15);color:#FDA4AF}.dbar .c.warn b{color:#FDA4AF}
+.dbar .live{color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;gap:6px}
+.dbar .live i{width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.ui .muted{color:#94A3B8;font-weight:700;font-size:11px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#nlist">2. 공지사항 목록</a>
+  <a href="#nread">3. 공지 읽기 (상세 창)</a>
+  <a href="#nwrite">4. 공지 작성</a>
+  <a href="#rlist">5. 부서 요청 목록</a>
+  <a href="#rdetail">6. 요청 상세 · 처리 버튼</a>
+  <a href="#rwrite">7. 요청 등록</a>
+  <a href="#alerts">8. 알림은 어떻게 오나</a>
+  <a href="#faq">9. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 소식 › 공지·요청</div>
+  <h1>공지·요청 길잡이</h1>
+  <p>사이드바 <b style="color:#fff">소식 › 공지·요청</b>입니다. "사람이 나에게 보낸 것"을 한곳에 모았습니다 — <b style="color:#fff">공지</b>는 읽으면 끝, <b style="color:#fff">부서 요청</b>은 처리해야 끝. 누가 읽었는지, 누가 처리 중인지가 전부 보이고, 새 글은 사이드바 빨간 숫자와 웹푸시로 알려 줍니다. 이 화면은 네이버 캘린더·카톡방·시트와는 연결되지 않습니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">"읽었어요?" 확인</div><div class="big"><s>일일이 물어보기</s> → <em>자동</em></div><div class="sub">열면 읽음 기록 · N/M과 안 읽은 사람 이름이 보임</div></div>
+    <div class="stat green"><div class="lbl">대상 지정</div><div class="big"><em>전체 · 팀 · 개인</em></div><div class="sub">받을 사람만 보고, 배지·푸시도 그 사람에게만</div></div>
+    <div class="stat purple"><div class="lbl">요청 진행 상황</div><div class="big"><em>3단계</em> 타임라인</div><div class="sub">접수 → 처리 시작 → 완료, 누가·언제까지 기록</div></div>
+    <div class="stat amber"><div class="lbl">새 소식 알림</div><div class="big"><em>2분</em> 안 배지</div><div class="sub">어느 화면에 있든 사이드바 빨간 숫자 + 웹푸시</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">공지 하나 전달</div><div class="pills"><span>단톡에 올리기</span><span>읽었는지 한 명씩 확인</span><span>못 본 사람에게 다시 알림</span><span>옛 공지는 대화에 묻힘</span></div><div class="ba-count">4단계 · 반복</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">공지 하나 전달</div><div class="pills"><span class="hot">공지 작성</span><span class="hot">공지 올리기</span></div><div class="ba-count">2번 누르기 · 읽음 자동 집계</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">타부서 요청 처리</div><div class="pills"><span>카톡·전화로 요청</span><span>누가 맡았는지 되묻기</span><span>끝났는지 다시 확인</span></div><div class="ba-count">3단계 · 기록 없음</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">타부서 요청 처리</div><div class="pills"><span class="hot">+ 요청 등록</span><span class="hot">처리 시작</span><span class="hot">완료 처리</span></div><div class="ba-count">3번 누르기 · 요청자에게 자동 알림</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>공지는 열어 보기만 해도 읽음이 기록됩니다 — 사이드바 숫자가 보이면 그날 한 번 열어 두세요. 요청은 받았으면 <b>[처리 시작]</b>부터 눌러 요청자가 기다리지 않게.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 사이드바 빨간 숫자의 뜻</h2>
+  <p class="lead">사이드바 "공지·요청" 옆 빨간 숫자 = <b>안 읽은 공지</b> + <b>나에게 온 대기 요청</b> + <b>내가 보낸 요청의 진행 소식</b>. 세 가지가 합쳐진 값이라 이 화면에 들어오면 상태줄에서 각각 몇 건인지 나눠 보여 줍니다.</p>
+  <div class="sync">
+    <div class="n">누가 올림<small>공지 작성 · 요청 등록 · 상태 변경</small></div>
+    <div class="arr">→</div>
+    <div class="n">받는 사람에게<small>사이드바 배지(2분 주기) + 웹푸시</small></div>
+    <div class="arr">→</div>
+    <div class="n">열어 보면<small>읽음 기록 · 진행 소식 확인 처리</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>"나에게 온 것"의 기준</b>대상이 <b>전체</b>면 모두, <b>팀</b>이면 내 부서·팀(관리 탭 인원 명단 기준, 겸임 A·B는 둘 다), <b>개인</b>이면 내 이름과 정확히 같을 때. 작성자를 고르지 않으면 상태줄에 "작성자를 선택하면 내 것만 골라 보여줍니다"가 나옵니다.</div>
+    <div class="box warn"><b>이 화면은 카톡·네이버·시트에 아무것도 보내지 않습니다</b>DB(공지·요청 표)와 웹푸시만 씁니다. 카톡 단톡 공지를 대신하는 화면이지, 카톡으로 다시 보내 주지는 않습니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:76px">2</span>
+    <span class="badge" style="right:26px;top:76px">3</span>
+    <span class="badge" style="left:26px;top:118px">4</span>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
+      <div style="background:#1E252F;padding:12px 16px"><div style="color:#fff;font-weight:900;font-size:15px">공지·요청</div><div style="color:#94A3B8;font-size:11px;font-weight:600">공지는 읽으면 끝, 요청은 처리해야 끝 — 나에게 온 것부터 보여줍니다</div></div>
+      <div class="dbar" style="border-radius:0"><span class="c warn">안 읽은 공지 <b>2건</b></span><span class="c warn">내 대기 요청 <b>1건</b></span><span class="c">내 요청 진행 소식 <b>0건</b></span><span class="spacer"></span><span style="color:#64748B">홍길동 · CS팀 A팀 기준</span></div>
+      <div class="tabs" style="border-radius:0"><span class="on" style="flex:none;padding:12px 20px">공지사항<span class="rb">2</span></span><span style="flex:none;padding:12px 20px">부서 요청<span class="rb">1</span></span><span style="flex:1"></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>검은 머리</b> — "공지·요청 / 공지는 읽으면 끝, 요청은 처리해야 끝 — 나에게 온 것부터 보여줍니다".</div></div>
+    <div class="item"><span class="num">2</span><div><b>상태줄 칩</b> — <b>안 읽은 공지 N건</b> · <b>내 대기 요청 N건</b> · (있을 때만) <b>내 요청 진행 소식 N건</b>. 0보다 크면 빨간색. 칩을 누르면 해당 탭으로 갑니다. 숫자가 아직 안 왔으면 "…건".</div></div>
+    <div class="item"><span class="num">3</span><div><b>기준 표시</b> — "홍길동 · CS팀 A팀 기준"처럼 지금 선택된 작성자와 소속. 이 사람 기준으로 "나에게 온 것"을 고릅니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>탭</b> — <b>공지사항</b> / <b>부서 요청</b>. 파란 밑줄이 현재 탭, 빨간 숫자는 안 읽은 공지 수 / 내 대기 요청 수. 마지막에 본 탭은 이 기기에 기억됩니다.</div></div>
+  </div>
+</section>
+
+<section id="nlist">
+  <h2>2. 공지사항 목록 — 한 줄이 공지 하나</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:186px;top:26px">2</span>
+    <span class="badge" style="right:26px;top:26px">3</span>
+    <span class="badge" style="left:26px;top:86px">4</span>
+    <span class="badge" style="right:26px;top:86px">5</span>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><div class="seg"><span class="on">내 공지</span><span>모든 공지</span></div><span class="lchip gray" style="color:#94A3B8">🔍 공지 검색</span><span class="lchip miss">안 읽음 2건</span><span class="spacer"></span><span class="bbtn pri">＋ 공지 작성</span></div>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;margin-top:8px;overflow:hidden">
+      <div class="nrow" style="border-top:0;background:#F8FAFC"><span class="dotu"></span><span class="cat urg">긴급</span><span style="color:#2563EB;font-size:11px">📌</span><span class="tt">9월 1일 정산 마감 앞당김 — 8/29(금)까지 카운터 제출</span><span class="tgt all">전체</span><span class="muted">김관리 · 08-25</span><span style="text-align:right"><span style="display:block;font-size:11px;font-weight:900;color:#64748B">12/20</span><span class="prog"><i style="width:60%"></i></span></span></div>
+      <div class="nrow"><span class="dotu"></span><span class="cat sys">시스템</span><span class="tt">서비스접수 화면 개선 — 팀 지역 칩 추가</span><span class="tgt team">팀 · A팀</span><span class="muted">홍길동 · 08-24</span><span style="text-align:right"><span style="display:block;font-size:11px;font-weight:900;color:#64748B">3/5</span><span class="prog"><i style="width:60%"></i></span></span></div>
+      <div class="nrow"><span class="dotu read"></span><span class="cat hr">인사</span><span class="tt read">9월 팀 이동 안내</span><span class="tgt me">👤 나에게</span><span class="muted">박팀장 · 08-22</span><span style="text-align:right"><span style="display:block;font-size:11px;font-weight:900;color:#059669">1/1</span><span class="prog"><i class="full" style="width:100%"></i></span></span></div>
+      <div class="nrow"><span class="dotu read"></span><span class="cat norm">일반</span><span class="tt read">주차장 공사 — 8/27 오전 이용 불가</span><span class="tgt all">전체</span><span class="muted">김관리 · 08-20</span><span style="text-align:right"><span style="display:block;font-size:11px;font-weight:900;color:#059669">20/20</span><span class="prog"><i class="full" style="width:100%"></i></span></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>내 공지 / 모든 공지</b> — 기본은 내 공지(나에게 온 것만). 모든 공지는 다른 팀·다른 사람에게 간 것도 포함.</div></div>
+    <div class="item"><span class="num">2</span><div><b>공지 검색</b> — 제목·내용·작성자에 글자가 들어간 것만. 없으면 ""○○" 검색 결과가 없습니다".</div></div>
+    <div class="item"><span class="num">3</span><div><b>안 읽음 N건</b> 알약(있을 때만) · <b>[＋ 공지 작성]</b>. <a href="#nwrite">4번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>한 줄</b> — <span style="color:var(--rose)">●</span> 안 읽음 점(읽으면 사라짐) · 구분 칩(<span class="cat norm">일반</span> <span class="cat urg">긴급</span> <span class="cat hr">인사</span> <span class="cat sys">시스템</span>) · 📌(상단 고정) · 제목(안 읽은 건 굵고 검게, 읽은 건 회색) · 대상 배지 · 작성자 · 날짜.</div></div>
+    <div class="item"><span class="num">5</span><div><b>읽음 진행</b> — "읽은 사람 / 받는 사람" 숫자와 막대. 전원이 읽으면 초록. 받는 사람 수는 대상(전체·팀·개인)의 재직자 수.</div></div>
+  </div>
+  <table class="tbl"><thead><tr><th>대상 배지</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><span class="tgt all">전체</span></td><td>모든 재직자</td></tr>
+    <tr><td><span class="tgt team">팀 · A팀</span> / <span class="tgt team">팀 · 영업팀 전체</span></td><td>그 팀·부서. CS A~D는 "○팀", 부서 전체는 부서명, 타부서 팀은 팀명</td></tr>
+    <tr><td><span class="tgt me">👤 나에게</span></td><td>대상이 개인이고 그 사람이 나</td></tr>
+    <tr><td><span class="tgt person">👤 홍길동</span></td><td>대상이 개인(다른 사람) — "모든 공지"에서만 보임</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>순서</b>📌 고정된 것이 맨 위, 그 다음 긴급, 그 다음 최신순. 고정·긴급 줄은 배경이 살짝 회색입니다. 처음 불러올 때는 "불러오는 중…", 하나도 없으면 "아직 공지가 없습니다. 첫 공지를 작성해 보세요."</div>
+</section>
+
+<section id="nread">
+  <h2>3. 공지 읽기 — 줄을 누르면 상세 창, 그 순간 읽음 기록</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:480px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px"><span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center">📣</span><div style="flex:1"><div style="display:flex;gap:5px;align-items:center"><span class="cat urg">긴급</span><span class="tgt all">전체</span><span style="border-radius:999px;background:rgba(255,255,255,.1);color:#93C5FD;font-size:10px;font-weight:900;padding:1px 8px">📌 고정됨</span></div><div style="color:#fff;font-weight:900;font-size:15px;margin-top:4px">9월 1일 정산 마감 앞당김 — 8/29(금)까지 카운터 제출</div><div style="color:#94A3B8;font-size:11px">김관리 · 08-25 09:12</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:12px">
+          <div style="background:#F8FAFC;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;color:#334155;line-height:1.7">이번 달 정산이 하루 앞당겨졌습니다. 담당 업체 카운터를 8/29(금) 18시까지 제출해 주세요.</div>
+          <div><div style="display:flex;justify-content:space-between;font-size:11px"><span style="font-weight:900;color:#64748B">읽음 확인</span><b>12/20 <span style="color:#94A3B8;font-weight:700">· 60%</span></b></div><div class="prog" style="width:100%;height:6px;margin-top:4px"><i style="width:60%"></i></div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:10px;font-weight:900;color:#FB7185">안 읽음 8</span><span class="lchip" style="font-size:10px;padding:1px 8px">김기사</span><span class="lchip" style="font-size:10px;padding:1px 8px">박현장</span><span class="lchip" style="font-size:10px;padding:1px 8px">이서비스</span><span class="lchip gray" style="font-size:10px;padding:1px 8px">+5</span></div>
+            <div style="margin-top:6px;font-size:10px;font-weight:900;color:#94A3B8">읽은 사람 12명 보기 ▼</div></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;padding:10px 14px;border-top:1px solid #F1F5F9;background:#F8FAFC"><span style="color:#94A3B8;font-size:11px;font-weight:900">🗑 삭제</span><span class="spacer"></span><span class="bbtn pri">📌 고정 해제</span><span class="bbtn dark">확인</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>목록의 줄을 누르면 상세 창이 열리고 <b>그 순간 내 읽음이 기록</b>됩니다(작성자가 선택돼 있을 때). 사이드바 숫자와 상태줄 숫자가 바로 줄어듭니다.</li>
+        <li>머리: 구분 칩 · 대상 배지 · (📌 고정됨) · 제목 · "작성자 · MM-DD HH:MM". 본문은 회색 상자(없으면 "(내용 없음)").</li>
+        <li><b>읽음 확인</b> — "12/20 · 60%" 막대, 아래에 <b>안 읽음 N</b>과 그 사람들 이름(24명까지, 넘으면 +N). 전원이 읽으면 <span class="lchip ok" style="font-size:10px;padding:1px 8px">✓ 전원 읽음</span>. 읽은 사람도 있고 안 읽은 사람도 있으면 <b>읽은 사람 N명 보기 ▼</b>로 펼칠 수 있습니다.</li>
+        <li>바닥 버튼: <b>🗑 삭제</b>(왼쪽, 회색) → 확인 <b>""제목" 공지를 삭제할까요?"</b> → 삭제되고 배지 갱신. <b>📌 상단 고정 / 고정 해제</b> → 즉시 목록 맨 위로(또는 해제). <b>[확인]</b>은 닫기. <span class="kbd">Esc</span>나 바깥 클릭으로도 닫힘.</li>
+      </ol>
+      <div class="box warn"><b>삭제·고정은 누구나 누를 수 있습니다</b>작성자 확인이 없으니 남의 공지를 지우지 않도록 주의하세요. 지운 공지는 되돌릴 수 없습니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="nwrite">
+  <h2>4. 공지 작성 — [＋ 공지 작성]</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px"><span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center">📣</span><div><div style="color:#fff;font-weight:900;font-size:15px">새 공지</div><div style="color:#94A3B8;font-size:11px">홍길동 이름으로 올라갑니다 — 읽음 여부가 모두에게 보여요</div></div></div>
+        <div style="padding:14px 16px;display:grid;gap:12px;font-size:11px;font-weight:900;color:#64748B">
+          <div>구분<div style="display:flex;gap:4px;margin-top:4px;align-items:center;flex-wrap:wrap"><span class="lchip dark">일반</span><span class="lchip gray">긴급</span><span class="lchip gray">인사</span><span class="lchip gray">시스템</span><span style="font-size:10px;color:#94A3B8;font-weight:700">긴급은 목록 맨 위에 올라갑니다</span></div></div>
+          <div class="fld">제목 <b style="color:#F43F5E">*</b><div class="in"></div></div>
+          <div>누구에게<div style="display:flex;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap"><div class="seg"><span class="on">전체 공지</span><span>특정 팀</span><span>특정 직원</span></div></div></div>
+          <div class="fld">내용<div class="in" style="min-height:80px"></div></div>
+          <div style="font-weight:700;color:#475569">☐ 목록 상단에 고정 (중요 공지)</div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #F1F5F9;background:#F8FAFC"><span class="bbtn ghost" style="color:#64748B">취소</span><span class="bbtn pri dis">공지 올리기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>칸</th><th>설명</th></tr></thead><tbody>
+        <tr><td><b>구분</b></td><td>일반 · 긴급 · 인사 · 시스템. "긴급은 목록 맨 위에 올라갑니다".</td></tr>
+        <tr><td><b>제목 *</b></td><td>필수. 비어 있으면 [공지 올리기]가 흐려집니다.</td></tr>
+        <tr><td><b>누구에게</b></td><td><b>전체 공지</b> / <b>특정 팀</b>(옆에 "부서·팀 선택" 목록 — 부서 전체와 부서 안 팀·파트) / <b>특정 직원</b>(아래에 부서·팀을 고르면 이름 칩이 나오는 직원 선택기, 클릭 1번). 대상을 바꾸면 이전 선택은 지워집니다.</td></tr>
+        <tr><td><b>내용</b></td><td>선택. 줄바꿈 그대로 보입니다.</td></tr>
+        <tr><td><b>목록 상단에 고정 (중요 공지)</b></td><td>켜면 📌가 붙어 맨 위에.</td></tr>
+      </tbody></table>
+      <ol class="steps">
+        <li><b>[공지 올리기]</b> → 버튼이 "올리는 중…" → 저장되면 창이 닫히고 목록 맨 위(또는 순서대로)에 나타납니다. 작성자가 없으면 "미지정" 이름으로 올라갑니다.</li>
+        <li>팀·개인 대상인데 아무도 안 골랐으면 토스트 <b>"대상 팀/직원을 선택하세요."</b></li>
+        <li>대상자에게 <b>웹푸시</b> "공지 — 제목 / 내용 앞부분"이 갑니다(전체면 모두, 본인 제외). 푸시가 실패해도 공지 등록에는 영향 없음.</li>
+        <li>실패하면 "등록 실패: …".</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="rlist">
+  <h2>5. 부서 요청 목록 — 카드 하나가 요청 하나</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:250px;top:26px">2</span>
+    <span class="badge" style="right:26px;top:26px">3</span>
+    <span class="badge" style="left:26px;top:90px">4</span>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><div class="seg"><span class="on">받은 요청 4</span><span>보낸 요청 2</span></div><div style="display:flex;gap:4px"><span class="lchip dark">전체</span><span class="lchip gray"><span class="dot8" style="background:#F43F5E"></span> 대기 <span style="color:#94A3B8">1</span></span><span class="lchip gray"><span class="dot8" style="background:#FBBF24"></span> 처리중 <span style="color:#94A3B8">1</span></span><span class="lchip gray"><span class="dot8" style="background:#CBD5E1"></span> 완료 <span style="color:#94A3B8">2</span></span></div><span class="spacer"></span><span class="lchip" style="border-radius:8px">유형 전체 ▾</span><span class="bbtn pri">+ 요청 등록</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div class="rcard" style="--bar:#F43F5E"><span style="display:flex;gap:5px;align-items:center"><span class="st recv">대기</span><span class="lchip gray" style="font-size:10px;padding:1px 8px">카운터확인</span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">예시상사 카운터</b><span class="lchip miss" style="font-size:10px;padding:1px 8px">희망 08-24</span></span><span style="display:flex;gap:5px;align-items:center"><span class="tgt team">팀 · A팀</span><span class="muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">8월 카운터 확인 부탁드립니다</span><span class="muted">김영업 · 08-22</span></span></div>
+      <div class="rcard fresh" style="--bar:#FBBF24"><span style="display:flex;gap:5px;align-items:center"><span class="st prog">처리중</span><span class="lchip gray" style="font-size:10px;padding:1px 8px">미수체크</span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">샘플무역 미수 3개월</b></span><span style="display:flex;gap:5px;align-items:center"><span class="tgt me">👤 나에게</span><span class="muted" style="flex:1"></span><span class="muted">이경리 · 08-25</span></span></div>
+      <div class="rcard" style="--bar:#E2E8F0;background:#F8FAFC"><span style="display:flex;gap:5px;align-items:center"><span class="st done">완료</span><span class="lchip gray" style="font-size:10px;padding:1px 8px">방문요청</span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">예시학원 세팅 방문</b></span><span style="display:flex;gap:5px;align-items:center"><span class="tgt all">전체</span><span class="muted" style="flex:1"></span><span class="muted">박영업 · 08-19</span></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>받은 요청 N / 보낸 요청 N</b> — 받은 = 내가 수신 대상이고 내가 올린 게 아닌 것. 보낸 = 내가 올린 것. <b>남의 개인 요청은 보이지 않습니다</b>(당사자만).</div></div>
+    <div class="item"><span class="num">2</span><div><b>상태 칩</b> — 전체 / <span style="color:var(--rose)">●</span>대기 N / <span style="color:#F59E0B">●</span>처리중 N / <span style="color:#94A3B8">●</span>완료 N. 숫자가 "지금 몇 건 밀려 있나"이자 필터.</div></div>
+    <div class="item"><span class="num">3</span><div><b>유형 전체 ▾</b>(카운터확인 · 미수체크 · 방문요청 · 기타) · <b>[+ 요청 등록]</b>. <a href="#rwrite">7번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>카드</b> — 왼쪽 색 띠(대기 빨강 · 처리중 노랑 · 완료 회색, 완료 카드는 배경도 회색) · 상태 칩 · 유형 · 제목(없으면 내용 첫 줄) · <span class="lchip miss" style="font-size:10px;padding:1px 8px">희망 MM-DD</span>(희망일이 지났고 미완료일 때만 빨갛게) · 대상 배지 · 내용 첫 줄 · 요청자 이름 · 날짜. <b>파란 테두리</b>는 내가 보낸 요청에 새 진행 소식이 있다는 표시 — 이 화면을 본 순간 확인 처리되어 배지에서 빠집니다.</div></div>
+  </div>
+  <div class="box tip"><b>비어 있을 때 글</b>받은 요청 탭: "내게 온 요청이 없어요 — 후련하게 처리 끝!" · 보낸 요청 탭: "내가 보낸 요청이 없어요." · 아무 요청도 없으면 "아직 요청이 없어요. 타부서에 이 화면을 공유해 주세요." 창으로 돌아올 때마다 다시 읽습니다.</div>
+</section>
+
+<section id="rdetail">
+  <h2>6. 요청 상세 — 카드를 누르면, 처리 버튼은 여기</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px"><span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center">➤</span><div style="flex:1"><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="st recv">대기</span><span style="border-radius:999px;background:rgba(255,255,255,.1);color:#CBD5E1;font-size:10px;font-weight:900;padding:1px 8px">카운터확인</span><span class="tgt team">팀 · A팀</span><span class="lchip miss" style="font-size:10px;padding:1px 8px">희망 08-24</span></div><div style="color:#fff;font-weight:900;font-size:15px;margin-top:4px">예시상사 카운터</div><div style="color:#94A3B8;font-size:11px">영업팀 김영업 대리 · 08-22 10:31 접수</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:12px">
+          <div style="background:#F8FAFC;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;color:#334155">8월 카운터 확인 부탁드립니다. 컬러 매수도 함께요.</div>
+          <div><div style="font-size:11px;font-weight:900;color:#64748B;margin-bottom:6px">진행 상황</div>
+            <div class="timeline"><div class="tl"><i class="b"></i><div><b>요청 접수</b> <span class="muted">08-22 10:31</span><div class="muted">영업팀 김영업 대리</div></div></div><div class="tl"><i></i><div><span style="color:#CBD5E1;font-weight:900">처리 시작</span> <span style="color:#CBD5E1;font-size:10px;font-weight:700">아직</span></div></div><div class="tl"><i></i><div><span style="color:#CBD5E1;font-weight:900">완료</span> <span style="color:#CBD5E1;font-size:10px;font-weight:700">아직</span></div></div></div></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;padding:10px 14px;border-top:1px solid #F1F5F9;background:#F8FAFC"><span style="color:#94A3B8;font-size:11px;font-weight:900">🗑 삭제</span><span class="spacer"></span><span class="bbtn line">처리 시작</span><span class="bbtn pri">완료 처리</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>버튼</th><th>보이는 때</th><th>누르면</th></tr></thead><tbody>
+        <tr><td><b>처리 시작</b></td><td>상태가 대기일 때</td><td>상태 <b>처리중</b>, 시작 시각·시작한 사람(나) 기록. 요청자에게 진행 소식(배지 + 웹푸시 "내 요청 처리중 — 유형 / ○○님이 처리를 시작했습니다").</td></tr>
+        <tr><td><b>완료 처리</b></td><td>완료가 아닐 때</td><td>상태 <b>완료</b>, 완료 시각·처리자(나) 기록(시작 기록이 없으면 지금으로 채움). 요청자에게 "내 요청 완료 — 유형 / ○○님이 완료했습니다".</td></tr>
+        <tr><td><b>완료 취소</b></td><td>완료일 때</td><td>상태 <b>대기</b>로, 시작·완료 기록 지움. 요청자에게 "상태를 "대기"로 바꿨습니다".</td></tr>
+        <tr><td><b>확인</b></td><td>완료일 때</td><td>닫기</td></tr>
+        <tr><td><b>🗑 삭제</b></td><td>항상(왼쪽)</td><td>확인 <b>"이 요청을 삭제할까요?"</b> → 삭제, 배지 갱신</td></tr>
+      </tbody></table>
+      <ol class="steps">
+        <li>머리: 상태 · 유형 · 대상 · (희망 MM-DD — 지났으면 빨강) · 제목(없으면 유형) · "요청자 · MM-DD HH:MM 접수". 요청자는 "부서 이름 호칭"으로 기록됩니다.</li>
+        <li><b>진행 상황</b> 타임라인: 요청 접수(파란 점) → 처리 시작(노란 점) → 완료(초록 점). 안 된 단계는 회색 "아직".</li>
+        <li>상태를 바꾸면 화면이 먼저 바뀌고 저장됩니다. 실패하면 "상태 변경 실패: …" 후 원래대로 다시 읽어 옵니다.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="rwrite">
+  <h2>7. 요청 등록 — [+ 요청 등록]</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:12px 16px;display:flex;gap:10px"><span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center">➤</span><div><div style="color:#fff;font-weight:900;font-size:15px">새 요청</div><div style="color:#94A3B8;font-size:11px">CS팀 홍길동 프로 이름으로 접수됩니다 — 처리 상황이 알림으로 돌아와요</div></div></div>
+        <div style="padding:14px 16px;display:grid;gap:12px;font-size:11px;font-weight:900;color:#64748B">
+          <div>누구에게 <b style="color:#F43F5E">*</b><div style="display:flex;gap:6px;margin-top:4px;align-items:center"><div class="seg"><span>전체 공지</span><span class="on">특정 팀</span><span>특정 직원</span></div><span class="lchip" style="border-radius:8px;min-width:150px">영업팀 전체 ▾</span></div></div>
+          <div>유형<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap"><span class="lchip dark">카운터확인</span><span class="lchip gray">미수체크</span><span class="lchip gray">방문요청</span><span class="lchip gray">기타</span></div></div>
+          <div style="display:grid;grid-template-columns:1fr 130px;gap:6px"><div class="fld">제목 (선택)<div class="in ph">예: ○○업체 카운터</div></div><div class="fld">희망일 (선택)<div class="in ph">연도-월-일</div></div></div>
+          <div class="fld">요청 내용 <b style="color:#F43F5E">*</b><div class="in ph" style="min-height:60px">예: OO업체 카운터 확인 부탁드립니다 / OO업체 미수 3개월 체크 요청</div></div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #F1F5F9;background:#F8FAFC"><span class="bbtn ghost" style="color:#64748B">취소</span><span class="bbtn pri dis">요청 보내기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>칸</th><th>설명</th></tr></thead><tbody>
+        <tr><td><b>누구에게 *</b></td><td>전체 공지 / 특정 팀(부서·팀 선택) / 특정 직원(직원 선택기). 공지 작성과 같은 선택기.</td></tr>
+        <tr><td><b>유형</b></td><td>카운터확인 · 미수체크 · 방문요청 · 기타. 기타를 고르면 "어떤 업무인지 입력" 칸이 열리고 "기타(○○)"로 저장됩니다.</td></tr>
+        <tr><td><b>제목 (선택)</b></td><td>예: ○○업체 카운터. 카드의 굵은 글자가 됩니다(없으면 내용 첫 줄).</td></tr>
+        <tr><td><b>희망일 (선택)</b></td><td>날짜 선택기. 지나면 카드에 빨간 "희망 MM-DD".</td></tr>
+        <tr><td><b>요청 내용 *</b></td><td>필수. 비면 [요청 보내기]가 흐려집니다.</td></tr>
+      </tbody></table>
+      <ol class="steps">
+        <li>머리 글이 "<b>부서 이름 호칭</b> 이름으로 접수됩니다 — 처리 상황이 알림으로 돌아와요". 작성자가 없으면 "우측 상단에서 작성자를 먼저 선택하세요"가 뜨고 버튼이 눌리지 않습니다(누르면 토스트 "우측 상단에서 작성자(본인)를 먼저 선택하세요.").</li>
+        <li><b>[요청 보내기]</b> → "보내는 중…" → 저장되면 창이 닫히고 상태 <b>대기</b>로 목록에 나타납니다(보낸 요청 탭). 팀·개인인데 대상을 안 골랐으면 "대상 팀/직원을 선택하세요."</li>
+        <li>대상자에게 <b>웹푸시</b> "부서 요청 — 유형 / 요청자 · 내용 앞부분"(본인 제외). 대상자의 사이드바 배지에 "내 대기 요청"으로 잡힙니다.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="alerts">
+  <h2>8. 알림은 어떻게 오나</h2>
+  <table class="tbl"><thead><tr><th>어디에</th><th>무엇이</th><th>언제 갱신</th></tr></thead><tbody>
+    <tr><td><b>사이드바 "공지·요청" 빨간 숫자</b></td><td>안 읽은 공지 + 나에게 온 대기 요청 + 내 요청 진행 소식(아직 안 본 것)</td><td>2분마다 · 창으로 돌아올 때 · 앱 안에서 공지·요청이 바뀐 직후(즉시)</td></tr>
+    <tr><td><b>이 화면 상태줄 칩</b></td><td>위 세 가지를 나눠서</td><td>탭 전환·변경 직후</td></tr>
+    <tr><td><b>웹푸시(휴대폰·PC 알림)</b></td><td>새 공지 "공지 — 제목" / 새 요청 "부서 요청 — 유형" / 진행 소식 "내 요청 처리중·완료 — 유형"</td><td>올린 즉시(대상자만, 올린 본인 제외). 알림 허용을 켠 기기만</td></tr>
+    <tr><td><b>요청 카드 파란 테두리</b></td><td>내가 보낸 요청의 상태가 바뀜</td><td>부서 요청 탭을 보는 순간 "확인"으로 바뀌어 다음엔 사라짐</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>알림이 안 오면</b>사이드바 오른쪽 위 작성자(본인)가 선택돼 있는지, 그리고 기기의 알림 허용(푸시 설정)이 켜져 있는지 확인하세요. 작성자가 없으면 "나에게 온 것"을 고를 수 없어 배지도 0입니다.</div>
+</section>
+
+<section id="faq">
+  <h2>9. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>공지를 읽었는데 빨간 숫자가 안 줄어요</summary><p>읽음은 <b>상세 창을 열었을 때</b> 기록됩니다(목록에서 보기만 하면 아님). 그리고 작성자(본인)가 선택돼 있어야 기록됩니다. 작성자를 고른 뒤 다시 열어 보세요.</p></details>
+    <details><summary>내 팀 공지인데 "내 공지"에 안 보여요</summary><p>대상 팀이 내 소속(관리 탭 인원 명단의 부서·팀)과 다르게 지정된 경우입니다. "모든 공지"로 바꿔 찾아보고, 명단의 내 팀이 맞는지 관리자에게 확인하세요.</p></details>
+    <details><summary>받은 요청 탭에 남이 받은 요청이 안 보여요</summary><p>의도된 동작입니다. 요청은 당사자(수신 대상 또는 요청자)만 봅니다. 전체 대상 요청은 모두에게 보입니다.</p></details>
+    <details><summary>실수로 완료를 눌렀어요</summary><p>같은 상세 창의 <b>[완료 취소]</b>를 누르면 대기로 돌아갑니다(시작·완료 기록은 지워짐). 요청자에게는 "상태를 "대기"로 바꿨습니다" 알림이 갑니다.</p></details>
+    <details><summary>공지를 올렸는데 팀원 폰에 알림이 안 갔어요</summary><p>웹푸시는 기기에서 알림을 허용한 사람에게만 갑니다. 공지 자체는 정상 등록돼 사이드바 배지(2분 안)로는 모두에게 표시됩니다. 푸시가 실패해도 공지 등록엔 영향이 없습니다.</p></details>
+    <details><summary>"부서 요청"에서 전체 공지라는 말이 보여요</summary><p>대상 선택기의 첫 칩 이름이 "전체 공지"로 되어 있어서 그렇습니다. 요청에서는 "모든 재직자에게 보내는 요청"이라는 뜻으로 읽으면 됩니다.</p></details>
+    <details><summary>불러오기 실패 문구가 떠요</summary><p>"불러오기 실패 — supabase/dept-requests.sql 실행 여부를 확인하세요." 같은 빨간 상자가 뜨면 서버 표가 준비되지 않은 상태입니다. 관리자에게 문구를 그대로 전달하세요.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">공지·요청 길잡이 · 서비스접수·일정리스트·캘린더·홈 길잡이도 같은 형식으로 이어집니다</p>
+</main>
+</div>
+</body>
+</html>

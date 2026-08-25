@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>자동 일정 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.impact .stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.impact .stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .impact .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .impact .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .impact .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.impact .stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.impact .stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.impact .stat .big s{opacity:.6;font-size:22px}
+.impact .stat .big em{font-style:normal}
+.impact .stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 자동 일정 전용 추가 ── */
+.tblwrap{overflow-x:auto}
+.ap{display:grid;grid-template-columns:230px minmax(0,1fr);gap:10px}
+@media(max-width:700px){.ap{grid-template-columns:1fr}}
+.panel{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;color:#0f172a;display:grid;gap:8px}
+.panel .ph{font-size:12.5px;font-weight:900;display:flex;align-items:center;gap:6px}
+.panel .ph .g{color:#94A3B8}
+.panel .sub{font-size:10.5px;color:#94A3B8;font-weight:600}
+.tk{border:1px solid #E2E8F0;border-radius:8px;padding:6px 9px;display:flex;gap:7px;align-items:flex-start;font-size:11.5px}
+.tk.on{border-color:#3B82F6;background:#EFF6FF}
+.tk .r{width:13px;height:13px;border-radius:50%;border:2px solid #CBD5E1;flex:none;margin-top:2px}
+.tk.on .r{border-color:#2563EB;background:#2563EB;box-shadow:inset 0 0 0 3px #EFF6FF}
+.tk b{display:block;color:#0f172a} .tk small{display:block;color:#94A3B8;font-size:10px;font-weight:600}
+.seg{background:#F1F5F9;border-radius:999px;padding:3px;display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.seg span{border-radius:999px;padding:5px;text-align:center;font-size:11.5px;font-weight:900;color:#94A3B8}
+.seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.gch{display:flex;flex-wrap:wrap;gap:4px}
+.gch span{border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;background:#F1F5F9;color:#64748B}
+.gch span.on{background:#2563EB;color:#fff}
+.gch span.ol{background:#fff;border:1px solid #CBD5E1}
+.slider{height:4px;border-radius:999px;background:#E2E8F0;position:relative;margin:8px 4px}
+.slider::before{content:"";position:absolute;left:0;top:0;height:100%;width:33%;background:#2563EB;border-radius:999px}
+.slider::after{content:"";position:absolute;left:33%;top:-5px;width:14px;height:14px;border-radius:50%;background:#2563EB;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.bigbtn{border-radius:999px;background:#2563EB;color:#fff;padding:8px;text-align:center;font-size:12.5px;font-weight:900;box-shadow:0 3px 10px rgba(37,99,235,.3)}
+.cand{background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;color:#0f172a}
+.cand .ch{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#F8FAFC;border-bottom:1px solid #F1F5F9}
+.cand .ch b{font-size:12.5px} .cand .ch small{display:block;font-size:10px;color:#94A3B8;font-weight:600}
+.reg{border-radius:999px;background:#0f172a;color:#fff;padding:6px 12px;font-size:11px;font-weight:900;white-space:nowrap}
+.crow{display:flex;gap:8px;padding:9px 12px;border-bottom:1px solid #F1F5F9;align-items:flex-start}
+.crow.on{background:#EFF6FF99}
+.cb{width:14px;height:14px;border:2px solid #CBD5E1;border-radius:3px;flex:none;margin-top:3px}
+.cb.on{background:#2563EB;border-color:#2563EB}
+.cl{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;font-weight:900}
+.c{border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:900;white-space:nowrap}
+.c.rank{border-radius:999px;background:#E2E8F0;color:#334155} .c.dist{background:#0f172a;color:#fff} .c.gr{background:#F1F5F9;color:#64748B} .c.grp{background:#FAF5FF;color:#7E22CE} .c.lab{background:#EFF6FF;color:#2563EB} .c.nv{background:#FFF1F2;color:#E11D48} .c.q{background:#FFFBEB;color:#B45309} .c.bl{background:#ECFEFF;color:#0E7490} .c.pin{background:#059669;color:#fff} .c.al{border:1px solid #FDA4AF;background:#FFF1F2;color:#BE123C;border-radius:999px} .c.alb{border:1px solid #93C5FD;background:#EFF6FF;color:#1D4ED8;border-radius:999px} .c.nt{border:1px solid #C4B5FD;background:#F5F3FF;color:#6D28D9;border-radius:999px} .c.dev{background:#4F46E5;color:#fff}
+.sl{font-size:10.5px;font-weight:600;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl.b{color:#2563EB;font-weight:900} .sl.g{color:#047857;font-weight:900} .sl.a{color:#D97706;font-weight:900} .sl.r{color:#E11D48;font-weight:900}
+.mini{position:relative;height:170px;background:#DCE8EF;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:30px 30px;border-bottom:1px solid #E2E8F0}
+.mini .tag{position:absolute;left:8px;top:8px;background:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:900;color:#475569;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.mk{position:absolute;width:22px;height:22px;border-radius:50%;background:#0f172a;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.mk.on{background:#2563EB}
+.anch{position:absolute;width:13px;height:13px;border-radius:50%;background:#DC2626;border:3px solid #fff;box-shadow:0 0 0 3px rgba(220,38,38,.35)}
+.mlabel{position:absolute;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:2px 7px;font-size:10px;font-weight:700;color:#0f172a;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.15)}
+.notice{border:1px solid #BFDBFE;background:#EFF6FF;color:#1D4ED8;border-radius:10px;padding:7px 12px;font-size:11.5px;font-weight:900}
+.dhead{background:#1E252F;color:#fff;border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.dhead .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dhead .stat{background:#151A23;margin:0 -14px -12px;padding:6px 14px;border-radius:0 0 14px 14px;font-size:10.5px;font-weight:700;color:#94A3B8}
+.dt{border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);padding:4px 8px;font-size:11px;font-weight:900;color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#anchor">2. ① 필수 스케줄 — 기준 업체</a>
+  <a href="#cond">3. ② 추천 조건</a>
+  <a href="#cand">4. ③ 후보 목록 읽는 법</a>
+  <a class="sub" href="#cand-single">한 곳 카드</a>
+  <a class="sub" href="#cand-group">같은 회사 여러 대 카드</a>
+  <a href="#map">5. 미니 지도</a>
+  <a href="#register">6. 선택 → 일정 등록</a>
+  <a href="#exclude">7. 빠지는 것들과 📍 기준 업체 고정</a>
+  <a href="#faq">8. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 자동 일정</div>
+  <h1>자동 일정 길잡이</h1>
+  <p>내일(또는 오늘) 반드시 갈 일정을 놓고, <b style="color:#fff">마지막 일정에서 가까운 순</b>으로 이번 분기 워킨맵의 점검·재계약 후보를 추천받아 체크만 하면 <b style="color:#fff">내 일정으로 등록</b>되는 화면입니다. 후보 카드에는 거리·등급·마지막 점검·최근 사용량·여분 권장·미수/불만 경고가 함께 붙어 "여기 가도 되나"를 카드 한 장으로 판단합니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p class="lead">"내일 어디 갈까"를 지도 보며 고르고 일정리스트에 한 건씩 적던 일을 대신합니다. 아래는 소스 코드로 확인되는 자동화만 적었습니다.</p>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">내일 동선 고르기</div><div class="big"><s>지도 눈대중</s> → <em>가까운 순</em></div><div class="sub">어림 예: 하루 10~15분 · 거리 m/km까지 표시</div></div>
+    <div class="stat green"><div class="lbl">후보 한 곳 확인</div><div class="big"><s>여러 화면</s> → <em>카드 1장</em></div><div class="sub">어림 예: 곳당 1~2분 · 점검일·매수·사용량·여분을 한눈에</div></div>
+    <div class="stat purple"><div class="lbl">선택한 후보 일정 입력</div><div class="big"><s>건별 손입력</s> → <em>N곳 일괄</em></div><div class="sub">어림 예: 건당 2~3분 · 업체·주소·기기·점검 메모 자동</div></div>
+    <div class="stat amber"><div class="lbl">같은 거래처 코드의 지점</div><div class="big"><em>카드 1장</em> · <em>방문 1건</em></div><div class="sub">기기 목록은 메모에 자동 기록 · 중복 일정 감소</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">내일 방문 동선 만들기</div><div class="pills"><span>워킨맵에서 눈으로 고르기</span><span>후보마다 점검방 열기</span><span>일정리스트에 한 건씩 입력</span></div><div class="ba-count">지도 · 점검방 · 일정리스트</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">내일 방문 동선 만들기</div><div class="pills"><span class="hot">마지막 일정 기준</span><span class="hot">가까운 순 추천</span><span class="hot">선택 N곳 일정 등록</span></div><div class="ba-count">한 화면에서 N곳 일괄</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">예: 같은 회사 3층·2층·지하</div><div class="pills"><span>기기마다 업체 확인</span><span>일정 각각 등록</span><span>같은 곳을 여러 줄로 관리</span></div><div class="ba-count">예: 일정 3줄</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">같은 거래처 코드의 지점</div><div class="pills"><span class="hot">카드 1장으로 묶기</span><span class="hot">기기 목록 메모 자동</span></div><div class="ba-count">방문 1건</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">방문 전 위험·제외 대상 대조</div><div class="pills"><span>미수·불만·초과 따로 확인</span><span>완료·이관·최근 점검 대조</span></div><div class="ba-count">후보마다 따로 확인</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">카드에서 경고, 추천에서 제외</div><div class="pills"><span class="hot">⚠ N · 📌 특이사항</span><span class="hot">G5·G12·숨김 자동 제외</span><span class="hot">경과일 미달 제외</span><span class="hot">SS·V 보류 권장</span></div><div class="ba-count">헛걸음·이중 방문 감소</div></div>
+  </div>
+  <div class="box tip"><b>이 화면을 쓰면 좋은 습관</b>퇴근 전(오후 4시 이후엔 날짜가 자동으로 다음 영업일) 필수 일정을 먼저 일정리스트에 넣고, 그 다음 여기서 [가까운 순으로 추천]을 누르세요 — 마지막 일정이 기준이 되어야 동선이 맞습니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 순서 세 단계</h2>
+  <p class="lead">CS팀이 실제로 하던 순서 그대로입니다. 화면도 그 순서로 ① ② ③ 번호가 붙어 있습니다.</p>
+  <div class="sync">
+    <div class="n">① 필수 스케줄<small>그날 일정리스트 · 마지막 일정 = 기준(앵커)</small></div>
+    <div class="arr">→</div>
+    <div class="n">② 추천 조건<small>점검/재계약 · 등급 · 경과일</small></div>
+    <div class="arr">→</div>
+    <div class="n">③ 후보 → 일정 등록<small>가까운 순 카드 · 체크 · 내 일정으로</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>후보는 전부 "현재 분기 워킨맵"에서만</b>워킨맵에 없는 거래처는 추천되지 않습니다. 워킨맵 라벨·등급·주소·코멘트(모델/기번)가 그대로 쓰이므로 워킨맵이 정확할수록 추천이 정확합니다.</div>
+    <div class="box warn"><b>이 화면이 바꾸는 것</b>[등록]을 누를 때 <b>일정리스트(as_tickets)</b>에 일정을 만듭니다. 그 외에는 아무것도 저장하지 않고, 네이버 캘린더·카톡방으로 직접 보내는 것도 없습니다. 등록된 일정의 처리(FIELD·완료·익일)는 일정리스트에서 합니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:150px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:120px">3</span>
+    <span class="badge" style="left:26px;top:290px">4</span>
+    <span class="badge" style="right:26px;top:120px">5</span>
+    <div class="dhead">
+      <div class="row" style="justify-content:space-between">
+        <div><div style="font-size:14px;font-weight:900">자동 일정 짜기</div><div style="font-size:10.5px;color:#94A3B8;font-weight:600">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검·재계약을 추천합니다.</div></div>
+        <div class="row"><span class="chip">오늘</span><span class="chip on">내일</span><span class="dt">2026-08-26</span><span class="chip team">A팀</span><span class="chip team">B팀</span><span class="chip team on">C팀</span><span class="chip team">D팀</span></div>
+      </div>
+      <div class="stat">현재 분기 워킨맵에서만 찾습니다 · 앵커 <span style="color:#6EE7B7">좌표 확인됨</span></div>
+    </div>
+    <div class="notice" style="margin-top:10px">14곳 — 공간코리아굿모닝시티 기준 가까운 순</div>
+    <div class="ap" style="margin-top:10px">
+      <div style="display:grid;gap:10px">
+        <div class="panel">
+          <div class="ph">① 필수 스케줄 <span class="g">2건</span> <span class="c" style="border-radius:999px;background:#2563EB;color:#fff">내 배정</span><span class="spacer"></span><span class="c" style="border:1px solid #CBD5E1;border-radius:999px;color:#64748B">↻ 새로고침</span></div>
+          <div class="sub">마지막에 가는 일정을 기준(앵커)으로 잡습니다.</div>
+          <div class="tk"><span class="r"></span><span><b>15:00 김경식세무회계사무소</b><small>서울 강남구 테헤란로 152</small></span></div>
+          <div class="tk on"><span class="r"></span><span><b>15:00 공간코리아굿모닝시티</b><small>서울 중구 장충단로 247</small></span></div>
+          <div class="sub" style="color:#64748B;font-weight:900">직접 지정 (업체명 또는 주소)</div>
+          <div class="modal inp" style="min-height:0;padding:6px 9px;font-size:11px;box-shadow:none;border-radius:8px">업체명 또는 주소 (예: 강남구 삼성로100길 8)</div>
+          <div style="font-size:10px;font-weight:900;color:#059669">📍 21SS주식회사 공간코리아굿모… 좌표로 거리 계산</div>
+        </div>
+        <div class="panel">
+          <div class="ph">② 추천 조건</div>
+          <div class="seg"><span class="on">점검</span><span>재계약</span></div>
+          <div class="sub" style="font-weight:900;color:#64748B">등급 (중복 선택)</div>
+          <div class="gch"><span class="on">N</span><span class="on">NN</span><span class="on">S</span><span>SS</span><span>V</span><span class="ol">전체</span></div>
+          <div class="sub" style="font-weight:900;color:#64748B">마지막 점검 경과: 60일 초과</div>
+          <div class="slider"></div>
+          <div class="bigbtn">✦ 가까운 순으로 추천</div>
+        </div>
+      </div>
+      <div class="cand">
+        <div class="ch"><div><b>③ 점검 후보 <span style="color:#94A3B8">14곳</span></b><small>가까운 순 · 선택 2곳</small></div><span class="reg">📅 선택 2곳 일정 등록</span></div>
+        <div class="mini"><span class="tag">숫자 = 후보 순번(가까운 순) · 마커 클릭 = 선택 · 🔴 기준 업체</span><span class="anch" style="left:150px;top:80px"></span><span class="mk on" style="left:180px;top:60px">1</span><span class="mk" style="left:110px;top:110px">2</span><span class="mk on" style="left:240px;top:120px">3</span><span class="mk" style="left:70px;top:50px">4</span><span class="mk" style="left:300px;top:70px">5</span><span class="mlabel" style="left:250px;top:95px">3. 미래테크 · 1.2km</span></div>
+        <div class="crow on"><span class="cb on"></span><span style="min-width:0;flex:1"><span class="cl"><span class="c rank">1</span><span class="c dist">420m</span>한빛문화재단<span class="c gr">S</span><span class="c lab">G2</span><span class="c al">⚠ 2</span></span><span class="sl">마지막 2026-05-12 · 106일 경과 <span style="color:#94A3B8">🖨 1대 · 복합기 1 ｜ SL-X4225RX 291047</span></span><span class="sl">📊 흑- 84,120 컬- 31,004 ｜ 전전(02-03) 흑- 79,310 컬- 28,210</span><span class="sl b">📈 3개월간 흑 4,810매 · 컬 2,794매 (월평균 약 2,535매)</span><span class="sl g">🧰 여분 K1 C1 M1 Y1 폐1 → 현재 K1 C1 M1 Y1 폐통1 → 지급 권장 K1 · C1 · M1 · Y1 · 폐통1 (A3컬러 2세트·폐통2 기준)</span><span class="sl">⌖ 서울 중구 을지로 100 5층</span></span></div>
+        <div class="crow"><span class="cb"></span><span style="min-width:0;flex:1"><span class="cl"><span class="c rank">2</span><span class="c dist">890m</span>아스크스토리디에스<span class="c gr">NN</span><span class="c nv">점검 이력 없음</span><span class="c bl">🏢 같은 건물 2개 법인 · 총 3대</span></span><span class="sl">마지막 점검 기록 없음 <span style="color:#94A3B8">🖨 2대 · 복합기 1 · PC 1 ｜ DocuCentre-V C3375 392700</span></span><span class="sl">⌖ 서울 중구 퇴계로 100</span></span></div>
+        <div class="crow on"><span class="cb on"></span><span style="min-width:0;flex:1"><span class="cl"><span class="c dist">1.2km</span>미래테크<span class="c dev">기기 3대</span><span class="c grp">SS</span><span class="c q">분기 초반 — 보류 권장</span><span class="c nt">📌 특이사항</span></span><span class="sl">마지막 2026-04-02 · 146일 경과 · 워킨맵 3곳 · 방문 1건으로 등록</span><span class="sl"><span class="c gr">3층</span> SL-X7600GX/0A6X001 <span style="color:#94A3B8">마지막 26-04-02</span> <span class="sl b" style="display:inline">📈 월평균 약 1,900매</span></span><span class="sl"><span class="c gr">2층</span> SL-X4300LX/0A6X002</span><span class="sl"><span class="c gr">지하1층</span> C2060/227683</span><span class="sl">⌖ 서울 중구 세종대로 40</span></span></div>
+        <div style="text-align:center;padding:8px;font-size:11.5px;font-weight:900;color:#64748B">더 보기 (12 / 14곳)</div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목 띠</b> — 아래 작은 줄에 <b>"현재 분기 워킨맵에서만 찾습니다 · 앵커 좌표 확인됨/좌표 없음"</b>. "좌표 없음"(노랑)이면 거리순이 아니라 경과일 순으로만 정렬됩니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>날짜·팀</b> — <b>[오늘] [내일]</b> 또는 날짜 칸에서 직접 고르기. 처음 값은 <b>오후 4시 이후면 다음 영업일</b>(주말·공휴일 건너뜀), 그 전이면 오늘. 팀 A~D(처음 값 C).</div></div>
+    <div class="item"><span class="num">3</span><div><b>① 필수 스케줄 / ② 추천 조건</b> — 왼쪽 두 상자. <a href="#anchor">2번</a>·<a href="#cond">3번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>파란 안내줄</b> — 추천 결과·등록 결과가 여기에 한 줄로: "14곳 — ○○ 기준 가까운 순", "거리 기준 없음(경과일 순)", "N곳 등록 완료 (이름) — 일정리스트에서 확인하세요.", 실패하면 "추천 실패: …" / "등록 실패: …".</div></div>
+    <div class="item"><span class="num">5</span><div><b>③ 후보</b> — 머리에 "점검 후보 N곳 · 가까운 순 · 선택 N곳"과 <b>[📅 선택 N곳 일정 등록]</b>(하나도 안 고르면 눌리지 않음). 아래 <b>미니 지도</b>(<a href="#map">5번</a>)와 카드 목록(<a href="#cand">4번</a>), 12장씩 <b>더 보기</b>.</div></div>
+  </div>
+</section>
+
+<section id="anchor">
+  <h2>2. ① 필수 스케줄 — 기준 업체(앵커) 정하기</h2>
+  <p>"어디에서 가까운 순"의 그 어디가 기준 업체입니다. 그날 <b>마지막에 가는 일정</b>이 자동으로 잡히고, 원하면 바꿀 수 있습니다.</p>
+  <ol class="steps">
+    <li>고른 날짜·팀의 <b>일정리스트 일정</b>이 시간순으로 나옵니다. <b>[내 배정]</b>이 켜져 있으면 나에게 배정된 것만, 누르면 <b>[전체]</b>로 팀 전체. 없으면 "이 날짜의 C팀 일정이 없습니다." <b>[↻ 새로고침]</b>으로 다시 읽습니다.</li>
+    <li>맨 아래(마지막) 일정에 자동으로 동그라미(라디오)가 켜집니다. 다른 일정을 누르면 그곳이 기준이 됩니다. 기준 일정은 파란 테두리.</li>
+    <li>일정에 없는 곳을 기준으로 하려면 <b>직접 지정</b> 칸에 <b>업체명 또는 주소</b>를 적습니다(예: 강남구 삼성로100길 8). 적기 시작하면 일정 선택은 풀립니다.</li>
+    <li>좌표를 찾는 순서: <b>워킨맵에서 업체명 매칭</b>(법인 표기 "㈜·주식회사"는 빼고 핵심 글자로 찾음) → 없으면 <b>일정의 주소 → 적은 글자</b>를 지도 좌표로 변환. 성공하면 상자 아래에 <span style="color:#059669;font-weight:900">📍 ○○ 좌표로 거리 계산</span>, 실패하면 <span style="color:#D97706;font-weight:900">좌표 미확인 — 경과일 순 정렬</span>과 안내줄 <span class="small">"○○"의 좌표를 못 찾았습니다 — 업체명 또는 주소로 다시 시도해 보세요 (거리 정렬 없이 경과일 순).</span></li>
+  </ol>
+  <div class="box tip"><b>워킨맵에 있는 업체를 직접 지정하면 한 가지가 더 됩니다</b>추천 조건(등급·경과일·완료 라벨)에 걸려 목록에서 빠질 업체라도 <b>📍 기준 업체</b>로 맨 위에 고정되어 함께 등록할 수 있습니다(<a href="#exclude">7번</a>). 글자 입력 중에는 0.35초 기다렸다가 찾으므로 한글을 다 치고 잠깐 기다리세요.</div>
+</section>
+
+<section id="cond">
+  <h2>3. ② 추천 조건</h2>
+  <table class="tbl"><thead><tr><th>조건</th><th>고르는 법</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><b>점검 / 재계약</b></td><td>둘 중 하나</td><td><b>점검</b> = 워킨맵 분기점검 대상. <b>재계약</b> = 워킨맵 재계약 대상(경과일 조건 없음). 후보 머리 제목과 등록되는 일정 종류가 이에 따라 바뀝니다.</td></tr>
+    <tr><td><b>등급 (중복 선택)</b> N · NN · S · SS · V</td><td>여러 개 켜기. <b>[전체]</b>는 다 켜기, 다 켜진 상태에선 <b>[해제]</b></td><td>처음 값은 <b>N·NN·S</b>. 하나도 안 켜면 전체 등급. SS나 V를 켜면 노란 안내 <span class="small">"SS·V는 분기 중반부터 권장 — 분기 초반이면 경고가 표시됩니다."</span></td></tr>
+    <tr><td><b>마지막 점검 경과: N일 초과</b></td><td>슬라이더 0~180일, 5일 단위 (점검일 때만 보임)</td><td>처음 값 60일. 마지막 점검이 이 일수보다 <b>오래된</b> 곳만 후보. 점검 기록이 없는 곳은 항상 통과합니다.</td></tr>
+    <tr><td><b>[✦ 가까운 순으로 추천]</b></td><td>누르면 "찾는 중…"</td><td>등급마다 가까운 60곳씩 뽑아 전체를 다시 거리순으로 정렬합니다(SS·V가 몰려 있어도 S가 통째로 잘리지 않게). 이전에 체크한 것은 풀립니다.</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>거리는 직선거리입니다</b>위·경도 차이로 계산한 대략의 거리(도로 거리가 아님). 400m라도 강 건너일 수 있으니 미니 지도로 한 번 확인하세요.</div>
+</section>
+
+<section id="cand">
+  <h2>4. ③ 후보 목록 읽는 법</h2>
+  <p>카드 한 장이 거래처 한 곳(또는 같은 회사 기기 묶음)입니다. 체크박스나 카드 아무 데나 누르면 선택됩니다(파란 배경).</p>
+
+  <h3 id="cand-single">한 곳 카드</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:30px">1</span>
+    <span class="badge" style="left:300px;top:30px">2</span>
+    <span class="badge" style="left:26px;top:80px">3</span>
+    <span class="badge" style="left:26px;top:150px">4</span>
+    <div class="cand"><div class="crow on" style="border:0"><span class="cb on"></span><span style="min-width:0;flex:1;display:grid;gap:3px"><span class="cl" style="font-size:13px"><span class="c rank">1</span><span class="c dist">420m</span>한빛문화재단<span class="c pin">📍 기준 업체 · 최근 점검 21일 전</span><span class="c grp">SS</span><span class="c lab">G6</span><span class="c nv">점검 이력 없음</span><span class="c q">분기 초반 — 보류 권장</span><span class="c bl">🏢 같은 건물 2개 법인 · 총 3대</span><span class="c nt">📌 특이사항</span><span class="c al">⚠ 2</span></span>
+      <span class="sl" style="font-size:11.5px">마지막 2026-05-12 · 106일 경과 <span style="color:#94A3B8">🖨 2대 · 복합기 1 · PC 1 ｜ SL-X4225RX 291047</span></span>
+      <span class="sl" style="font-size:11px">📊 흑- 84,120 컬- 31,004 큰컬- 1,200 ｜ 전전(02-03) 흑- 79,310 컬- 28,210 큰컬- 1,100</span>
+      <span class="sl b" style="font-size:11px">📈 3개월간 흑 4,810매 · 컬 2,794매 · 큰컬 100매 (월평균 약 2,568매)</span>
+      <span class="sl g" style="font-size:11px">🧰 여분 K1 C1 M1 Y1 폐1 → 현재 K1 C1 M1 Y1 폐통1 → 지급 권장 K1 · C1 · M1 · Y1 · 폐통1 (A3컬러 2세트·폐통2 기준)</span>
+      <span class="sl a" style="font-size:11px">⚠ 컬 카운터가 이전보다 작아 해당 항목은 제외했습니다 (입력 오류 가능)</span>
+      <span class="sl r" style="font-size:11px">❗ 출입 시 1층 경비실 방문증 필요</span>
+      <span class="sl" style="font-size:11px">⌖ 서울 중구 을지로 100 5층</span></span></div></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>순번 · 거리 · 업체명</b> — 회색 동그라미 숫자는 순번(미니 지도 마커 번호와 같음). 검은 칩은 기준 업체까지 거리(1km 미만은 m). 좌표가 없으면 거리 칩이 없습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>상태 칩</b> — <span class="c pin">📍 기준 업체 · 사유</span> 직접 지정한 업체가 조건 밖인데 고정된 것 · <span class="c grp">SS</span> 등급(SS·V는 보라, 나머지 회색) · <span class="c lab">G6</span> 워킨맵 라벨 · <span class="c nv">점검 이력 없음</span> · <span class="c q">분기 초반 — 보류 권장</span> SS·V인데 분기 시작 40일이 안 됐을 때 · <span class="c bl">🏢 같은 건물 N개 법인 · 총 N대</span> 같은 도로명+번지에 다른 후보 법인이 있을 때 · <span class="c nt">📌 특이사항</span> 거래처 방문 규칙(출입 비번 등) 있음 · <span class="c al">⚠ N</span> 미수·불만(빨강) / 초과료(주황) / 이번 분기 점검·재계약 남음(파랑). 📌와 ⚠는 누르면 <b>통합이력</b> 팝업이 열립니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>마지막 점검 줄</b> — "마지막 2026-05-12 · 106일 경과" 또는 "마지막 점검 기록 없음". 옆 <b>🖨 N대</b>는 임대리스트의 <b>임대중</b> 기기 수와 목록(복합기·PC·모니터·기타, 복합기는 모델 자산번호까지).</div></div>
+    <div class="item"><span class="num">4</span><div><b>사용량·여분 줄</b> — 📊 최근 매수 ｜ 전전(월-일) 매수 · <span style="color:#2563EB;font-weight:900">📈</span> 두 점검 사이 사용량과 월평균 · <span style="color:#047857;font-weight:900">🧰</span> 최근 여분 → 기준(A3컬러 2세트·폐통2 / A4컬러 3세트 / 흑백 K2 / 잉크젯 1세트)과 비교한 지급 권장 · <span style="color:#D97706;font-weight:900">⚠</span> 카운터가 줄었거나 기번이 달라 비교를 뺀 경고 · <span style="color:#E11D48;font-weight:900">❗</span> 최근 점검의 특이사항(ㅡㅡㅡ 같은 채움표시는 제외) · ⌖ 주소.</div></div>
+  </div>
+
+  <h3 id="cand-group">같은 회사 여러 대 카드 — 방문 1건</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="cand"><div class="crow on" style="border:0"><span class="cb on"></span><span style="min-width:0;flex:1;display:grid;gap:3px"><span class="cl" style="font-size:13px"><span class="c dist">1.2km</span>미래테크<span class="c dev">기기 4대</span><span class="c gr">S</span><span class="c bl">🏢 같은 건물 2개 법인 · 총 6대</span><span class="c alb">⚠ 1</span></span>
+        <span class="sl" style="font-size:11.5px">마지막 2026-04-02 · 146일 경과 · 워킨맵 3곳 (기기 1대는 워킨맵 미등록) · 방문 1건으로 등록</span>
+        <span class="sl" style="font-size:11px"><span class="c gr">3층</span> SL-X7600GX/0A6XBJPTA0 <span style="color:#94A3B8">마지막 26-04-02</span> <span class="sl b" style="display:inline">📈 월평균 약 1,900매</span> <span class="sl g" style="display:inline">🧰 현재 K2 C1 M1 Y1 폐통2 → 지급 권장 C1 · M1 · Y1</span></span>
+        <span class="sl" style="font-size:11px"><span class="c gr">2층</span> SL-X4300LX/0A6XBJWC0</span>
+        <span class="sl" style="font-size:11px"><span class="c gr">지하1층</span> APEOSPORT-C2060/227683</span>
+        <span class="sl" style="font-size:11px">⌖ 서울 중구 세종대로 40</span></span></div></div></div>
+    <div style="display:grid;gap:10px">
+      <div class="box"><b>왜 묶이나</b>같은 거래처 코드(사업자)의 워킨맵 지점들은 같은 회사의 기기들입니다. 따로 등록하면 일정이 3건이 되므로 <b>카드 1장 = 방문 1건</b>으로 묶습니다. 이름은 지점 이름들의 공통 부분(예: "미래테크").</div>
+      <div class="box"><b><span class="c dev">기기 N대</span></b>임대리스트 기준 복합기 대수와 워킨맵 등록 수 중 큰 값. 워킨맵에 일부만 등록된 회사는 "(기기 N대는 워킨맵 미등록)"이 붙습니다.</div>
+      <div class="box"><b>기기 줄</b>각 지점의 위치 꼬리(3층·2층…) + 코멘트의 모델/기번. 사용량·여분은 <b>최근 점검 기록의 기번과 그 기기 기번이 일치할 때만</b> 표시합니다(같은 수치가 모든 기기에 복제되지 않게).</div>
+      <div class="box tip"><b>선택은 묶음 단위</b>체크하면 지점 전부가 함께 선택·해제됩니다. 미니 지도 마커도 묶음 대표 하나만 그립니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="map">
+  <h2>5. 미니 지도 — 추가하기 전에 "어디쯤인지"</h2>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="mini" style="border:1px solid #E2E8F0;border-radius:12px;height:200px"><span class="tag">숫자 = 후보 순번(가까운 순) · 마커 클릭 = 선택 · 🔴 기준 업체</span><span class="anch" style="left:170px;top:95px"></span><span class="mk on" style="left:200px;top:70px">1</span><span class="mk" style="left:120px;top:120px">2</span><span class="mk on" style="left:270px;top:140px">3</span><span class="mk" style="left:80px;top:60px">4</span><span class="mk" style="left:330px;top:80px">5</span><span class="mk" style="left:240px;top:40px">6</span><span class="mlabel" style="left:280px;top:112px">3. 미래테크 · 1.2km</span></div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>표시</th><th>뜻</th></tr></thead><tbody>
+        <tr><td><span class="anch" style="position:static;display:inline-block;vertical-align:middle"></span> 빨간 점</td><td>기준 업체(앵커). 좌표가 없으면 안 그립니다.</td></tr>
+        <tr><td><span class="mk" style="position:static;display:inline-flex;vertical-align:middle">2</span> 검은 숫자</td><td>후보 순번(카드의 회색 번호와 같음). 지금 "더 보기"로 펼쳐진 카드만 그립니다(최대 60개).</td></tr>
+        <tr><td><span class="mk on" style="position:static;display:inline-flex;vertical-align:middle">1</span> 파란 숫자</td><td>선택된 후보.</td></tr>
+        <tr><td>마커 클릭</td><td>그 후보를 <b>선택/해제</b>하고 "3. 미래테크 · 1.2km" 이름표가 뜹니다. 묶음 카드면 지점 전부가 함께 토글.</td></tr>
+      </tbody></table>
+      <div class="box tip"><b>지도 엔진</b>카카오맵이 열리면 카카오, 아니면 OpenStreetMap. 처음엔 기준 업체와 가까운 30곳이 다 보이게 자동으로 맞춰집니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="register">
+  <h2>6. 선택 → 일정 등록 — 내 일정에 들어가는 방식</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 등록 확인 창</span>
+      <div class="modal" style="max-width:360px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;padding:14px 18px"><div style="font-size:10.5px;font-weight:900;color:#94A3B8">2026-08-26 · C팀 · 점검</div><div style="font-size:15px;font-weight:900;color:#fff">2곳 일정 등록</div></div>
+        <div style="padding:10px 18px;display:grid;gap:6px;font-size:12px;font-weight:700;color:#334155">
+          <div style="display:flex;gap:8px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#3B82F6"></span>한빛문화재단<span style="color:#94A3B8;font-size:10px;font-weight:900">420m</span></div>
+          <div style="display:flex;gap:8px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#3B82F6"></span>미래테크<span class="c" style="background:#EEF2FF;color:#4F46E5">기기 3대</span><span style="color:#94A3B8;font-size:10px;font-weight:900">1.2km</span></div>
+        </div>
+        <div style="padding:0 18px 8px;font-size:11px;font-weight:700;color:#94A3B8">✅ 심태현에게 배정되어 일정리스트의 [내 일정]에 바로 나타납니다.</div>
+        <div style="display:flex;gap:8px;padding:0 16px 16px"><span class="mbtn ghost" style="flex:1;border-radius:999px;padding:9px">취소</span><span class="mbtn primary" style="flex:2;border-radius:999px;padding:9px">등록</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>카드를 체크한 뒤 후보 머리의 <b>[📅 선택 N곳 일정 등록]</b>을 누르면 확인 창이 뜹니다(날짜 · 팀 · 점검/재계약, 고른 곳 목록, 거리, 묶음이면 "기기 N대").</li>
+        <li><b>[등록]</b> → 고른 곳마다 일정리스트에 일정 1건이 생기고 안내줄에 <b>"N곳 등록 완료 (내 이름) — 일정리스트에서 확인하세요."</b> ① 필수 스케줄 목록도 새로 읽어 방금 등록한 일정이 보입니다.</li>
+        <li>일정리스트 <b>[내 일정]</b> 탭(그 날짜)에 바로 나타납니다. 이후 FIELD 전송·완료·익일 처리는 일정리스트에서.</li>
+      </ol>
+      <table class="tbl"><thead><tr><th>만들어지는 일정의 칸</th><th>채워지는 값</th></tr></thead><tbody>
+        <tr><td>날짜 · 팀</td><td>위에서 고른 날짜 · 팀. <b>시간은 비움</b>(자동 일정은 순서를 내 일정 동선이 정함).</td></tr>
+        <tr><td>업체명 · 주소</td><td>워킨맵 이름에서 등급·마감 표기를 뗀 업체명(묶음이면 공통 이름) · 워킨맵 주소+상세주소</td></tr>
+        <tr><td>기종 · 기번 · 등급</td><td>워킨맵 코멘트 "모델 / 기번"에서 분리 · 등급</td></tr>
+        <tr><td>접수내용</td><td>점검: <code>정기점검 (마지막 2026-05-12 · 106일 경과)</code> (기록 없으면 "마지막 기록 없음") · 재계약: <code>재계약 방문</code>. 묶음이면 뒤에 <code> · 기기 3대</code></td></tr>
+        <tr><td>메모</td><td>묶음일 때 <code>워킨맵 등록 3곳 — 3층: SL-X7600GX/0A6X… · 2층: … · 지하1층: …</code></td></tr>
+        <tr><td>담당자 · 상태</td><td><b>내 이름 · 배정</b></td></tr>
+        <tr><td>일정 구분</td><td>점검 = <b>매월점검</b> 구분 · 재계약 = <b>AS</b> 구분. 캘린더 제목은 "점검 ○○" / "재계약 ○○". 출처 표시 "autoplan".</td></tr>
+      </tbody></table>
+      <div class="box warn"><b>등록 버튼은 되돌리기가 없습니다</b>잘못 등록했으면 일정리스트에서 그 줄을 <b>[삭제]</b>하세요. 같은 곳을 두 번 등록하면 일정도 두 건 생깁니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="exclude">
+  <h2>7. 후보에서 빠지는 것들 · 📍 기준 업체 고정</h2>
+  <table class="tbl"><thead><tr><th>빠지는 경우</th><th>이유</th></tr></thead><tbody>
+    <tr><td>라벨 <b>G5</b>(점검 완료) · <b>G12</b>(이관)</td><td>이번 분기 방문 대상이 아님. 워킨맵에서 색이 바뀌면 다음 추천부터 빠집니다.</td></tr>
+    <tr><td><b>다른 팀</b> 거래처</td><td>위에서 고른 팀의 워킨맵만 봅니다.</td></tr>
+    <tr><td>현재 분기가 아닌 명단 · 지도 숨김(OFF) 항목</td><td>워킨맵은 분기마다 새 명단이라 지금 분기만.</td></tr>
+    <tr><td>점검: 마지막 점검이 <b>경과일 슬라이더</b> 이내</td><td>60일(기본) 안에 다녀온 곳. 재계약은 이 조건이 없습니다.</td></tr>
+    <tr><td>등급 필터 밖</td><td>처음 값이 N·NN·S이므로 SS·V는 켜야 나옵니다.</td></tr>
+    <tr><td>등급별 60곳 넘는 먼 곳</td><td>등급마다 가까운 60곳까지. 더 멀리 있는 곳은 기준 업체를 바꿔 다시 추천.</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>📍 기준 업체는 조건 밖이어도 맨 위에 고정</b>직접 지정 칸에 워킨맵 업체를 적어 기준으로 잡았는데 그 업체가 위 조건에 걸려 빠졌다면, 추천 결과 <b>맨 위에 초록 칩</b>과 사유가 붙어 나타나 함께 등록할 수 있습니다. 사유 예: <code>최근 점검 21일 전</code> · <code>등급 SS — 필터 밖</code> · <code>이미 완료(G5)</code> · <code>D팀 소속</code> · <code>추천 조건 밖</code>.</div>
+  <div class="box warn"><b>SS·V는 "분기 초반 — 보류 권장"</b>분기 시작 후 40일이 지나기 전에는 SS·V 카드에 노란 칩이 붙습니다. 빠지는 건 아니고 안내입니다 — 팀 관행(SS·V는 분기 중반부터)에 맞게 판단하세요.</div>
+</section>
+
+<section id="faq">
+  <h2>8. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>추천을 눌렀는데 0곳이에요</summary><p>① 팀·분기 워킨맵이 올라와 있는지(워킨맵 탭에서 확인), ② 등급 필터를 [전체]로, ③ 점검이면 경과일 슬라이더를 낮춰 보세요(0일이면 경과일 조건 없음). ④ 그래도 없으면 그 팀 대상이 모두 G5·G12일 수 있습니다.</p></details>
+    <details><summary>"좌표 없음"이라 거리순이 안 돼요</summary><p>기준 일정의 업체명이 워킨맵과 다르고 주소도 비어 있는 경우입니다. 직접 지정 칸에 워킨맵 이름 그대로나 도로명 주소를 적어 보세요. 그래도 안 되면 경과일 순으로 보고 미니 지도 없이 진행됩니다.</p></details>
+    <details><summary>꼭 가야 하는 업체가 후보에 없어요</summary><p>직접 지정 칸에 그 업체명을 적어 기준으로 잡고 추천을 누르면 조건 밖이어도 📍 기준 업체로 맨 위에 고정됩니다. 워킨맵 자체에 없는 업체는 이 화면으로 등록할 수 없으니 일정리스트에서 직접 만드세요.</p></details>
+    <details><summary>등록했는데 [내 일정]에 안 보여요</summary><p>일정리스트에서 날짜 탭(금일/익일/예정)이 등록한 날짜와 맞는지, 팀 칩이 맞는지 확인하세요. 안내줄이 "등록 실패: …"였으면 저장이 안 된 것입니다 — 문구를 그대로 전달해 주세요.</p></details>
+    <details><summary>같은 회사인데 카드가 두 장으로 나와요</summary><p>거래처 코드가 두 지점에 다르게 붙어 있거나 코드가 없어 이름 앞 10글자로 묶는데 이름이 다른 경우입니다. 워킨맵 이름 표기를 맞추거나 거래처 코드 연결을 요청하세요. 두 장을 다 체크하면 일정도 2건이 생깁니다.</p></details>
+    <details><summary>📈 사용량이 안 나와요</summary><p>최근 2회 점검 기록이 모두 있어야 계산됩니다(전전 점검이 없으면 📊 매수만). 기번이 두 기록에서 다르면 기기 교체로 보고 비교를 생략합니다.</p></details>
+    <details><summary>재계약 후보에 SS·S만 나오게 하려면</summary><p>② 추천 조건에서 등급 N·NN을 끄고 S·SS를 켜세요. 재계약은 경과일 조건이 없으므로 등급과 라벨(G5·G12 제외)만으로 걸러집니다. 재계약 준비 탭은 같은 워킨맵 명단을 S·SS로 좁혀 보여주는 화면입니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">자동 일정 길잡이 · 워킨맵 · 일정리스트 · 재계약 준비 길잡이와 같은 형식</p>
+</main>
+</div>
+</body>
+</html>
