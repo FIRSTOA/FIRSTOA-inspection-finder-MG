@@ -22,7 +22,7 @@ const GUIDES: Guide[] = [
   { group: "소식·학습", key: "inbox", title: "공지·요청", desc: "공지 읽기, 요청 보내기·처리 상태", url: "/guide/inbox.html", updated: "2026-08-26" },
   { group: "소식·학습", key: "copier-notes", title: "복합기 학습·처리이력", desc: "기록 → 족보 → 가이드, 검색, 데일리 퀴즈", url: "/guide/copier-notes.html", updated: "2026-08-26" },
   { group: "소식·학습", key: "it-history", title: "IT 학습·처리이력", desc: "IT 처리 기록 검색·학습", url: "/guide/it-history.html", updated: "2026-08-26" },
-  { group: "소식·학습", key: "selfdev", title: "자기개발/지식공유", desc: "독서·지식 공유 기록" },
+  { group: "소식·학습", key: "selfdev", title: "자기개발/지식공유", desc: "독서·지식 공유 기록", url: "/guide/selfdev.html", updated: "2026-08-26" },
   { group: "기록·성과", key: "weekly", title: "주간현황판 · 일일방문일지", desc: "방문 기록 자동 생성, 주간 목표·회고, 사무 기록", url: "/guide/weekly.html", updated: "2026-08-26" },
   { group: "기록·성과", key: "growth", title: "성장기록", desc: "개인 성과·성장 카드", url: "/guide/growth.html", updated: "2026-08-26" },
   { group: "고객·홍보", key: "customer-report", title: "고객 리포트", desc: "월간 리포트 대상·수신자·링크 문자 발송·로그", url: "/guide/customer-report.html", updated: "2026-08-26" },

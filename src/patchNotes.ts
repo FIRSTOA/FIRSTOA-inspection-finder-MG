@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b9b8bdcf50",
+    "date": "2026-08-26",
+    "note": "사용설명서 — 재계약 준비 편 등록(+완성된 편 반영)"
+  },
+  {
     "hash": "52f14e6b54",
     "date": "2026-08-26",
     "note": "사용설명서 15편 등록(홈·서비스접수·캘린더·워킨맵·자동일정·맛동여지도·FIELD·공지·복합기·주간/일일·성장·고객리포트·해피콜·홍보물·카운터문자) + 그룹별 목록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ccf5abf7d4",
     "date": "2026-08-14",
     "note": "주소 지오코딩 정규화기 공용화 — 띄어쓰기 어떤 조합이든 잡는다"
-  },
-  {
-    "hash": "53072fdb86",
-    "date": "2026-08-14",
-    "note": "넘기기 팝업을 디자인 모달로 + 원격 건 자동 AS이관 마무리"
   }
 ];
