@@ -102,6 +102,24 @@ function parseEvents(xml: string): NaverEvent[] {
   return out;
 }
 
+/** 계정에 보이는 캘린더 id 전부(PROPFIND Depth 1) — 감시 밖 캘린더로 옮긴 일정을 삭제로 오판하지 않기 위한 가드용. 실패하면 빈 배열 */
+async function listAccountCalendarIds(auth: { id: string; header: string }): Promise<string[]> {
+  try {
+    const res = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/`, {
+      method: "PROPFIND",
+      headers: { Authorization: auth.header, "Content-Type": "application/xml; charset=utf-8", Depth: "1" },
+      body: `<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>`,
+    });
+    if (!res.ok) return [];
+    const text = await res.text();
+    const blocks = text.match(/<(?:\w+:)?response>[\s\S]*?<\/(?:\w+:)?response>/g) || [];
+    return blocks
+      .filter((b) => /<(?:\w+:)?calendar\s*\/>/.test(b))
+      .map((b) => decodeURIComponent((((b.match(/<(?:\w+:)?href>([^<]+)<\/(?:\w+:)?href>/) || [])[1] || "").trim().replace(/\/$/, "").split("/").pop() || "")))
+      .filter(Boolean);
+  } catch { return []; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
@@ -245,7 +263,7 @@ Deno.serve(async (req) => {
     const changed = listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80);
 
     // 웹앱 일정에 연결된 uid(미러+승격) — 표시 목록에서 제외 + 네이버에서 옮긴 날짜·시간을 티켓에 반영
-    const ticketRows = await restAll<{ id: string; date: string; time: string; status: string; naverUid: string; assignee?: string; calendarTitle?: string; vendor?: string }>("as_tickets?select=id,date,time,status,naverUid,assignee,"calendarTitle",vendor&naverUid=not.is.null");
+    const ticketRows = await restAll<{ id: string; date: string; time: string; status: string; naverUid: string; assignee?: string; calendarTitle?: string; vendor?: string }>(`as_tickets?select=id,date,time,status,naverUid,assignee,"calendarTitle",vendor&naverUid=not.is.null`);
     const ticketUids = new Set(ticketRows.map((t) => t.naverUid).filter(Boolean));
     const ticketByUid = new Map(ticketRows.map((t) => [t.naverUid, t]));
 
@@ -344,7 +362,7 @@ Deno.serve(async (req) => {
     // 삭제 완전 양방향(2026-08-15 확정): 네이버에서 사라진 일정은 웹앱 일정·표시도 삭제.
     // 가드: 조회 실패 회차·백로그 잔여 회차에는 판단하지 않는다 (캘린더 간 "이동"을 삭제로 오인 방지 —
     //        이동은 새 href가 다운로드돼야 같은 uid가 살아있음을 알 수 있다)
-    let removed = 0, ticketDeleted = 0;
+    let removed = 0, ticketDeleted = 0, movedElsewhere = 0;
     const backlogNow = listing.filter((l) => stateByHref.get(l.href)?.etag !== l.etag).length - changed.length;
     if (!errors.length && backlogNow <= 0) {
       // 살아있는 uid = 여전히 목록에 있는 href의 uid + 이번에 내려받은 uid
@@ -352,11 +370,28 @@ Deno.serve(async (req) => {
       for (const r of state) if (listedHrefs.has(r.href)) aliveUids.add(r.uid);
       for (const item of changed) { const st = stateByHref.get(item.href); if (st) aliveUids.add(st.uid); }
       const goneRows = state.filter((r) => !listedHrefs.has(r.href));
+      let accountCals: string[] | null = null; // 필요할 때 한 번만 PROPFIND
       for (const row of goneRows.slice(0, 100)) {
         const uidAlive = row.uid && aliveUids.has(row.uid);
         if (row.uid && !uidAlive) {
-          await fetch(`${rest}/naver_calendar_events?uid=eq.${encodeURIComponent(row.uid)}`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } }).catch(() => undefined);
           const t = ticketByUid.get(row.uid);
+          // 웹앱 티켓이 걸린 uid는 삭제 전에 계정 전체 캘린더에서 생존을 확인한다 —
+          // 팀이 완료 일정을 미감시 캘린더(당시 미설정 팀 캘린더·점검마감 등)로 옮긴 것을 "네이버 삭제"로 오판해
+          // 티켓을 지워온 실사고(2026-08-15~25, A·B·D·E 매일). 다른 캘린더에 살아 있으면 티켓·표시를 그대로 둔다.
+          if (t) {
+            if (accountCals === null) accountCals = await listAccountCalendarIds(auth);
+            let foundElsewhere = false;
+            for (const cal of accountCals.filter((c) => !calendars.includes(c))) {
+              const probe = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/${encodeURIComponent(cal)}/${encodeURIComponent(row.uid)}.ics`, { headers: { Authorization: auth.header } }).catch(() => null);
+              if (probe && probe.ok) { foundElsewhere = true; break; }
+            }
+            if (foundElsewhere) {
+              movedElsewhere += 1;
+              await fetch(`${rest}/naver_caldav_state?href=eq.${encodeURIComponent(row.href)}`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } }).catch(() => undefined);
+              continue;
+            }
+          }
+          await fetch(`${rest}/naver_calendar_events?uid=eq.${encodeURIComponent(row.uid)}`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } }).catch(() => undefined);
           if (t) {
             const del = await fetch(`${rest}/as_tickets?id=eq.${encodeURIComponent(t.id)}`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } });
             if (del.ok) ticketDeleted += 1;
@@ -369,7 +404,7 @@ Deno.serve(async (req) => {
 
     return Response.json({
       ok: true, calendars: calendars.length, listed: listing.length, changed: changed.length, downloaded,
-      manualUpserted, imported, ticketUpdated, ticketDeleted, promotedRemoved, removed, errors,
+      manualUpserted, imported, ticketUpdated, ticketDeleted, movedElsewhere, promotedRemoved, removed, errors,
       backlog: Math.max(0, listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).length - changed.length),
     }, { headers: jsonHeaders });
   } catch (error) {
