@@ -4680,10 +4680,10 @@ export default function App() {
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
-  const FIELD_NAVER_BUTTON = true; // 2026-08-25: 팀 완료 캘린더 5팀 설정 완료 → 필드탭에서도 [일정정리] 노출 (숨겨둔 이유가 해소됨)
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
   // 통합 전송 팝업은 "일정리스트에서 넘어온 세션"에서만 — ref는 리렌더를 못 일으켜 상태를 병행한다
-  const [linkedTicket, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
+  // 일정리스트에서 넘어온 세션 표식 — 2026-08-25부터 전송 버튼은 경로와 무관하게 통합 하나라 값은 읽지 않고, 연결 해제 시점 추적용으로만 유지
+  const [, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
   const [ticketDeferReason, setTicketDeferReason] = useState(""); // 익일 사유 — 일정리스트와 동일하게 필수
   const setPendingTicket = (t: { id: string; receptionId: string; vendor: string } | null) => {
     pendingAsTicketRef.current = t;
@@ -6407,18 +6407,12 @@ export default function App() {
             {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요 (전송 안 됨)" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)"}</div>}
             <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
-                linkedTicket ? (
-                  /* 일정리스트에서 넘어온 세션 — 방 선택·자가/부품 자동 감지가 담긴 통합 전송 팝업 (필드 직접 사용은 기존 버튼 유지) */
-                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-6 rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
-                ) : (
+                /* 통합 전송 팝업(방 선택·자가/부품 자동 감지) — 일정리스트에서 왔든 필드탭에서 직접 붙여넣었든 같은 버튼.
+                   전송 성공 뒤 일정리스트에 같은 업체 미완료 일정이 있으면 완료/익일 팝업 → 팀 완료 캘린더 이동까지 이어진다. */
                 <>
-                  <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="col-span-3 rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">점검방 보내기</button>
-                  <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">AS방 보내기</button>
-                  <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-teal-200 bg-teal-50 py-3 text-sm font-black text-teal-700 shadow-sm transition hover:bg-teal-100 active:scale-[0.99] disabled:opacity-40`}>자가신청</button>
-                  <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-black text-amber-700 shadow-sm transition hover:bg-amber-100 active:scale-[0.99] disabled:opacity-40`}>부품신청</button>
-                  {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} title="완료/익일 정리 — 팀 완료 캘린더까지 반영 (전송 없이 정리만)" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">일정정리</button>}
+                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-4 rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+                  <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} title="완료/익일 정리 — 팀 완료 캘린더까지 반영 (전송 없이 정리만)" className="col-span-2 whitespace-nowrap rounded-xl border border-emerald-600 bg-white py-3.5 text-sm font-black text-emerald-700">일정정리</button>
                 </>
-                )
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
               ) : fieldSheetUrl ? (
@@ -6522,36 +6516,15 @@ export default function App() {
           </div>
           {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요"}</div>}
           <div className="flex flex-wrap gap-2">
-            {(mode === "inspection" || mode === "blank-report") ? (linkedTicket ? <>
-              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
-            </> : <>
-              <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "점검방 보내기"}</button>
-              <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "AS방 보내기"}</button>
-              {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">일정 정리(완료/익일)</button>}
+            {(mode === "inspection" || mode === "blank-report") ? (<>
+              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-[2] whitespace-nowrap rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
+              <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} className="flex-1 whitespace-nowrap rounded-xl border border-emerald-600 bg-white py-3.5 text-sm font-black text-emerald-700">일정정리</button>
             </>) : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
               <button onClick={() => mode === "praise" ? praiseSubmitRef.current?.() : handleSendAll("normal")} disabled={mode === "praise" ? !praiseReady : (!hasOutput || sending)} className="flex-[1.5] whitespace-nowrap rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400">{sending ? "보내는 중…" : mode === "logistics" ? "물류방 보내기" : "보내기"}</button>
               {fieldSheetUrl && <a href={fieldSheetUrl} target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 py-3 text-sm font-black text-emerald-700">📄 시트</a>}
             </>}
-            {(mode === "inspection" || mode === "blank-report") && !linkedTicket && (
-              <>
-                <button
-                  onClick={() => handleSendAll("자가")}
-                  disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-xl border border-teal-200 bg-teal-50 py-3 text-sm font-black text-teal-700 shadow-sm transition hover:bg-teal-100 active:scale-[0.99] disabled:opacity-40"
-                >
-                  자가신청
-                </button>
-                <button
-                  onClick={() => handleSendAll("부품")}
-                  disabled={!hasOutput || sending}
-                  className="flex-1 whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-black text-amber-700 shadow-sm transition hover:bg-amber-100 active:scale-[0.99] disabled:opacity-40"
-                >
-                  부품신청
-                </button>
-              </>
-            )}
           </div>
         </div>
       </div>

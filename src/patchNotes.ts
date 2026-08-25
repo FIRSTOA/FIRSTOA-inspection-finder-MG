@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4ca28dbba3",
+    "date": "2026-08-25",
+    "note": "필드탭 [일정정리] 버튼 공개(직접 양식도 매칭), 납품 완료·연기는 카톡 없이 웹만, 중간보고 현재시각·#미배정·타팀 CS 지원 포함"
+  },
+  {
     "hash": "a16bd8049e",
     "date": "2026-08-25",
     "note": "네이버 sync — 티켓 삭제 전 계정 전체 캘린더 uid 생존 확인(미감시 캘린더 이동을 삭제로 오판하던 실사고), 티켓 읽기 페이지네이션 따옴표 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4ec6a5681a",
     "date": "2026-08-05",
     "note": "카운터 문자전송 구현 — 직원 Streamlit 원본 이식 (모듈 3분리, 설정은 DB 공유)"
-  },
-  {
-    "hash": "47d5e38af4",
-    "date": "2026-08-05",
-    "note": "예약 문자 디스패치 크론 서울 재등록 SQL (뭄바이 구버전 대체, 적용 완료)"
   }
 ];
