@@ -1,10 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
-import {
-  Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2,
-  Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen,
-  TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown,
-} from "lucide-react";
+import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
@@ -28,6 +24,7 @@ import InboxHub from "./InboxHub";
 import { useInboxBadge } from "./useInboxBadge";
 import GrowthHub from "./GrowthHub";
 import WalkingMap from "./WalkingMap";
+import FoodMap from "./FoodMap";
 import ServiceReception from "./ServiceReception";
 import { PromoWorkspace } from "./CustomerEngagement";
 import CustomerReport from "./CustomerReport";
@@ -50,7 +47,7 @@ import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategory
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus, sendServiceReception } from "./api";
 import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
-import { normalizeLogisticsKind, saveActivityEvent, type ActivityKind } from "./operations";
+import { normalizeLogisticsKind, saveActivityEvent, teamForAuthor, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
 import { prepareImageForUpload } from "./imageUpload";
@@ -4685,7 +4682,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "foodMap" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -5731,7 +5728,7 @@ export default function App() {
   // 그룹 기준: 현장 핵심(단독 1클릭) → 자재·요청 → 학습·지식 → 기록·성과 → 고객·홍보 → 업무관리(하단)
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
     home: HomeIcon, serviceReception: ClipboardList, asReception: ListChecks, calendar: CalendarDays,
-    walkingMap: MapIcon, autoSchedule: Wand2, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
+    walkingMap: MapIcon, autoSchedule: Wand2, foodMap: Utensils, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
     itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
     growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
     operations: Settings2, lookup: Database, inbox: Inbox,
@@ -5743,7 +5740,7 @@ export default function App() {
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["recontract", "재계약 준비"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["walkingMap", "워킨맵"] as [typeof screen, string], ["recontract", "재계약 준비"] as [typeof screen, string], ["autoSchedule", "자동 일정"] as [typeof screen, string], ["foodMap", "맛동여지도"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["lookup", "조회"], ["operations", "관리"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];
@@ -5994,6 +5991,7 @@ export default function App() {
         {screen === "weekly" && <WorkDashboard kind="weekly" author={author} focusDate={weeklyFocus} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
+        {screen === "foodMap" && <FoodMap author={author} team={(() => { const t = teamForAuthor(author); return /^[A-E]$/.test(t) ? t : ""; })()} />}
         {screen === "calendar" && <CsCalendar />}
         {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} />}
         {screen === "serviceReception" && <ServiceReception author={author} />}

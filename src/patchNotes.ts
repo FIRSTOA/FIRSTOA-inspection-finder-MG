@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "eb4eedc4d5",
+    "date": "2026-08-25",
+    "note": "팀 전용 캘린더 — 일정리스트·네이버와 분리된 팀별 메모 캘린더(team_calendar_events), 캘린더 탭 [🔒 팀] 뷰"
+  },
+  {
     "hash": "eeadc76f4f",
     "date": "2026-08-25",
     "note": "자동일정 기준 업체 검색 — 요청 순번 가드 + 350ms 디바운스 (조합 중 글자 조회가 최종 결과를 덮어쓰던 경쟁 수리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a3fb1e64fe",
     "date": "2026-08-13",
     "note": "IT 명단 복구 + 접수 멀티유저 자동 갱신 + 원격이관 화면 다이어트"
-  },
-  {
-    "hash": "12cad22d5a",
-    "date": "2026-08-13",
-    "note": "워킨맵 초과 필터 + 원격 화면 정리 + IT 명단 정정"
   }
 ];
