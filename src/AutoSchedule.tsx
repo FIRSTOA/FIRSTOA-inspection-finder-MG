@@ -19,6 +19,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { usageSpareAdvice } from "./spareAdvice";
+import CandidateMap, { type CandidatePoint } from "./CandidateMap";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = {
@@ -351,6 +352,18 @@ export default function AutoSchedule({ author }: { author: string }) {
               <CalendarPlus size={14} />선택 {groups.filter((g) => g.members.some((m) => picked.has(m.id))).length}곳 일정 등록
             </button>
           </div>
+          {/* 미니 지도 — 추가하기 전에 어디쯤인지 보이게(내 일정에 가서 확인하던 불편). 표시 중인 후보(더 보기 범위)만 그린다 */}
+          {rows.length > 0 && (
+            <CandidateMap
+              anchor={anchorGeo ? { lat: anchorGeo.lat, lng: anchorGeo.lng, name: anchorGeo.name } : null}
+              points={groups.slice(0, candLimit).flatMap((group, index): CandidatePoint[] => {
+                const m = group.members[0];
+                if (m.lat == null || m.lng == null) return [];
+                return [{ id: m.id, lat: m.lat, lng: m.lng, name: group.members.length > 1 ? group.rep : (m.vendor || m.place_name), rank: index + 1, picked: group.members.some((x) => picked.has(x.id)), distanceKm: m.distance_km }];
+              })}
+              onToggle={(id) => { const group = groups.find((g) => g.members.some((m) => m.id === id)); (group ? group.members : []).forEach((m) => toggle(m.id)); }}
+            />
+          )}
           {/* 내부 스크롤(64vh)이 카드를 중간에서 자르고 페이지 스크롤과 겹쳐 답답했다(사용자 지적) →
               페이지 흐름으로 두고 12곳씩 '더 보기'로 늘린다(후보가 수십 곳이어도 렌더가 가볍다) */}
           <div className="divide-y divide-slate-100">
@@ -372,6 +385,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                     <input type="checkbox" checked={on} onChange={() => toggle(r.id)} className="mt-1 h-4 w-4 accent-blue-600" />
                     <span className="min-w-0 flex-1 overflow-hidden">
                       <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-700">{groups.indexOf(group) + 1}</span>
                         {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
                         <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
                         {anchorPin?.id === r.id && <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">📍 기준 업체{anchorPin.reason ? ` · ${anchorPin.reason}` : ""}</span>}

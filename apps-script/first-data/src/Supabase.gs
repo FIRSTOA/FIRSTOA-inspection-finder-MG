@@ -101,10 +101,17 @@ function buildSupaRowFromArray_(cat, arr) {
 
 // 시트소스 전체교체 미러: 테이블 전체 삭제 후 현재 행 전부 insert(청크). 절대 throw 안 함.
 // 원본시트가 진실 → 수정·삭제까지 반영. (삭제 후 insert 중 실패 시 다음 동기화에서 자가복구)
+// 미러 전체교체는 DELETE가 필요하다 — RLS 하드닝(2026-08-17) 뒤 anon의 DELETE가 막혀 미수·초과·확장성 미러가
+// 8일간 조용히 멈춘 실사고. 스크립트 속성 SUPABASE_SERVICE_KEY(service_role)가 있으면 그 키로, 없으면 anon으로.
+// (service_role 키는 GAS 스크립트 속성에만 둔다 — 코드·프론트에 절대 노출하지 않는다)
+function supabaseWriteKey_() {
+  try { return PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY') || SUPABASE_ANON; } catch (e) { return SUPABASE_ANON; }
+}
 function supabaseReplaceAll_(table, rows) {
+  var KEY = supabaseWriteKey_();
   var H = {
-    apikey: SUPABASE_ANON,
-    Authorization: 'Bearer ' + SUPABASE_ANON,
+    apikey: KEY,
+    Authorization: 'Bearer ' + KEY,
     Prefer: 'return=minimal'
   };
   // 1) 전체 삭제 (id>=0 = 전 행)

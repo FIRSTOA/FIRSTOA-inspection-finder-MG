@@ -103,3 +103,13 @@ create table if not exists public.counter_sms_targets (
 create index if not exists counter_sms_targets_batch_idx on public.counter_sms_targets(batch_id);
 grant select, insert, update, delete on public.counter_sms_batches to anon;
 grant select, insert, update, delete on public.counter_sms_targets to anon;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2026-08-25 예외: 시트 미러 4종(misu·overage·pc_expansion·mfp_expansion)에 anon DELETE 복구
+--   GAS(first-data Supabase.gs supabaseReplaceAll_)가 anon 키로 "전체 삭제 → 재삽입"을 하는데
+--   8/17 하드닝 뒤 DELETE 401(42501)로 미러가 8일간 조용히 멈춘 실사고. 이 표들은 매일 0시 시트에서
+--   전량 재생성되는 캐시라 임시 소실 위험만 있다. 근본 해결은 GAS가 service_role(스크립트 속성
+--   SUPABASE_SERVICE_KEY)로 쓰는 것 — Supabase.gs에 코드 준비됨(clasp push 대기).
+--   ※ 아래 grant는 2026-08-25 시점 "미적용"(사용자 결정 대기). 임시로 오늘 밤 미러를 살리려면 SQL 편집기에서 실행하고,
+--     GAS가 service_role로 전환되면 revoke delete on table ... from anon; 으로 다시 회수한다.
+-- grant select, insert, delete on table public.misu, public.overage, public.pc_expansion, public.mfp_expansion to anon;

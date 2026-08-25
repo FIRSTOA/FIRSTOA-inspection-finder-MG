@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "01657f1844",
+    "date": "2026-08-25",
+    "note": "자동일정 — 검색한 기준 업체를 조건과 무관하게 맨 위에 고정(사유 배지) 해서 바로 추가 가능"
+  },
+  {
     "hash": "7242d357ab",
     "date": "2026-08-25",
     "note": "FIELD 초기화 규칙 — 점검·AS·물류는 새 양식 불러올 때 사진까지 비움, 그 외 양식은 전송 성공 시 초기화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a7e6ae4e93",
     "date": "2026-08-13",
     "note": "재계약 조회 컬럼 재구성 + 자동 최신화(배너 제거)"
-  },
-  {
-    "hash": "2347586228",
-    "date": "2026-08-13",
-    "note": "워킨맵 뱃지 접두 매칭 + 재계약 내용 요약 + 동기화 안내"
   }
 ];
