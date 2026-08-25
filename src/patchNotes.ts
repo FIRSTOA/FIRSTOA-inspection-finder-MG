@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9e068c9f34",
+    "date": "2026-08-26",
+    "note": "작성자 인식 — 빈 값으로 작성자를 지우지 않게"
+  },
+  {
     "hash": "f20a3b701e",
     "date": "2026-08-26",
     "note": "양식 붙여넣기 작성자 인식 — 빈 작성자 칸이 다음 줄(구분: 점검)을 이름으로 잡던 것 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "067626bdab",
     "date": "2026-08-14",
     "note": "지역 판정 보강 — 'C지역/B팀' 표기 인식, 경기권 시 단위 매핑 확대(일산·김포·안산 등)"
-  },
-  {
-    "hash": "afb50ca910",
-    "date": "2026-08-14",
-    "note": "지역→팀 판정 통일 — 수도권A~E는 그 글자, 지방(도 단위)은 E"
   }
 ];
