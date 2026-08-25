@@ -5482,7 +5482,7 @@ export default function App() {
 
   // 복붙 전송(일정 연결 없음) → 일정리스트에서 같은 업체의 미완료 AS 일정을 찾아 완료 처리를 제안.
   // 자동 완료는 안 한다(다른 건일 수 있음) — 정확히 1건일 때만 물어보고, 여러 건이면 안내만.
-  // manual: 필드탭 [일정정리] 버튼에서 직접 호출 — 매칭이 없을 때도 결과를 알려준다 (전송 후 자동 호출은 조용히)
+  // manual: 매칭이 없을 때도 결과 토스트를 띄우는 옵션 (전송 후 자동 호출은 조용히 — 현재 호출부는 자동 경로만)
   const offerTicketMatchAfterSend = async (formText: string, opts: { manual?: boolean } = {}) => {
     try {
       const vendorLine = extractVendorFromText(formText);

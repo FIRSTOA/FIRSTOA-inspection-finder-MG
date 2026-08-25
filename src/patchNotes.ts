@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4573636ccf",
+    "date": "2026-08-25",
+    "note": "정리 팝업 오타(양체→양식)"
+  },
+  {
     "hash": "1ac1c1beea",
     "date": "2026-08-25",
     "note": "필드탭 [일정정리] 버튼 제거(전송 후 팝업으로 충분), 정리 팝업 문구 — 네이버 캘린더 완료 이동·익일 사유 별도 전송 안내"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "bf729d291b",
     "date": "2026-08-13",
     "note": "알림 체계 이원화 — 오류·경고는 확인 모달, 성공·진행만 토스트"
-  },
-  {
-    "hash": "1f74dafb7d",
-    "date": "2026-08-07",
-    "note": "재계약 등급 파싱 수정 — 워킨맵 재계약 이름은 '2109/27SS…' 형식이라 앞자리에 슬래시·하이픈 허용 (212건 미분류 → S 91·SS 80·V 32로 정상 인식)"
   }
 ];
