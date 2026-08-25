@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "183ba95d35",
+    "date": "2026-08-25",
+    "note": "특이사항 플래그 키도 이력 검색과 같은 업체명 도출 사용(이름 접두 제거·슬래시 열차 업체 칸)"
+  },
+  {
     "hash": "89177c3a17",
     "date": "2026-08-25",
     "note": "일정리스트 접수시간 열 제거; 이력 검색·특이사항 플래그의 업체명 — 슬래시 열차 제목은 등급 칸 뒤 업체 칸 사용"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c53bdbaf30",
     "date": "2026-08-13",
     "note": "워킨맵 초과 표시 + 재계약 날짜 보정 + 새 버전 감지 배너"
-  },
-  {
-    "hash": "b9e987bec0",
-    "date": "2026-08-13",
-    "note": "두 방 보내기 안내 문구 개선 — '이미 저장된 내용(중복)' 대신 '기록은 첫 전송 때 저장돼 있어 그대로 뒀어요' (정상 경로인데 오류처럼 읽히던 것)"
   }
 ];

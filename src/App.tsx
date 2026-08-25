@@ -5286,6 +5286,9 @@ export default function App() {
     if (res.ok && kind === "normal" && !pendingAsTicketRef.current) {
       void offerTicketMatchAfterSend(target);
     }
+    if (res.ok && kind === "normal" && !["inspection", "blank-report", "logistics", "replacement", "praise"].includes(mode)) {
+      resetAfterSend();
+    }
     if (res.ok) {
       const needsReview = Boolean(latestWorkinResult?.reviewDevices);
       showToast(
@@ -5301,6 +5304,29 @@ export default function App() {
       showToast("전송 실패: " + (res.error || "알 수 없는 오류"), "error");
     }
     return Boolean(res.ok);
+  };
+
+  // 사진 비우기 — 보낸 뒤 새 일정을 불러와도 이전 현장 사진이 그대로 남아 있던 것(실사고). 저장소(IndexedDB) 쪽도 함께 비운다
+  const clearPhotos = (modes: string[]) => {
+    setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return []; });
+    for (const m of new Set(modes)) { delete hydratedPhotosRef.current[m]; void photoStoreClearMode(m); }
+    clearPhotoCache();
+  };
+  // 전송 성공 후 초기화 — 확장성·PC·담당자변경·불만·미수·초과·재계약·공기청정기·삼성노트처럼 "한 번 보내고 끝"인 양식.
+  // 점검·AS·물류는 보낸 뒤 재전송·수정할 수 있어야 하므로 여기서 비우지 않고, 새 양식이 들어올 때 비운다.
+  const resetAfterSend = () => {
+    clearPhotos([mode]);
+    setInputText("");
+    resetOutputs();
+    setItemForms([{ ...EMPTY_ITEM_FORM }]);
+    setSharedForm(EMPTY_SHARED_FORM);
+    setSelectedItem(0);
+    setReportTypes([]);
+    setReportTypeOther("");
+    if (mode === "air-purifier") setAirForm(EMPTY_AIR_FORM);
+    if (mode === "pc") { setPcForm({ ...EMPTY_PC_FORM }); setCopierExpansionForm({ ...EMPTY_COPIER_EXPANSION_FORM }); }
+    if (mode === "contact-change") setContactChangeForm({ ...EMPTY_CONTACT_CHANGE_FORM });
+    if (isCat) setCatForms((prev) => ({ ...prev, [mode]: emptyCatForm(mode) }));
   };
 
   const handleReset = () => {
@@ -5419,6 +5445,8 @@ export default function App() {
   // 쓰되 일정 연결만 유지한다. openAsTicketInField는 AS 전용이라 분기점검 원문이 AS로 변환됐다.
   const openFormInField = (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => {
     setScreen("field");
+    clearPhotos([mode, "inspection", "blank-report"]); // 새 양식 = 새 현장 — 이전 사진은 여기서 끊는다
+    setWorkinSyncResult(null);
     handleLoadForm(rawText);
     // handleLoadForm 내부의 초기화가 연결을 지우므로 그 뒤에 건다
     setPendingTicket(ticket ? { id: ticket.id, receptionId: ticket.receptionId || "", vendor: ticket.vendor || "" } : null);
@@ -5429,6 +5457,7 @@ export default function App() {
     // 물류 제목("…/발주처/…/고객사/품목/비고")에서 고객사·품목·구분을 꺼낸다 — 디스페이스코리아처럼 딱 업체명만
     const parsed = logisticsTicketInfo(`${t.vendor || ""} ${t.issue || ""}`);
     setScreen("field");
+    clearPhotos([mode, "logistics"]); // 새 물류 양식 — 이전 사진 제거
     handleModeChange("logistics");
     setLogisticsForm({
       ...EMPTY_LOGISTICS_FORM,
@@ -5450,6 +5479,8 @@ export default function App() {
       };
     }
     delete modeStateRef.current["blank-report"]; // 이전 저장본이 복원돼 새 양식과 섞이지 않게 비운다
+    clearPhotos([mode, "blank-report"]); // 새 AS 양식 — 이전 현장 사진 제거
+    setWorkinSyncResult(null);
     setMode("blank-report");
     setScreen("field");
     setInputText("");
