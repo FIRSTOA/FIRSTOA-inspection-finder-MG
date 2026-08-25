@@ -109,7 +109,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       const list = await rpc<Place[]>("suggest_workin_candidates", {
         p_team: team, p_kind: kind, p_grades: grades,
         p_lat: anchorGeo?.lat ?? null, p_lng: anchorGeo?.lng ?? null,
-        p_min_days: kind === "quarter" ? minDays : 0, p_limit: 120,
+        p_min_days: kind === "quarter" ? minDays : 0, p_limit: 60, // 등급별 상한(가까운 60곳씩) — 전체 120 캡은 SS·V가 S를 밀어냈다
       });
       setRows(list || []);
       setPicked(new Set());

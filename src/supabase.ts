@@ -256,12 +256,23 @@ export async function uploadPublicFile(bucket: string, path: string, file: Blob,
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
 
-export async function invokeEdgeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: "POST",
-    headers: BASE_HEADERS,
-    body: JSON.stringify(body),
-  });
+export async function invokeEdgeFunction<T>(name: string, body: Record<string, unknown>, timeoutMs = 20_000): Promise<T> {
+  // 타임아웃 — 모바일에서 앱 전환으로 응답이 영영 안 오면 뒤에 걸린 저장까지 멈추던 것 방지
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: "POST",
+      headers: BASE_HEADERS,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    throw new Error(controller.signal.aborted ? `서버 함수(${name}) 응답 시간 초과` : (error as Error).message);
+  } finally {
+    window.clearTimeout(timer);
+  }
   const data = await res.json().catch(() => ({})) as T & { error?: string };
   if (!res.ok) throw new Error(data.error || `서버 함수 호출 실패(${res.status})`);
   return data;

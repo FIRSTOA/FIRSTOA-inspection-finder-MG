@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "1511cfbcef",
+    "date": "2026-08-25",
+    "note": "완료·연기 양식 접수내용 — 양식의 제목/상태 줄 우선, 구분 낱말 A/S 오인 수리"
+  },
+  {
     "hash": "28185b300a",
     "date": "2026-08-25",
     "note": "FIELD 폼 4건 수리 — 내 일정 FIELD 직행, 여분위치 띄어쓰기, '이름 - a/s' 접두 업체명 오인, 탭 작업본 세션 보존(리로드 초기화)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a4568cdab6",
     "date": "2026-08-07",
     "note": "자동 일정 — 워킨맵 기준 + 실제 거리순 + 등급 다중 선택"
-  },
-  {
-    "hash": "675a482b84",
-    "date": "2026-08-07",
-    "note": "자동 일정 짜기 1차 시안 — 워킨맵과 FIELD 사이 신규 탭"
   }
 ];

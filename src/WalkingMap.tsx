@@ -1520,11 +1520,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         }
       } catch (error) {
         console.error("Workin map shared load failed", error);
-        if (active) setSyncState("error");
+        if (active) {
+          setSyncState("error");
+          // 한 번 실패하면 폴링도 안 돌고 이 기기 로컬에만 저장되는 "공용 DB 연결 필요" 상태에 영구히 갇혔다 — 15초 뒤 재시도
+          retryTimer = window.setTimeout(() => { if (active) void initializeSharedPlaces(); }, 15_000);
+        }
       }
     };
+    let retryTimer = 0;
     void initializeSharedPlaces();
-    return () => { active = false; };
+    return () => { active = false; window.clearTimeout(retryTimer); };
   }, [userKey]);
 
   useEffect(() => {

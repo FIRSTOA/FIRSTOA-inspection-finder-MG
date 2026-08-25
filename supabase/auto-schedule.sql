@@ -12,7 +12,7 @@ end $$;
 
 -- 워킨맵 이름에서 등급과 업체명을 분리: "14SS㈜이오플랜본사1매월마감" → SS / ㈜이오플랜본사
 create or replace function workin_grade_(nm text) returns text language sql immutable as $$
-  select coalesce(upper((regexp_match(coalesce(nm,''), '^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z])'))[1]), '');
+  select coalesce(upper((regexp_match(coalesce(nm,''), '^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z]|$)'))[1]), '');
 $$;
 -- 워킨맵 이름은 "숫자+등급+업체명+특이사항/마감구분"이 붙어 있고 줄바꿈(_x000d_)까지 섞인다.
 -- 점검 이력(jeomgeom._업체명)과 맞추려면 업체명만 남겨야 매칭된다 (카운터문자 파서와 같은 규칙).
@@ -180,19 +180,31 @@ create function suggest_workin_candidates(
     left join dev_code dc on p.code <> '' and dc.dcode = p.code
     left join dev_key dk2 on dk2.dk = p.pkey and length(p.pkey) >= 3
   )
+  , filtered as (
+    select id, place_name, vendor, grade, label, addr, lat, lng, comment,
+           last_date,
+           case when last_date is null then 9999 else (current_date - last_date::date) end as days_since,
+           distance_km, quarter_ok,
+           (last_date is null) as never_visited,
+           code, prev_date, last_pages, prev_pages, last_toner, last_spare, last_waste,
+           last_serial, prev_serial, last_special, device_count, devices
+    from scored
+    where (p_kind <> 'quarter' or (case when last_date is null then 9999 else (current_date - last_date::date) end) >= p_min_days)
+      and (cardinality(p_grades) = 0 or grade = any(p_grades))
+  )
+  -- 상한은 등급별로 — 밀집한 SS·V(G6)가 p_limit를 다 차지해 몇 km 밖의 S 거래처가 통째로 잘리던 실사고(2026-08-25).
+  -- 등급마다 가까운 p_limit곳을 뽑고 전체를 다시 거리순으로 돌려준다.
   select id, place_name, vendor, grade, label, addr, lat, lng, comment,
-         last_date,
-         case when last_date is null then 9999 else (current_date - last_date::date) end as days_since,
-         distance_km, quarter_ok,
-         (last_date is null) as never_visited,
+         last_date, days_since, distance_km, quarter_ok, never_visited,
          code, prev_date, last_pages, prev_pages, last_toner, last_spare, last_waste,
          last_serial, prev_serial, last_special, device_count, devices
-  from scored
-  where (p_kind <> 'quarter' or (case when last_date is null then 9999 else (current_date - last_date::date) end) >= p_min_days)
-    and (cardinality(p_grades) = 0 or grade = any(p_grades))
-  order by distance_km asc nulls last,
-           (case when last_date is null then 9999 else (current_date - last_date::date) end) desc
-  limit p_limit;
+  from (
+    select f.*, row_number() over (partition by f.grade order by f.distance_km asc nulls last, f.days_since desc) as grade_rank
+    from filtered f
+  ) ranked
+  where grade_rank <= p_limit
+  order by distance_km asc nulls last, days_since desc
+  limit p_limit * 6;
 $$;
 grant execute on function suggest_workin_candidates(text, text, text[], double precision, double precision, int, int) to anon, authenticated;
 notify pgrst, 'reload schema';

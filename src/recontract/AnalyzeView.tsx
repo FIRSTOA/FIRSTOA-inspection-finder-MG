@@ -321,7 +321,7 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
     <div className="space-y-4">
       {/* 머리 — 다크 브리핑 카드 (앱 공통 톤 #1E252F). 여기만 보면 방문 준비의 반이 끝난다 */}
       <section className="overflow-hidden rounded-2xl bg-[#1E252F] shadow-sm">
-        <div className="flex items-start gap-3 p-5 pb-4">
+        <div className="flex flex-wrap items-start gap-3 p-5 pb-4">
           <button type="button" onClick={onBack} aria-label="목록으로"
             className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-slate-300 transition hover:bg-white/20 hover:text-white">
             <ChevronLeft size={18} />
@@ -345,7 +345,8 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
               {asHistory.length > 0 && <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-300">AS {asHistory.length}</span>}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          {/* 모바일(390px)에선 텍스트 칸이 120px로 눌려 업체명이 3줄이 되던 것 — 액션은 둘째 줄 오른콽으로 */}
+          <div className="order-last flex w-full shrink-0 items-center justify-end gap-1.5 sm:order-none sm:w-auto">
             <button type="button" onClick={() => void copySheet()}
               className="mt-0.5 flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-[12px] font-bold text-white transition hover:bg-blue-500">
               <ClipboardCopy size={14} /> 한 장 복사
@@ -358,6 +359,7 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
         </div>
         {/* 탭 + 기간 창 — 기간을 바꾸면 모든 탭의 수치가 그 기간 기준으로 다시 계산된다 */}
         <div className="flex flex-wrap items-center gap-1 border-t border-white/10 bg-[#151A23] px-3 py-2">
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:contents">
           {TABS.map(({ key, badge }) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${tab === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:bg-white/10 hover:text-white"}`}>
@@ -365,8 +367,9 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
               {badge !== undefined && <span className={`rounded-full px-1.5 text-[10px] font-bold ${tab === key ? "bg-slate-900/10 text-slate-600" : "bg-white/10 text-slate-400"}`}>{badge}</span>}
             </button>
           ))}
+          </div>
           {periodOptions.length > 1 && (
-            <span className="ml-auto flex shrink-0 items-center gap-1">
+            <span className="flex basis-full items-center gap-1 pt-1 sm:ml-auto sm:basis-auto sm:shrink-0 sm:pt-0">
               <span className="mr-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">기간</span>
               {periodOptions.map((option) => (
                 <button key={option.label} type="button" onClick={() => setWindowFrom(option.from)}
@@ -425,13 +428,18 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
                   const bwRate = rate("흑백");
                   const cls = (value: number | null) => (value === null ? "text-slate-400" : value >= 100 ? "text-red-600" : value >= 80 ? "text-amber-600" : "text-slate-900");
                   return (
-                    <div key={machine.model} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px]">
-                      <span className="w-24 shrink-0 truncate font-bold text-slate-700">{machine.model}</span>
-                      <span className={`font-bold tabular-nums ${cls(colorRate)}`}>컬러 {colorRate === null ? "기본 미확인" : `${colorRate}%`}</span>
-                      <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.컬러))}{machine.기본월.컬러 ? ` / 기본 ${money(machine.기본월.컬러)}매` : "매"}</span>
-                      <span className={`font-bold tabular-nums ${cls(bwRate)}`}>흑백 {bwRate === null ? "기본 미확인" : `${bwRate}%`}</span>
-                      <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.흑백))}{machine.기본월.흑백 ? ` / 기본 ${money(machine.기본월.흑백)}매` : "매"}</span>
-                      {machine.초과횟수 > 0 && <span className="text-[11px] font-semibold text-red-600">초과 {machine.초과횟수}회 · {money(machine.초과금액)}원</span>}
+                    <div key={machine.model} className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-0.5 text-[13px] sm:flex sm:flex-wrap sm:items-baseline">
+                      <span className="truncate font-bold text-slate-700 sm:w-24 sm:shrink-0">{machine.model === "?" ? "기기 미상" : machine.model}</span>
+                      <span className="flex flex-wrap items-baseline gap-x-2 sm:contents">
+                        <span className={`font-bold tabular-nums ${cls(colorRate)}`}>컬러 {colorRate === null ? "기본 미확인" : `${colorRate}%`}</span>
+                        <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.컬러))}{machine.기본월.컬러 ? ` / 기본 ${money(machine.기본월.컬러)}매` : "매"}</span>
+                      </span>
+                      <span className="hidden sm:contents" />
+                      <span className="col-start-2 flex flex-wrap items-baseline gap-x-2 sm:contents">
+                        <span className={`font-bold tabular-nums ${cls(bwRate)}`}>흑백 {bwRate === null ? "기본 미확인" : `${bwRate}%`}</span>
+                        <span className="text-[11px] text-slate-400">월 {money(avg(machine.total.흑백))}{machine.기본월.흑백 ? ` / 기본 ${money(machine.기본월.흑백)}매` : "매"}</span>
+                        {machine.초과횟수 > 0 && <span className="text-[11px] font-semibold text-red-600">초과 {machine.초과횟수}회 · {money(machine.초과금액)}원</span>}
+                      </span>
                     </div>
                   );
                 })}
@@ -447,7 +455,7 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
                 <div className="mt-0.5 text-2xl font-bold">{recommended.label}</div>
                 <div className="mt-1 text-[12px] leading-relaxed text-blue-100">{recommended.reason}</div>
               </div>
-              <div className="flex shrink-0 gap-5 text-right">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 sm:shrink-0 sm:text-right">
                 <div><div className="text-[10px] text-blue-200">회사 매출</div><div className="text-[15px] font-bold tabular-nums">{money(recommended.companyRevenue)}원</div></div>
                 <div><div className="text-[10px] text-blue-200">혜택 비용</div><div className="text-[15px] font-bold tabular-nums">{money(recommended.benefitValue)}원</div></div>
                 <div><div className="text-[10px] text-blue-200">ROI</div><div className="text-[15px] font-bold text-amber-300">×{recommended.companyROI}</div></div>
@@ -546,7 +554,7 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
                   </div>
                 )}
                 <div className="overflow-x-auto border-t border-slate-100 px-5 py-3">
-                  <table className="w-full min-w-[420px] text-sm">
+                  <table className="w-full text-sm sm:min-w-[420px]">
                     <thead>
                       <tr className="text-left text-[11px] font-semibold text-slate-400">
                         <th className="py-1.5 pr-3 font-semibold">월</th>
@@ -593,8 +601,8 @@ function DetailView({ item, workinTarget, onBack, onRemove }: { item: Analyzed; 
       {tab === "대장" && (
         <Panel title="판매 · 수금 대장" hint="이카운트 원문 그대로 · 초과 줄은 붉게">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="sticky top-0 bg-white">
+            <table className="w-full text-sm sm:min-w-[640px]">
+              <thead className="bg-white">
                 <tr className="border-b border-slate-200 text-left text-[11px] font-semibold text-slate-400">
                   <th className="w-28 py-2 pr-3 font-semibold">일자</th>
                   <th className="py-2 pr-3 font-semibold">적요</th>
@@ -939,10 +947,10 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
                     <span className="block truncate text-[13px] font-bold text-slate-900">{target.vendor}</span>
                     <span className="block truncate text-[11px] text-slate-400">{target.종료일 ? `${target.종료일} 종료` : "종료일 미기재"}{target.places.length > 1 ? ` · 지점 ${target.places.length}곳` : ""}</span>
                   </span>
-                  {target.종료일 && <span className={`shrink-0 text-[11px] font-bold tabular-nums ${dday <= 14 ? "text-rose-600" : dday <= 45 ? "text-amber-600" : "text-slate-400"}`}>{dday >= 0 ? `D-${dday}` : `${-dday}일 지남`}</span>}
+                  {target.종료일 && <span className={`hidden shrink-0 text-[11px] font-bold tabular-nums sm:inline ${dday <= 14 ? "text-rose-600" : dday <= 45 ? "text-amber-600" : "text-slate-400"}`}>{dday >= 0 ? `D-${dday}` : `${-dday}일 지남`}</span>}
                   {doneVendor
                     ? <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700">분석됨 → 보기</span>
-                    : <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">대장 붙여넣기</span>}
+                    : <span className="hidden shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500 sm:inline">대장 붙여넣기</span>}
                 </button>
               );
             })}

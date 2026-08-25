@@ -450,8 +450,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     pendingWritesRef.current += 1;
     try {
       await work;
-    } catch {
-      setSyncError(failMessage);
+    } catch (error) {
+      // 원인(401·제약 위반·네트워크)을 삼키지 않는다 — "저장 실패"만 보이면 원격에서 진단이 불가능하다
+      console.error("as_tickets write failed", error);
+      setSyncError(`${failMessage} (${(error as Error)?.message || String(error)})`);
     } finally {
       pendingWritesRef.current -= 1;
     }
@@ -1078,9 +1080,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const ticket = doneTicket;
     setDoneTicket(null);
     if (!ticket) return;
-    await shareActionReason(ticket, "", reason); // 기록을 먼저 남기고 이동 (이동 후엔 캘린더가 바뀜)
+    // 상태 저장을 먼저 — 카톡·네이버 왕복을 기다리는 사이 모바일이 카톡으로 전환되면 fetch가 끊겨
+    // "네이버 기록 실패"만 뜨고 완료 저장이 영영 안 되던 실사고(2026-08-25). 기록은 뒤에서 이어 남긴다.
     const block = buildActionBlock(ticket, reason);
     toggleDone(ticket, { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${block}` }); // 웹앱 일정 메모에도 동일 기록
+    void shareActionReason(ticket, "", reason);
   };
 
   const toggleDone = (ticket: AsTicket, extraPatch: Partial<AsTicket> = {}) => {
@@ -1107,12 +1111,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const ticket = deferTicket;
     const isAsSchedule = ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS";
     setDeferId("");
-    void (async () => {
-      const deferLabel = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`;
-      await shareActionReason(ticket, deferLabel, reason);
-      const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel, false)}` } : {};
-      update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch });
-    })();
+    const deferLabel = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`;
+    const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel, false)}` } : {};
+    // 날짜·상태 저장 먼저, 카톡·네이버 기록은 뒤에 (applyDone과 같은 이유)
+    update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch });
+    void shareActionReason(ticket, deferLabel, reason);
   };
 
   /**
@@ -1738,6 +1741,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             onFieldDirect={(t) => {
               const ticket = tickets.find((x) => x.id === t.id);
               if (!ticket) return;
+              // 납품·철수·교체는 물류 필드로 (일정리스트의 물류 [FIELD]와 같은 경로)
+              if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
+                onLogistics?.({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note });
+                return;
+              }
               const raw = receptionRawOf(ticket);
               const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor };
               if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link);
