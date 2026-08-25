@@ -4639,7 +4639,7 @@ export default function App() {
     // 작성자 칸이 비어 있으면 \s*가 줄바꿈을 넘어 다음 줄("구분: 점검")을 이름으로 잡았다(실사고 8/13) — 같은 줄만 보고, 라벨 꼴은 버린다
     const authorRaw = value.match(/^작성자[^\S\n]*[:：][^\S\n]*(.*)$/m)?.[1]?.trim() || "";
     const authorValue = authorRaw && !/^(구분|레벨|등급|업체명|부서명|지역|키맨)\s*[:：]/.test(authorRaw) ? authorRaw : "";
-    if (authorValue !== undefined) handleSetAuthor(authorValue.trim());
+    if (authorValue) handleSetAuthor(authorValue); // 빈 값으로 작성자를 지우지 않는다
     const typeValue = value.match(/^구분\s*[:：]\s*(.*)$/m)?.[1];
     if (typeValue !== undefined) {
       const known = ["점검", "AS", "마감", "여분", "세팅"];

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f20a3b701e",
+    "date": "2026-08-26",
+    "note": "양식 붙여넣기 작성자 인식 — 빈 작성자 칸이 다음 줄(구분: 점검)을 이름으로 잡던 것 수리"
+  },
+  {
     "hash": "53f6242c59",
     "date": "2026-08-26",
     "note": "사이드바 재편(매일 쓰는 5개 상단 + 현장·동선/소식·학습/기록·성과/고객·홍보 접이식 그룹), 사용설명서 목록 그룹 접기"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "afb50ca910",
     "date": "2026-08-14",
     "note": "지역→팀 판정 통일 — 수도권A~E는 그 글자, 지방(도 단위)은 E"
-  },
-  {
-    "hash": "18dc15c25b",
-    "date": "2026-08-14",
-    "note": "지오코딩 엣지 변형 보강 — 층·호 제거(한글 \\b 미작동 수정) + 건물번호 압축형"
   }
 ];
