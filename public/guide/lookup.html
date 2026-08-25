@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>조회 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 조회·관리 길잡이 추가 (밝은 카드 재현) ── */
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;margin-top:12px;color:#24303F}
+.card .chead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;background:#F8FAFC;border-bottom:1px solid #F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.card .chead small{font-weight:600;color:#94A3B8;font-size:11px}
+.card .chead.dk{background:#1E252F;color:#fff} .card .chead.dk small{color:#94A3B8}
+.card .crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 14px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155}
+.card .crow.hd{background:#F1F5F9;color:#64748B;font-size:11px;font-weight:900;border-top:0}
+.card .crow.band{background:#FFFBEB;color:#92400E;font-size:11px;font-weight:700}
+.card .crow.dark{background:#151A23;color:#C5CDD8}
+.card .crow .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .crow b{color:#0f172a}
+.lp{border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;background:#F1F5F9;color:#64748B;white-space:nowrap}
+.lp.on{background:#0f172a;color:#fff}
+.lp.lbl{background:transparent;color:#94A3B8;font-size:10px;padding-left:0;min-width:26px}
+.lp.blue{background:#2563EB;color:#fff} .lp.ghost{background:#fff;border:1px solid #CBD5E1;color:#475569}
+.lp.line{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.kpi.k4{grid-template-columns:repeat(4,1fr)}
+.kpi div{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 8px;text-align:center;color:#24303F}
+.kpi b{display:block;font-size:18px;color:#0f172a;line-height:1.2} .kpi small{font-size:11px;font-weight:700;color:#94A3B8}
+.inp2{flex:1;min-width:140px;border:1px solid #CBD5E1;border-radius:10px;padding:7px 12px;font-size:12.5px;color:#94A3B8;background:#fff}
+.sw{display:inline-block;width:40px;height:22px;border-radius:999px;background:#CBD5E1;position:relative;vertical-align:middle;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw.on{background:#2563EB} .sw.on::after{left:21px} .sw.on.danger{background:#F59E0B}
+.tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:900;white-space:nowrap}
+.tag.g{background:#ECFDF5;color:#047857} .tag.b{background:#EFF6FF;color:#1D4ED8} .tag.a{background:#FEF3C7;color:#92400E} .tag.r{background:#FFE4E6;color:#BE123C} .tag.s{background:#F1F5F9;color:#94A3B8} .tag.v{background:#F5F3FF;color:#6D28D9} .tag.dk{background:#0f172a;color:#fff}
+.violet{border:2px solid #C4B5FD;background:#F5F3FF;border-radius:14px;overflow:hidden;margin-top:12px;color:#24303F}
+.violet .vh{background:#6D28D9;color:#fff;font-weight:900;font-size:13px;padding:8px 14px}
+.violet .vb{padding:10px 14px;font-size:12.5px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:4px}
+.dot.g{background:#34D399} .dot.r{background:#FB7185}
+.tabline{display:flex;gap:0;border-bottom:1px solid #E2E8F0;background:#fff}
+.tabline span{padding:10px 18px;font-size:13px;font-weight:900;color:#94A3B8}
+.tabline span.on{color:#0f172a;box-shadow:inset 0 -3px 0 #2563EB}
+.small.center{text-align:center}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#records">2. 기록 조회 — 표 고르고 거르기</a>
+  <a class="sub" href="#r-cats">분류 칩 16개</a>
+  <a class="sub" href="#r-filter">기간·유형·팀·검색·CSV</a>
+  <a class="sub" href="#r-table">표 읽는 법</a>
+  <a href="#detail">3. 상세 창</a>
+  <a href="#edit">4. 기기정보 수정</a>
+  <a href="#hide">5. 숨김·복원(오발송 정리)</a>
+  <a href="#boards">6. 전용 보드 — 미수·초과료·재고</a>
+  <a href="#status">7. 업무 현황판</a>
+  <a href="#history">8. 통합이력 팝업</a>
+  <a class="sub" href="#h-search">검색·분류 탭·범위</a>
+  <a class="sub" href="#h-note">📌 거래처 특이사항</a>
+  <a class="sub" href="#h-check">이번 분기 체크</a>
+  <a class="sub" href="#h-list">분류별 이력 카드</a>
+  <a href="#faq">9. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 조회</div>
+  <h1>조회 길잡이</h1>
+  <p>쌓인 기록을 <b style="color:#fff">한 곳에서 찾아보는</b> 화면입니다. 점검·AS·물류·미수·접수… 16개 표를 같은 방법으로 검색하고, 행을 누르면 원문까지 봅니다. 여기서 바꿀 수 있는 것은 딱 두 가지 — 잘못 적힌 <b style="color:#fff">기기정보(기번·자산번호·모델·업체명) 수정</b>과 오발송 기록 <b style="color:#fff">숨김</b>입니다. 그리고 다른 화면에서 열리는 <b style="color:#fff">통합이력 팝업</b>도 이 문서에서 함께 설명합니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-26 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">지난 기록 찾기</div><div class="big"><s>표 16개</s> → <em>한 화면</em></div><div class="sub">분류 칩만 바꾸면 같은 방법으로 검색</div></div>
+    <div class="stat green"><div class="lbl">잘못 적힌 기번 고치기</div><div class="big"><em>1번</em> 저장 · <em>모든 화면</em></div><div class="sub">원문 줄까지 같이 고쳐지고 수정 이력이 남음</div></div>
+    <div class="stat purple"><div class="lbl">오발송 기록 정리</div><div class="big"><em>1번</em> 숨김 · <em>3곳</em> 반영</div><div class="sub">목록 · 업무 현황판 · 주간현황판 집계에서 함께 빠짐</div></div>
+    <div class="stat amber"><div class="lbl">업체 이력 모아 보기</div><div class="big"><s>표마다 검색</s> → <em>이름 2글자</em></div><div class="sub">통합이력 팝업이 10개 분류를 한 번에</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">접수팀이 잘못 적은 기번 바로잡기</div><div class="pills"><span>시트 열기</span><span>행 찾기</span><span>칸 고치기</span><span>원문은 그대로</span><span>다른 화면엔 옛 값</span></div><div class="ba-count">5단계 · 반영 안 됨</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">접수팀이 잘못 적은 기번 바로잡기</div><div class="pills"><span class="hot">행 클릭</span><span class="hot">✏️ 기기정보 수정</span><span class="hot">저장</span></div><div class="ba-count">3번 누르기 · 원문·이력 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">방문 전 업체 이력 확인</div><div class="pills"><span>점검 시트</span><span>AS 시트</span><span>미수 시트</span><span>초과 시트</span><span>불만 시트</span></div><div class="ba-count">시트 5개 왕복</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">방문 전 업체 이력 확인</div><div class="pills"><span class="hot">🗂️ 이력</span><span class="hot">이름 입력</span></div><div class="ba-count">요약 한 장 · 이번 분기 체크까지</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">잘못 보낸 양식 지우기</div><div class="pills"><span>시트에서 행 삭제</span><span>현황판 숫자는 그대로</span><span>원문 사라짐</span></div><div class="ba-count">기록 유실 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">잘못 보낸 양식 지우기</div><div class="pills"><span class="hot">행 클릭</span><span class="hot">숨김</span></div><div class="ba-count">원문 보존 · 언제든 복원</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>조회 화면은 "보기" 전용으로 쓰고, 값을 바꾸는 일은 각 업무 화면(FIELD·접수·관리 탭)에서. 예외는 기기정보 수정과 오발송 숨김 두 가지만입니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 이 화면에 있는 것 세 가지</h2>
+  <p class="lead">왼쪽 메뉴 맨 아래 <b>조회</b>를 누르면 열립니다. 위에는 탭 두 개, 그리고 다른 화면에서 열리는 팝업 하나가 이 문서의 범위입니다.</p>
+  <div class="sync">
+    <div class="n">기록 조회<small>16개 표를 분류 칩으로 골라 검색 · 상세 · 기기정보 수정 · 숨김</small></div>
+    <div class="arr">+</div>
+    <div class="n">업무 현황판<small>기간·팀·인원별 처리 건수 집계</small></div>
+    <div class="arr">+</div>
+    <div class="n">통합이력 팝업<small>FIELD 헤더 🗂️ 이력 등에서 열림 · 한 업체의 전체 이력</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>기록은 어디서 오나</b>FIELD·서비스접수에서 저장한 것은 즉시, 구글시트(미수·초과·임대리스트 등)는 관리 탭 "동기화 현황"에 적힌 주기로 들어옵니다. 여기서 보이는 것은 그 표들을 <b>그대로</b> 읽은 것입니다.</div>
+    <div class="box warn"><b>여기서 고칠 수 없는 것</b>기록 내용(처리내용·매수 등)은 여기서 수정하지 않습니다. 잘못 보낸 것은 <a href="#hide">숨김</a>, 기기 식별자만 <a href="#edit">기기정보 수정</a>. 시트가 원본인 표(미수·초과료·임대리스트)는 시트에서 고쳐야 다음 동기화 때 살아남습니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <p>맨 위 검은 띠와 그 아래 탭입니다. 번호를 따라 보세요.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:88px">2</span>
+    <span class="badge" style="right:40px;top:88px">3</span>
+    <span class="badge" style="left:26px;top:140px">4</span>
+    <div class="bar">
+      <div class="row" style="display:block"><b style="font-size:15px">조회</b><div style="font-size:11px;color:#8FA1B8;font-weight:700">쌓인 기록을 한 곳에서 — 기록 조회와 업무 현황판</div></div>
+      <div class="row"><span style="font-size:11px;color:#6B7684;font-weight:700">오늘 들어온 기록</span><span class="chip">점검 <b style="color:#fff">12</b></span><span class="chip">AS <b style="color:#fff">7</b></span><span class="chip">접수 <b style="color:#fff">9</b></span><span class="chip">미수 <b style="color:#6B7684">0</b></span><span class="spacer"></span><span style="font-size:11px;color:#6B7684;font-weight:700">기록은 보기 전용 — 수정·삭제는 각 업무 화면과 관리 탭에서</span></div>
+    </div>
+    <div class="tabline" style="border-radius:0 0 12px 12px"><span class="on">기록 조회</span><span>업무 현황판</span></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목 띠</b> — "조회 · 쌓인 기록을 한 곳에서 — 기록 조회와 업무 현황판". 늘 같습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>오늘 들어온 기록</b> — 점검 · AS · 접수 · 미수가 <b>오늘 날짜로</b> 몇 건 들어왔는지. 0보다 크면 숫자가 흰색, 0이면 회색. 불러오는 동안은 "…". 눌러도 아무 일 없습니다(표시만).</div></div>
+    <div class="item"><span class="num">3</span><div><b>안내 문구</b> — "기록은 보기 전용 — 수정·삭제는 각 업무 화면과 관리 탭에서". 좁은 화면에서는 숨겨집니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>탭</b> — <b>기록 조회</b> / <b>업무 현황판</b>. 선택된 탭 아래 파란 줄. 마지막에 보던 탭을 기억해 다음에 열 때 그 탭으로 열립니다.</div></div>
+  </div>
+</section>
+
+<section id="records">
+  <h2>2. 기록 조회 — 표를 고르고, 거르고, 찾기</h2>
+  <p>위에서부터 <b>분류 칩 → 요약 숫자 3개 → 거르기 줄 → 표</b> 순서입니다.</p>
+
+  <h3 id="r-cats">분류 칩 16개 — 어느 표를 볼지</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:76px">3</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead"><small>기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다.</small><span class="lp ghost" style="border-radius:50%;width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center">↻</span></div>
+      <div class="crow"><span class="lp lbl" style="min-width:64px">현장 기록</span><span class="lp on">점검</span><span class="lp">AS</span><span class="lp">물류</span><span class="lp">불만</span></div>
+      <div class="crow" style="border-top:0"><span class="lp lbl" style="min-width:64px">영업·관리</span><span class="lp">미수</span><span class="lp">초과료</span><span class="lp">초과조정</span><span class="lp">재계약</span><span class="lp">해지방어</span><span class="lp">관리지원</span><span class="lp">PC 확장성</span><span class="lp">복합기 확장성</span></div>
+      <div class="crow" style="border-top:0"><span class="lp lbl" style="min-width:64px">접수·자산</span><span class="lp">접수</span><span class="lp">담당자·주소 변경</span><span class="lp">기기·부품 재고</span><span class="lp">거래처 특이사항</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>안내 한 줄</b> — "기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다."</div></div>
+    <div class="item"><span class="num">2</span><div><b>↻ 새로고침</b> — 지금 조건으로 처음부터 다시 읽습니다. 읽는 동안 아이콘이 돕니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>분류 칩</b> — 세 줄(현장 기록 · 영업·관리 · 접수·자산). 검은 칩이 지금 보는 표. 칩을 바꾸면 <b>검색어·유형 칩이 비워지고</b> 처음부터 다시 읽습니다(다른 표에 남은 검색어가 엉뚱하게 적용되던 일을 막기 위해). 마지막에 본 분류는 기억됩니다.</div></div>
+  </div>
+  <table class="tbl"><thead><tr><th>분류</th><th>검색이 훑는 칸</th><th>팀 칩</th><th>이 표에서 되는 것</th></tr></thead><tbody>
+    <tr><td><b>점검</b></td><td>업체명 · 작성자 · 내용 · 모델명 · 시리얼넘버 · 자산기번</td><td>있음</td><td>상세 · <b>기기정보 수정</b> · 숨김</td></tr>
+    <tr><td><b>AS</b></td><td>위와 같음 + 처리내용</td><td>있음</td><td>상세 · <b>기기정보 수정</b> · 숨김</td></tr>
+    <tr><td><b>물류</b></td><td>거래처명 · 작성자 · 품목 · 특이사항</td><td>없음</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>불만</b></td><td>업체명 · 작성자 · 불만내용 · 불편내용 · 조치내용</td><td>있음</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>미수</b></td><td colspan="3">전용 보드로 열림 — <a href="#boards">6번</a></td></tr>
+    <tr><td><b>초과료</b></td><td colspan="3">전용 보드로 열림 — <a href="#boards">6번</a></td></tr>
+    <tr><td><b>초과조정</b></td><td>업체명 · 작성자 · 제안 · 고객반응</td><td>있음</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>재계약</b></td><td>업체명 · 작성자 · 내용 · 갱신상태</td><td>있음</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>해지방어</b></td><td>업체명 · 해지사유 · 방어전략 · 내용</td><td>있음(담당팀)</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>관리지원</b></td><td>업체명 · 요청유형 · 내용 · 처리결과</td><td>있음(담당팀)</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>PC 확장성</b></td><td>업체명 · 작성자 · 세부사양 · 업체담당자 · IT담당자</td><td>있음</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>복합기 확장성</b></td><td>상호 · 등록자 · 전략영업담당자 · 프로젝트 · 관심품목</td><td>있음(미팅지역)</td><td>상세 · 숨김</td></tr>
+    <tr><td><b>접수</b></td><td>업체명 · 접수자 · 제목 · 증상 · 시리얼 · 자산번호 · 주소</td><td>있음</td><td>상세 · <b>유형 칩</b>(복합기/IT/원격) · 삭제된 접수는 안 보임</td></tr>
+    <tr><td><b>담당자·주소 변경</b></td><td>업체명 · 작성자 · 변경 전 · 변경 후 · 사유</td><td>있음</td><td>상세 · 숨김 (반영은 관리 탭에서)</td></tr>
+    <tr><td><b>기기·부품 재고</b></td><td colspan="3">전용 보드로 열림 — <a href="#boards">6번</a></td></tr>
+    <tr><td><b>거래처 특이사항</b></td><td>업체명 · 특이사항 · 출근 · 점심 · 기재자 · 등급</td><td>없음</td><td>상세(보기만) — 고치는 곳은 통합이력 팝업</td></tr>
+  </tbody></table>
+
+  <h3 id="r-filter">요약 숫자와 거르기 줄 — 기간 · 유형 · 팀 · 검색 · CSV</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 점검 분류</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:104px">2</span>
+    <span class="badge" style="right:26px;top:104px">3</span>
+    <span class="badge" style="left:26px;top:144px">4</span>
+    <span class="badge" style="left:26px;top:186px">5</span>
+    <div class="kpi" style="margin-top:0"><div><b>1,284건</b><small>최근 3개월 기록</small></div><div><b>2026-08-26</b><small>가장 최근 기록</small></div><div><b>전 팀</b><small>보는 범위</small></div></div>
+    <div class="card">
+      <div class="crow" style="border-top:0"><span class="lp lbl">기간</span><span class="lp ghost">1개월</span><span class="lp on">3개월</span><span class="lp ghost">6개월</span><span class="lp ghost">1년</span><span class="lp ghost">전체</span><span class="spacer"></span><span class="lp ghost">⬇ CSV</span></div>
+      <div class="crow" style="border-top:0"><span class="lp lbl">팀</span><span class="lp on">전체</span><span class="lp ghost">A팀</span><span class="lp ghost">B팀</span><span class="lp ghost">C팀</span><span class="lp ghost">D팀</span></div>
+      <div class="crow" style="border-top:0"><span class="inp2">🔍 점검 검색 — 업체명 · 작성자 · 내용</span><span class="lp blue" style="padding:7px 14px">검색</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>요약 3칸</b> — 왼쪽: 지금 조건에 맞는 <b>정확한 총 건수</b>와 기간 이름(예: "최근 3개월 기록"). 가운데: 가장 최근 기록의 날짜. 오른쪽: "전 팀"/"A팀" + 아래에 "보는 범위" 또는 검색 중이면 <b>"검색어" 검색 중</b>. 전용 보드(미수·초과료·재고)에서는 안 보입니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>기간</b> — 1개월 · 3개월 · 6개월 · 1년 · 전체. 처음엔 <b>3개월</b>. 그 표의 날짜 칸(작성일·접수일 등) 기준으로 오늘부터 거슬러 셉니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>⬇ CSV</b> — <b>지금 화면에 불러온 행</b>(표에 보이는 열만)을 엑셀용 CSV 파일로 내려받습니다. 파일 이름은 "분류_오늘날짜.csv". 행이 하나도 없으면 흐려져 눌리지 않습니다. 300건 넘게 받으려면 먼저 [300건 더 보기]로 불러오세요.</div></div>
+    <div class="item"><span class="num">4</span><div><b>팀</b> — 전체 · A팀 · B팀 · C팀 · D팀. 그 표의 지역/담당팀 칸에 팀 글자가 들어 있으면 잡습니다(예: "수도권C"). 점검·AS·불만·재계약처럼 출처 라벨 괄호에 팀이 적힌 표는 그것도 함께 봅니다. <b>유형</b> 줄은 접수 분류에서만 나타납니다: 전체 · 복합기 · IT · 원격.</div></div>
+    <div class="item"><span class="num">5</span><div><b>검색</b> — 칸에 적고 <span class="kbd">Enter</span> 또는 <b>[검색]</b>. 위 표의 "검색이 훑는 칸"을 한 번에 부분일치로 찾습니다. 칸 오른쪽 <b>×</b>는 검색어를 지우고 전체로 돌아갑니다. 괄호·쉼표·따옴표는 검색어에서 빈칸으로 바뀝니다.</div></div>
+  </div>
+  <div class="box tip"><b>노란 안내 띠가 있는 표</b>미수: "시트 동기화 표입니다. 입력일 칸에 값이 없는 행도 있어 최신 등록순으로 보여줍니다." / 거래처 특이사항: "출근·점심시간과 방문 규칙 — 통합이력에서 업체를 열면 같은 내용을 고칠 수 있습니다". 읽기 실패 시에는 빨간 띠로 "조회 실패 (숫자)"가 뜹니다 — ↻로 다시 시도하세요.</div>
+
+  <h3 id="r-table">표 읽는 법</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 점검</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:150px">3</span>
+    <div class="card" style="margin-top:0">
+      <div class="crow" style="border-top:0;background:#F8FAFC;font-size:10px;color:#94A3B8;font-weight:700">잘못된 기록은 상세에서 숨길 수 있습니다 (원문 보존)<span class="spacer"></span><span class="lp">숨긴 기록 보기</span></div>
+      <div class="crow hd"><span style="width:76px">작성일</span><span class="grow">업체명</span><span style="width:60px">작성자</span><span style="width:50px">지역</span><span style="width:110px">자산기번</span><span class="grow">내용</span></div>
+      <div class="crow"><span style="width:76px;font-family:monospace">2026-08-26</span><b class="grow">가나다세무회계</b><span style="width:60px">홍길동</span><span style="width:50px">C</span><span style="width:110px;font-family:monospace">B8187</span><span class="grow">분기점검 / 토너 교체 / 매수 45,210</span></div>
+      <div class="crow"><span style="width:76px;font-family:monospace">2026-08-26</span><b class="grow">모범상사(주)</b><span style="width:60px">김철수</span><span style="width:50px">A</span><span style="width:110px;font-family:monospace">226951</span><span class="grow">급지 소음 점검 / 롤러 청소</span></div>
+      <div class="crow" style="justify-content:center"><span class="lp ghost" style="padding:7px 18px">300건 더 보기</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>숨김 안내 줄</b> — 숨김이 되는 표에만 있습니다. 평소엔 "잘못된 기록은 상세에서 숨길 수 있습니다 (원문 보존)". <b>[숨긴 기록 보기]</b>를 누르면 숨긴 것만 보이고 문구가 "숨긴 기록만 보는 중 — 잘못 숨긴 건 상세에서 복원"으로, 버튼은 <b>[일반 기록 보기]</b>로 바뀝니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>표 머리</b> — 분류마다 열이 다릅니다(위 표 참고). 좁은 화면에서는 덜 중요한 열이 숨고, 휴대폰에서는 업체명·날짜 + 항목 3개를 붙인 <b>카드</b>로 보입니다. 시트 수식 에러값(#N/A 등)은 빈칸으로, 비어 있으면 "-"로 표시됩니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>300건 더 보기</b> — 한 번에 300건씩 읽습니다. 마지막까지 읽으면 버튼이 사라집니다. 조건에 맞는 것이 없으면 "조건에 맞는 기록이 없습니다.", 읽는 중엔 "불러오는 중…".</div></div>
+  </div>
+  <div class="box tip"><b>행을 누르면</b>상세 창이 열립니다 — 다음 3번. 정렬은 항상 그 표의 기준 날짜 <b>최신순</b>이며 바꿀 수 없습니다.</div>
+</section>
+
+<section id="detail">
+  <h2>3. 상세 창 — 모든 항목과 원문</h2>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="max-width:460px">
+        <div><div style="font-size:11px;color:#2563EB;font-weight:900">점검</div><div class="mt" style="font-size:16px">가나다세무회계</div></div>
+        <div style="border:1px solid #E2E8F0;border-radius:10px;padding:6px 10px;font-size:12.5px;display:grid;gap:4px">
+          <div style="display:flex;gap:10px"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">작성일</span><span>2026-08-26</span></div>
+          <div style="display:flex;gap:10px"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">업체명</span><span>가나다세무회계</span></div>
+          <div style="display:flex;gap:10px"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">자산기번</span><span>B8187</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">연락처</span><span style="flex:1">02-1234-5678</span><span class="btn phone" style="width:auto;padding:0 8px">📞</span></div>
+        </div>
+        <div style="border:1px solid #FDE68A;background:#FFFBEB;border-radius:10px;padding:6px 10px;font-size:11px;color:#92400E"><b style="display:block;font-size:10px">수정 이력</b>2026-08-20 14:02 · 홍길동 <span style="margin-left:6px">자산기번: B8178 → <b>B8187</b></span></div>
+        <div style="border:1px solid #E2E8F0;border-radius:10px;padding:6px 10px"><div style="font-size:10px;color:#94A3B8;font-weight:900">원문</div><div class="quote" style="font-size:11px;padding:6px 8px;margin-top:4px">업체명 : 가나다세무회계
+모델명 : SL-X3220NR
+자산기번 : B8187
+처리내용 : 분기점검, 토너 교체</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><span class="btn" style="background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE;margin-right:auto">✏️ 기기정보 수정</span><span class="btn" style="background:#fff;color:#475569;border-color:#CBD5E1">전체 복사</span><span class="btn del">숨김 (오발송·오기록)</span><span class="btn" style="background:#0f172a;color:#fff">닫기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>부분</th><th>무엇인가</th></tr></thead><tbody>
+        <tr><td><b>머리</b></td><td>파란 글씨로 분류 이름, 그 아래 업체명(없으면 "제목 없음"). 오른쪽 <b>×</b>로 닫기. 창 밖 어두운 곳을 눌러도 닫힙니다.</td></tr>
+        <tr><td><b>항목 줄</b></td><td>값이 있는 항목만 "이름 : 값"으로 전부. 값에 전화번호 모양이 있으면 오른쪽에 <span class="btn phone" style="width:auto;padding:0 6px;vertical-align:middle">📞</span>가 붙어 바로 걸 수 있습니다(휴대폰).</td></tr>
+        <tr><td><b>수정 이력</b>(노란 상자)</td><td>기기정보 수정을 한 적이 있는 기록에만. "날짜 시각 · 누가" 그리고 "항목: 전 → <b>후</b>". 빈값은 "(빈값)"으로 표시.</td></tr>
+        <tr><td><b>원문</b></td><td>카톡·FIELD 양식 원문이 있는 기록은 회색 상자에 그대로. 길면 상자 안에서 스크롤.</td></tr>
+        <tr><td><b>아래 버튼</b></td><td><b>[✏️ 기기정보 수정]</b>(점검·AS만, <a href="#edit">4번</a>) · <b>[전체 복사]</b>(항목 전부를 "이름: 값" 줄로 클립보드에) · <b>[숨김 (오발송·오기록)]</b> 또는 숨긴 기록을 보는 중이면 <b>[복원]</b>(<a href="#hide">5번</a>) · <b>[닫기]</b>.</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</section>
+
+<section id="edit">
+  <h2>4. ✏️ 기기정보 수정 — 잘못 적힌 기번·자산번호·모델·업체명 바로잡기</h2>
+  <p class="lead">접수팀이 기번을 잘못 적으면 그 기록이 이력으로 남아 다음 AS 판단이 틀어집니다. 통합이력·FIELD 불러오기·접수 AS히스토리가 <b>전부 이 한 행을 읽기 때문에</b> 여기서 고치면 모든 화면에 바로 반영됩니다. <b>점검과 AS 기록</b>에서만 가능하고, 고칠 수 있는 칸은 <b>업체명 · 모델명 · 시리얼넘버 · 자산기번</b> 네 개입니다.</p>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 수정 중</span>
+      <div class="modal" style="max-width:440px">
+        <div style="border:1px solid #E2E8F0;border-radius:10px;padding:6px 10px;font-size:12.5px;display:grid;gap:6px">
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">업체명</span><span style="flex:1;border:1px solid #93C5FD;background:#EFF6FF;border-radius:8px;padding:3px 8px">가나다세무회계</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">모델명</span><span style="flex:1;border:1px solid #93C5FD;background:#EFF6FF;border-radius:8px;padding:3px 8px">SL-X3220NR</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">시리얼넘버</span><span style="flex:1;border:1px solid #93C5FD;background:#EFF6FF;border-radius:8px;padding:3px 8px">0A6XBJPTA0</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">자산기번</span><span style="flex:1;border:1px solid #2563EB;background:#EFF6FF;border-radius:8px;padding:3px 8px;font-weight:900">B8187|</span></div>
+          <div style="display:flex;gap:10px"><span style="width:70px;color:#94A3B8;font-size:11px;font-weight:900">처리내용</span><span style="color:#64748B">분기점검, 토너 교체 (수정 불가)</span></div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end"><span class="btn" style="background:#fff;color:#475569;border-color:#CBD5E1;margin-right:auto">취소</span><span class="btn" style="background:#fff;color:#475569;border-color:#CBD5E1">전체 복사</span><span class="btn" style="background:#2563EB;color:#fff">저장</span></div>
+        <div class="ms">확인 팝업</div>
+        <div class="quote" style="font-size:12px">이 기록을 수정할까요?
+
+자산기번: B8178 → B8187
+원문 속 해당 줄도 함께 수정
+
+통합이력·FIELD 불러오기·접수 AS히스토리가 전부 이 기록을 읽으므로 모든 화면에 바로 반영됩니다. 변경 전 값은 수정 이력에 남습니다.</div>
+        <div class="grid"><div class="mbtn ghost">취소</div><div class="mbtn dark">확인</div></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>점검 또는 AS 분류</b>에서 그 기록의 행을 눌러 상세 창을 엽니다.</li>
+        <li>왼쪽 아래 <b>[✏️ 기기정보 수정]</b>을 누르면 업체명·모델명·시리얼넘버·자산기번 네 줄이 <b>파란 입력칸</b>으로 바뀝니다. 다른 항목은 그대로 글자입니다.</li>
+        <li>고칠 칸만 바꿉니다. 하나도 안 바꾸면 [저장]이 눌리지 않습니다. <b>[취소]</b>는 입력을 버리고 보기 상태로.</li>
+        <li><b>[저장]</b> → 확인 팝업에 바뀐 내용이 "항목: 전 → 후"로 나열됩니다. 원문에 같은 라벨 줄이 있으면 "원문 속 해당 줄도 함께 수정"이 덧붙습니다. <b>[확인]</b>을 누르면 저장("저장 중…" 표시), 끝나면 그 자리에서 새 값이 보이고 목록 행도 바뀝니다.</li>
+      </ol>
+      <div class="box naver"><b>원문도 같이 고쳐집니다 — 단, 조심스럽게</b>원문에서 "자산기번 : 옛값" 같은 줄을 찾아 새 값으로 바꿉니다. 한 원문에 기기가 여러 대면 <b>옛 값과 같은 줄만</b> 바꾸고, 옛 값을 모를 때(칸이 비어 있던 경우)는 그런 줄이 <b>하나뿐일 때만</b> 바꿉니다. 다른 기기 줄은 절대 건드리지 않습니다.</div>
+      <div class="box tip"><b>업체명을 고치면</b>검색·이력 매칭에 쓰는 매칭 키도 함께 바뀌어 통합이력에서 새 이름으로 잡힙니다. 변경 전 값은 <b>수정 이력</b>(노란 상자)에 "누가 · 언제 · 무엇을" 남습니다.</div>
+      <div class="box warn"><b>실패하면</b>"수정 실패: (사유)" 경고창이 뜹니다. 그대로 두고 다시 [저장]하거나, 사유 문구를 관리자에게 전달하세요.</div>
+    </div>
+  </div>
+</section>
+
+<section id="hide">
+  <h2>5. 숨김 · 복원 — 잘못 보낸 양식 정리</h2>
+  <p>FIELD에서 두 번 보냈거나 다른 업체로 잘못 올린 기록은 <b>지우지 않고 숨깁니다.</b> 원문은 그대로 남고, 누가 언제 숨겼는지 기록되며, 언제든 복원할 수 있습니다.</p>
+  <table class="tbl"><thead><tr><th>누르면</th><th>무슨 일이</th></tr></thead><tbody>
+    <tr><td><b>[숨김 (오발송·오기록)]</b></td><td>확인 팝업 <span class="quote" style="display:inline-block;padding:3px 8px;font-size:12px">이 기록을 숨길까요?<br>목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)</span> → [확인]하면 목록에서 사라지고 창이 닫힙니다("처리 중…" 표시).</td></tr>
+    <tr><td><b>[복원]</b><br><span class="small">숨긴 기록 보기 중에만</span></td><td>"이 기록을 복원할까요?" → [확인]하면 일반 기록으로 돌아갑니다.</td></tr>
+    <tr><td><b>점검 · AS · 물류 기록이면</b></td><td>숨김/복원이 <b>업무 현황판과 주간현황판(방문 기록)</b> 집계에도 같이 적용됩니다. 원문·작성자·날짜가 같은 건, 그리고 원문이 조금 달라진 중복 전송분까지 업체+작성자+날짜로 한 번 더 맞춰 뺍니다.</td></tr>
+    <tr><td>실패</td><td>위 토스트 <span class="toast" style="font-size:12px;padding:5px 10px;background:#9F1239">처리 실패: (사유)</span></td></tr>
+  </tbody></table>
+  <div class="box tip"><b>숨김이 되는 표</b>점검 · AS · 물류 · 불만 · 미수 · 초과료 · 초과조정 · 재계약 · 해지방어 · 관리지원 · PC 확장성 · 복합기 확장성 · 담당자·주소 변경 · 기기·부품 재고. 접수와 거래처 특이사항에는 숨김 버튼이 없습니다(접수는 접수 화면에서 삭제).</div>
+  <div class="box warn"><b>시트가 원본인 표는 다시 살아날 수 있음</b>미수·초과료처럼 시트에서 통째로 다시 들어오는 표는 다음 동기화 때 같은 행이 새로 들어올 수 있습니다. 그런 건 시트에서 지우는 것이 정답입니다.</div>
+</section>
+
+<section id="boards">
+  <h2>6. 전용 보드 — 미수 · 초과료 · 기기·부품 재고</h2>
+  <p>이 세 분류는 범용 표 대신 기능이 더 많은 <b>전용 화면</b>이 열립니다(요약 3칸과 기간·CSV 줄이 없고, 자기 필터를 가집니다).</p>
+
+  <h3>미수 — 전체 현황 / CS체크 목록</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 전체 현황</span>
+    <div class="row" style="display:flex;gap:6px;margin-bottom:8px"><span class="lp on" style="background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.1)">전체 현황</span><span class="lp">CS체크 목록 <span class="tag s">38</span></span></div>
+    <div class="kpi" style="margin-top:0"><div><b>212곳</b><small>미수 업체</small></div><div><b>₩38,420,000</b><small>잔액 합계</small></div><div><b>57곳</b><small>3개월 이상</small></div></div>
+    <div class="card">
+      <div class="crow" style="border-top:0"><span class="lp lbl">팀</span><span class="lp on">전체</span><span class="lp">A팀</span><span class="lp">B팀</span><span class="lp">C팀</span><span class="lp">D팀</span><span class="lp">E팀</span></div>
+      <div class="crow" style="border-top:0"><span class="lp lbl">조건</span><span class="lp on">전체</span><span class="lp">1~2개월</span><span class="lp">3개월+</span><span class="lp lbl" style="margin-left:8px">정렬</span><span class="lp on" style="background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.1)">잔액순 ↓</span><span class="lp">개월순</span><span class="lp">최신순</span><span class="inp2">업체명 검색</span></div>
+    </div>
+    <div class="card">
+      <div class="crow hd"><span class="grow">업체명</span><span style="width:40px">팀</span><span style="width:70px">지역</span><span style="width:60px;text-align:right">개월</span><span style="width:100px;text-align:right">잔액</span><span style="width:70px;text-align:right">입력일</span></div>
+      <div class="crow"><b class="grow">모범상사(주)</b><span style="width:40px">A팀</span><span style="width:70px">수도권A</span><span style="width:60px;text-align:right;color:#E11D48;font-weight:900">4개월</span><span style="width:100px;text-align:right;font-weight:900">₩1,320,000</span><span style="width:70px;text-align:right;color:#94A3B8">26-08-01</span></div>
+      <div class="crow"><b class="grow">가나다세무회계</b><span style="width:40px">C팀</span><span style="width:70px">수도권C</span><span style="width:60px;text-align:right">2개월</span><span style="width:100px;text-align:right;font-weight:900">₩440,000</span><span style="width:70px;text-align:right;color:#94A3B8">26-08-01</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>부분</th><th>어떻게 쓰나</th></tr></thead><tbody>
+    <tr><td><b>전체 현황 / CS체크 목록</b> 토글</td><td>전체 현황 = 미수 시트(수도권A~E) 전체. CS체크 목록 = 관리부가 시트에서 <b>CS체크</b> 표시한 업체만(1시간마다 동기화). 토글 옆 숫자는 CS체크 건수.</td></tr>
+    <tr><td><b>요약 3칸</b></td><td>미수 업체 N곳 · 잔액 합계 · 3개월 이상 N곳. 필터가 그대로 반영됩니다.</td></tr>
+    <tr><td><b>팀</b> 전체 · A~E팀</td><td>시트 출처(수도권A 등)로 나눕니다. 잔액은 "미수잔액" → 없으면 "실제 잔액", 개월은 "미수개월" → "실제 개월수" 순으로 읽습니다(B팀 시트는 실제 잔액만 있음).</td></tr>
+    <tr><td><b>조건</b> 전체 · 1~2개월 · 3개월+</td><td>미수 개월수로 거릅니다. 3개월 이상은 표에서 개월이 <span style="color:var(--rose);font-weight:900">빨간색</span>.</td></tr>
+    <tr><td><b>정렬</b> 잔액순 · 개월순 · 최신순</td><td>같은 것을 다시 누르면 ↓(내림)/↑(오름)이 바뀝니다. 개월순은 개월 같으면 잔액순.</td></tr>
+    <tr><td><b>업체명 검색</b></td><td>치는 대로 바로 걸러집니다(Enter 불필요).</td></tr>
+    <tr><td><b>행 클릭 → 미수 상세</b></td><td>머리에 업체명 + 등급·지역·임대여부·관리담당자 배지. 큰 숫자 4개(미수개월 · 미수잔액 · 실제 개월수 · 실제 잔액, 3개월 이상은 빨강). 묶음: <b>연락처 · 주소</b>(업체담당자·휴대폰번호·메일주소·주소 — 전화번호엔 📞), <b>확인 · 체크 이력</b>(입금약속일·체크여부·CS/경영/전략 담당·체크·1회·2회·메일/문자발송여부), <b>기타 정보</b>, 맨 아래 <b>원문 펼치기</b>.</td></tr>
+    <tr><td><b>CS체크 목록</b> 화면</td><td>팀 칩(건수 표시) · 업체명 검색 · 열: 업체명(아래 "CS담당 이름") · 팀 · 개월 · 잔액 · CS-1회 · CS-2회. 미수 시트에 같은 업체가 있으면 행을 눌러 상세를 볼 수 있고, 없으면 눌리지 않습니다. 동기화 미설정이면 노란 안내가 뜹니다(관리자 몫). 비어 있으면 "CS체크된 업체가 없어요."</td></tr>
+  </tbody></table>
+
+  <h3>초과료</h3>
+  <ol class="steps">
+    <li><b>요약 3칸</b> — 초과 내역 N건 · 합계 금액 · 업체 수. <b>최근 12개월치만</b> 불러옵니다.</li>
+    <li><b>팀</b> 전체 · A~E팀 — 시트의 "관리 담당자" 칸에서 수도권A~E를 읽고, 지방 표기는 E로 봅니다.</li>
+    <li><b>조건</b> — <b>년월 선택</b>(전체 년월 / 2026-08 …, 최근 18개월) 과 <b>등급 칩</b>(시트에 있는 등급 최대 8개).</li>
+    <li><b>정렬</b> 최신순 · 금액순(다시 누르면 ↓↑) · 검색 "업체명·접수내용 검색".</li>
+    <li><b>표</b> — 업체명(아래 접수내용) · 팀 · 마감방식 · 합계 · 날짜. <b>상위 300건만 표시</b> — 넘으면 "상위 300건만 표시 — 필터·검색으로 좁혀주세요".</li>
+    <li><b>행 클릭 → 초과료 상세</b> — 큰 숫자: 초과료 합계 · 컬러 초과료 · 흑백 초과료 · 기본금액. 묶음: 접수 내용(날짜·접수내용·초과보고·AS건수·AS접수내용) · 계약 · 기기(마감방식·기본매수·초과장당금액·연평균·계약일·종료일·남은개월·모델명·자산번호) · 연락처 · 미수 연계 · 특이사항 · 기타 정보 · 원문 펼치기.</li>
+  </ol>
+
+  <h3>기기·부품 재고</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 기기</span>
+    <div class="card" style="margin-top:0"><div class="tabline" style="border-radius:14px 14px 0 0;align-items:center"><span class="on">기기 <span class="tag b" style="background:#2563EB;color:#fff">37</span></span><span>부품 <span class="tag s">128</span></span><span class="spacer" style="flex:1"></span><span class="lp on" style="margin-right:12px">+ 항목 추가</span></div></div>
+    <div class="kpi k4"><div><b>37대</b><small>기기 총수량</small></div><div><b>12종</b><small>품목 수</small></div><div><b style="color:#E11D48">2종</b><small>품절 (0)</small></div><div><b style="color:#B45309">3종</b><small>부족 (1~2)</small></div></div>
+    <div class="card">
+      <div class="crow" style="border-top:0"><span class="lp lbl" style="min-width:40px">브랜드</span><span class="lp on">전체</span><span class="lp">삼성</span><span class="lp">신도리코</span><span class="lp">캐논</span><span class="lp">기타</span></div>
+      <div class="crow" style="border-top:0"><span class="lp lbl" style="min-width:40px">조건</span><span class="lp on" style="background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.1)">전체</span><span class="lp">새기기</span><span class="lp">리퍼</span><span class="lp">⚠ 부족만</span><span class="lp lbl" style="margin-left:6px">정렬</span><span class="lp on" style="background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.1)">이름순</span><span class="lp">수량 적은순</span></div>
+      <div class="crow" style="border-top:0"><span class="inp2">기종 검색</span></div>
+    </div>
+    <div class="card">
+      <div class="chead">삼성 <small>3종</small><span class="spacer" style="flex:1"></span><small>9대</small></div>
+      <div class="crow"><span class="grow"><b>SL-X3220NR</b> <span class="tag b">새기기</span><br><span style="font-size:10px;color:#CBD5E1">홍길동 · 2시간 전</span></span><span class="lp ghost" style="border-radius:50%;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center">−</span><span class="lp ghost" style="min-width:48px;text-align:center;font-size:14px">6</span><span class="lp ghost" style="border-radius:50%;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center">＋</span><span style="font-size:11px;color:#CBD5E1;font-weight:900">삭제</span></div>
+      <div class="crow"><span class="grow"><b>SL-X4250LX</b> <span class="tag a">리퍼</span><br><span style="font-size:10px;color:#CBD5E1">김철수 · 3일 전</span></span><span class="lp ghost" style="border-radius:50%;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center">−</span><span class="lp" style="min-width:48px;text-align:center;font-size:14px;background:#FFE4E6;color:#BE123C">0</span><span class="lp ghost" style="border-radius:50%;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center">＋</span><span style="font-size:11px;color:#CBD5E1;font-weight:900">삭제</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>부분</th><th>어떻게 쓰나</th></tr></thead><tbody>
+    <tr><td><b>기기 / 부품</b> 탭</td><td>탭 옆 숫자는 그 종류의 총수량. 기기는 브랜드별 묶음(브랜드 N종 · N대), 부품은 한 목록.</td></tr>
+    <tr><td><b>요약 4칸</b></td><td>총수량(기기는 "대", 부품은 "개") · 품목 수 · <span style="color:var(--rose);font-weight:900">품절 (0)</span> · <span style="color:var(--amber);font-weight:900">부족 (1~2)</span>.</td></tr>
+    <tr><td><b>브랜드</b>(기기만) · <b>조건</b></td><td>브랜드 칩은 기종 카탈로그와 같은 제조사 + 기타. 조건: 전체·새기기·리퍼(기기만), <b>⚠ 부족만</b>(수량 2 이하만), 정렬 이름순·수량 적은순, 검색 "기종 검색"/"부품명 검색".</td></tr>
+    <tr><td><b>− / 수량 / ＋</b></td><td>누르면 즉시 1씩 바뀌고 저장됩니다(0 아래로는 안 내려감). 수량 칸 색: 0 빨강, 1~2 노랑. 줄 아래에 "누가 · 얼마 전"이 갱신됩니다. 실패하면 토스트 "수량 변경 실패: …" 후 다시 읽어옵니다.</td></tr>
+    <tr><td><b>삭제</b></td><td>"「품목 (구분)」 항목을 삭제할까요?" 확인 후 항목 자체가 없어집니다(수량 0과 다름).</td></tr>
+    <tr><td><b>+ 항목 추가</b></td><td>창: (기기) 브랜드 · 구분(새기기/리퍼) · <b>기종명 (입력하면 브랜드 자동 선택)</b> — 카탈로그 목록에서 고를 수 있음 · 수량 · 메모(선택: 위치·상태 등). (부품) 부품명 · 수량 · 메모(적용 기종 등). [추가] 후 목록이 새로 읽힙니다.</td></tr>
+    <tr><td>비어 있을 때</td><td>"기기 재고 항목을 추가해 주세요. (관리부와 함께 채워가는 표입니다)" / 필터에 걸리는 게 없으면 "조건에 맞는 항목이 없어요." 창으로 돌아오면 자동 새로고침.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="status">
+  <h2>7. 업무 현황판 — 기간 · 팀 · 사람별로 얼마나 했나</h2>
+  <p class="lead">"팀 운영량과 기록 누락을 확인합니다. <b>팀장 기록은 집계하지 않습니다.</b>" — 화면 맨 위 안내 그대로입니다. FIELD 등에서 저장된 활동 기록을 기간으로 잘라 셉니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="right:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:74px">2</span>
+    <span class="badge" style="right:26px;top:74px">3</span>
+    <span class="badge" style="left:26px;top:128px">4</span>
+    <span class="badge" style="left:26px;top:200px">5</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead"><small>팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</small><span style="display:flex;background:#F1F5F9;border-radius:999px;padding:3px"><span class="lp on" style="background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.1)">주간</span><span class="lp" style="background:transparent">월간</span><span class="lp" style="background:transparent">분기</span><span class="lp" style="background:transparent">연간</span></span></div>
+      <div class="crow"><span class="lp ghost">📅 2026-08-26</span><span class="lp line">2026-08-24 ~ 2026-08-30</span><span class="spacer"></span><span style="display:flex;background:#F1F5F9;border-radius:999px;padding:3px"><span class="lp on">전체</span><span class="lp" style="background:transparent">A팀</span><span class="lp" style="background:transparent">B팀</span><span class="lp" style="background:transparent">C팀</span><span class="lp" style="background:transparent">D팀</span></span><span class="lp ghost">전체 팀원 ▾</span><span class="lp ghost">전체 업무 ▾</span></div>
+    </div>
+    <div class="kpi k4"><div><b>96건</b><small>업무</small></div><div><b>71곳</b><small>거래처</small></div><div><b>128대</b><small>기기·물품</small></div><div><b>14명</b><small>활동 인원</small></div></div>
+    <div class="card"><div class="chead">업무 구성</div>
+      <div class="crow"><span class="tag b">점검</span><b>52</b><span class="tag r" style="margin-left:14px">AS</span><b>23</b><span class="tag v" style="margin-left:14px">물류</span><b>9</b><span class="tag s" style="margin-left:14px">기타(여분,마감)</span><b>4</b><span class="tag" style="margin-left:14px;background:#ECFEFF;color:#0E7490">확장성(IT,복합기)</span><b>2</b><span class="tag" style="margin-left:14px;background:#FDF2F8;color:#BE185D">불만</span><b>1</b></div></div>
+    <div class="card"><div class="chead">인원별 현황</div>
+      <div class="crow hd"><span style="width:70px">작성자</span><span style="width:30px">팀</span><span style="width:40px">전체</span><span style="width:50px">거래처</span><span style="width:40px">점검</span><span style="width:30px">AS</span><span style="width:40px">물류</span><span class="grow">…</span></div>
+      <div class="crow"><b style="width:70px">홍길동</b><span style="width:30px">A</span><b style="width:40px">14</b><span style="width:50px">11</span><span style="width:40px">9</span><span style="width:30px">3</span><span style="width:40px">2</span><span class="grow"></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>기간 종류</b> — 주간 · 월간 · 분기 · 연간. 주간은 <b>날짜 하나</b>를 고르면 그 주 월~일, 월간은 년·월, 분기는 년·분기, 연간은 년(최근 5년 + 내년). 고른 범위가 파란 칩 "시작 ~ 끝"으로 보입니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>날짜/년월 선택</b> — 주간이면 날짜 칸, 그 외엔 "2026년" 같은 드롭다운(월간은 "8월", 분기는 "3분기"도).</div></div>
+    <div class="item"><span class="num">3</span><div><b>팀 · 팀원 · 업무</b> — 팀(전체·A~D팀)을 바꾸면 팀원 선택이 "전체 팀원"으로 돌아갑니다. 팀원 목록은 그 기간에 기록이 있는 사람만. 업무는 "전체 업무" 또는 점검 · AS · 물류 · 기타(여분,마감) · 확장성(IT,복합기) · 불만 · 미수 · 초과조정 · 재계약 · 담당자·주소 변경 · 교체양식.</div></div>
+    <div class="item"><span class="num">4</span><div><b>요약 4칸</b> — 업무 N건 · 거래처 N곳 · 기기·물품 N대 · 활동 인원 N명. 지금 걸린 팀·팀원·업무 조건 기준.</div></div>
+    <div class="item"><span class="num">5</span><div><b>업무 구성 · 팀별 현황 · 인원별 현황</b> — 아래 표.</div></div>
+  </div>
+  <table class="tbl"><thead><tr><th>판</th><th>보이는 것</th><th>누르면</th></tr></thead><tbody>
+    <tr><td><b>업무 구성</b></td><td>업무 11종 타일 각각의 건수(팀·팀원 조건 반영, 업무 조건은 무시).</td><td>그 업무만 보기 ↔ 다시 누르면 전체 업무.</td></tr>
+    <tr><td><b>팀별 현황</b></td><td>A~D팀의 건수 · 인원과 막대(가장 많은 팀이 100%).</td><td>그 팀만 보기 ↔ 다시 누르면 전체. 팀원은 전체로 돌아감.</td></tr>
+    <tr><td><b>인원별 현황</b></td><td>PC: 작성자 · 팀 · 전체 · 거래처 · 점검 · AS · 물류 · 기타(여분,마감) · 확장성(IT,복합기) · 불만 · 미수 · 초과조정 · 재계약 · 담당자 변경 · 교체양식. 건수 많은 순. 휴대폰: 사람 카드 + 업무 칩. 없으면 "기록이 없습니다."</td><td>그 사람만 보기(파랗게 표시).</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box tip"><b>숫자가 세지는 규칙</b>① <b>점검은 기기 수</b>로 셉니다(한 양식에 여러 대 — 기기 수가 없는 옛 기록은 1대). ② <b>재계약·불만은 기간 안 같은 업체를 1</b>로 셉니다(2~3차 방문이 이어져도 업체 1곳). ③ 팀장 기록과 <a href="#hide">숨김</a>된 기록은 빠집니다. ④ 물류 중 "여분·마감"은 기타(여분,마감)로 따로.</div>
+    <div class="box warn"><b>불러오기 실패</b>"운영현황을 불러오지 못했습니다." 아래 안내 문구가 뜨면 관리자에게. 다른 화면에서 숨김 처리 후 돌아오면(창 복귀) 자동으로 다시 셉니다.</div>
+  </div>
+</section>
+
+<section id="history">
+  <h2>8. 🗂️ 통합이력 팝업 — 한 업체의 모든 기록을 한 장에</h2>
+  <p class="lead">조회 화면 안의 버튼이 아니라 <b>FIELD 화면 오른쪽 위 🗂️ 이력</b>, 서비스접수·자동일정·분기 안내·AS접수함의 <b>업체 알림 칩</b>을 눌렀을 때 뜨는 큰 팝업입니다. 접수 · 점검 · AS · 초과 · 미수 · 불만 · 복합기확장성 · PC확장성 · 재계약 · 업체정보(임대리스트) 10개 분류를 업체 이름으로 한 번에 모아 보여줍니다.</p>
+
+  <h3 id="h-search">검색 · 분류 탭 · 범위</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 머리 부분</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:82px">2</span>
+    <span class="badge" style="right:26px;top:82px">3</span>
+    <span class="badge" style="left:26px;top:124px">4</span>
+    <span class="badge" style="left:26px;top:166px">5</span>
+    <div class="bar" style="background:#020617">
+      <div class="row" style="display:block"><div style="font-size:10px;letter-spacing:.16em;color:#6B7684;font-weight:900">▤ 통합이력</div><b style="font-size:17px">가나다세무회계</b></div>
+      <div class="row"><span class="chip">기록 <b style="color:#fff">48</b>건</span><span class="chip">최근 <b style="color:#fff">2026-08-26</b></span><span class="chip">통합 이름 <b style="color:#fff">2</b>개</span><span class="chip" style="color:#7DD3FC;border:1px solid rgba(56,189,248,.4)">"가나다" 넓게 보기</span><span class="spacer"></span><span class="chip" style="border:1px solid rgba(255,255,255,.15);background:transparent">범위 · 전체 ▾</span></div>
+      <div class="row"><span class="inp2" style="background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.1);color:#6B7684;border-radius:999px">🔍 거래처 이름 검색</span></div>
+      <div class="row"><span class="tab on">요약 48</span><span class="chip" style="background:#2563EB;color:#fff">점검 21</span><span class="chip">AS 9</span><span class="chip">접수 6</span><span class="chip">미수 3</span><span class="chip">초과 4</span><span class="chip">업체정보 5</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>업체명</b> — 지금 보는 업체. 아직 없으면 "거래처를 검색하세요". 오른쪽 <b>×</b>로 닫기(어두운 바깥을 눌러도 닫힘).</div></div>
+    <div class="item"><span class="num">2</span><div><b>숫자 칩</b> — 기록 N건 · 최근 날짜 · (이름이 여럿 합쳐졌으면) 통합 이름 N개. <b>"○○" 넓게 보기</b>는 "세무법인·주식회사·본사·빌딩" 같은 접두·접미를 뗀 짧은 이름으로 다시 검색하는 지름길 — 같은 건물의 다른 법인까지 함께 보고 싶을 때. 자동으로 합치지는 않습니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>범위 ▾</b> — 이름이 여럿이거나 지역이 여럿일 때만 나타납니다. 누르면 <b>지역</b>(전체 · A 강북 · B 강서 · C 강남 · D 경기 · E 지방 · 기타, 건수 표시)과 <b>포함된 거래처 이름</b>(전체 이름 / 이름별) 칩이 펼쳐져 좁혀 볼 수 있습니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>거래처 이름 검색</b> — 2글자 이상 치면 0.25초 뒤 자동 검색. 결과 목록: 지역 배지 · 업체명 · (시리얼/기번으로 찾았으면) <span class="tag b">시리얼 일치</span> <span class="tag b">자산기번 일치</span> <span class="tag b">기기번호 일치</span> 배지 · "최근 날짜 · 지역" · 분류별 건수. 위에 지역 탭으로 좁힐 수 있고, 없으면 "이력이 있는 거래처가 없습니다." 결과를 누르면 그 업체로 바뀝니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>분류 탭</b> — <b>요약 N</b> + 기록이 있는 분류만(접수 · 점검 · AS · 초과 · 미수 · 불만 · 복합기 · PC·IT · 재계약 · 업체정보, 각각 건수). 업체정보는 <b>임대중</b> 기기만 셉니다.</div></div>
+  </div>
+  <div class="box tip"><b>기번·시리얼로도 찾습니다</b>업체명 대신 기번이나 시리얼을 넣어도 점검·AS 기록에서 그 기기를 가진 업체를 찾아 줍니다. 결과에 "시리얼 일치/자산기번 일치" 배지가 붙습니다.</div>
+
+  <h3 id="h-note">📌 거래처 특이사항 — 요약 탭 맨 위 보라 상자</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="violet" style="margin-top:0"><div class="vh">📌 거래처 특이사항 <span style="float:right;font-weight:700;color:#DDD6FE;font-size:10px">방문 규칙·출입·유무상 범위 — 그날 기기 상태는 아래 방문 메모</span></div>
+        <div class="vb"><span class="lp ghost" style="color:#6D28D9;border-color:#DDD6FE">🕘 출근 9:30~</span> <span class="lp ghost" style="color:#6D28D9;border-color:#DDD6FE">🍚 점심 12~13시</span>
+          <p style="margin:8px 0 0;font-weight:700">- 지하주차장 카드키: 1층 안내데스크<br>[8/20 홍길동] 3층 소형기는 점검 제외</p>
+          <div style="display:flex;gap:6px;margin-top:8px"><span class="inp2" style="border-color:#C4B5FD">새로 알게 된 규칙 추가 — 예) 지하주차장 카드키 필요</span><span class="lp" style="background:#6D28D9;color:#fff;border-radius:8px;padding:7px 12px">+ 추가</span></div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center"><span class="lp ghost" style="color:#6D28D9;border-color:#C4B5FD">✎ 수정</span><span style="font-size:11px;color:#94A3B8;font-weight:700">홍길동 기재 · 2026-08-20</span></div>
+        </div></div>
+    </div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>없는 업체는 점선 버튼 <b>"📌 이 거래처의 특이사항 적기 — 방문 규칙·출입 방법·점검 제외 기기 등"</b>이 보입니다. 누르면 편집 상자가 열립니다.</li>
+        <li><b>+ 추가</b> — 한 줄 적고 <span class="kbd">Enter</span> 또는 [+ 추가]. 본문 끝에 <b>"[월/일 이름] 내용"</b>이 자동으로 붙어 쌓입니다(언제 생긴 규칙인지 남기기 위해). 토스트 <span class="toast ok" style="font-size:12px;padding:4px 10px">특이사항에 추가했습니다 ✓</span></li>
+        <li><b>✎ 수정</b> — 🕘 출근시간 · 🍚 점심시간 칸과 본문 전체를 고칩니다. <b>[저장]</b> → "특이사항을 저장했습니다 ✓"(새로 만들면 "특이사항을 등록했습니다 ✓"). <b>본문과 시간을 모두 비우고 저장하면 삭제</b>되고 "특이사항을 지웠습니다."가 뜹니다. [취소]는 되돌립니다.</li>
+      </ol>
+      <div class="box naver"><b>어디에 쓰이나</b>일정리스트 "내 일정" 상세의 보라 상자, FIELD AS 변환 안내, 자동일정 등이 이 내용을 읽습니다. 조회 &gt; 기록 조회의 <b>거래처 특이사항</b> 분류에서 전 업체를 표로 훑을 수 있습니다(고치는 건 여기서만).</div>
+      <div class="box warn"><b>방문 메모와 다릅니다</b>이 상자는 "그 업체 고유의 규칙"(출입·카드키·유무상 범위). 그날 기기 상태는 점검 기록의 특이사항 칸이며, 아래 "이번 분기 체크"의 <b>방문 메모</b> 줄에 따로 보입니다.</div>
+    </div>
+  </div>
+
+  <h3 id="h-check">이번 분기 체크 · 최근 활동 — 요약 탭</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0"><div class="chead dk">이번 분기 체크<small>워킨맵 · 미수 · 초과 · 불만 · 기기별 최근 점검 기준</small></div>
+      <div class="crow"><span class="lp lbl" style="min-width:44px">미수</span><span style="border-left:4px solid #F43F5E;padding-left:8px;color:#BE123C;font-weight:900">잔액 ₩1,320,000 · 4개월<br><span style="font-weight:500;color:#94A3B8;font-size:11px">누적 3회 발생</span></span></div>
+      <div class="crow"><span class="lp lbl" style="min-width:44px">점검</span><span style="border-left:4px solid #3B82F6;padding-left:8px;color:#1D4ED8;font-weight:900">3분기 방문 대상</span></div>
+      <div class="crow"><span class="lp lbl" style="min-width:44px">기기</span><span style="border-left:4px solid #94A3B8;padding-left:8px;font-weight:900">임대중 복합기 3 · PC 2<br><span style="font-weight:500;color:#94A3B8;font-size:11px">종료 1대 제외 · 최근 점검에서 3대 확인</span></span></div>
+      <div class="crow"><span class="lp lbl" style="min-width:44px">교체</span><span style="border-left:4px solid #6366F1;padding-left:8px;color:#4338CA;font-weight:900">2026-04-03 납품/교체<br><span style="font-weight:500;color:#94A3B8;font-size:11px">점검 기기 226951 → B8187 변경 (이전 기기 마지막 점검 2026-03-11)</span></span></div>
+      <div class="crow" style="background:#F8FAFC;font-size:11px;color:#94A3B8">최근 점검 2026-08-26 · 강남 · 기기 3대 방문</div>
+    </div>
+    <div class="card"><div class="chead">최근 활동<small>누르면 그 분류의 전체 기록이 열립니다</small></div>
+      <div class="crow"><span class="dot g"></span><span style="width:60px;color:#64748B;font-family:monospace">26-08-26</span><span style="width:80px">C 강남구</span><span class="grow">홍길동</span><span class="tag" style="background:#ECFDF5;color:#047857">점검</span>›</div>
+      <div class="crow"><span class="dot r"></span><span style="width:60px;color:#64748B;font-family:monospace">26-08-01</span><span style="width:80px">C</span><span class="grow">관리부</span><span class="tag r">미수</span>›</div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>줄</th><th>언제 나오나 · 무엇을 말하나</th></tr></thead><tbody>
+    <tr><td><b>미수</b></td><td>미수 이력이 있으면. 잔액 있으면 <span style="color:var(--rose);font-weight:900">빨강 강조</span> "잔액 · N개월 · 누적 N회 발생", 완납이면 회색 "완납 · 날짜 · 그동안 N회 발생".</td></tr>
+    <tr><td><b>불만</b></td><td>최근 90일 불만. 내용 · 날짜 · "최근 90일 N건". 빨강 강조.</td></tr>
+    <tr><td><b>초과</b></td><td>초과 시트 최신 건(합계&gt;0). 금액 · 날짜 · "12개월 새 N회". 노랑.</td></tr>
+    <tr><td><b>점검</b></td><td>워킨맵 등재 상태 — "N분기 방문 대상"(파랑) / "완료"(회색) / "다음 분기로 이관"(회색).</td></tr>
+    <tr><td><b>재계약</b></td><td>워킨맵 재계약 등재 — "도래 · 26년 9월 종료"(파랑) / "완료"(회색).</td></tr>
+    <tr><td><b>방문 메모</b></td><td>가장 최근 점검 기록의 특이사항 칸(그날 기기 상태). "ㅡㅡ"·"없음" 같은 채움 표시는 안 보여줍니다.</td></tr>
+    <tr><td><b>기기</b></td><td>임대리스트에서 <b>임대중</b>만 세어 "복합기 N · PC N · 모니터 N · 기타 N", 아래에 "종료 N대 제외 · 최근 점검에서 N대 확인 (반납된 N대 제외)". 반납 확인된 기번은 현역으로 세지 않습니다.</td></tr>
+    <tr><td><b>기기 — 시트 확인 필요 N대</b>(노랑)</td><td>임대중 복합기인데 <b>최근 2회 방문 모두</b>에서 안 보인 기기. "회수 미반영·교체·기번 오기재" 신호 — 시트나 기번을 확인하세요.</td></tr>
+    <tr><td><b>교체</b>(남보라)</td><td>임대리스트 납품/교체일이 최근 1년 안이거나, 점검 기기(시리얼) 변화가 잡히면 "기기 교체된 것으로 보임 · 점검 기기 A → B 변경 (이전 기기 마지막 점검 날짜)".</td></tr>
+    <tr><td>아무것도 없으면</td><td>"이번 분기에 특별히 체크할 항목이 없습니다." 맨 아래 줄은 "최근 점검 날짜 · 지역 · 기기 N대 방문".</td></tr>
+    <tr><td><b>최근 활동</b></td><td>모든 분류를 합친 최근 10건 — 날짜 · 지역(+지역구) · 누가 · 분류 배지. 누르면 그 분류 탭으로. 없으면 "기록이 없습니다 — 검색어를 줄이거나 "넓게 보기"를 눌러 보세요."</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>기기의 정체는 시리얼</b>기번은 재부여되거나 옛 기록에 비어 있어, 기기를 묶을 때 시리얼을 먼저, 없으면 기번을 씁니다. 최근 15개월 안에 점검된 기기만 "현역"으로 봅니다.</div>
+
+  <h3 id="h-list">분류 탭 — 이력 카드 읽기</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현 · 점검 탭</span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:0 4px 6px"><div><b style="font-size:14px">점검 이력</b><div style="font-size:11px;color:#64748B">최신순 · 항목을 누르면 전체 내용이 열립니다.</div></div><b style="font-size:12px;color:#64748B">21건</b></div>
+      <div class="card" style="margin-top:0">
+        <div class="crow" style="border-top:0;gap:10px"><span style="width:44px;height:44px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:12px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:9px;color:#F43F5E;font-weight:900">8월</span><b style="font-size:15px">26</b></span><span class="grow"><b>분기점검 / 토너 교체</b><br><span style="font-size:10.5px;color:#64748B">2026-08-26 · 📍C · <span class="tag dk">기기 3대</span> · 👤 홍길동</span></span><span style="color:#94A3B8">⌄</span></div>
+        <div class="crow" style="background:#F8FAFC"><div class="quote" style="width:100%;font-size:11.5px;padding:8px 10px">업체명 : 가나다세무회계
+모델명 : SL-X3220NR
+자산기번 : B8187
+매수 : 45,210
+토너잔량 : 60%
+처리내용 : 분기점검, 토너 교체</div></div>
+        <div class="crow" style="font-size:10px;color:#64748B">🕒 2026-08-26 · 🏢 가나다세무회계<span class="spacer"></span><span class="lp on">사진·영상 보기</span></div>
+      </div>
+    </div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>부분</th><th>내용</th></tr></thead><tbody>
+        <tr><td><b>머리</b></td><td>"{분류} 이력 · 최신순 · 항목을 누르면 전체 내용이 열립니다." 오른쪽 건수. <b>접수 탭</b>에는 전체 · 복합기 AS · 원격이관 · IT 칩이 하나 더(건수 표시).</td></tr>
+        <tr><td><b>카드 한 줄</b></td><td>왼쪽 월/일 블록 · 대표 문장(처리내용·증상 등 그 분류의 중요 항목 첫 값; 없으면 업체명) · 날짜 · (접수) 유형 배지 · 📍지역 · <span class="tag dk">기기 N대</span>(한 방문에 기기 여럿) · 👤작성자 · (이름이 여럿 합쳐진 경우) 다른 법인명.</td></tr>
+        <tr><td><b>펼치면</b></td><td><b>점검·AS는 원문 그대로</b>(FIELD 검색과 똑같은 양식). 다른 분류는 중요 항목을 크게, 나머지는 "그 외 정보 N개 보기"로 접어둠. 없으면 "표시할 상세 내용이 없습니다."</td></tr>
+        <tr><td><b>아래 줄</b></td><td>🕒 날짜 · 🏢 업체명 · 사진 앨범 링크가 있으면 <b>[사진·영상 보기]</b>(새 창).</td></tr>
+        <tr><td>비었을 때</td><td>"선택한 범위에 이력이 없습니다." — 범위 ▾에서 지역·이름을 전체로 돌려 보세요.</td></tr>
+      </tbody></table>
+      <div class="box warn"><b>여기서는 고치지 못합니다</b>점검·AS의 기번·모델이 틀렸으면 팝업을 닫고 <b>조회 &gt; 기록 조회 &gt; 점검/AS</b>에서 그 행을 열어 <a href="#edit">✏️ 기기정보 수정</a>. 저장하면 이 팝업에도 바로 반영됩니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>9. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>검색했는데 아무것도 안 나와요</summary><p>① 기간이 "3개월"로 걸려 있지 않은지 — <b>전체</b>로 바꿔 보세요. ② 팀 칩이 특정 팀인지. ③ 분류가 맞는지(AS 처리내용은 AS 분류에서만 검색됨). ④ 검색어의 괄호·쉼표는 빈칸으로 바뀌므로 "(주)"는 빼고 핵심 이름만 넣으세요. ⑤ 그래도 없으면 [숨긴 기록 보기]에 들어가 있을 수 있습니다.</p></details>
+    <details><summary>기번을 고쳤는데 통합이력에는 옛 값이 보여요</summary><p>통합이력 팝업을 닫고 다시 열어 보세요(열려 있던 화면은 재진입 후 반영). 그래도 옛 값이면 원문의 라벨 줄이 "자산기번 :" 형태가 아니어서 원문은 못 고친 경우입니다 — 상세 창의 <b>원문</b> 상자를 확인하고, 필요하면 관리자에게 원문 수정을 요청하세요. 수정 자체는 노란 <b>수정 이력</b> 상자로 확인할 수 있습니다.</p></details>
+    <details><summary>실수로 숨겼어요</summary><p>같은 분류에서 <b>[숨긴 기록 보기]</b> → 그 행 클릭 → <b>[복원]</b>. 점검·AS·물류라면 업무 현황판·주간현황판 집계도 함께 돌아옵니다.</p></details>
+    <details><summary>CSV에 300건만 들어 있어요</summary><p>CSV는 <b>화면에 불러온 행</b>만 내보냅니다. 표 아래 [300건 더 보기]를 끝까지 눌러 모두 불러온 뒤 [CSV]를 누르세요. 요약 첫 칸의 총 건수와 맞으면 다 받은 것입니다.</p></details>
+    <details><summary>업무 현황판에 내 기록이 안 잡혀요</summary><p>① 팀장은 집계하지 않습니다. ② 기간 범위(주간이면 그 주 월~일)를 확인. ③ 그 기록이 <a href="#hide">숨김</a> 처리되면 빠집니다. ④ 관리 탭 인원에서 이름·팀이 정확히 맞는지(띄어쓰기) 확인 — 팀 판정이 이름으로 이뤄집니다.</p></details>
+    <details><summary>통합이력에 같은 회사가 두 개로 나와요 / 남의 회사가 섞여요</summary><p>이름이 다르게 적힌 기록(예: "주식회사 무암"과 "무암")은 자동으로 합쳐져 "통합 이름 N개"로 표시되고, <b>범위 ▾ → 포함된 거래처 이름</b>에서 하나만 골라 볼 수 있습니다. 같은 건물의 다른 법인은 자동으로 합치지 않으니 "넓게 보기"로만 함께 보세요 — 법인이 다르면 미수·초과도 다른 회사 것입니다.</p></details>
+    <details><summary>미수 보드 숫자가 시트와 달라요</summary><p>미수 보드는 시트 출처 행만, 업체명이 있는 행만 셉니다. 잔액은 "미수잔액"이 비어 있으면 "실제 잔액"을 읽습니다. 시트가 바뀐 직후라면 관리 탭 <b>동기화 현황</b>의 미수 줄에서 마지막 기록 시각을 확인하세요(매시간 전체 재적재).</p></details>
+    <details><summary>"조회 실패 (400)" 같은 빨간 띠가 떠요</summary><p>↻ 새로고침을 한 번 눌러 보고, 반복되면 검색어에 특수문자가 있는지 확인하세요. 계속되면 띠의 문구를 그대로 관리자에게 보내 주세요.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">조회 길잡이 · 관리 탭은 <a href="admin.html">관리 길잡이</a>에서</p>
+</main>
+</div>
+</body>
+</html>

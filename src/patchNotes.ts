@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "69764ecbec",
+    "date": "2026-08-26",
+    "note": "사용설명서 — 자기개발/지식공유 편 등록"
+  },
+  {
     "hash": "b9b8bdcf50",
     "date": "2026-08-26",
     "note": "사용설명서 — 재계약 준비 편 등록(+완성된 편 반영)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "18aa1d0c40",
     "date": "2026-08-14",
     "note": "중복 접수 확인을 디자인 모달로 — 다크 헤더+안내 항목, 기본 동작은 [중복이면 취소] 강조"
-  },
-  {
-    "hash": "ccf5abf7d4",
-    "date": "2026-08-14",
-    "note": "주소 지오코딩 정규화기 공용화 — 띄어쓰기 어떤 조합이든 잡는다"
   }
 ];

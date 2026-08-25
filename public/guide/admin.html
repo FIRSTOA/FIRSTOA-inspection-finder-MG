@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>관리 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 조회·관리 길잡이 추가 (밝은 카드 재현) ── */
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;margin-top:12px;color:#24303F}
+.card .chead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;background:#F8FAFC;border-bottom:1px solid #F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.card .chead small{font-weight:600;color:#94A3B8;font-size:11px}
+.card .chead.dk{background:#1E252F;color:#fff} .card .chead.dk small{color:#94A3B8}
+.card .crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 14px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155}
+.card .crow.hd{background:#F1F5F9;color:#64748B;font-size:11px;font-weight:900;border-top:0}
+.card .crow.band{background:#FFFBEB;color:#92400E;font-size:11px;font-weight:700}
+.card .crow.dark{background:#151A23;color:#C5CDD8}
+.card .crow .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .crow b{color:#0f172a}
+.lp{border-radius:999px;padding:4px 10px;font-size:11px;font-weight:900;background:#F1F5F9;color:#64748B;white-space:nowrap}
+.lp.on{background:#0f172a;color:#fff}
+.lp.lbl{background:transparent;color:#94A3B8;font-size:10px;padding-left:0;min-width:26px}
+.lp.blue{background:#2563EB;color:#fff} .lp.ghost{background:#fff;border:1px solid #CBD5E1;color:#475569}
+.lp.line{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.kpi.k4{grid-template-columns:repeat(4,1fr)}
+.kpi div{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px 8px;text-align:center;color:#24303F}
+.kpi b{display:block;font-size:18px;color:#0f172a;line-height:1.2} .kpi small{font-size:11px;font-weight:700;color:#94A3B8}
+.inp2{flex:1;min-width:140px;border:1px solid #CBD5E1;border-radius:10px;padding:7px 12px;font-size:12.5px;color:#94A3B8;background:#fff}
+.sw{display:inline-block;width:40px;height:22px;border-radius:999px;background:#CBD5E1;position:relative;vertical-align:middle;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw.on{background:#2563EB} .sw.on::after{left:21px} .sw.on.danger{background:#F59E0B}
+.tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:900;white-space:nowrap}
+.tag.g{background:#ECFDF5;color:#047857} .tag.b{background:#EFF6FF;color:#1D4ED8} .tag.a{background:#FEF3C7;color:#92400E} .tag.r{background:#FFE4E6;color:#BE123C} .tag.s{background:#F1F5F9;color:#94A3B8} .tag.v{background:#F5F3FF;color:#6D28D9} .tag.dk{background:#0f172a;color:#fff}
+.violet{border:2px solid #C4B5FD;background:#F5F3FF;border-radius:14px;overflow:hidden;margin-top:12px;color:#24303F}
+.violet .vh{background:#6D28D9;color:#fff;font-weight:900;font-size:13px;padding:8px 14px}
+.violet .vb{padding:10px 14px;font-size:12.5px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:4px}
+.dot.g{background:#34D399} .dot.r{background:#FB7185}
+.tabline{display:flex;gap:0;border-bottom:1px solid #E2E8F0;background:#fff}
+.tabline span{padding:10px 18px;font-size:13px;font-weight:900;color:#94A3B8}
+.tabline span.on{color:#0f172a;box-shadow:inset 0 -3px 0 #2563EB}
+.small.center{text-align:center}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성 — 상태줄과 탭</a>
+  <a href="#members">2. 인원</a>
+  <a class="sub" href="#m-table">명단 표 읽기</a>
+  <a class="sub" href="#m-add">인원 추가</a>
+  <a class="sub" href="#m-edit">정보 수정 · 겸직 A·B</a>
+  <a class="sub" href="#m-retire">퇴사 · 복구</a>
+  <a href="#changes">3. 담당자·주소 변경</a>
+  <a href="#sync">4. 동기화 현황</a>
+  <a href="#system">5. 전송·카톡방</a>
+  <a class="sub" href="#s-switch">전송·연동 스위치</a>
+  <a class="sub" href="#s-naver">네이버 캘린더 설정</a>
+  <a class="sub" href="#s-rooms">카톡방 매핑(보내는 방향)</a>
+  <a class="sub" href="#s-collect">카톡 수집 상태 · 수집 방 매핑</a>
+  <a class="sub" href="#s-jobs">시트 기입 최근 작업</a>
+  <a class="sub" href="#s-codes">거래처 코드 미매칭 확정</a>
+  <a href="#push">6. 알림</a>
+  <a href="#faq">7. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 관리</div>
+  <h1>관리 길잡이</h1>
+  <p><b style="color:#fff">값을 바꾸는 화면</b>들을 한 지붕 아래 모은 곳입니다. 인원 명단, 담당자·주소 변경 반영, 기록이 들어오는 길의 상태, 카톡 전송·시트 기입·네이버 캘린더 스위치, 카톡방 이름, 거래처 코드 연결, 그리고 내 기기의 알림. 여기서 누르는 토글 하나가 <b style="color:#fff">회사 전체 전송</b>을 멈추거나 살릴 수 있으니, 어떤 버튼이 어디까지 영향을 주는지 하나씩 설명합니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-26 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">전송 스위치·카톡방 이름 바꾸기</div><div class="big"><s>DB 콘솔</s> → <em>토글 1번</em></div><div class="sub">예전엔 Supabase 콘솔을 열어야 했던 값</div></div>
+    <div class="stat green"><div class="lbl">인원 한 명 등록</div><div class="big"><em>1번</em> 등록 · <em>즉시</em> 반영</div><div class="sub">작성자 목록 · 요청 대상 · 일정 팀 필터에 바로</div></div>
+    <div class="stat purple"><div class="lbl">기록 길 끊김 찾기</div><div class="big"><s>표 13개 열어보기</s> → <em>한 표</em></div><div class="sub">빨간 칩 하나로 어느 길이 멈췄는지</div></div>
+    <div class="stat amber"><div class="lbl">시트 기입 실패 복구</div><div class="big"><s>스크립트 로그</s> → <em>다시 실행</em></div><div class="sub">실패 건마다 버튼 하나</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">카톡방 이름이 바뀌었을 때</div><div class="pills"><span>DB 콘솔 로그인</span><span>표 찾기</span><span>행 편집</span><span>오타 확인</span><span>저장</span></div><div class="ba-count">5단계 · 개발자만</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">카톡방 이름이 바뀌었을 때</div><div class="pills"><span class="hot">업무 종류</span><span class="hot">지역</span><span class="hot">방 이름</span><span class="hot">저장</span></div><div class="ba-count">한 줄 입력 · 누구나</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">퇴사자 정리</div><div class="pills"><span>명단 시트에서 삭제</span><span>과거 기록 이름 깨짐</span><span>집계 어긋남</span></div><div class="ba-count">되돌리기 어려움</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">퇴사자 정리</div><div class="pills"><span class="hot">퇴사</span><span class="hot">확인</span></div><div class="ba-count">명단에서만 빠짐 · 복구 1번</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">"시트에 안 들어갔어요"</div><div class="pills"><span>Apps Script 열기</span><span>실행 로그 뒤지기</span><span>시트에 손으로 기입</span></div><div class="ba-count">개발자 호출</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">"시트에 안 들어갔어요"</div><div class="pills"><span class="hot">시트 기입 최근 작업</span><span class="hot">다시 실행</span></div><div class="ba-count">2번 누르기</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>관리 탭에 들어오면 먼저 맨 위 상태줄을 봅니다 — 빨간 숫자나 "테스트 모드"가 보이면 그것부터.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 다섯 탭이 하는 일</h2>
+  <p class="lead">왼쪽 메뉴 맨 아래 <b>관리</b>를 누르면 열립니다. 위 검은 띠는 어느 탭에 있어도 보이는 <b>상태줄</b>이고, 그 아래 탭 다섯 개가 실제 일을 합니다.</p>
+  <table class="tbl"><thead><tr><th>탭</th><th>하는 일</th><th>바꾸면 어디에 영향</th></tr></thead><tbody>
+    <tr><td><b>인원</b></td><td>회사 전체 명단 — 추가·수정·퇴사·복구</td><td>작성자 선택 목록, 요청 대상, 일정리스트 팀 필터·배정 명단, 중간보고</td></tr>
+    <tr><td><b>담당자·주소 변경</b></td><td>FIELD로 들어온 변경 요청을 보고 워킨맵에 반영</td><td>워킨맵 지점의 주소/연락처 (임대리스트는 시트가 원본이라 제외)</td></tr>
+    <tr><td><b>동기화 현황</b></td><td>표 13개에 기록이 언제까지 들어왔는지 보기만</td><td>없음(읽기 전용)</td></tr>
+    <tr><td><b>전송·카톡방</b></td><td>카톡 전송·시트 기입·테스트 모드·네이버 캘린더 스위치, 카톡방 이름, 카톡 수집, 시트 기입 재실행, 거래처 코드 연결</td><td><b>회사 전체</b>의 FIELD 전송·시트 기입·네이버 등록</td></tr>
+    <tr><td><b>알림</b></td><td>지금 쓰는 이 기기의 푸시 알림 켜기/끄기·종류 선택</td><td>이 기기·이 브라우저만</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>전송·카톡방 탭은 신중히</b>테스트 모드·카톡 전송·시트 동기화 토글은 나 혼자가 아니라 전 직원의 전송을 바꿉니다. 누르기 전에 무엇을 켜고 끄는지 5번 설명을 꼭 읽으세요.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성 — 상태줄과 탭</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:82px">1</span>
+    <span class="badge" style="left:120px;top:82px">2</span>
+    <span class="badge" style="left:250px;top:82px">3</span>
+    <span class="badge" style="right:150px;top:82px">4</span>
+    <span class="badge" style="right:30px;top:82px">5</span>
+    <span class="badge" style="left:26px;top:140px">6</span>
+    <div class="bar">
+      <div class="row" style="display:block"><b style="font-size:15px">관리</b><div style="font-size:11px;color:#8FA1B8;font-weight:700">인원·주소변경·동기화·전송/카톡방 — 웹앱 운영을 한 곳에서</div></div>
+      <div class="row"><span class="chip">재직 <b style="color:#fff">31명</b></span><span class="chip rose" style="background:rgba(251,113,133,.15)">시트기입 실패 <b>2건</b></span><span class="chip" style="color:#FCD34D;background:rgba(251,191,36,.15)">수집 대기 <b>3개</b></span><span class="spacer"></span><span class="chip" style="color:#FCD34D;background:rgba(251,191,36,.2)">⚠ 테스트 모드</span><span class="chip"><span class="dot g"></span>카톡 <span class="dot r"></span>시트</span></div>
+    </div>
+    <div class="tabline" style="border-radius:0 0 12px 12px"><span class="on">인원</span><span>담당자·주소 변경</span><span>동기화 현황</span><span>전송·카톡방</span><span>알림</span></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>재직 N명</b> — 지금 재직 인원 수. 누르면 인원 탭으로.</div></div>
+    <div class="item"><span class="num">2</span><div><b>시트기입 실패 N건</b> — 최근 20건의 시트 기입 요청 중 실패(또는 오류가 붙은 대기) 수. 0보다 크면 <span style="color:var(--rose);font-weight:900">빨강</span>. 누르면 전송·카톡방 탭으로(맨 아래 "시트 기입 최근 작업").</div></div>
+    <div class="item"><span class="num">3</span><div><b>수집 대기 N개</b> — 드라이브 수집함에서 아직 처리 안 된 카톡 대화 txt 수. 0보다 크면 <span style="color:var(--amber);font-weight:900">노랑</span>. 누르면 전송·카톡방 탭으로. (First-DATA 응답이 없으면 칩 자체가 안 보임)</div></div>
+    <div class="item"><span class="num">4</span><div><b>⚠ 테스트 모드</b> — 테스트 모드나 시트 테스트 모드 중 하나라도 켜져 있을 때만 나타납니다. 이때는 <b>전 직원의 전송·기입이 실제 방/탭으로 가지 않습니다.</b> 누르면 전송·카톡방 탭으로.</div></div>
+    <div class="item"><span class="num">5</span><div><b>● 카톡 ● 시트</b> — 점이 <span class="dot g"></span>초록이면 켜짐, <span class="dot r"></span>빨강이면 꺼짐(카톡 전송 / 시트 동기화 스위치). 누르면 전송·카톡방 탭으로.</div></div>
+    <div class="item"><span class="num">6</span><div><b>탭</b> — 인원 · 담당자·주소 변경 · 동기화 현황 · 전송·카톡방 · 알림. 마지막 탭을 기억합니다. 탭을 오가면 상태줄 숫자도 다시 읽습니다. 처음엔 "현황을 불러오는 중…".</div></div>
+  </div>
+</section>
+
+<section id="members">
+  <h2>2. 인원 — 회사 전체 명단</h2>
+  <p class="lead">"부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로"." — 화면 머리에 적힌 그대로입니다. CS팀의 <b>팀장 / A~D</b> 값은 작성자 명단과 일정 팀 필터가 그대로 쓰므로 바꾸면 즉시 반영됩니다.</p>
+
+  <h3 id="m-table">명단 표 읽기</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="right:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:82px">2</span>
+    <span class="badge" style="left:26px;top:130px">3</span>
+    <span class="badge" style="right:26px;top:176px">4</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead dk"><span>인원 관리 <small>회사 전체</small><br><small>부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로".</small></span><span style="display:flex;gap:6px;align-items:center"><span class="chip">재직 31명</span><span class="chip" style="border:1px solid rgba(255,255,255,.15)">퇴사 4명 보기</span><span class="lp blue" style="padding:7px 14px">👤+ 인원 추가</span></span></div>
+      <div class="crow dark"><span class="chip">🔍 이름·팀 검색</span><span class="chip on">전체 <span style="color:#94A3B8">31</span></span><span class="chip">임원 2</span><span class="chip">CS팀 17</span><span class="chip">영업팀 6</span><span class="chip">CSS·운영지원 6</span></div>
+      <div class="crow hd"><span style="width:90px">이름</span><span style="width:60px">부서</span><span style="width:80px">팀/파트</span><span style="width:70px">직책</span><span style="width:90px">입사일</span><span style="width:80px">근속</span><span class="grow" style="text-align:right">관리</span></div>
+      <div class="crow" style="background:#F1F5F9;font-weight:900;font-size:12px">CS팀 <span style="color:#94A3B8;font-size:10px">17명</span></div>
+      <div class="crow" style="background:#F8FAFC;font-size:11px;color:#64748B;font-weight:900">팀장 · 파트장 <span style="color:#94A3B8;font-size:10px">3명</span></div>
+      <div class="crow"><b style="width:90px">👤 홍길동</b><span style="width:60px">CS팀</span><span style="width:80px"><span class="tag s">팀장</span></span><span style="width:70px"><span class="tag b">팀장</span></span><span style="width:90px">2019-03-04</span><span style="width:80px;color:#94A3B8">7년 5개월</span><span class="grow" style="text-align:right;color:#CBD5E1">✎ &nbsp;퇴사</span></div>
+      <div class="crow"><b style="width:90px">👤 김철수</b><span style="width:60px">CS팀</span><span style="width:80px"><span class="tag s">A·B</span></span><span style="width:70px"><span class="tag v">파트장</span></span><span style="width:90px">2021-07-01</span><span style="width:80px;color:#94A3B8">5년 1개월</span><span class="grow" style="text-align:right;color:#CBD5E1">✎ &nbsp;퇴사</span></div>
+      <div class="crow" style="background:#F8FAFC;font-size:11px;color:#64748B;font-weight:900">A팀 <span style="color:#94A3B8;font-size:10px">4명</span></div>
+      <div class="crow"><b style="width:90px">👤 이영희</b><span style="width:60px">CS팀</span><span style="width:80px"><span class="tag s">A팀</span></span><span style="width:70px"><span class="tag s">프로</span></span><span style="width:90px">2024-02-13</span><span style="width:80px;color:#94A3B8">2년 6개월</span><span class="grow" style="text-align:right;color:#CBD5E1">✎ &nbsp;퇴사</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>머리 오른쪽</b> — 재직 N명 · <b>[퇴사 N명 보기/숨기기]</b>(퇴사자가 있을 때만) · <b>[인원 추가]</b>.</div></div>
+    <div class="item"><span class="num">2</span><div><b>다크 툴바</b> — "이름·팀 검색" 칸(치는 대로 걸러짐, 이름·팀 글자·"A팀" 같은 표기 모두) + 부서 칩 <b>전체 · 임원 · CS팀 · 영업팀 · CSS·운영지원</b>(각 재직 수).</div></div>
+    <div class="item"><span class="num">3</span><div><b>구분행</b> — 전체 보기에서는 <b>부서 행</b>(진한 회색) → 그 안에 <b>팀장 · 파트장</b> 묶음 → 팀별(A팀·B팀… 또는 전략영업·운영지원…) → <b>팀 미지정</b>. 부서를 고르면 팀 구분행만 남습니다. 임원은 구분행 없이 바로 나열.</div></div>
+    <div class="item"><span class="num">4</span><div><b>관리</b> — 행에 마우스를 올리면(휴대폰은 항상) <b>✎</b>(정보 수정)와 <b>퇴사</b>가 나타납니다.</div></div>
+  </div>
+  <table class="tbl"><thead><tr><th>열</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><b>팀/파트</b></td><td>CS팀은 한 글자 팀이면 "A팀"처럼, 겸직은 "A·B" 그대로, 없으면 "—".</td></tr>
+    <tr><td><b>직책</b> 칩 색</td><td><span class="tag b">팀장</span> <span class="tag v">파트장</span> <span class="tag g">부파트장</span> <span class="tag a">임원</span> <span class="tag s">프로</span>(직책 없음 기본값)</td></tr>
+    <tr><td><b>입사일 · 근속</b></td><td>근속은 입사일로 계산한 "N년 M개월"(입사일 없으면 빈칸).</td></tr>
+    <tr><td>"팀장 · 파트장" 묶음에 들어가는 사람</td><td>팀이 "팀장"인 사람, 팀에 점(·)이 든 겸직자, 팀 없이 직책만 있는 사람. 그 안에서 팀장 → 파트장 → 부파트장 순.</td></tr>
+    <tr><td>비어 있을 때</td><td>검색 결과 없음: ""검색어" 검색 결과가 없습니다" / 인원 자체가 없음: "인원 없음 — 우측 상단 "인원 추가"로 등록하세요"</td></tr>
+  </tbody></table>
+
+  <h3 id="m-add">인원 추가</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="padding:0;overflow:hidden">
+        <div style="background:#1E252F;color:#fff;padding:12px 16px"><b style="font-size:14px">👤+ 인원 추가</b><div style="font-size:11px;color:#94A3B8">등록하면 작성자 목록·요청 대상에 바로 나타납니다</div></div>
+        <div style="padding:14px 16px;display:grid;gap:10px">
+          <div><div style="font-size:11px;color:#64748B;font-weight:700">이름 <span style="color:#E11D48">*</span></div><div class="inp" style="min-height:0;margin-top:4px">박민수</div></div>
+          <div class="grid"><div><div style="font-size:11px;color:#64748B;font-weight:700">부서</div><div class="inp" style="min-height:0;margin-top:4px">CS팀 ▾</div></div><div><div style="font-size:11px;color:#64748B;font-weight:700">팀/파트</div><div class="inp" style="min-height:0;margin-top:4px">A ▾</div></div><div><div style="font-size:11px;color:#64748B;font-weight:700">직책</div><div class="inp" style="min-height:0;margin-top:4px">프로 (기본) ▾</div></div><div><div style="font-size:11px;color:#64748B;font-weight:700">입사일</div><div class="inp" style="min-height:0;margin-top:4px">2026-08-26</div></div></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;background:#F8FAFC"><span class="lp ghost" style="padding:8px 14px">취소</span><span class="lp blue" style="padding:8px 20px">추가</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>오른쪽 위 <b>[인원 추가]</b>. 부서 칩을 골라 둔 상태면 그 부서가 미리 선택됩니다(전체면 CS팀).</li>
+        <li><b>이름</b>(필수) · <b>부서</b> · <b>팀/파트</b> · <b>직책</b> · <b>입사일</b>(오늘이 기본, 칸을 누르면 달력). 이름 칸에서 <span class="kbd">Enter</span>를 쳐도 등록됩니다.</li>
+        <li><b>[추가]</b>("등록 중…") → 창이 닫히고 명단이 다시 읽힙니다. 바로 작성자 목록·요청 대상에 나타납니다.</li>
+      </ol>
+      <table class="tbl"><thead><tr><th>부서</th><th>고를 수 있는 팀/파트</th></tr></thead><tbody>
+        <tr><td>임원</td><td>(없음)</td></tr>
+        <tr><td>CS팀</td><td>팀장 · A · B · C · D · <b>A·B</b>(겸직)</td></tr>
+        <tr><td>영업팀</td><td>(없음) · 전략영업 · IT</td></tr>
+        <tr><td>CSS·운영지원</td><td>(없음) · 운영지원 · CSS · 경영지원 · 지원(비정규)</td></tr>
+      </tbody></table>
+      <div class="box tip"><b>직책</b>은 프로 (기본) · 팀장 · 파트장 · 부파트장 중 하나. <b>같은 팀에 같은 이름의 퇴사자</b>가 있으면 새로 만들지 않고 그 사람을 <b>복구</b>합니다(과거 기록이 이어지도록).</div>
+    </div>
+  </div>
+
+  <h3 id="m-edit">✎ 정보 수정 — 부서 · 팀 · 직책, 겸직 "A·B"</h3>
+  <ol class="steps">
+    <li>행의 <b>✎</b> → "{이름} 정보 수정" 창. 부제: "바꾸면 작성자 목록·요청 대상·프로필에 바로 반영됩니다".</li>
+    <li><b>부서</b>를 바꾸면 팀/파트가 그 부서의 첫 항목으로 초기화됩니다.</li>
+    <li><b>팀/파트</b> — 목록에서 고르거나 맨 아래 <b>"직접 입력…"</b>을 고르면 글자 칸이 열립니다. 안내: "겸임은 "직접 입력"으로 A·B처럼 점(·)으로 묶으세요". 목록에 없는 값이 이미 들어 있는 사람은 열 때부터 직접 입력 상태입니다.</li>
+    <li><b>직책</b> 고르고 <b>[저장]</b>("저장 중…"). 이름·입사일은 여기서 바꾸지 않습니다.</li>
+  </ol>
+  <div class="box naver"><b>겸직 "A·B"가 하는 일</b>일정리스트 팀 필터·배정 명단·중간보고에서 A팀과 B팀 양쪽에 잡힙니다. 명단 표에서는 "팀장 · 파트장" 묶음에 올라갑니다. 점은 가운뎃점(·)이어야 합니다.</div>
+
+  <h3 id="m-retire">퇴사 · 복구</h3>
+  <table class="tbl"><thead><tr><th>누르면</th><th>무슨 일이</th></tr></thead><tbody>
+    <tr><td><b>퇴사</b></td><td>확인 팝업 <span class="quote" style="display:inline-block;padding:3px 8px;font-size:12px">{이름} 님을 퇴사 처리할까요?<br><br>명단에서만 빠지고 과거 기록은 그대로 남습니다.</span> → [확인]하면 재직 명단에서 빠지고 오늘 날짜가 퇴사일로 적힙니다. 행은 지우지 않습니다 — 과거 기록의 이름이 살아 있어야 집계가 안 깨집니다.</td></tr>
+    <tr><td><b>[퇴사 N명 보기]</b></td><td>아래에 <b>퇴사자</b> 카드가 펼쳐집니다: 이름 · 부서 · 팀 · "입사일 입사 · 퇴사일 퇴사". "과거 기록 보존을 위해 명단에만 빠져 있습니다. 재입사 시 복구하세요."</td></tr>
+    <tr><td><b>↶ 복구</b></td><td>확인 없이 바로 재직으로 돌아오고 퇴사일이 지워집니다.</td></tr>
+    <tr><td>실패</td><td>빨간 띠에 "처리하지 못했습니다." 또는 사유.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="changes">
+  <h2>3. 담당자·주소 변경 — FIELD 변경 요청을 워킨맵에 반영</h2>
+  <p>"FIELD에서 전송한 변경 요청을 업체·지역별로 확인하고, 워킨맵에 반영합니다." 최근 500건을 읽습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="crow" style="border-top:0"><span class="inp2">업체명 · 담당자 · 변경 내용 검색</span><span style="display:flex;background:#F1F5F9;border-radius:999px;padding:3px"><span class="lp on">전체</span><span class="lp" style="background:transparent">A팀</span><span class="lp" style="background:transparent">B팀</span><span class="lp" style="background:transparent">C팀</span><span class="lp" style="background:transparent">D팀</span></span><b>12건</b></div>
+    </div>
+    <div class="card">
+      <div class="crow"><span class="tag s">C</span><span class="grow"><b>가나다세무회계</b><br><span style="font-size:11px;color:#64748B">담당자 변경 · 담당자 퇴사</span></span><span style="text-align:right;font-size:11px;color:#94A3B8">2026. 08. 20.<br>홍길동</span></div>
+      <div class="crow" style="background:#F8FAFC;display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div style="font-size:11px;color:#94A3B8;font-weight:900">변경 전</div><div>김OO 대리 010-1234-5678</div></div><div><div style="font-size:11px;color:#94A3B8;font-weight:900">변경 후</div><b>박OO 과장 010-9876-5432</b></div></div>
+      <div class="crow" style="background:#F8FAFC"><span class="lp ghost">등급 A</span><span class="lp line">첨부 사진 보기</span><span class="lp" style="background:#ECFDF5;color:#047857;border:1px solid #A7F3D0">워킨맵 반영</span><span style="font-size:10px;color:#94A3B8">임대리스트는 시트가 원본이라 시트에서 수정해야 합니다</span><span class="spacer"></span><span style="font-size:11px;color:#CBD5E1;font-weight:900">이력 삭제</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>부분</th><th>어떻게 쓰나</th></tr></thead><tbody>
+    <tr><td><b>검색 · 팀</b></td><td>검색은 업체명·담당자·구분·사유·변경 전/후·특이사항을 모두 훑고 치는 대로 걸러집니다. 팀은 전체 · A~D팀. 오른쪽에 걸러진 건수.</td></tr>
+    <tr><td><b>줄 하나</b></td><td>지역 배지 · 업체명(없으면 "업체명 미기재") · "구분 · 사유" · 오른쪽에 변경일과 작성자. <b>누르면 펼쳐집니다.</b></td></tr>
+    <tr><td><b>펼친 내용</b></td><td>변경 전 / 변경 후 / 특이사항(있을 때) / 등급 / <b>[첨부 사진 보기]</b>(사진이 있을 때, 새 창) / <b>[워킨맵 반영]</b> / <b>[이력 삭제]</b>.</td></tr>
+    <tr><td><b>[워킨맵 반영]</b></td><td>① 업체명으로 워킨맵 지점을 찾습니다(이름이 5자 이상이면 부분일치도). ② 확인 팝업 "워킨맵 N곳의 주소(또는 연락처)를 아래 내용으로 바꿉니다. … 변경 후: … 계속할까요?" ③ 구분에 "주소"가 있으면 주소를, 아니면 연락처를 바꾸고 그 지점 메모에 "[변경반영] 날짜 구분 → 내용"을 남깁니다. ④ 토스트 <span class="toast ok" style="font-size:12px;padding:4px 10px">워킨맵 N곳에 반영했습니다.</span></td></tr>
+    <tr><td>반영이 안 될 때 토스트</td><td>"변경 후 내용이 비어 있어 반영할 수 없습니다." / "업체명으로 워킨맵을 매칭할 수 없습니다." / "워킨맵에서 일치하는 거래처를 찾지 못했습니다." / "반영 실패: …"</td></tr>
+    <tr><td><b>[이력 삭제]</b></td><td>"이 변경이력을 삭제할까요? 업체명 · 날짜" 확인 후 이 변경 기록만 지웁니다(워킨맵은 그대로).</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>임대리스트는 여기서 안 바뀝니다</b>임대리스트(vendor 시트)는 구글시트가 원본이라 웹앱에서 고치면 다음 동기화 때 덮입니다. 임대리스트 연락처·주소는 시트에서 고쳐 주세요 — 화면에도 그 문구가 적혀 있습니다.</div>
+</section>
+
+<section id="sync">
+  <h2>4. 동기화 현황 — 기록이 들어오는 길이 살아 있나</h2>
+  <p class="lead">조회 화면이 읽는 표들이 <b>"어디서, 언제까지"</b> 채워졌는지 보여줍니다. "표마다 기록이 들어오는 길별 마지막 기록 시각. 빨강 = 끊긴 것으로 의심, 회색 = 예전 경로라 조용해도 정상." 읽기 전용 — 여기서 바꾸는 것은 없습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead">동기화 현황<span class="lp ghost">↻ 새로고침</span></div>
+      <div class="crow hd"><span style="width:80px">분류</span><span class="grow">원본</span><span style="width:70px;text-align:right">총 건수</span><span style="width:46%">경로별 마지막 기록</span></div>
+      <div class="crow"><b style="width:80px">점검</b><span class="grow" style="color:#64748B;font-size:11px">FIELD 전송 + 팀별 점검방</span><span style="width:70px;text-align:right;font-family:monospace">48,213</span><span style="width:46%;display:flex;gap:4px;flex-wrap:wrap"><span class="tag b">웹앱 <b>오늘</b> <span style="opacity:.6;font-family:monospace">08-26 14:02</span></span><span class="tag s" style="border:1px solid #E2E8F0;background:#F8FAFC">카톡 <span class="tag s">A 없음</span><span class="tag s">B 12일 전</span><span class="tag s">C 12일 전</span><span class="tag s">D 없음</span></span></span></div>
+      <div class="crow"><b style="width:80px">미수</b><span class="grow" style="color:#64748B;font-size:11px">미수현황 시트(수도권A~E) — 매시간 전체 재적재</span><span style="width:70px;text-align:right;font-family:monospace">212</span><span style="width:46%"><span class="tag g">시트 <b>오늘</b></span></span></div>
+      <div class="crow"><b style="width:80px">초과료</b><span class="grow" style="color:#64748B;font-size:11px">초과 시트</span><span style="width:70px;text-align:right;font-family:monospace">9,410</span><span style="width:46%"><span class="tag r">시트 <b>9일 전</b></span></span></div>
+      <div class="crow"><b style="width:80px">해지방어</b><span class="grow" style="color:#64748B;font-size:11px">FIELD 해지방어 양식</span><span style="width:70px;text-align:right;font-family:monospace">0</span><span style="width:46%"><span class="tag s">아직 기록 없음</span></span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>칩</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><span class="tag g">시트 오늘</span> <span class="tag b">웹앱 어제</span> <span class="tag a">카톡 N일 전</span></td><td>그 길로 마지막 기록이 들어온 게 언제인지(오늘 · 어제 · N일 전, 달력 날짜 기준). 넓은 화면에선 "월-일 시:분"도 함께. 초록=시트, 파랑=웹앱, 노랑=카톡.</td></tr>
+    <tr><td><span class="tag r">시트 9일 전</span></td><td><b>빨강</b> — 기준 일수를 넘게 조용함 → 길이 끊겼을 수 있음. 기준: 보통 7일, 물류 30일, 초과조정 90일, PC 확장성·복합기 확장성·임대리스트 9일(주 1회 동기화라 여유).</td></tr>
+    <tr><td><span class="tag s">카톡 (중단) 40일 전</span></td><td><b>회색</b> — 예전 경로(현재 봇 수집이 멈춘 카톡방 수집 등). 조용해도 정상. 마우스를 올리면 마지막 시각이 풍선으로.</td></tr>
+    <tr><td><span class="tag s">카톡 <span class="tag a">A 어제</span> <span class="tag s">B 없음</span></span></td><td>점검·AS·불만·재계약은 카톡 수집을 <b>팀별 A~D</b>로 나눠 보여줍니다 — 어느 팀 방 txt까지 올라왔는지. 사흘 넘으면 회색, 기록 없으면 "없음".</td></tr>
+    <tr><td><span class="tag s">아직 기록 없음</span></td><td>표가 비어 있음(총 건수 0).</td></tr>
+    <tr><td>"확인 중…"</td><td>아직 읽는 중. 오류가 나면 빨간 글씨로 사유 앞부분.</td></tr>
+  </tbody></table>
+  <table class="tbl"><thead><tr><th>분류(13개)</th><th>원본(화면 문구)</th><th>길</th></tr></thead><tbody>
+    <tr><td>점검</td><td>FIELD 전송 + 팀별 점검방</td><td>웹앱 · 카톡 (중단)</td></tr>
+    <tr><td>AS</td><td>FIELD 전송 + 팀별 AS방 (시트분은 초기 이관)</td><td>웹앱 · 카톡 (중단)</td></tr>
+    <tr><td>물류</td><td>FIELD 물류 양식</td><td>웹앱</td></tr>
+    <tr><td>불만</td><td>불만 시트 + FIELD</td><td>시트 · 웹앱 · 카톡 (중단)</td></tr>
+    <tr><td>미수</td><td>미수현황 시트(수도권A~E) — 매시간 전체 재적재</td><td>시트</td></tr>
+    <tr><td>초과료</td><td>초과 시트</td><td>시트</td></tr>
+    <tr><td>초과조정</td><td>초과업체조정 방 + FIELD (드문 업무)</td><td>카톡 (중단) · 웹앱</td></tr>
+    <tr><td>재계약</td><td>계약종료체크 방 — 수집 중단으로 새 기록 없음</td><td>카톡 (중단)</td></tr>
+    <tr><td>해지방어</td><td>FIELD 해지방어 양식</td><td>웹앱</td></tr>
+    <tr><td>관리지원</td><td>FIELD 관리지원 양식</td><td>웹앱</td></tr>
+    <tr><td>PC 확장성</td><td>PC 확장성 DB 시트 + IT통합 양식</td><td>시트 · 웹앱</td></tr>
+    <tr><td>복합기 확장성</td><td>영업확장성 DB 통합추출 시트</td><td>시트</td></tr>
+    <tr><td>임대리스트</td><td>임대리스트 원본시트 (주 1회 전체 동기화)</td><td>시트</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box naver"><b>시트 → DB</b>First-DATA Apps Script의 <b>시간 트리거</b>가 주기적으로 복사합니다. 주기를 바꾸거나 시트가 바뀌면 First-DATA Apps Script의 트리거 설정에서 조정합니다.</div>
+    <div class="box kakao"><b>카톡 → DB</b>메신저봇이 업무방 메시지를 웹훅으로 넘기면 GAS가 양식을 해석해 즉시 기록합니다. 길이 끊기면 봇 기기·웹훅 주소를 확인하세요.</div>
+    <div class="box tip"><b>웹앱 → DB</b>FIELD·서비스접수에서 저장하는 즉시 직접 기록됩니다. 별도 동기화가 없습니다.</div>
+  </div>
+</section>
+
+<section id="system">
+  <h2>5. 전송·카톡방 — 회사 전체 전송을 다루는 곳</h2>
+  <p class="lead">위에서 아래로 여섯 묶음입니다: <b>전송·연동 스위치</b> → <b>카톡방 매핑</b> → <b>카톡 수집 상태 (First-DATA)</b> → <b>카톡 수집 방 매핑</b> → <b>시트 기입 최근 작업</b> → <b>거래처 코드 미매칭 확정</b>. 테스트 모드가 켜져 있으면 맨 위에 노란 띠 <b>"테스트 모드가 켜져 있습니다 — 전송·기입이 실제 방/탭으로 가지 않습니다."</b>가 먼저 보입니다.</p>
+
+  <h3 id="s-switch">전송·연동 스위치</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead"><span>전송·연동 스위치<br><small>지금까지 Supabase 콘솔에서만 바꿀 수 있던 값입니다.</small></span><span class="lp ghost">↻ 새로고침</span></div>
+      <div class="crow band" style="background:#ECFDF5;color:#047857">FIELD_KAKAO_SEND_ENABLED 저장됨</div>
+      <div class="crow"><span class="grow"><b>카톡 전송</b> <span style="font-family:monospace;font-size:10px;color:#CBD5E1">FIELD_KAKAO_SEND_ENABLED</span><br><span style="font-size:11px;color:#94A3B8">끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다.</span></span><span class="sw on"></span></div>
+      <div class="crow"><span class="grow"><b>시트 동기화</b> <span style="font-family:monospace;font-size:10px;color:#CBD5E1">FIELD_SHEET_SYNC_ENABLED</span><br><span style="font-size:11px;color:#94A3B8">끄면 FIELD 기록이 구글시트에 기입되지 않습니다.</span></span><span class="sw on"></span></div>
+      <div class="crow"><span class="grow"><b>테스트 모드</b> <span style="font-family:monospace;font-size:10px;color:#CBD5E1">TEST_MODE</span><br><span style="font-size:11px;color:#94A3B8">켜면 모든 카카오톡 전송이 실제 방 대신 아래 테스트 카톡방으로만 갑니다.</span></span><span class="sw"></span></div>
+      <div class="crow"><span class="grow"><b>시트 테스트 모드</b> <span style="font-family:monospace;font-size:10px;color:#CBD5E1">FIELD_SHEET_TEST_MODE</span><br><span style="font-size:11px;color:#94A3B8">켜면 시트 기입이 테스트 탭으로만 갑니다.</span></span><span class="sw"></span></div>
+      <div class="crow"><span class="grow"><b>네이버 캘린더 미러</b> <span style="font-family:monospace;font-size:10px;color:#CBD5E1">NAVER_CALENDAR_ENABLED</span><br><span style="font-size:11px;color:#94A3B8">켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트).</span></span><span class="sw on"></span></div>
+      <div class="crow"><span class="grow"><b>테스트 카톡방 이름</b><br><span style="font-size:11px;color:#94A3B8">카카오톡 방 이름입니다. 테스트 모드가 켜지면 모든 전송이 실제 방 대신 이 카톡방으로만 갑니다.</span></span><span class="inp2" style="flex:none;width:200px">테스트방</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>스위치</th><th>켜짐 색</th><th>끄면 / 켜면</th></tr></thead><tbody>
+    <tr><td><b>카톡 전송</b></td><td>파랑</td><td>끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다. 상태줄 "카톡" 점이 빨강으로.</td></tr>
+    <tr><td><b>시트 동기화</b></td><td>파랑</td><td>끄면 FIELD 기록이 구글시트에 기입되지 않습니다. 상태줄 "시트" 점이 빨강으로.</td></tr>
+    <tr><td><b>테스트 모드</b></td><td><span style="color:var(--amber);font-weight:900">노랑(위험)</span></td><td>켜면 모든 카카오톡 전송이 실제 방 대신 <b>테스트 카톡방</b>으로만. 상태줄에 ⚠ 테스트 모드.</td></tr>
+    <tr><td><b>시트 테스트 모드</b></td><td><span style="color:var(--amber);font-weight:900">노랑(위험)</span></td><td>켜면 시트 기입이 테스트 탭으로만. 상태줄에 ⚠ 테스트 모드.</td></tr>
+    <tr><td><b>네이버 캘린더 미러</b></td><td>파랑</td><td>켜면 일정 등록 시 네이버 캘린더에도 자동 등록(원본은 웹앱 일정리스트).</td></tr>
+  </tbody></table>
+  <ol class="steps">
+    <li>토글을 누르면 <b>바로 저장</b>됩니다(확인 팝업 없음). 저장되는 동안 토글이 흐려지고, 끝나면 위에 초록 띠 <b>"{설정 이름} 저장됨"</b>.</li>
+    <li><b>테스트 카톡방 이름</b>은 글자 칸 — 적고 <b>다른 곳을 눌러(포커스가 빠지면)</b> 저장됩니다. 값이 같으면 저장하지 않습니다.</li>
+    <li>실패하면 빨간 띠에 사유. <b>[↻ 새로고침]</b>으로 서버 값을 다시 읽어 확인하세요.</li>
+  </ol>
+  <div class="box warn"><b>테스트가 끝나면 반드시 끄기</b>테스트 모드를 켜 둔 채 퇴근하면 다음 날 전 직원의 보고가 테스트방으로 갑니다. 상태줄의 ⚠ 표시가 사라졌는지 확인하세요.</div>
+
+  <h3 id="s-naver">네이버 캘린더 설정 — 캘린더 ID · 재연동 · 팀별 완료 캘린더</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="crow" style="border-top:0"><span class="grow"><b>네이버 캘린더 ID</b><br><span style="font-size:11px;color:#94A3B8">비워두면 연동 계정의 기본 캘린더. 특정 캘린더로 보내려면 그 캘린더의 공유 URL(naver.me/…)을 그대로 붙여넣으세요 — 자동으로 ID로 바뀝니다. (캘린더 설정 → 공개 설정 → URL 복사)</span></span><span class="inp2" style="flex:none;width:200px">defaultCalendarId</span></div>
+      <div class="crow"><span class="grow"><b>네이버 재연동 (토큰 갱신)</b><br><span style="font-size:11px;color:#94A3B8">네이버 캘린더에 등록이 안 되기 시작하면(토큰 만료·비밀번호 변경) 연동 계정으로 로그인 한 번이면 됩니다. "연동 완료 ✓" 알림까지 확인하세요.</span></span><span class="lp" style="background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;padding:7px 14px">재연동 열기</span></div>
+      <div class="crow"><span class="grow"><b>팀별 완료 캘린더 ID</b><br><span style="font-size:11px;color:#94A3B8">일정 완료 시 익일통합as에서 이 캘린더로 이동합니다. 비운 팀은 제자리 완료 체크만. A·B는 "강북서AB as" 하나를 같이 씁니다(같은 ID).</span><br><span class="lp ghost" style="margin-top:6px;display:inline-block">네이버 캘린더 목록 불러오기</span>
+        <div style="margin-top:6px;font-size:11px;display:grid;gap:3px"><div><b style="display:inline-block;width:120px">강북서AB as</b> <code style="background:#F1F5F9;padding:1px 6px;border-radius:4px;font-size:10px">(캘린더 ID)</code> <span class="lp ghost" style="font-size:10px;padding:1px 8px">복사</span></div><div><b style="display:inline-block;width:120px">강남C as</b> <code style="background:#F1F5F9;padding:1px 6px;border-radius:4px;font-size:10px">(캘린더 ID)</code> <span class="lp ghost" style="font-size:10px;padding:1px 8px">복사</span></div></div></span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:900;color:#64748B">A <span class="inp2" style="flex:none;width:90px;min-width:0"> </span> B <span class="inp2" style="flex:none;width:90px;min-width:0"> </span> C <span class="inp2" style="flex:none;width:90px;min-width:0"> </span> D <span class="inp2" style="flex:none;width:90px;min-width:0"> </span> E <span class="inp2" style="flex:none;width:90px;min-width:0"> </span></span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>항목</th><th>어떻게</th><th>결과</th></tr></thead><tbody>
+    <tr><td><b>네이버 캘린더 ID</b></td><td>일정 <b>등록</b>이 들어갈 캘린더. 비우면 연동 계정의 기본 캘린더. 캘린더의 <b>공유 URL</b>을 그대로 붙여넣으면 자동으로 ID로 바뀝니다(캘린더 설정 → 공개 설정 → URL 복사). 칸에서 나가면 저장.</td><td>초록 띠 "NAVER_CALENDAR_ID 저장됨"</td></tr>
+    <tr><td><b>[재연동 열기]</b></td><td>네이버 로그인 창이 열립니다. <b>연동 계정</b>으로 로그인하면 웹앱으로 돌아오며 토큰이 갱신됩니다. 네이버 등록이 갑자기 안 될 때(토큰 만료·비밀번호 변경) 쓰는 버튼.</td><td>"연동 완료 ✓" 알림까지 확인</td></tr>
+    <tr><td><b>[네이버 캘린더 목록 불러오기]</b></td><td>연동 계정에 보이는 캘린더 목록을 가져옵니다("불러오는 중…"). "내 캘린더 · 내 할 일 · 네이버 예약"은 뺍니다. 각 줄의 <b>[복사]</b>로 ID를 복사 → 아래 팀 칸에 붙여넣기.</td><td>토스트 <span class="toast ok" style="font-size:12px;padding:4px 10px">{캘린더 이름} ID 복사 ✓</span> / 실패 "복사 실패" / 목록 실패 "캘린더 목록 조회 실패: …" / 없으면 "캘린더가 없습니다"</td></tr>
+    <tr><td><b>팀별 완료 캘린더 ID A~E</b></td><td>일정리스트에서 <b>[완료]</b>를 누르면 그 팀 일정이 익일통합as에서 이 캘린더로 옮겨집니다. 비운 팀은 제자리에서 완료 체크만. A와 B는 "강북서AB as" 하나를 같이 쓰므로 <b>같은 ID</b>를 넣습니다. 칸에서 나가면 저장.</td><td>"NAVER_TEAM_CALENDAR_A 저장됨" 같은 초록 띠</td></tr>
+  </tbody></table>
+  <div class="box naver"><b>일정리스트와의 관계</b>완료 후 뜨는 토스트가 "…캘린더로 이동 + 완료 체크 ✓"면 정상, "완료 체크 ✓ (완료 캘린더 미설정 — 제자리 체크)"면 여기 그 팀 칸이 비어 있다는 뜻입니다.</div>
+
+  <h3 id="s-rooms">카톡방 매핑 — 보내는 방향</h3>
+  <p>"업무 종류 · 지역별로 어느 방에 보낼지 정합니다. 지역 <b>*</b> 는 전 지역 공통입니다." FIELD에서 [📨 카톡방 전송]을 누르면 이 표를 보고 방을 고릅니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="crow" style="border-top:0;align-items:flex-end"><span><span style="font-size:10px;color:#64748B;font-weight:900">업무 종류</span><br><span class="lp ghost">점검 ▾</span></span><span><span style="font-size:10px;color:#64748B;font-weight:900">지역</span><br><span class="lp ghost">A팀 ▾</span></span><span class="grow"><span style="font-size:10px;color:#64748B;font-weight:900">카톡방 이름</span><br><span class="inp2" style="display:block">카톡방 정확한 이름</span></span><span class="lp blue" style="padding:8px 14px">+ 저장</span></div>
+      <div class="crow" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#F1F5F9;padding:0">
+        <div style="background:#fff;padding:8px 12px"><b style="font-size:12px">점검</b><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="tag s">A</span><span class="grow" style="font-size:12px">강북A 점검 보고방</span><span style="color:#CBD5E1">🗑</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="tag s">공통</span><span class="grow" style="font-size:12px">점검 통합 보고방</span><span style="color:#CBD5E1">🗑</span></div></div>
+        <div style="background:#fff;padding:8px 12px"><b style="font-size:12px">AS</b><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="tag s">CD</span><span class="grow" style="font-size:12px">강남CD AS방</span><span style="color:#CBD5E1">🗑</span></div></div>
+        <div style="background:#fff;padding:8px 12px"><b style="font-size:12px">물류</b><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="tag s">공통</span><span class="grow" style="font-size:12px">물류 보고방</span><span style="color:#CBD5E1">🗑</span></div></div>
+      </div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li><b>업무 종류</b> — 점검 · AS · 미수 · 재계약 · 불만 · 초과조정 · 자가 · 부품 · 물류 · PC · 복합기.</li>
+    <li><b>지역</b> — <b>* 공통</b> · A팀 · B팀 · C팀 · D팀 · CD팀.</li>
+    <li><b>카톡방 이름</b> — 카카오톡에 보이는 방 이름과 <b>글자 하나까지 같게</b>. <span class="kbd">Enter</span>를 쳐도 저장.</li>
+    <li><b>[+ 저장]</b> — 같은 업무 종류·지역이 이미 있으면 <b>그 줄의 방 이름을 덮어씁니다</b>(중복 생성 안 됨). 초록 띠 "방 매핑 저장됨". 방 이름이 비면 버튼이 눌리지 않습니다.</li>
+    <li>아래 카드는 업무 종류별로 묶이고 각 줄에 지역 배지(공통/A/B…) · 방 이름 · <b>🗑</b>. 🗑 → "점검 · A 방 매핑을 삭제할까요? "방 이름"" 확인 후 삭제. 비어 있으면 "등록된 방 매핑이 없습니다."</li>
+  </ol>
+  <div class="box tip"><b>방을 고르는 순서</b>FIELD 전송 시 그 업무 종류에서 작성자 팀(A~D)의 줄을 먼저, 없으면 <b>* 공통</b> 줄을 씁니다. 그러니 공통은 안전망으로 하나 두는 것이 좋습니다.</div>
+
+  <h3 id="s-collect">카톡 수집 상태 (First-DATA) · 카톡 수집 방 매핑 — 받는 방향</h3>
+  <p>"드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다." 카톡방 대화를 내보낸 txt를 드라이브 폴더에 올리면 GAS가 읽어 DB에 넣는 길입니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead"><span>카톡 수집 상태 (First-DATA)<br><small>드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</small></span></div>
+      <div class="crow" style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#F1F5F9;padding:0">
+        <div style="background:#fff;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:12px">드라이브 수집함 (카톡 TXT 자동 적재)</b><span class="lp blue" style="font-size:10px">지금 수집 실행</span></div><div style="background:#F8FAFC;border-radius:8px;padding:4px 8px;font-size:11px;margin-top:6px">파일 3 · 처리 3 · 신규 41 · 확인필요 2 · 실패 0</div><div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap"><span class="tag g">트리거 동작 중</span><span class="tag a">대기 파일 3개</span><span class="tag s">주기 10분</span><span class="lp ghost" style="font-size:10px">폴더 열기</span></div></div>
+        <div style="background:#fff;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:12px">일괄 수집 작업 큐</b><span class="lp ghost" style="font-size:10px">끝난 작업 정리</span></div><div style="margin-top:6px;font-size:11px;display:grid;gap:3px"><div><span class="tag g">done</span> 점검 · A팀</div><div><span class="tag a">running</span> AS · CD팀</div><div><span class="tag r">error</span> 미수 · B팀 <span style="color:#F43F5E">시트 권한 없음</span></div></div></div>
+      </div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>부분</th><th>뜻 · 누르면</th></tr></thead><tbody>
+    <tr><td><b>[지금 수집 실행]</b></td><td>트리거를 기다리지 않고 수집함의 txt를 지금 처리합니다. 누르면 "수집 중… (몇 분 걸릴 수 있음)". 끝나면 회색 상자에 <b>"파일 N · 처리 N · 신규 N · 확인필요 N · 실패 N"</b>(실패하면 "실행 실패: …").</td></tr>
+    <tr><td><span class="tag g">트리거 동작 중</span> / <span class="tag r">트리거 없음</span></td><td>자동 수집 시간 트리거가 살아 있는지. "없음"이면 자동 수집이 멈춘 상태 — First-DATA Apps Script 확인.</td></tr>
+    <tr><td><span class="tag a">대기 파일 N개</span></td><td>아직 안 읽은 txt 수(0이면 회색). 상태줄 "수집 대기"와 같은 숫자.</td></tr>
+    <tr><td>주기 · [폴더 열기]</td><td>트리거 주기 표시 · 드라이브 수집 폴더를 새 창으로.</td></tr>
+    <tr><td>빨간 상자</td><td>"수집함이 꺼져 있습니다 — 카톡 대화가 DB로 들어오지 않는 상태입니다."</td></tr>
+    <tr><td><b>일괄 수집 작업 큐</b></td><td>최근 작업 5개: 상태 배지(<span class="tag g">done</span> / <span class="tag r">error</span> / 그 외 노랑) · "방 종류 · 팀" · 오류 앞부분. 없으면 "대기 중인 수집 작업이 없습니다."</td></tr>
+    <tr><td><b>[끝난 작업 정리]</b></td><td>작업이 있을 때만 보임. 끝난 작업을 큐에서 치우고 상태를 다시 읽습니다("정리 중…").</td></tr>
+    <tr><td>"GAS 상태 조회 실패: …"</td><td>First-DATA가 응답하지 않음. 잠시 후 새로고침.</td></tr>
+  </tbody></table>
+  <div class="card">
+    <div class="chead"><span>카톡 수집 방 매핑 <small>받는 방향</small><br><small>드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</small></span></div>
+    <div class="crow" style="align-items:flex-end"><span class="grow"><span style="font-size:10px;color:#64748B;font-weight:900">방이름 (정확히)</span><br><span class="inp2" style="display:block">예: 강북A 미수 보증금미입금 보고방</span></span><span><span style="font-size:10px;color:#64748B;font-weight:900">분류</span><br><span class="lp ghost">점검 ▾</span></span><span><span style="font-size:10px;color:#64748B;font-weight:900">팀</span><br><span class="inp2" style="display:inline-block;width:70px;min-width:0">A / AB / CD</span></span><span class="lp blue" style="padding:8px 14px">저장</span></div>
+    <div class="crow"><span class="tag s">미수</span><span class="tag s">A</span><span class="grow">강북A 미수 보증금미입금 보고방</span><span style="color:#CBD5E1">🗑</span></div>
+  </div>
+  <ol class="steps">
+    <li><b>방이름 (정확히)</b> — 내보낸 txt 첫 줄 "○○ 님과 카카오톡 대화"의 ○○와 똑같이.</li>
+    <li><b>분류</b> — 점검 · AS · 미수 · 불만 · 재계약. <b>팀</b> — A / AB / CD처럼 글자로.</li>
+    <li><b>[저장]</b> → 목록에 "분류 · 팀 · 방이름" 줄이 추가됩니다. 🗑 → ""방이름" 수집 매핑을 삭제할까요?" 확인 후 삭제. 저장 실패는 빨간 띠 "GAS 상태 조회 실패: …" 또는 "저장 실패".</li>
+  </ol>
+  <div class="box warn"><b>두 매핑을 헷갈리지 마세요</b>위 <b>카톡방 매핑</b>은 웹앱이 <b>보내는</b> 방, 이 <b>카톡 수집 방 매핑</b>은 txt를 <b>받아 읽을 때</b> 분류하는 표입니다. 방 이름이 같아도 따로 등록해야 합니다.</div>
+
+  <h3 id="s-jobs">시트 기입 최근 작업</h3>
+  <p>"FIELD·접수에서 구글시트로 보낸 요청의 결과입니다. 실패가 쌓이면 Apps Script 배포를 확인하세요." 최근 20건.</p>
+  <div class="card">
+    <div class="crow" style="border-top:0"><span class="tag g">완료</span><span style="width:110px">점검</span><span class="grow" style="color:#64748B;font-size:11px">행 4,812</span><span style="font-family:monospace;font-size:10px;color:#94A3B8">08-26 14:02</span></div>
+    <div class="crow"><span class="tag r">실패 5회</span><span style="width:110px">AS</span><span class="grow" style="color:#64748B;font-size:11px">만료 — 수동 정리 (필요 시 관리 탭에서 개별 재실행)</span><span class="lp line" style="font-size:10px">다시 실행</span><span style="font-family:monospace;font-size:10px;color:#94A3B8">08-25 17:40</span></div>
+    <div class="crow"><span class="tag a">대기 1회</span><span style="width:110px">물류</span><span class="grow" style="color:#64748B;font-size:11px">-</span><span class="lp line" style="font-size:10px">다시 실행</span><span style="font-family:monospace;font-size:10px;color:#94A3B8">08-26 14:10</span></div>
+  </div>
+  <table class="tbl"><thead><tr><th>칸</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><span class="tag g">완료</span> <span class="tag r">실패 N회</span> <span class="tag a">대기 N회</span></td><td>상태와 시도 횟수. 대기 = 아직 처리 중이거나 다음 시도를 기다림. 다섯 번 실패하면 "실패"로 확정.</td></tr>
+    <tr><td>분류 · 메시지</td><td>양식 종류(점검·AS·물류…) · 완료면 "행 N"(시트의 몇 번째 행에 들어갔는지), 아니면 오류 문구.</td></tr>
+    <tr><td><b>[다시 실행]</b></td><td>완료가 아닌 줄에만. 그 요청 하나를 지금 다시 보냅니다("실행 중…") → 끝나면 목록을 다시 읽어 결과 확인. 상태줄 "시트기입 실패" 숫자도 함께 줄어듭니다.</td></tr>
+    <tr><td>비어 있으면</td><td>"최근 작업 기록이 없습니다."</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>실패가 여러 건 연달아 뜨면</b>한 건씩 [다시 실행]하기 전에 <b>시트 동기화 스위치가 켜져 있는지</b>, 시트 테스트 모드가 꺼져 있는지 먼저 보세요. 스위치 문제가 아니면 Apps Script 배포 문제일 수 있으니 관리자에게.</div>
+
+  <h3 id="s-codes">거래처 코드 미매칭 확정 — 워킨맵 지점 ↔ 임대리스트 거래처</h3>
+  <p>"워킨맵 지점을 임대리스트 거래처와 연결합니다 — 연결됨 N곳 (시리얼 N · 자산 N · 이름 N · 수동 N)". 자동 연결(시리얼 &gt; 자산번호 &gt; 이름 순)이 못 이은 지점을 사람이 직접 잇는 곳입니다. 여기서 확정한 것(수동)은 자동 재연결이 다시 돌아도 보존됩니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="margin-top:0">
+      <div class="chead"><span>거래처 코드 미매칭 확정<br><small>워킨맵 지점을 임대리스트 거래처와 연결합니다 — 연결됨 1,912곳 (시리얼 1,420 · 자산 310 · 이름 96 · 수동 86)</small></span><span class="lp ghost">↻ 새로고침</span></div>
+      <div class="crow band" style="background:#EFF6FF;color:#1D4ED8">✅ 모범상사 강남지점 → 모범상사(주) 연결됨</div>
+      <div class="crow"><span class="tag s">C팀 · 점검</span><span class="grow"><b>가나다세무회계 8층</b></span><span class="lp line" style="font-size:10px">🔗 닫기</span></div>
+      <div class="crow" style="background:#F8FAFC;display:block"><div class="inp2" style="display:block">🔍 임대리스트 거래처명 검색 (2자 이상)</div>
+        <div style="display:grid;gap:4px;margin-top:6px"><div class="crow" style="border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:6px 10px"><b class="grow">가나다세무회계</b><span style="font-size:10px;color:#94A3B8;font-weight:900">기기 4대</span><span style="font-family:monospace;font-size:10px;color:#CBD5E1">C01234</span></div><div class="crow" style="border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:6px 10px"><b class="grow">가나다회계법인</b><span style="font-size:10px;color:#94A3B8;font-weight:900">기기 1대</span><span style="font-family:monospace;font-size:10px;color:#CBD5E1">C05678</span></div></div></div>
+      <div class="crow"><span class="tag s">A팀 · 재계약</span><span class="grow"><b>2609/모범상사 강북</b></span><span class="lp line" style="font-size:10px">🔗 연결</span></div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li>목록은 <b>아직 연결되지 않은 워킨맵 지점</b>(보이는 지점만)이 팀·이름 순으로. 각 줄: "A팀 · 점검/매월/재계약" 배지 · 지점 이름 · <b>[🔗 연결]</b>.</li>
+    <li><b>[연결]</b>을 누르면 그 줄 아래 검색칸이 열립니다: "임대리스트 거래처명 검색 (2자 이상)". 치는 대로 임대리스트에서 이름 부분일치로 최대 8곳(기기 많은 순)이 나옵니다 — 이름 · <b>기기 N대</b> · 코드.</li>
+    <li>맞는 거래처를 <b>누르면 바로 연결</b>됩니다(확인 팝업 없음). 파란 띠 <b>"✅ {지점} → {거래처} 연결됨"</b>, 그 지점은 목록에서 빠지고 요약의 "수동" 숫자가 1 오릅니다. 워킨맵 배지·재계약 매칭은 다음 불러오기부터 새 코드를 씁니다.</li>
+    <li>결과가 없으면 "검색 결과 없음 — 임대리스트에 없는 곳(신규·타사)일 수 있습니다." [닫기]로 접습니다. 모두 연결되면 "🎉 미매칭 지점이 없습니다 — 전부 연결됐습니다."</li>
+  </ol>
+  <div class="box warn"><b>연결은 신중히 — 되돌리기 버튼이 없습니다</b>기기 대수와 코드를 보고 확실할 때만 누르세요. 잘못 연결한 것은 관리자에게 알려 수정해야 합니다. "저장 실패: …"가 뜨면 잠시 후 다시.</div>
+</section>
+
+<section id="push">
+  <h2>6. 알림 — 이 기기의 푸시 알림</h2>
+  <p class="lead">알림은 <b>기기·브라우저 단위</b>입니다 — PC와 폰 각각 켜야 하고, 켠 기기로만 옵니다. 종류별 선택은 서버에 저장돼 발송할 때 걸러집니다.</p>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="card" style="margin-top:0">
+        <div class="crow" style="border-top:0"><span class="tag b" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;font-size:16px">🔔</span><span class="grow"><b>푸시 알림</b><br><span style="font-size:11px;color:#059669;font-weight:700">이 기기로 알림이 오는 중</span></span><span class="lp" style="background:#64748B;color:#fff;border-radius:10px;padding:8px 14px">알림 끄기</span></div>
+        <div class="crow" style="display:grid;gap:6px">
+          <div class="crow" style="border:1px solid #BFDBFE;background:#EFF6FF;border-radius:10px;padding:8px 12px"><span class="tag b" style="background:#2563EB;color:#fff">✓</span><span><b>새 접수</b><br><span style="font-size:11px;color:#64748B">내 팀 지역으로 접수가 들어올 때</span></span></div>
+          <div class="crow" style="border:1px solid #BFDBFE;background:#EFF6FF;border-radius:10px;padding:8px 12px"><span class="tag b" style="background:#2563EB;color:#fff">✓</span><span><b>공지사항</b><br><span style="font-size:11px;color:#64748B">나를 대상으로 공지가 올라올 때</span></span></div>
+          <div class="crow" style="border:1px solid #E2E8F0;border-radius:10px;padding:8px 12px"><span class="tag s" style="background:#fff;border:1px solid #CBD5E1;color:transparent">✓</span><span><b>부서 요청</b><br><span style="font-size:11px;color:#64748B">나에게 온 요청·내 요청의 진행 소식</span></span></div>
+          <div class="crow" style="border:1px solid #BFDBFE;background:#EFF6FF;border-radius:10px;padding:8px 12px"><span class="tag b" style="background:#2563EB;color:#fff">✓</span><span><b>일정 배정</b><br><span style="font-size:11px;color:#64748B">내 이름으로 일정이 배정될 때</span></span></div>
+        </div>
+        <div class="crow"><span class="lp ghost" style="border-radius:10px;padding:8px 12px">📨 내 기기로 테스트 알림 보내기</span><span style="font-size:11px;color:#94A3B8">1~2초 안에 알림창에 떠야 정상입니다</span></div>
+      </div>
+    </div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>머리의 상태 문구</th><th>뜻</th></tr></thead><tbody>
+        <tr><td><span style="color:var(--green);font-weight:900">이 기기로 알림이 오는 중</span></td><td>켜짐. 버튼은 <b>[알림 끄기]</b>.</td></tr>
+        <tr><td>꺼짐 — 아래 버튼으로 켜세요</td><td>버튼은 <b>[🔔 이 기기 알림 켜기]</b>.</td></tr>
+        <tr><td><span style="color:var(--rose);font-weight:900">브라우저에서 차단됨 — 주소창 자물쇠 → 알림 → 허용 후 다시</span></td><td>브라우저가 알림 권한을 막았습니다. 안내대로 허용한 뒤 새로고침.</td></tr>
+        <tr><td><span style="color:var(--amber);font-weight:900">아이폰은 사파리 공유 → "홈 화면에 추가" 후, 그 앱에서 켤 수 있어요</span></td><td>아이폰은 홈 화면에 추가한 앱에서만 알림이 됩니다.</td></tr>
+        <tr><td>이 브라우저는 알림을 지원하지 않습니다</td><td>다른 브라우저로.</td></tr>
+      </tbody></table>
+      <ol class="steps">
+        <li><b>오른쪽 위 작성자(본인)</b>를 먼저 고릅니다 — 알림 대상 매칭 기준. 안 골랐으면 켤 때 토스트 "우측 상단에서 작성자(본인)를 먼저 선택하세요 — 알림 대상 매칭 기준입니다."</li>
+        <li><b>[🔔 이 기기 알림 켜기]</b> → 브라우저 권한 창 → 허용 → 토스트 <span class="toast ok" style="font-size:12px;padding:4px 10px">이 기기로 알림이 옵니다 ✓</span></li>
+        <li><b>종류 4개</b>(새 접수 · 공지사항 · 부서 요청 · 일정 배정)를 눌러 켜고 끕니다(기본 모두 켜짐, "저장 중…" 후 반영). 알림이 꺼져 있으면 흐려져 눌리지 않습니다.</li>
+        <li><b>[📨 내 기기로 테스트 알림 보내기]</b> → 토스트 "테스트 발송 완료 ✓ — 내 이름 구독 N개 기기로 보냈어요". 켜진 기기가 없으면 "발송했지만 내 이름으로 켜진 기기가 없어요 — 위에서 알림을 먼저 켜주세요".</li>
+        <li><b>[알림 끄기]</b> → "이 기기의 알림을 끌까요?" → 토스트 "알림을 껐습니다".</li>
+      </ol>
+      <div class="box tip"><b>내가 한 일은 나에게 안 옵니다</b>"내가 등록·처리한 건 나에게 오지 않아요" — 혼자 테스트할 땐 작성자를 다른 이름으로 바꿔 등록하거나 위 테스트 버튼을 쓰세요. 알림음은 기기 기본음이며 폰 설정(사이트별 알림)에서 바꿉니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>7. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>FIELD에서 보냈는데 카톡방에 안 떠요</summary><p>관리 탭 상태줄부터: ① <b>⚠ 테스트 모드</b>가 보이면 전송이 테스트방으로 가고 있습니다 → 전송·카톡방에서 테스트 모드 끄기. ② "카톡" 점이 <span class="dot r"></span>빨강이면 카톡 전송 스위치가 꺼진 것 → 켜기(큐에 쌓인 건은 이후 나갑니다). ③ 둘 다 정상이면 <b>카톡방 매핑</b>에서 그 업무 종류·팀 줄의 방 이름이 카톡 방 이름과 글자까지 같은지 확인.</p></details>
+    <details><summary>시트에 기입이 안 됐어요</summary><p>전송·카톡방 → <b>시트 기입 최근 작업</b>에서 그 건이 "실패"나 "대기"인지 보고 <b>[다시 실행]</b>. 실패가 계속이면 시트 동기화 스위치·시트 테스트 모드를 확인하고, 그래도 안 되면 오류 문구를 관리자에게.</p></details>
+    <details><summary>네이버 캘린더에 일정이 안 올라가요</summary><p>① 스위치 <b>네이버 캘린더 미러</b>가 켜져 있는지. ② 갑자기 안 되기 시작했다면 토큰 만료 — <b>[재연동 열기]</b>로 연동 계정 로그인 후 "연동 완료 ✓" 확인. ③ 완료 시 "완료 캘린더 미설정 — 제자리 체크"가 뜨면 <b>팀별 완료 캘린더 ID</b>의 그 팀 칸이 빈 것 → [네이버 캘린더 목록 불러오기]로 ID 복사해 넣기.</p></details>
+    <details><summary>새로 온 직원이 작성자 목록에 없어요</summary><p>인원 탭 → <b>[인원 추가]</b> → 이름·부서·팀 넣고 [추가]. 등록 즉시 작성자 목록·요청 대상에 나타납니다. 이미 있는데 안 보이면 퇴사자로 내려가 있을 수 있으니 [퇴사 N명 보기] → <b>복구</b>.</p></details>
+    <details><summary>한 사람이 두 팀을 겸직해요</summary><p>인원 탭에서 그 사람 <b>✎</b> → 팀/파트에서 <b>직접 입력…</b> → "A·B"(가운뎃점) → [저장]. 양 팀 일정 필터·배정·중간보고에 함께 잡힙니다.</p></details>
+    <details><summary>동기화 현황에 빨간 칩이 떠요</summary><p>빨강은 "기준 일수 넘게 조용함"입니다. 시트 길이면 First-DATA Apps Script의 트리거가 살아 있는지, 카톡 길이면 봇 기기·웹훅 주소를 확인하세요. 회색 "카톡 (중단)"은 예전 경로라 정상입니다. 주 1회 동기화 표(임대리스트·확장성)는 9일 기준이라 주말 직후엔 잠깐 빨갈 수 있습니다.</p></details>
+    <details><summary>담당자 변경을 반영했는데 임대리스트는 그대로예요</summary><p>정상입니다 — [워킨맵 반영]은 <b>워킨맵</b>만 바꿉니다. 임대리스트는 구글시트가 원본이라 시트에서 고쳐야 다음 동기화 때 반영됩니다.</p></details>
+    <details><summary>알림이 안 와요</summary><p>① 알림 탭 머리 문구 확인 — "차단됨"이면 브라우저 주소창 자물쇠 → 알림 → 허용. ② 아이폰은 홈 화면에 추가한 앱에서만. ③ 내가 등록·처리한 건은 나에게 오지 않습니다. ④ [📨 내 기기로 테스트 알림 보내기]로 1~2초 안에 오는지 확인. ⑤ 종류 체크가 꺼져 있지 않은지.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">관리 길잡이 · 조회 탭은 <a href="lookup.html">조회 길잡이</a>에서</p>
+</main>
+</div>
+</body>
+</html>

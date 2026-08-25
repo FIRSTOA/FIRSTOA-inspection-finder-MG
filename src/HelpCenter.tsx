@@ -29,8 +29,8 @@ const GUIDES: Guide[] = [
   { group: "고객·홍보", key: "happycall", title: "해피콜", desc: "해피콜 메시지 생성·예약·발송 상태", url: "/guide/happycall.html", updated: "2026-08-26" },
   { group: "고객·홍보", key: "promo", title: "홍보물 발송·인쇄", desc: "홍보물 만들기·발송·인쇄", url: "/guide/promo.html", updated: "2026-08-26" },
   { group: "고객·홍보", key: "counter-sms", title: "카운터 문자전송", desc: "마감 목록 업로드 → 팀 전송, 이중 발송 방지", url: "/guide/counter-sms.html", updated: "2026-08-26" },
-  { group: "조회·관리", key: "lookup", title: "조회", desc: "통합이력 검색, 기기정보 수정, 필드로 불러오기" },
-  { group: "조회·관리", key: "admin", title: "관리", desc: "인원, 네이버 캘린더 설정, 카톡방 매핑, 동기화 현황, 거래처 코드" },
+  { group: "조회·관리", key: "lookup", title: "조회", desc: "기록 조회·CSV, 기기정보 수정, 숨김·복원, 미수·초과·재고 보드, 통합이력", url: "/guide/lookup.html", updated: "2026-08-26" },
+  { group: "조회·관리", key: "admin", title: "관리", desc: "인원, 네이버 캘린더 설정, 카톡방 매핑, 동기화 현황, 거래처 코드, 알림", url: "/guide/admin.html", updated: "2026-08-26" },
 ];
 const GROUPS = Array.from(new Set(GUIDES.map((g) => g.group)));
 
