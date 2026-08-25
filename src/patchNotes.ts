@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "888eb2c14b",
+    "date": "2026-08-25",
+    "note": "모바일 저장 실패 수리(DB 먼저·엣지 타임아웃·에러 원문), 재계약 탭 모바일 6곳, 워킨맵 재연결 재시도, 자동일정 등급별 거리 상한, 내 일정 물류 FIELD 직행"
+  },
+  {
     "hash": "1511cfbcef",
     "date": "2026-08-25",
     "note": "완료·연기 양식 접수내용 — 양식의 제목/상태 줄 우선, 구분 낱말 A/S 오인 수리"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cadd90691c",
     "date": "2026-08-07",
     "note": "빌드 보정 — AutoSchedule 미사용 import 제거"
-  },
-  {
-    "hash": "a4568cdab6",
-    "date": "2026-08-07",
-    "note": "자동 일정 — 워킨맵 기준 + 실제 거리순 + 등급 다중 선택"
   }
 ];

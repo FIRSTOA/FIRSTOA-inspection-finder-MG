@@ -6025,14 +6025,12 @@ export default function App() {
             <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-sm sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 truncate text-sm font-semibold text-slate-500">{fieldTicketVendor(ticketDonePrompt.vendor || "").vendor || ticketDonePrompt.vendor || "이 일정"}</div>
-              {ticketDonePrompt.matched
-                ? <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">
-                    카톡방 전송은 <b>이미 끝났습니다</b>. 방금 보낸 양식과 같은 업체의 <b>미완료 일정</b>이 일정리스트에 있어서 정리할지 묻는 것뿐입니다.<br />
-                    같은 건이면 <b>완료</b>, 다음에 다시 가야 하면 <b>익일로</b>, 관계없는 일정이면 <b>그대로 두기</b>를 누르세요.
-                  </div>
-                : <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[12px] font-bold leading-5 text-slate-600">
-                    카톡방 전송은 <b>이미 끝났습니다</b>. 일정리스트에서 열어 온 일정을 어떻게 정리할지만 고르세요.
-                  </div>}
+              <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">
+                카톡방 전송은 끝났습니다. 여기서 정리하면 <b>일정리스트와 네이버 캘린더가 함께</b> 바뀝니다.<br />
+                <b>✓ 완료</b> → 일정 완료 + 네이버 일정이 팀 완료 캘린더로 이동·완료 체크<br />
+                <b>→ 익일로</b> → 사유를 적으면 팀 AS방에 <b>별도 메시지</b>로 나가고, 네이버 일정 날짜도 옮겨집니다
+                {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양체와 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
+              </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>
                 <button type="button" onClick={() => { setTicketDeferPrompt(ticketDonePrompt); setTicketDeferDate(nextBizYmd(kstDate())); setTicketDonePrompt(null); }} className="rounded-lg border border-purple-200 bg-purple-50 py-3 text-sm font-black text-purple-700">→ 익일로</button>
@@ -6419,8 +6417,7 @@ export default function App() {
                 /* 통합 전송 팝업(방 선택·자가/부품 자동 감지) — 일정리스트에서 왔든 필드탭에서 직접 붙여넣었든 같은 버튼.
                    전송 성공 뒤 일정리스트에 같은 업체 미완료 일정이 있으면 완료/익일 팝업 → 팀 완료 캘린더 이동까지 이어진다. */
                 <>
-                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-4 rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
-                  <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} title="완료/익일 정리 — 팀 완료 캘린더까지 반영 (전송 없이 정리만)" className="col-span-2 whitespace-nowrap rounded-xl border border-emerald-600 bg-white py-3.5 text-sm font-black text-emerald-700">일정정리</button>
+                  <button onClick={openSendPicker} disabled={!hasOutput || sending} className="col-span-6 rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
                 </>
               ) : mode === "replacement" ? (
                 <button type="button" disabled className="col-span-6 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-black text-slate-400">전송 불가 · 복사 전용</button>
@@ -6526,8 +6523,7 @@ export default function App() {
           {fieldRegionMissing && <div className="mb-1 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요"}</div>}
           <div className="flex flex-wrap gap-2">
             {(mode === "inspection" || mode === "blank-report") ? (<>
-              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-[2] whitespace-nowrap rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
-              <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} className="flex-1 whitespace-nowrap rounded-xl border border-emerald-600 bg-white py-3.5 text-sm font-black text-emerald-700">일정정리</button>
+              <button onClick={openSendPicker} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "📨 카톡방 전송"}</button>
             </>) : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
