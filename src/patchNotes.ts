@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "53f6242c59",
+    "date": "2026-08-26",
+    "note": "사이드바 재편(매일 쓰는 5개 상단 + 현장·동선/소식·학습/기록·성과/고객·홍보 접이식 그룹), 사용설명서 목록 그룹 접기"
+  },
+  {
     "hash": "d480e49fbb",
     "date": "2026-08-26",
     "note": "사용설명서 — 조회·관리 편 등록, 21편 완성"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "18dc15c25b",
     "date": "2026-08-14",
     "note": "지오코딩 엣지 변형 보강 — 층·호 제거(한글 \\b 미작동 수정) + 건물번호 압축형"
-  },
-  {
-    "hash": "7821766e25",
-    "date": "2026-08-14",
-    "note": "지오코딩을 엣지 프록시로 — 카카오 대비 + 노미나팀 안정화, 내 일정 지도 워킨맵과 통일"
   }
 ];
