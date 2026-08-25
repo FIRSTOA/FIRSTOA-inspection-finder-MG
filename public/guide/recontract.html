@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>재계약 준비 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 재계약 준비 전용 재현 요소 (추가) ── */
+.dk{background:#1E252F;border-radius:16px;padding:14px 16px;color:#fff;display:grid;gap:8px}
+.dk2{background:#151A23;border-radius:0 0 16px 16px;padding:8px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:#C5CDD8;font-size:11.5px;font-weight:900}
+.dk.top{border-radius:16px 16px 0 0}
+.dk .h{font-size:14px;font-weight:900;color:#fff}
+.dk .sub{font-size:11.5px;color:#94A3B8;font-weight:500}
+.dk .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.wchip{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.1);color:#CBD5E1}
+.wchip.on{background:#fff;color:#0f172a} .wchip.blue{background:#2563EB;color:#fff}
+.wchip.red{background:rgba(239,68,68,.2);color:#FCA5A5} .wchip.em{background:rgba(16,185,129,.2);color:#6EE7B7} .wchip.am{background:rgba(245,158,11,.2);color:#FCD34D} .wchip.vi{background:rgba(139,92,246,.2);color:#C4B5FD}
+.bbtn{border-radius:12px;padding:8px 14px;font-size:12.5px;font-weight:900;display:inline-flex;align-items:center;gap:6px}
+.bbtn.blue{background:#2563EB;color:#fff} .bbtn.ghost{background:rgba(255,255,255,.1);color:#E2E8F0} .bbtn.txt{color:#94A3B8}
+.bbtn.dark{background:#0f172a;color:#fff;border-radius:999px} .bbtn.white{background:#fff;color:#64748B;border:1px solid #CBD5E1;border-radius:999px}
+.ta{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:#94A3B8;min-height:64px;white-space:pre-wrap}
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;color:#0f172a}
+.card .pad{padding:14px 16px}
+.lrow{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155}
+.gsq{flex:none;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff}
+.gsq.ss{background:#7C3AED} .gsq.s{background:#2563EB}
+.lrow .nm{flex:1;min-width:0} .lrow .nm b{display:block;color:#0f172a;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .lrow .nm small{display:block;color:#94A3B8;font-size:11px}
+.dd{font-size:11px;font-weight:900;font-variant-numeric:tabular-nums}
+.dd.r{color:#E11D48} .dd.a{color:#D97706} .dd.g{color:#94A3B8}
+.tg{border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+.tg.em{background:#D1FAE5;color:#047857} .tg.sl{background:#F1F5F9;color:#64748B} .tg.bl{background:#DBEAFE;color:#1D4ED8} .tg.rd{background:#FEE2E2;color:#DC2626} .tg.am{background:#FEF3C7;color:#B45309} .tg.dk{background:#0f172a;color:#fff} .tg.vi{background:#EDE9FE;color:#6D28D9}
+.statg{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:640px){.statg{grid-template-columns:repeat(4,1fr)}}
+.st .l{font-size:11px;font-weight:700;color:#94A3B8} .st .v{font-size:19px;font-weight:900;color:#0f172a;line-height:1.2;font-variant-numeric:tabular-nums} .st .v small{font-size:11px;color:#94A3B8;font-weight:500;margin-left:2px} .st .s{font-size:11px;color:#94A3B8}
+.st .v.bl{color:#2563EB} .st .v.am{color:#D97706} .st .v.gr{color:#059669} .st .v.rd{color:#DC2626}
+.plan{background:linear-gradient(135deg,#2563EB,#3B82F6);color:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.plan .l{font-size:10.5px;font-weight:900;letter-spacing:.08em;color:#BFDBFE;text-transform:uppercase}
+.plan .big{font-size:20px;font-weight:900} .plan .r{font-size:11.5px;color:#DBEAFE}
+.plan .kv{display:flex;gap:16px;margin-left:auto;text-align:right} .plan .kv div{font-size:10px;color:#BFDBFE} .plan .kv b{display:block;font-size:14px;color:#fff;font-variant-numeric:tabular-nums} .plan .kv b.am{color:#FCD34D}
+.alt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:9px 16px;border-top:1px solid #F1F5F9;font-size:12px;color:#64748B} .alt .rk{width:28px;font-size:11px;font-weight:900;color:#94A3B8} .alt b{color:#1E293B;font-size:12.5px} .alt .cost{margin-left:auto;font-variant-numeric:tabular-nums;color:#64748B}
+.mtbl{width:100%;border-collapse:collapse;font-size:12px;color:#334155;font-variant-numeric:tabular-nums}
+.mtbl th{font-size:11px;font-weight:700;color:#94A3B8;text-align:left;padding:6px 8px} .mtbl td{padding:6px 8px;border-top:1px solid #F1F5F9} .mtbl .num{text-align:right} .mtbl .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;font-weight:900;color:#64748B}
+.mtbl tr.sub td{background:#F8FAFC;color:#64748B;font-size:11px;font-weight:900;border-top:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0}
+.mtbl tr.item td{padding:2px 8px;border-top:0;font-size:11.5px;color:#94A3B8}
+.mtbl tr.item td.ind{border-left:2px solid #E2E8F0;padding-left:10px}
+.mtbl tr.item.ex td{color:#DC2626;font-weight:700} .mtbl tr.item.ex td.ind{border-left-color:#FCA5A5}
+.mtbl tfoot td{border-top:2px solid #CBD5E1;font-weight:900;color:#0f172a}
+.mtbl .green{color:#059669;font-weight:700}
+.reddot{display:inline-flex;align-items:center;gap:4px;color:#DC2626;font-weight:700;font-size:11.5px} .reddot::before{content:"";width:6px;height:6px;border-radius:50%;background:#EF4444}
+.sim{background:#EFF6FF;border-top:1px solid #F1F5F9;padding:10px 16px;font-size:12px;color:#334155;display:grid;gap:4px}
+.sim .in{display:inline-block;border:1px solid #CBD5E1;border-radius:8px;background:#fff;padding:2px 8px;width:80px;text-align:right;font-weight:900;font-variant-numeric:tabular-nums}
+.tst{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:8px 12px;font-size:12.5px;font-weight:700;border:1px solid}
+.tst.ok{background:#ECFDF5;color:#065F46;border-color:#A7F3D0} .tst.err{background:#FFF1F2;color:#9F1239;border-color:#FECDD3} .tst.info{background:#fff;color:#1E293B;border-color:#E2E8F0}
+.ban{border-radius:14px;padding:10px 14px;font-size:12px;font-weight:900;line-height:1.6}
+.ban.am{background:#FFFBEB;border:1px solid #FCD34D;color:#92400E}
+.ban.bl{background:#172554;color:#93C5FD;border-radius:0 0 16px 16px;padding:6px 14px;font-size:11px}
+.pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;background:#F8FAFC;border-radius:12px;padding:10px 12px;color:#475569;white-space:pre-wrap;line-height:1.6}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#targets">2. 방문 대상 목록 읽기</a>
+  <a href="#paste">3. 대장 붙여넣기 → 분석</a>
+  <a href="#cards">4. 분석된 거래처 카드</a>
+  <a href="#head">5. 상세 — 다크 머리</a>
+  <a href="#tabs">6. 탭 다섯 개와 기간 칩</a>
+  <a href="#summary">7. 요약 탭</a>
+  <a class="sub" href="#s-stat">한눈 요약 4칸</a>
+  <a class="sub" href="#s-rate">기기별 활용률</a>
+  <a class="sub" href="#s-plan">추천 플랜 A/B/C</a>
+  <a class="sub" href="#s-check">방문 전 확인 · 권한 밖</a>
+  <a href="#usage">8. 사용량 탭</a>
+  <a class="sub" href="#u-sim">기본매수 시뮬레이터</a>
+  <a href="#ledger">9. 대장 탭</a>
+  <a href="#contract">10. 계약·적요 탭</a>
+  <a href="#history">11. 고객 이력 탭</a>
+  <a href="#banners">12. 노란 경고 배너</a>
+  <a href="#copy">13. 한 장 복사</a>
+  <a href="#judge">14. 판정은 어떻게 나오나</a>
+  <a href="#faq">15. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 재계약 준비</div>
+  <h1>재계약 준비 길잡이</h1>
+  <p>이번 분기 재계약 방문 갈 곳을 <b style="color:#fff">워킨맵 목록 그대로</b> 보여주고, 이카운트 <b style="color:#fff">거래처관리대장</b>을 통째로 붙여넣으면 계약 이력·사용량·수금·불만·AS를 한 화면으로 읽어 <b style="color:#fff">"이 업체엔 어떤 카드를 내밀지"</b>까지 정리해 주는 화면입니다. 방문 전에 이 화면 한 번, 그리고 <b style="color:#fff">[한 장 복사]</b>로 팀 카톡에 붙이면 준비가 끝납니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-26 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">대장 한 장 읽기</div><div class="big"><s>30분</s> → <em>10초</em></div><div class="sub">Ctrl+A → 붙여넣기 → 계약·사용량·수금 자동 분석</div></div>
+    <div class="stat green"><div class="lbl">업체 이력 모으기</div><div class="big"><s>4곳 검색</s> → <em>0번</em></div><div class="sub">불만 · 미수 · AS · 지난 협상이 자동으로 붙음</div></div>
+    <div class="stat purple"><div class="lbl">혜택 비용 계산</div><div class="big"><s>계산기</s> → <em>A/B/C</em></div><div class="sub">플랜별 회사 매출 · 혜택 비용 · ROI 자동</div></div>
+    <div class="stat amber"><div class="lbl">방문 대상 고르기</div><div class="big"><em>워킨맵</em>과 <em>같음</em></div><div class="sub">S·SS만, 완료(G5)·영업부·이관은 자동 제외</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">업체 하나 방문 준비</div><div class="pills"><span>이카운트 대장 출력</span><span>적요 읽으며 계약 이력 정리</span><span>월별 카운터 눈으로 합산</span><span>초과료 계산기</span><span>미수·불만 시트 따로 검색</span><span>혜택 안 머릿속 계산</span></div><div class="ba-count">6단계 · 사람마다 다름</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">업체 하나 방문 준비</div><div class="pills"><span class="hot">목록에서 업체 클릭</span><span class="hot">Ctrl+A · Ctrl+C</span><span class="hot">분석하기</span></div><div class="ba-count">3번 · 같은 기준</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">팀에 공유</div><div class="pills"><span>정리한 내용 타이핑</span><span>숫자 옮겨 적기</span><span>카톡 전송</span></div><div class="ba-count">3단계 · 오타 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">팀에 공유</div><div class="pills"><span class="hot">한 장 복사</span><span class="hot">카톡에 붙이기</span></div><div class="ba-count">2번 누르기</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>업체는 꼭 <b>방문 대상 목록에서 클릭</b>해서 시작하세요. 그래야 그 업체 줄에 "분석됨"이 붙고, 워킨맵 메모의 기본료와 대장이 다를 때 경고도 뜹니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 재료 세 가지가 한 화면에 모입니다</h2>
+  <p class="lead">이 화면은 새로 만드는 데이터가 없습니다. 이미 있는 세 곳을 <b>읽어서 합쳐 보여주기만</b> 합니다. 그래서 목록이 워킨맵과 다르거나, 이력이 시트와 다를 일이 없습니다.</p>
+  <div class="sync">
+    <div class="n">워킨맵<small>이번 분기 재계약 목록 · S/SS 등급 · 종료일</small></div>
+    <div class="arr">+</div>
+    <div class="n">이카운트 대장<small>적요(계약 이력) · 판매/수금내역(카운터·초과·수금)</small></div>
+    <div class="arr">+</div>
+    <div class="n">사내 원장<small>불만 · 미수 · AS · 지난 재계약 협상 · 거래처 특이사항</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>이카운트 대장은 사람이 직접 붙여넣습니다</b>프로그램 설치나 자동 로그인 없이 전 직원이 쓰게 하려고, 이카운트 화면을 <b>Ctrl+A → Ctrl+C</b>로 복사해 붙이는 방식입니다. 적요와 판매/수금내역이 <b>둘 다</b> 들어와야 분석됩니다.</div>
+    <div class="box warn"><b>분석 기록은 창을 닫으면 사라집니다</b>이카운트 매출·수납 데이터라 기기에 남기지 않습니다. 브라우저 탭을 닫으면 붙여넣은 대장과 분석이 모두 지워집니다(새로고침은 괜찮음). 며칠에 걸쳐 준비한다면 <b>[한 장 복사]</b>로 결과를 먼저 카톡에 남기세요.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성 — 목록 화면</h2>
+  <p>사이드바 <b>재계약 준비</b>를 누르면 나오는 첫 화면입니다. 위에서 아래로 <b>붙여넣기 카드 → 분석된 거래처 → 이번 분기 방문 대상</b> 순서입니다. (처음 열어 분석이 하나도 없으면 붙여넣기 카드가 항상 펼쳐져 있습니다.)</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 목록</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:242px">2</span>
+    <span class="badge" style="left:26px;top:392px">3</span>
+    <span class="badge" style="right:26px;top:392px">4</span>
+    <span class="badge" style="left:26px;top:448px">5</span>
+    <div class="dk">
+      <div><span class="wchip" style="background:rgba(59,130,246,.2);color:#93C5FD">이카운트 붙여넣기</span></div>
+      <div style="font-size:13px;font-weight:900;color:#FCD34D">▶ 주식회사 한빛무역 의 관리대장을 붙여넣으세요</div>
+      <div class="h" style="font-size:18px">이카운트 화면을 통째로 붙여넣으세요</div>
+      <div class="sub">이카운트 → 회계 I → 출력물 → <b style="color:#E2E8F0">거래처관리대장 I</b>에서 거래처 조회 → <b style="color:#E2E8F0">전체 선택(Ctrl+A) → 복사(Ctrl+C)</b> → 아래에 붙여넣기(Ctrl+V). 분석 기록은 <b style="color:#E2E8F0">이 창을 닫으면 남지 않습니다</b>.</div>
+      <div class="ta">여기에 붙여넣기 — 적요와 판매/수금내역이 모두 들어와야 합니다</div>
+      <div class="row"><span class="bbtn blue">분석하기</span><span class="bbtn ghost">📋 클립보드에서 바로 분석</span><span class="bbtn txt">닫기</span></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px;flex-wrap:wrap;gap:6px"><b style="font-size:14px;color:#0f172a">분석된 거래처 2곳 <span style="font-size:11px;color:#94A3B8;font-weight:500">창을 닫으면 사라집니다</span></b><span style="display:flex;gap:6px"><span class="bbtn dark" style="padding:6px 12px;font-size:11.5px">+ 거래처 추가</span><span class="bbtn white" style="padding:6px 12px;font-size:11.5px">모두 지우기</span></span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+      <div class="card pad"><div style="display:flex;gap:5px;margin-bottom:6px"><span class="tg em">쉬움</span><span class="tg sl">장기 8년</span></div><b style="font-size:15px">주식회사 한빛무역</b><div style="font-size:11.5px;color:#64748B;margin-top:2px">월 69,000원 · 컬러 62% · 초과 2회</div><div style="margin-top:8px;background:#EFF6FF;color:#1D4ED8;border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:900">→ 3년 + 혜택 없음</div></div>
+      <div class="card pad"><div style="display:flex;gap:5px;margin-bottom:6px"><span class="tg am">어려움</span><span class="tg sl">일반 4년</span></div><b style="font-size:15px">그린치과</b><div style="font-size:11.5px;color:#64748B;margin-top:2px">월 120,000원 · 컬러 131% · 초과 7회</div><div style="margin-top:8px;background:#EFF6FF;color:#1D4ED8;border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:900">→ 3년 + 무상 1개월</div></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="dk top" style="border-radius:16px 16px 0 0;padding:10px 14px"><div class="row"><span class="h" style="flex:1">3Q 재계약 방문 대상 — 총 24곳 <span class="sub">워킨맵 기준</span></span><span class="wchip">A팀</span><span class="wchip">B팀</span><span class="wchip on">C팀 ★</span><span class="wchip">D팀</span><span class="wchip">↻ 새로고침</span></div></div>
+      <div class="dk2" style="border-radius:0"><span class="wchip on" style="padding:3px 9px">전체 24</span><span class="wchip" style="padding:3px 9px">SS 6</span><span class="wchip" style="padding:3px 9px">S 18</span><span style="margin-left:auto;font-size:10px;color:#64748B">분석됨 2/24 · 워킨맵 완료(G5) 5곳 제외됨</span></div>
+      <div class="lrow"><span class="gsq ss">SS</span><span class="nm"><b>주식회사 한빛무역</b><small>2026-08-31 종료 · 지점 2곳</small></span><span class="dd r">D-5</span><span class="tg em">분석됨 → 보기</span></div>
+      <div class="lrow"><span class="gsq s">S</span><span class="nm"><b>동아세무회계</b><small>2026-09-30 종료</small></span><span class="dd a">D-35</span><span class="tg sl">대장 붙여넣기</span></div>
+      <div class="lrow"><span class="gsq s">S</span><span class="nm"><b>미래건축사무소</b><small>2026-10-31 종료</small></span><span class="dd g">D-66</span><span class="tg sl">대장 붙여넣기</span></div>
+      <div class="lrow"><span class="gsq ss">SS</span><span class="nm"><b>(주)새봄유통</b><small>종료일 미기재</small></span><span class="tg sl">대장 붙여넣기</span></div>
+      <div style="text-align:center;padding:8px;font-size:12px;font-weight:900;color:#2563EB">더 보기 (20곳 남음)</div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>붙여넣기 카드</b> — 이카운트 대장을 붙이고 <b>[분석하기]</b>. 방문 대상 목록에서 업체를 누르면 노란 글씨로 <b>"▶ ○○○ 의 관리대장을 붙여넣으세요"</b>가 뜨고 화면이 맨 위로 올라옵니다. <a href="#paste">3번</a>.</div></div>
+    <div class="item"><span class="num">2</span><div><b>분석된 거래처</b> — 붙여넣어 분석한 업체가 카드로 쌓입니다(최근 것이 앞). 카드를 누르면 상세. <b>[+ 거래처 추가]</b>는 붙여넣기 카드를 다시 펼치고, <b>[모두 지우기]</b>는 전부 삭제. <a href="#cards">4번</a>.</div></div>
+    <div class="item"><span class="num">3</span><div><b>이번 분기 방문 대상</b> — 워킨맵의 재계약 목록에서 <b>S·SS 등급만</b> 가져온 것. 팀 칩(★=내 팀)과 <b>↻ 새로고침</b>. <a href="#targets">2번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>등급 칩 · 집계</b> — 전체 / SS / S 로 걸러 보기. 오른쪽 작은 글씨 <b>"분석됨 2/24"</b>는 목록 중 대장을 이미 붙인 곳 수, <b>"워킨맵 완료(G5) 5곳 제외됨"</b>은 워킨맵에서 완료 처리돼 이 목록에서 빠진 수.</div></div>
+    <div class="item"><span class="num">5</span><div><b>업체 한 줄</b> — 등급 네모(SS 보라 · S 파랑), 업체명, 종료일, D-day, 오른쪽 상태 배지. 누르면 붙여넣기 안내 또는(이미 분석했으면) 바로 상세.</div></div>
+  </div>
+</section>
+
+<section id="targets">
+  <h2>2. 방문 대상 목록 읽기 — 워킨맵과 똑같은 기준</h2>
+  <p>이 목록은 재계약 화면이 따로 만드는 게 아니라 <b>워킨맵의 이번 분기 재계약 목록</b>을 그대로 가져와 CS가 방문하는 등급만 남긴 것입니다. 워킨맵에서 업체를 완료(G5)로 바꾸면 <b>↻ 새로고침</b>을 눌렀을 때 여기서도 빠집니다.</p>
+  <table class="tbl"><thead><tr><th>요소</th><th>뜻 · 누르면</th></tr></thead><tbody>
+    <tr><td><b>3Q 재계약 방문 대상 — 총 24곳</b></td><td>지금 분기(1~3월=1Q, 4~6월=2Q, 7~9월=3Q, 10~12월=4Q)와 걸러진 뒤 업체 수. 목록을 불러오는 동안은 <b>"워킨맵 목록을 불러오는 중…"</b>, 없으면 <b>"C팀 3Q 방문 대상이 없습니다."</b></td></tr>
+    <tr><td><b>A팀 · B팀 · C팀 ★ · D팀</b></td><td>워킨맵의 팀별 목록. 처음 열면 <b>내 팀(★)</b>이 선택돼 있습니다(A~D 밖의 사람은 C팀이 기본). 다른 팀을 누르면 그 팀 목록으로 바뀌고 "더 보기"도 10곳부터 다시 시작.</td></tr>
+    <tr><td><b>↻ 새로고침</b></td><td>워킨맵에서 바꾼 것(완료 처리·메모 수정)을 다시 읽어 옵니다. 붙여넣은 분석은 지워지지 않습니다.</td></tr>
+    <tr><td><b>전체 24 · SS 6 · S 18</b></td><td>등급으로 걸러 보기. 숫자는 각 등급 업체 수. 해당 등급이 없으면 <b>"SS급 대상이 없습니다."</b></td></tr>
+    <tr><td><b>분석됨 2/24</b></td><td>이 목록 업체 중 대장을 붙여 분석해 둔 곳 수. 이카운트 상호가 워킨맵 이름과 달라도, <b>목록에서 업체를 눌러 시작했으면</b> 그 업체에 "분석됨"이 붙습니다.</td></tr>
+    <tr><td><b>워킨맵 완료(G5) 5곳 제외됨</b></td><td>워킨맵에서 라벨 G5(재계약 완료)로 바꾼 업체 수. 이 목록에서 자동으로 빠집니다. 0이면 이 글씨가 안 보입니다.</td></tr>
+    <tr><td><b>등급 네모</b></td><td><span class="gsq ss" style="display:inline-flex;width:22px;height:22px;font-size:10px;vertical-align:middle">SS</span> 팀장급 방문 · <span class="gsq s" style="display:inline-flex;width:22px;height:22px;font-size:10px;vertical-align:middle">S</span> 일반프로·부파트장 방문. 같은 업체에 S·SS 지점이 섞이면 높은 쪽으로 표시.</td></tr>
+    <tr><td><b>2026-08-31 종료 · 지점 2곳</b></td><td>종료일이 가장 빠른 지점 기준. 같은 업체의 지점(401호·405호)은 한 줄로 묶이고 "지점 N곳"이 붙습니다. 종료일을 못 읽으면 <b>"종료일 미기재"</b>.</td></tr>
+    <tr><td><b>D-5 · D-35 · 12일 지남</b></td><td>종료일까지 남은 날. <span style="color:var(--rose);font-weight:900">14일 이하 빨강</span>, <span style="color:var(--amber);font-weight:900">45일 이하 호박</span>, 그 밖은 회색. 지났으면 "N일 지남". 휴대폰 폭에서는 숨겨집니다.</td></tr>
+    <tr><td><b>분석됨 → 보기</b> / <b>대장 붙여넣기</b></td><td>초록이면 누르는 즉시 상세로. 회색이면 누르면 붙여넣기 카드가 펼쳐지고 노란 안내 "▶ ○○○ 의 관리대장을 붙여넣으세요"가 뜹니다.</td></tr>
+    <tr><td><b>더 보기 (20곳 남음)</b></td><td>처음엔 10곳만 보이고, 누를 때마다 20곳씩 더 펼쳐집니다. 정렬은 종료일 빠른 순 → 업체명 순.</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box tip"><b>이 목록에서 빠지는 업체</b>① 라벨 <b>G5</b>(재계약 완료) · <b>G6·G7</b>(영업부 관할) · <b>G12</b>(이관) ② 등급이 없는 곳 ③ 등급이 <b>V·N·NN</b>인 곳(V는 영업부 관할). 워킨맵에는 보이는데 여기 없다면 이 셋 중 하나입니다.</div>
+    <div class="box tip"><b>종료일이 옛 연도인데 D-day가 정상인 이유</b>워킨맵 이름 앞 "2109/…"처럼 처음 계약한 연도가 남은 자동연장 건은, 종료 <b>월</b>이 이번 분기 달(3Q=8·9·10월)에 들면 올해로 읽습니다. 그래서 "1786일 지남" 같은 엉뚱한 숫자가 안 나옵니다.</div>
+  </div>
+</section>
+
+<section id="paste">
+  <h2>3. 이카운트 대장 붙여넣기 → 분석</h2>
+  <p class="lead">가장 중요한 동작입니다. 이카운트 화면을 <b>통째로</b> 복사해서 붙이면 됩니다 — 일부만 골라 복사하지 마세요.</p>
+  <ol class="steps">
+    <li><b>방문 대상 목록에서 업체를 누른다</b> → 화면이 맨 위로 올라가고 붙여넣기 카드에 노란 글씨 <b>"▶ 주식회사 한빛무역 의 관리대장을 붙여넣으세요"</b>가 뜹니다. (목록 없이 바로 붙여도 되지만, 그러면 목록 줄에 "분석됨"이 안 붙을 수 있습니다.)</li>
+    <li><b>이카운트</b>에서 <b>회계 I → 출력물 → 거래처관리대장 I</b>을 열고 그 거래처를 조회합니다. 화면에 <b>적요</b>(위쪽 계약 메모)와 <b>판매/수금내역</b>(아래쪽 표)이 둘 다 보여야 합니다.</li>
+    <li>이카운트 화면을 클릭한 뒤 <span class="kbd">Ctrl</span>+<span class="kbd">A</span>(전체 선택) → <span class="kbd">Ctrl</span>+<span class="kbd">C</span>(복사).</li>
+    <li>웹앱으로 돌아와 <b>[클립보드에서 바로 분석]</b>을 누르면 붙여넣기 없이 곧바로 분석됩니다. 브라우저가 클립보드를 막으면 <span class="tst info">ⓘ 클립보드를 읽지 못했습니다 — 입력창에 직접 붙여주세요.</span> 가 뜨니, 그때는 입력칸을 클릭하고 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> → <b>[분석하기]</b>.</li>
+    <li>성공하면 <span class="tst ok">✓ 주식회사 한빛무역 분석 완료 ✓</span> 토스트가 뜨고 <b>바로 상세 화면</b>이 열립니다. 업체명은 이카운트 화면 제목("○○○ 관리대장(거래명세서별)")에서 읽습니다.</li>
+  </ol>
+  <h3>붙여넣기에서 나올 수 있는 알림</h3>
+  <table class="tbl"><thead><tr><th>알림</th><th>언제 · 어떻게</th></tr></thead><tbody>
+    <tr><td><span class="tst info">ⓘ 이카운트 화면을 붙여넣어 주세요.</span></td><td>입력칸이 비어 있는데 [분석하기]를 눌렀을 때.</td></tr>
+    <tr><td><span class="tst err">⚠ 대장 형식을 못 읽었습니다 — 거래처관리대장 I 화면 전체(적요 + 판매/수금내역)를 복사해 주세요.</span></td><td>붙인 글에서 월별 전표도, 계약 이력도 하나도 못 찾았을 때. 대개 일부만 복사했거나 다른 화면(거래처원장 등)을 복사한 경우. 처음부터 Ctrl+A로 다시.</td></tr>
+    <tr><td><span class="tst err">⚠ 분석 실패: (오류 내용)</span></td><td>읽는 도중 예기치 않은 오류. 괄호 안 문구를 그대로 전달해 주세요.</td></tr>
+    <tr><td><span class="tst ok">✓ ○○○ 분석 완료 ✓</span></td><td>성공. 붙여넣기 카드는 닫히고 상세가 열립니다.</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box warn"><b>세션 저장 — 탭을 닫으면 사라집니다</b>분석 기록은 브라우저 탭이 살아 있는 동안만 남습니다(새로고침·다른 메뉴 다녀오기는 괜찮음). 탭을 닫거나 브라우저를 끄면 모두 지워집니다. 이카운트 매출 데이터를 기기에 남기지 않기 위한 의도된 동작입니다.</div>
+    <div class="box tip"><b>같은 업체를 다시 붙이면</b>덮어씁니다(업체명이 같으면 한 장만 남음). 대장 기간을 더 길게 뽑아 다시 붙이고 싶을 때 그냥 다시 붙이면 됩니다.</div>
+  </div>
+</section>
+
+<section id="cards">
+  <h2>4. 분석된 거래처 카드</h2>
+  <p>붙여넣은 업체가 카드로 쌓입니다. 카드 한 장은 이렇게 읽습니다.</p>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="card pad" style="max-width:280px;width:100%"><div style="display:flex;gap:5px;margin-bottom:6px"><span class="tg am">어려움</span><span class="tg sl">일반 4년</span></div><b style="font-size:16px">그린치과</b><div style="font-size:11.5px;color:#64748B;margin-top:2px">월 120,000원 · 컬러 131% · 초과 7회</div><div style="margin-top:8px;background:#EFF6FF;color:#1D4ED8;border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:900">→ 3년 + 무상 1개월</div></div></div>
+    <div style="display:grid;gap:10px">
+      <table class="tbl"><thead><tr><th>칸</th><th>뜻</th></tr></thead><tbody>
+        <tr><td><b>난이도 칩</b></td><td><span class="tg em">쉬움</span> <span class="tg bl">보통</span> <span class="tg am">어려움</span> <span class="tg rd">매우어려움</span> — 협상 난이도. 기준은 <a href="#judge">14번</a>.</td></tr>
+        <tr><td><b>거래관계 칩</b></td><td>"장기 8년"·"일반 4년"·"신규 1년"·"판단 불가 0년" — 거래 연차와 그 분류.</td></tr>
+        <tr><td><b>한 줄 숫자</b></td><td>월 기본료 · 컬러 활용률(월평균 컬러 사용 ÷ 컬러 기본매수) · 초과료 발생 횟수.</td></tr>
+        <tr><td><b>→ 파란 칸</b></td><td>추천 플랜 A안 이름. <b>대장만으로</b> 계산한 값이라, 상세에서 불만·AS 이력이 붙으면 1순위가 바뀔 수 있습니다(<a href="#faq">FAQ</a>).</td></tr>
+      </tbody></table>
+      <div class="box"><b>[+ 거래처 추가]</b>붙여넣기 카드를 다시 펼칩니다(분석이 하나라도 있으면 카드는 접혀 있음). 붙여넣기 카드의 <b>[닫기]</b>로 다시 접습니다.</div>
+      <div class="box warn"><b>[모두 지우기]</b>확인 없이 <b>즉시</b> 전부 삭제되고 <span class="tst ok" style="font-size:11.5px;padding:4px 9px">✓ 분석 기록을 모두 지웠습니다.</span> 가 뜹니다. 되돌릴 수 없으니 필요한 건 [한 장 복사]로 먼저 남기세요.</div>
+    </div>
+  </div>
+</section>
+
+<section id="head">
+  <h2>5. 상세 — 다크 머리: 여기만 보면 방문 준비의 반</h2>
+  <p>카드나 목록 줄을 누르면 상세가 열립니다. 맨 위 검은 카드에 <b>핵심 판단 문장</b>과 상태 칩이 모여 있습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 상세 머리</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:120px;top:60px">2</span>
+    <span class="badge" style="left:120px;top:96px">3</span>
+    <span class="badge" style="right:150px;top:26px">4</span>
+    <span class="badge" style="right:26px;top:26px">5</span>
+    <span class="badge" style="left:26px;top:150px">6</span>
+    <span class="badge" style="right:26px;top:150px">7</span>
+    <div class="dk top" style="gap:6px">
+      <div class="row" style="align-items:flex-start">
+        <span class="wchip" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:0">‹</span>
+        <div style="flex:1;min-width:0">
+          <div class="h" style="font-size:20px">주식회사 한빛무역 <span class="sub">X3220 · 월 69,000원 · 2024-09-01 ~ 2026-08-31</span></div>
+          <div style="font-size:13px;color:#CBD5E1;margin-top:4px"><b style="color:#fff">8년차 장기</b> · 관계형 · 난이도 <b style="color:#34D399">쉬움</b> <span style="color:#64748B">→</span> 1순위 <b style="color:#FCD34D">3년 + 혜택 없음</b></div>
+          <div class="row" style="margin-top:6px"><span class="wchip">초과 보통</span><span class="wchip em">결제 안정</span><span class="wchip vi">특이사항</span><span class="wchip red">불만 1</span><span class="wchip am">미수기록 1</span><span class="wchip">AS 2</span></div>
+        </div>
+        <span class="bbtn blue">📋 한 장 복사</span><span class="wchip" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:0;background:transparent;color:#64748B">🗑</span>
+      </div>
+    </div>
+    <div class="dk2" style="border-radius:0"><span class="wchip on">요약</span><span class="wchip">사용량 <span style="background:rgba(255,255,255,.15);border-radius:999px;padding:0 5px;font-size:10px">2</span></span><span class="wchip">대장</span><span class="wchip">계약·적요</span><span class="wchip">고객 이력 <span style="background:rgba(255,255,255,.15);border-radius:999px;padding:0 5px;font-size:10px">4</span></span><span style="margin-left:auto;font-size:10px;letter-spacing:.08em;color:#64748B">기간</span><span class="wchip blue" style="padding:3px 9px">전체 36개월</span><span class="wchip" style="padding:3px 9px">2년</span><span class="wchip" style="padding:3px 9px">1년</span><span class="wchip" style="padding:3px 9px">6개월</span></div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>‹ 목록으로</b> — 목록 화면으로 돌아갑니다. 분석은 그대로 남습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>업체명 · 작은 글씨</b> — 이카운트 상호, 그 옆에 현재 계약 기기 모델 · 월 기본료 · 현재 계약 기간(적요 최근 계약에서).</div></div>
+    <div class="item"><span class="num">3</span><div><b>핵심 판단 문장</b> — "<b>N년차 거래관계</b> · 거래처유형 · 난이도 <b>○○</b> → 1순위 <b>A안 이름</b>". 난이도는 쉬움이면 초록, 어려움·매우어려움이면 빨강. 1순위는 노란 글씨.</div></div>
+    <div class="item"><span class="num">4</span><div><b>[한 장 복사]</b> — 지금 보는 기간 기준 분석 요약을 카톡용 글로 복사. 내용은 <a href="#copy">13번</a>.</div></div>
+    <div class="item"><span class="num">5</span><div><b>🗑 분석 지우기</b> — <b>확인 창 없이 즉시</b> 이 업체 분석을 지우고 목록으로 돌아갑니다. 되돌릴 수 없습니다.</div></div>
+    <div class="item"><span class="num">6</span><div><b>상태 칩</b> — <b>초과 {없음·보통·많음·매우많음}</b>(많음 이상이면 빨강) · <b>결제 {안정·가끔불안·잦은불안}</b>(안정이면 초록, 아니면 호박) · <b>특이사항</b>(보라 — 거래처 특이사항 메모가 있을 때) · <b>불만 N</b>(빨강) · <b>미수기록 N</b>(호박) · <b>AS N</b>(회색). 뒤의 넷은 사내 원장을 자동 조회한 결과라 대장을 붙인 직후 잠시 뒤에 나타납니다.</div></div>
+    <div class="item"><span class="num">7</span><div><b>탭 5개 + 기간 칩</b> — <a href="#tabs">6번</a>. 사용량 탭 옆 숫자는 초과료 횟수, 고객 이력 옆 숫자는 불만+미수+AS+협상 기록 합.</div></div>
+  </div>
+</section>
+
+<section id="tabs">
+  <h2>6. 탭 다섯 개와 기간 칩 — 무엇이 바뀌고 무엇은 그대로인가</h2>
+  <table class="tbl"><thead><tr><th>탭</th><th>무엇이 보이나</th><th>언제 보나</th></tr></thead><tbody>
+    <tr><td><b>요약</b></td><td>한눈 요약 4칸 · 기기별 활용률 · 추천 플랜 A/B/C · 방문 전 확인 · 권한 밖</td><td>이것만 보면 방문 준비 끝. <a href="#summary">7번</a></td></tr>
+    <tr><td><b>사용량</b> <span class="tg sl">2</span></td><td>기기별 카드(계약 상태·월 기본·활용률·월별 표·시뮬레이터)</td><td>"기본매수 올리면 초과료 얼마 줄까" 계산. <a href="#usage">8번</a></td></tr>
+    <tr><td><b>대장</b></td><td>이카운트 판매·수금 전표를 그대로 표로. 초과 줄은 빨강</td><td>숫자가 의심될 때 원문 확인. <a href="#ledger">9번</a></td></tr>
+    <tr><td><b>계약·적요</b></td><td>계약 이력 요약(최근 먼저) + 적요 원문</td><td>조건이 어떻게 올라왔나, 무상 조건 있나. <a href="#contract">10번</a></td></tr>
+    <tr><td><b>고객 이력</b> <span class="tg sl">4</span></td><td>불만 · 미수 기록 · AS 이력 · 지난 재계약 협상</td><td>대장 밖 사정. <a href="#history">11번</a></td></tr>
+  </tbody></table>
+  <h3>기간 칩 — 전체 · 2년 · 1년 · 6개월</h3>
+  <p>3년치 대장을 붙였어도 <b>최근 1년만</b> 놓고 볼 수 있습니다. 탭 줄 오른쪽 <b>"기간"</b> 옆 칩을 누르면 됩니다. 칩은 대장 기간이 그보다 길 때만 나타납니다(대장이 10개월이면 "6개월" 칩만, 대장이 1년 미만이면 기간 줄 자체가 없음). 선택한 칩은 파랑이 되고, 전체가 아닐 때 아래에 파란 띠가 뜹니다.</p>
+  <div class="shot ui" style="padding-top:14px"><span class="cap">화면 재현</span><div class="ban bl" style="border-radius:12px">2025-09-01 이후만 보는 중 — 모든 수치·판정이 이 기간 기준입니다 (계약 이력·잔액은 전체 기준)</div></div>
+  <div class="grid2">
+    <div class="box tip"><b>기간을 바꾸면 함께 바뀌는 것</b>누적 매출·수금 합계 · 초과료 누적·횟수 · 월평균·활용률 · 월 기본료(그 기간 임대료 줄) · 최근 청구 · CMS 실패 횟수·결제 판정 · 핵심 판단 문장과 난이도 · 추천 플랜 A/B/C · 사용량 탭 표 · 대장 탭 표(맨 오른쪽 열이 "잔액" → <b>"누계(기간 내)"</b>) · 한 장 복사 내용(기간 줄에 "· 기간 필터" 표시).</div>
+    <div class="box naver"><b>기간을 바꿔도 그대로인 것</b>① <b>계약 이력·적요</b> — 계약은 기간 밖이라도 현재를 설명하므로. 거래 연차도 적요 기준. ② <b>미수 잔액</b> — "지금 잔액"은 시점 값. ③ <b>누적 청구 개월수</b>(3개월 누적 청구 여부) — 전체 대장에서 감지한 값을 이어받음. ④ <b>기본매수</b> — 기간 안에 초과료 줄이 없어 기본을 못 읽으면 전체 대장의 값을 그대로 씀. ⑤ <b>고객 이력 탭</b> — 대장과 무관.</div>
+  </div>
+</section>
+
+<section id="summary">
+  <h2>7. 요약 탭 — 이것만 보면 방문 준비 끝</h2>
+
+  <h3 id="s-stat">한눈 요약 4칸</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="card pad">
+      <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:10px"><b style="font-size:13px">한눈 요약</b><span style="font-size:11px;color:#94A3B8">대장 2023-09-01 ~ 2026-08-31 · 36개월</span></div>
+      <div class="statg">
+        <div class="st"><div class="l">누적 매출</div><div class="v bl">248.4<small>만원</small></div><div class="s">수금 241.5만원</div></div>
+        <div class="st"><div class="l">초과료 누적</div><div class="v">3.2<small>만원</small></div><div class="s">2회 발생</div></div>
+        <div class="st"><div class="l">미수 잔액</div><div class="v gr">없음</div><div class="s">CMS 실패 0회 · 우량</div></div>
+        <div class="st"><div class="l">월 기본료</div><div class="v">69,000<small>원</small></div><div class="s">최근 청구 69,000원</div></div>
+      </div>
+      <div style="border-top:1px solid #F1F5F9;margin-top:12px;padding-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#94A3B8;margin-bottom:4px">기기별 활용률</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;font-size:13px"><b style="width:90px;color:#334155">X3220</b><b style="color:#0f172a">컬러 62%</b><span style="font-size:11px;color:#94A3B8">월 310 / 기본 500매</span><b style="color:#0f172a">흑백 41%</b><span style="font-size:11px;color:#94A3B8">월 1,240 / 기본 3,000매</span><span style="font-size:11px;color:#DC2626;font-weight:700">초과 2회 · 32,000원</span></div>
+      </div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>칸</th><th>숫자의 뜻</th><th>색</th></tr></thead><tbody>
+    <tr><td><b>누적 매출</b></td><td>붙인 기간의 판매 합계(만원). 아래 작은 글씨는 수금 합계.</td><td>항상 파랑</td></tr>
+    <tr><td><b>초과료 누적</b></td><td>"컬러초과사용료·흑백초과사용료" 줄 금액의 합(만원). 아래는 발생 횟수.</td><td>3회 이상이면 호박</td></tr>
+    <tr><td><b>미수 잔액</b></td><td>누계 잔액에서 <b>마지막 청구월의 미수(아직 수금 전이 정상인 몫)</b>를 뺀 실질 잔액. 0이면 "없음". 아래는 CMS 승인실패 횟수와 수금 판정(우량·보통·주의).</td><td>잔액 있거나 CMS 실패 있으면 호박, 둘 다 0이면 초록</td></tr>
+    <tr><td><b>월 기본료</b></td><td>대장 임대료 줄의 <b>기기별 최신 단가를 합한</b> 값(기기 2대면 둘의 합). 아래는 가장 최근 달 청구액.</td><td>검정</td></tr>
+  </tbody></table>
+  <p class="small">머리 힌트에 "· 3개월 누적 청구"가 붙으면 이 업체는 분기마다 한 번 카운터를 찍는 곳입니다 — 월평균·기본매수가 모두 월 기준으로 환산돼 있습니다.</p>
+
+  <h3 id="s-rate">기기별 활용률 읽는 법</h3>
+  <p>기기마다 기본매수가 달라 합치면 왜곡되므로 <b>기기별로</b> 보여줍니다. 활용률 = <b>월평균 사용 ÷ 월 기본매수 × 100</b>. 월평균의 분모는 <b>그 기기에 카운터가 찍힌 달 수</b>(중간에 들어온 기기를 전체 개월로 나누지 않음).</p>
+  <div class="legend">
+    <div class="item"><span class="num">%</span><div><b>색</b> — <span style="color:#DC2626;font-weight:900">100% 이상 빨강</span>(기본을 넘겨 쓰는 중) · <span style="color:#D97706;font-weight:900">80% 이상 호박</span>(한계 근접) · 그 아래 검정. <b>"기본 미확인"</b>은 대장·적요 어디에도 그 기기의 기본매수가 없을 때.</div></div>
+    <div class="item"><span class="num">매</span><div><b>회색 작은 글씨</b> — "월 310 / 기본 500매": 월평균 사용과 월 기본. 기본이 없으면 "월 880매"만. 맨 끝 빨간 "초과 N회 · X원"은 그 기기의 초과료 횟수·합계.</div></div>
+    <div class="item"><span class="num">?</span><div><b>"기기 미상"</b> — 임대료 줄 없이 카운터·초과료만 따로 청구된 전표가 있고 기기가 2대 이상이라 어느 기기인지 모를 때. 기기가 1대뿐이면 자동으로 그 기기에 붙습니다.</div></div>
+  </div>
+
+  <h3 id="s-plan">추천 플랜 A/B/C 카드 읽는 법</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="card">
+      <div class="plan"><div style="min-width:0;flex:1"><div class="l">추천 플랜</div><div class="big">3년 + 혜택 없음</div><div class="r">8년 장기 + 안정 — 혜택 없이 성사 가능</div></div><div class="kv"><div>회사 매출<b>2,484,000원</b></div><div>혜택 비용<b>0원</b></div><div>ROI<b class="am">×∞</b></div></div></div>
+      <div class="alt"><span class="rk">B안</span><b>3년 + 무상 1개월</b><span>관계 유지 보너스</span><span class="cost">비용 69,000원 · ROI ×35.0</span></div>
+      <div class="alt"><span class="rk">C안</span><b>3년 + 무상 2개월</b><span>거래처 망설임 시 마지막 카드</span><span class="cost">비용 138,000원 · ROI ×17.0</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>칸</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><b>A안(파란 큰 칸)</b></td><td>1순위로 내밀 카드. 이름은 "<b>N년 + {혜택 없음 · 무상 1개월 · 무상 2개월 · 동급 기기 교체}</b>" 넷 중 하나. 아래 작은 글씨가 <b>왜 이 카드인가</b>(예: "결제 불안 (CMS 실패 2회 / 미수 138,000원) — 보수적 접근"). 컬러 활용률이 80% 이상이면 끝에 "· 컬러 활용률 N% — 기본매수 조정 상담 병행"이 덧붙습니다.</td></tr>
+    <tr><td><b>회사 매출</b></td><td>월 기본료 × 계약 개월수(무상 개월은 뺌).</td></tr>
+    <tr><td><b>혜택 비용</b></td><td>회사가 쓰는 돈. 혜택 없음 0원 · 무상 1개월 = 기본료 1개월치 · 무상 2개월 = 2개월치 · 동급 기기 교체 = <b>보수적으로 2개월치로 추정</b>(이설+잔존가치).</td></tr>
+    <tr><td><b>ROI</b></td><td>회사 매출 ÷ 혜택 비용. 비용 0이면 <b>×∞</b>.</td></tr>
+    <tr><td><b>B안 · C안</b></td><td>A안이 안 먹힐 때 순서대로. "비용 · ROI"는 같은 계산.</td></tr>
+  </tbody></table>
+  <h3>플랜은 어떤 순서로 정해지나</h3>
+  <p>상황을 위에서부터 검사해 <b>먼저 걸리는 것</b>으로 정합니다. 위쪽 세 가지는 <b>고객 이력 탭 데이터(불만·AS)</b>가 들어가므로, 목록 카드의 "→ 플랜"과 상세의 1순위가 다를 수 있습니다.</p>
+  <table class="tbl"><thead><tr><th>순서</th><th>상황(먼저 걸리는 것)</th><th>A안</th><th>B안</th><th>C안</th></tr></thead><tbody>
+    <tr><td>1</td><td><b>장비 이슈</b> — AS 5건 이상 또는 장비 관련 불만</td><td>3년 + 동급 기기 교체</td><td>2년 + 동급 기기 교체</td><td>3년 + 무상 2개월</td></tr>
+    <tr><td>2</td><td><b>심각 불만</b> — 불만항목에 "상"·"심각"</td><td>3년 + 무상 2개월</td><td>2년 + 무상 1개월</td><td>3년 + 동급 기기 교체</td></tr>
+    <tr><td>3</td><td><b>결제 불안</b> — CMS 실패 1회 이상 또는 실질 미수 50만원 이상</td><td>2년 + 혜택 없음</td><td>2년 + 무상 1개월</td><td>1년 + 혜택 없음</td></tr>
+    <tr><td>4</td><td><b>초과 과다</b> — 초과료 합 50만원 이상 또는 4회 이상</td><td>3년 + 무상 1개월</td><td>2년 + 무상 1개월</td><td>3년 + 무상 2개월</td></tr>
+    <tr><td>5</td><td><b>장기 안정</b> — 7년 이상 · 심각 불만 0 · AS 3건 미만 · CMS 실패 0 · 미수 0</td><td>3년 + 혜택 없음</td><td>3년 + 무상 1개월</td><td>3년 + 무상 2개월</td></tr>
+    <tr><td>6</td><td><b>신규</b> — 거래 1~2년차</td><td>2년 + 무상 1개월</td><td>2년 + 혜택 없음</td><td>3년 + 무상 1개월</td></tr>
+    <tr><td>7</td><td><b>그 밖(일반)</b></td><td>3년 + 무상 1개월</td><td>3년 + 혜택 없음</td><td>2년 + 무상 1개월</td></tr>
+  </tbody></table>
+
+  <h3 id="s-check">방문 전 확인 · 권한 밖</h3>
+  <div class="grid2">
+    <div class="box"><b>방문 전 확인 (위험 신호 · 거래처 특이사항)</b>위험 신호가 있거나 특이사항 메모가 있을 때만 나타납니다. 빨간 점 줄이 위험 신호 — 예: "컬러 활용률 118% (기본매수 초과 사용)", "초과료 5회 누계 320,000원 (반복 발생)", "CMS 승인실패 2회", "미수 잔액 138,000원 (약 2개월치)", "거래 관계 신규 — 혜택 신중", "<b>공기청정기 무상 조건 유지 필요</b> — "적요 원문 구절"". 아래 보라 상자는 <b>거래처 특이사항</b>(작성자 · 출근 시간 · 점심 시간 칩 + 메모 본문) — 워킨맵·FIELD와 같은 메모입니다.</div>
+    <div class="box warn"><b>권한 밖 — 제시 금지</b>항상 다섯 개가 회색 칩으로 나옵니다: <b>임대료 직접 인하 (가격 조정)</b> · <b>혜택 2개 이상 동시 제공</b> · <b>고급 장비 상향 교체 (동급 외)</b> · <b>예외적 장기 무상 (3개월+)</b> · <b>계약서 외 별도 지원</b>. 상담 중 고객이 요구해도 즉답하지 말고 "확인 후 말씀드리겠다"로. 이 목록은 사내 정책이라 화면에서 바꿀 수 없습니다.</div>
+  </div>
+</section>
+
+<section id="usage">
+  <h2>8. 사용량 탭 — 기기별 카드</h2>
+  <p>초과료는 기기별 계약이라 기기를 합치지 않습니다. 기기마다 카드 하나. 카운터가 하나도 없으면 <b>"카운터가 찍힌 기기가 없습니다 — [대장] 탭에서 원문을 확인해 주세요."</b>만 보입니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 기기 카드 하나 (다른 업체 예)</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:26px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:86px">3</span>
+    <span class="badge" style="left:26px;top:186px">4</span>
+    <span class="badge" style="left:26px;top:346px">5</span>
+    <div class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 16px;background:#F8FAFC;border-bottom:1px solid #F1F5F9"><b style="font-size:14px">AC2060</b><span class="tg am">종료 D-5 (2026-08-31)</span><span class="tg bl">월 기본 컬 400 · 흑 1,000매</span><span class="tg sl">3개월 누적 청구</span><span style="margin-left:auto;font-size:11px;color:#94A3B8;font-weight:700">초과 4회 · 96,000원</span></div>
+      <div class="statg" style="padding:12px 16px">
+        <div class="st"><div class="l">컬러 활용률</div><div class="v rd">118%</div><div class="s">월 472 / 기본 400매</div></div>
+        <div class="st"><div class="l">흑백 활용률</div><div class="v">88%</div><div class="s">월 880매 / 기본 1,000매</div></div>
+        <div class="st"><div class="l">컬러 총 사용</div><div class="v bl">17,000<small>매</small></div><div class="s">36개월</div></div>
+        <div class="st"><div class="l">흑백 총 사용</div><div class="v">31,680<small>매</small></div><div class="s">36개월</div></div>
+      </div>
+      <div style="padding:8px 16px;border-top:1px solid #F1F5F9">
+        <table class="mtbl"><thead><tr><th>월</th><th class="num">컬러</th><th class="num">흑백</th><th>초과</th></tr></thead><tbody>
+          <tr><td class="mono">2026.02</td><td class="num"><b>1,380</b></td><td class="num">2,610</td><td><span class="reddot">컬러 180매 · 18,000원</span></td></tr>
+          <tr><td class="mono">2026.05</td><td class="num"><b>1,110</b></td><td class="num">2,540</td><td style="color:#E2E8F0">—</td></tr>
+          <tr><td class="mono">2026.08</td><td class="num"><b>1,560</b></td><td class="num">2,720</td><td><span class="reddot">컬러 360매 · 36,000원</span></td></tr>
+        </tbody></table>
+      </div>
+      <div class="sim"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><b>💡 기본매수 조정 시뮬레이션</b><span>컬러 월 기본을 <span class="in">600</span> 매로 하면</span><b>초과료 96,000원 → <span style="color:#059669">0원</span> <span style="color:#2563EB">(-96,000원)</span></b></div><div style="font-size:11px;color:#94A3B8">이 기기의 실제 사용량(12회 검침)에 새 기본을 적용해 재계산 — 초과 단가 100원/매 기준. "기본매수를 올리는 대신 기본료를 얼마 조정할지" 협상의 숫자 근거로 쓰세요.</div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>기기명 + 계약 배지</b> — 적요에서 이 모델의 계약을 찾아 <span class="tg rd">계약종료 2026-06-30</span>(이미 지남) · <span class="tg am">종료 D-5 (2026-08-31)</span>(90일 이내) · <span class="tg sl">계약 ~2027-08-31</span> · <span class="tg sl">계약기간 미확인</span> 중 하나. 이어서 <span class="tg bl">월 기본 컬 400 · 흑 1,000매</span>, 분기 청구 업체면 <span class="tg sl">3개월 누적 청구</span>. 이름이 <b>"기기 미상 (임대료 줄 없는 청구)"</b>면 어느 기기 것인지 모르는 전표 묶음.</div></div>
+    <div class="item"><span class="num">2</span><div><b>초과 N회 · X원</b> — 이 기기의 초과료 횟수와 합계.</div></div>
+    <div class="item"><span class="num">3</span><div><b>4칸</b> — 컬러 활용률(100%↑ 빨강, 80%↑ 호박) · 흑백 활용률(100%↑ 빨강) · 컬러 총 사용 · 흑백 총 사용. 기본이 없으면 활용률은 "—". 기본이 둘 다 없으면 노란 줄 <b>"기본매수 미확인 — 대장·적요 어디에도 이 기기의 기본 조건이 없습니다. 임대리스트나 계약서에서 확인해 주세요."</b></div></div>
+    <div class="item"><span class="num">4</span><div><b>월별 표</b> — 카운터가 찍힌 달만. 초과 열엔 빨간 점 "컬러 180매 · 18,000원", 없으면 "—". 3개월 누적 업체는 분기 달만 보이고 그 숫자는 3개월치입니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>시뮬레이터</b> — 아래 설명. 초과료가 실제로 난 종류(컬러/흑백)에만 나타납니다.</div></div>
+  </div>
+  <h3 id="u-sim">💡 기본매수 조정 시뮬레이션</h3>
+  <ol class="steps">
+    <li>숫자칸에 <b>새 월 기본매수</b>를 적습니다(처음엔 현재 기본이 들어 있음, 위아래 화살표는 100씩). 위 그림은 기본 400매를 600매로 바꿔 본 예 — 3개월 누적 업체라 분기 1,800매까지 초과가 안 나므로 0원.</li>
+    <li>즉시 <b>"초과료 96,000원 → 0원 (-96,000원)"</b>으로 다시 계산됩니다. 왼쪽이 실제 냈던 초과료, 오른쪽이 새 기본이었다면 냈을 초과료(0원이면 초록), 괄호가 절감액(파랑).</li>
+    <li>계산은 이 기기의 <b>실제 월별 사용량</b>에 새 기본을 적용하고, 초과 단가는 <b>실제 청구된 초과료 ÷ 초과 매수</b>로 뽑습니다. 3개월 누적 업체는 기본×3으로 비교합니다.</li>
+  </ol>
+  <div class="box tip"><b>이렇게 씁니다</b>"기본을 500매로 올리면 초과료가 연 9만원 줄어든다 — 대신 기본료를 얼마 올릴지" 를 숫자로 이야기할 때. 기본료 조정 자체는 권한 밖이니, 상담에서 제시할 안은 팀장과 먼저 맞추세요.</div>
+  <p class="small">기기가 2대 이상이면 맨 아래 회색 줄에 "기기 합산 — 컬러 X매 · 흑백 Y매 · 초과 Z원"이 참고로 붙습니다.</p>
+</section>
+
+<section id="ledger">
+  <h2>9. 대장 탭 — 이카운트 원문 그대로, 초과 줄은 붉게</h2>
+  <p>붙여넣은 판매/수금내역을 이카운트 모양으로 다시 그린 표입니다. 숫자가 이상하다 싶으면 여기서 원문을 확인합니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="card pad">
+      <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:8px"><b style="font-size:13px">판매 · 수금 대장</b><span style="font-size:11px;color:#94A3B8">이카운트 원문 그대로 · 초과 줄은 붉게</span></div>
+      <table class="mtbl"><thead><tr><th>일자</th><th>적요</th><th class="num">판매</th><th class="num">수금</th><th class="num">잔액</th></tr></thead><tbody>
+        <tr><td class="mono">2026/07/10</td><td><b>7월 임대료</b></td><td class="num"><b>85,000</b></td><td class="num"></td><td class="num" style="color:#94A3B8">85,000</td></tr>
+        <tr class="item"><td></td><td class="ind">복사기임대료(X3220) [6/11~7/10] / 1 * 69,000</td><td class="num">69,000</td><td></td><td></td></tr>
+        <tr class="item"><td></td><td class="ind">컬러A4누계-16801, 전월-16141 [사용-660] / 1 * 0</td><td class="num"></td><td></td><td></td></tr>
+        <tr class="item ex"><td></td><td class="ind">컬러초과사용료 [초과-160(기본-500매)] / 1 * 16,000</td><td class="num">16,000</td><td></td><td></td></tr>
+        <tr><td class="mono">2026/07/25</td><td><b>CMS 출금</b></td><td class="num"></td><td class="num green">85,000</td><td class="num" style="color:#94A3B8"></td></tr>
+        <tr class="sub"><td class="mono" colspan="2">2026/07 계</td><td class="num">85,000</td><td class="num">85,000</td><td></td></tr>
+        <tr><td class="mono">2026/08/10</td><td><b>8월 임대료</b></td><td class="num"><b>69,000</b></td><td class="num"></td><td class="num" style="color:#94A3B8">69,000</td></tr>
+        <tr class="item"><td></td><td class="ind">복사기임대료(X3220) [7/11~8/10] / 1 * 69,000</td><td class="num">69,000</td><td></td><td></td></tr>
+        <tr class="item"><td></td><td class="ind">컬러A4누계-17096, 전월-16801 [사용-295] / 1 * 0</td><td class="num"></td><td></td><td></td></tr>
+        <tr class="sub"><td class="mono" colspan="2">2026/08 계</td><td class="num">69,000</td><td class="num"></td><td></td></tr>
+      </tbody><tfoot><tr><td colspan="2" style="font-size:11px">누계 <span style="color:#DC2626;font-size:11px;font-weight:700;margin-left:6px">초과 2회 · 32,000원</span></td><td class="num">2,484,000</td><td class="num">2,415,000</td><td class="num">69,000</td></tr></tfoot></table>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>줄 종류</th><th>어떻게 보이나</th></tr></thead><tbody>
+    <tr><td><b>전표 줄</b></td><td>날짜(2026/08/10) · 적요(굵게) · 판매 · <span style="color:#059669;font-weight:700">수금(초록)</span> · 잔액(판매−수금을 위에서부터 누적한 값, 회색).</td></tr>
+    <tr><td><b>상세 줄</b></td><td>전표 아래 들여쓴 회색 줄 — 임대료·카운터·초과료 등 이카운트 상세 항목 원문. <span style="color:#DC2626;font-weight:700">초과사용료 줄만 빨강</span>(왼쪽 선도 빨강).</td></tr>
+    <tr><td><b>월계 줄</b></td><td>회색 바탕 "2026/08 계" — 그 달 판매·수금 합.</td></tr>
+    <tr><td><b>누계(맨 아래 굵게)</b></td><td>이카운트 화면의 누계 줄 값(판매·수금·잔액). 초과가 있으면 옆에 빨간 "초과 N회 · X원".</td></tr>
+    <tr><td><b>기간 칩을 켰을 때</b></td><td>마지막 열 이름이 <b>"누계(기간 내)"</b>로 바뀌고, 누계 줄의 판매·수금은 그 기간 합, 잔액은 전체 그대로.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="contract">
+  <h2>10. 계약·적요 탭 — 조건이 어떻게 올라왔나</h2>
+  <p>이카운트 적요(사람이 몇 년간 손으로 적은 계약 메모)를 <b>위: 분석 요약(최근 먼저) · 아래: 적요 원문 그대로</b>로 보여줍니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="card pad">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid #F8FAFC;font-size:12px;color:#64748B"><b class="mono" style="font-size:13px;color:#1E293B">2024-09-01 ~ 2026-08-31</b><span class="tg dk">재계약</span><b style="color:#475569">AC2060</b><span>기본료 <b style="color:#1E293B">69,000원</b></span><span>컬 <b style="color:#1E293B">400</b>/100</span><span>흑 <b style="color:#1E293B">1,000</b>/9</span><span class="tg am" style="font-size:10px">공기청정기 무상 유지 확인</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:6px 0;font-size:12px;color:#64748B"><b class="mono" style="font-size:13px;color:#1E293B">2021-09-01 ~ 2024-08-31</b><span class="tg dk">신규</span><b style="color:#475569">AC2060</b><span>기본료 <b style="color:#1E293B">59,000원</b></span><span>컬 <b style="color:#1E293B">400</b>/90</span><span>흑 <b style="color:#1E293B">1,000</b>/9</span><span>보증금 <b style="color:#1E293B">300,000원</b></span></div>
+      <div class="pre" style="margin-top:10px">AC2060 신규 21.9.1~24.8.31 (3년) 월-59,000원 (컬400/90 흑1000/9) 보증금 300,000원
+→ 재계약 24.9.1~26.8.31 월-69,000원 (컬400/100 흑1000/9) 공기청정기 무상</div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>요소</th><th>뜻</th></tr></thead><tbody>
+    <tr><td><b>기간</b></td><td>"2024-09-01 ~ 2026-08-31". 적요에 없으면 "? ~ ?".</td></tr>
+    <tr><td><b>검은 칩</b></td><td>계약 종류 — 적요에서 찾은 <b>교체재계약 · 재계약 · 신규 · 기기교체 · 추가 · 임대 · 연장 · 해지</b> 중 하나. 없으면 칩 없음.</td></tr>
+    <tr><td><b>모델 · 기본료 · 컬/흑</b></td><td>"컬 400/100"은 컬러 기본 400매 · 초과 단가 100원. 보증금이 적혀 있으면 "보증금 300,000원".</td></tr>
+    <tr><td><b><span class="tg am" style="font-size:10px">○○ 무상 유지 확인</span></b></td><td>적요에 "○○ 무상"이 있는 계약. <b>재계약 때 이 조건이 빠지면 사고</b>가 되니 요약 탭 "방문 전 확인"에도 같은 내용이 위험 신호로 올라갑니다.</td></tr>
+    <tr><td><b>회색 원문 상자</b></td><td>적요 전체를 고치지 않고 그대로. 없으면 "적요 없음". 스크롤됩니다.</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>적요를 읽는 규칙 몇 가지</b>"월-12만", "142,000원", "칼-500/120", "컬600/100", "훅1000/9"(흑의 오타)처럼 사람마다 다른 표기를 최대한 흡수합니다. 그래도 못 읽은 숫자는 "기본 미확인"으로 나오니, 그때는 원문 상자를 직접 보세요. 이 탭은 <b>기간 칩과 무관</b>합니다.</div>
+</section>
+
+<section id="history">
+  <h2>11. 고객 이력 탭 — 대장 밖의 사정</h2>
+  <p>업체명으로 사내 원장을 자동 조회해 붙입니다. 하나도 없으면 <b>"이 업체로 조회된 불만·미수·AS·협상 기록이 없습니다."</b></p>
+  <table class="tbl"><thead><tr><th>판</th><th>보이는 것</th><th>어디서 오나</th></tr></thead><tbody>
+    <tr><td><b>불만 N건</b></td><td>최근 5건 — 날짜 · <span class="tg rd" style="font-size:10px">불만유형</span> · 불만내용</td><td>불만 원장(bulman)</td></tr>
+    <tr><td><b>미수 기록 N건</b></td><td>최근 5건 — 입력일 · <b style="color:var(--amber)">N개월 X원</b> · 방문내용</td><td>미수 원장(misu)</td></tr>
+    <tr><td><b>AS 이력 N건</b> <span class="small">최근 8건</span></td><td>날짜(연도 두 자리) · 모델 · 처리 내용</td><td>AS 기록(as_records)</td></tr>
+    <tr><td><b>지난 재계약 협상 N건</b> <span class="small">/계약갱신 기록</span></td><td>최근 4건 — 날짜 · <span class="tg bl" style="font-size:10px">갱신상태</span> · <span class="tg sl" style="font-size:10px">위험 N</span> · 제안조건</td><td>카톡 /계약갱신 명령으로 쌓인 재계약 원장</td></tr>
+  </tbody></table>
+  <div class="box naver"><b>이 탭의 데이터가 플랜에도 들어갑니다</b>불만 항목에 "상"·"심각"이 있으면 <b>심각 불만</b>, 불만 유형·내용에 장비·출력·잼·토너 같은 말이 있으면 <b>장비 불만</b>, AS가 5건 이상이면 <b>장비 이슈</b>로 잡혀 A안이 "동급 기기 교체"로 바뀝니다(<a href="#s-plan">7번 순서표</a>). 그래서 상세를 열어 이력이 불러와진 뒤에 1순위가 바뀌는 경우가 있습니다.</div>
+</section>
+
+<section id="banners">
+  <h2>12. 노란 경고 배너 — 상세 머리 바로 아래</h2>
+  <p>조건에 걸릴 때만 나타나는 노란 띠 세 가지입니다. 무시하지 말고 방문 전에 확인하세요.</p>
+  <div style="display:grid;gap:10px">
+    <div class="ban am">⚠ 워킹맵 메모의 기본료는 150,000원인데 대장에서 읽은 월기본료는 105,000원입니다 — 어느 쪽이 현재 조건인지 방문 전에 확인하세요 (기기 추가·철수·조건 변경 가능성).</div>
+    <div class="ban am">⚠ 이 기간엔 카운터(검침) 전표가 없습니다 — 기간을 넓히거나 [전체]로 보세요.</div>
+    <div class="ban am">⚠ 카운터(누계·사용) 줄을 인식하지 못해 사용량이 0으로 보입니다 — [대장] 탭에서 카운터 줄이 들어왔는지 확인해 주세요. 형식이 다르면 이민구에게 원문을 전달해 주세요.</div>
+  </div>
+  <table class="tbl"><thead><tr><th>배너</th><th>언제</th><th>하면 좋은 것</th></tr></thead><tbody>
+    <tr><td><b>워킹맵 조건 불일치</b></td><td>이 업체가 지금 선택된 팀의 방문 대상 목록에 있고(목록에서 눌러 시작했거나 이름이 같음), 워킨맵 메모의 "기본요금" 값과 대장 월기본료가 <b>10% 넘게</b> 다를 때.</td><td>기기가 추가·철수됐거나 조건이 바뀐 뒤 한쪽만 갱신된 경우가 많습니다. 계약·적요 탭과 임대리스트를 대조.</td></tr>
+    <tr><td><b>기간에 검침 없음</b></td><td>기간 칩(2년·1년·6개월)을 켰는데 그 안에 카운터 전표가 하나도 없을 때(예: 3개월 누적 업체에서 6개월 칩).</td><td>기간을 넓히거나 [전체]로.</td></tr>
+    <tr><td><b>카운터 없음</b></td><td>전체로 보는데 카운터 줄을 하나도 못 읽어 사용량이 0일 때.</td><td>대장 탭에서 "…누계-…, [사용-…]" 줄이 들어왔는지 확인. 이카운트 출력 형식이 다른 업체면 원문을 개발 담당(이민구)에게.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="copy">
+  <h2>13. [한 장 복사] — 카톡에 붙이는 분석 요약</h2>
+  <p>상세 머리 오른쪽 파란 <b>[한 장 복사]</b>를 누르면 <b>지금 보고 있는 기간 기준</b>으로 아래 모양의 글이 클립보드에 담기고 <span class="tst ok">✓ 분석 한 장을 복사했습니다 ✓</span> 가 뜹니다. 실패하면 <span class="tst err">⚠ 복사 실패 — 화면에서 직접 선택해 복사하세요.</span></p>
+  <div class="quote">[재계약 분석] 주식회사 한빛무역
+기간 2023-09-01 ~ 2026-08-31 (36개월)
+8년차 장기 · 관계형 · 난이도 쉬움
+
+■ 추천: 3년 + 혜택 없음
+- 8년 장기 + 안정 — 혜택 없이 성사 가능
+- 회사 매출 2,484,000원 · 혜택 비용 0원 · ROI ×∞
+- B안: 3년 + 무상 1개월 (관계 유지 보너스)
+- C안: 3년 + 무상 2개월 (거래처 망설임 시 마지막 카드)
+
+■ 근거
+- 누적 매출 2,484,000원 · 수금 2,415,000원 · 잔액 69,000원
+- 컬러 월평균 310매 / 기본 500매 · 초과 2회
+- 흑백 월평균 1,240매 / 기본 3,000매
+- X3220: 컬러 62% · 흑백 41% (기본 컬500·흑3,000매) · 계약 ~2026-08-31
+- 현재 계약: 재계약 2024-09-01~2026-08-31 · 월 69,000원 · 무상 공기청정기
+- 초과료 2회 32,000원 · CMS 실패 0회 · 결제 우량
+
+■ 주의
+- 공기청정기 무상 조건 유지 필요 — "→ 재계약 24.9.1~26.8.31 월-69,000원 (컬400/100 흑1000/9) 공기청정기 무상"</div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>기간 줄</b> — 기간 칩을 켰으면 "(12개월 · 기간 필터)"처럼 표시돼 받는 사람도 일부 기간인 걸 알 수 있습니다.</div></div>
+    <div class="item"><span class="num">•</span><div><b>■ 주의</b> — 위험 신호가 있을 때만 붙습니다. 권한 밖 목록은 들어가지 않습니다(사내 공통 규칙이라).</div></div>
+  </div>
+</section>
+
+<section id="judge">
+  <h2>14. 판정은 어떻게 나오나 — 칩 하나하나의 기준</h2>
+  <p>상세 머리의 문장과 칩은 아래 규칙으로 정해집니다. 사내 정책이라 화면에서 바꿀 수 없고, 같은 대장이면 누가 붙여도 같은 결과가 나옵니다.</p>
+  <table class="tbl"><thead><tr><th>항목</th><th>값</th><th>기준</th></tr></thead><tbody>
+    <tr><td><b>거래 연차</b></td><td>N년차</td><td>올해 − 거래 시작 연도. 시작 연도는 적요의 <b>보증금 입금일 → "임대개시"/"최초임대" → 가장 빠른 계약 시작일 → 대장 첫 달</b> 순으로 찾음.</td></tr>
+    <tr><td><b>거래관계</b></td><td>장기 · 일반 · 신규 · 판단 불가</td><td>7년 이상 장기 · 3년 이상 일반 · 그 아래 신규 · 연도를 못 찾으면 판단 불가.</td></tr>
+    <tr><td><b>초과 수준</b></td><td>없음 · 보통 · 많음 · 매우많음</td><td>초과 0회 없음 · 환산 개월 3회 이상 많음 · 6개월 이상(또는 대장 개월의 40% 이상) 매우많음 · 그 사이 보통. 3개월 누적 업체는 1회를 3개월로 셈. <b>초과료 1회 평균이 월 기본료의 절반 이상</b>이면 횟수와 무관하게 매우많음.</td></tr>
+    <tr><td><b>결제 안정성</b></td><td>안정 · 가끔불안 · 잦은불안</td><td>CMS 승인실패 0회이고 실질 미수 0원 → 안정. CMS 실패 3회 이상 또는 실질 미수 50만원 초과 → 잦은불안. 그 사이 가끔불안. <b>마지막 청구월의 미수는 정상으로 보고 뺍니다</b>(CMS는 다음 달 출금).</td></tr>
+    <tr><td><b>수금 판정</b>(한눈 요약)</td><td>우량 · 보통 · 주의</td><td>CMS 실패 3회 이상 또는 실질 미수가 월평균 청구의 2개월치 이상 → 주의. CMS 실패 1회 이상 또는 실질 미수 있음 → 보통. 아니면 우량.</td></tr>
+    <tr><td><b>거래처 유형</b></td><td>가격형 · 관계형 · 귀찮음형 · 장비민감형 · 혼합형</td><td>초과 많음↑ 또는 적요에 "할인·가격" → 가격형 / 장기+결제 안정 → 관계형 / 적요에 "자동연장·자동갱신" → 귀찮음형 / 적요에 "교체" 2번 이상 → 장비민감형. 신호가 여럿이면 혼합형(같은 신호 2개면 그것).</td></tr>
+    <tr><td><b>난이도</b></td><td>쉬움 · 보통 · 어려움 · 매우어려움</td><td>점수: 장기 −1 · 신규 +1 · 결제 안정 −1 · 잦은불안 +2 · 초과 없음 −1 · 많음 +1 · 매우많음 +2. 합이 −2 이하 쉬움 · 0 이하 보통 · 2 이하 어려움 · 그 위 매우어려움.</td></tr>
+    <tr><td><b>월평균 사용</b></td><td>매</td><td>매월 청구 업체: [사용-N]이 찍힌 달들의 평균. 3개월 누적 업체: 총 사용 ÷ 대장 개월수.</td></tr>
+    <tr><td><b>기본매수</b></td><td>매</td><td>대장 초과료 줄 "(기본-400매)"가 가장 정확(기기별 최신값). 없으면 적요의 계약 조건. "기본-400*3=1200매"는 월 400으로 환산.</td></tr>
+  </tbody></table>
+  <p class="small">규칙은 옛 재계약 시스템(judgement.py·calcProposals)을 그대로 옮긴 것이며 자동 테스트로 지켜집니다. 규칙 자체가 잘못됐다고 느끼면 화면이 아니라 팀장에게 이야기하세요.</p>
+</section>
+
+<section id="faq">
+  <h2>15. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>붙여넣었는데 "대장 형식을 못 읽었습니다"가 떠요</summary><p>이카운트 화면의 일부만 복사됐을 확률이 높습니다. 이카운트 화면 빈 곳을 한 번 클릭한 뒤 Ctrl+A → Ctrl+C를 다시 하세요. "거래처관리대장 I"(거래명세서별)이 맞는지, 화면 아래 "판매/수금내역" 표와 "누계" 줄까지 보이는지 확인. 다른 출력물(거래처원장 등)은 읽지 못합니다.</p></details>
+    <details><summary>어제 분석한 게 다 사라졌어요</summary><p>정상입니다. 분석 기록은 브라우저 탭을 닫으면 지워집니다(이카운트 매출 데이터를 기기에 남기지 않기 위해). 새로고침이나 다른 메뉴로 다녀오는 건 괜찮습니다. 며칠에 걸쳐 준비할 때는 [한 장 복사]로 결과를 카톡에 남겨 두세요.</p></details>
+    <details><summary>목록 카드의 "→ 플랜"과 상세의 1순위가 달라요</summary><p>목록 카드는 대장만으로 계산하고, 상세는 불만·AS 이력까지 불러와 계산합니다. AS가 5건 이상이거나 장비 관련 불만이 있으면 상세에서 A안이 "동급 기기 교체"로 바뀝니다. 상세 쪽이 최종입니다.</p></details>
+    <details><summary>방문 대상 목록에 "분석됨"이 안 붙어요</summary><p>이카운트 상호와 워킨맵 이름이 달라서입니다(예: "㈜한빛무역" vs "한빛무역 401호"). 목록에서 그 업체 줄을 <b>먼저 눌러</b>(노란 "▶ … 붙여넣으세요"가 뜬 상태에서) 붙여넣으면 이름이 달라도 그 줄에 붙습니다. 이미 붙인 경우는 상세에서 🗑로 지우고 목록에서 눌러 다시 붙이세요.</p></details>
+    <details><summary>워킨맵에는 있는 업체가 여기 목록엔 없어요</summary><p>세 가지 중 하나입니다. ① 라벨이 G5(완료)·G6/G7(영업부)·G12(이관) ② 등급이 없음 ③ 등급이 V·N·NN(CS 방문 대상 아님). 워킨맵에서 등급·라벨을 확인하고 고친 뒤 여기서 [↻ 새로고침].</p></details>
+    <details><summary>기간을 1년으로 바꿨는데 기본매수가 "미확인"이 되지 않고 그대로예요</summary><p>의도된 동작입니다. 기본매수는 계약 조건이라 기간과 무관합니다. 그 기간 안에 초과료 줄이 없어 기본을 못 읽으면 전체 대장의 값을 이어받습니다. 계약 이력·미수 잔액도 마찬가지로 전체 기준입니다.</p></details>
+    <details><summary>활용률이 "기본 미확인"이에요</summary><p>대장 초과료 줄에도, 적요에도 그 기기의 기본매수가 없는 경우입니다. 초과가 한 번도 안 난 기기는 대장에 "(기본-N매)"가 찍힐 일이 없으니 적요에 조건이 없으면 알 수 없습니다. 임대리스트나 계약서에서 확인하세요.</p></details>
+    <details><summary>"기기 미상 (임대료 줄 없는 청구)" 카드가 있어요</summary><p>임대료 줄 없이 카운터·초과료만 따로 청구된 전표가 있는데 기기가 2대 이상이라 어느 기기 것인지 가를 수 없을 때입니다. 대장 탭에서 그 전표를 보고 어느 기기인지 판단하세요. 기기가 1대뿐이면 자동으로 그 기기에 붙습니다.</p></details>
+    <details><summary>미수 잔액이 "없음"인데 대장 누계 잔액은 0이 아니에요</summary><p>마지막 청구월 금액은 아직 수금 전인 게 정상(CMS는 다음 달 출금)이라 실질 미수에서 뺍니다. 대장 탭 누계 줄의 잔액은 이카운트 값 그대로이고, 요약의 "미수 잔액"은 그 몫을 뺀 값입니다.</p></details>
+    <details><summary>[클립보드에서 바로 분석]이 안 돼요</summary><p>브라우저가 클립보드 읽기를 막으면 "클립보드를 읽지 못했습니다 — 입력창에 직접 붙여주세요."가 뜹니다. 입력칸을 클릭하고 Ctrl+V 후 [분석하기]를 누르면 같은 결과입니다.</p></details>
+    <details><summary>실수로 🗑를 눌러 분석이 지워졌어요</summary><p>확인 창 없이 즉시 지워지며 되돌릴 수 없습니다. 이카운트에서 다시 복사해 붙이면 같은 결과가 나옵니다(같은 대장이면 판정도 같음).</p></details>
+    <details><summary>E팀인데 목록이 C팀으로 열려요</summary><p>팀 칩은 A·B·C·D 네 개만 있고, 그 밖의 사람은 C팀이 기본으로 잡힙니다. 필요한 팀 칩을 눌러 바꾸면 됩니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">재계약 준비 길잡이 · 일정리스트·FIELD·워킨맵 길잡이와 같은 형식</p>
+</main>
+</div>
+</body>
+</html>

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "52f14e6b54",
+    "date": "2026-08-26",
+    "note": "사용설명서 15편 등록(홈·서비스접수·캘린더·워킨맵·자동일정·맛동여지도·FIELD·공지·복합기·주간/일일·성장·고객리포트·해피콜·홍보물·카운터문자) + 그룹별 목록"
+  },
+  {
     "hash": "b162f64cf6",
     "date": "2026-08-25",
     "note": "일정리스트 길잡이 — 효과 판(큰 숫자 타일·예전/지금 단계 비교)로 장점 섹션 시각화"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "53072fdb86",
     "date": "2026-08-14",
     "note": "넘기기 팝업을 디자인 모달로 + 원격 건 자동 AS이관 마무리"
-  },
-  {
-    "hash": "c3232be8f9",
-    "date": "2026-08-14",
-    "note": "전환→넘기기 재설계 + 앵커 주소 폴백 + 워킨맵 핀 정리 + 캘린더 오늘 스크롤"
   }
 ];

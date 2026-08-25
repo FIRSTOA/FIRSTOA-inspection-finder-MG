@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>자기개발/지식공유 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 자기개발/지식공유 재현용 ── */
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.hdr{background:#1E252F;color:#fff;padding:12px 16px;display:grid;gap:2px}
+.hdr .ttl{font-weight:900;font-size:14px} .hdr .sub{font-size:10.5px;color:#94A3B8;font-weight:600}
+.utabs{display:flex;background:#fff;border-bottom:1px solid #E2E8F0;overflow-x:auto}
+.utab{padding:10px 18px;font-size:12.5px;font-weight:900;color:#94A3B8;white-space:nowrap}
+.utab.on{color:#0f172a;box-shadow:inset 0 -3px 0 #2563EB}
+.pillbtn{display:inline-block;border-radius:999px;padding:5px 12px;font-size:11.5px;font-weight:900;white-space:nowrap;line-height:1.3}
+.pillbtn.blue{background:#2563EB;color:#fff} .pillbtn.dark{background:#0f172a;color:#fff} .pillbtn.ghost{background:#fff;color:#475569;border:1px solid #CBD5E1}
+.pillbtn.off{background:#2563EB;color:#fff;opacity:.4} .pillbtn.act{background:#EFF6FF;color:#2563EB;font-size:10.5px;padding:3px 10px}
+.whead{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #F1F5F9;font-weight:900;font-size:12.5px;color:#0f172a}
+.mini{border:1px solid #F1F5F9;background:#F8FAFC;border-radius:12px;padding:10px;font-size:11px;display:grid;gap:3px}
+.mini .k{font-size:10px;font-weight:900;color:#94A3B8} .mini .v{font-size:18px;font-weight:900;color:#0f172a;line-height:1.1} .mini .s{font-size:10px;font-weight:700;color:#94A3B8}
+.seg{display:inline-flex;background:#F1F5F9;border-radius:999px;padding:3px}
+.seg span{border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:900;color:#64748B} .seg span.on{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.cnt{border-radius:999px;background:#F1F5F9;color:#64748B;padding:4px 10px;font-size:11px;font-weight:900}
+.fchip{border-radius:999px;background:#F1F5F9;color:#64748B;padding:3px 9px;font-size:11px;font-weight:900} .fchip.on{background:#0f172a;color:#fff}
+.post{background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:14px;display:grid;gap:8px;font-size:12.5px}
+.post.best{border-color:#FDE68A;background:linear-gradient(135deg,#FFFBEB,#fff 60%)}
+.post .meta{display:flex;gap:8px;align-items:center;font-size:11px;color:#94A3B8;font-weight:700;flex-wrap:wrap}
+.post .anon{background:#F1F5F9;color:#64748B;border-radius:999px;padding:1px 9px;font-weight:900}
+.post .body{display:flex;gap:10px} .post .qm{font-family:serif;font-size:30px;line-height:1;color:#FCD34D}
+.post .txt{color:#1E293B;font-weight:500;line-height:1.7;font-size:13.5px}
+.cover{width:56px;height:80px;border-radius:8px;background:linear-gradient(135deg,#2563EB,#4338CA);color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;flex:none}
+.cover.g{background:linear-gradient(135deg,#059669,#0F766E)} .cover.r{background:linear-gradient(135deg,#F43F5E,#DB2777)} .cover.a{background:linear-gradient(135deg,#F59E0B,#EA580C)}
+.rbtn{display:inline-block;border-radius:999px;padding:5px 12px;font-size:11.5px;font-weight:900;border:1px solid #E2E8F0;color:#64748B;background:#fff}
+.rbtn.voted{background:#FBBF24;color:#fff;border-color:transparent} .rbtn.dark{background:#1E293B;color:#fff;border-color:transparent}
+.avatar{width:32px;height:32px;border-radius:50%;background:#FEF3C7;color:#B45309;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none}
+.gchip{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:900}
+.gchip.cat{background:#ECFDF5;color:#059669} .gchip.dd{background:#EFF6FF;color:#2563EB} .gchip.over{background:#FFE4E6;color:#E11D48} .gchip.who{background:#F1F5F9;color:#475569} .gchip.pr{background:#FFFBEB;color:#D97706}
+.bar2{height:8px;border-radius:999px;background:#F1F5F9;overflow:hidden;flex:1} .bar2 i{display:block;height:100%;background:#3B82F6} .bar2.done i{background:#10B981}
+.rank{display:flex;justify-content:space-between;background:#F8FAFC;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:900;color:#334155}
+.rank.me{background:#FFFBEB;box-shadow:inset 0 0 0 1px #FDE68A} .rank.me.v{background:#F5F3FF;box-shadow:inset 0 0 0 1px #DDD6FE} .rank.me.g{background:#ECFDF5;box-shadow:inset 0 0 0 1px #A7F3D0}
+.field{display:grid;gap:3px} .field small{font-size:10.5px;font-weight:900;color:#94A3B8}
+.field .in{border:1px solid #CBD5E1;border-radius:9px;padding:7px 10px;font-size:12px;color:#94A3B8;background:#fff;min-height:34px} .field .in.ta{min-height:64px}
+.chk{width:22px;height:22px;border-radius:50%;border:2px solid #CBD5E1;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:transparent;flex:none}
+.chk.on{background:#10B981;border-color:#10B981;color:#fff}
+.errbox{background:#FFF1F2;border:1px solid #FECDD3;color:#BE123C;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:600}
+.dl{display:grid;grid-template-columns:100px 1fr;gap:4px 10px;font-size:12.5px} .dl b{font-size:10.5px;color:#94A3B8;letter-spacing:.04em} .dl span{color:#1E293B;font-weight:600}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#home">2. 홈 — 대시보드</a>
+  <a href="#reading">3. 독서</a>
+  <a class="sub" href="#r-write">글쓰기 · 책 검색 · 사진</a>
+  <a class="sub" href="#r-post">글 한 장 읽기 · 추천 · 댓글</a>
+  <a class="sub" href="#r-side">추천 도서 · 포인트 현황</a>
+  <a href="#tips">4. 배움·팁</a>
+  <a href="#goals">5. 목표</a>
+  <a href="#praise">6. 칭찬</a>
+  <a href="#rules">7. 포인트·랭킹 규칙</a>
+  <a href="#faq">8. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 학습·지식 · 자기개발/지식공유</div>
+  <h1>자기개발/지식공유 길잡이</h1>
+  <p>책에서 만난 좋은 글과 업무 팁을 <b style="color:#fff">익명으로</b> 나누고, 동료 글에 <b style="color:#fff">👍 추천</b>을 보내 포인트를 모으고, 내 <b style="color:#fff">목표</b>를 걸어 진행률을 채우고, 동료를 <b style="color:#fff">칭찬</b>하는 화면입니다. 업무 시스템(일정·카톡·네이버)과는 연결돼 있지 않아 마음 놓고 써도 됩니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-26 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">글 올릴 때 내 이름</div><div class="big"><s>노출</s> → <em>익명</em></div><div class="sub">작성자는 저장만 · 화면엔 "익명"</div></div>
+    <div class="stat green"><div class="lbl">책 제목·표지 넣기</div><div class="big"><s>타이핑·촬영</s> → <em>검색 1번</em></div><div class="sub">📖 책 검색 → 고르면 제목·표지 자동</div></div>
+    <div class="stat purple"><div class="lbl">포인트 집계</div><div class="big"><s>손으로</s> → <em>자동</em></div><div class="sub">추천 1개 = 0.2P · 월간 랭킹 · 명예의 전당</div></div>
+    <div class="stat amber"><div class="lbl">칭찬 보내기</div><div class="big"><em>이름 1클릭</em> + <em>한 줄</em></div><div class="sub">부서·팀 고르면 이름 칩이 바로</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">좋은 구절 나누기</div><div class="pills"><span>카톡방에 타이핑</span><span>누가 썼는지 다 보임</span><span>반응은 흩어짐</span></div><div class="ba-count">이름 노출 · 기록 안 남음</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">좋은 구절 나누기</div><div class="pills"><span class="hot">📖 책 검색</span><span class="hot">구절 적기</span><span class="hot">익명으로 올리기</span></div><div class="ba-count">3번 누르기 · 추천·댓글 한곳</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">이달의 우수자 뽑기</div><div class="pills"><span>추천 세기</span><span>표 만들기</span><span>공지</span></div><div class="ba-count">3단계 · 매달 반복</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">이달의 우수자 뽑기</div><div class="pills"><span class="hot">홈 열기</span></div><div class="ba-count">1번 · 🏆 이번 달 포인트 랭킹</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">내 목표 챙기기</div><div class="pills"><span>메모장에 적기</span><span>날짜 계산</span><span>달성 여부 기억</span></div><div class="ba-count">3곳 따로 · 잊기 쉬움</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">내 목표 챙기기</div><div class="pills"><span class="hot">목표 추가</span><span class="hot">슬라이더</span><span class="hot">✓</span></div><div class="ba-count">D-day · 달성률 자동</div></div>
+  </div>
+  <div class="box tip"><b>좋은 습관 한 줄</b>하루에 <b>추천 하나</b>. 내 추천 하나가 동료에게 0.2P가 되고, 그게 쌓여 이번 달 랭킹이 됩니다.</div>
+  <p class="small">시간 수치는 어림한 예시입니다.</p>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 규칙 세 가지</h2>
+  <p class="lead">이 화면의 글은 <b>익명</b>이고, 추천은 <b>포인트</b>가 되고, 무엇을 하든 <b>작성자(내 이름)</b>가 골라져 있어야 합니다.</p>
+  <div class="sync">
+    <div class="n">익명<small>독서·배움·팁 글과 댓글은 "익명"으로만 보임</small></div>
+    <div class="arr">·</div>
+    <div class="n">포인트<small>받은 추천 1개 = 0.2P</small></div>
+    <div class="arr">·</div>
+    <div class="n">작성자<small>왼쪽 메뉴 맨 아래 내 이름</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>익명이지만 저장은 됩니다</b>글·댓글에는 "익명"만 보이고 내 글에는 <b>"익명 (내 글)"</b>, 내 댓글에는 <b>"익명 (나)"</b>가 붙어 나만 알아볼 수 있습니다. 작성자는 포인트 집계용으로만 저장됩니다. <b>칭찬은 예외</b> — 보낸 사람 이름이 함께 보입니다.</div>
+    <div class="box warn"><b>"작성자를 먼저 선택하세요."가 뜨면</b>왼쪽 메뉴 맨 아래가 "작성자 미선택"인 상태입니다. 작성자를 고른 뒤 다시 하세요. 글쓰기·추천·댓글·목표 추가·칭찬 보내기 모두 이 확인을 거칩니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:88px">2</span>
+    <div class="card">
+      <div class="hdr"><div class="ttl">자기개발 / 지식공유</div><div class="sub">읽고, 나누고, 목표를 이루는 공간 — 글은 익명으로, 추천 1개 = 0.2P</div></div>
+      <div class="utabs"><span class="utab on">홈</span><span class="utab">독서</span><span class="utab">배움·팁</span><span class="utab">목표</span><span class="utab">칭찬</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>화면 이름</b> — "자기개발 / 지식공유". 왼쪽 메뉴 <b>학습·지식 › 자기개발/지식공유</b>에서 들어옵니다. 열면 항상 <b>홈</b>부터.</div></div>
+    <div class="item"><span class="num">2</span><div><b>탭 5개</b> — 홈(대시보드) · 독서 · 배움·팁 · 목표 · 칭찬. 선택된 탭은 글자가 검게 되고 아래 파란 줄. 홈의 작은 카드·버튼을 누르면 해당 탭으로 자동 이동합니다.</div></div>
+  </div>
+  <table class="tbl"><thead><tr><th>탭</th><th>무엇을 하나</th><th>익명?</th><th>자세히</th></tr></thead><tbody>
+    <tr><td><b>홈</b></td><td>내 목표·칭찬·포인트 요약, 최근 책장, 칭찬 릴레이, 지식창고, 이번 달 랭킹, 명예의 전당</td><td>—</td><td><a href="#home">2번</a></td></tr>
+    <tr><td><b>독서</b></td><td>책 구절 올리기(표지 검색·사진), 추천·댓글, 추천 도서, 포인트 현황</td><td>익명</td><td><a href="#reading">3번</a></td></tr>
+    <tr><td><b>배움·팁</b></td><td>업무 팁·링크 올리기, 추천·댓글, 포인트 현황</td><td>익명</td><td><a href="#tips">4번</a></td></tr>
+    <tr><td><b>목표</b></td><td>내 목표 추가·진행률·완료, 전체 보기, 달성 현황</td><td>이름 공개</td><td><a href="#goals">5번</a></td></tr>
+    <tr><td><b>칭찬</b></td><td>동료 칭찬 보내기, 받은 사람·보낸 사람 필터, 이번 달 칭찬왕</td><td>이름 공개</td><td><a href="#praise">6번</a></td></tr>
+  </tbody></table>
+</section>
+
+<section id="home">
+  <h2>2. 홈 — 대시보드 여섯 칸</h2>
+  <p>열면 잠깐 <b>"불러오는 중…"</b>이 보이고, 여섯 개 카드가 두 줄씩 나옵니다. 각 카드 오른쪽 위 <span class="pillbtn act">파란 작은 버튼</span>을 누르면 그 탭으로 이동합니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 위 두 카드</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:60px;top:26px">2</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="card">
+        <div class="whead">🌱 나의 성장 대시보드 <span class="pillbtn act">목표 관리</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px">
+          <div class="mini"><span class="k">내 목표 달성</span><span style="display:flex;gap:8px;align-items:center"><span style="width:40px;height:40px;border-radius:50%;border:5px solid #E2E8F0;border-top-color:#2563EB;border-right-color:#2563EB;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">50%</span><span><span class="v">1<span style="font-size:11px;color:#94A3B8">/2</span></span><span class="s" style="display:block">정보처리기사 필기 · 40%</span></span></span></div>
+          <div class="mini"><span class="k">내가 받은 칭찬</span><span class="v">3</span><span class="s">최근 3건</span></div>
+          <div class="mini"><span class="k">달성 목표</span><span><span class="gchip cat">✓ 매주 책 1권</span></span></div>
+          <div class="mini"><span class="k">배움·팁 포인트</span><span class="v" style="color:#7C3AED">1.4P</span><span class="s">내가 쓴 글 4 · 받은 추천 7</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="whead">📚 독서 — 최근 책장 <span class="pillbtn act">+ 새 글 쓰기</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px"><div class="cover" style="width:auto;height:74px">미움받을 용기</div><div class="cover g" style="width:auto;height:74px">아주 작은 습관의 힘</div><div class="cover r" style="width:auto;height:74px">불편한 편의점</div><div class="cover a" style="width:auto;height:74px">돈의 심리학</div></div>
+        <div style="border-top:1px solid #F1F5F9;padding:8px 12px"><div style="font-size:10px;font-weight:900;color:#D97706">🏆 베스트 구절 · 《미움받을 용기》</div><div style="font-size:11.5px;color:#475569;font-weight:600">자유란 타인에게 미움을 받는 것이다 …</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>🌱 나의 성장 대시보드</b> — 작은 칸 4개, 전부 누를 수 있음. <b>내 목표 달성</b>(도넛 %, 완료/전체, 진행률 가장 높은 목표 · %) → 목표 / <b>내가 받은 칭찬</b>(개수, 최근 보낸 사람 3명 이니셜, "아직 없음 — 먼저 칭찬해 보세요") → 칭찬 / <b>달성 목표</b>(최근 완료 2개 "✓ 제목", 없으면 0) → 목표 / <b>배움·팁 포인트</b>(보라 X.XP, "내가 쓴 글 N · 받은 추천 N") → 배움·팁.</div></div>
+    <div class="item"><span class="num">2</span><div><b>📚 독서 — 최근 책장</b> — 제목이 있는 최신 글 4권(같은 책은 한 번만). 표지 그림이 있으면 그림, 없으면 제목 글자가 든 색 표지. 아래에 날짜와 👍 수. <b>표지를 누르면</b> 그 자리에서 창이 열립니다(아래). 맨 아래 <b>🏆 베스트 구절</b>은 추천이 가장 많은 독서 글 — 누르면 독서 탭.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 책장 표지를 눌렀을 때</span>
+      <div class="modal" style="max-width:440px;padding:0;overflow:hidden">
+        <div style="background:#1E252F;color:#fff;padding:14px 16px;display:flex;gap:10px;align-items:flex-start"><span style="background:rgba(255,255,255,.1);border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex:none">📖</span><div style="flex:1"><div style="font-weight:900;font-size:15px">《미움받을 용기》</div><div style="font-size:11px;color:#94A3B8;font-weight:600">익명 · 2026-08-21 · 👍 추천 5</div></div><span style="color:#94A3B8;font-weight:900">✕</span></div>
+        <div style="padding:14px 16px;display:flex;gap:12px"><div class="cover" style="width:64px;height:88px">미움받을 용기</div><div style="font-size:13px;line-height:1.7;color:#1E293B">자유란 타인에게 미움을 받는 것이다. 남의 시선에서 벗어나는 순간 …</div></div>
+        <div style="background:#F8FAFC;border-top:1px solid #F1F5F9;padding:10px 16px;display:flex;justify-content:flex-end;gap:6px"><span class="pillbtn ghost" style="padding:7px 14px">독서 탭에서 보기</span><span class="pillbtn dark" style="padding:7px 22px">확인</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <div class="box"><b>책장 상세 창</b>제목 《책 제목》, 아래 "익명 · 날짜 · 👍 추천 N", 표지와 구절 전문. <b>독서 탭에서 보기</b> → 창을 닫고 독서 탭으로. <b>확인</b> · ✕ · 바깥 클릭 · <span class="kbd">Esc</span>로 닫기. 여기선 추천·댓글을 할 수 없고 보기만 합니다.</div>
+      <div class="box"><b>💖 칭찬 릴레이</b> — 최근 칭찬 4건: 받은 사람 이니셜 동그라미, "보낸 사람 → <b>받은 사람</b>", 내용 한 줄, 날짜. 오른쪽 위 <b>나도 칭찬하기</b> → 칭찬 탭. 없으면 "아직 칭찬이 없어요. 첫 칭찬의 주인공을 만들어 주세요."</div>
+      <div class="box"><b>💡 지식창고 — 배움·팁</b> — 최신 팁 4장(제목·본문 3줄·날짜·👍). 카드 아무 데나 누르면 배움·팁 탭. 오른쪽 위 <b>+ 새 팁 등록</b>. 없으면 "아직 팁이 없어요 — 오늘 배운 것 하나를 남겨보세요."</div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="box"><b>🏆 이번 달 포인트 랭킹</b> — 이번 달에 받은 추천으로 상위 5명. 🥇🥈🥉 4. 5. 순, 내 줄은 보라색 테두리에 "(나)". 점수는 X.XP. 오른쪽 위 <b>글 쓰러 가기</b> → 독서 탭. 비어 있으면 "이번 달 추천 기록이 아직 없어요."</div>
+    <div class="box"><b>🏛 명예의 전당 — 월간 1위</b> — 지난 달들(진행 중인 이번 달은 제외)의 1위를 최근 6개월까지: "N월 👑 이름 X.XP". <b>포인트 쌓기</b> → 배움·팁 탭. 비어 있으면 "아직 마감된 달의 기록이 없어요."</div>
+  </div>
+  <div class="box tip"><b>홈의 포인트는 독서+배움·팁을 합친 값</b>홈의 "배움·팁 포인트"와 랭킹은 내가 쓴 <b>모든 글</b>(독서·팁)에 받은 추천을 합칩니다. 반면 독서 탭·배움·팁 탭 오른쪽의 "포인트 현황"은 <b>그 탭 글만</b> 셉니다. 숫자가 달라 보여도 오류가 아닙니다.</div>
+</section>
+
+<section id="reading">
+  <h2>3. 독서 — 좋은 글을 익명으로</h2>
+  <p class="lead">왼쪽 넓은 칸에 <b>베스트 구절 → 글쓰기 → 정렬·검색 → 글 목록</b>, 오른쪽 좁은 칸에 <b>이런 책 어때요 → 포인트 현황</b>이 있습니다(화면이 좁으면 오른쪽 칸이 아래로 내려갑니다).</p>
+
+  <h3 id="r-write">글쓰기 · 책 검색 · 사진 첨부</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 책 검색 결과가 열린 상태</span>
+    <span class="badge" style="left:26px;top:60px">1</span>
+    <span class="badge" style="right:60px;top:60px">2</span>
+    <span class="badge" style="left:26px;top:110px">3</span>
+    <span class="badge" style="left:26px;top:218px">4</span>
+    <span class="badge" style="left:26px;top:290px">5</span>
+    <span class="badge" style="right:60px;top:290px">6</span>
+    <div class="card" style="padding:14px;display:grid;gap:8px">
+      <div style="font-size:11px;font-weight:900;color:#94A3B8">좋은 글 남기기 <span style="color:#CBD5E1;font-weight:700">— 익명으로 공유됩니다</span></div>
+      <div style="display:flex;gap:6px;align-items:center"><span class="cover" style="width:28px;height:38px;font-size:7px;border-radius:4px">표지</span><span class="field" style="flex:1"><span class="in" style="color:#1E293B">미움받을 용기</span></span><span class="pillbtn ghost" style="padding:7px 12px">📖 책 검색</span></div>
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:8px;display:grid;gap:6px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:900;color:#94A3B8"><span>책을 고르면 제목·표지가 채워집니다</span><span>닫기 ✕</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div style="display:flex;gap:8px;align-items:center;background:#fff;border-radius:8px;padding:6px;box-shadow:inset 0 0 0 1px #E2E8F0"><span class="cover" style="width:30px;height:44px;font-size:7px;border-radius:4px">표지</span><span><span style="display:block;font-size:11.5px;font-weight:900">미움받을 용기</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:700">기시미 이치로, 고가 후미타케</span></span></div>
+          <div style="display:flex;gap:8px;align-items:center;background:#fff;border-radius:8px;padding:6px;box-shadow:inset 0 0 0 1px #E2E8F0"><span style="width:30px;height:44px;border-radius:4px;background:#F1F5F9;color:#94A3B8;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center;text-align:center;flex:none">표지<br>없음</span><span><span style="display:block;font-size:11.5px;font-weight:900">미움받을 용기 2</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:700">기시미 이치로</span></span></div>
+        </div>
+      </div>
+      <div class="field"><span class="in ta">마음에 남은 구절이나 생각을 적어주세요.</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="display:flex;gap:8px;align-items:center"><span class="pillbtn ghost" style="padding:5px 11px;color:#64748B">📷 사진 첨부</span><span style="font-size:11px;color:#CBD5E1;font-weight:700">0자</span></span><span class="pillbtn off" style="padding:8px 18px;font-size:12.5px">익명으로 올리기</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>제목 칸</b> — 안내 글 "책 제목·출처 (선택)". 비워도 올릴 수 있습니다. 표지를 고른 뒤에는 칸 왼쪽에 작은 표지가 붙고, 그 위 <b>×</b>로 표지만 뗄 수 있습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>📖 책 검색</b> — 제목 칸에 글자가 있어야 켜집니다(비면 흐림). 제목 칸에서 <span class="kbd">Enter</span>를 쳐도 검색. 검색 중엔 "검색 중…".</div></div>
+    <div class="item"><span class="num">3</span><div><b>검색 결과 판</b> — "책을 고르면 제목·표지가 채워집니다". 찾는 동안 "책을 찾는 중…". 결과는 두 줄로 표지(없으면 "표지 없음")·제목·저자. <b>책을 누르면</b> 제목 칸이 그 제목으로 바뀌고 표지가 붙고 판이 닫힙니다. <b>닫기 ✕</b>는 그냥 닫기.</div></div>
+    <div class="item"><span class="num">4</span><div><b>본문 칸</b> — "마음에 남은 구절이나 생각을 적어주세요." <b>여기만 필수</b>. 3줄 크기, 아래 모서리를 끌어 늘릴 수 있음. 글자 수가 오른쪽 아래 "N자"로 보입니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>📷 사진 첨부</b> — 사진 파일을 고르면 올라가고("올리는 중…") 작은 미리보기가 붙습니다. 미리보기 위 <b>×</b>로 제거. 사진 아닌 파일은 빨간 띠 "이미지 파일만 첨부할 수 있어요."</div></div>
+    <div class="item"><span class="num">6</span><div><b>익명으로 올리기</b> — 본문이 비어 있으면 흐리게 잠김. 누르면 "올리는 중…" → 완료되면 칸이 모두 비워지고 목록 맨 위에 새 글이 나타납니다.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box tip"><b>책 검색은 네 곳을 차례로 물어봅니다</b>① 리디북스(회사 서버 경유) → ② 카카오 책 검색(관리자가 키를 넣어 둔 경우만) → ③ 구글 도서 → ④ 오픈라이브러리. 앞에서 결과가 나오면 거기서 멈춥니다. 전부 비면 "검색 결과가 없어요 — 제목을 바꿔 다시 검색해 보세요." 아래에 노란 글씨 "검색 서버가 잠시 응답하지 않았을 수 있어요 — 잠시 후 다시 시도해 보세요."</div>
+    <div class="box warn"><b>표지는 독서 글에만 저장됩니다</b>배움·팁 탭에는 책 검색 버튼이 없고 표지도 저장되지 않습니다. 사진 첨부는 두 탭 모두 됩니다.</div>
+  </div>
+
+  <h3 id="r-post">글 한 장 읽기 · 추천 · 댓글</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 내 글, 댓글 펼침</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="right:60px;top:26px">2</span>
+    <span class="badge" style="left:26px;top:70px">3</span>
+    <span class="badge" style="left:26px;top:170px">4</span>
+    <span class="badge" style="left:150px;top:170px">5</span>
+    <span class="badge" style="right:60px;top:170px">6</span>
+    <span class="badge" style="left:26px;top:222px">7</span>
+    <div class="post">
+      <div class="meta"><span class="anon">익명 (내 글)</span><span>2026-08-21</span><span style="font-weight:900;color:#64748B">《미움받을 용기》</span><span style="margin-left:auto;font-weight:900;color:#CBD5E1">삭제</span></div>
+      <div class="body"><div class="cover">미움받을 용기</div><div class="txt">자유란 타인에게 미움을 받는 것이다. 누군가에게 미움을 받는다는 것은 내가 자유롭게 살고 있다는 증거이며, 스스로의 방침에 따라 살고 있다는 표시다. 관련 영상 https://example.com/talk …</div></div>
+      <div style="display:flex;gap:6px;align-items:center;padding-left:66px"><span class="rbtn voted">👍 추천 5</span><span class="rbtn dark">💬 댓글 2</span><span style="font-size:11.5px;font-weight:900;color:#3B82F6">더보기</span></div>
+      <div style="border-top:1px solid #F1F5F9;padding-top:8px;margin-left:66px;display:grid;gap:6px">
+        <div style="background:#F8FAFC;border-radius:8px;padding:6px 10px;display:flex;justify-content:space-between;gap:8px"><span><span style="font-size:10px;font-weight:900;color:#94A3B8">익명 · 08-22</span><span style="display:block;font-size:11.5px;font-weight:600;color:#334155">저도 이 장에서 멈췄어요.</span></span></div>
+        <div style="background:#F8FAFC;border-radius:8px;padding:6px 10px;display:flex;justify-content:space-between;gap:8px"><span><span style="font-size:10px;font-weight:900;color:#94A3B8">익명 (나) · 08-22</span><span style="display:block;font-size:11.5px;font-weight:600;color:#334155">2권도 추천합니다.</span></span><span style="font-size:10px;font-weight:900;color:#CBD5E1">삭제</span></div>
+        <div style="display:flex;gap:6px"><span class="field" style="flex:1"><span class="in" style="min-height:30px;padding:5px 10px">익명 댓글 남기기</span></span><span class="pillbtn dark" style="padding:6px 12px">등록</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>익명 표시</b> — 모든 글이 "익명". 내가 쓴 글에만 <b>"익명 (내 글)"</b>. 옆에 날짜, 제목이 있으면 《제목》.</div></div>
+    <div class="item"><span class="num">2</span><div><b>삭제</b> — 내 글에만 보임. 누르면 확인 창 <b>"이 글을 삭제할까요?"</b> (취소 / 확인). 확인하면 글과 함께 목록에서 사라집니다. 베스트 구절로 위에 뽑힌 복사본에는 삭제가 없습니다(아래 원본에서 지우세요).</div></div>
+    <div class="item"><span class="num">3</span><div><b>표지와 본문</b> — 표지가 있으면 왼쪽에 작은 표지, 없으면 노란 큰 따옴표 “. 본문 속 <b>https:// 주소는 자동으로 파란 링크</b>가 되어 누르면 새 탭에서 열립니다. 첨부 사진은 본문 아래에 나오고, 누르면 새 탭에서 원본 크기로.</div></div>
+    <div class="item"><span class="num">4</span><div><b>👍 추천</b> — 누르면 노란색으로 바뀌며 숫자 +1. 다시 누르면 취소(-1). 서버가 답할 때까지 잠깐 흐려지며 연타가 막힙니다. 내 글도 추천할 수 있습니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>💬 댓글</b> — 숫자는 댓글 수. 누르면 아래에 댓글 칸이 펼쳐지고 버튼이 검게 변합니다. 다시 누르면 접힘.</div></div>
+    <div class="item"><span class="num">6</span><div><b>더보기 / 접기</b> — 본문이 280자를 넘을 때만 나타납니다. 처음엔 280자까지만 보이고 "…".</div></div>
+    <div class="item"><span class="num">7</span><div><b>댓글 쓰기</b> — "익명 댓글 남기기" 칸에 적고 <span class="kbd">Enter</span> 또는 <b>등록</b>. 댓글도 "익명", 내 것만 "익명 (나)"와 <b>삭제</b>(확인 창 없이 바로 지워짐). 날짜는 월-일만.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box"><b>🏆 베스트 구절</b>목록 맨 위에 노란 테두리로 한 장 더 보이는 글. 추천이 가장 많은 글(같으면 최신)이 자동으로 뽑힙니다. 추천·댓글은 여기서도 됩니다.</div>
+    <div class="box"><b>정렬 · 통계 · 검색 줄</b><span class="seg" style="vertical-align:middle"><span class="on">최신순</span><span>추천순</span></span> 토글, <span class="cnt">전체 N · 이번 주 N · 내 포인트 X.XP</span> 요약, 오른쪽 <b>제목·내용 검색</b> 칸(치는 즉시 걸러짐, 대소문자 무시). 검색 결과가 없으면 "검색 결과가 없어요.", 글이 하나도 없으면 "아직 올라온 글이 없어요. 첫 글을 남겨보세요."</div>
+  </div>
+
+  <h3 id="r-side">오른쪽 칸 — 이런 책 어때요 · 포인트 현황</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div style="display:grid;gap:10px">
+        <div class="card">
+          <div style="padding:9px 14px;border-bottom:1px solid #F1F5F9"><div style="font-weight:900;font-size:12.5px">📚 이런 책 어때요</div><div style="font-size:10px;color:#94A3B8;font-weight:700">매일 바뀌어요 — 누르면 제목·표지가 작성칸에 담깁니다</div></div>
+          <div style="display:flex;gap:4px;padding:8px 10px 0;overflow:hidden"><span class="fchip on">자기계발</span><span class="fchip">경영·리더십</span><span class="fchip">경제·재테크</span><span class="fchip">인문·교양</span><span class="fchip">소설·에세이</span><span class="fchip">IT·기술</span></div>
+          <div style="padding:8px 10px;display:grid;gap:4px">
+            <div style="display:flex;gap:8px;align-items:center"><span class="cover" style="width:40px;height:56px;font-size:8px;border-radius:4px">그릿</span><span><span style="display:block;font-size:12px;font-weight:900">그릿</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:700">앤절라 더크워스</span></span></div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="cover g" style="width:40px;height:56px;font-size:8px;border-radius:4px">원씽</span><span><span style="display:block;font-size:12px;font-weight:900">원씽</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:700">게리 켈러</span></span></div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="cover a" style="width:40px;height:56px;font-size:8px;border-radius:4px">역행자</span><span><span style="display:block;font-size:12px;font-weight:900">역행자</span><span style="display:block;font-size:10px;color:#94A3B8;font-weight:700">자청</span></span></div>
+          </div>
+        </div>
+        <div class="card" style="padding:12px 14px;display:grid;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:900;font-size:12.5px">🏆 포인트 현황</span><span class="seg"><span class="on" style="font-size:10px;padding:3px 8px">전체</span><span style="font-size:10px;padding:3px 8px">이번 달</span></span></div>
+          <div style="font-size:10px;color:#94A3B8;font-weight:700">받은 추천 1개 = 0.2P. 어떤 글인지는 공개되지 않아요.</div>
+          <div class="rank"><span>🥇 박서준</span><span style="color:#D97706">2.4P</span></div>
+          <div class="rank me"><span>🥈 김하늘 (나)</span><span style="color:#D97706">1.8P</span></div>
+          <div class="rank"><span>🥉 이도윤</span><span style="color:#D97706">0.6P</span></div>
+        </div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <div class="box"><b>📚 이런 책 어때요 (독서 탭에만)</b>장르 칩 6개 — 자기계발 · 경영·리더십 · 경제·재테크 · 인문·교양 · 소설·에세이 · IT·기술. 장르마다 <b>하루 3권</b>이 날짜에 따라 돌아가며 나옵니다. <b>책을 누르면</b> 글쓰기의 제목 칸과 표지가 채워지고 화면이 맨 위로 스르륵 올라갑니다. 표지·저자는 회사 서버가 찾아 주며 기기에 7일 기억되므로 두 번째부터는 바로 뜹니다.</div>
+      <div class="box"><b>🏆 포인트 현황</b><b>전체 / 이번 달</b> 토글. 이 탭 글에 받은 추천을 사람별로 합쳐 🥇🥈🥉 4. 5. … 순으로, 내 줄은 노란 테두리에 "(나)". 이름만 보이고 <b>어떤 글인지는 안 보입니다</b>(익명 유지). 없으면 "아직 추천 기록이 없어요." / "이번 달 추천 기록이 없어요."</div>
+      <div class="box warn"><b>맨 위 빨간 띠가 보이면</b>불러오기나 저장이 실패한 것입니다. 문구를 그대로 관리자에게 전달하세요(예: "불러오기 실패 — supabase/reading.sql 실행 여부를 확인하세요.").</div>
+    </div>
+  </div>
+</section>
+
+<section id="tips">
+  <h2>4. 배움·팁 — 독서와 같은 판, 다른 문구</h2>
+  <p>업무 팁·강의·아티클 링크를 익명으로 나누는 곳입니다. 화면 짜임새·추천·댓글·정렬·검색·포인트 현황은 <a href="#reading">독서</a>와 완전히 같고, 아래만 다릅니다.</p>
+  <table class="tbl"><thead><tr><th>자리</th><th>독서</th><th>배움·팁</th></tr></thead><tbody>
+    <tr><td>글쓰기 제목 줄</td><td>좋은 글 남기기 — 익명으로 공유됩니다</td><td><b>배움·팁 남기기</b> — 익명으로 공유됩니다</td></tr>
+    <tr><td>제목 칸 안내</td><td>책 제목·출처 (선택)</td><td><b>주제·출처 (선택)</b></td></tr>
+    <tr><td>본문 칸 안내</td><td>마음에 남은 구절이나 생각을 적어주세요.</td><td><b>배운 것, 꿀팁, 링크(자동으로 클릭 가능)를 공유해주세요.</b></td></tr>
+    <tr><td>올리기 버튼</td><td>익명으로 올리기</td><td><b>익명으로 공유</b></td></tr>
+    <tr><td>맨 위 뽑힌 글</td><td>🏆 베스트 구절</td><td><b>🏆 베스트 팁</b></td></tr>
+    <tr><td>📖 책 검색 · 표지</td><td>있음</td><td><b>없음</b>(제목만 저장)</td></tr>
+    <tr><td>📚 이런 책 어때요</td><td>있음</td><td><b>없음</b> — 오른쪽엔 포인트 현황만</td></tr>
+    <tr><td>📷 사진 첨부</td><td>있음</td><td>있음</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>링크는 그냥 붙이면 됩니다</b>본문에 <code>https://…</code>를 넣으면 올린 뒤 자동으로 파란 링크가 되어 새 탭으로 열립니다. 제목 칸에 "유튜브 강의"처럼 출처를 적어 두면 홈 지식창고 카드에 제목으로 보입니다.</div>
+</section>
+
+<section id="goals">
+  <h2>5. 목표 — 걸고, 채우고, 완료</h2>
+  <p class="lead">목표는 <b>이름이 공개</b>됩니다(익명 아님). 내 목표는 내가만 고치고 지울 수 있고, 다른 사람 목표는 <b>전체 보기</b>에서 구경만 합니다.</p>
+  <h3>새 목표 추가</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div class="card" style="padding:14px;display:grid;gap:8px">
+      <div style="font-size:11px;font-weight:900;color:#94A3B8">새 목표 추가</div>
+      <div style="display:grid;grid-template-columns:110px 1fr;gap:8px"><span class="field"><span class="in" style="color:#1E293B">자격증 ▾</span></span><span class="field"><span class="in">목표 (예: 정보처리기사 필기 합격, 매주 책 1권)</span></span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span class="field"><small>시작일 (비우면 오늘)</small><span class="in">연도-월-일</span></span><span class="field"><small>완료 목표일</small><span class="in">연도-월-일</span></span></div>
+      <div class="field"><span class="in">메모 (선택)</span></div>
+      <div style="display:flex;justify-content:flex-end"><span class="pillbtn off" style="padding:8px 18px;font-size:12.5px">목표 추가</span></div>
+    </div>
+  </div>
+  <ol class="steps">
+    <li><b>분류</b>를 고른다 — 자격증 · 학습 · 독서 · 건강 · 습관 · 기타(처음값 기타).</li>
+    <li><b>목표</b> 칸에 적는다 — "목표 (예: 정보처리기사 필기 합격, 매주 책 1권)". <b>이것만 필수</b>. 비어 있으면 <b>목표 추가</b> 버튼이 흐리게 잠깁니다.</li>
+    <li><b>시작일</b>(비우면 오늘 날짜가 들어감) · <b>완료 목표일</b>(비우면 "미정") · <b>메모</b>는 선택.</li>
+    <li><b>목표 추가</b> → "추가 중…" → 칸이 비워지고 목록에 새 목표가 나타납니다. 진행률은 0%에서 시작.</li>
+  </ol>
+
+  <h3>목표 한 장 읽기</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 내 목표(진행 중)</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:96px;top:26px">2</span>
+    <span class="badge" style="left:96px;top:74px">3</span>
+    <span class="badge" style="left:96px;top:106px">4</span>
+    <span class="badge" style="right:60px;top:26px">5</span>
+    <div class="post" style="grid-template-columns:auto 1fr auto;display:grid;align-items:start">
+      <span class="chk">✓</span>
+      <div style="display:grid;gap:5px;padding:0 10px">
+        <div style="font-weight:900;font-size:13.5px">정보처리기사 필기 합격</div>
+        <div style="font-size:11.5px;color:#64748B;font-weight:600">매일 저녁 1시간, 기출 3회독</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:#94A3B8;font-weight:700"><span class="gchip cat">자격증</span><span>2026-08-01 ~ 2026-09-20</span><span class="gchip dd">D-25</span></div>
+        <div style="display:flex;gap:8px;align-items:center"><span class="bar2"><i style="width:40%"></i></span><span style="font-size:11px;font-weight:900;color:#64748B">40%</span></div>
+        <div style="height:4px;border-radius:999px;background:#E2E8F0;position:relative"><span style="position:absolute;left:40%;top:-5px;width:14px;height:14px;border-radius:50%;background:#2563EB"></span></div>
+      </div>
+      <span style="display:flex;gap:8px;font-size:11px;font-weight:900;color:#CBD5E1"><span>수정</span><span>삭제</span></span>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>✓ 동그라미</b> — 내 목표만 누를 수 있음. 누르면 <b>완료</b>: 카드가 초록으로, 제목에 줄이 그어지고, 진행률이 100%로, "완료 날짜"가 붙습니다. 다시 누르면 완료가 풀립니다(진행률은 100%에 남아 있으니 슬라이더로 내리세요). 남의 목표는 흐린 동그라미로 눌리지 않습니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>제목 · 메모</b> — 그 아래 칩: 전체 보기일 때 <span class="gchip who">이름</span>, <span class="gchip cat">분류</span>, "시작일 ~ 목표일"(없으면 "?" / "미정").</div></div>
+    <div class="item"><span class="num">3</span><div><b>D-day 칩</b> — 목표일까지 <span class="gchip dd">D-25</span>(파랑), 당일 <span class="gchip dd">D-DAY</span>, 지났으면 <span class="gchip over">D+3</span>(빨강). 완료된 목표엔 안 보임.</div></div>
+    <div class="item"><span class="num">4</span><div><b>진행률 막대와 슬라이더</b> — 막대는 누구나 보이고, 아래 <b>슬라이더</b>는 내 목표이면서 완료 전일 때만. 5% 단위로 끌면 막대가 바로 움직이고, <b>손을 떼는 순간</b> 저장됩니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>수정 · 삭제</b> — 내 목표에만. <b>수정</b>은 카드가 파란 입력 판으로 바뀌어 분류·제목·시작일·목표일·메모를 고치고 <b>저장</b>(제목이 비면 저장 안 됨) 또는 <b>취소</b>. <b>삭제</b>는 확인 창 <b>"○○○ 목표를 삭제할까요?"</b>(목표 제목이 따옴표 안에) → 확인.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box"><b>필터 줄</b><span class="seg" style="vertical-align:middle"><span class="on">내 목표</span><span>전체 보기</span></span> 토글(처음엔 내 목표) · <span class="cnt">내 목표 N · 완료 N · 달성률 P%</span> 요약 · 오른쪽에 분류 칩 <span class="fchip on">전체</span> <span class="fchip">자격증</span> <span class="fchip">학습</span> … 진행 중 목표가 위에, 완료한 목표는 아래 <b>"✅ 완료한 목표 N개 펼치기"</b> 안에 접혀 있습니다. 비어 있으면 "아직 목표가 없어요. 첫 목표를 걸어보세요." / 전체 보기면 "등록된 목표가 없어요."</div>
+    <div class="box"><b>🏁 달성 현황 (오른쪽)</b>"완료한 목표 수 기준. 서로 자극이 되어주세요." 사람별 <b>완료/전체</b>를 완료 수 많은 순으로 🥇🥈🥉. 내 줄은 초록 테두리 "(나)". 없으면 "아직 목표 기록이 없어요."</div>
+  </div>
+</section>
+
+<section id="praise">
+  <h2>6. 칭찬 — 이름 걸고 고맙다고 말하기</h2>
+  <p class="lead">칭찬은 <b>보낸 사람 이름이 함께 표시</b>됩니다(익명 아님). 받은 칭찬은 이번 달 칭찬왕으로 모입니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 칭찬 보내기</span>
+    <span class="badge" style="left:26px;top:60px">1</span>
+    <span class="badge" style="left:26px;top:100px">2</span>
+    <span class="badge" style="left:26px;top:146px">3</span>
+    <span class="badge" style="right:60px;top:146px">4</span>
+    <div class="card" style="padding:14px;display:grid;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:900;color:#64748B">💌 칭찬 보내기 <span style="color:#CBD5E1;font-weight:700">— 보낸 사람 이름이 함께 표시됩니다</span></span><span class="gchip pr">내가 받은 칭찬 3</span></div>
+      <div style="display:flex;gap:6px"><span class="pillbtn ghost" style="padding:6px 12px">CS팀 ▾</span><span class="pillbtn ghost" style="padding:6px 12px">팀 전체 ▾</span></div>
+      <div class="namepick"><span class="sm">박서준</span><span class="sm on">이도윤</span><span class="sm">최민서</span><span class="sm">정하린</span><span class="sm">강지호</span></div>
+      <div style="display:flex;gap:8px"><span class="field" style="flex:1"><span class="in">어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)</span></span><span class="pillbtn off" style="padding:8px 18px;font-size:12.5px">보내기</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>부서 · 팀 고르기</b> — 처음엔 CS팀 · 팀 전체. 부서(임원 · CS팀 · 영업팀 · CSS·운영지원 순) → 팀을 바꾸면 아래 이름 칩이 바뀌고 고른 이름은 풀립니다. 겸임(A·B)인 사람은 어느 팀을 골라도 나옵니다.</div></div>
+    <div class="item"><span class="num">2</span><div><b>이름 칩</b> — 누르면 파랗게 선택. <b>내 이름은 목록에 없습니다</b>(자기 칭찬 불가). 인원이 없으면 "해당 팀에 선택할 인원이 없어요".</div></div>
+    <div class="item"><span class="num">3</span><div><b>내용 칸</b> — "어떤 점이 좋았는지 구체적으로 (예: 어제 무거운 기기 옮기는 것 도와줘서 감사!)". <span class="kbd">Enter</span>로도 보낼 수 있습니다.</div></div>
+    <div class="item"><span class="num">4</span><div><b>보내기</b> — 이름과 내용이 둘 다 있어야 켜짐. "보내는 중…" → 내용 칸만 비워지고(이름은 유지) 목록 맨 위에 올라갑니다. 오른쪽 위 <span class="gchip pr">내가 받은 칭찬 N</span>은 내가 받은 총 개수.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현 · 칭찬 카드(내가 보낸 것)</span>
+      <div class="post" style="gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="display:flex;gap:8px;align-items:center"><span class="avatar">도윤</span><span><span style="display:block;font-size:12.5px"><span style="font-weight:900;color:#475569">김하늘</span> (나) <span style="color:#CBD5E1">→</span> <b>이도윤</b></span><span class="gchip pr" style="font-size:9.5px">칭찬</span></span></span><span style="display:flex;gap:8px;font-size:11px;font-weight:900;color:#94A3B8"><span style="color:#CBD5E1">수정</span><span style="color:#CBD5E1">삭제</span>2026-08-25</span></div>
+        <div class="txt" style="padding-left:40px;font-size:14px">어제 무거운 기기 옮기는 것 도와줘서 감사!</div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <div class="box"><b>카드 읽기</b>받은 사람 이니셜(성 뺀 두 글자) 동그라미 · "<b>보낸 사람</b> → <b>받은 사람</b>" · 작은 <span class="gchip pr">칭찬</span> 배지 · 날짜 · 내용. <b>내가 받은 칭찬은 카드가 노란빛</b>으로 강조됩니다. 내가 보낸 카드엔 "(나)"와 <b>수정 · 삭제</b>.</div>
+      <div class="box"><b>수정 · 삭제</b><b>수정</b> → 내용 칸이 열려 고치고 <span class="kbd">Enter</span> 또는 <b>저장</b>(<b>취소</b>로 되돌림). <b>삭제</b> → 확인 창 <b>"이 칭찬을 삭제할까요?"</b> → 확인. 받은 사람은 바꿀 수 없으니 잘못 보냈으면 삭제 후 다시.</div>
+      <div class="box"><b>필터</b>"받은 사람: 전체 ▾" · "보낸 사람: 전체 ▾" 두 드롭다운(칭찬에 등장한 이름만). 하나라도 바꾸면 옆에 <b>초기화</b>가 나타납니다. 조건에 안 맞으면 "조건에 맞는 칭찬이 없어요."</div>
+      <div class="box"><b>👑 이번 달 칭찬왕 (오른쪽)</b>이번 달 받은 칭찬 개수로 순위 — 1위는 👑, 그 아래 2. 3. …, "N회". 내 줄은 노란 테두리 "(나)". 없으면 "이번 달 칭찬이 아직 없어요."</div>
+    </div>
+  </div>
+  <div class="box warn"><b>이런 빨간 띠가 뜨면</b>"작성자를 먼저 선택하세요." → 왼쪽 메뉴 아래 작성자 확인. "자기 자신 칭찬은 셀프라 무효입니다 🙂 동료를 칭찬해 주세요." → 받는 사람이 나로 잡힌 경우(보통 생기지 않음). 저장 실패 문구는 그대로 관리자에게.</div>
+</section>
+
+<section id="rules">
+  <h2>7. 포인트·랭킹 규칙 한눈에</h2>
+  <table class="tbl"><thead><tr><th>어디</th><th>무엇을 세나</th><th>범위</th><th>표시</th></tr></thead><tbody>
+    <tr><td>독서 탭 · 포인트 현황</td><td>독서 글에 받은 추천</td><td>전체 / 이번 달 토글</td><td>추천 × 0.2 = X.XP · 🥇🥈🥉</td></tr>
+    <tr><td>배움·팁 탭 · 포인트 현황</td><td>팁 글에 받은 추천</td><td>전체 / 이번 달 토글</td><td>같음</td></tr>
+    <tr><td>홈 · 배움·팁 포인트 칸</td><td>내 글(독서+팁 모두)에 받은 추천</td><td>전체 기간</td><td>X.XP · 내가 쓴 글 N · 받은 추천 N</td></tr>
+    <tr><td>홈 · 🏆 이번 달 포인트 랭킹</td><td>모든 글에 받은 추천</td><td>이번 달, 상위 5명</td><td>X.XP</td></tr>
+    <tr><td>홈 · 🏛 명예의 전당</td><td>달마다 추천 1위</td><td>지난 달들, 최근 6개월</td><td>N월 👑 이름 X.XP</td></tr>
+    <tr><td>칭찬 탭 · 👑 이번 달 칭찬왕</td><td>받은 칭찬 개수</td><td>이번 달</td><td>N회</td></tr>
+    <tr><td>목표 탭 · 🏁 달성 현황</td><td>완료한 목표 수</td><td>전체 기간</td><td>완료/전체</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="box tip"><b>0.2P는 어떻게 나오나</b>추천 1개 = 0.2P라서 추천 7개면 1.4P, 12개면 2.4P. 추천을 취소하면 그만큼 다시 빠집니다.</div>
+    <div class="box tip"><b>"이번 달"의 기준</b>추천을 <b>누른 날짜</b>입니다. 지난달 글이라도 이번 달에 받은 추천은 이번 달 랭킹에 들어갑니다. 명예의 전당은 달이 끝나야 그 달 1위가 올라갑니다.</div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>8. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>글을 올리려는데 버튼이 눌리지 않아요</summary><p>본문 칸이 비어 있으면 <b>익명으로 올리기</b>가 흐리게 잠깁니다. 제목은 없어도 되지만 본문은 꼭 필요합니다. 눌렸는데 빨간 띠 "작성자를 먼저 선택하세요."가 뜨면 왼쪽 메뉴 아래 작성자를 고르세요.</p></details>
+    <details><summary>내 글인 걸 다른 사람이 알 수 있나요</summary><p>화면에는 "익명"만 보이고, "(내 글)" 표시는 내 화면에서만 붙습니다. 포인트 현황에 이름은 나오지만 어떤 글인지는 연결되지 않습니다. 단, <b>칭찬</b>은 보낸 사람 이름이 공개됩니다.</p></details>
+    <details><summary>책 검색이 "검색 결과가 없어요"만 나와요</summary><p>네 곳(리디북스 → 카카오 → 구글 도서 → 오픈라이브러리)을 다 물어봤는데 비었을 때입니다. 노란 글씨가 함께 뜨면 서버가 잠시 답을 안 한 것이니 잠시 뒤 다시. 제목을 짧게(부제 빼고) 다시 검색해 보세요. 표지 없이 올려도 됩니다.</p></details>
+    <details><summary>추천을 눌렀는데 숫자가 잠깐 바뀌고 되돌아갔어요</summary><p>화면은 먼저 바꾸고 서버에 저장하는 방식인데, 저장이 실패하면 서버 상태로 되돌립니다. 인터넷을 확인하고 다시 눌러 보세요. 연타는 첫 요청이 끝날 때까지 막힙니다.</p></details>
+    <details><summary>글을 지웠는데 베스트 구절에 아직 있어요</summary><p>베스트 구절은 목록 위에 한 장 더 보여 주는 복사본입니다. 삭제 후 목록이 새로 계산되면 사라지고, 다음으로 추천이 많은 글이 올라옵니다. 안 바뀌면 탭을 한 번 바꿔서 돌아오세요.</p></details>
+    <details><summary>완료를 잘못 눌렀어요(목표)</summary><p>✓ 동그라미를 다시 누르면 완료가 풀립니다. 진행률은 100%로 남아 있으니 슬라이더를 끌어 원래 값으로 내리세요(손을 떼면 저장됩니다).</p></details>
+    <details><summary>다른 사람 목표를 응원하고 싶어요</summary><p>목표 탭에는 추천·댓글이 없습니다. <b>전체 보기</b>로 구경한 뒤, 칭찬 탭에서 그 사람에게 칭찬을 보내 주세요.</p></details>
+    <details><summary>칭찬 받는 사람 목록에 그 사람이 없어요</summary><p>부서·팀 드롭다운을 바꿔 보세요(처음엔 CS팀 · 팀 전체). 그래도 없으면 재직 명단에 없는 사람일 수 있으니 관리 탭 인원 명단을 확인하세요.</p></details>
+    <details><summary>홈 포인트와 독서 탭 포인트가 달라요</summary><p>홈은 독서+배움·팁 글을 합쳐 세고, 각 탭의 포인트 현황은 그 탭 글만 셉니다. <a href="#rules">7번</a> 표 참고.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">자기개발/지식공유 길잡이 · 같은 메뉴의 IT 학습·처리이력, 복합기 학습·처리이력 길잡이도 같은 형식</p>
+</main>
+</div>
+</body>
+</html>
