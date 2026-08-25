@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>주간현황판·일일방문일지 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 현황판 카드·표 재현 ── */
+.stats{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+.stat{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px}
+.stat .l{font-size:10.5px;font-weight:700;color:#94A3B8} .stat .v{margin-top:3px;font-size:18px;font-weight:900;color:#0f172a}
+.wcard{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;font-size:12.5px;color:#334155}
+.wtag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900}
+.wtag.blue{background:#EFF6FF;color:#1D4ED8} .wtag.rose{background:#FFF1F2;color:#BE123C} .wtag.violet{background:#F5F3FF;color:#6D28D9} .wtag.slate{background:#F1F5F9;color:#475569} .wtag.cyan{background:#ECFEFF;color:#0E7490} .wtag.amber{background:#FFFBEB;color:#B45309} .wtag.pink{background:#FDF2F8;color:#BE185D} .wtag.emerald{background:#ECFDF5;color:#047857} .wtag.yellow{background:#FEFCE8;color:#A16207} .wtag.dark{background:#0f172a;color:#fff} .wtag.orange{background:#FFF7ED;color:#C2410C}
+.bar2{height:6px;border-radius:999px;background:#F1F5F9;overflow:hidden;margin-top:8px} .bar2 i{display:block;height:100%;background:#3B82F6} .bar2 i.ok{background:#10B981}
+.ubtn{display:inline-block;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:900;border:1px solid transparent;white-space:nowrap}
+.ubtn.primary{background:#2563EB;color:#fff} .ubtn.dark{background:#0f172a;color:#fff} .ubtn.ghost{background:#fff;color:#475569;border-color:#CBD5E1} .ubtn.amber{background:#FFFBEB;color:#B45309;border-color:#FDE68A} .ubtn.emerald{background:#ECFDF5;color:#047857;border-color:#A7F3D0} .ubtn.soft{background:#F1F5F9;color:#0f172a}
+.dsel{border-radius:10px;padding:5px 11px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)}
+.field{border:1px solid #CBD5E1;border-radius:10px;padding:7px 10px;font-size:12.5px;color:#64748B;background:#fff}
+.field b{display:block;font-size:10.5px;color:#94A3B8;font-weight:900}
+.list{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.list .li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-top:1px solid #F1F5F9;font-size:12.5px;color:#334155} .list .li:first-child{border-top:0}
+.list .li .t{font-weight:900;color:#0f172a} .list .li .m{color:#94A3B8;font-size:11.5px;margin-left:auto;white-space:nowrap}
+.minitbl{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0}
+.minitbl th{font-size:10.5px;color:#94A3B8;padding:7px 8px;text-align:right;border-bottom:1px solid #E2E8F0} .minitbl th:first-child,.minitbl td:first-child{text-align:left}
+.minitbl td{padding:7px 8px;text-align:right;border-bottom:1px solid #F1F5F9;color:#475569} .minitbl td.b{font-weight:900;color:#0f172a}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 상단 바 읽기</a>
+  <a href="#summary">2. 요약 카드·외근 카드</a>
+  <a href="#auto">3. 방문 기록은 어떻게 생기나</a>
+  <a href="#cancel">4. 잘못 기록됐을 때 — 숨김·복원</a>
+  <a href="#daily">5. 일일방문일지 — 일간 화면</a>
+  <a class="sub" href="#d-sales">외근 영업 활동</a>
+  <a class="sub" href="#d-office">내근 업무 입력</a>
+  <a href="#periods">6. 주간·월간·분기·연간 비교</a>
+  <a href="#weekly">7. 주간현황판 — 목표·병목·회고</a>
+  <a class="sub" href="#w-goal">업무별 목표</a>
+  <a class="sub" href="#w-bottleneck">병목현상 3가지</a>
+  <a class="sub" href="#w-cards">성장노트·배운 점 등 6칸</a>
+  <a class="sub" href="#w-save">자동 저장</a>
+  <a href="#viewas">8. 다른 직원 기록 보기</a>
+  <a href="#growth">9. 성장기록·분기 목표와의 연결</a>
+  <a href="#faq">10. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 기록·성과 › 주간현황판 · 일일방문일지</div>
+  <h1>주간현황판·일일방문일지 길잡이</h1>
+  <p>내가 오늘·이번 주·이번 달 <b style="color:#fff">어디를 몇 곳 다녀왔고 얼마나 걸렸는지</b>를 보는 화면입니다. 방문 기록은 손으로 적지 않습니다 — <b style="color:#fff">FIELD 탭에서 카톡방 전송을 마치면 자동으로 생깁니다.</b> 여기서 손으로 적는 것은 내근 업무(시간)와 주간 목표·회고 두 가지뿐입니다. 두 화면은 같은 부품으로 만들어져 있어서 한 문서에 함께 설명합니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p class="lead">현황판은 "일지를 쓰는 곳"이 아니라 "이미 쓰인 것을 보는 곳"입니다. 보고를 보냈으면 일지는 끝난 것입니다.</p>
+  <table class="tbl"><thead><tr><th>예전엔</th><th>지금은</th><th>아끼는 것</th></tr></thead><tbody>
+    <tr><td>보고양식을 카톡에 보낸 뒤, 하루 방문을 일지·엑셀에 다시 옮겨 적음</td><td>FIELD <b>[📨 카톡방 전송]</b>이 끝나면 방문 기록(업체·도착시간·기기 대수·업무 종류·소요시간)이 <b>자동 저장</b>됨</td><td>같은 내용 두 번 적기 0 (예: 방문 1건당 2~3분)</td></tr>
+    <tr><td>주간·월간 실적을 엑셀에서 SUM으로 합산</td><td>방문 거래처·기계 대수·외근 시간·9가지 업무별 건수가 <b>일·주·월·분기·연 단위로 자동 합산</b>, 일별·주별·월별 비교표까지</td><td>집계 작업 (예: 주당 20~30분)</td></tr>
+    <tr><td>목표 대비 달성률을 계산기로</td><td>주간현황판 카드에 <b>목표 숫자</b>만 넣으면 달성률 %와 ±건수, 막대가 자동</td><td>계산 실수 0</td></tr>
+    <tr><td>주간 회고를 문서에 따로 쓰고 저장 버튼을 잊음</td><td>병목·목표·성장노트 칸은 <b>타이핑 멈춘 0.9초 뒤 자동 저장</b>, 주차를 바꾸는 순간에도 즉시 저장</td><td>저장 누락으로 날아가는 기록 0</td></tr>
+    <tr><td>성장노트를 "상황/문제점/개선/실행" 틀에 맞춰 손으로 다시 정리</td><td><b>[✨ AI변환]</b> 한 번이면 적어둔 문장을 그 틀로 정리 (AI 실패 시에도 규칙으로 변환)</td><td>정리 시간 (예: 건당 5분)</td></tr>
+    <tr><td>잘못 보낸 보고를 실적에서 빼려면 담당자에게 부탁</td><td>조회 화면 상세의 <b>[숨김 (오발송·오기록)]</b> 한 번 → 현황판 집계에서도 함께 빠지고, 필요하면 <b>[복원]</b></td><td>정정 요청 왕복 0</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>좋은 습관 한 줄</b>현장에서는 FIELD 전송만 정확히, 퇴근 전엔 일일방문일지에서 내근 시간 한 번 저장, 금요일엔 주간현황판에서 목표·병목·회고 세 칸 — 이 세 가지면 기록은 끝입니다.</div>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 기록은 FIELD에서 오고, 여기서는 봅니다</h2>
+  <p class="lead">두 화면의 숫자는 전부 <b>방문 기록(visit_logs)</b>이라는 한 저장소에서 옵니다. 그 저장소에 줄이 추가되는 순간은 딱 하나 — FIELD 탭에서 보고를 <b>카톡방으로 성공적으로 보냈을 때</b>입니다.</p>
+  <div class="sync">
+    <div class="n">FIELD 탭<small>보고양식 작성 → 📨 카톡방 전송</small></div>
+    <div class="arr">→</div>
+    <div class="n">방문 기록 저장<small>업체 · 날짜 · 도착시간 · 대수 · 업무종류 · 분</small></div>
+    <div class="arr">→</div>
+    <div class="n">현황판 두 화면<small>일일방문일지 · 주간현황판 (+ 성장기록)</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box naver"><b>자동으로 채워지는 것</b>방문 거래처 수, 기계 대수, 업무 종류별 건수(점검·AS·납품 …), 외근 시간, 외근 영업 활동 칸. 전부 FIELD 전송이 만든 기록에서 계산됩니다.</div>
+    <div class="box kakao"><b>손으로 적는 것</b>일일방문일지의 <b>내근 업무 입력</b>(수량·분·복귀시간)과 주간현황판의 <b>목표 숫자·병목·회고·성장노트</b>. 이 둘은 각각 별도 저장소(office_logs·weekly_notes)에 들어갑니다.</div>
+  </div>
+  <div class="box warn"><b>작성자를 먼저 골라야 합니다</b>이름이 선택되지 않은 상태로 열면 화면 대신 <b>"FIELD에서 작성자를 먼저 선택해 주세요."</b> 한 줄만 보입니다. 우측 상단(FIELD 탭)에서 본인 이름을 고른 뒤 다시 들어오세요.</div>
+</section>
+
+<section id="screen">
+  <h2>1. 상단 바 읽기 — 기간·주차·누구의 기록인지</h2>
+  <p>두 화면 모두 맨 위에 검은 띠가 있습니다. 일일방문일지에는 기간 탭이 있고, 주간현황판에는 연·월·주차 선택만 있습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 일일방문일지 상단</span>
+    <span class="badge" style="left:26px;top:26px">1</span>
+    <span class="badge" style="left:26px;top:66px">2</span>
+    <span class="badge" style="right:150px;top:66px">3</span>
+    <span class="badge" style="right:26px;top:66px">4</span>
+    <div class="bar">
+      <div class="row"><span class="tab on">일간</span><span class="tab">주간</span><span class="tab">월간</span><span class="tab">분기</span><span class="tab">연간</span></div>
+      <div class="row"><span class="dsel">📅 2026-08-25</span><span class="spacer"></span><span class="dsel">홍길동 (나) ▾</span><span class="chip">2026-08-25 ~ 2026-08-25</span></div>
+    </div>
+    <div class="bar" style="margin-top:10px">
+      <div class="row"><span class="chip" style="background:transparent;color:#8FA1B8">주간현황판 상단 ↓</span></div>
+      <div class="row"><span class="dsel">2026년 ▾</span><span class="dsel">8월 ▾</span><span class="dsel">4주 8/24~8/28 ▾</span><span class="spacer"></span><span class="dsel">홍길동 (나) ▾</span><span class="chip">2026-08-24 ~ 2026-08-28</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>기간 탭</b>(일일방문일지만) — 일간 · 주간 · 월간 · 분기 · 연간. 탭에 따라 오른쪽 선택칸이 바뀝니다: 일간=날짜 달력, 주간=연·월·주차, 월간=연·월, 분기=연 + [1분기][2분기][3분기][4분기] 버튼, 연간=연도.</div></div>
+    <div class="item"><span class="num">2</span><div><b>날짜·주차 선택</b> — 주차는 "<b>4주 8/24~8/28</b>"처럼 월요일~금요일로 표시됩니다(토·일은 근무일이 아니어서 처음부터 빼고 셈). 연도는 올해 앞뒤로 6개.</div></div>
+    <div class="item"><span class="num">3</span><div><b>누구의 기록</b> — 기본은 <b>내 이름 (나)</b>. 팀별 명단에서 다른 사람을 고르면 그 사람 기록을 <b>읽기 전용</b>으로 봅니다(<a href="#viewas">8번</a>).</div></div>
+    <div class="item"><span class="num">4</span><div><b>조회 범위</b> — 지금 보고 있는 시작일 ~ 종료일. 아래 모든 숫자는 이 범위 안 기록만 더한 것입니다.</div></div>
+  </div>
+  <div class="box tip"><b>연도·월을 바꾸면 주차는 그 달 첫 주로</b>주간 보기에서 월을 바꾸면 자동으로 그 달 1주가 선택됩니다. 원하는 주는 세 번째 칸에서 다시 고르세요.</div>
+</section>
+
+<section id="summary">
+  <h2>2. 요약 카드·외근 카드 — 숫자가 어떻게 세어지나</h2>
+  <p>검은 제목 띠 아래에 큰 숫자 4개, 그 아래 "외근" 줄에 업무 종류별 카드가 있습니다. 제목 띠에는 항상 <b>"FIELD 기록을 기준으로 자동 집계됩니다."</b>라고 적혀 있습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현 · 요약 + 외근 카드</span>
+    <div class="bar" style="border-radius:14px 14px 0 0;padding:12px 16px 10px">
+      <div style="font-size:10.5px;font-weight:900;letter-spacing:.06em;color:#60A5FA">홍길동 · 2026-08-24 ~ 2026-08-28</div>
+      <div style="font-size:16px;font-weight:900">주간 현황판</div>
+      <div style="font-size:10.5px;color:#94A3B8;font-weight:700">FIELD 기록을 기준으로 자동 집계됩니다.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 14px 14px;padding:12px">
+      <div class="stats"><div class="stat"><div class="l">방문 거래처</div><div class="v">14곳</div></div><div class="stat"><div class="l">기계 대수</div><div class="v">23대</div></div><div class="stat"><div class="l">외근 시간</div><div class="v">11시간 40분</div></div><div class="stat"><div class="l">내근 시간</div><div class="v">3시간 10분</div></div></div>
+      <div style="margin-top:8px;font-size:11.5px;color:#64748B;font-weight:700">총 활동시간 <b style="color:#0f172a">14시간 50분</b></div>
+    </div>
+    <div style="margin-top:12px;font-weight:900;font-size:14px;color:#0f172a">외근 <span style="font-size:11px;color:#94A3B8;font-weight:700">방문·현장 업무 건수와 소요시간</span></div>
+    <div class="stats" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="wcard"><span class="wtag dark">🏢 방문 거래처</span><div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px"><b style="font-size:20px;color:#0f172a">14<span style="font-size:10px;color:#94A3B8;font-weight:600"> 곳</span></b><span style="font-size:11px;color:#64748B;font-weight:700">기기 23대</span></div></div>
+      <div class="wcard"><span class="wtag blue">✅ 점검</span><div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px"><b style="font-size:20px;color:#0f172a">18<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></b><span style="font-size:11px;color:#64748B;font-weight:700">6시간 30분</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:10.5px;font-weight:700;color:#64748B">목표 <span class="field" style="padding:2px 8px;flex:1;text-align:right;font-size:11px">20</span></div><div class="bar2"><i style="width:90%"></i></div><div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:900;color:#64748B;margin-top:3px"><span>달성률 90%</span><span style="color:#E11D48">-2건</span></div></div>
+      <div class="wcard"><span class="wtag rose">🔧 AS</span><div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px"><b style="font-size:20px;color:#0f172a">7<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></b><span style="font-size:11px;color:#64748B;font-weight:700">4시간 10분</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:10.5px;font-weight:700;color:#64748B">목표 <span class="field" style="padding:2px 8px;flex:1;text-align:right;font-size:11px">5</span></div><div class="bar2"><i class="ok" style="width:100%"></i></div><div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:900;color:#64748B;margin-top:3px"><span>달성률 100%</span><span style="color:#059669">+2건</span></div></div>
+      <div class="wcard"><span class="wtag violet">📦 납품/반출/교체/셋팅</span><div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px"><b style="font-size:20px;color:#0f172a">2<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></b><span style="font-size:11px;color:#64748B;font-weight:700">1시간</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:10.5px;font-weight:700;color:#64748B">목표 <span class="field" style="padding:2px 8px;flex:1;text-align:right;font-size:11px">&nbsp;</span></div><div class="bar2"></div><div style="font-size:10.5px;font-weight:900;color:#CBD5E1;margin-top:3px">목표 미입력</div></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>카드</th><th>무엇을 세나</th><th>계산 규칙</th></tr></thead><tbody>
+    <tr><td><b>방문 거래처</b></td><td>다녀온 업체 수</td><td>같은 날 같은 업체를 여러 번 보고해도 <b>1곳</b>. (날짜 + 업체명 기준)</td></tr>
+    <tr><td><b>기계 대수</b></td><td>다녀온 업체의 기기 합</td><td>같은 날 같은 업체에 보고가 여러 건이면 그중 <b>가장 큰 대수 하나</b>만 인정해 더함.</td></tr>
+    <tr><td><b>외근 시간</b></td><td>업무 종류별 소요시간의 합</td><td>FIELD 양식의 소요시간(분). 60분 이상은 "N시간 M분"으로 표시.</td></tr>
+    <tr><td><b>내근 시간</b></td><td>내근 업무 입력의 분 합</td><td>일일방문일지에서 저장한 값(<a href="#d-office">5번</a>). 주간현황판에서도 그 주 합계가 보입니다.</td></tr>
+    <tr><td><b>총 활동시간</b></td><td>외근 + 내근</td><td>일간 화면에서는 옆에 <b>마감</b>(귀사/직퇴, 없으면 "미선택")과 <b>복귀시간</b>(없으면 "미입력")이 함께 보입니다.</td></tr>
+  </tbody></table>
+  <h3>외근 카드 9종 — 색과 아이콘</h3>
+  <div class="legend">
+    <div class="item"><span class="wtag blue">✅ 점검</span><div>건수 = <b>기기 대수</b>(점검 3대면 3건). 보고에 점검이 포함되면 잡힘.</div></div>
+    <div class="item"><span class="wtag rose">🔧 AS</span><div>건수 = 방문 1건.</div></div>
+    <div class="item"><span class="wtag violet">📦 납품/반출/교체/셋팅</span><div>건수 = <b>수량</b>(물류 양식의 수량 숫자, 세팅 보고 포함).</div></div>
+    <div class="item"><span class="wtag slate">📌 기타(여분,마감)</span><div>물류 양식 구분이 <b>여분·마감</b>이면 여기로. 방문 1건.</div></div>
+    <div class="item"><span class="wtag cyan">💻 확장성(IT,복합기)</span><div>PC/IT·복합기 확장성 양식 전송 시. 방문 1건.</div></div>
+    <div class="item"><span class="wtag amber">💰 미수</span><div>미수 양식 전송 시.</div></div>
+    <div class="item"><span class="wtag pink">💢 불만</span><div>불만 양식 전송 시.</div></div>
+    <div class="item"><span class="wtag emerald">📝 재계약</span><div>재계약 양식 전송 시.</div></div>
+    <div class="item"><span class="wtag yellow">📈 초과조정</span><div>초과조정 양식 전송 시.</div></div>
+  </div>
+  <div class="box tip"><b>카드 아래 "목표" 칸과 달성률은 주간현황판에만 있습니다</b>일일방문일지의 같은 카드는 건수·시간만 보여줍니다. 목표 입력은 <a href="#w-goal">7번</a>.</div>
+</section>
+
+<section id="auto">
+  <h2>3. 방문 기록은 어떻게 생기나 — FIELD 전송과의 관계</h2>
+  <p class="lead">현황판에 줄이 생기는 순간은 <b>FIELD 탭에서 [📨 카톡방 전송]이 성공한 직후</b> 하나뿐입니다. 이 화면 안에는 방문을 추가하는 버튼이 없습니다.</p>
+  <div class="flow">
+    <div class="node"><div class="dot">1</div><div class="body"><b>FIELD에서 양식을 채우고 [📨 카톡방 전송]</b> — 점검·AS·물류·PC/IT·미수·불만·재계약·초과조정·공기청정기 양식 전부 해당. 시트 저장과 카톡 게시가 끝나면 다음 단계로.</div></div>
+    <div class="node"><div class="dot">2</div><div class="body"><b>방문 기록 1줄이 자동 저장됩니다</b> — 업체명(양식에서 추출), 작성자(내 이름), 날짜(<b>오늘</b>, 한국시간), 도착시간(양식의 도착 시:분), 기기 대수(점검·AS는 양식의 기기 수, 물류는 수량, 공기청정기는 1), 등급(양식 원문의 "등급:" 뒤 글자), 업무 종류, 소요시간(분), 원문.</div></div>
+    <div class="node"><div class="dot">3</div><div class="body"><b>같은 걸 두 번 보내도 한 줄</b> — 날짜·작성자·업체·원문이 완전히 같으면 중복으로 보고 저장하지 않습니다. 원문이 한 글자라도 다르면(사진 링크 등) 새 줄이 됩니다 — 그래서 방문 거래처는 "날짜+업체"로 한 번만 셉니다(<a href="#summary">2번</a>).</div></div>
+    <div class="node"><div class="dot">4</div><div class="body"><b>저장이 실패하면</b> 전송 결과 문구 뒤에 <b>"· 방문집계 실패: (이유)"</b>가 붙습니다. 카톡은 이미 나간 상태이니 다시 보내지 말고, 그 문구를 그대로 알려 주세요. 테스트 모드 전송은 기록되지 않습니다.</div></div>
+  </div>
+  <h3>업무 종류와 시간은 이렇게 정해집니다</h3>
+  <table class="tbl"><thead><tr><th>FIELD에서 이렇게 보내면</th><th>기록되는 업무 종류</th><th>소요시간(분)</th></tr></thead><tbody>
+    <tr><td>보고 종류에 <b>점검</b>만 체크</td><td>✅ 점검</td><td>양식의 소요시간 전부 점검으로</td></tr>
+    <tr><td>보고 종류에 <b>AS</b>만 체크 (또는 AS방으로 전송)</td><td>🔧 AS</td><td>양식의 소요시간 전부 AS로</td></tr>
+    <tr><td><b>점검 + AS</b> 둘 다 체크</td><td>✅ 점검 + 🔧 AS 두 종류</td><td><b>점검은 1대당 10분</b>, 나머지가 AS. 점검분이 총시간 이상이면 반으로 나눔. 예) 60분·3대 → 점검 30분 / AS 30분</td></tr>
+    <tr><td>물류 양식, 구분이 <b>여분·마감</b> (또는 보고 종류 여분/마감)</td><td>📌 기타(여분,마감)</td><td>양식 소요시간</td></tr>
+    <tr><td>물류 양식, 그 외 구분 (또는 보고 종류 세팅)</td><td>📦 납품/반출/교체/셋팅</td><td>양식 소요시간</td></tr>
+    <tr><td>PC/IT · 복합기 확장성</td><td>💻 확장성(IT,복합기)</td><td>양식 소요시간</td></tr>
+    <tr><td>미수 / 불만 / 재계약 / 초과조정 양식</td><td>💰 미수 / 💢 불만 / 📝 재계약 / 📈 초과조정</td><td>양식 소요시간</td></tr>
+  </tbody></table>
+  <div class="box warn"><b>날짜는 항상 "보낸 날"입니다</b>어제 다녀온 곳을 오늘 보내면 오늘 기록으로 들어갑니다. 현황판 날짜를 맞추려면 그날 안에 전송하세요.</div>
+</section>
+
+<section id="cancel">
+  <h2>4. 잘못 기록됐을 때 — 숨김·복원</h2>
+  <p>이 화면에는 삭제 버튼이 없습니다. 오발송·오기록은 <b>하단 메뉴 [조회] → 기록</b>에서 그 보고 원본을 찾아 숨기면, 현황판 집계에서도 함께 빠집니다(점검·AS·물류 기록만 연동).</p>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현 · 조회 화면 상세 하단</span>
+      <div class="modal" style="max-width:440px">
+        <div class="mt" style="font-size:15px">이 기록을 숨길까요?</div>
+        <div class="ms">목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)</div>
+        <div class="grid"><div class="mbtn ghost">취소</div><div class="mbtn dark">확인</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;border-top:1px dashed #E2E8F0;padding-top:10px"><span class="ubtn ghost">전체 복사</span><span class="ubtn" style="background:#FFF1F2;color:#E11D48;border-color:#FECDD3">숨김 (오발송·오기록)</span><span class="ubtn dark">닫기</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>하단 메뉴 <b>[조회]</b> → <b>기록</b> 탭에서 점검·AS·물류 기록 중 잘못 보낸 줄을 눌러 상세를 엽니다.</li>
+        <li>맨 아래 <b>[숨김 (오발송·오기록)]</b> → 확인 창에서 <b>[확인]</b>. 원문은 남고 목록에서만 사라집니다.</li>
+        <li>같은 작성자·같은 날짜·같은 업체의 방문 기록이 <b>취소 상태</b>로 바뀌어 일일방문일지·주간현황판·성장기록 집계에서 빠집니다(중복 전송분까지 함께).</li>
+        <li>되돌리려면 조회 화면에서 <b>숨긴 기록 보기</b> → 그 줄 상세 → <b>[복원]</b> → "이 기록을 복원할까요?" [확인]. 방문 기록도 다시 살아납니다.</li>
+      </ol>
+      <div class="box tip"><b>왜 삭제가 아니라 숨김인가</b>누가·언제 숨겼는지가 남고, 원문이 보존되어 나중에 다시 확인할 수 있습니다. 실패하면 <span class="toast warnt" style="font-size:12px;padding:5px 10px">처리 실패: (이유)</span> 토스트가 뜹니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="daily">
+  <h2>5. 일일방문일지 — 일간 화면</h2>
+  <p><b>일간</b> 탭일 때만 보이는 세 덩어리가 있습니다: 외근 영업 활동(자동), 내근 업무 입력(손으로), 금일 방문 상세(펼치기).</p>
+
+  <h3 id="d-sales">외근 영업 활동 — 6칸</h3>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <div style="font-weight:900;font-size:14px;color:#0f172a;margin-bottom:8px">외근 영업 활동</div>
+    <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      <div class="stat"><div class="l">N~S IT 영업</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+      <div class="stat"><div class="l">N~S 복합기 영업</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+      <div class="stat"><div class="l">SS~V IT 영업</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+      <div class="stat"><div class="l">SS~V 복합기 영업</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+      <div class="stat"><div class="l">N~S 계약종료</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+      <div class="stat"><div class="l">SS~V 계약종료</div><div class="v">0<span style="font-size:10px;color:#94A3B8;font-weight:600"> 건</span></div></div>
+    </div>
+  </div>
+  <p>방문 기록에 <b>IT 영업(1차/2차)·복합기 영업(1차/2차)·계약종료</b> 표시가 있는 건을 등급별로 나눠 셉니다. 등급이 <b>SS 또는 V로 시작</b>하면 SS~V 칸, 그 외는 N~S 칸입니다.</p>
+  <div class="box warn"><b>지금은 대부분 0으로 보입니다</b>현재 FIELD 양식에는 영업 1차/2차·계약종료를 표시하는 칸이 없어서, 이 값이 채워진 방문 기록이 거의 만들어지지 않습니다. 칸이 생기면 이 여섯 칸이 자동으로 채워지는 구조입니다.</div>
+
+  <h3 id="d-office">내근 업무 입력 — 이 화면에서 유일하게 손으로 적는 곳</h3>
+  <div class="grid2">
+    <div class="shot ui"><span class="cap">화면 재현</span>
+      <div class="wcard">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div><b style="font-size:14px;color:#0f172a">내근 업무 입력</b><div style="font-size:11px;color:#94A3B8;font-weight:700">수량·건수와 시간을 입력하세요.</div></div><span style="font-size:11px;font-weight:700;color:#64748B">복귀시간 <span class="field" style="display:inline-block;padding:3px 8px">18:20</span></span></div>
+        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 70px 80px;gap:6px;align-items:center;font-size:12px">
+          <span style="font-weight:700">수리품</span><span class="field" style="padding:4px 8px"><b>수량/건</b>2</span><span class="field" style="padding:4px 8px"><b>시간(분)</b>40</span>
+          <span style="font-weight:700">기계수리</span><span class="field" style="padding:4px 8px"><b>수량/건</b>1</span><span class="field" style="padding:4px 8px"><b>시간(분)</b>60</span>
+          <span style="font-weight:700">기계오버홀</span><span class="field" style="padding:4px 8px"><b>수량/건</b>&nbsp;</span><span class="field" style="padding:4px 8px"><b>시간(분)</b>&nbsp;</span>
+          <span style="font-weight:700">출고준비</span><span class="field" style="padding:4px 8px"><b>수량/건</b>&nbsp;</span><span class="field" style="padding:4px 8px"><b>시간(분)</b>&nbsp;</span>
+          <span style="font-weight:700;color:#94A3B8">… 교육참여 · 폐카불량 · 스케줄 · 전화마감 · 정리정돈 · 차량정리</span><span></span><span></span>
+        </div>
+        <div style="margin-top:10px;display:flex;justify-content:space-between;background:#F8FAFC;border-radius:10px;padding:8px 10px;font-size:12px"><span style="font-weight:700;color:#475569">내근 총시간</span><b style="color:#0f172a">1시간 40분</b></div>
+        <div class="ubtn primary" style="display:block;text-align:center;margin-top:8px;padding:9px">내근 업무 저장</div>
+      </div>
+    </div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li>항목 10개 — <b>수리품 · 기계수리 · 기계오버홀 · 출고준비 · 교육참여 · 폐카불량 · 스케줄 · 전화마감 · 정리정돈 · 차량정리</b>. 각각 <b>수량/건</b>과 <b>시간(분)</b>을 숫자로 넣습니다. 0 미만은 0으로 고쳐집니다.</li>
+        <li>오른쪽 위 <b>복귀시간</b>은 시:분 선택. 요약 띠의 "복귀시간"에 그대로 보입니다.</li>
+        <li><b>내근 총시간</b>은 입력하는 즉시 합산됩니다(저장 전).</li>
+        <li><b>[내근 업무 저장]</b> → 저장 중엔 "저장 중…", 끝나면 초록 상자 <span class="toast ok" style="font-size:12px;padding:5px 10px">✓ 내근업무 저장 완료</span>. 요약 카드의 내근 시간·총 활동시간이 바뀝니다.</li>
+      </ol>
+      <div class="box tip"><b>하루에 한 장</b>내근 입력은 <b>작성자 + 날짜</b>당 한 장만 있습니다. 같은 날 다시 저장하면 덮어씁니다. 어제 것을 고치려면 상단 날짜를 어제로 바꾸고 저장하세요.</div>
+      <div class="box warn"><b>다른 사람 기록을 보는 중이면</b>칸이 비활성화되고 버튼이 <b>"읽기 전용"</b>으로 바뀝니다.</div>
+    </div>
+  </div>
+
+  <h3>금일 방문 상세 — 펼쳐 보기</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div class="list">
+      <div class="li" style="justify-content:space-between"><span><b style="color:#0f172a">금일 방문 상세</b> <span style="color:#94A3B8;font-size:11px">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</span></span><span style="color:#64748B;font-weight:900;font-size:11.5px">접기</span></div>
+      <div class="li" style="background:#F8FAFC;border-left:4px solid #CBD5E1"><span class="t" style="font-size:11.5px">8/25 · 3건</span><span class="chip" style="background:#fff;color:#475569;border:1px solid #E2E8F0"><b style="color:#94A3B8">방문</b> 3</span><span class="chip" style="background:#fff;color:#475569;border:1px solid #E2E8F0"><b style="color:#94A3B8">기기</b> 5</span><span class="chip" style="background:#fff;color:#475569;border:1px solid #E2E8F0"><b style="color:#94A3B8">점검</b> 4</span><span class="chip" style="background:#fff;color:#475569;border:1px solid #E2E8F0"><b style="color:#94A3B8">AS</b> 1</span><span class="chip" style="background:#fff;color:#475569;border:1px solid #E2E8F0"><b style="color:#94A3B8">외근시간</b> 2시간 20분</span><span class="m" style="color:#2563EB;font-weight:900">접기</span></div>
+      <div class="li" style="padding-left:24px"><span style="color:#94A3B8;font-size:11.5px;width:70px">09:40</span><span><span class="t">한빛세무회계</span> <span class="wtag slate" style="font-size:9.5px">A</span><br><span class="wtag blue" style="font-size:9.5px">✅ 점검</span></span><span class="m" style="text-align:right">3대<br><b style="color:#475569">1시간</b></span></div>
+      <div class="li" style="padding-left:24px"><span style="color:#94A3B8;font-size:11.5px;width:70px">11:10</span><span><span class="t">미래디자인</span><br><span class="wtag rose" style="font-size:9.5px">🔧 AS</span></span><span class="m" style="text-align:right">1대<br><b style="color:#475569">40분</b></span></div>
+      <div class="li" style="padding-left:24px"><span style="color:#94A3B8;font-size:11.5px;width:70px">시간 미입력</span><span><span class="t">동해상사</span> <span class="wtag slate" style="font-size:9.5px">미방문</span><br><span class="wtag blue" style="font-size:9.5px">✅ 점검</span></span><span class="m" style="text-align:right">1대<br><b style="color:#475569">40분</b></span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">•</span><div><b>제목 줄을 누르면</b> 전체가 접히고 펼쳐집니다. 처음엔 접혀 있습니다. 기록이 없으면 "저장된 방문 기록이 없습니다."</div></div>
+    <div class="item"><span class="num">•</span><div><b>날짜 줄</b>(회색 왼쪽 띠) — "8/25 · 3건"과 요약 칩(방문·기기·점검·AS·납품·PC·IT·미수·불만·외근시간). 누르면 그 날 방문이 한 줄씩 나옵니다: 도착시간, 업체명, 등급 배지, 업무 종류 배지, 대수, 소요시간.</div></div>
+    <div class="item"><span class="num">•</span><div><b>미방문 배지</b> — 방문하지 않은 것으로 기록된 건. 건수 집계에서는 빠지고 목록에는 보입니다(현재 FIELD 전송은 모두 방문으로 기록되므로 거의 보이지 않습니다).</div></div>
+  </div>
+</section>
+
+<section id="periods">
+  <h2>6. 주간·월간·분기·연간 비교 — 흐름을 표로</h2>
+  <p>일일방문일지에서 <b>주간·월간·분기·연간</b> 탭을 누르면 요약·외근 카드 아래에 <b>비교표</b>와 <b>방문 상세 트리</b>가 나옵니다.</p>
+  <div class="shot ui"><span class="cap">화면 재현 · 월간 탭 → 주별 실적 비교</span>
+    <div style="font-weight:900;font-size:14px;color:#0f172a">주별 실적 비교 <span style="font-size:11px;color:#94A3B8;font-weight:700">선택한 월의 주차별 흐름을 확인하세요.</span></div>
+    <div style="overflow-x:auto;margin-top:8px"><table class="minitbl"><thead><tr><th>구분</th><th>방문</th><th>기기</th><th>점검</th><th>AS</th><th>납품</th><th>PC·IT</th><th>미수</th><th>불만</th><th>외근시간</th><th>내근시간</th></tr></thead><tbody>
+      <tr><td class="b">1주 <span style="color:#94A3B8;font-weight:400;font-size:10px">8/3~8/7</span></td><td class="b">12</td><td>19</td><td>15</td><td>6</td><td>1</td><td>0</td><td>1</td><td>0</td><td style="color:#1D4ED8;font-weight:900">10시간 5분</td><td style="color:#047857;font-weight:900">4시간</td></tr>
+      <tr><td class="b">2주 <span style="color:#94A3B8;font-weight:400;font-size:10px">8/10~8/14</span></td><td class="b">9</td><td>14</td><td>11</td><td>4</td><td>0</td><td>1</td><td>0</td><td>1</td><td style="color:#1D4ED8;font-weight:900">8시간 30분</td><td style="color:#047857;font-weight:900">5시간 20분</td></tr>
+      <tr><td class="b">3주 <span style="color:#94A3B8;font-weight:400;font-size:10px">8/17~8/21</span></td><td class="b">14</td><td>23</td><td>18</td><td>7</td><td>2</td><td>0</td><td>0</td><td>0</td><td style="color:#1D4ED8;font-weight:900">11시간 40분</td><td style="color:#047857;font-weight:900">3시간 10분</td></tr>
+    </tbody></table></div>
+  </div>
+  <table class="tbl"><thead><tr><th>탭</th><th>비교표 제목</th><th>줄 하나 =</th><th>방문 상세 트리</th></tr></thead><tbody>
+    <tr><td><b>주간</b></td><td>일별 실적 비교</td><td>하루(8/24 …)</td><td>월~금 날짜별 → 방문 줄</td></tr>
+    <tr><td><b>월간</b></td><td>주별 실적 비교</td><td>주차(1주 8/3~8/7 …)</td><td>주차(초록 띠) → 날짜(파란 띠) → 방문 줄</td></tr>
+    <tr><td><b>분기</b></td><td>월별 실적 비교</td><td>월(7월·8월·9월)</td><td>월(파란 띠) → 주차 → 날짜 → 방문 줄</td></tr>
+    <tr><td><b>연간</b></td><td>분기별 실적 비교</td><td>분기(1분기 1~3월 …)</td><td>분기(남색 띠) → 월 → 주차 → 날짜 → 방문 줄</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>열 뜻</b>방문=거래처 수, 기기=대수, 점검·AS·납품·PC·IT·미수·불만=건수, 외근시간(파란 글씨)·내근시간(초록 글씨). 휴대폰에서는 표 대신 카드로 같은 값을 보여줍니다. 트리의 각 줄은 <b>[펼치기]/[접기]</b>로 여닫고, 주차·날짜는 항상 월~금만 나옵니다.</div>
+</section>
+
+<section id="weekly">
+  <h2>7. 주간현황판 — 목표·병목·회고를 적는 곳</h2>
+  <p class="lead">주간현황판은 일일방문일지의 "주간" 보기에 <b>쓰는 칸</b>을 더한 화면입니다. 위쪽 외근 카드에는 목표 칸이, 그 아래엔 <b>주간 목표·성장 기록</b> 큰 상자가, 맨 아래엔 주간 방문 상세가 있습니다. 적는 것은 모두 <b>그 주(월요일 날짜) + 내 이름</b>으로 한 장에 저장됩니다.</p>
+
+  <h3 id="w-goal">업무별 목표 — 카드 안 "목표" 칸</h3>
+  <ol class="steps">
+    <li>외근 카드(점검·AS·납품 … 9종) 아래 <b>목표</b> 칸에 이번 주 목표 건수를 숫자로 넣습니다.</li>
+    <li>즉시 막대와 <b>달성률 N%</b>, 오른쪽에 <span style="color:#059669;font-weight:900">+N건</span>(초과) 또는 <span style="color:#E11D48;font-weight:900">-N건</span>(부족)이 표시됩니다. 목표를 채우면 막대가 <b>초록</b>, 아직이면 <b>파랑</b>. 비워 두면 "목표 미입력".</li>
+    <li>따로 저장 버튼이 없습니다 — 다른 회고 칸과 함께 자동 저장(<a href="#w-save">아래</a>).</li>
+  </ol>
+
+  <h3 id="w-bottleneck">이번 주 병목현상 3가지</h3>
+  <div class="shot ui"><span class="cap">화면 재현</span>
+    <div style="background:#FFF1F2;border-radius:12px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end"><div><div style="font-size:10.5px;font-weight:900;letter-spacing:.06em;color:#E11D48">BOTTLENECK</div><b style="font-size:14px;color:#0f172a">이번 주 병목현상 3가지</b></div><span style="font-size:11px;color:#94A3B8;font-weight:700">병목현상 / 원인 / 해결방안</span></div>
+      <div class="stats" style="margin-top:10px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+        <div class="wcard" style="border-color:#FECDD3"><div style="display:flex;justify-content:space-between;align-items:center"><span class="wtag rose" style="font-size:10px">병목 1</span><span style="width:8px;height:8px;border-radius:50%;background:#F43F5E;display:inline-block"></span></div><div class="field" style="margin-top:8px"><b>병목현상</b>부품 재고 확인이 늦어 재방문</div><div class="field" style="margin-top:6px"><b>원인</b>차량 재고를 출발 전에 안 봄</div><div class="field" style="margin-top:6px"><b>해결방안</b>아침 스케줄 때 재고 3분 점검</div></div>
+        <div class="wcard" style="border-color:#FECDD3"><div style="display:flex;justify-content:space-between;align-items:center"><span class="wtag rose" style="font-size:10px">병목 2</span><span style="width:8px;height:8px;border-radius:50%;background:#CBD5E1;display:inline-block"></span></div><div class="field" style="margin-top:8px"><b>병목현상</b>&nbsp;</div><div class="field" style="margin-top:6px"><b>원인</b>&nbsp;</div><div class="field" style="margin-top:6px"><b>해결방안</b>&nbsp;</div></div>
+        <div class="wcard" style="border-color:#FECDD3"><div style="display:flex;justify-content:space-between;align-items:center"><span class="wtag rose" style="font-size:10px">병목 3</span><span style="width:8px;height:8px;border-radius:50%;background:#CBD5E1;display:inline-block"></span></div><div class="field" style="margin-top:8px"><b>병목현상</b>&nbsp;</div><div class="field" style="margin-top:6px"><b>원인</b>&nbsp;</div><div class="field" style="margin-top:6px"><b>해결방안</b>&nbsp;</div></div>
+      </div>
+    </div>
+  </div>
+  <p>카드 3장이 고정으로 있고 각각 <b>병목현상</b>(한 줄) · <b>원인</b> · <b>해결방안</b>(여러 줄, 쓰는 만큼 늘어남) 칸이 있습니다. 하나라도 적으면 오른쪽 위 점이 <span style="color:#F43F5E;font-weight:900">빨강</span>으로 바뀌어 "채워진 카드"임을 보여줍니다.</p>
+
+  <h3>이번 주 목표 · 결과·미진행 사유 · 다음 주 목표</h3>
+  <p>회색 띠에 카드 3장: <b>이번 주 목표</b>(이번 주 집중할 결과) · <b>결과·미진행 사유</b>(실행 결과와 밀린 이유) · <b>다음 주 목표</b>(다음 실행으로 넘길 항목). 자유롭게 여러 줄 적습니다.</p>
+
+  <h3 id="w-cards">성장노트 · 도전 · 배운 점 · 요청 · 특이사항 · 칭찬 — 6칸</h3>
+  <div class="shot ui"><span class="cap">화면 재현 · 성장노트와 배운 점</span>
+    <div class="grid2">
+      <div class="wcard"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap"><span class="wtag amber">💡 성장노트</span><span style="display:flex;gap:4px"><span class="ubtn ghost" style="padding:3px 9px;font-size:11px">틀 추가</span><span class="ubtn amber" style="padding:3px 9px;font-size:11px">✨ AI변환</span></span></div><div class="field" style="margin-top:10px;white-space:pre-wrap;color:#334155">상황: 고객이 급한데 부품이 차에 없어서 두 번 방문
+문제점: 출발 전 재고를 확인하지 않음
+개선해야 할 점: 일정 확인 때 필요 부품을 함께 체크
+실행: 아침 스케줄 시간에 차량 재고 점검 추가</div></div>
+      <div class="wcard"><span class="wtag emerald">📚 배운 점</span>
+        <div style="margin-top:10px;display:grid;grid-template-columns:44px 44px 52px 1fr 44px 44px 16px;gap:4px;font-size:9.5px;font-weight:900;color:#94A3B8"><span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>교육자</span><span>소요시간</span><span></span></div>
+        <div style="margin-top:4px;display:grid;grid-template-columns:44px 44px 52px 1fr 44px 44px 16px;gap:4px;font-size:10.5px"><span class="field" style="padding:3px 5px">8/26</span><span class="field" style="padding:3px 5px">삼성</span><span class="field" style="padding:3px 5px">MX3</span><span class="field" style="padding:3px 5px">전사롤러 교체 순서</span><span class="field" style="padding:3px 5px">이대리</span><span class="field" style="padding:3px 5px">30분</span><span style="color:#CBD5E1;font-weight:900;align-self:center">×</span></div>
+        <span class="ubtn emerald" style="margin-top:8px;padding:3px 9px;font-size:11px">행 추가</span></div>
+    </div>
+  </div>
+  <table class="tbl"><thead><tr><th>칸</th><th>어떻게 적나</th><th>특별한 것</th></tr></thead><tbody>
+    <tr><td><span class="wtag amber">💡 성장노트</span></td><td>자유 서술. 되도록 <b>상황: / 문제점: / 개선해야 할 점: / 실행:</b> 네 줄 형식으로</td><td><b>[틀 추가]</b> — 칸 내용을 네 줄 빈 틀로 바꿉니다(적은 글이 있으면 덮어씀). <b>[✨ AI변환]</b> — 적어둔 문장을 AI가 네 줄 형식으로 정리("변환중" 표시). AI 서버가 응답하지 않으면 문장 규칙으로라도 나눠 넣습니다. 성장기록 화면은 이 네 줄을 읽어 표로 보여줍니다.</td></tr>
+    <tr><td><span class="wtag blue">🎯 새로운 도전·아이디어</span></td><td>자유 서술</td><td>성장기록에서는 "아이디어"로 모입니다.</td></tr>
+    <tr><td><span class="wtag emerald">📚 배운 점</span></td><td><b>행 단위 입력</b>: M/DD · 브랜드 · 기종 · 배운점 · 교육자 · 소요시간. <b>[행 추가]</b>로 줄을 늘리고 <b>×</b>로 지움</td><td>내부적으로는 한 줄에 탭으로 이어 붙여 저장되어, 성장기록의 [배운점 모음]에서 브랜드별로 다시 정렬됩니다.</td></tr>
+    <tr><td><span class="wtag violet">🤝 지원·요청·건의사항</span></td><td>자유 서술</td><td>—</td></tr>
+    <tr><td><span class="wtag orange">🧡 특이사항</span></td><td>자유 서술</td><td>성장기록 "특이사항"으로 모입니다.</td></tr>
+    <tr><td><span class="wtag pink">👏 칭찬</span></td><td>자유 서술</td><td>—</td></tr>
+  </tbody></table>
+
+  <h3 id="w-save">자동 저장 — 상자 오른쪽 위 배지를 보세요</h3>
+  <div class="legend">
+    <div class="item"><span class="wtag slate">자동 저장</span><div>아직 바꾼 게 없음.</div></div>
+    <div class="item"><span class="wtag blue">자동 저장중</span><div>타이핑 후 0.9초 대기 중 또는 서버로 보내는 중.</div></div>
+    <div class="item"><span class="wtag emerald">자동 저장됨</span><div>서버에 들어갔음. 이 상태를 보고 화면을 떠나면 안전합니다.</div></div>
+    <div class="item"><span class="wtag amber">읽기 전용</span><div>다른 사람 기록을 보는 중 — 모든 칸이 잠김.</div></div>
+  </div>
+  <div class="box tip"><b>주차를 바꾸거나 화면을 나가도 잃지 않습니다</b>대기 중인 내용이 있으면 주차가 바뀌기 직전·화면을 떠나는 순간에 즉시 저장합니다. 저장이 실패하면 빨간 상자로 이유가 뜨고 배지가 "자동 저장"으로 돌아갑니다 — 그때는 아무 칸이나 한 글자 고쳐 다시 저장을 유도하세요.</div>
+</section>
+
+<section id="viewas">
+  <h2>8. 다른 직원 기록 보기 — 읽기 전용</h2>
+  <ol class="steps">
+    <li>상단 바 오른쪽 <b>이름 선택</b>에서 팀별 명단 중 한 사람을 고릅니다.</li>
+    <li>화면 위에 노란 띠가 뜹니다: <span class="toast warnt" style="font-size:12px;padding:5px 10px">👀 김민수 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</span></li>
+    <li>그 사람의 방문·내근·주간 기록이 그대로 보이고, 모든 입력칸·버튼은 잠깁니다(내근 저장 버튼은 "읽기 전용", 주간 배지도 "읽기 전용").</li>
+    <li><b>내 이름 (나)</b>를 다시 고르면 편집이 풀립니다. FIELD에서 작성자를 바꾸면 이 선택도 그 이름으로 따라갑니다.</li>
+  </ol>
+</section>
+
+<section id="growth">
+  <h2>9. 성장기록·분기 목표와의 연결</h2>
+  <p>주간현황판에 적은 성장노트·배운 점·아이디어·특이사항은 <b>성장기록</b> 화면(기록·성과 › 성장기록)에서 팀 전체·기간별로 모아 봅니다. 분기 <b>계획표·분기결과표·미션결과표·골든미팅카드</b>도 그 화면에 있습니다 — 자세한 사용법은 <a href="growth.html">성장기록 길잡이</a>.</p>
+  <div class="grid2">
+    <div class="box naver"><b>성장기록 → 주간현황판</b>성장기록 목록의 <b>[주간현황판 ↗]</b>을 누르면 이 화면이 그 주차로 열립니다(연·월·주가 자동으로 맞춰짐).</div>
+    <div class="box tip"><b>골든미팅카드 AI변환의 재료</b>골든미팅카드의 [최신분기 AI변환]은 그 분기 주간현황판 기록(성장노트·배운 점·아이디어·특이사항)을 함께 읽어 초안을 만듭니다. 매주 적어둘수록 분기 카드가 쉬워집니다.</div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>10. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>오늘 다녀온 곳이 현황판에 안 보여요</summary><p>① FIELD에서 카톡방 전송이 성공했는지(토스트 "전송 완료…") 확인. ② 전송 결과에 "방문집계 실패"가 붙어 있었다면 그 문구를 알려 주세요. ③ 작성자 이름이 다른 사람으로 선택돼 있지 않은지. ④ 어제 다녀온 것을 오늘 보냈으면 오늘 날짜에 있습니다.</p></details>
+    <details><summary>같은 업체가 두 번 세어진 것 같아요</summary><p>방문 거래처는 날짜+업체명으로 한 번만 셉니다. 업체명이 조금 다르게 들어갔다면(띄어쓰기·지점명) 두 곳으로 보일 수 있습니다. 방문 상세를 펼쳐 업체명을 비교해 보세요.</p></details>
+    <details><summary>점검 3대인데 점검 건수가 3으로 나와요 — 1건 아닌가요</summary><p>의도된 규칙입니다. 점검과 납품은 <b>기기 대수·수량</b>을 건수로 세고, AS 등 나머지는 방문 1건으로 셉니다(2번 표).</p></details>
+    <details><summary>주간현황판에 적은 글이 사라졌어요</summary><p>같은 주차의 <b>내 이름</b>으로 보고 있는지 확인하세요(다른 사람 선택 시 그 사람 기록이 보임). 저장 실패 빨간 상자가 떴었다면 그 시점 내용은 들어가지 않았을 수 있습니다. 배지가 "자동 저장됨"인지 확인하는 습관을 권합니다.</p></details>
+    <details><summary>토·일 날짜가 없어요</summary><p>의도된 설계입니다. 주차·비교표·상세 트리는 월~금만 보여줍니다. 주말 기록은 일간 탭에서 날짜를 직접 고르면 볼 수 있습니다.</p></details>
+    <details><summary>빨간 상자에 "업데이트된 supabase/visits.sql을 다시 실행했는지 확인해 주세요."가 떠요</summary><p>저장소(테이블) 쪽 오류입니다. 사용자가 고칠 수 있는 문제가 아니니 상자에 적힌 문구를 그대로 관리자에게 전달하세요.</p></details>
+    <details><summary>잘못 보낸 보고를 실적에서 빼고 싶어요</summary><p><a href="#cancel">4번</a>대로 하단 [조회] → 기록 → 상세 → [숨김 (오발송·오기록)]. 점검·AS·물류 기록만 현황판과 연동됩니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">주간현황판·일일방문일지 길잡이 · 이어서 <a href="growth.html">성장기록</a> · <a href="schedule.html">일정리스트</a></p>
+</main>
+</div>
+</body>
+</html>

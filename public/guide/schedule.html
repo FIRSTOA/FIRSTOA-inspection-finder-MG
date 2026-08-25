@@ -119,6 +119,27 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 .faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
 .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
 .small{font-size:12.5px;color:var(--muted)}
+/* ── 효과 판(장점) ── */
+.impact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{border-radius:18px;padding:18px 18px 16px;color:#fff;display:grid;gap:4px}
+.stat.blue{background:linear-gradient(135deg,#1D4ED8,#3B82F6)} .stat.green{background:linear-gradient(135deg,#047857,#10B981)} .stat.purple{background:linear-gradient(135deg,#6D28D9,#8B5CF6)} .stat.amber{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.stat .lbl{font-size:12px;font-weight:700;opacity:.85}
+.stat .big{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:34px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .big s{opacity:.6;font-size:22px}
+.stat .big em{font-style:normal}
+.stat .sub{font-size:12px;opacity:.9}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+@media(max-width:700px){.ba{grid-template-columns:1fr} .ba-arrow{transform:rotate(90deg);padding:4px 0}}
+.ba-card{border-radius:16px;padding:14px 16px;display:grid;gap:8px;border:1px solid var(--line);background:var(--card);align-content:start}
+.ba-card.new{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.ba-title{font-size:12px;font-weight:900;letter-spacing:.06em;color:var(--muted)} .ba-card.new .ba-title{color:var(--blue)}
+.ba-what{font-size:13px;font-weight:900;color:var(--ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.pills span.hot{background:var(--ink);color:#fff;border-color:transparent}
+.ba-count{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-size:26px;color:var(--muted);line-height:1}
+.ba-card.new .ba-count{color:var(--blue)}
+.ba-arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 @media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
 </style>
 
@@ -159,16 +180,29 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 
 <section id="benefits">
   <h2>이 화면이 아껴주는 것</h2>
-  <p class="lead">일정리스트는 "적는 곳"이 아니라 "누르는 곳"입니다. 예전에 손으로 세 번 하던 일이 한 번으로 줍니다.</p>
-  <table class="tbl"><thead><tr><th>예전엔</th><th>지금은</th><th>아끼는 것</th></tr></thead><tbody>
-    <tr><td>네이버 캘린더 제목에 담당자 이름을 손으로 적고, 팀에 따로 알림</td><td><b>[배정]</b> 한 번 → 네이버 제목에 "이름-"이 자동으로 붙고 그 사람 묶음으로 이동</td><td>건당 오타·누락 없음 (예: 건당 1분)</td></tr>
-    <tr><td>보고양식 작성 → 카톡 전송 → 캘린더에서 일정 찾아 완료 캘린더로 옮기기 → 체크</td><td><b>[FIELD] → [카톡방 전송] → [✓ 완료]</b> 세 번 — 시트 저장·카톡·네이버 이동·완료 체크가 한 줄로</td><td>일정 하나당 화면 3개 왕복 제거 (예: 건당 3~5분)</td></tr>
-    <tr><td>못 간 일정을 캘린더에서 날짜 옮기고, 사유는 카톡에 따로 타이핑</td><td><b>[익일]</b> 사유 한 번 입력 → 날짜 이동 + 팀 AS방 사유 카톡 + 네이버 기록</td><td>사유가 세 곳에 똑같이 남음 (기록 누락 0)</td></tr>
-    <tr><td>12시·14시 중간보고를 일정을 눈으로 대조해 손으로 작성</td><td><b>[📋 중간보고]</b> → AI가 "업체 기종 내용"으로 압축 → 복사</td><td>보고 1회당 (예: 15~20분 → 1분), 완료 건 자동 제외</td></tr>
-    <tr><td>내일 갈 곳을 캘린더·카톡·메모에서 따로 모아 확인</td><td><b>익일일정·내 일정</b> 탭 — 지도 위 동선 + N/K/T 길찾기 + 개인 메모</td><td>출발 전 준비 시간 (예: 10분)</td></tr>
-    <tr><td>네이버에서 누가 옮기거나 지운 일정을 나중에 알게 됨</td><td>20초 안에 여기로 반영(날짜·완료·삭제) — 두 화면이 항상 같은 상태</td><td>"어디가 맞지?" 대조 작업 0</td></tr>
-  </tbody></table>
+  <div class="impact">
+    <div class="stat blue"><div class="lbl">일정 하나 완료까지</div><div class="big"><s>3화면</s> → <em>1화면</em></div><div class="sub">FIELD·카톡·네이버 캘린더가 한 줄로</div></div>
+    <div class="stat green"><div class="lbl">중간보고 작성</div><div class="big"><s>20분</s> → <em>1분</em></div><div class="sub">예: 손으로 대조 → AI 요약 후 복사</div></div>
+    <div class="stat purple"><div class="lbl">완료·익일 사유 기록</div><div class="big"><em>1번</em> 입력 · <em>3곳</em> 저장</div><div class="sub">카톡 · 네이버 · 리스트에 같은 내용</div></div>
+    <div class="stat amber"><div class="lbl">네이버 ↔ 리스트 어긋남</div><div class="big"><em>20초</em> 안에 <em>0</em></div><div class="sub">누가 옮기든 지우든 자동 반영</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">일정 하나 마무리</div><div class="pills"><span>보고양식 작성</span><span>카톡 전송</span><span>캘린더 열기</span><span>일정 찾기</span><span>완료 캘린더로 옮기기</span><span>완료 체크</span></div><div class="ba-count">6단계</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">일정 하나 마무리</div><div class="pills"><span class="hot">FIELD</span><span class="hot">📨 카톡방 전송</span><span class="hot">✓ 완료</span></div><div class="ba-count">3번 누르기</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">담당자 정하기</div><div class="pills"><span>캘린더 제목 열기</span><span>이름 타이핑</span><span>저장</span><span>팀에 따로 알림</span></div><div class="ba-count">4단계 · 오타 위험</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">담당자 정하기</div><div class="pills"><span class="hot">배정</span><span class="hot">이름 클릭</span></div><div class="ba-count">2번 누르기 · 네이버 제목 자동</div></div>
+  </div>
+  <div class="ba">
+    <div class="ba-card"><div class="ba-title">예전엔</div><div class="ba-what">못 간 일정 미루기</div><div class="pills"><span>캘린더 날짜 옮기기</span><span>카톡에 사유 타이핑</span><span>리스트도 따로 수정</span></div><div class="ba-count">3곳 따로 · 누락 잦음</div></div>
+    <div class="ba-arrow">→</div>
+    <div class="ba-card new"><div class="ba-title">지금은</div><div class="ba-what">못 간 일정 미루기</div><div class="pills"><span class="hot">익일</span><span class="hot">사유 1번</span></div><div class="ba-count">3곳 자동 · 누락 0</div></div>
+  </div>
   <div class="box tip"><b>좋은 습관 한 줄</b>일정은 웹앱에서만 만지고, 네이버는 확인용으로. 그러면 카톡·네이버·리스트가 저절로 맞습니다.</div>
+  <p class="small">시간 수치는 팀 평균에서 어림한 예시입니다.</p>
 </section>
 
 <section id="intro">

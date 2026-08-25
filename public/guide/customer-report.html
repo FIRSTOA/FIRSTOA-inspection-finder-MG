@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>고객 리포트 길잡이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#1E252F; --text:#24303F; --muted:#6B7684; --line:#E2E7EE;
+  --blue:#2563EB; --blue-soft:#E8F0FE; --green:#059669; --green-soft:#E6F6EF; --purple:#7C3AED; --purple-soft:#F1EAFE;
+  --rose:#E11D48; --rose-soft:#FDE8EE; --amber:#B45309; --amber-soft:#FEF3DC; --lime-soft:#EEF8D9; --lime:#4D7C0F;
+  --shot-bg:#EEF1F5; --dark:#1E252F; --dark-2:#0B0F17;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}}
+:root[data-theme="dark"]{
+  --paper:#121721; --card:#1A2130; --ink:#E8EDF5; --text:#E3E8F0; --muted:#98A3B3; --line:#2A3446;
+  --blue-soft:#1B2A4A; --green-soft:#12362A; --purple-soft:#2C2148; --rose-soft:#43202A; --amber-soft:#3E2E12; --lime-soft:#26351A; --lime:#A3D06A; --amber:#F2B45A;
+  --shot-bg:#0F141C; --dark:#0B0F17; --dark-2:#05070B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.7;word-break:keep-all}
+h1,h2,h3{font-family:"Do Hyeon","Noto Sans KR",sans-serif;font-weight:400;letter-spacing:-.01em;text-wrap:balance;color:var(--ink);margin:0}
+h1{font-size:40px;line-height:1.15} h2{font-size:28px;line-height:1.2} h3{font-size:19px;line-height:1.3}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr);align-items:start}}
+nav.toc{position:sticky;top:16px;display:none;font-size:13px}
+@media(min-width:1100px){nav.toc{display:block}}
+nav.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus{color:var(--blue);border-left-color:var(--blue);outline:none}
+nav.toc .sub{padding-left:22px;font-size:12px}
+main{min-width:0;display:grid;gap:44px}
+.hero{background:var(--dark);color:#fff;border-radius:20px;padding:34px 30px;display:grid;gap:14px}
+.hero h1{color:#fff}
+.hero p{margin:0;color:#B7C0CD;max-width:62ch}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8FA1B8}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+section{display:grid;gap:16px;scroll-margin-top:16px}
+section > p{margin:0;max-width:70ch}
+.lead{font-size:16.5px;color:var(--text)}
+.box{border-radius:14px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line);background:var(--card)}
+.box b{display:block;font-size:13px;letter-spacing:.02em}
+.box.tip{border-color:transparent;background:var(--blue-soft)} .box.tip b{color:var(--blue)}
+.box.naver{border-color:transparent;background:var(--green-soft)} .box.naver b{color:var(--green)}
+.box.warn{border-color:transparent;background:var(--amber-soft)} .box.warn b{color:var(--amber)}
+.box.kakao{border-color:transparent;background:var(--amber-soft)} .box.kakao b{color:var(--amber)}
+.grid2{display:grid;gap:12px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{position:relative;padding:12px 14px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px}
+ol.steps li b{color:var(--ink)}
+/* ── 화면 재현 ── */
+.shot{position:relative;background:var(--shot-bg);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;overflow:hidden}
+.shot .cap{position:absolute;right:12px;top:10px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.ui{font-size:13px;color:#24303F}
+.bar{background:var(--dark-2);border-radius:14px;padding:12px 14px;display:grid;gap:9px;color:#fff}
+.bar .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tab{border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:900;color:#AEB8C6;background:rgba(255,255,255,.07)}
+.tab.on{background:#fff;color:#0f172a}
+.tab.mine{color:#93C5FD}
+.chip{border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.chip.rose{color:#FDA4AF} .chip.green{color:#86EFAC} .chip.blue{color:#93C5FD} .chip.on{background:#fff;color:#0f172a}
+.chip.team{background:rgba(255,255,255,.07)} .chip.team.on{background:#fff;color:#0f172a}
+.spacer{flex:1}
+.mid{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:900;background:rgba(255,255,255,.07);color:#C5CDD8}
+.table{background:#fff;border:2px solid #FCA5A5;border-radius:14px;overflow:hidden;margin-top:12px}
+.table .head{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#FFF1F2;font-weight:900;color:#9F1239;font-size:13px}
+.table .head .n{background:#FFE4E6;color:#BE123C;border-radius:999px;padding:1px 8px;font-size:11px}
+.trow{display:grid;grid-template-columns:44px 56px 64px minmax(0,1fr) 48px 44px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid #EEF1F5;font-size:12.5px;color:#334155}
+.trow.hd{color:#64748B;font-size:11px;font-weight:900;border-top:0;background:#F8FAFC}
+.trow .t{font-weight:900;color:#0f172a}
+.gubun{display:inline-block;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900}
+.gubun.deliver{background:#FFE4E6;color:#BE123C} .gubun.as{background:#ECFCCB;color:#3F6212} .gubun.done{background:#DBEAFE;color:#1D4ED8} .gubun.monthly{background:#FEF3C7;color:#92400E}
+.title{font-weight:900;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+.btn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;border:1px solid transparent;white-space:nowrap;line-height:1.2}
+.btn.field{background:#1E252F;color:#fff;border-radius:8px;padding:6px 11px}
+.btn.assign{background:#ECFDF5;color:#047857;border-color:#A7F3D0}
+.btn.done{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.btn.defer{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE}
+.btn.del{background:#FFF1F2;color:#BE123C;border-color:#FECDD3}
+.btn.phone{background:#059669;color:#fff;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:8px}
+.btn.phone.n{width:auto;padding:0 8px;gap:4px}
+.badge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(225,29,72,.22);z-index:2}
+.legend{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.legend .item{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.legend .num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:2px}
+/* 모달 재현 */
+.modal{background:#fff;border-radius:18px;padding:18px 20px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:grid;gap:10px;color:#0f172a}
+.modal .mt{font-size:18px;font-weight:900} .modal .ms{font-size:12.5px;color:#64748B;font-weight:700}
+.modal textarea,.modal .inp{width:100%;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font:inherit;font-size:13px;color:#64748B;background:#F8FAFC;min-height:64px}
+.modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border-radius:12px;padding:11px;font-weight:900;font-size:13.5px;text-align:center;border:1px solid transparent}
+.mbtn.primary{background:#2563EB;color:#fff} .mbtn.purple{background:#F5F3FF;color:#6D28D9;border-color:#DDD6FE} .mbtn.ghost{background:#fff;color:#64748B;border-color:#E2E8F0} .mbtn.dark{background:#0f172a;color:#fff} .mbtn.emerald{background:#059669;color:#fff}
+.namepick{display:flex;flex-wrap:wrap;gap:6px}
+.namepick span{border-radius:999px;padding:6px 12px;background:#F1F5F9;font-weight:900;font-size:13px;color:#0f172a}
+.namepick span.on{background:#2563EB;color:#fff}
+.toast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;background:#0f172a;color:#fff}
+.toast.ok{background:#065F46} .toast.warnt{background:#92400E}
+.quote{font-family:"Noto Sans KR",sans-serif;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13.5px;white-space:pre-wrap}
+.flow{display:grid;gap:10px}
+.flow .node{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.flow .dot{width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.flow .node .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sync{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.sync .n{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 10px;font-weight:900;color:var(--ink)}
+.sync .n small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:4px}
+.sync .arr{font-size:22px;color:var(--muted)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+table.tbl th,table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:var(--paper)}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.faq summary{cursor:pointer;font-weight:900;color:var(--ink)} .faq details p{margin:8px 0 0;color:var(--text)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-size:12px;background:var(--card)}
+.small{font-size:12.5px;color:var(--muted)}
+@media print{.hero{background:#1E252F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} nav.toc{display:none} body{background:#fff} .wrap{grid-template-columns:1fr} section{break-inside:avoid}}
+/* ── 추가: 고객·홍보·조회·관리 길잡이 공용 모형 ── */
+.hd{background:#1E252F;border-radius:14px 14px 0 0;padding:12px 14px;color:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.hd .t{font-weight:900;font-size:14px} .hd .s{font-size:11px;color:#94A3B8;font-weight:600;margin-top:2px}
+.hd.solo{border-radius:14px}
+.strip{background:#151A23;border-radius:0 0 14px 14px;padding:9px 14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:#C5CDD8;font-size:12px}
+.btn.blue{background:#2563EB;color:#fff} .btn.white{background:#fff;color:#334155;border-color:#CBD5E1} .btn.ghostw{background:rgba(255,255,255,.1);color:#fff} .btn.emerald{background:#059669;color:#fff} .btn.emeraldsoft{background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(52,211,153,.4)} .btn.rose{background:#FFF1F2;color:#E11D48;border-color:#FECDD3} .btn.dark{background:#0f172a;color:#fff} .btn.violet{background:#6D28D9;color:#fff} .btn.bluesoft{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE} .btn.big{padding:8px 14px;font-size:12.5px}
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.card .chead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid #F1F5F9;background:#F8FAFC;font-weight:900;font-size:12.5px;color:#0f172a}
+.card .cbody{padding:10px 14px;display:grid;gap:8px}
+.rowl{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #F1F5F9;font-size:12px;color:#334155} .rowl:first-child{border-top:0}
+.tg{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:900;white-space:nowrap} .tg.g{background:#ECFDF5;color:#047857} .tg.r{background:#FFF1F2;color:#BE123C} .tg.a{background:#FEF3C7;color:#92400E} .tg.b{background:#EFF6FF;color:#1D4ED8} .tg.gr{background:#F1F5F9;color:#64748B} .tg.v{background:#F5F3FF;color:#6D28D9} .tg.i{background:#EEF2FF;color:#4338CA} .tg.dk{background:#0f172a;color:#fff}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .kpi div{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px;text-align:center} .kpi b{display:block;font-size:17px;color:#0f172a} .kpi small{font-size:10.5px;color:#94A3B8;font-weight:900}
+.progress{height:6px;width:140px;border-radius:999px;background:#E2E8F0;overflow:hidden;display:inline-block;vertical-align:middle} .progress i{display:block;height:100%;background:#10B981}
+.inputm{border:1px solid #CBD5E1;border-radius:10px;padding:7px 10px;font-size:12px;color:#64748B;background:#fff;display:inline-block}
+.darkinput{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);color:#94A3B8;border-radius:8px;padding:6px 10px;font-size:12px;display:inline-block}
+.ui .muted{color:#94A3B8;font-size:11px;font-weight:700}
+.grid3c{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.mcard{border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#fff;font-size:12px;color:#334155} .mcard.sent{border-color:#A7F3D0;background:#ECFDF5}
+.ntoast{display:inline-flex;gap:8px;align-items:center;border-radius:12px;padding:8px 12px;font-size:12.5px;font-weight:700;border:1px solid #E2E8F0;background:#fff;color:#1e293b;box-shadow:0 8px 24px rgba(15,23,42,.12)} .ntoast.ok{border-color:#A7F3D0;background:#ECFDF5;color:#065F46} .ntoast.err{border-color:#FECDD3;background:#FFF1F2;color:#9F1239}
+.sw{display:inline-block;width:40px;height:22px;border-radius:999px;background:#E2E8F0;position:relative;vertical-align:middle} .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)} .sw.on{background:#2563EB} .sw.on::after{left:21px} .sw.on.amber{background:#F59E0B}
+.tabu{padding:8px 14px;font-weight:900;font-size:13px;color:#94A3B8;display:inline-block} .tabu.on{color:#0f172a;box-shadow:inset 0 -3px #2563EB}
+.a4{background:#fff;border-radius:6px;box-shadow:0 8px 24px rgba(15,23,42,.12);overflow:hidden;color:#0f172a;font-size:11.5px}
+.a4 .top{background:#1E252F;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;gap:10px}
+.a4 .cells{display:grid;grid-template-columns:repeat(4,1fr);background:#F8FAFC;border-bottom:1px solid #E2E8F0} .a4 .cells div{padding:10px 6px;text-align:center;border-right:1px solid #E2E8F0} .a4 .cells div:last-child{border-right:0} .a4 .cells b{display:block;font-size:20px} .a4 .cells small{font-size:10px;color:#64748B;font-weight:900}
+.a4 .sec{padding:10px 18px}
+.a4 table{width:100%;border-collapse:collapse;font-size:11px} .a4 th{text-align:left;border-bottom:2px solid #0f172a;padding:4px 6px;color:#64748B;font-size:10px} .a4 td{padding:5px 6px;border-bottom:1px solid #F1F5F9}
+.a4 .promo{margin:0 18px 14px;background:linear-gradient(90deg,#1E252F,#2b3a52);color:#fff;border-radius:12px;padding:12px 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <a href="#benefits">이 화면이 아껴주는 것</a>
+  <a href="#intro">시작하기 전에</a>
+  <a href="#screen">1. 화면 구성</a>
+  <a href="#build">2. 업체 검색 → 리포트 만들기</a>
+  <a href="#page">3. 리포트 한 장 읽기</a>
+  <a href="#actions">4. 만들어진 뒤 버튼 네 개</a>
+  <a class="sub" href="#b-png">PNG 저장 · 인쇄</a>
+  <a class="sub" href="#b-recip">수신자 관리</a>
+  <a class="sub" href="#b-send">문자 발송</a>
+  <a href="#queue">5. 연속 발송</a>
+  <a href="#rule">6. 반검수 원칙</a>
+  <a href="#faq">7. 이럴 땐 어떻게</a>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">퍼스트전산 CS 웹앱 · 고객·홍보 › 고객 리포트</div>
+  <h1>고객 리포트 길잡이</h1>
+  <p>거래처 한 곳의 <b style="color:#fff">한 달(또는 분기·반기·연간) 서비스 내역</b>을 A4 한두 장 리포트로 자동으로 만들고, 이미지로 저장하거나 <b style="color:#fff">담당자 휴대폰에 링크 문자</b>로 보내는 화면입니다. 접수가 한 건도 없던 업체도 "안정 운영 + 정기 점검" 리포트가 나갑니다. 문자는 반드시 사람이 확인 팝업을 눌러야만 나가는 <b style="color:#fff">반검수</b> 방식입니다.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">처음 쓰는 분 기준으로 씀</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">그림은 실제 화면을 같은 색·모양으로 재현한 것</span>
+    <span class="pill" style="background:rgba(255,255,255,.1);color:#DCE3EC">2026-08-25 기준</span>
+  </div>
+</header>
+
+<section id="benefits">
+  <h2>이 화면이 아껴주는 것</h2>
+  <p>리포트에 들어가는 숫자·표·기기 목록은 전부 이미 쌓여 있는 기록(접수·점검·임대리스트)에서 자동으로 채워집니다. 사람이 하는 일은 "맞는지 훑어보고 보내기"만 남습니다.</p>
+  <table class="tbl"><thead><tr><th>예전엔</th><th>지금은</th><th>아끼는 것</th></tr></thead><tbody>
+    <tr><td>업체별로 이번 달 AS·점검 내역을 기록에서 찾아 손으로 정리</td><td>업체명을 고르면 기간 안의 접수(AS·원격·IT)·점검 방문·처리내용이 표로 자동 집계</td><td>정리 시간(예: 업체당 10~20분 → 검토 1~2분)</td></tr>
+    <tr><td>기기 대수·기종·자산번호를 임대리스트에서 따로 옮겨 적기</td><td>임대중 기기가 품목별 대수 + 브랜드·기종·자산기번 표로 자동 삽입</td><td>옮겨 적다 생기는 오타·누락</td></tr>
+    <tr><td>문서를 이미지로 만들고, 수신자 번호를 매번 찾아 문자 앱에서 전송</td><td>[문자 발송] 한 번에 리포트를 한 장 이미지로 합쳐 올리고, 등록된 수신자 전원에게 링크 문자 발송</td><td>사람 수만큼 반복하던 전송 작업</td></tr>
+    <tr><td>누가 어느 업체에 보냈는지 기억에 의존</td><td>발송 성공·실패가 업체별 로그로 남고, 연속 발송 목록에 "발송됨" 표시</td><td>중복 발송·누락</td></tr>
+    <tr><td>수신자를 각자 메모</td><td>업체별 수신자가 전 직원 공용으로 저장되고, 기존 기록(키맨·워킨맵·접수 회신번호)에서 후보를 추천</td><td>번호 찾는 시간, 기기 바꿀 때 사라지는 메모</td></tr>
+  </tbody></table>
+  <div class="box tip"><b>이 화면을 쓰면 좋은 습관</b>월초에 [연속 발송]으로 수신자 등록된 업체를 한 곳씩 넘기며 리포트를 눈으로 훑고 보내면, 지난달 서비스 보고가 한 자리에서 끝납니다.</div>
+</section>
+
+<section id="intro">
+  <h2>시작하기 전에 — 어디서 무엇을 읽어와서 어디로 보내나</h2>
+  <p class="lead">이 화면은 <b>읽기만</b> 하는 곳(기록들)과 <b>쓰는</b> 곳(수신자·발송 로그·문구)이 나뉩니다. 리포트를 아무리 만들어도 기록 원본은 바뀌지 않습니다.</p>
+  <div class="sync">
+    <div class="n">기록 원본<small>임대리스트 · 서비스접수 · 점검 기록 · 일정 처리내용</small></div>
+    <div class="arr">→</div>
+    <div class="n">고객 리포트<small>이 화면 · 집계 · A4 1~2장</small></div>
+    <div class="arr">→</div>
+    <div class="n">고객 휴대폰<small>이미지 링크 문자(대표번호)</small></div>
+  </div>
+  <div class="grid2">
+    <div class="box"><b>읽어오는 것</b>① 임대리스트에서 그 업체의 <b>임대중</b> 기기(품목·제조사·모델명·자산번호) ② 기간 안의 서비스접수(복합기 AS·원격이관·IT)와, 그 접수에 연결된 일정의 FIELD 전송 양식에서 "처리내용:" 한 줄 ③ 기간 안의 점검 기록(날짜·지역·기기 목록·처리내용) ④ 가장 최근 점검일</div>
+    <div class="box naver"><b>저장되는 것</b>업체별 <b>수신자 명단</b>(전 직원 공용), <b>발송 로그</b>(누가·언제·누구에게·성공/실패·이미지 링크), 리포트 문자 <b>공용 문안</b>, 발송 때 만든 <b>리포트 이미지</b>(저장소). 문자는 회사 대표번호로 나갑니다.</div>
+  </div>
+</section>
+
+<section id="screen">
+  <h2>1. 화면 구성</h2>
+  <p>맨 위 검은 상자에 기간·검색·연속 발송이 모여 있습니다. 처음 열면 기간은 <b>월간 · 지난달</b>로 잡혀 있습니다.</p>
+  <div class="shot ui">
+    <span class="cap">화면 재현</span>
+    <span class="badge" style="left:26px;top:74px">1</span>
+    <span class="badge" style="left:230px;top:74px">2</span>
+    <span class="badge" style="right:60px;top:74px">3</span>
+    <span class="badge" style="left:26px;top:118px">4</span>
+    <div class="hd solo" style="display:grid;gap:10px">
+      <div><div class="t">고객 리포트</div><div class="s">전 업체 대상 — 접수가 없어도 "잘 관리되고 있다"는 리포트가 나갑니다. 이미지로 저장해 발송하세요.</div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <span style="display:inline-flex;gap:2px;background:rgba(255,255,255,.1);border-radius:999px;padding:3px"><span class="tab on">월간</span><span class="tab">분기</span><span class="tab">반기</span><span class="tab">연간</span></span>
+        <span class="darkinput" style="color:#fff">2026-07</span>
+        <span class="chip" style="background:rgba(37,99,235,.25);color:#BFDBFE">2026년 7월 · 2026-07-01 ~ 2026-07-31</span>
+        <span class="spacer"></span>
+        <span class="btn emeraldsoft big">✈ 연속 발송</span>
+      </div>
+      <div style="display:flex;gap:6px;max-width:560px"><span class="darkinput" style="flex:1">업체명 검색 (임대중 기기 보유 업체)</span><span class="btn blue big">🔍 검색</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>기간 종류</b> — 월간 / 분기 / 반기 / 연간. 옆의 <b>연월 칸</b>(YYYY-MM)과 합쳐 기간이 정해집니다. 예: "분기" + 2026-08 → 2026년 3분기(7/1~9/30), "반기" + 2026-08 → 하반기, "연간" → 그 해 1/1~12/31.</div></div>
+    <div class="item"><span class="num">2</span><div><b>기간 표시 칩</b> — 지금 선택된 기간 이름과 시작~끝 날짜. 리포트 제목·문자에 이 이름("2026년 7월")이 그대로 들어갑니다.</div></div>
+    <div class="item"><span class="num">3</span><div><b>✈ 연속 발송</b> — 수신자가 등록된 업체들을 한 곳씩 넘기며 만들고 검토하고 보내는 모드. <a href="#queue">5번</a>.</div></div>
+    <div class="item"><span class="num">4</span><div><b>업체명 검색</b> — 임대리스트에서 <b>임대중 기기가 있는 업체</b>만 찾습니다. <span class="kbd">Enter</span> 또는 [검색]. 2글자 이상.</div></div>
+  </div>
+  <div class="box tip"><b>아직 아무것도 없을 때</b>가운데에 점선 상자로 <i>"기간을 고르고 업체를 검색하면 리포트가 만들어집니다 / 접수가 없는 업체도 "안정 운영 + 정기 점검" 리포트가 나갑니다 — 전 업체 대상"</i>이 보입니다. 정상입니다.</div>
+</section>
+
+<section id="build">
+  <h2>2. 업체 검색 → 리포트 만들기</h2>
+  <ol class="steps">
+    <li><b>기간을 고른다</b> — 월간/분기/반기/연간 중 하나를 누르고, 연월 칸에서 달을 고릅니다. 보통 지난달이 기본으로 들어 있어 그대로 두면 됩니다.</li>
+    <li><b>업체명을 적고 [검색]</b> — 1글자만 적으면 위쪽에 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">업체명을 2글자 이상 입력해 주세요.</span> 가 뜹니다. 검색 중엔 버튼이 "검색 중"으로 바뀝니다.</li>
+    <li><b>목록에서 업체를 누른다</b> — 검색창 아래로 최대 40개의 업체명 목록이 내려옵니다(이름 가나다순, 임대중인 곳만). 하나를 누르면 바로 만들기 시작. 목록이 비면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">임대중 기기가 있는 업체 중에 없습니다 — 이름을 줄여서 검색해 보세요.</span></li>
+    <li><b>"리포트를 만드는 중…"</b>이 잠깐 보이고 A4 모양 리포트가 나타납니다. 이때 <b>이전 업체의 수신자·발송 로그는 먼저 비워지고</b> 새 업체 것으로 다시 채워집니다(다른 업체 수신자에게 잘못 나가는 사고 방지).</li>
+  </ol>
+  <div class="grid2">
+    <div class="box"><b>같은 회사인데 이름이 조금 다르면?</b>"주식회사 푸드나무"로 만들어도 점검 기록에 "푸드나무"로 적힌 건은 함께 잡힙니다. 핵심 이름으로 넓게 찾은 뒤 같은 회사인지 대조해 걸러내는 방식입니다.</div>
+    <div class="box warn"><b>실패하면</b><span class="ntoast err" style="font-size:11.5px;padding:4px 10px">리포트 생성 실패: (원인)</span> 가 뜹니다. 새로고침 후 다시 시도하고, 계속되면 괄호 안 문구를 그대로 전달해 주세요.</div>
+  </div>
+</section>
+
+<section id="page">
+  <h2>3. 리포트 한 장 읽는 법 — 어디에서 온 숫자인가</h2>
+  <p>리포트는 고객에게 그대로 나가는 문서입니다. 각 칸이 어느 기록에서 왔는지 알아야 "이 숫자 맞나?"를 판단할 수 있습니다.</p>
+  <div class="shot ui" style="display:flex;justify-content:center">
+    <span class="cap">화면 재현 · 1장 축소</span>
+    <span class="badge" style="left:30px;top:60px">1</span>
+    <span class="badge" style="left:30px;top:150px">2</span>
+    <span class="badge" style="left:30px;top:225px">3</span>
+    <span class="badge" style="left:30px;top:345px">4</span>
+    <span class="badge" style="left:30px;top:440px">5</span>
+    <div class="a4" style="width:100%;max-width:560px">
+      <div class="top"><div><div style="font-size:9px;letter-spacing:.2em;color:#93C5FD;font-weight:900">FIRST OA · SERVICE REPORT</div><div style="font-size:18px;font-weight:900;margin-top:4px">2026년 7월 서비스 리포트</div><div style="font-size:11px;color:#CBD5E1;font-weight:700">가나다상사 귀중</div></div><div style="text-align:right"><div style="font-weight:900;font-size:14px">퍼스트전산</div><div style="font-size:9.5px;color:#94A3B8">사무기기 · IT 통합 관리</div></div></div>
+      <div class="sec" style="border-bottom:1px solid #F1F5F9;color:#475569;font-size:10.5px">가나다상사 담당자님, 언제나 저희 퍼스트전산을 믿고 맡겨 주셔서 진심으로 감사합니다. 2026년 7월 동안 함께한 서비스 내용을 정리해 전해 드립니다. …</div>
+      <div class="cells"><div><b>1<span style="font-size:11px;color:#94A3B8">회</span></b><small>정기 점검</small></div><div><b>2<span style="font-size:11px;color:#94A3B8">회</span></b><small>AS 방문</small></div><div><b>1<span style="font-size:11px;color:#94A3B8">회</span></b><small>원격 지원</small></div><div><b>6<span style="font-size:11px;color:#94A3B8">대</span></b><small>관리 기기</small></div></div>
+      <div class="sec"><div style="font-weight:900;font-size:12px">■ 2026년 7월 서비스 내역</div>
+        <table><thead><tr><th>날짜</th><th>구분</th><th>기기</th><th>내용</th><th>처리</th></tr></thead><tbody>
+          <tr><td>07/03</td><td><span class="tg b">AS 방문</span></td><td>SL-X3220NR · A0123</td><td>용지 씹힘</td><td><b>급지롤러 교체</b></td></tr>
+          <tr><td>07/11</td><td><span class="tg g">정기 점검</span></td><td>복합기 3대</td><td>강북 정기 방문 점검</td><td><b>점검 완료</b></td></tr>
+          <tr><td>07/22</td><td><span class="tg i">원격 지원</span></td><td>-</td><td>스캔 설정</td><td><b>처리 완료</b></td></tr>
+        </tbody></table>
+        <div style="margin-top:10px;font-weight:900;font-size:12px">■ 관리 중인 장비 <span style="font-size:10px;color:#94A3B8">총 6대</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:5px;font-size:10px"><div class="mcard">🖨 컬러복합기<br><b>3대</b></div><div class="mcard">🖥 데스크탑<br><b>2대</b></div><div class="mcard">🖥 PC모니터<br><b>1대</b></div></div>
+      </div>
+      <div class="promo"><div style="font-size:11px;font-weight:900;color:#93C5FD">사무실 IT의 모든 것, 퍼스트전산이 함께합니다</div><div style="font-size:9.5px;color:#94A3B8">렌탈도 판매도 — 필요하실 때 담당자에게 말씀만 주세요 · 대표번호 1522-1093</div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="num">1</span><div><b>머리</b> — "{기간} 서비스 리포트", "{업체명} 귀중". 업체명은 검색 목록에서 누른 이름 그대로.</div></div>
+    <div class="item"><span class="num">2</span><div><b>요약 4칸</b> — <b>정기 점검</b>(기간 내 점검 기록 건수) · <b>AS 방문</b>(접수 구분이 "복합기 AS") · <b>원격 지원</b>(접수 "원격이관" + "IT"를 합친 수) · <b>관리 기기</b>(임대중 기기 대수).</div></div>
+    <div class="item"><span class="num">3</span><div><b>서비스 내역 표</b> — 날짜순. 접수 건은 <span class="tg b">AS 방문</span>/<span class="tg i">원격 지원</span>/<span class="tg i">IT 지원</span>, 기기 칸은 "모델 · 자산번호(또는 시리얼)", 내용은 접수 증상(34자까지), <b>처리</b>는 그 접수에 연결된 일정의 FIELD 양식 "처리내용:" 줄(40자) — 없으면 접수 상태가 완료/전송완료면 "처리 완료", 아니면 "진행 중". 점검 건은 <span class="tg g">정기 점검</span>, 같은 날 같은 지역 방문을 하나로 묶어 "복합기 N대"(기기 목록의 자산기번 개수), 내용 "강북/강서/강남/경기/지방 정기 방문 점검".</div></div>
+    <div class="item"><span class="num">4</span><div><b>관리 중인 장비</b> — 품목별 대수 카드(많은 순, 8개까지, 넘치면 "외 N대") + 아래에 품목·브랜드·기종·자산기번 표(8행까지, 넘치면 "외 N대 — 전체 목록은 담당자에게 요청하시면 보내드립니다."). 브랜드는 임대리스트 제조사 칸에 오기재가 있어 <b>모델명으로 먼저 추정</b>(MFC→브라더, SL-→삼성, ApeosPort→제록스, ECOSYS→교세라 …)하고 못 알아보면 시트 값을 씁니다.</div></div>
+    <div class="item"><span class="num">5</span><div><b>홍보 띠</b> — 복합기·PC·입퇴사자 IT·사무환경 4칸과 소프트웨어 배지, 대표번호. 고정 문구입니다. 맨 아래 "본 리포트는 {기간} 서비스 기록을 바탕으로 자동 작성되었습니다 · 퍼스트전산".</div></div>
+  </div>
+  <div class="grid2">
+    <div class="box naver"><b>내역이 한 건도 없으면</b>표 자리에 초록 상자로 <b>"이 기간 동안 장애·요청 없이 안정적으로 운영되었습니다 ✓"</b>와, 최근 점검일이 있으면 "최근 정기 점검일 YYYY-MM-DD — 다음 분기에도 방문 점검으로 관리해 드립니다.", 없으면 "정기 점검 일정에 맞춰 방문 관리해 드리고 있습니다."가 들어갑니다. 그래서 전 업체에 보낼 수 있습니다.</div>
+    <div class="box"><b>2장이 되는 경우</b>내역이 10행을 넘으면 1장 표 아래 "계속 → 2장"이 붙고, 2장("{기간} 서비스 내역 (계속) — {업체} · 2/2")에 11~24행이 들어갑니다. 24행을 넘는 나머지는 "외 N건 — 상세 내역은 담당자에게 문의해 주세요."로 줄입니다.</div>
+  </div>
+  <div class="box warn"><b>리포트 아래 노란 안내문</b>"발송 전 확인: 업체명·기간·건수(N회)가 맞는지 훑어보고 저장하세요. 자동 발송(문자 MMS·메일)과 수신자 관리는 2단계로 만들 예정입니다." — 앞 문장이 핵심입니다. 뒷 문장은 예전 안내가 남아 있는 것으로, 수신자 관리와 문자 발송은 지금 위의 버튼으로 가능합니다.</div>
+</section>
+
+<section id="actions">
+  <h2>4. 만들어진 뒤 버튼 네 개 — 누르면 무슨 일이 생기나</h2>
+  <div class="shot ui"><span class="cap">화면 재현 · 리포트 위 버튼 줄</span>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span class="btn dark big">🖼 PNG 저장 (장별)</span><span class="btn white big">🖨 인쇄 / PDF</span><span class="btn white big">👥 수신자 관리 <span class="tg gr">2</span></span><span class="btn blue big">✈ 문자 발송</span><span class="muted">최근 발송 08-01 · 김담당 성공 외 1건</span></div>
+  </div>
+
+  <h3 id="b-png"><span class="btn dark" style="vertical-align:middle">PNG 저장 (장별)</span> · <span class="btn white" style="vertical-align:middle">인쇄 / PDF</span></h3>
+  <table class="tbl"><thead><tr><th>버튼</th><th>누르면</th><th>결과</th></tr></thead><tbody>
+    <tr><td><b>PNG 저장 (장별)</b></td><td>화면의 리포트를 장마다 2배 해상도 이미지로 찍어 내려받습니다. 진행 중엔 "저장 중…".</td><td>파일 <code>업체명_2026년7월_1.png</code>(2장이면 _2도). 끝나면 <span class="ntoast ok" style="font-size:11.5px;padding:4px 10px">리포트 이미지 N장 저장 완료 ✓</span></td></tr>
+    <tr><td><b>인쇄 / PDF</b></td><td>브라우저 인쇄 창이 열립니다. 리포트 영역만 인쇄되고 장마다 페이지가 나뉩니다.</td><td>대상을 "PDF로 저장"으로 고르면 PDF 파일. DB·문자에는 아무 영향 없음.</td></tr>
+  </tbody></table>
+
+  <h3 id="b-recip"><span class="btn white" style="vertical-align:middle">수신자 관리</span> — 이 업체에 누구에게 보낼지 (전 직원 공용)</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="padding:0;overflow:hidden;max-width:440px">
+        <div class="hd" style="border-radius:0"><div><div class="t">리포트 수신자</div><div class="s">가나다상사 · 표기가 달라도 같은 회사면 함께 씁니다</div></div><span style="color:#94A3B8">✕</span></div>
+        <div style="padding:14px 16px;display:grid;gap:10px">
+          <div class="card"><div class="rowl"><span style="flex:1;font-weight:900">김담당 과장</span><span class="muted">010-1234-5678</span><span style="color:#E11D48;font-weight:900;font-size:11px">삭제</span></div><div class="rowl"><span style="flex:1;font-weight:900">이름 없음</span><span class="muted">010-9876-5432</span><span style="color:#E11D48;font-weight:900;font-size:11px">삭제</span></div></div>
+          <div class="muted" style="font-weight:900">기존 기록에서 찾은 연락처</div>
+          <div style="background:#EFF6FF;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;font-size:12px"><span style="flex:1"><b>박실장</b> <span class="tg gr">임대리스트 키맨</span></span><span class="muted">010-2222-3333</span><span class="btn blue">＋ 추가</span></div>
+          <div style="background:#EFF6FF;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;font-size:12px"><span style="flex:1"><b>이름 미기재</b> <span class="tg gr">워킨맵</span></span><span class="muted">010-4444-5555</span><span class="btn blue">＋ 추가</span></div>
+          <div style="display:flex;gap:6px"><span class="inputm" style="width:100px">이름·직함</span><span class="inputm" style="flex:1">휴대폰 번호</span><span class="btn dark big">추가</span></div>
+        </div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>위 목록</b>이 지금 등록된 수신자입니다. 없으면 점선 상자 "아직 수신자가 없습니다 — 아래에서 추가해 주세요."</li>
+        <li><b>"기존 기록에서 찾은 연락처"</b>는 추천입니다(최대 8명). 출처 배지: <span class="tg gr">임대리스트 키맨</span> · <span class="tg gr">키맨 DB</span> · <span class="tg gr">워킨맵</span> · <span class="tg gr">접수 회신번호</span> · <span class="tg gr">미수 기록</span>. 휴대폰(01x) 번호만, 이미 등록된 번호는 빼고 보여줍니다. <b>[＋ 추가]</b>를 누르면 바로 등록됩니다.</li>
+        <li><b>직접 추가</b> — 이름·직함(비워도 됨)과 휴대폰 번호를 적고 [추가]. 번호가 01x 형식이 아니면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">휴대폰 번호(01x)를 확인해 주세요.</span>, 같은 번호면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">이미 등록된 번호입니다.</span></li>
+        <li><b>[삭제]</b> — 그 사람이 목록에서 빠집니다(기록은 비활성으로 남고 발송 대상에서만 제외).</li>
+      </ol>
+      <div class="box naver"><b>어디에 저장되나</b>업체의 <b>핵심 이름</b>(법인 표기 제거) 기준으로 DB에 저장되어 <b>모든 직원·모든 기기</b>에서 같은 명단이 보입니다. 부제의 "표기가 달라도 같은 회사면 함께 씁니다"가 그 뜻입니다.</div>
+      <div class="box warn"><b>목록을 못 불러오면</b><span class="ntoast err" style="font-size:11.5px;padding:4px 10px">수신자 목록을 불러오지 못했습니다 — 새로고침 후 다시 시도해 주세요.</span> 이때는 명단이 비어 보여 [문자 발송]이 막힙니다 — 잘못된 사람에게 나가는 것보다 안전하게 막는 쪽을 택한 것입니다.</div>
+    </div>
+  </div>
+
+  <h3 id="b-send"><span class="btn blue" style="vertical-align:middle">문자 발송</span> — 이미지 링크 문자 보내기 (확인 팝업 필수)</h3>
+  <div class="grid2">
+    <div class="shot ui" style="display:flex;justify-content:center"><span class="cap">화면 재현</span>
+      <div class="modal" style="padding:0;overflow:hidden;max-width:440px">
+        <div class="hd" style="border-radius:0"><div><div class="t">발송 전 확인</div><div class="s">리포트 1장을 이미지 링크로 만들어 아래 문안으로 보냅니다</div></div></div>
+        <div style="padding:14px 16px;display:grid;gap:8px;font-size:12px">
+          <div class="muted" style="font-weight:900">받는 사람 2명</div>
+          <div style="display:flex;gap:6px"><span class="tg gr" style="font-size:12px">김담당 과장</span><span class="tg gr" style="font-size:12px">01098765432</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted" style="font-weight:900">문안 — {업체명} {기간} {링크} 자동 치환</span><span><span class="btn dark">공용 저장</span> <span class="btn white">기본 문구</span></span></div>
+          <div class="inp" style="min-height:0;white-space:pre-wrap;font-size:11.5px">[퍼스트오에이] {업체명} {기간} 서비스 리포트
+
+안녕하세요, 퍼스트오에이입니다.
+{기간} 동안의 점검·서비스 내역을 정리해 보내드립니다.
+
+{링크}
+
+늘 믿고 맡겨주셔서 감사합니다.
+문의 1522-1093</div>
+          <div class="muted" style="font-weight:900">받는 사람이 보게 될 내용</div>
+          <div class="inp" style="min-height:0;font-size:11.5px">[퍼스트오에이] 가나다상사 2026년 7월 서비스 리포트 … ▶ 리포트 보기: (이미지 링크 자동 첨부) …</div>
+        </div>
+        <div style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid #F1F5F9"><span class="mbtn ghost" style="flex:1">취소</span><span class="mbtn primary" style="flex:1">2명에게 발송</span></div>
+      </div></div>
+    <div style="display:grid;gap:10px">
+      <ol class="steps">
+        <li><b>[문자 발송]</b>을 누르면 — 수신자가 0명이면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">수신자를 먼저 추가해 주세요.</span> 와 함께 수신자 관리 창이 대신 열립니다. 있으면 <b>"발송 전 확인"</b> 창.</li>
+        <li><b>받는 사람</b> 칩과 <b>문안</b>을 확인합니다. 문안의 <code>{업체명}</code> <code>{기간}</code> <code>{링크}</code>는 발송 때 자동으로 채워집니다. 문안을 고치면 이 브라우저에 기억되고, <b>[공용 저장]</b>을 누르면 전 직원 공용 문안으로 바뀝니다(<span style="color:var(--green);font-weight:900">공용으로 저장됨 ✓ — 전 직원에게 반영</span>). <b>[기본 문구]</b>는 처음 문구로 되돌립니다.</li>
+        <li><b>"받는 사람이 보게 될 내용"</b>에서 실제 문장을 마지막으로 확인하고 <b>[N명에게 발송]</b>. 발송 중엔 "발송 중…"으로 바뀌고 창이 닫히지 않습니다.</li>
+      </ol>
+      <div class="box naver"><b>발송을 누르면 순서대로</b>① 보이는 리포트를 장별로 찍어 <b>세로로 한 장</b>의 이미지로 합칩니다(링크 1개, 폰에서 이어 보이게) ② 회사 저장소에 올려 공개 링크를 만듭니다 ③ 수신자마다 문안에 <b>"▶ 리포트 보기: 링크"</b>를 넣어 <b>대표번호로 문자</b>를 보냅니다 — 같은 번호는 1통만 ④ 사람마다 성공/실패를 발송 로그에 남깁니다.</div>
+      <div class="box tip"><b>{링크}를 지워버렸어도</b>링크는 반드시 나갑니다 — 문안 끝에 자동으로 붙습니다. 문서 없는 안내 문자는 의미가 없기 때문입니다.</div>
+      <div class="box"><b>결과 알림</b>모두 성공 → <span class="ntoast ok" style="font-size:11.5px;padding:4px 10px">리포트 문자 발송 완료 — N명 ✓</span> · 일부 실패 → <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">발송 N명 완료 · 실패 N명 (이름)</span> · 이미지 만들기부터 실패 → "발송 실패: (원인)". 버튼 줄 오른쪽 "최근 발송 MM-DD · 이름 성공/실패 외 N건"이 갱신됩니다.</div>
+    </div>
+  </div>
+</section>
+
+<section id="queue">
+  <h2>5. 연속 발송 — 수신자 등록된 업체를 한 곳씩 넘기며</h2>
+  <p>월초 보고처럼 여러 업체를 이어서 보낼 때 씁니다. <b>자동으로 나가는 문자는 한 통도 없습니다</b> — 업체마다 리포트를 눈으로 보고 [문자 발송] → 확인 팝업을 눌러야 나갑니다.</p>
+  <div class="flow">
+    <div class="node"><div class="dot">1</div><div class="body"><b>[✈ 연속 발송]</b> → "연속 발송 — {기간}" 창. 수신자가 등록된 업체가 가나다순으로 나오고, 이 기간에 이미 성공 발송한 곳에는 <span class="tg g">{기간} 발송됨</span> 배지. 아래 버튼 <b>[닫기]</b> · <b>[안 보낸 N곳 시작]</b>(초록) · <b>[전체 N곳]</b>. 등록된 업체가 하나도 없으면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">수신자가 등록된 업체가 없습니다 — 먼저 업체별로 수신자를 추가해 주세요.</span></div></div>
+    <div class="node"><div class="dot">2</div><div class="body"><b>확인 팝업 "연속 발송을 시작할까요?"</b> — "{기간} · N곳", 본문 <i>"업체를 한 곳씩 불러와 리포트를 보여드립니다. <b>발송은 업체마다 [문자 발송] → 확인 팝업을 눌러야만 나갑니다</b> — 자동으로 나가는 문자는 없습니다."</i> [취소] / [N곳 시작]. 남은 곳이 0이면 <span class="ntoast err" style="font-size:11.5px;padding:4px 10px">{기간}에 보낼 남은 업체가 없습니다.</span></div></div>
+    <div class="node"><div class="dot">3</div><div class="body">
+      <div class="shot ui" style="padding:12px"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:12px;padding:8px 12px"><b style="color:#065F46;font-size:13px">연속 발송 1/12</b><span style="flex:1;color:#047857;font-size:12px;font-weight:700">가나다상사 (이번 기간 발송 이력 있음)</span><span class="muted" style="color:#059669">보냄 0 · 건너뜀 0</span><span class="btn white" style="color:#047857;border-color:#A7F3D0">건너뛰고 다음</span><span class="btn" style="color:#64748B">중단</span></div></div>
+      <p style="margin:8px 0 0">첫 업체 리포트가 만들어지고, 화면 위에 초록 띠가 붙어 따라옵니다. 리포트를 훑고 <b>[문자 발송] → [N명에게 발송]</b>이 모두 성공하면 <b>자동으로 다음 업체</b>로 넘어갑니다(실패가 하나라도 있으면 넘어가지 않고 그 자리에 머뭅니다). 보낼 필요가 없으면 <b>[건너뛰고 다음]</b>, 그만두려면 <b>[중단]</b>.</p></div></div>
+    <div class="node"><div class="dot">4</div><div class="body">마지막 업체까지 끝나면 <span class="ntoast ok" style="font-size:11.5px;padding:4px 10px">연속 발송 끝 — 보냄 N · 건너뜀 N</span></div></div>
+  </div>
+  <div class="box tip"><b>"발송됨" 판단 기준</b>같은 <b>기간 이름</b>("2026년 7월")으로 성공 로그가 있는 업체입니다. 그래서 8월에 분기 리포트를 새로 보내면 다시 "안 보낸 곳"이 됩니다.</div>
+</section>
+
+<section id="rule">
+  <h2>6. 반검수 원칙 — 왜 팝업이 두 번인가</h2>
+  <div class="grid2">
+    <div class="box"><b>기계가 하는 일</b>기록 모으기, 표 만들기, 이미지 만들기, 링크 붙이기, 여러 명에게 보내기, 로그 남기기.</div>
+    <div class="box"><b>사람이 하는 일</b>업체명·기간·건수가 맞는지 보기, 수신자가 이 회사 사람인지 보기, 문안 확인, 마지막 [발송] 누르기.</div>
+  </div>
+  <div class="box warn"><b>보내고 나면 되돌릴 수 없습니다</b>문자는 회사 대표번호로 즉시 나갑니다. 특히 확인할 것 세 가지 — ① 업체 이름이 검색 목록에서 잘못 눌린 옆 업체가 아닌지 ② 처리 칸에 고객에게 보여도 되는 문장인지(FIELD 처리내용이 그대로 들어감) ③ 수신자 추천 목록의 "접수 회신번호"가 실제 고객 번호인지.</div>
+</section>
+
+<section id="faq">
+  <h2>7. 이럴 땐 어떻게</h2>
+  <div class="faq" style="display:grid;gap:8px">
+    <details><summary>검색해도 업체가 안 나와요</summary><p>임대리스트에서 <b>임대여부가 "임대중"</b>인 기기가 있는 업체만 나옵니다. 이름을 두세 글자로 줄여 다시 검색해 보세요. 임대가 끝난 업체는 이 화면 대상이 아닙니다.</p></details>
+    <details><summary>점검을 갔는데 "정기 점검 0회"로 나와요</summary><p>점검 기록의 작성일이 선택한 기간 안에 있어야 하고, 업체명이 같은 회사로 대조되어야 합니다. 조회 탭 › 기록 조회 › 점검에서 그 기록의 업체명·작성일을 확인하세요. 이름이 전혀 다르게 적혀 있으면 조회 화면의 [기기정보 수정]으로 업체명을 바로잡을 수 있습니다.</p></details>
+    <details><summary>처리 칸이 "진행 중"이라고 나와요</summary><p>그 접수에 연결된 일정의 FIELD 전송 양식에 "처리내용:" 줄이 없고, 접수 상태도 완료가 아닐 때입니다. 일정리스트에서 그 건을 완료 처리하거나 FIELD 양식으로 처리내용을 보낸 뒤 다시 만들면 바뀝니다.</p></details>
+    <details><summary>브랜드가 잘못 나와요</summary><p>모델명 접두로 추정한 결과입니다(예: L8900 → 브라더). 모델명이 특이한 기기는 임대리스트 제조사 칸 값을 그대로 쓰니, 그 값이 틀리면 시트(임대리스트 원본)에서 고쳐야 합니다.</p></details>
+    <details><summary>문자를 보냈는데 고객이 링크가 안 열린대요</summary><p>링크는 저장소의 공개 이미지 주소입니다. 문안을 지나치게 줄여 링크가 잘렸는지 "받는 사람이 보게 될 내용"에서 확인하세요. 발송 로그에는 이미지 링크가 함께 남으니 필요하면 다시 보낼 수 있습니다.</p></details>
+    <details><summary>연속 발송 중에 다른 업체를 검색했어요</summary><p>초록 띠는 그대로 남고 목록 순서도 유지됩니다. 검색한 업체를 보내도 큐 진행에는 반영되지 않으니, 끝나면 띠의 [건너뛰고 다음]으로 원래 순서를 이어가세요.</p></details>
+    <details><summary>PNG가 내려받아지지 않아요</summary><p>브라우저가 여러 파일 다운로드를 막았을 수 있습니다(주소창 아이콘에서 허용). 폰에서는 [인쇄 / PDF] 대신 [문자 발송]으로 내 번호를 수신자로 넣어 확인하는 방법도 있습니다.</p></details>
+  </div>
+</section>
+
+<p class="small" style="text-align:center;margin-top:10px">고객 리포트 길잡이 · 해피콜·홍보물·카운터 문자·조회·관리 길잡이와 같은 형식</p>
+</main>
+</div>
+</body>
+</html>
