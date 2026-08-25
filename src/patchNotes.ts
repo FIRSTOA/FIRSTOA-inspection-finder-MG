@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a16bd8049e",
+    "date": "2026-08-25",
+    "note": "네이버 sync — 티켓 삭제 전 계정 전체 캘린더 uid 생존 확인(미감시 캘린더 이동을 삭제로 오판하던 실사고), 티켓 읽기 페이지네이션 따옴표 수리"
+  },
+  {
+    "hash": "5e9629959d",
+    "date": "2026-08-25",
+    "note": "네이버 팀 완료 캘린더 5팀 완성 — 실제 구조(A·B 공유·E 통합) 반영, list_calendars/peek 액션, REST 1000행 캡 페이지네이션(백로그 정체 수리), 관리탭 캘린더 목록"
+  },
+  {
     "hash": "2b7dd19f5f",
     "date": "2026-08-25",
     "note": "재계약 화면 수리·개선 — KST 날짜 2건, 기기별 분모, 종류별 시뮬레이터, 복원 가드, 복사 보강, 워킹맵 조건 대조, 연결 저장, 판정 누적 가중, 무상 원문, localStorage 잔재 제거"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "47d5e38af4",
     "date": "2026-08-05",
     "note": "예약 문자 디스패치 크론 서울 재등록 SQL (뭄바이 구버전 대체, 적용 완료)"
-  },
-  {
-    "hash": "3c2e0a6e9d",
-    "date": "2026-08-05",
-    "note": "인덱스 병합 단계 분리 — 별도 실행 + 슬라이스 읽기/쓰기 + 실패 시 2회 자동 재시도, indexfinalize 액션"
-  },
-  {
-    "hash": "e689f0c4be",
-    "date": "2026-08-05",
-    "note": "숨김 연동 완결 — 검색 뷰·상세 RPC에 숨김 필터 + 이벤트도 업체 기준 취소"
   }
 ];

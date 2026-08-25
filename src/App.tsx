@@ -4680,7 +4680,7 @@ export default function App() {
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
-  const FIELD_NAVER_BUTTON = false;
+  const FIELD_NAVER_BUTTON = true; // 2026-08-25: 팀 완료 캘린더 5팀 설정 완료 → 필드탭에서도 [일정정리] 노출 (숨겨둔 이유가 해소됨)
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
   // 통합 전송 팝업은 "일정리스트에서 넘어온 세션"에서만 — ref는 리렌더를 못 일으켜 상태를 병행한다
   const [linkedTicket, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5473,12 +5473,13 @@ export default function App() {
 
   // 복붙 전송(일정 연결 없음) → 일정리스트에서 같은 업체의 미완료 AS 일정을 찾아 완료 처리를 제안.
   // 자동 완료는 안 한다(다른 건일 수 있음) — 정확히 1건일 때만 물어보고, 여러 건이면 안내만.
-  const offerTicketMatchAfterSend = async (formText: string) => {
+  // manual: 필드탭 [일정정리] 버튼에서 직접 호출 — 매칭이 없을 때도 결과를 알려준다 (전송 후 자동 호출은 조용히)
+  const offerTicketMatchAfterSend = async (formText: string, opts: { manual?: boolean } = {}) => {
     try {
       const vendorLine = extractVendorFromText(formText);
       const core = historyCoreName(vendorLine) || vendorLine.trim();
       const key = vendorMatchKey(core);
-      if (!key || key.length < 2) return;
+      if (!key || key.length < 2) { if (opts.manual) showToast("양식에서 업체명을 읽지 못했어요 — 업체명 줄을 확인해 주세요", "error"); return; }
       // KST 자정 경계(00~09시) 보정 — UTC 그대로 자르면 하루 어긋난다
       const from = new Date(Date.now() + 9 * 3600000 - 14 * 86400000).toISOString().slice(0, 10);
       const until = new Date(Date.now() + 9 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);
@@ -5517,6 +5518,8 @@ export default function App() {
         });
       } else if (matches.length > 1) {
         showToast(`일정리스트에 이 업체 미완료 일정이 ${matches.length}건 있어요 — 일정리스트에서 완료 처리해 주세요`, "warning", { duration: 7000 });
+      } else if (opts.manual) {
+        showToast(`일정리스트에 "${core}"의 미완료 AS 일정이 없어요 (최근 2주~내일)`, "warning");
       }
     } catch { /* 매칭은 부가 기능 — 실패해도 전송 흐름에 영향 없음 */ }
   };
@@ -6413,7 +6416,7 @@ export default function App() {
                   <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="col-span-3 rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">AS방 보내기</button>
                   <button onClick={() => handleSendAll("자가")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-teal-200 bg-teal-50 py-3 text-sm font-black text-teal-700 shadow-sm transition hover:bg-teal-100 active:scale-[0.99] disabled:opacity-40`}>자가신청</button>
                   <button onClick={() => handleSendAll("부품")} disabled={!hasOutput || sending} className={`${FIELD_NAVER_BUTTON ? "col-span-2" : "col-span-3"} whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-black text-amber-700 shadow-sm transition hover:bg-amber-100 active:scale-[0.99] disabled:opacity-40`}>부품신청</button>
-                  {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} title="완료/익일 정리 — 네이버 캘린더까지 반영" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">네이버</button>}
+                  {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} title="완료/익일 정리 — 팀 완료 캘린더까지 반영 (전송 없이 정리만)" className="col-span-2 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-black text-emerald-700 disabled:opacity-40">일정정리</button>}
                 </>
                 )
               ) : mode === "replacement" ? (
@@ -6524,7 +6527,7 @@ export default function App() {
             </> : <>
               <button onClick={() => handleSendAll("normal", "inspection")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "점검방 보내기"}</button>
               <button onClick={() => handleSendAll("normal", "as")} disabled={!hasOutput || sending} className="flex-1 whitespace-nowrap rounded-xl bg-rose-500 py-3 text-sm font-black text-white shadow-md shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.99] disabled:bg-slate-200 disabled:shadow-none">{sending ? "전송 중…" : "AS방 보내기"}</button>
-              {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (!t) { showToast("일정리스트에서 [FIELD로]로 불러온 일정만 정리할 수 있어요", "error"); return; } setTicketDonePrompt({ ...t, sentText: buildResultText() }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">네이버 캘린더</button>}
+              {FIELD_NAVER_BUTTON && <button onClick={() => { const t = pendingAsTicketRef.current; if (t) { setTicketDonePrompt({ ...t, sentText: buildResultText() }); return; } void offerTicketMatchAfterSend(buildResultText(), { manual: true }); }} className="flex-1 whitespace-nowrap rounded-lg border border-emerald-600 bg-white py-3 text-sm font-bold text-emerald-700">일정 정리(완료/익일)</button>}
             </>) : mode === "replacement" ? (
               <button type="button" disabled className="flex-[1.5] whitespace-nowrap rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-semibold text-slate-400">전송 불가 · 복사 전용</button>
             ) : <>
