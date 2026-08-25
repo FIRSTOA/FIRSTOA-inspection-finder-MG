@@ -9,7 +9,7 @@ import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatu
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
-import { fieldTicketVendor, historyCoreName, logisticsTicketInfo } from "./ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, slashTrainVendor } from "./ids";
 import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
@@ -429,7 +429,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const firstToken = raw.split(/\s+/)[0] || "";
     if (who && raw.startsWith(who)) raw = raw.slice(who.length).replace(/^[\s\-–—:]+/, "");
     else if (MEMBER_NAMES.has(firstToken.replace(/[-–—:]+$/, ""))) raw = raw.slice(firstToken.length).replace(/^[\s\-–—:]+/, "");
-    const fallback = historyCoreName(raw);
+    // "계약갱신제안 / SS급 / 한국농어민신문 / 조은유 차장" 꼴 — 등급 칸 다음이 업체다. 첫 칸(내용)으로 검색하면 엉뚱한 결과가 난다
+    const fallback = historyCoreName(slashTrainVendor(raw) || raw);
     if (!t.vendor_code) { setHistVendor(fallback); return; }
     void vendorNameByCode(t.vendor_code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
   };
@@ -729,7 +730,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 네이버 목록 뷰 구도(시간|분류|내용|팀)의 한 줄 행 — 목록 탭·그날 팝업 공용
   // 좌측 한 칸에 "C팀 (오후 3시)" — 팀 시간대와 다르면 실제 시각을 그대로 보여준다
   const teamTimeLabel = (team: string | null, time: string) => {
-    // 팀이 있으면 항상 팀 시간대로 — 접수 시각(12:53 등)은 일정리스트의 접수시간 칸에서만 보여준다
+    // 팀이 있으면 항상 팀 시간대로 — 접수 시각(12:53 등)은 표에 따로 보여주지 않는다(접수시간 열 제거, 2026-08-25)
     if (team === "기타" && time) return Number(time.slice(0, 2)) < 12 ? `오전 ${time}` : `오후 ${time}`;
     if (team && time) return `${team}팀 (${TEAM_SLOT_LABEL[team] || time})`;
     if (team) return `${team}팀 (종일)`;
@@ -1848,12 +1849,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               }
               if (doneRows.length || naverDone.length) groups.push({ key: "__done__", rows: doneRows, naver: naverDone });
               const th = "whitespace-nowrap px-3 py-2 text-xs font-black text-slate-500";
-              const elapsedLabel = (t: AsTicket) => {
-                if (!t.time) return "";
-                const min = Math.floor((Date.now() - new Date(`${t.date}T${t.time}:00+09:00`).getTime()) / 60_000);
-                if (min < 10) return ""; // 10분 미만은 정상 처리 흐름
-                return min < 60 ? `${min}분 경과` : `${Math.floor(min / 60)}시간 경과`;
-              };
               const dowOf = (date: string) => ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()];
               // 네이버 원본 행 — 티켓과 같은 컬럼 구도로 한 표에 들어간다 (클릭=네이버 상세, 완료=제자리 체크)
               const naverListRow = (ev: NaverEventRow, done: boolean) => {
@@ -1863,7 +1858,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{evTeam === "종일" || evTeam === "기타" ? evTeam : `${evTeam}팀`}</td>
                     <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ev.location || "") || "-"}</td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold text-slate-300">-</td>
                     {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ev.date)})</span></td>}
                     <td className="px-3 py-1.5"><div className={`max-w-[560px] truncate text-sm font-black ${done ? "text-slate-400 line-through" : "text-slate-900"}`} title={ev.title}>{ev.title || "(제목 없음)"}</div></td>
                     <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ev.description || ""}>{ev.description || "-"}</div></td>
@@ -1881,7 +1875,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{ticket.team === "기타" ? "기타" : `${ticket.team}팀`}</td>
                   <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>{shortCat(displayTypeOf(ticket))}</span></td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{ticket.source === "naver" ? <span className="text-slate-300">-</span> : (ticket.time || "종일")}{ticket.source !== "naver" && elapsedLabel(ticket) && <span className="ml-1 text-[10px] font-black text-amber-600">⏱ {elapsedLabel(ticket)}</span>}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[560px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(ticket.vendor.trim())} onOpen={() => openTicketHistory(ticket)} /></div>
@@ -1966,7 +1959,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <table className="w-full min-w-[1100px] text-left">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50">
-                          <th className={th}>팀</th><th className={th}>구분</th><th className={th}>지역구</th><th className={th}>접수시간</th>{dayFilter === "scheduled" && <th className={th}>방문일정</th>}
+                          <th className={th}>팀</th><th className={th}>구분</th><th className={th}>지역구</th>{dayFilter === "scheduled" && <th className={th}>방문일정</th>}
                           <th className={`${th} w-[34%]`}>제목</th><th className={`${th} w-[15%]`}>접수내용</th>
                           <th className={th}>기기</th><th className={`${th} text-right`}>처리</th>
                         </tr>

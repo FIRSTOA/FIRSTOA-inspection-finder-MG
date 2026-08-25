@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0dc9fb07fb",
+    "date": "2026-08-25",
+    "note": "주석 정리 — 일정정리 버튼 언급 제거"
+  },
+  {
     "hash": "4573636ccf",
     "date": "2026-08-25",
     "note": "정리 팝업 오타(양체→양식)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "abbb3218cb",
     "date": "2026-08-13",
     "note": "필드 공유폼에 지역 셀렉트 + 토스트 고정패널 위 배치 + 자가·부품 구분 관문 해제"
-  },
-  {
-    "hash": "bf729d291b",
-    "date": "2026-08-13",
-    "note": "알림 체계 이원화 — 오류·경고는 확인 모달, 성공·진행만 토스트"
   }
 ];

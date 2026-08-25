@@ -172,3 +172,14 @@ export function logisticsTicketInfo(raw: string): { vendor: string; item: string
   }
   return { vendor: fieldTicketVendor(flat).vendor, item: "", category };
 }
+
+/**
+ * "계약갱신제안 / SS급 / 한국농어민신문 / 조은유 차장" 꼴(네이버 수기 제목의 슬래시 열차)에서 업체 칸을 고른다 —
+ * 등급 칸(SS급·S·V…) 바로 뒤가 업체다. 첫 칸(내용)으로 이력을 검색하면 엉뚱한 결과가 난다(실사고). 해당 꼴이 아니면 빈값.
+ */
+export function slashTrainVendor(raw: string): string {
+  const parts = String(raw || "").split(/\s*\/\s*/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 3) return "";
+  const gradeAt = parts.findIndex((part) => /^(SS|S|V|NN|N)\s*급?$/i.test(part));
+  return gradeAt >= 0 && parts[gradeAt + 1] ? parts[gradeAt + 1] : "";
+}
