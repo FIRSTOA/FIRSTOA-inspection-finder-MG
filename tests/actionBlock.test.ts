@@ -100,3 +100,15 @@ describe("업체명 라벨", () => {
     expect(buildActionBlock({ vendor: "빌드인사이트" }, { author: "신정훈", reason: "   " })).toBe("");
   });
 });
+
+describe("제목 머리의 '이름 - a/s' 접두 (2026-08-25 실사고)", () => {
+  it("등급 접두가 없어도 이름·구분 기호·a/s를 벗기고 업체명을 잡는다", () => {
+    const block = buildActionBlock({ vendor: "이호준 - a/s NN SL-K3250NR 위례올림수학학원-분기마감 종료일 24. 6" }, { author: "이호준", reason: "정착기 교체 완료" });
+    expect(block).toContain("업체명: 위례올림수학학원");
+    expect(block).not.toContain("업체명: 이호준");
+  });
+  it("등급 접두가 있는 원래 형태도 그대로 정상", () => {
+    const block = buildActionBlock({ vendor: "이호준 - a/s NN SL-K3250NR 1NN위례올림수학학원-분기마감 종료일 24. 6" }, { author: "이호준", reason: "완료" });
+    expect(block).toContain("업체명: 위례올림수학학원");
+  });
+});

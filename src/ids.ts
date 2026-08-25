@@ -129,7 +129,7 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
 
 // 일정리스트→FIELD 변환용: 네이버 미러 제목("이민구 셋팅요청 S D450 30S업체명…분기마감 종료일 …")에서
 // 업체명부(슬래시·공백 보존)와 구분을 꺼낸다 — 접수원본 변환(A양식)과 같은 모양이 되도록.
-const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$/;
+const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(as|a\/s)$/i;
 export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
   const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
   const tokens = flat.split(" ");
@@ -144,7 +144,9 @@ export function fieldTicketVendor(raw: string): { vendor: string; gubun: string 
     let start = 0;
     while (start < tokens.length) {
       const token = tokens[start];
-      if (FIELD_TITLE_ACTION.test(token) || /^(SS|NN|S|N|V)$/.test(token) || /^[A-Za-z0-9./-]+$/.test(token) || /^[가-힣]{2,4}$/.test(token) && start === 0 && tokens.length > 2 && FIELD_TITLE_ACTION.test(tokens[1] || "")) { start += 1; continue; }
+      // 직원 이름 접두는 뒤에 행위어·구분 기호("-")·A/S가 올 때 벗긴다 — "이호준 - a/s NN …"이 통째로 업체명이 되던 실사고
+      const nameThenMarker = /^[가-힣]{2,4}$/.test(token) && start === 0 && tokens.length > 2 && (FIELD_TITLE_ACTION.test(tokens[1] || "") || /^[-–—:]$/.test(tokens[1] || ""));
+      if (FIELD_TITLE_ACTION.test(token) || /^[-–—:]$/.test(token) || /^(SS|NN|S|N|V)$/.test(token) || /^[A-Za-z0-9./-]+$/.test(token) || nameThenMarker) { start += 1; continue; }
       break;
     }
     vendor = tokens.slice(start).join(" ");

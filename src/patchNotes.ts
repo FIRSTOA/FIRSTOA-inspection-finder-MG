@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "78e679dd51",
+    "date": "2026-08-25",
+    "note": "필드탭 직접 사용도 [카톡방 전송] 통합 버튼 하나로 — 방 선택·자가/부품 자동 감지, 전송 후 일정 완료/익일 연쇄"
+  },
+  {
     "hash": "4ca28dbba3",
     "date": "2026-08-25",
     "note": "필드탭 [일정정리] 버튼 공개(직접 양식도 매칭), 납품 완료·연기는 카톡 없이 웹만, 중간보고 현재시각·#미배정·타팀 CS 지원 포함"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4287229f44",
     "date": "2026-08-07",
     "note": "지역 판정 파서 일치 + 사진 업로드 재시도 + 카운터문자 결과 우선 표시"
-  },
-  {
-    "hash": "4ec6a5681a",
-    "date": "2026-08-05",
-    "note": "카운터 문자전송 구현 — 직원 Streamlit 원본 이식 (모듈 3분리, 설정은 DB 공유)"
   }
 ];

@@ -1734,6 +1734,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           </div>
 
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm}
+            // AS 일정은 일정리스트 [FIELD]와 같은 직행 — 접수원본이 있으면 그걸, 없으면 제목으로 조립한 양식으로 바로 FIELD 탭 (예전엔 과거 양식 검색창이 먼저 떴다)
+            onFieldDirect={(t) => {
+              const ticket = tickets.find((x) => x.id === t.id);
+              if (!ticket) return;
+              const raw = receptionRawOf(ticket);
+              const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor };
+              if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link);
+            }}
             onRemove={(t) => { const target = tickets.find((x) => x.id === t.id); if (target) removeTicket(target); }} />}
           <div className={`space-y-3 md:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {/* 한 구조로 통일(2026-08-19) — 예정 일정은 익일로 넘어올 때까지 배정을 거의 하지 않아

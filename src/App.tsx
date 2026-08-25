@@ -2313,7 +2313,9 @@ function changeSpareToken(raw: string, token: SpareToken, delta: number): string
 }
 
 function spareStorageLocation(raw: string) {
-  return raw.match(/(?:^|\n)(?:보관\s*)?위치\s*[:：]\s*(.*)$/im)?.[1]?.trim() || "";
+  // 끝 공백을 여기서 trim하면 입력 중 스페이스가 매 렌더마다 지워져 띄어쓰기가 불가능해진다(실사고) — 표시값은 그대로, 빈값 판정만 trim
+  const value = raw.match(/(?:^|\n)(?:보관\s*)?위치\s*[:：] ?(.*)$/im)?.[1] || "";
+  return value.trim() ? value : "";
 }
 
 function changeSpareStorageLocation(raw: string, location: string) {
@@ -2322,7 +2324,7 @@ function changeSpareStorageLocation(raw: string, location: string) {
     .filter((line) => !/^(?:보관\s*)?위치\s*[:：]/i.test(line.trim()))
     .join("\n")
     .trimEnd();
-  return location.trim() ? `${withoutLocation}${withoutLocation ? "\n" : ""}보관 위치: ${location.trim()}` : withoutLocation;
+  return location.trim() ? `${withoutLocation}${withoutLocation ? "\n" : ""}보관 위치: ${location}` : withoutLocation;
 }
 
 function SpareQuickEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -3973,13 +3975,18 @@ export default function App() {
   const lastBlankVendor = useRef<string>("");
   // 탭별 작업상태 보관 (탭을 바꿔도 적던 내용이 사라지지 않게)
   const modeRef = useRef<Mode>("inspection");
-  const modeStateRef = useRef<Record<string, {
+  type ModeSnapshot = {
     inputText: string; textOutput: string; listOutput: ResultItem[];
     itemForms: PerItemForm[]; sharedForm: SharedForm; selectedItem: number;
     editedBlocks: Record<number, string>; airForm: AirPurifierForm;
     reportTypes: string[]; reportTypeOther: string;
     photos?: { file: File; url: string; id?: string }[]; photoUploadUrls?: string[] | null; photoAlbumLinks?: Record<string, string>;
-  }>>({});
+  };
+  // 다른 탭의 작업본도 세션 스냅샷에서 되살린다 — 예전엔 메모리에만 있어서, 확장성 탭에 머무는 동안
+  // 새 버전 자동 새로고침이 일어나면 점검 탭 작성분만 사라졌다("불러오기 하고 돌아오니 초기화" 실사고). 사진(File)은 제외.
+  const modeStateRef = useRef<Record<string, ModeSnapshot>>(
+    (ss.modeStates && typeof ss.modeStates === "object" ? ss.modeStates : {}) as Record<string, ModeSnapshot>,
+  );
 
 
   // On a restored session, skip the first auto-transform so it doesn't
@@ -4358,6 +4365,8 @@ export default function App() {
           // 점검·미양식 외 탭(PC·복합기확장성·물류·교체·담당자변경·불만·미수·초과·재계약)도
           // 새로고침에 작성분이 남도록 함께 보관한다
           pcForm, copierExpansionForm, logisticsForm, replacementForm, contactChangeForm, catForms,
+          // 현재 탭이 아닌 탭들의 작업본 — 탭을 바꿀 때 ref에 저장되므로(handleModeChange) 여기서 함께 내려쓴다
+          modeStates: Object.fromEntries(Object.entries(modeStateRef.current).map(([key, snap]) => [key, { ...snap, photos: undefined, photoUploadUrls: undefined, photoAlbumLinks: undefined }])),
         }));
       } catch {
         // ignore quota / private mode errors
