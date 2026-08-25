@@ -5,7 +5,8 @@
  * 후보는 전부 **현재 분기 워킨맵**에서만 찾는다 (suggest_workin_candidates RPC).
  * 규칙: 마지막 점검 경과일 기준(조절 가능) · N·NN·S는 언제든 · SS·V는 분기 중반부터 권장.
  */
-import { parseEquipComment } from "./ids";
+import { fieldTicketVendor, parseEquipComment } from "./ids";
+import { RENEWAL_DONE_LABELS } from "./workinPlaces";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
@@ -41,7 +42,9 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [onlyMine, setOnlyMine] = useState(true);
   const [anchorId, setAnchorId] = useState("");
   const [anchorQuery, setAnchorQuery] = useState("");
-  const [anchorGeo, setAnchorGeo] = useState<{ name: string; lat: number; lng: number } | null>(null);
+  const [anchorGeo, setAnchorGeo] = useState<{ name: string; lat: number; lng: number; placeId?: number } | null>(null);
+  // 기준 업체를 후보 목록 맨 위에 고정한 기록 — 조건(등급·경과일·완료)에 걸려 빠졌어도 사람이 콕 찍은 곳은 추가할 수 있어야 한다
+  const [anchorPin, setAnchorPin] = useState<{ id: number; reason: string } | null>(null);
   const [grades, setGrades] = useState<string[]>(["N", "NN", "S"]);
   const [minDays, setMinDays] = useState(60);
   const [kind, setKind] = useState<"quarter" | "renewal">("quarter");
@@ -73,8 +76,8 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (!raw) { setAnchorGeo(null); return; }
     // 법인 접두어·기호를 뺀 핵심 토큰으로 검색 — "주식회사 무암 (Mooam)" → "무암"
     const core = raw.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || raw;
-    const hits = await selectRows<{ name: string; latitude: number | null; longitude: number | null }>(
-      "workin_map_places", `select=name,latitude,longitude&name=ilike.*${encodeURIComponent(core.slice(0, 8))}*&limit=20`,
+    const hits = await selectRows<{ id: number; name: string; latitude: number | null; longitude: number | null }>(
+      "workin_map_places", `select=id,name,latitude,longitude&name=ilike.*${encodeURIComponent(core.slice(0, 8))}*&limit=20`,
     ).catch(() => []);
     const key = vendorMatchKey(raw);
     const scored = hits
@@ -87,7 +90,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score);
     const hit = scored[0]?.h;
-    if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number }); return; }
+    if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number, placeId: hit.id }); return; }
     // 워킨맵에 없는 업체(예: 분기점검 대상 아님) — 일정의 주소 → 입력값 순으로 지오코딩
     for (const source of [address, raw]) {
       const q = String(source || "").trim();
@@ -102,6 +105,34 @@ export default function AutoSchedule({ author }: { author: string }) {
   const anchorTicket = tickets.find((t) => t.id === anchorId);
   useEffect(() => { void resolveAnchor(anchorTicket?.vendor || anchorQuery, anchorTicket?.address || ""); }, [anchorTicket?.vendor, anchorTicket?.address, anchorQuery, resolveAnchor]);
 
+  // 기준 업체 한 줄 만들기: ① 조건 없는 RPC로 그 자리 데이터(최근 점검·기기)를 얻고 ② 그래도 없으면(완료 라벨·타팀) 워킨맵 행으로 최소 구성
+  const pinnedAnchorRow = async (placeId: number, lat: number, lng: number): Promise<{ row: Place; reason: string } | null> => {
+    try {
+      const near = await rpc<Place[]>("suggest_workin_candidates", { p_team: team, p_kind: kind, p_grades: [], p_lat: lat, p_lng: lng, p_min_days: 0, p_limit: 3 });
+      const hit = (near || []).find((r) => r.id === placeId);
+      if (hit) {
+        const reason = kind === "quarter" && hit.days_since < minDays ? `최근 점검 ${hit.days_since}일 전`
+          : grades.length && hit.grade && !grades.includes(hit.grade) ? `등급 ${hit.grade} — 필터 밖` : "";
+        return { row: hit, reason };
+      }
+    } catch { /* 아래 폴백 */ }
+    const rows = await selectRows<{ id: number; name: string; label: string; comment: string; address: string; address_detail: string; latitude: number | null; longitude: number | null; team: string }>(
+      "workin_map_places", `select=id,name,label,comment,address,address_detail,latitude,longitude,team&id=eq.${placeId}&limit=1`,
+    ).catch(() => []);
+    const w = rows[0];
+    if (!w) return null;
+    const grade = (w.name.match(/^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z]|$)/)?.[1] || "").toUpperCase();
+    const reason = RENEWAL_DONE_LABELS.has(w.label) ? `이미 완료(${w.label})` : w.team && w.team !== team ? `${w.team}팀 소속` : "추천 조건 밖";
+    const row: Place = {
+      id: w.id, place_name: w.name, vendor: fieldTicketVendor(w.name).vendor || w.name, grade, label: w.label || "",
+      addr: `${w.address || ""} ${w.address_detail || ""}`.trim(), lat: w.latitude, lng: w.longitude, comment: w.comment || "",
+      last_date: null, days_since: 9999, distance_km: 0, quarter_ok: true, never_visited: false, code: "",
+      prev_date: null, last_pages: null, prev_pages: null, last_toner: null, last_spare: null, last_waste: null,
+      last_serial: null, prev_serial: null, last_special: null, device_count: 0, devices: null,
+    };
+    return { row, reason };
+  };
+
   const suggest = async () => {
     setLoading(true);
     setNotice("");
@@ -111,10 +142,17 @@ export default function AutoSchedule({ author }: { author: string }) {
         p_lat: anchorGeo?.lat ?? null, p_lng: anchorGeo?.lng ?? null,
         p_min_days: kind === "quarter" ? minDays : 0, p_limit: 60, // 등급별 상한(가까운 60곳씩) — 전체 120 캡은 SS·V가 S를 밀어냈다
       });
-      setRows(list || []);
+      let merged: Place[] = list || [];
+      setAnchorPin(null);
+      // 검색한 기준 업체가 조건에 걸려 목록에서 빠졌으면 맨 위에 고정하고 사유를 단다 — "내가 원하는 업체도 추가" 요구(2026-08-25)
+      if (anchorGeo?.placeId != null && !merged.some((r) => r.id === anchorGeo.placeId)) {
+        const pinned = await pinnedAnchorRow(anchorGeo.placeId, anchorGeo.lat, anchorGeo.lng);
+        if (pinned) { merged = [pinned.row, ...merged]; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
+      }
+      setRows(merged);
       setPicked(new Set());
-      setNotice(`${(list || []).length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}`);
-      void getVendorFlagsBatch((list || []).map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
+      setNotice(`${merged.length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}`);
+      void getVendorFlagsBatch(merged.map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
     } catch (e) {
       setNotice(`추천 실패: ${(e as Error).message}`);
     } finally { setLoading(false); }
@@ -336,6 +374,7 @@ export default function AutoSchedule({ author }: { author: string }) {
                       <span className="flex flex-wrap items-center gap-1.5">
                         {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
                         <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
+                        {anchorPin?.id === r.id && <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">📍 기준 업체{anchorPin.reason ? ` · ${anchorPin.reason}` : ""}</span>}
                         {r.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(r.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{r.grade}</span>}
                         {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
                         {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
