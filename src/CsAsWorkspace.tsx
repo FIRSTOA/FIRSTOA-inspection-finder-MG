@@ -1751,6 +1751,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {/* 중간보고 — 12시·14시 카톡 보고 자동 생성 */}
                 <button type="button" onClick={openMidReport}
                   className="ml-auto shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
+                <a href="/guide/schedule.html" target="_blank" rel="noreferrer" title="일정리스트 사용법 — 버튼별 동작·네이버 연동 설명"
+                  className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">❔ 사용법</a>
                 <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
                   {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
                 </span>
