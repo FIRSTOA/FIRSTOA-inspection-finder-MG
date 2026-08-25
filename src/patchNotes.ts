@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "2b7dd19f5f",
+    "date": "2026-08-25",
+    "note": "재계약 화면 수리·개선 — KST 날짜 2건, 기기별 분모, 종류별 시뮬레이터, 복원 가드, 복사 보강, 워킹맵 조건 대조, 연결 저장, 판정 누적 가중, 무상 원문, localStorage 잔재 제거"
+  },
+  {
     "hash": "58174438d1",
     "date": "2026-08-25",
     "note": "재계약 통계 수술 — 월기본료 기기합산, 누적감지 창 승계+간격 폴백, 다기기 전표 귀속, 보증금 오독, 실질잔액 완납 반영"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e689f0c4be",
     "date": "2026-08-05",
     "note": "숨김 연동 완결 — 검색 뷰·상세 RPC에 숨김 필터 + 이벤트도 업체 기준 취소"
-  },
-  {
-    "hash": "b8bea5d206",
-    "date": "2026-08-05",
-    "note": "숨김→방문일지 연동 보강 — 업체+작성자+날짜 기준 취소 추가 (중복 전송분의 원문 불일치 누락 해결)"
   }
 ];

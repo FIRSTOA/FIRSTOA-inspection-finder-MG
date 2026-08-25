@@ -67,7 +67,9 @@ function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilt
   return t.scheduleType as DisplayFilter;
 }
 // AS 완료는 팀별 네이버 완료 캘린더로 이동한다 — 표기도 그 캘린더 이름을 쓴다
-const DONE_CAL_LABEL: Record<Team, string> = { A: "강북A as", B: "강서B as", C: "강남C as", D: "경기D as", E: "지방E as", 기타: "as완료" };
+// 팀 완료 캘린더의 실제 이름(네이버 CalDAV displayname 실측, 2026-08-25) — A·B는 "강북서AB as" 하나를 같이 쓴다
+const DONE_CAL_LABEL: Record<Team, string> = { A: "강북서AB as", B: "강북서AB as", C: "강남C as", D: "경기 D as", E: "E지역 AS/점검 토탈", 기타: "as완료" };
+const NAVER_MAIN_CAL = "76de84c7-48a2-46c6-8de0-edc721a03f3f"; // 익일통합as — 접수·수기 일정이 모이는 대상 캘린더
 
 const storageKey = "cs_as_tickets_v4";
 const REPORT_SEP = "-------------------"; // 중간보고 구분선 — 카톡에서 섹션이 끊어 읽히게
@@ -539,7 +541,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [naverDetail, setNaverDetail] = useState<NaverEventRow | null>(null);
   // 납품철수교체휴가교육 캘린더(75632617) — 그 외(익일통합as)는 AS 미처리와 같은 보라 계열
   const NAVER_DELIVERY_CAL = "75632617";
-  const naverCategoryOf = (ev: { calendar_id: string }): DisplayFilter => (ev.calendar_id === NAVER_DELIVERY_CAL ? "납품철수교체휴가교육" : "익일통합as");
+  // 팀 완료 캘린더 id — 관리 탭 설정(app_config NAVER_TEAM_CALENDAR_*)이 원본. 완료 캘린더에서 온 일정은 "AS[완료]"로 분류한다
+  const [teamCalIds, setTeamCalIds] = useState<Partial<Record<Team, string>>>({ C: "75904193" });
+  useEffect(() => {
+    selectRows<{ key: string; value: string }>("app_config", "select=key,value&key=like.NAVER_TEAM_CALENDAR_*")
+      .then((rows) => {
+        const next: Partial<Record<Team, string>> = {};
+        for (const row of rows) { const t = row.key.replace("NAVER_TEAM_CALENDAR_", "") as Team; if ((row.value || "").trim()) next[t] = row.value.trim(); }
+        if (Object.keys(next).length) setTeamCalIds(next);
+      })
+      .catch(() => { /* 설정을 못 읽으면 C만 아는 기본값 유지 */ });
+  }, []);
+  const doneCalIds = useMemo(() => new Set(Object.values(teamCalIds).filter(Boolean) as string[]), [teamCalIds]);
+  const naverCategoryOf = (ev: { calendar_id: string }): DisplayFilter =>
+    ev.calendar_id === NAVER_DELIVERY_CAL ? "납품철수교체휴가교육" : doneCalIds.has(ev.calendar_id) ? "AS[완료]" : "익일통합as";
   const naverChipStyle = (ev: { calendar_id: string; completed: boolean }) =>
     ev.completed ? "border-slate-200 bg-slate-50 text-slate-400 line-through"
       : ev.calendar_id === NAVER_DELIVERY_CAL ? "border-rose-200 bg-rose-100 text-rose-700 hover:bg-rose-200"
@@ -594,11 +609,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     }
   };
   // 캘린더 간 이동 — 동기화 대상 캘린더면 분류가 바뀌고, 그 외(완료 캘린더 등)면 목록에서 빠진다
-  const NAVER_CAL_LIST = [
-    { id: "76de84c7-48a2-46c6-8de0-edc721a03f3f", name: "익일통합as" },
-    { id: NAVER_DELIVERY_CAL, name: "납품철수교체휴가교육" },
-    { id: "75904193", name: "강남C as (완료 캘린더)" },
-  ];
+  // 캘린더 이동 선택지 — 익일통합as·납품 + 설정된 팀 완료 캘린더 전부(같은 id는 한 번만: 강북서AB as)
+  const NAVER_CAL_LIST = useMemo(() => {
+    const list = [
+      { id: NAVER_MAIN_CAL, name: "익일통합as" },
+      { id: NAVER_DELIVERY_CAL, name: "납품철수교체휴가교육" },
+    ];
+    for (const t of ["A", "B", "C", "D", "E"] as Team[]) {
+      const id = teamCalIds[t];
+      if (id && !list.some((c) => c.id === id)) list.push({ id, name: `${DONE_CAL_LABEL[t]} (완료 캘린더)` });
+    }
+    return list;
+  }, [teamCalIds]);
   const transferNaverEvent = async (toCal: string) => {
     const ev = naverDetail;
     if (!ev) return;
@@ -606,7 +628,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (!await askConfirm(`이 일정을 "${toName}"(으)로 옮길까요?`)) return;
     try {
       await invokeEdgeFunction("naver-calendar-push", { action: "caldav_transfer", uid: ev.uid, calId: ev.calendar_id, toCal });
-      const synced = toCal === "76de84c7-48a2-46c6-8de0-edc721a03f3f" || toCal === NAVER_DELIVERY_CAL;
+      const synced = toCal === NAVER_MAIN_CAL || toCal === NAVER_DELIVERY_CAL;
       if (synced) {
         const next = { ...ev, calendar_id: toCal };
         setNaverDetail(next);

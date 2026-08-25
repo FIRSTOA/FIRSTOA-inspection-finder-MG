@@ -3,6 +3,7 @@ import { askConfirm } from "./confirmModal";
 import { AlertTriangle, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { GAS_GET_URL } from "./api";
+import { notify } from "./toast";
 import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
 
@@ -35,6 +36,17 @@ const ROOM_REGIONS = ["*", "A", "B", "C", "D", "CD"];
 
 export default function SystemAdmin() {
   const [config, setConfig] = useState<ConfigRow[]>([]);
+  // 네이버 계정에 보이는 캘린더 목록(CalDAV PROPFIND) — 팀 완료 캘린더 ID를 공유 URL 없이도 고를 수 있게
+  const [naverCalList, setNaverCalList] = useState<Array<{ id: string; name: string; owner: string }> | null>(null);
+  const [naverCalLoading, setNaverCalLoading] = useState(false);
+  const loadNaverCalList = async () => {
+    setNaverCalLoading(true);
+    try {
+      const r = await invokeEdgeFunction<{ calendars?: Array<{ id: string; name: string; owner: string }> }>("naver-calendar-sync", { action: "list_calendars" });
+      setNaverCalList((r.calendars || []).filter((c) => !/내 캘린더|내 할 일|네이버 예약/.test(c.name)));
+    } catch (e) { notify(`캘린더 목록 조회 실패: ${(e as Error).message}`, "error"); }
+    finally { setNaverCalLoading(false); }
+  };
   const [rooms, setRooms] = useState<RoomRow[]>([]);
   const [jobs, setJobs] = useState<SheetJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,10 +225,27 @@ export default function SystemAdmin() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">팀별 완료 캘린더 ID</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">일정 완료 시 익일통합에서 이 캘린더로 이동합니다. 비운 팀은 이동 안 함. (예: C = 강남C as)</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">일정 완료 시 익일통합as에서 이 캘린더로 이동합니다. 비운 팀은 제자리 완료 체크만. A·B는 "강북서AB as" 하나를 같이 씁니다(같은 ID).</p>
+              <button type="button" onClick={() => void loadNaverCalList()} disabled={naverCalLoading}
+                className="mt-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+                {naverCalLoading ? "불러오는 중…" : "네이버 캘린더 목록 불러오기"}
+              </button>
+              {naverCalList && (
+                <ul className="mt-2 max-h-48 space-y-0.5 overflow-y-auto text-[11px] font-semibold text-slate-600">
+                  {naverCalList.length === 0 && <li className="text-slate-400">캘린더가 없습니다</li>}
+                  {naverCalList.map((c) => (
+                    <li key={c.id} className="flex items-center gap-2">
+                      <span className="w-40 truncate font-black text-slate-800">{c.name || "(이름 없음)"}</span>
+                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">{c.id}</code>
+                      <button type="button" onClick={() => { void navigator.clipboard.writeText(c.id).then(() => notify(`${c.name} ID 복사 ✓`, "success")).catch(() => notify("복사 실패", "error")); }}
+                        className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">복사</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {(["A", "B", "C", "D"] as const).map((t) => (
+              {(["A", "B", "C", "D", "E"] as const).map((t) => (
                 <label key={t} className="flex items-center gap-1 text-xs font-black text-slate-500">{t}
                   <input defaultValue={valueOf(`NAVER_TEAM_CALENDAR_${t}`)} onBlur={(e) => { if (e.target.value !== valueOf(`NAVER_TEAM_CALENDAR_${t}`)) void saveConfig(`NAVER_TEAM_CALENDAR_${t}`, e.target.value.trim()); }}
                     className="w-32 rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
