@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "73e86cb4c5",
+    "date": "2026-08-25",
+    "note": "일정리스트 사용설명서를 웹앱 정적 페이지(/guide/schedule.html)로 — 계정 없이 열람, 헤더 ❔ 사용법 버튼"
+  },
+  {
     "hash": "c962f4fd5c",
     "date": "2026-08-25",
     "note": "맛동여지도 — 네이버지도 저장목록 복사본 그대로 붙여넣기(파서+테스트 9개), 미리보기 후 일괄 등록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "336b6696fb",
     "date": "2026-08-14",
     "note": "시트 API 직행 최적화 — 기입 10초+ → 3.2초 (실측)"
-  },
-  {
-    "hash": "6c01a0849c",
-    "date": "2026-08-14",
-    "note": "시트 기입 엔진 — 구글 시트 API 직행 (GAS 자동 폴백, 10초+ → 1~3초)"
   }
 ];
