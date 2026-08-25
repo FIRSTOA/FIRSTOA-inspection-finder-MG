@@ -5745,7 +5745,7 @@ export default function App() {
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
-  const standaloneItems = [homeItem, ["field", "FIELD"] as [typeof screen, string], ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string]];
+  const standaloneItems = [homeItem, ["serviceReception", "서비스접수"] as [typeof screen, string], ["asReception", "일정리스트"] as [typeof screen, string], ["calendar", "캘린더"] as [typeof screen, string], ["field", "FIELD"] as [typeof screen, string]];
   const lowerItems = [] as [typeof screen, string][];
   const bottomItems = [["lookup", "조회"], ["operations", "관리"], ["help", "사용설명서"]] as [typeof screen, string][];
   const navItems = [...standaloneItems, ...navGroups.flatMap((group) => group.items), ...lowerItems, ...bottomItems];

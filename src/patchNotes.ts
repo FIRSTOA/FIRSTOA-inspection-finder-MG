@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6d9f89cd69",
+    "date": "2026-08-26",
+    "note": "FIELD 설명서 — 점검 체크리스트 섹션"
+  },
+  {
+    "hash": "1d8a6aa5ad",
+    "date": "2026-08-26",
+    "note": "FIELD 점검 체크리스트(접이식, 기기별 펼침 기억, 새 양식마다 초기화) — 팀 공유 체크리스트 항목 그대로"
+  },
+  {
     "hash": "9e068c9f34",
     "date": "2026-08-26",
     "note": "작성자 인식 — 빈 값으로 작성자를 지우지 않게"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fcd45651d9",
     "date": "2026-08-14",
     "note": "카카오 지오코딩 가동 + 자동일정 캘린더 제외 + 내 일정 지도 업그레이드"
-  },
-  {
-    "hash": "3eb2d810c9",
-    "date": "2026-08-14",
-    "note": "자동일정 등록 개선 + 지역 규칙 최종 + E지역 AS방 연결"
-  },
-  {
-    "hash": "067626bdab",
-    "date": "2026-08-14",
-    "note": "지역 판정 보강 — 'C지역/B팀' 표기 인식, 경기권 시 단위 매핑 확대(일산·김포·안산 등)"
   }
 ];
