@@ -112,3 +112,28 @@ describe("제목 머리의 '이름 - a/s' 접두 (2026-08-25 실사고)", () => 
     expect(block).toContain("업체명: 위례올림수학학원");
   });
 });
+
+describe("접수내용 — 양식의 '제목' 줄이 구분 낱말(A/S)보다 우선 (2026-08-25 실사고)", () => {
+  const NOTE = [
+    "A/S    V   Apeos-C3070   17V건축사무소에스파스수냐빌딩 4층 안쪽방문전 정우석 차장님에게 연락 후 주차확인 필요 / 백업/합산매월마감   종료일   27. 6. 30",
+    "기번   130335   자산번호   X7052                  ",
+    "접수유형   전화   접수분야   A/S                  ",
+    "기종   Apeos-C3070   기기상태   확인요망                  ",
+    "제목    출력시 글자 뭉개짐                        ",
+    "상태    뚜렷하게 표현되지않고, 뭉개져서 나옴                        ",
+  ].join("\n");
+  const ticket = { vendor: "A/S\t V\tApeos-C3070\t17V건축사무소에스파스수냐빌딩 4층 안쪽방문전 정우석 차장님에게 연락 후 주차확인 필요 / 백업/합산매월마감", note: NOTE };
+
+  it("접수내용은 '출력시 글자 뭉개짐' — 'A/S'가 아니다", () => {
+    const block = buildActionBlock(ticket, { author: "박영현", reason: "익일 오전 방문", deferLabel: "8/26로 연기" });
+    expect(block).toContain("접수내용: 출력시 글자 뭉개짐");
+    expect(block).not.toContain("접수내용: A/S");
+    expect(block).toContain("자산기번: X7052");
+    expect(block).toContain("시리얼번호: 130335");
+  });
+
+  it("제목이 없고 접수분야가 여분요청이면 그건 내용으로 쓴다", () => {
+    const block = buildActionBlock({ vendor: "여분요청 V SL-X7500LX 12#V디쉐어세종", note: "접수유형   전화   접수분야   여분요청\n제목    \n상태    " }, { author: "심태현", reason: "완료" });
+    expect(block).toContain("접수내용: 여분요청");
+  });
+});

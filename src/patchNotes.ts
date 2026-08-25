@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "28185b300a",
+    "date": "2026-08-25",
+    "note": "FIELD 폼 4건 수리 — 내 일정 FIELD 직행, 여분위치 띄어쓰기, '이름 - a/s' 접두 업체명 오인, 탭 작업본 세션 보존(리로드 초기화)"
+  },
+  {
     "hash": "78e679dd51",
     "date": "2026-08-25",
     "note": "필드탭 직접 사용도 [카톡방 전송] 통합 버튼 하나로 — 방 선택·자가/부품 자동 감지, 전송 후 일정 완료/익일 연쇄"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "675a482b84",
     "date": "2026-08-07",
     "note": "자동 일정 짜기 1차 시안 — 워킨맵과 FIELD 사이 신규 탭"
-  },
-  {
-    "hash": "4287229f44",
-    "date": "2026-08-07",
-    "note": "지역 판정 파서 일치 + 사진 업로드 재시도 + 카운터문자 결과 우선 표시"
   }
 ];

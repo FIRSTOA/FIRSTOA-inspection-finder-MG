@@ -9,6 +9,7 @@
  * 들어온 건만 컬럼이 채워진다 — 그래서 컬럼이 비면 원문에서 찾아야 한다.
  */
 import { fieldTicketVendor } from "./ids";
+import { extractIssue } from "./reportAssignee";
 
 export type ActionTicketLike = {
   vendor?: unknown;
@@ -57,7 +58,15 @@ export function extractDeviceInfo(ticket: ActionTicketLike, extra = "") {
       || pick(/(?:^|[\t\s])((?:ECOSYS|APEOS|ApeosPort|Apeos|DocuCentre|DocuPrint|SL-|CLX|MX|ES|CM|HP|D)[A-Za-z0-9-]*(?:[ ][A-Za-z]{0,2}\d[A-Za-z0-9-]*)?)/)),
     asset: String(ticket.asset ?? "").trim() || pick(/자산기번[\t \s]*:?[\t ]*([A-Za-z0-9-]{3,})/) || pick(/자산번호[\t \s]*:?[\t ]*([A-Za-z0-9-]{3,})/),
     serial: String(ticket.serial ?? "").trim() || pick(/시리얼(?:넘버|번호)[\t \s]*:?[\t ]*([A-Za-z0-9-]{5,})/, 5) || pick(/기번[\t \s]*:?[\t ]*([A-Za-z0-9-]{5,})/, 5),
-    issue: String(ticket.issue ?? "").trim() || pick(/접수분야[\t \s]*:?[\t ]*([^\t\n]+)/) || pick(/(?:^|\n)내용[\t \s]*:[\t ]*([^\t\n]+)/),
+    // 접수내용: 양식의 "제목/상태/내용/접수내용" 줄(탭·콜론·스페이스 구분 모두)이 원본 — 예전엔 "접수분야 A/S"의
+    // 구분 낱말을 먼저 집어 "접수내용: A/S"로 나갔다(실사고). 접수분야는 A/S가 아닌 것(여분요청·미수방문)일 때만 폴백.
+    issue: (() => {
+      const labeled = extractIssue(String(ticket.issue ?? ""), `${String(ticket.note ?? "")}\n${String(extra ?? "")}`);
+      if (labeled) return labeled;
+      const category = pick(/접수분야[\t \s]*:?[\t ]*([^\t\n]+)/);
+      if (category && !/^a\s*\/?\s*s$/i.test(category)) return category;
+      return "";
+    })(),
   };
 }
 
