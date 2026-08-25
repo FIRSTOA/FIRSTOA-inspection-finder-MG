@@ -34,6 +34,10 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const [q, setQ] = useState("");
   const [onlyParking, setOnlyParking] = useState(false);
   const [gu, setGu] = useState("");
+  // 팀별로 나눠 본다(팀장 요청) — 기본은 자기 팀, "전체"로 다른 팀 것도. 올릴 때는 작성자 팀으로 저장된다
+  const [teamFilter, setTeamFilter] = useState<string>(/^[A-E]$/.test(team) ? team : "");
+  const [bulk, setBulk] = useState<string | null>(null); // 여러 개 한 번에 붙여넣기 (네이버 저장 목록 옮겨 적기)
+  const [bulkLog, setBulkLog] = useState<string[]>([]);
   const [origin, setOrigin] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,7 +53,8 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const shown = useMemo(() => {
     const key = q.trim().toLowerCase();
     const list = places.filter((p) =>
-      (!onlyParking || ["가능", "유료", "발렛"].includes(p.parking))
+      (!teamFilter || p.team === teamFilter)
+      && (!onlyParking || ["가능", "유료", "발렛"].includes(p.parking))
       && (!gu || p.gu === gu)
       && (!key || [p.name, p.menu, p.address, p.memo, p.tags.join(" "), p.author].join(" ").toLowerCase().includes(key)));
     if (origin) {
@@ -60,7 +65,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
       });
     }
     return [...list].sort((a, b) => b.likes - a.likes || b.rating - a.rating);
-  }, [places, q, onlyParking, gu, origin]);
+  }, [places, q, onlyParking, gu, origin, teamFilter]);
 
   // 내 위치 기준 가까운 순 (모바일 현장) — 실패하면 검색어 주소로
   const useMyLocation = () => {
@@ -106,6 +111,31 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const like = async (p: FoodPlace) => {
     try { await updateRows("food_places", `id=eq.${p.id}`, { likes: p.likes + 1 }); setPlaces((cur) => cur.map((x) => (x.id === p.id ? { ...x, likes: x.likes + 1 } : x))); }
     catch { /* 추천은 부가 기능 */ }
+  };
+  const runBulk = async () => {
+    if (bulk == null || busy) return;
+    const lines = bulk.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+    setBusy(true);
+    const log: string[] = [];
+    try {
+      for (const line of lines.slice(0, 60)) {
+        const [name = "", address = "", parkingMemo = ""] = line.split(/\s*[|｜\t]\s*/);
+        if (!name) continue;
+        if (places.some((p) => p.name === name.trim())) { log.push(`↷ ${name} — 이미 있음`); continue; }
+        const found = await geocodeKR(address.trim() || name.trim());
+        await insertRow("food_places", {
+          name: name.trim(), address: address.trim() || (found?.label || ""), address_detail: "", lat: found?.lat ?? null, lng: found?.lng ?? null,
+          gu: guOf(address.trim() || found?.label || ""), parking: parkingMemo ? "가능" : "모름", parking_memo: parkingMemo.trim(),
+          menu: "", price: "", rating: 0, tags: [], memo: "", author, team, likes: 0, updated_at: new Date().toISOString(),
+        });
+        log.push(`${found ? "✓" : "⚠ 좌표 없음(목록만)"} ${name}`);
+        setBulkLog([...log]);
+      }
+      await load();
+      notify(`${log.filter((l) => l.startsWith("✓")).length}곳 지도에 올렸습니다`, "success");
+    } catch (e) { notify(`일괄 등록 중단: ${(e as Error).message}`, "error"); }
+    finally { setBusy(false); }
   };
   const edit = (p: FoodPlace) => setForm({ id: p.id, name: p.name, address: p.address, address_detail: p.address_detail, parking: p.parking, parking_memo: p.parking_memo, menu: p.menu, price: p.price, rating: p.rating, tags: p.tags || [], memo: p.memo });
 
@@ -174,7 +204,17 @@ export default function FoodMap({ author, team }: { author: string; team: string
             <div className="text-lg font-black">🍴 맛동여지도 <span className="ml-1 text-[12px] font-semibold text-slate-400">주차 되는 맛집, 같이 쌓기</span></div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">누구나 올리고 모두가 봅니다 · 주차 정보가 핵심 · 마커 색 = 주차(초록 가능·파랑 유료·남색 발렛·주황 노상·빨강 불가)</div>
           </div>
-          <button type="button" onClick={() => setForm(emptyForm())} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow hover:bg-blue-500">+ 맛집 올리기</button>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => { setBulk(""); setBulkLog([]); }} className="rounded-full bg-white/10 px-3 py-2 text-sm font-black text-slate-200 hover:bg-white/20">여러 개 붙여넣기</button>
+            <button type="button" onClick={() => setForm(emptyForm())} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow hover:bg-blue-500">+ 맛집 올리기</button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {["", "A", "B", "C", "D", "E"].map((t) => (
+            <button key={t || "all"} type="button" onClick={() => setTeamFilter(t)} className={`rounded-full px-3 py-1 text-[12px] font-black ${teamFilter === t ? "bg-white text-slate-900" : "bg-white/10 text-slate-300 hover:bg-white/20"}`}>
+              {t ? `${t}팀` : "전체"} <span className="opacity-60">{places.filter((p) => !t || p.team === t).length}</span>
+            </button>
+          ))}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="가게·메뉴·주소·올린 사람 검색 (주소를 넣고 [이 주소 기준]도 가능)"
@@ -249,6 +289,24 @@ export default function FoodMap({ author, team }: { author: string; team: string
         </section>
       </div>
 
+      {bulk != null && (
+        <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!busy) setBulk(null); }}>
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="text-lg font-black text-slate-950">여러 개 한 번에 올리기</div>
+            <div className="mt-1 text-[12px] font-semibold leading-5 text-slate-500">
+              네이버지도 "저장" 목록은 내보내기가 없어 자동으로 못 가져옵니다 — 대신 목록을 보면서 <b>한 줄에 하나</b>씩 옮겨 적으면 좌표를 잡아 한꺼번에 올립니다.<br />
+              형식: <code className="rounded bg-slate-100 px-1">가게명 | 주소 | 주차메모</code> (주소·주차메모는 생략 가능 — 주소가 없으면 가게명으로 검색). 주차메모를 적으면 "주차 가능"으로 올라가고, 나머지는 나중에 [수정]으로 채우면 됩니다.
+            </div>
+            <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={8} autoFocus placeholder={"삼겹살집 | 서울 강남구 테헤란로 152 | 건물 지하 1시간 무료\n국밥집 | | 옆 공영주차장\n초밥집"}
+              className="mt-3 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-[12px] leading-5 outline-none focus:border-blue-500" />
+            {bulkLog.length > 0 && <div className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{bulkLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
+            <div className="mt-4 flex gap-2">
+              <button type="button" disabled={busy} onClick={() => setBulk(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">닫기</button>
+              <button type="button" disabled={busy || !bulk.trim()} onClick={() => void runBulk()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? `올리는 중… ${bulkLog.length}` : `${bulk.split(/\n/).filter((l) => l.trim()).length}곳 올리기`}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {form && (
         <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setForm(null)}>
           <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>

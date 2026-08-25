@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "599805b900",
+    "date": "2026-08-25",
+    "note": "맛동여지도 — 주차 가능한 맛집 공유 지도(food_places): 지도·목록·주소 지오코딩·주차/메뉴/별점·내 위치 가까운 순·추천"
+  },
+  {
     "hash": "eb4eedc4d5",
     "date": "2026-08-25",
     "note": "팀 전용 캘린더 — 일정리스트·네이버와 분리된 팀별 메모 캘린더(team_calendar_events), 캘린더 탭 [🔒 팀] 뷰"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cca88518f4",
     "date": "2026-08-13",
     "note": "접수 중복·시트 지연 수술 — 잠금 재시도 즉시화 + 중복 접수 확인 가드"
-  },
-  {
-    "hash": "a3fb1e64fe",
-    "date": "2026-08-13",
-    "note": "IT 명단 복구 + 접수 멀티유저 자동 갱신 + 원격이관 화면 다이어트"
   }
 ];
