@@ -269,6 +269,43 @@ async function pickPhotos(name: string, category: string, urls: string[]): Promi
   } catch { return []; }
 }
 
+const PLACE_PICK_INSTRUCTION = `너는 저장된 메모를 근거로 "어느 가게였는지" 맞히는 도구다.
+입력: 우리 메모(먹은 메뉴·주차 안내 등)와 그 주소 주변 음식점 후보 목록(이름·업종·거리).
+JSON만 출력: {"index": 2, "why": "메모의 '돈까스'가 후보 이름과 맞음"}  고를 수 없으면 {"index": -1}.
+규칙:
+- 메모의 음식 이름·업종이 후보의 이름/업종과 분명히 맞을 때만 고른다(예: 메모 "김치찌개" → 후보 "찌개집").
+- 애매하면 반드시 -1. 거리만 가깝다는 이유로 고르지 않는다. 카페·프랜차이즈 디저트는 메모가 그걸 가리킬 때만.
+- 후보 여러 개가 똑같이 그럴듯하면 -1.`;
+
+/** 주소로만 저장된 곳: 메모(먹은 메뉴 등)를 근거로 주변 후보 중 실제 가게를 고른다. 확실하지 않으면 -1. */
+async function pickPlace(hint: string, candidates: Array<{ name: string; category: string; source: string }>): Promise<{ index: number; why: string }> {
+  const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
+  if (!apiKey || !hint.trim() || !candidates.length) return { index: -1, why: "" };
+  const model = Deno.env.get("OPENAI_REPORT_MODEL") || "gpt-5.5";
+  const list = candidates.map((c, i) => `${i}. ${c.name} (${c.category || "업종 미상"}, ${c.source})`).join("\n");
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model, reasoning: { effort: "low" },
+      input: [
+        { role: "system", content: PLACE_PICK_INSTRUCTION },
+        { role: "user", content: `우리 메모: ${hint.slice(0, 300)}\n\n후보:\n${list}` },
+      ],
+      text: { format: { type: "json_object" } },
+    }),
+  });
+  if (!res.ok) return { index: -1, why: "" };
+  const data = await res.json().catch(() => ({}));
+  const outputText = data.output_text
+    || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") || "";
+  try {
+    const parsed = JSON.parse(outputText || "{}");
+    const idx = Number(parsed.index);
+    return { index: Number.isInteger(idx) && idx >= 0 && idx < candidates.length ? idx : -1, why: String(parsed.why || "").slice(0, 120) };
+  } catch { return { index: -1, why: "" }; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: jsonHeaders });
   try {
@@ -280,6 +317,15 @@ Deno.serve(async (req) => {
       if (q.length < 2) return Response.json({ error: "검색어가 너무 짧습니다" }, { status: 400, headers: jsonHeaders });
       const photos = await photoSearch(q);
       return Response.json({ ok: true, photos }, { headers: jsonHeaders });
+    }
+
+    if (action === "pick_place") {
+      const hint = String(body.hint || "");
+      const cands = (Array.isArray(body.candidates) ? body.candidates : []).slice(0, 12)
+        .map((c: Record<string, unknown>) => ({ name: String(c?.name || ""), category: String(c?.category || ""), source: String(c?.source || "") }))
+        .filter((c: { name: string }) => c.name);
+      const out = await pickPlace(hint, cands);
+      return Response.json({ ok: true, ...out }, { headers: jsonHeaders });
     }
 
     if (action === "nearby") {

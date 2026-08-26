@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0b63847114",
+    "date": "2026-08-27",
+    "note": "맛동여지도 상세 사진: 한 장 확대 크롭 대신 큰 사진+옆 두 장 갤러리 배치, 이름 띠 가독성 보강, 사진 없을 때 안내 축소"
+  },
+  {
     "hash": "c6e09a1ddb",
     "date": "2026-08-27",
     "note": "맛동여지도: 사진도 자동 — 이름으로 카카오·네이버 이미지 검색 후보 제시, 고른 사진은 저장소로 복사(링크 차단·만료 대비). 가게 선택 시 사진 검색 자동 실행. 지도 고정 해제·지도와 목록 높이 통일"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "078e9a66e7",
     "date": "2026-08-14",
     "note": "개발 도구 취약점 정리 — npm audit fix (vite·postcss 등 데브 체인, 빌드·테스트 통과 확인)"
-  },
-  {
-    "hash": "302c62747b",
-    "date": "2026-08-14",
-    "note": "사진 용량 대책 — 업로드 압축 강화(WebP 우선) + 분기 드라이브 아카이브 파이프라인"
   }
 ];

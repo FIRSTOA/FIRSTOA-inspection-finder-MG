@@ -17,7 +17,7 @@ const GUIDES: Guide[] = [
   { group: "현장·동선", key: "workin", title: "워킨맵", desc: "분기 점검 대상 지도, 라벨, 엑셀 가져오기, 점검 후 자동 반영", url: "/guide/workin.html", updated: "2026-08-26" },
   { group: "현장·동선", key: "recontract", title: "재계약 준비", desc: "이카운트 대장 붙여넣기 분석, 기기별 활용률, 추천 플랜", url: "/guide/recontract.html", updated: "2026-08-26" },
   { group: "현장·동선", key: "autoplan", title: "자동 일정", desc: "가까운 점검 후보 추천, 기준 업체, 미니 지도, 일정 등록", url: "/guide/autoplan.html", updated: "2026-08-26" },
-  { group: "현장·동선", key: "foodmap", title: "맛동여지도", desc: "주차 되는 맛집 공유 지도, 네이버 저장목록 붙여넣기", url: "/guide/foodmap.html", updated: "2026-08-26" },
+  { group: "현장·동선", key: "foodmap", title: "맛동여지도", desc: "주차 되는 맛집 공유 지도 · 이름만 넣으면 업종·주소·사진·메뉴 자동", url: "/guide/foodmap.html", updated: "2026-08-27" },
   { group: "현장·동선", key: "field", title: "FIELD", desc: "모든 보고양식(점검·AS·물류·확장성·불만·미수·칭찬…), 사진, 카톡방 전송, 일정 정리", url: "/guide/field.html", updated: "2026-08-26" },
   { group: "소식·학습", key: "inbox", title: "공지·요청", desc: "공지 읽기, 요청 보내기·처리 상태", url: "/guide/inbox.html", updated: "2026-08-26" },
   { group: "소식·학습", key: "copier-notes", title: "복합기 학습·처리이력", desc: "기록 → 족보 → 가이드, 검색, 데일리 퀴즈", url: "/guide/copier-notes.html", updated: "2026-08-26" },
