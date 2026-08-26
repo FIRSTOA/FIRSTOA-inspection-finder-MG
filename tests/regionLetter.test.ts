@@ -28,3 +28,22 @@ describe("regionLetter", () => {
     expect(regionLetter("", "")).toBe("");
   });
 });
+
+// _dupKey는 "메시지에서 읽은 원래 값"으로 계산해야 한다 — 정규화 값으로 만들면 과거 업로드분과 키가 어긋나
+// 재업로드·백필 때 같은 건이 전부 다시 들어온다(2026-08-26, D 점검방 백필 준비 중 발견).
+describe("지역 정규화와 _dupKey 분리", () => {
+  it("저장 지역은 글자로 바뀌지만 dupKey는 원문 표기를 따른다", async () => {
+    const { buildRecords } = await import("../src/inspectParser");
+    const form = (region: string) => [
+      "구분: 점검", "등급: S", "업체명: 테스트상사", "부서명: 3층", `지역: ${region}`,
+      "키맨/접수자: 홍길동 010-0000-0000", "모델명: SL-X3220NR", "시리얼넘버: ABC123",
+      "자산기번: X0001", "내용: 정기점검", "처리내용: 기본점검",
+    ].join("\n");
+    const a = buildRecords(form("수도권C"), "2026-08-26", "이민구", "");
+    const b = buildRecords(form("C"), "2026-08-26", "이민구", "");
+    expect(a.inspect?.["지역"]).toBe("C");
+    expect(b.inspect?.["지역"]).toBe("C");
+    expect(a.inspect?._dupKey).not.toBe(b.inspect?._dupKey); // 원문 표기가 다르면 키도 다르다 = 키가 정규화에 흔들리지 않는다
+    expect(a.region).toBe("C");
+  });
+});

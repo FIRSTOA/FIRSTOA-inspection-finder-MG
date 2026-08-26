@@ -86,7 +86,9 @@ function sliceIncremental_(key, text) {
       if (pos >= 0) {
         const anchorEnd = pos + cur.anchor.length;
         if (anchorEnd >= text.length) return { text: '', nothingNew: true };
-        return { text: text.slice(Math.max(0, anchorEnd - 3000)), isTail: true };
+        // 앵커 앞부분은 "이미 처리했다"고 보고 건너뛴다. 첫 업로드가 부분 내보내기였다면 그 기간은 영구 누락되므로
+        // 얼마나 건너뛰었는지 남긴다(관리탭 수집 로그에서 보인다). 되살리려면 앵커 초기화 후 재업로드.
+        return { text: text.slice(Math.max(0, anchorEnd - 3000)), isTail: true, skippedChars: Math.max(0, anchorEnd - 3000) };
       }
     }
   } catch (e) {}
@@ -157,6 +159,7 @@ function ingestFromDriveFolder() {
       else { added += (res.added || 0); status = '완료(드라이브)'; }
       done++;
 
+      if (sl.skippedChars > 100000) status += ' · 앞부분 ' + Math.round(sl.skippedChars / 1048576 * 10) / 10 + 'MB 건너뜀(증분)';
       logUpload({ category: route.category, team: route.team, roomName: room, parsed: res.parsed || 0, added: res.added || 0, skipped: res.skipped || 0, status: status });
       file.moveTo(f.done);
     } catch (err) {

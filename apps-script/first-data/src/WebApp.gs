@@ -23,6 +23,8 @@ function doGet(e) {
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
     else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
     else if (action === 'ingestnow') result = ingestFromDriveFolder();  // 드라이브 수집 즉시 실행 (CS 웹앱 관리 탭)
+    else if (action === 'cursorlist') result = listUploadCursors();     // 수집 앵커(증분 기준점) 목록
+    else if (action === 'cursorreset') result = resetUploadCursor(e.parameter.key || ''); // 앵커 초기화 → 다음 업로드는 파일 전체 재처리
     else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
     else if (action === 'roommapset') result = setRoomMapRow_(e.parameter.room, e.parameter.category, e.parameter.team);
     else if (action === 'roommapdel') result = delRoomMapRow_(e.parameter.room);
@@ -205,6 +207,40 @@ function getUploadCursor(key) {
     }
     return { ok: true, anchor: '' };
   } catch (err) { return { ok: false, error: err.toString(), anchor: '' }; }
+}
+
+/**
+ * 수집 앵커 목록. 앵커는 "직전 업로드 파일의 마지막 300자"로, 다음 업로드에서 그 뒤만 처리한다(증분).
+ * 첫 업로드가 부분 내보내기였으면 그 앞 기간은 앵커에 막혀 영구히 안 들어온다 — 그때 초기화가 필요하다.
+ * (2026-08-26 실사고: D 점검방 2023-11~2026-01 3,846건이 이 이유로 누락)
+ */
+function listUploadCursors() {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_CURSOR_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, rows: [] };
+    const data = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    return { ok: true, rows: data.map(function (r) {
+      var a = String(r[1] || ''); if (a.charAt(0) === '!') a = a.slice(1);
+      return { key: String(r[0]), anchorLen: a.length, anchorTail: a.slice(-60) };
+    }) };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/** 앵커 삭제 → 다음 업로드는 파일 전체를 처리한다. 중복은 _dupKey 로 걸러지므로 안전하다. */
+function resetUploadCursor(key) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_CURSOR_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, removed: 0 };
+    const last = sh.getLastRow();
+    const data = sh.getRange(2, 1, last - 1, 2).getValues();
+    const keep = data.filter(function (r) { return key ? String(r[0]) !== String(key) : false; });
+    const removed = data.length - keep.length;
+    sh.getRange(2, 1, data.length, 2).clearContent();
+    if (keep.length) sh.getRange(2, 1, keep.length, 2).setValues(keep);
+    return { ok: true, removed: removed, key: key || '(전체)' };
+  } catch (err) { return { ok: false, error: err.toString() }; }
 }
 
 function setUploadCursor(key, anchor) {

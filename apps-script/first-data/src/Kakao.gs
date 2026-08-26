@@ -125,11 +125,13 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
     const vendor = String(rec.vendor || '').trim();
     if (!vendor) continue;
     const obj = rec.obj || {};
-    // 지역은 A~E 한 글자로만 저장한다 — "수도권D"·"경기 화성시"·"강서b"·라벨 오삼킴("키맨/접수자: …")이 그대로 들어갔던 것(2026-08-26 정리)
-    if (obj['지역'] != null) obj['지역'] = regionLetter_(obj['지역'], teamLabel);
+    // dupKey는 메시지에서 읽은 "원래 값"으로 계산한다 — 정규화한 값으로 계산하면 과거 업로드분과 키가 어긋나
+    // 같은 건이 다시 들어온다(재업로드·백필 때 전부 중복). 그래서 지역 정규화는 키 계산 뒤에 한다.
     const key = dupKey_(cat, vendor, obj);
     if (existing[key]) continue;
     existing[key] = true;
+    // 지역은 A~E 한 글자로만 저장 — "수도권D"·"경기 화성시"·"강서b"·라벨 오삼킴("키맨/접수자: …")이 그대로 들어갔던 것
+    if (obj['지역'] != null) obj['지역'] = regionLetter_(obj['지역'], teamLabel);
 
     const outRow = CONFIG[cat].displayCols.map(c => (obj[c] == null ? '' : obj[c]));
     outRow.push(vendor, srcLabel, rec.raw || '', new Date(), key);

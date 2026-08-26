@@ -114,7 +114,7 @@ function extractObj(content: string, dateStr: string, author: string, regionFall
   const vendor = f["업체명"];
   if (!vendor || vendor.length < 2 || /^부서명/.test(vendor)) return null;
   if (!f["작성자"]) f["작성자"] = String(author || "").replace(/님$/, "");
-  f["지역"] = regionLetter(f["지역"] || "", regionFallback); // 저장은 항상 A~E 한 글자 (표기 변형·라벨 오삼킴이 지역 칸에 남지 않게)
+  if (!f["지역"]) f["지역"] = regionFallback || ""; // dupKey는 원문 값으로 계산한다 — 정규화 값으로 만들면 과거 기록과 키가 어긋나 같은 건이 다시 저장된다
   if (!f["작성일"]) f["작성일"] = dateStr || "";
   if (asDefault && !f["구분"]) f["구분"] = "AS";
   const obj: Record<string, string> = {};
@@ -134,13 +134,22 @@ export function buildRecords(text: string, dateStr: string, author: string, regi
   let as: Row | undefined;
   let region = "";
 
+  // 저장 값·전송 지역은 A~E 한 글자로 정규화하되, _dupKey는 buildRow가 원문 값으로 계산한 것을 그대로 둔다
   if (hasInspect) {
     const r = extractObj(content, dateStr, author, regionFallback, false);
-    if (r) { inspect = buildRow(r.vendor, r.obj, content, SRC_LABEL); region = region || (r.obj["지역"] || ""); }
+    if (r) {
+      inspect = buildRow(r.vendor, r.obj, content, SRC_LABEL);
+      inspect["지역"] = regionLetter(r.obj["지역"] || "", regionFallback);
+      region = region || inspect["지역"];
+    }
   }
   if (hasAS) {
     const r = extractObj(content, dateStr, author, regionFallback, true);
-    if (r) { as = buildRow(r.vendor, r.obj, content, SRC_LABEL); region = region || (r.obj["지역"] || ""); }
+    if (r) {
+      as = buildRow(r.vendor, r.obj, content, SRC_LABEL);
+      as["지역"] = regionLetter(r.obj["지역"] || "", regionFallback);
+      region = region || as["지역"];
+    }
   }
 
   return { hasInspect, hasAS, inspect, as, region };
