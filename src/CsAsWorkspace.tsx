@@ -902,21 +902,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const completedNow = changed.status === "완료" && before.status !== "완료";
       const rescheduled = changed.date !== before.date || changed.time !== before.time;
       const uncompletedNow = before.status === "완료" && changed.status !== "완료";
-      const isDelivery = changed.scheduleType === "납품철수교체휴가교육";
-      if (completedNow && isDelivery) {
-        // 납품·철수·교체는 영업부 캘린더 소관 — 이동하지 않고 제자리 완료 체크만
-        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, calId: "75632617", done: true })
-          .then(() => notify("네이버: 납품 일정 완료 체크 ✓", "success"))
-          .catch((e) => notify(`네이버 완료 체크 실패: ${(e as Error).message}`, "error"));
-      } else if (uncompletedNow && isDelivery) {
-        void invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, calId: "75632617", done: false }).catch(() => undefined);
+      const isDelivery = changed.scheduleType === "납품철수교체휴가교육" || changed.scheduleType === "물류";
+      if ((completedNow || uncompletedNow) && isDelivery) {
+        // 납품·철수·교체 캘린더는 영업부 소관 — 웹앱에서 완료/취소해도 네이버는 건드리지 않는다(2026-08-26 결정; 예전엔 제자리 체크를 했다)
+        if (completedNow) notify("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더(납품철수교체)는 영업부가 관리", "success");
       } else if (completedNow) {
         void invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
           // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
           .then((r) => {
             if (r.status !== "moved") return;
             const moved = !!r.toCalendarId && r.toCalendarId !== NAVER_CAL_LIST[0].id;
-            notify(moved ? `네이버: ${DONE_CAL_LABEL[changed.team]} 캘린더로 이동 + 완료 체크 ✓` : "네이버: 완료 체크 ✓ (완료 캘린더 미설정 — 제자리 체크)", "success");
+            notify(moved ? `네이버: ${DONE_CAL_LABEL[changed.team]} 캘린더로 이동 + 완료 체크 ✓` : "네이버: 완료 체크 ✓ (이 팀은 완료 캘린더가 설정되지 않아 제자리에서 체크)", "success");
           })
           .catch((e) => notify(`네이버 완료 이동 실패: ${(e as Error).message}`, "error"));
       } else if (uncompletedNow) {

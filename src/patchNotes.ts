@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4e64fdc9f6",
+    "date": "2026-08-26",
+    "note": "사이드바 기본 순서 — 홈 · 서비스접수 · 일정리스트 · 캘린더 · FIELD"
+  },
+  {
     "hash": "6d9f89cd69",
     "date": "2026-08-26",
     "note": "FIELD 설명서 — 점검 체크리스트 섹션"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b9a5ea8984",
     "date": "2026-08-14",
     "note": "내 일정: 워킨맵에 없는 업체는 일정 주소를 카카오 지오코딩으로 좌표 확보 — 무암 같은 AS 일정도 핀·동선·클릭 이동 전부 동작"
-  },
-  {
-    "hash": "fcd45651d9",
-    "date": "2026-08-14",
-    "note": "카카오 지오코딩 가동 + 자동일정 캘린더 제외 + 내 일정 지도 업그레이드"
   }
 ];

@@ -4717,6 +4717,15 @@ export default function App() {
     if (!sendPicker) return;
     const picked = sendPicker;
     setSendPicker(null);
+    // 사진은 방별 전송 전에 한 번만 올린다 — 예전엔 점검방 전송에서 업로드가 실패해 그 방만 빠지고,
+    // 이어진 AS방 전송이 남은 사진을 재시도해 성공하는 "AS방만 갔다" 사고가 있었다. 실패하면 어느 방에도 보내지 않는다.
+    if (photos.length) {
+      try { await ensurePhotoLink(); }
+      catch (e) {
+        showToast(`사진 업로드 실패: ${(e as Error).message || "오류"} — 아무 방에도 보내지 않았습니다. 다시 [카톡방 전송]을 누르면 남은 사진만 다시 올립니다`, "error", { duration: 9000 });
+        return;
+      }
+    }
     let mainOk = !picked.inspection && !picked.as; // 주 보고 미선택(자가·부품만)이면 바로 진행
     if (picked.inspection) mainOk = await handleSendAll("normal", "inspection", true) || mainOk;
     if (picked.as) mainOk = await handleSendAll("normal", "as", true) || mainOk;
@@ -5595,7 +5604,10 @@ export default function App() {
       // 네이버 미러 정리: 완료면 접수양식 밑에 처리내용을 잇고 팀 완료 캘린더로 이동, 미루기면 날짜만 변경
       const naverUid = String(rows[0]?.["naverUid"] || "");
       const naverTeam = String(rows[0]?.["team"] || "");
-      if (naverUid) {
+      // 납품·철수·교체 캘린더는 영업부 소관 — 완료해도 네이버 완료 체크·이동을 하지 않는다 (날짜 변경은 반영)
+      const deliveryTicket = ["납품철수교체휴가교육", "물류"].includes(String(rows[0]?.["scheduleType"] || ""));
+      if (naverUid && deliveryTicket && receptionStatus === "완료") showToast("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더는 영업부가 관리", "success");
+      if (naverUid && !(deliveryTicket && receptionStatus === "완료")) {
         void (async () => {
           try {
             if (receptionStatus === "완료") {
