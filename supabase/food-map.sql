@@ -26,3 +26,12 @@ drop policy if exists food_places_anon_all on public.food_places;
 create policy food_places_anon_all on public.food_places for all to anon using (true) with check (true);
 grant select, insert, update, delete on table public.food_places to anon, authenticated;
 notify pgrst, 'reload schema';
+
+-- 2026-08-27 개편: 네이버지도식 상세(사진·메뉴판·업종·영업시간·전화). 이미 적용됨(Management API DDL).
+alter table public.food_places
+  add column if not exists photos text[] not null default '{}',        -- 올린 사진 URL (첫 장이 목록 썸네일)
+  add column if not exists menus jsonb not null default '[]'::jsonb,   -- [{name, price, signature}] — 네이버 메뉴 붙여넣기로 채운다
+  add column if not exists category text not null default '',          -- 업종(이자카야·한식…)
+  add column if not exists hours text not null default '',             -- 영업시간 메모
+  add column if not exists tel text not null default '';
+notify pgrst, 'reload schema';

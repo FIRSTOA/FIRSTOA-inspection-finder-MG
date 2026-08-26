@@ -77,3 +77,63 @@ export function looksLikeNaverSavedList(text: string): boolean {
   const lines = String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
   return lines.filter((l) => ADDRESS_RE.test(l)).length >= 2 && !lines.some((l) => /\|/.test(l));
 }
+
+/** 메뉴 한 줄 — 네이버지도 "메뉴" 탭을 긁어 붙이면 그대로 읽는다. */
+export type MenuItem = { name: string; price: string; signature?: boolean };
+
+const PRICE_ONLY = /^([0-9][0-9,\.]*)\s*원?$/;                 // "3,900원" · "13000"
+const NAME_WITH_PRICE = /^(.+?)[\s|·\-–—]+([0-9][0-9,\.]*)\s*원?$/; // "네기마 3,900원"
+const SIGNATURE_MARK = /^(대표|시그니처|인기|추천|BEST|best)$/;
+const NOISE = /^(메뉴|가격|사진|리뷰|정보|더보기|메뉴판|이미지|원산지|\d+개|영업.*|휴무.*)$/;
+
+const wonOf = (raw: string) => {
+  const n = Number(String(raw).replace(/[^\d]/g, ""));
+  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString("ko-KR")}원` : "";
+};
+
+/**
+ * 네이버지도 메뉴 목록 붙여넣기 → 메뉴 배열.
+ * 실제 붙여넣기 모양: "대표 / 네기마(다리살+대파) / 3,900원" 이 줄로 나뉘어 온다.
+ * 한 줄에 이름과 가격이 같이 오는 형태("네기마 3,900원")와 "이름 | 가격"도 함께 받는다.
+ */
+export function parseMenuBlock(text: string): MenuItem[] {
+  const out: MenuItem[] = [];
+  let pendingName = "";
+  let signature = false;
+  const push = (name: string, price: string) => {
+    const clean = name.replace(/\s+/g, " ").trim();
+    if (clean.length < 1) return;
+    if (out.some((m) => m.name === clean)) return; // 같은 메뉴가 사진·목록으로 두 번 오는 경우
+    out.push({ name: clean.slice(0, 60), price, ...(signature ? { signature: true } : {}) });
+    signature = false;
+  };
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (SIGNATURE_MARK.test(line)) { signature = true; continue; }
+    if (NOISE.test(line)) continue;
+    const only = line.match(PRICE_ONLY);
+    if (only) {
+      if (pendingName) { push(pendingName, wonOf(only[1])); pendingName = ""; }
+      continue; // 이름 없이 가격만 온 줄은 버린다
+    }
+    const both = line.match(NAME_WITH_PRICE);
+    if (both && !/^[0-9,]+$/.test(both[1].trim())) {
+      if (pendingName) { push(pendingName, ""); }         // 앞줄 이름은 가격 없이 저장
+      pendingName = "";
+      push(both[1], wonOf(both[2]));
+      continue;
+    }
+    if (pendingName) push(pendingName, "");               // 이름이 연달아 오면 앞 것은 가격 없이
+    pendingName = line;
+  }
+  if (pendingName) push(pendingName, "");
+  return out.slice(0, 40);
+}
+
+/** 붙여넣은 글이 메뉴 목록처럼 보이는지 (가격 줄이 2개 이상) */
+export function looksLikeMenuBlock(text: string): boolean {
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const priced = lines.filter((l) => PRICE_ONLY.test(l) || NAME_WITH_PRICE.test(l)).length;
+  return priced >= 2;
+}

@@ -2,7 +2,7 @@
  * 네이버지도 저장목록 복사본 파서 — 2026-08-25 사용자가 실제로 복사해 준 88곳 샘플의 일부로 검증.
  */
 import { describe, expect, it } from "vitest";
-import { looksLikeNaverSavedList, parkingFromNote, parseNaverSavedList, stripCategory } from "../src/foodImport";
+import { looksLikeNaverSavedList, parkingFromNote, parseNaverSavedList, stripCategory, parseMenuBlock, looksLikeMenuBlock } from "../src/foodImport";
 
 const SAMPLE = `1,b1,b2 식당가 주차1시간
 고양진 생갈비 김치찌개찌개,전골
@@ -84,5 +84,33 @@ describe("네이버 저장목록 파서", () => {
   it("형식 판별", () => {
     expect(looksLikeNaverSavedList(SAMPLE)).toBe(true);
     expect(looksLikeNaverSavedList("삼겹살집 | 서울 강남구 테헤란로 152 | 지하 1시간")).toBe(false);
+  });
+});
+
+describe("parseMenuBlock — 네이버지도 메뉴 붙여넣기", () => {
+  it("대표 배지 + 이름 + 가격이 줄로 나뉘어 와도 읽는다", () => {
+    const paste = ["대표", "네기마(다리살+대파)", "3,900원", "대표", "치킨난방", "13,000원",
+      "대표", "토마토나베", "13,000원", "히타하이볼", "9,000원", "감자사라다", "9,900원"].join("\n");
+    const items = parseMenuBlock(paste);
+    expect(items).toHaveLength(5);
+    expect(items[0]).toEqual({ name: "네기마(다리살+대파)", price: "3,900원", signature: true });
+    expect(items[3]).toEqual({ name: "히타하이볼", price: "9,000원" });
+    expect(items[4].signature).toBeUndefined();
+  });
+  it("한 줄에 이름과 가격이 같이 와도 읽는다", () => {
+    const items = parseMenuBlock("삼겹살 15000\n김치찌개 | 9,000원\n계란말이 7,000");
+    expect(items.map((m) => `${m.name}=${m.price}`)).toEqual(["삼겹살=15,000원", "김치찌개=9,000원", "계란말이=7,000원"]);
+  });
+  it("머리글·안내 줄은 버리고, 같은 메뉴는 한 번만 담는다", () => {
+    const items = parseMenuBlock("메뉴\n가격\n네기마\n3,900원\n사진\n네기마\n3,900원");
+    expect(items).toEqual([{ name: "네기마", price: "3,900원" }]);
+  });
+  it("가격 없는 메뉴도 이름은 살린다", () => {
+    const items = parseMenuBlock("모듬꼬치\n하이볼\n9,000원");
+    expect(items).toEqual([{ name: "모듬꼬치", price: "" }, { name: "하이볼", price: "9,000원" }]);
+  });
+  it("looksLikeMenuBlock — 가격 줄이 2개 이상이면 메뉴로 본다", () => {
+    expect(looksLikeMenuBlock("네기마\n3,900원\n하이볼\n9,000원")).toBe(true);
+    expect(looksLikeMenuBlock("삼겹살집 | 서울 강남구 테헤란로 1")).toBe(false);
   });
 });

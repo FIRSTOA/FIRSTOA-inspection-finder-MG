@@ -2,33 +2,48 @@
  * 맛동여지도 — 주차 가능한 맛집을 팀이 함께 쌓는 공유 지도 (팀장 제안, 2026-08-25).
  * 강남처럼 주차가 어려운 곳에서 매번 다시 찾지 않게: 이름·주소(→좌표)·주차 정보·추천 메뉴·별점을 누구나 추가하고,
  * 지도(카카오→실패 시 OSM)와 목록에서 주차 가능만 걸러 보거나 내 위치·검색 기준 가까운 순으로 본다. 워킨맵과 같은 공유 모델.
+ *
+ * 2026-08-27 개편: 네이버지도처럼 "지도 + 목록(대표사진 썸네일) + 하단 상세(사진·메뉴판)" 3단 구성.
+ * 사진은 직접 올리고(폰 사진 축소 후 저장), 메뉴는 네이버지도 메뉴 탭을 긁어 붙이면 그대로 읽는다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, selectRows, updateRows, uploadPhoto } from "./supabase";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { geocodeKR } from "./geocode";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { kakaoMapSearchLink, naverMapLink } from "./navApp";
-import { looksLikeNaverSavedList, parseNaverSavedList, type ImportedPlace } from "./foodImport";
+import { prepareImageForUpload } from "./imageUpload";
+import { looksLikeMenuBlock, looksLikeNaverSavedList, parseMenuBlock, parseNaverSavedList, type ImportedPlace, type MenuItem } from "./foodImport";
 
 export type FoodPlace = {
   id: string; name: string; address: string; address_detail: string; lat: number | null; lng: number | null; gu: string;
   parking: "가능" | "유료" | "발렛" | "노상" | "불가" | "모름"; parking_memo: string; menu: string; price: string; rating: number;
   tags: string[]; memo: string; author: string; team: string; likes: number; created_at: string;
+  category: string; hours: string; tel: string; photos: string[]; menus: MenuItem[];
 };
 const PARKING: FoodPlace["parking"][] = ["가능", "유료", "발렛", "노상", "불가", "모름"];
 const PARKING_TONE: Record<string, string> = { 가능: "bg-emerald-100 text-emerald-800", 유료: "bg-blue-100 text-blue-800", 발렛: "bg-indigo-100 text-indigo-800", 노상: "bg-amber-100 text-amber-800", 불가: "bg-rose-100 text-rose-700", 모름: "bg-slate-100 text-slate-500" };
 const PARKING_COLOR: Record<string, string> = { 가능: "#059669", 유료: "#2563eb", 발렛: "#4f46e5", 노상: "#d97706", 불가: "#e11d48", 모름: "#64748b" };
 const TAGS = ["혼밥", "단체", "빨리나옴", "조용함", "가성비", "회식", "점심특선", "24시"];
+const MAX_PHOTOS = 8;
 const guOf = (address: string) => (address.match(/([가-힣]+(?:구|시|군))\s/) || [])[1] || "";
 const distKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => Math.sqrt(((a.lat - b.lat) * 111) ** 2 + ((a.lng - b.lng) * 88) ** 2);
 const stars = (n: number) => "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n));
 const esc = (v: string) => v.replace(/[<>&]/g, "");
+const distLabel = (d: number) => (d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`);
+/** 목록·상세에서 쓰는 대표 메뉴 (대표 표시된 것 먼저) */
+const topMenus = (p: FoodPlace, n: number): MenuItem[] => {
+  const list = Array.isArray(p.menus) ? p.menus : [];
+  return [...list].sort((a, b) => Number(Boolean(b.signature)) - Number(Boolean(a.signature))).slice(0, n);
+};
 
-type Form = { id: string; name: string; address: string; address_detail: string; parking: FoodPlace["parking"]; parking_memo: string; menu: string; price: string; rating: number; tags: string[]; memo: string };
-const emptyForm = (): Form => ({ id: "", name: "", address: "", address_detail: "", parking: "가능", parking_memo: "", menu: "", price: "", rating: 4, tags: [], memo: "" });
+type Form = {
+  id: string; name: string; category: string; address: string; address_detail: string; parking: FoodPlace["parking"]; parking_memo: string;
+  menu: string; price: string; rating: number; tags: string[]; memo: string; tel: string; hours: string; photos: string[]; menus: MenuItem[];
+};
+const emptyForm = (): Form => ({ id: "", name: "", category: "", address: "", address_detail: "", parking: "가능", parking_memo: "", menu: "", price: "", rating: 4, tags: [], memo: "", tel: "", hours: "", photos: [], menus: [] });
 
 export default function FoodMap({ author, team }: { author: string; team: string }) {
   const [places, setPlaces] = useState<FoodPlace[]>([]);
@@ -44,6 +59,10 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
   const [focusId, setFocusId] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [menuPaste, setMenuPaste] = useState<string | null>(null); // 메뉴 붙여넣기 입력창 (열려 있으면 문자열)
+  const [viewer, setViewer] = useState<{ urls: string[]; at: number } | null>(null); // 사진 크게 보기
+  const detailRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try { setPlaces(await selectRows<FoodPlace>("food_places", "select=*&order=created_at.desc&limit=2000")); }
@@ -58,7 +77,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
       (!teamFilter || p.team === teamFilter)
       && (!onlyParking || ["가능", "유료", "발렛"].includes(p.parking))
       && (!gu || p.gu === gu)
-      && (!key || [p.name, p.menu, p.address, p.memo, p.tags.join(" "), p.author].join(" ").toLowerCase().includes(key)));
+      && (!key || [p.name, p.category, p.menu, p.address, p.memo, (p.tags || []).join(" "), p.author, (p.menus || []).map((m) => m.name).join(" ")].join(" ").toLowerCase().includes(key)));
     if (origin) {
       return [...list].sort((a, b) => {
         const da = a.lat != null && a.lng != null ? distKm(origin, { lat: a.lat, lng: a.lng }) : 9e9;
@@ -82,6 +101,23 @@ export default function FoodMap({ author, team }: { author: string; team: string
     if (found) setOrigin({ lat: found.lat, lng: found.lng, label: q.trim().slice(0, 14) }); else notify("그 주소의 좌표를 못 찾았어요", "error");
   };
 
+  // ── 사진: 폰 사진은 그대로 올리면 수 MB — 1400px로 줄여 저장한다 (접수·필드탭과 같은 방식) ──
+  const addPhotos = async (files: FileList | null) => {
+    if (!files || !form || photoBusy) return;
+    const room = Math.max(0, MAX_PHOTOS - form.photos.length);
+    if (!room) { notify(`사진은 ${MAX_PHOTOS}장까지예요`, "error"); return; }
+    setPhotoBusy(true);
+    try {
+      const urls: string[] = [];
+      for (const file of Array.from(files).slice(0, room)) {
+        const prepared = await prepareImageForUpload(file, 1400);
+        urls.push(await uploadPhoto(`food/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType));
+      }
+      setForm((cur) => (cur ? { ...cur, photos: [...cur.photos, ...urls] } : cur));
+    } catch (e) { notify(`사진 업로드 실패: ${(e as Error).message}`, "error"); }
+    finally { setPhotoBusy(false); }
+  };
+
   const save = async () => {
     if (!form || busy) return;
     if (!form.name.trim()) { notify("가게 이름을 적어 주세요", "error"); return; }
@@ -93,13 +129,15 @@ export default function FoodMap({ author, team }: { author: string; team: string
         if (found) { lat = found.lat; lng = found.lng; } else notify("주소 좌표를 못 찾아 목록에만 올립니다 — 주소를 더 정확히 적으면 지도에 뜹니다", "error");
       }
       const row = {
-        name: form.name.trim(), address: form.address.trim(), address_detail: form.address_detail.trim(), lat, lng, gu: guOf(form.address),
+        name: form.name.trim(), category: form.category.trim(), address: form.address.trim(), address_detail: form.address_detail.trim(), lat, lng, gu: guOf(form.address),
         parking: form.parking, parking_memo: form.parking_memo.trim(), menu: form.menu.trim(), price: form.price.trim(), rating: form.rating,
-        tags: form.tags, memo: form.memo.trim(), updated_at: new Date().toISOString(),
+        tags: form.tags, memo: form.memo.trim(), tel: form.tel.trim(), hours: form.hours.trim(),
+        photos: form.photos, menus: form.menus.filter((m) => m.name.trim()).map((m) => ({ name: m.name.trim(), price: m.price.trim(), ...(m.signature ? { signature: true } : {}) })),
+        updated_at: new Date().toISOString(),
       };
       if (form.id) await updateRows("food_places", `id=eq.${form.id}`, row);
       else await insertRow("food_places", { ...row, author, team });
-      setForm(null);
+      setForm(null); setMenuPaste(null);
       await load();
       notify(form.id ? "수정했습니다" : "맛동여지도에 올렸습니다 — 모두에게 보입니다", "success");
     } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); }
@@ -151,7 +189,14 @@ export default function FoodMap({ author, team }: { author: string; team: string
     } catch (e) { notify(`일괄 등록 중단: ${(e as Error).message}`, "error"); }
     finally { setBusy(false); }
   };
-  const edit = (p: FoodPlace) => setForm({ id: p.id, name: p.name, address: p.address, address_detail: p.address_detail, parking: p.parking, parking_memo: p.parking_memo, menu: p.menu, price: p.price, rating: p.rating, tags: p.tags || [], memo: p.memo });
+  const edit = (p: FoodPlace) => {
+    setMenuPaste(null);
+    setForm({
+      id: p.id, name: p.name, category: p.category || "", address: p.address, address_detail: p.address_detail, parking: p.parking, parking_memo: p.parking_memo,
+      menu: p.menu, price: p.price, rating: p.rating, tags: p.tags || [], memo: p.memo, tel: p.tel || "", hours: p.hours || "",
+      photos: Array.isArray(p.photos) ? [...p.photos] : [], menus: Array.isArray(p.menus) ? p.menus.map((m) => ({ ...m })) : [],
+    });
+  };
 
   // ── 지도 (카카오 → OSM 폴백) ──
   const elRef = useRef<HTMLDivElement>(null);
@@ -209,6 +254,13 @@ export default function FoodMap({ author, team }: { author: string; team: string
   }, [engine, shown, origin, focusId]);
 
   const focused = places.find((p) => p.id === focusId);
+  // 휴대폰에서는 상세가 목록 아래에 있어 안 보인다 — 고르면 그 자리로 부드럽게 내려준다
+  useEffect(() => {
+    if (!focusId || typeof window === "undefined" || window.innerWidth >= 1024) return;
+    detailRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusId]);
+
+  const distOf = (p: FoodPlace) => (origin && p.lat != null && p.lng != null ? distKm(origin, { lat: p.lat, lng: p.lng }) : null);
 
   return (
     <div className="space-y-3">
@@ -216,11 +268,11 @@ export default function FoodMap({ author, team }: { author: string; team: string
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-lg font-black">🍴 맛동여지도 <span className="ml-1 text-[12px] font-semibold text-slate-400">주차 되는 맛집, 같이 쌓기</span></div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">누구나 올리고 모두가 봅니다 · 주차 정보가 핵심 · 마커 색 = 주차(초록 가능·파랑 유료·남색 발렛·주황 노상·빨강 불가)</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">누구나 올리고 모두가 봅니다 · 사진·메뉴판까지 · 마커 색 = 주차(초록 가능·파랑 유료·남색 발렛·주황 노상·빨강 불가)</div>
           </div>
           <div className="flex gap-1.5">
             <button type="button" onClick={() => { setBulk(""); setBulkLog([]); }} className="rounded-full bg-white/10 px-3 py-2 text-sm font-black text-slate-200 hover:bg-white/20">여러 개 붙여넣기</button>
-            <button type="button" onClick={() => setForm(emptyForm())} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow hover:bg-blue-500">+ 맛집 올리기</button>
+            <button type="button" onClick={() => { setMenuPaste(null); setForm(emptyForm()); }} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow hover:bg-blue-500">+ 맛집 올리기</button>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -249,59 +301,132 @@ export default function FoodMap({ author, team }: { author: string; team: string
       <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr]">
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div ref={elRef} className="h-[320px] w-full bg-slate-100 sm:h-[460px]" />
-          {focused && (
-            <div className="border-t border-slate-100 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[14px] font-black text-slate-900">{focused.name}</span>
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${PARKING_TONE[focused.parking]}`}>🅿 {focused.parking}</span>
-                {focused.rating > 0 && <span className="text-[12px] font-black text-amber-500">{stars(focused.rating)}</span>}
-              </div>
-              {focused.parking_memo && <div className="mt-1 text-[12px] font-bold text-slate-700">주차: {focused.parking_memo}</div>}
-              {focused.menu && <div className="text-[12px] text-slate-600">추천: {focused.menu}{focused.price ? ` · ${focused.price}` : ""}</div>}
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                <a href={naverMapLink(`${focused.name} ${focused.address}`)} target="_blank" rel="noreferrer" className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">네이버지도</a>
-                <a href={kakaoMapSearchLink(`${focused.name} ${focused.address}`)} target="_blank" rel="noreferrer" className="rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-black text-slate-900">카카오맵</a>
-              </div>
-            </div>
-          )}
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-4 py-2.5 text-[12px] font-black text-slate-500">{shown.length}곳{origin ? ` · ${origin.label} 기준 가까운 순` : " · 추천·별점 순"}</div>
-          {!shown.length && <div className="px-4 py-12 text-center text-sm font-semibold text-slate-400">{places.length ? "조건에 맞는 곳이 없어요" : "아직 올라온 맛집이 없어요 — 첫 번째로 올려 보세요"}</div>}
+          {!shown.length && <div className="px-4 py-12 text-center text-sm font-semibold text-slate-400">{places.length ? "조건에 맞는 곳이 없어요" : "아직 올라온 맛집이 없어요 — [+ 맛집 올리기]로 시작해 보세요"}</div>}
           <ul className="max-h-[520px] divide-y divide-slate-100 overflow-y-auto">
             {shown.map((p) => {
-              const d = origin && p.lat != null && p.lng != null ? distKm(origin, { lat: p.lat, lng: p.lng }) : null;
+              const d = distOf(p);
+              const thumb = (p.photos || [])[0] || "";
+              const menus = topMenus(p, 2);
               return (
-                <li key={p.id} className={`px-4 py-3 transition ${focusId === p.id ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
-                  <button type="button" onClick={() => setFocusId(p.id)} className="w-full text-left">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {d != null && <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`}</span>}
-                      <span className="text-[14px] font-black text-slate-900">{p.name}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${PARKING_TONE[p.parking]}`}>🅿 {p.parking}</span>
-                      {p.rating > 0 && <span className="text-[11px] font-black text-amber-500">{stars(p.rating)}</span>}
-                      {p.gu && <span className="text-[11px] font-semibold text-slate-400">{p.gu}</span>}
-                      {p.lat == null && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400">지도 미표시</span>}
-                    </div>
-                    {p.parking_memo && <div className="mt-0.5 text-[12px] font-bold text-emerald-800">주차 · {p.parking_memo}</div>}
-                    {(p.menu || p.price) && <div className="text-[12px] text-slate-700">{p.menu}{p.price ? ` · ${p.price}` : ""}</div>}
-                    {p.memo && <div className="text-[12px] text-slate-500">{p.memo}</div>}
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      {(p.tags || []).map((t) => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">#{t}</span>)}
-                      <span className="ml-auto text-[10px] font-semibold text-slate-400">{p.author}{p.team ? ` · ${p.team}팀` : ""} · {p.address.slice(0, 22)}</span>
-                    </div>
+                <li key={p.id} className={`transition ${focusId === p.id ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
+                  <button type="button" onClick={() => setFocusId(p.id)} className="flex w-full gap-3 px-4 py-3 text-left">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {d != null && <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{distLabel(d)}</span>}
+                        <span className="text-[14px] font-black text-slate-900">{p.name}</span>
+                        {p.category && <span className="text-[11px] font-bold text-slate-400">{p.category}</span>}
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${PARKING_TONE[p.parking]}`}>🅿 {p.parking}</span>
+                        {p.rating > 0 && <span className="text-[11px] font-black text-amber-500">{stars(p.rating)}</span>}
+                        {p.lat == null && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400">지도 미표시</span>}
+                      </span>
+                      {p.parking_memo && <span className="mt-0.5 block text-[12px] font-bold text-emerald-800">주차 · {p.parking_memo}</span>}
+                      {menus.length > 0
+                        ? <span className="mt-0.5 block truncate text-[12px] text-slate-700">{menus.map((m) => `${m.signature ? "⭐ " : ""}${m.name}${m.price ? ` ${m.price}` : ""}`).join(" · ")}</span>
+                        : (p.menu || p.price) && <span className="mt-0.5 block text-[12px] text-slate-700">{p.menu}{p.price ? ` · ${p.price}` : ""}</span>}
+                      <span className="mt-1 flex flex-wrap items-center gap-1">
+                        {(p.tags || []).slice(0, 3).map((t) => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">#{t}</span>)}
+                        <span className="ml-auto truncate text-[10px] font-semibold text-slate-400">{p.gu || p.address.slice(0, 12)} · {p.author}{p.team ? ` ${p.team}팀` : ""}</span>
+                      </span>
+                    </span>
+                    {thumb
+                      ? <img src={thumb} alt="" loading="lazy" className="h-[74px] w-[74px] shrink-0 rounded-xl object-cover" />
+                      : <span className="flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-300">🍴</span>}
                   </button>
-                  <div className="mt-1.5 flex gap-1.5">
-                    <button type="button" onClick={() => void like(p)} className="rounded-full border border-rose-200 px-2.5 py-1 text-[11px] font-black text-rose-600 hover:bg-rose-50">👍 추천 {p.likes}</button>
-                    <button type="button" onClick={() => edit(p)} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50">수정</button>
-                    <button type="button" onClick={() => void remove(p)} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-400 hover:bg-slate-50">삭제</button>
-                  </div>
                 </li>
               );
             })}
           </ul>
         </section>
       </div>
+
+      {/* 하단 상세 — 네이버지도처럼 사진·메뉴판·주차·길찾기를 한자리에 */}
+      <section ref={detailRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {!focused ? (
+          <div className="px-4 py-8 text-center text-[13px] font-semibold text-slate-400">지도의 핀이나 목록에서 가게를 고르면 사진·메뉴가 여기 나옵니다</div>
+        ) : (
+          <>
+            {(focused.photos || []).length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto bg-slate-900/5 p-1.5">
+                {focused.photos.map((url, i) => (
+                  <button key={url} type="button" onClick={() => setViewer({ urls: focused.photos, at: i })} className="shrink-0">
+                    <img src={url} alt="" loading="lazy" className={`${i === 0 ? "h-40 w-56 sm:h-48 sm:w-72" : "h-40 w-36 sm:h-48 sm:w-44"} rounded-xl object-cover transition hover:opacity-90`} />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[17px] font-black text-slate-950">{focused.name}</span>
+                {focused.category && <span className="text-[12px] font-bold text-slate-400">{focused.category}</span>}
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${PARKING_TONE[focused.parking]}`}>🅿 {focused.parking}</span>
+                {focused.rating > 0 && <span className="text-[13px] font-black text-amber-500">{stars(focused.rating)}</span>}
+                {distOf(focused) != null && <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[11px] font-black tabular-nums text-white">{distLabel(distOf(focused) as number)}</span>}
+                <span className="ml-auto text-[11px] font-semibold text-slate-400">{focused.author}{focused.team ? ` · ${focused.team}팀` : ""}</span>
+              </div>
+              <div className="mt-1 text-[12px] font-semibold text-slate-500">{focused.address}{focused.address_detail ? ` · ${focused.address_detail}` : ""}{focused.hours ? ` · ${focused.hours}` : ""}</div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  {focused.parking_memo && (
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-900">🅿 {focused.parking_memo}</div>
+                  )}
+                  {focused.memo && <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[12px] font-semibold leading-5 text-slate-700">{focused.memo}</div>}
+                  {(focused.tags || []).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {focused.tags.map((t) => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">#{t}</span>)}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-slate-400">메뉴</div>
+                  {(focused.menus || []).length > 0 ? (
+                    <ul className="mt-1 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                      {focused.menus.map((m) => (
+                        <li key={m.name} className="flex items-center gap-2 px-3 py-1.5">
+                          {m.signature && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">대표</span>}
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800">{m.name}</span>
+                          <span className="shrink-0 text-[13px] font-black tabular-nums text-slate-900">{m.price}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-1 rounded-xl border border-dashed border-slate-200 px-3 py-3 text-[12px] font-semibold text-slate-400">
+                      {focused.menu ? `${focused.menu}${focused.price ? ` · ${focused.price}` : ""}` : "아직 메뉴가 없어요"} — [수정]에서 네이버지도 메뉴를 붙여넣으면 한 번에 들어갑니다
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <a href={naverMapLink(`${focused.name} ${focused.address}`)} target="_blank" rel="noreferrer" className="rounded-full bg-emerald-600 px-3 py-1.5 text-[12px] font-black text-white">네이버 길찾기</a>
+                <a href={kakaoMapSearchLink(`${focused.name} ${focused.address}`)} target="_blank" rel="noreferrer" className="rounded-full bg-amber-400 px-3 py-1.5 text-[12px] font-black text-slate-900">카카오맵</a>
+                {focused.tel && <a href={`tel:${focused.tel.replace(/[^0-9+]/g, "")}`} className="rounded-full bg-slate-900 px-3 py-1.5 text-[12px] font-black text-white">📞 {focused.tel}</a>}
+                <button type="button" onClick={() => void like(focused)} className="rounded-full border border-rose-200 px-3 py-1.5 text-[12px] font-black text-rose-600 hover:bg-rose-50">👍 추천 {focused.likes}</button>
+                <button type="button" onClick={() => edit(focused)} className="rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-black text-slate-600 hover:bg-slate-50">수정 · 사진/메뉴 추가</button>
+                <button type="button" onClick={() => void remove(focused)} className="rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-black text-slate-400 hover:bg-slate-50">삭제</button>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
+      {viewer && (
+        <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/80 p-3" onMouseDown={() => setViewer(null)}>
+          <img src={viewer.urls[viewer.at]} alt="" className="max-h-[86vh] max-w-full rounded-xl object-contain" onMouseDown={(e) => e.stopPropagation()} />
+          {viewer.urls.length > 1 && (
+            <div className="absolute bottom-5 flex gap-2" onMouseDown={(e) => e.stopPropagation()}>
+              {viewer.urls.map((u, i) => (
+                <button key={u} type="button" onClick={() => setViewer({ ...viewer, at: i })} className={`h-2.5 w-2.5 rounded-full ${i === viewer.at ? "bg-white" : "bg-white/40"}`} aria-label={`${i + 1}번째 사진`} />
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={() => setViewer(null)} className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1.5 text-sm font-black text-white">닫기 ✕</button>
+        </div>
+      )}
 
       {bulk != null && (
         <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!busy) setBulk(null); }}>
@@ -310,19 +435,19 @@ export default function FoodMap({ author, team }: { author: string; team: string
             {!preview ? (
               <>
                 <div className="mt-1 text-[12px] font-semibold leading-5 text-slate-500">
-                  <b>네이버지도 "저장" 목록을 쭉 긁어 붙여넣으면</b> 그대로 읽습니다(가게명·주소·내 메모의 주차 문구까지). 한 줄 형식 <code className="rounded bg-slate-100 px-1">가게명 | 주소 | 주차메모</code>도 됩니다.
+                  <b>네이버지도 "저장" 목록을 쭉 긁어 붙여넣으면</b> 그대로 읽습니다(가게명·주소·내 메모의 주차 문구까지). 한 줄 형식 <code className="rounded bg-slate-100 px-1">이름 | 주소 | 주차메모</code>도 됩니다.
                   주소가 없으면 가게명으로 좌표를 찾습니다.
                 </div>
-                <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={10} autoFocus placeholder={"네이버지도 저장목록 복사본을 여기에…\n\n또는\n삼겹살집 | 서울 강남구 테헤란로 152 | 건물 지하 1시간 무료"}
+                <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={10} autoFocus placeholder={"네이버지도 저장목록 복사본을 여기에…\n\n또는\n삼겹살집 | 서울 강남구 테헤란로 1 | 건물 지하 2시간 무료"}
                   className="mt-3 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-[12px] leading-5 outline-none focus:border-blue-500" />
                 <div className="mt-4 flex gap-2">
                   <button type="button" onClick={() => setBulk(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">닫기</button>
-                  <button type="button" disabled={!bulk.trim()} onClick={buildPreview} className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">해석해서 미리보기</button>
+                  <button type="button" disabled={!bulk.trim()} onClick={buildPreview} className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">해석해서 확인하기</button>
                 </div>
               </>
             ) : (
               <>
-                <div className="mt-1 text-[12px] font-semibold text-slate-500">잘못 읽힌 건 ✕로 빼고 올리세요. 업종·메뉴·별점은 올린 뒤 [수정]으로 채울 수 있습니다.</div>
+                <div className="mt-1 text-[12px] font-semibold text-slate-500">잘못 읽힌 건 ✕로 빼고 올리세요. 업종·메뉴·사진·별점은 올린 뒤 [수정]으로 채울 수 있습니다.</div>
                 <ul className="mt-3 max-h-[46vh] divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
                   {preview.map((r, i) => (
                     <li key={`${r.name}-${i}`} className="flex items-start gap-2 px-3 py-2">
@@ -335,38 +460,116 @@ export default function FoodMap({ author, team }: { author: string; team: string
                         <span className="block truncate text-[11px] text-slate-500">{r.address || "(주소 없음 — 이름으로 검색)"}</span>
                         {(r.parkingMemo || r.memo) && <span className="block text-[11px] text-emerald-800">{[r.parkingMemo, r.memo].filter(Boolean).join(" · ")}</span>}
                       </span>
-                      <button type="button" onClick={() => setPreview(preview.filter((_, j) => j !== i))} className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-black text-slate-400 hover:bg-rose-50 hover:text-rose-600">✕</button>
+                      <button type="button" onClick={() => setPreview(preview.filter((_, j) => j !== i))} className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-black text-slate-400 hover:bg-rose-50 hover:text-rose-500">✕</button>
                     </li>
                   ))}
                 </ul>
                 {bulkLog.length > 0 && <div className="mt-2 max-h-28 overflow-y-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{bulkLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
                 <div className="mt-4 flex gap-2">
-                  <button type="button" disabled={busy} onClick={() => setPreview(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">← 다시 붙이기</button>
-                  <button type="button" disabled={busy || !preview.length} onClick={() => void runBulk()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? `올리는 중… ${bulkLog.length}/${preview.length}` : `${preview.length}곳 올리기`}</button>
+                  <button type="button" disabled={busy} onClick={() => setPreview(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">← 다시 붙여넣기</button>
+                  <button type="button" disabled={busy || !preview.length} onClick={() => void runBulk()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? "올리는 중…" : `${preview.length}곳 올리기`}</button>
                 </div>
               </>
             )}
           </div>
         </div>
       )}
+
       {form && (
-        <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setForm(null)}>
+        <div className="fixed inset-0 z-[160] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!busy && !photoBusy) setForm(null); }}>
           <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
             <div className="text-lg font-black text-slate-950">{form.id ? "맛집 수정" : "맛집 올리기"}</div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">주소를 넣으면 좌표를 찍어 지도에 올립니다 · 주차 정보를 꼭 적어 주세요</div>
             <div className="mt-4 space-y-2">
-              <input value={form.name} autoFocus onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="가게 이름 *" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-500" />
-              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="주소 (예: 서울 강남구 테헤란로 152)" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500" />
+              <div className="grid grid-cols-[1fr_8rem] gap-2">
+                <input value={form.name} autoFocus onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="가게 이름 *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+                <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="업종(이자카야)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+              </div>
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="주소 (예: 서울 강남구 테헤란로 152)" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
               <input value={form.address_detail} onChange={(e) => setForm({ ...form, address_detail: e.target.value })} placeholder="상세 (건물·층, 선택)" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={form.tel} onChange={(e) => setForm({ ...form, tel: e.target.value })} placeholder="전화 (선택)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+                <input value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })} placeholder="영업시간 (예: 17:00~24시)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+              </div>
+
+              {/* 사진 — 폰 사진은 자동으로 줄여 올린다 */}
+              <div className="rounded-xl border border-slate-200 p-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-black text-slate-500">사진 {form.photos.length}/{MAX_PHOTOS}</div>
+                  <label className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-black ${photoBusy ? "bg-slate-200 text-slate-400" : "bg-slate-900 text-white"}`}>
+                    {photoBusy ? "올리는 중…" : "＋ 사진 고르기"}
+                    <input type="file" accept="image/*" multiple disabled={photoBusy} className="hidden" onChange={(e) => { void addPhotos(e.target.files); e.currentTarget.value = ""; }} />
+                  </label>
+                </div>
+                {form.photos.length > 0 && (
+                  <div className="mt-2 flex gap-1.5 overflow-x-auto">
+                    {form.photos.map((url, i) => (
+                      <div key={url} className="relative shrink-0">
+                        <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                        {i === 0 && <span className="absolute left-1 top-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-black text-white">대표</span>}
+                        <button type="button" onClick={() => setForm({ ...form, photos: form.photos.filter((_, j) => j !== i) })} className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-slate-900 text-[11px] font-black text-white">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-1 text-[10px] font-semibold text-slate-400">첫 장이 목록 썸네일로 쓰입니다</div>
+              </div>
+
+              {/* 메뉴 — 네이버지도 메뉴 탭을 긁어 붙이면 이름·가격·대표까지 한 번에 */}
+              <div className="rounded-xl border border-slate-200 p-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-black text-slate-500">메뉴 {form.menus.length}개</div>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => setMenuPaste(menuPaste == null ? "" : null)} className="rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-black text-white">네이버 메뉴 붙여넣기</button>
+                    <button type="button" onClick={() => setForm({ ...form, menus: [...form.menus, { name: "", price: "" }] })} className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-black text-slate-600">＋ 한 줄</button>
+                  </div>
+                </div>
+                {menuPaste != null && (
+                  <div className="mt-2 rounded-lg bg-slate-50 p-2">
+                    <textarea value={menuPaste} onChange={(e) => setMenuPaste(e.target.value)} rows={5} placeholder={"네이버지도 메뉴 화면을 쭉 긁어 붙여넣기\n\n대표\n네기마(다리살+대파)\n3,900원\n히타하이볼\n9,000원"}
+                      className="w-full resize-y rounded-lg border border-slate-300 px-2.5 py-2 font-mono text-[12px] leading-5 outline-none focus:border-emerald-500" />
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <button type="button" disabled={!menuPaste.trim()}
+                        onClick={() => {
+                          const parsed = parseMenuBlock(menuPaste);
+                          if (!parsed.length) { notify("메뉴를 못 읽었어요 — 이름과 가격 줄이 있는지 봐 주세요", "error"); return; }
+                          const merged = [...form.menus.filter((m) => m.name.trim()), ...parsed.filter((p) => !form.menus.some((m) => m.name.trim() === p.name))];
+                          setForm({ ...form, menus: merged });
+                          setMenuPaste(null);
+                          notify(`메뉴 ${parsed.length}개를 읽었습니다`, "success");
+                        }}
+                        className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-40">읽어서 넣기</button>
+                      <button type="button" onClick={() => setMenuPaste(null)} className="rounded-full border border-slate-300 px-3 py-1.5 text-[11px] font-black text-slate-500">취소</button>
+                      {menuPaste.trim() && !looksLikeMenuBlock(menuPaste) && <span className="text-[10px] font-bold text-amber-600">가격 줄이 안 보여요 — 그래도 이름은 들어갑니다</span>}
+                    </div>
+                  </div>
+                )}
+                {form.menus.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {form.menus.map((m, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <button type="button" title="대표 메뉴" onClick={() => setForm({ ...form, menus: form.menus.map((x, j) => (j === i ? { ...x, signature: !x.signature } : x)) })}
+                          className={`shrink-0 rounded px-1.5 py-1 text-[11px] font-black ${m.signature ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-400"}`}>대표</button>
+                        <input value={m.name} onChange={(e) => setForm({ ...form, menus: form.menus.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} placeholder="메뉴 이름"
+                          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-[13px] font-semibold outline-none focus:border-blue-500" />
+                        <input value={m.price} onChange={(e) => setForm({ ...form, menus: form.menus.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)) })} placeholder="가격"
+                          className="w-24 shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-right text-[13px] font-semibold tabular-nums outline-none focus:border-blue-500" />
+                        <button type="button" onClick={() => setForm({ ...form, menus: form.menus.filter((_, j) => j !== i) })} className="shrink-0 rounded-full px-2 py-1 text-[12px] font-black text-slate-400 hover:bg-rose-50 hover:text-rose-500">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <div className="mb-1 text-[11px] font-black text-slate-500">주차</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {PARKING.map((p) => <button key={p} type="button" onClick={() => setForm({ ...form, parking: p })} className={`rounded-full px-3 py-1.5 text-[12px] font-black ${form.parking === p ? "bg-slate-900 text-white" : PARKING_TONE[p]}`}>{p}</button>)}
+                  {PARKING.map((p) => <button key={p} type="button" onClick={() => setForm({ ...form, parking: p })} className={`rounded-full px-3 py-1.5 text-[12px] font-black ${form.parking === p ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{p}</button>)}
                 </div>
-                <input value={form.parking_memo} onChange={(e) => setForm({ ...form, parking_memo: e.target.value })} placeholder="주차 메모 (예: 건물 지하 1시간 무료, 옆 공영주차장 2천원)" className="mt-1.5 w-full rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500" />
+                <input value={form.parking_memo} onChange={(e) => setForm({ ...form, parking_memo: e.target.value })} placeholder="주차 메모 (예: 건물 지하 1시간 무료, 옆 공영주차장)" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
               </div>
               <div className="grid grid-cols-[1fr_7rem] gap-2">
-                <input value={form.menu} onChange={(e) => setForm({ ...form, menu: e.target.value })} placeholder="추천 메뉴" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
+                <input value={form.menu} onChange={(e) => setForm({ ...form, menu: e.target.value })} placeholder="한 줄 추천 (메뉴판과 별개, 선택)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
                 <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="1인 가격" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
               </div>
               <div className="flex items-center gap-2">
@@ -374,13 +577,13 @@ export default function FoodMap({ author, team }: { author: string; team: string
                 {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => setForm({ ...form, rating: n })} className={`text-xl ${n <= form.rating ? "text-amber-400" : "text-slate-300"}`}>★</button>)}
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {TAGS.map((t) => { const on = form.tags.includes(t); return <button key={t} type="button" onClick={() => setForm({ ...form, tags: on ? form.tags.filter((x) => x !== t) : [...form.tags, t] })} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${on ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>#{t}</button>; })}
+                {TAGS.map((t) => { const on = form.tags.includes(t); return <button key={t} type="button" onClick={() => setForm({ ...form, tags: on ? form.tags.filter((x) => x !== t) : [...form.tags, t] })} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${on ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>#{t}</button>; })}
               </div>
               <textarea value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} rows={2} placeholder="한 줄 메모 (선택)" className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
             </div>
             <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => setForm(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">취소</button>
-              <button type="button" disabled={busy} onClick={() => void save()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? "저장 중…" : form.id ? "수정 저장" : "올리기"}</button>
+              <button type="button" onClick={() => { setForm(null); setMenuPaste(null); }} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-black text-slate-500">취소</button>
+              <button type="button" disabled={busy || photoBusy} onClick={() => void save()} className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-black text-white shadow disabled:opacity-50">{busy ? "저장 중…" : photoBusy ? "사진 올리는 중…" : "저장"}</button>
             </div>
           </div>
         </div>
