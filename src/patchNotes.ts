@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b18eb8fe64",
+    "date": "2026-08-26",
+    "note": "서비스접수 업체명을 시트 원문(CA열) 기준으로 실제 연결 — 직전 커밋에서 빠진 배선"
+  },
+  {
     "hash": "88c7c64b99",
     "date": "2026-08-26",
     "note": "접수 양식 업체명 = 임대리스트 시트 원문(CA열, 지점 포함, 등급 접두 제거) — 워킨맵 이름 우선 폐기(본사/현장 오선택·25V25#V 겹침 수리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d1bcb0a71d",
     "date": "2026-08-14",
     "note": "카카오 워킨맵 라벨에 흰 말풍선 배경(지도 글자와 분리, 선택 시 다크 반전 유지) + 자동일정 '1차 시안' 뱃지 제거"
-  },
-  {
-    "hash": "b0a7ea62c8",
-    "date": "2026-08-14",
-    "note": "워킨맵 칩 상세 표기 복원 + 이력 팝업 내용 강화"
   }
 ];

@@ -93,6 +93,17 @@ function preFilterForCategory_(cat, messages) {
   });
 }
 
+// 지역 표기 → 팀 글자(A~E). 못 알아보면 업로드 팀 글자, 그것도 없으면 빈칸.
+function regionLetter_(value, teamLabel) {
+  var v = String(value == null ? '' : value).trim();
+  var m = v.match(/^\s*(?:강서|강남|강북|강동|서울)?\s*(?:수도권)?\s*([A-Ea-e])\s*(?:지역|팀)?\s*$/);
+  if (m) return m[1].toUpperCase();
+  if (/(경기|평택|수원|화성|오산|성남|인천|용인|안양|부천|고양|일산|파주|김포|하남|과천|안산|시흥|의정부|남양주|포승|광명|구리|이천|안성|양주|동탄)/.test(v)) return 'D';
+  if (/(지방|충청|충남|충북|경상|경남|경북|전라|전남|전북|강원|제주|대전|대구|부산|울산|세종)/.test(v)) return 'E';
+  var t = String(teamLabel || '').trim().toUpperCase();
+  return /^[A-E]$/.test(t) ? t : '';
+}
+
 // 추출된 레코드를 통합 탭에 중복 제거하며 추가. (시트의 현재 dupKey를 매번 다시 읽어 배치 간 중복도 거른다)
 function appendKakaoRecords_(cat, roomType, teamLabel, records) {
   const masterSs = SpreadsheetApp.openById(MASTER_SS_ID);
@@ -110,6 +121,8 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
     const vendor = String(rec.vendor || '').trim();
     if (!vendor) continue;
     const obj = rec.obj || {};
+    // 지역은 A~E 한 글자로만 저장한다 — "수도권D"·"경기 화성시"·"강서b"·라벨 오삼킴("키맨/접수자: …")이 그대로 들어갔던 것(2026-08-26 정리)
+    if (obj['지역'] != null) obj['지역'] = regionLetter_(obj['지역'], teamLabel);
     const key = dupKey_(cat, vendor, obj);
     if (existing[key]) continue;
     existing[key] = true;
