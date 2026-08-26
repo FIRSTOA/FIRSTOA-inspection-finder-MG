@@ -528,40 +528,42 @@ export default function FoodMap({ author, team }: { author: string; team: string
           <>
             <div className="relative">
               {(focused.photos || []).length > 0 ? (
-                <>
-                  <button type="button" onClick={() => setViewer({ urls: focused.photos, at: 0 })} className="block w-full">
-                    <img src={focused.photos[0]} alt="" className="h-52 w-full object-cover sm:h-64" />
+                // 한 장을 크게 늘려 자르면 고기 클로즈업처럼 이상하게 보인다 — 큰 사진 + 옆 두 장의 갤러리 배치
+                <div className="grid h-44 grid-cols-3 gap-1 bg-white sm:h-56">
+                  <button type="button" onClick={() => setViewer({ urls: focused.photos, at: 0 })}
+                    className={`relative overflow-hidden ${focused.photos.length > 1 ? "col-span-2" : "col-span-3"}`}>
+                    <img src={focused.photos[0]} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
                   </button>
                   {focused.photos.length > 1 && (
-                    <div className="absolute bottom-3 right-3 flex gap-1.5">
-                      {focused.photos.slice(1, 5).map((url, i) => (
-                        <button key={url} type="button" onClick={() => setViewer({ urls: focused.photos, at: i + 1 })}>
-                          <img src={url} alt="" loading="lazy" className="h-14 w-14 rounded-xl object-cover ring-2 ring-white/70 transition hover:ring-white" />
-                        </button>
-                      ))}
-                      {focused.photos.length > 5 && (
-                        <button type="button" onClick={() => setViewer({ urls: focused.photos, at: 5 })}
-                          className="grid h-14 w-14 place-items-center rounded-xl bg-black/55 text-[12px] font-black text-white ring-2 ring-white/70 backdrop-blur">+{focused.photos.length - 5}</button>
-                      )}
+                    <div className="grid grid-rows-2 gap-1">
+                      {focused.photos.slice(1, 3).map((url, i) => {
+                        const more = i === 1 && focused.photos.length > 3 ? focused.photos.length - 3 : 0;
+                        return (
+                          <button key={url} type="button" onClick={() => setViewer({ urls: focused.photos, at: i + 1 })} className="relative overflow-hidden">
+                            <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover transition duration-300 hover:scale-[1.04]" />
+                            {more > 0 && <span className="absolute inset-0 grid place-items-center bg-slate-950/55 text-[15px] font-black text-white backdrop-blur-[1px]">+{more}</span>}
+                          </button>
+                        );
+                      })}
+                      {focused.photos.length === 2 && <div className="bg-slate-50" />}
                     </div>
                   )}
-                </>
+                </div>
               ) : (
-                <div className="grid h-32 w-full place-items-center bg-gradient-to-br from-slate-100 to-orange-50 sm:h-40">
+                <div className="grid h-28 w-full place-items-center bg-gradient-to-br from-slate-100 to-orange-50 sm:h-32">
                   <div className="text-center">
-                    <div className="text-3xl opacity-40">📷</div>
-                    <div className="mt-1 text-[11px] font-bold text-slate-400">사진이 없어요 — [수정]에서 올려 주세요</div>
+                    <div className="text-2xl opacity-40">📷</div>
+                    <div className="mt-1 text-[11px] font-bold text-slate-400">사진이 없어요 — [사진·메뉴 채우기]에서 자동으로 찾을 수 있어요</div>
                   </div>
                 </div>
               )}
-              <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-4">
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                  <h3 className="text-[21px] font-black leading-tight tracking-tight text-white drop-shadow">{focused.name}</h3>
-                  {focused.category && <span className="pb-0.5 text-[12px] font-bold text-white/70">{focused.category}</span>}
-                  {focused.rating > 0 && <span className="pb-0.5 text-[13px] font-black text-amber-300 drop-shadow">{stars(focused.rating)}</span>}
-                  <span className="ml-auto pb-0.5 text-[11px] font-bold text-white/70">{focused.author}{focused.team ? ` · ${focused.team}팀` : ""}</span>
-                </div>
+              {/* 이름 띠 — 사진 위 글씨가 묻히지 않게 아래쪽만 짙게 */}
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end gap-x-2 gap-y-0.5 px-4 pb-2.5">
+                <h3 className="text-[19px] font-black leading-tight tracking-tight text-white [text-shadow:0_1px_3px_rgba(0,0,0,.6)]">{focused.name}</h3>
+                {focused.category && <span className="pb-0.5 text-[11px] font-bold text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,.6)]">{focused.category}</span>}
+                {focused.rating > 0 && <span className="pb-0.5 text-[12px] font-black text-amber-300 [text-shadow:0_1px_2px_rgba(0,0,0,.6)]">{stars(focused.rating)}</span>}
+                <span className="ml-auto pb-1 text-[10px] font-bold text-white/70">{focused.author}{focused.team ? ` · ${focused.team}팀` : ""}</span>
               </div>
             </div>
 
