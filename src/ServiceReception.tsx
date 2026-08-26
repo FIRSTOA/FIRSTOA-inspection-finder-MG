@@ -10,6 +10,7 @@ import { kstDate } from "./visits";
 import { normRegion } from "./region";
 import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
+import { sheetVendorName } from "./vendorName";
 import { prepareImageForUpload } from "./imageUpload";
 import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
@@ -656,7 +657,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     }
   };
 
-  const vendorName = workinName || pick(lease, "거래처명", "_업체명", "업체명") || (custKind === "신규" ? manualVendor.trim() : "");
+  // 업체명은 임대리스트 시트 원문(CA열, 지점 표기 포함)을 쓴다 — 워킨맵 이름을 앞세우던 예전 방식은 본사·현장이 여럿인 업체에서 엉뚱한 지점을 적었다
+  const vendorName = sheetVendorName(lease) || (custKind === "신규" ? manualVendor.trim() : "");
   // 접수 시점에 이 업체에 걸린 것(미수·초과·불만·점검·재계약)을 ⚠칩 하나로 — 누르면 통합이력 (일정리스트와 같은 기준)
   const [vendorAlert, setVendorAlert] = useState<VendorWorkFlags | null>(null);
   const [histVendor, setHistVendor] = useState("");
@@ -713,8 +715,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   const report = useMemo(() => {
     if (!reportSource) return "";
-    // 워킨맵 이름 → 시트 원문 업체명(지점 표기 포함 "25V(주) 드림엔지니어링삼성동현장…") → 회사명만 — 본사·현장이 여럿인 업체가 엉뚱한 지점으로 적히지 않게
-    const 업체명 = workinName || pick(reportSource, "업체명", "거래처명", "_업체명");
+    // 시트 원문 업체명(지점 표기 포함, 등급 접두는 양식이 따로 붙이므로 뗀다) → 회사명만. 워킨맵 이름은 쓰지 않는다(지점 오선택 실사고)
+    const 업체명 = sheetVendorName(reportSource);
     const 등급 = pick(reportSource, "등급");
     const 모델명 = pick(reportSource, "모델명", "기종");
     const 기번 = pick(reportSource, "시리얼번호(기번)", "기번");

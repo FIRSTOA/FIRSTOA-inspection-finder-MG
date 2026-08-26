@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "88c7c64b99",
+    "date": "2026-08-26",
+    "note": "접수 양식 업체명 = 임대리스트 시트 원문(CA열, 지점 포함, 등급 접두 제거) — 워킨맵 이름 우선 폐기(본사/현장 오선택·25V25#V 겹침 수리)"
+  },
+  {
     "hash": "9abece95d1",
     "date": "2026-08-26",
     "note": "양식 업체명 지점 오선택 수리(워킨맵 본사/현장 여럿이면 시트 원문 업체명으로) + 네이버 수입 팀 판정(본문 지역≠시간대면 주소로) + 물류 완료 문구·설명서, schedule 설명서 복원"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b0a7ea62c8",
     "date": "2026-08-14",
     "note": "워킨맵 칩 상세 표기 복원 + 이력 팝업 내용 강화"
-  },
-  {
-    "hash": "240a176219",
-    "date": "2026-08-14",
-    "note": "내 일정 상세 모달 — 워킨맵 안 봐도 되는 실행 화면으로"
   }
 ];
