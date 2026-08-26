@@ -25,3 +25,21 @@ export async function menusFromPhoto(imageUrl: string): Promise<MenuItem[]> {
   if (res.error) throw new Error(res.error);
   return (Array.isArray(res.menus) ? res.menus : []).filter((m) => m.name);
 }
+
+export type PhotoHit = { url: string; thumb: string; site: string; doc: string };
+
+/** 가게 사진 자동 찾기 (카카오·네이버 이미지 검색) — 후보를 돌려주고, 고른 것만 우리 저장소로 복사한다. */
+export async function searchPhotos(q: string): Promise<PhotoHit[]> {
+  const query = q.trim();
+  if (query.length < 2) return [];
+  const res = await invokeEdgeFunction<{ ok?: boolean; photos?: PhotoHit[]; error?: string }>("place-search", { action: "photos", q: query });
+  if (res.error) throw new Error(res.error);
+  return Array.isArray(res.photos) ? res.photos : [];
+}
+
+/** 외부 사진을 우리 저장소로 복사 — 원본 링크가 막히거나 사라져도 계속 보이게 */
+export async function savePhotoToStorage(url: string): Promise<string> {
+  const res = await invokeEdgeFunction<{ ok?: boolean; url?: string; error?: string }>("place-search", { action: "save_photo", url });
+  if (res.error || !res.url) throw new Error(res.error || "복사 실패");
+  return res.url;
+}

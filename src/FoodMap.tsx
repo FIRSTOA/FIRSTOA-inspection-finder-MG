@@ -15,7 +15,7 @@ import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { prepareImageForUpload } from "./imageUpload";
-import { menusFromPhoto, searchPlaces, type PlaceCandidate } from "./placeSearch";
+import { menusFromPhoto, savePhotoToStorage, searchPhotos, searchPlaces, type PhotoHit, type PlaceCandidate } from "./placeSearch";
 import { looksLikeMenuBlock, looksLikeNaverSavedList, parseMenuBlock, parseNaverSavedList, type ImportedPlace, type MenuItem } from "./foodImport";
 
 export type FoodPlace = {
@@ -68,6 +68,8 @@ export default function FoodMap({ author, team }: { author: string; team: string
   const [cands, setCands] = useState<PlaceCandidate[] | null>(null); // 검색 후보
   const [lookupBusy, setLookupBusy] = useState(false);
   const [menuBusy, setMenuBusy] = useState(false); // 메뉴 사진 읽는 중
+  const [photoHits, setPhotoHits] = useState<PhotoHit[] | null>(null); // 자동으로 찾은 사진 후보
+  const [photoFindBusy, setPhotoFindBusy] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -146,7 +148,10 @@ export default function FoodMap({ author, team }: { author: string; team: string
       lat: c.lat, lng: c.lng,
     } : cur));
     setCands(null); setLookup("");
-    notify(`${c.name} 정보를 채웠습니다 — 주차·사진·메뉴만 더하면 끝`, "success");
+    notify(`${c.name} 정보를 채웠습니다 — 사진도 바로 찾아옵니다`, "success");
+    // 고르는 순간 사진까지 찾아 온다 (한 번 더 누르지 않게)
+    const gu2 = ((c.roadAddress || c.address).match(/([가-힣]+(?:구|시|군))/) || [])[1] || "";
+    void findPhotos([c.name, gu2].filter(Boolean).join(" "));
   };
   // 메뉴판·네이버 메뉴 화면 사진 → AI가 이름·가격·대표까지 읽어 담는다
   const readMenuPhoto = async (files: FileList | null) => {
@@ -166,6 +171,32 @@ export default function FoodMap({ author, team }: { author: string; team: string
       notify(`메뉴 ${read.length}개를 읽었습니다`, "success");
     } catch (e) { notify(`메뉴 읽기 실패: ${(e as Error).message}`, "error"); }
     finally { setMenuBusy(false); }
+  };
+
+  // 가게 이름으로 사진을 찾아온다 (카카오·네이버 이미지 검색) — 지도 API는 사진을 주지 않는다
+  const findPhotos = async (keyword?: string) => {
+    if (photoFindBusy) return;
+    const q = (keyword ?? [form?.name.trim() || "", (form?.address.match(/([가-힣]+(?:구|시|군))/) || [])[1] || ""].filter(Boolean).join(" ")).trim();
+    if (q.length < 2) { notify("가게 이름을 먼저 넣어 주세요", "error"); return; }
+    setPhotoFindBusy(true);
+    try {
+      const hits = await searchPhotos(q);
+      setPhotoHits(hits);
+      if (!hits.length) notify("사진을 못 찾았어요 — 이름을 더 정확히 넣거나 직접 올려 주세요", "error");
+    } catch (e) { notify(`사진 찾기 실패: ${(e as Error).message}`, "error"); }
+    finally { setPhotoFindBusy(false); }
+  };
+  // 고른 후보는 우리 저장소로 복사해 담는다 (원본 링크가 막히거나 사라져도 계속 보이게)
+  const takePhoto = async (hit: PhotoHit) => {
+    if (!form || photoBusy) return;
+    if (form.photos.length >= MAX_PHOTOS) { notify(`사진은 ${MAX_PHOTOS}장까지예요`, "error"); return; }
+    setPhotoBusy(true);
+    try {
+      const url = await savePhotoToStorage(hit.url);
+      setForm((cur) => (cur ? { ...cur, photos: [...cur.photos, url] } : cur));
+      setPhotoHits((cur) => (cur ? cur.filter((h) => h.url !== hit.url) : cur));
+    } catch (e) { notify(`사진을 담지 못했습니다: ${(e as Error).message}`, "error"); }
+    finally { setPhotoBusy(false); }
   };
 
   const save = async () => {
@@ -247,7 +278,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
       photos: Array.isArray(p.photos) ? [...p.photos] : [], menus: Array.isArray(p.menus) ? p.menus.map((m) => ({ ...m })) : [],
       lat: p.lat, lng: p.lng,
     });
-    setCands(null); setLookup("");
+    setCands(null); setLookup(""); setPhotoHits(null);
   };
 
   // ── 지도 (카카오 → OSM 폴백) ──
@@ -351,7 +382,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
             <div className="flex gap-2">
               <button type="button" onClick={() => { setBulk(""); setBulkLog([]); }}
                 className="rounded-full bg-white/10 px-3.5 py-2 text-[13px] font-black text-slate-200 ring-1 ring-inset ring-white/10 transition hover:bg-white/20">여러 개 붙여넣기</button>
-              <button type="button" onClick={() => { setMenuPaste(null); setCands(null); setLookup(""); setForm(emptyForm()); }}
+              <button type="button" onClick={() => { setMenuPaste(null); setCands(null); setLookup(""); setPhotoHits(null); setForm(emptyForm()); }}
                 className="rounded-full bg-orange-500 px-4 py-2 text-[13px] font-black text-white shadow-lg shadow-orange-900/30 transition hover:bg-orange-400">＋ 맛집 올리기</button>
             </div>
           </div>
@@ -413,10 +444,10 @@ export default function FoodMap({ author, team }: { author: string; team: string
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
         {/* ── 지도 ── */}
-        <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_40px_-28px_rgba(15,23,42,0.25)] lg:sticky lg:top-4">
-          <div ref={elRef} className="h-[340px] w-full bg-slate-100 sm:h-[480px]" />
+        <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_40px_-28px_rgba(15,23,42,0.25)] lg:h-[560px]">
+          <div ref={elRef} className="h-[340px] w-full bg-slate-100 sm:h-[480px] lg:h-full" />
           <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-1 rounded-2xl bg-white/85 px-2.5 py-1.5 shadow-sm ring-1 ring-slate-200/70 backdrop-blur">
             {(["가능", "유료", "발렛", "노상", "불가"] as const).map((k) => (
               <span key={k} className="flex items-center gap-1 px-1 text-[10px] font-black text-slate-600">
@@ -427,8 +458,8 @@ export default function FoodMap({ author, team }: { author: string; team: string
         </section>
 
         {/* ── 목록 ── */}
-        <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_40px_-28px_rgba(15,23,42,0.25)]">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <section className="flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_40px_-28px_rgba(15,23,42,0.25)] lg:h-[560px]">
+          <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
             <div className="text-[13px] font-black text-slate-900">{shown.length}<span className="ml-0.5 text-slate-400">곳</span></div>
             <div className="text-[11px] font-bold tracking-wide text-slate-400">{origin ? `${origin.label} 기준 가까운 순` : "추천 많은 순"}</div>
           </div>
@@ -443,7 +474,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
               )}
             </div>
           )}
-          <ul className="max-h-[560px] divide-y divide-slate-100 overflow-y-auto">
+          <ul className="flex-1 divide-y divide-slate-100 overflow-y-auto max-lg:max-h-[520px]">
             {shown.map((p) => {
               const d = distOf(p);
               const thumb = (p.photos || [])[0] || "";
@@ -475,7 +506,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
                       </span>
                     </span>
                     {thumb
-                      ? <img src={thumb} alt="" loading="lazy" className="h-[84px] w-[84px] shrink-0 rounded-2xl object-cover ring-1 ring-slate-200/60" />
+                      ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-[84px] w-[84px] shrink-0 rounded-2xl object-cover ring-1 ring-slate-200/60" />
                       : <span className="grid h-[84px] w-[84px] shrink-0 place-items-center rounded-2xl bg-slate-50 text-xl text-slate-300 ring-1 ring-slate-200/60">🍴</span>}
                   </button>
                 </li>
@@ -721,13 +752,37 @@ export default function FoodMap({ author, team }: { author: string; team: string
 
               {/* 사진 — 폰 사진은 자동으로 줄여 올린다 */}
               <div className="rounded-2xl bg-slate-50/70 p-3 ring-1 ring-inset ring-slate-200/70">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-black text-slate-500">사진 {form.photos.length}/{MAX_PHOTOS}</div>
-                  <label className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-black ${photoBusy ? "bg-slate-200 text-slate-400" : "bg-slate-900 text-white"}`}>
-                    {photoBusy ? "올리는 중…" : "＋ 사진 고르기"}
-                    <input type="file" accept="image/*" multiple disabled={photoBusy} className="hidden" onChange={(e) => { void addPhotos(e.target.files); e.currentTarget.value = ""; }} />
-                  </label>
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="text-[11px] font-black tracking-wide text-slate-500">사진 {form.photos.length}/{MAX_PHOTOS}</div>
+                  <div className="flex gap-1.5">
+                    <button type="button" disabled={photoFindBusy || form.name.trim().length < 2} onClick={() => void findPhotos()}
+                      className="rounded-full bg-orange-500 px-3 py-1 text-[11px] font-black text-white shadow-sm transition hover:bg-orange-400 disabled:opacity-40">
+                      {photoFindBusy ? "찾는 중…" : "🔎 사진 자동 찾기"}
+                    </button>
+                    <label className={`cursor-pointer rounded-full px-3 py-1 text-[11px] font-black ${photoBusy ? "bg-slate-200 text-slate-400" : "bg-slate-900 text-white"}`}>
+                      {photoBusy ? "담는 중…" : "＋ 직접 올리기"}
+                      <input type="file" accept="image/*" multiple disabled={photoBusy} className="hidden" onChange={(e) => { void addPhotos(e.target.files); e.currentTarget.value = ""; }} />
+                    </label>
+                  </div>
                 </div>
+                {photoHits && (
+                  <div className="mt-2 rounded-xl bg-white p-2 ring-1 ring-inset ring-orange-200/70">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-black tracking-wide text-orange-700">찾은 사진 {photoHits.length}장 — 쓸 것만 눌러 담으세요</div>
+                      <button type="button" onClick={() => setPhotoHits(null)} className="text-[11px] font-black text-slate-400 hover:text-slate-600">닫기 ✕</button>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                      {photoHits.map((h) => (
+                        <button key={h.url} type="button" disabled={photoBusy} onClick={() => void takePhoto(h)} title={h.site}
+                          className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-slate-200 transition hover:ring-2 hover:ring-orange-400 disabled:opacity-50">
+                          <img src={h.thumb || h.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                          <span className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-1 py-0.5 text-[8px] font-bold text-white">{h.site || "웹"}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-slate-400">블로그·웹에서 찾은 사진입니다 — 가게가 맞는지 보고 담아 주세요</div>
+                  </div>
+                )}
                 {form.photos.length > 0 && (
                   <div className="mt-2 flex gap-1.5 overflow-x-auto">
                     {form.photos.map((url, i) => (

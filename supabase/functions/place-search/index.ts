@@ -65,6 +65,85 @@ async function naverSearch(q: string): Promise<Candidate[]> {
   })) as Candidate[];
 }
 
+export type PhotoHit = { url: string; thumb: string; site: string; doc: string };
+
+/** 가게 사진 자동 찾기 — 카카오·네이버 이미지 검색(공식 API). 지도 API는 사진을 주지 않아 이 길로 간다. */
+async function photoSearch(q: string): Promise<PhotoHit[]> {
+  const out: PhotoHit[] = [];
+  const kakaoKey = Deno.env.get("KAKAO_REST_KEY") || "";
+  const nid = Deno.env.get("NAVER_CLIENT_ID") || "";
+  const nsecret = Deno.env.get("NAVER_CLIENT_SECRET") || "";
+
+  const tasks: Array<Promise<void>> = [];
+  if (kakaoKey) {
+    tasks.push((async () => {
+      const res = await fetch(`https://dapi.kakao.com/v2/search/image?query=${encodeURIComponent(q)}&size=20&sort=accuracy`, {
+        headers: { Authorization: `KakaoAK ${kakaoKey}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      for (const d of data.documents || []) {
+        const w = Number(d.width || 0), h = Number(d.height || 0);
+        if (w && w < 400) continue;                       // 너무 작은 이미지는 버린다
+        if (w && h && h / w > 1.9) continue;              // 세로로 긴 캡처·배너류 제외
+        out.push({ url: String(d.image_url || ""), thumb: String(d.thumbnail_url || d.image_url || ""), site: String(d.display_sitename || ""), doc: String(d.doc_url || "") });
+      }
+    })().catch(() => undefined));
+  }
+  if (nid && nsecret) {
+    tasks.push((async () => {
+      const res = await fetch(`https://openapi.naver.com/v1/search/image?query=${encodeURIComponent(q)}&display=20&filter=large`, {
+        headers: { "X-Naver-Client-Id": nid, "X-Naver-Client-Secret": nsecret },
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      for (const d of data.items || []) {
+        const w = Number(d.sizewidth || 0), h = Number(d.sizeheight || 0);
+        if (w && w < 400) continue;
+        if (w && h && h / w > 1.9) continue;
+        out.push({ url: String(d.link || ""), thumb: String(d.thumbnail || d.link || ""), site: cleanTags(String(d.title || "")).slice(0, 24), doc: "" });
+      }
+    })().catch(() => undefined));
+  }
+  await Promise.all(tasks);
+
+  const seen = new Set<string>();
+  const uniq: PhotoHit[] = [];
+  for (const p of out) {
+    if (!/^https:\/\//.test(p.url)) continue;             // http는 브라우저가 막는다
+    const key = p.url.split("?")[0];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(p);
+  }
+  return uniq.slice(0, 18);
+}
+
+/**
+ * 고른 사진을 우리 저장소로 복사한다. 네이버·블로그 이미지는 다른 사이트에서 불러오면 막히는 일이 잦아
+ * (referer 검사·링크 만료) 원본을 가져와 photos 버킷에 넣고 우리 URL을 돌려준다.
+ */
+async function savePhoto(url: string): Promise<{ url: string } | { error: string }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceKey) return { error: "저장소 설정이 없습니다" };
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Referer: "" } });
+  if (!res.ok) return { error: `원본을 못 받았습니다(${res.status})` };
+  const type = res.headers.get("content-type") || "image/jpeg";
+  if (!type.startsWith("image/")) return { error: "이미지가 아닙니다" };
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > 8 * 1024 * 1024) return { error: "사진이 너무 큽니다(8MB 초과)" };
+  const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : type.includes("gif") ? "gif" : "jpg";
+  const path = `food/auto/${crypto.randomUUID()}.${ext}`;
+  const up = await fetch(`${supabaseUrl}/storage/v1/object/photos/${path}`, {
+    method: "POST",
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": type, "x-upsert": "true" },
+    body: buf,
+  });
+  if (!up.ok) return { error: `저장 실패(${up.status}) ${(await up.text().catch(() => "")).slice(0, 120)}` };
+  return { url: `${supabaseUrl}/storage/v1/object/public/photos/${path}` };
+}
+
 const MENU_INSTRUCTION = `너는 식당 메뉴판 사진에서 메뉴를 뽑아내는 도구다.
 사진은 종이 메뉴판일 수도 있고, 네이버지도 앱의 "메뉴" 화면을 캡처한 것일 수도 있다.
 JSON만 출력한다: {"menus":[{"name":"메뉴 이름","price":"9,000원","signature":true}]}
@@ -112,6 +191,21 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "search");
+
+    if (action === "photos") {
+      const q = String(body.q || "").trim();
+      if (q.length < 2) return Response.json({ error: "검색어가 너무 짧습니다" }, { status: 400, headers: jsonHeaders });
+      const photos = await photoSearch(q);
+      return Response.json({ ok: true, photos }, { headers: jsonHeaders });
+    }
+
+    if (action === "save_photo") {
+      const url = String(body.url || "").trim();
+      if (!/^https?:\/\//.test(url)) return Response.json({ error: "url이 필요합니다" }, { status: 400, headers: jsonHeaders });
+      const out = await savePhoto(url);
+      if ("error" in out) return Response.json(out, { status: 502, headers: jsonHeaders });
+      return Response.json({ ok: true, ...out }, { headers: jsonHeaders });
+    }
 
     if (action === "menu") {
       const imageUrl = String(body.imageUrl || "").trim();
