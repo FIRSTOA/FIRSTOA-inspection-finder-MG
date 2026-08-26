@@ -164,6 +164,29 @@ Deno.serve(async (req) => {
     const calKind = (cal: string): "main" | "delivery" | "done" | "inspection" =>
       cal === mainCal ? "main" : teamCals[cal] ? "done" : inspectionCals.includes(cal) ? "inspection" : "delivery";
     const TEAM_BY_SLOT: Record<string, string> = { "09:00": "A", "12:00": "B", "15:00": "C", "18:00": "D", "21:00": "E" };
+    // 주소의 구·시 → 팀 (서비스접수 DISTRICT_TEAM과 같은 표). 시간대 팀과 본문 지역 표기가 다를 때 판가름용
+    const DISTRICT_TEAM: Array<[string, string]> = [
+      ["강북", "A"], ["노원", "A"], ["도봉", "A"], ["성북", "A"], ["중랑", "A"], ["동대문", "A"], ["성동", "A"], ["광진", "A"], ["종로", "A"], ["용산", "A"],
+      ["강서", "B"], ["양천", "B"], ["영등포", "B"], ["구로", "B"], ["금천", "B"], ["마포", "B"], ["은평", "B"], ["서대문", "B"],
+      ["강남", "C"], ["서초", "C"], ["송파", "C"], ["강동", "C"], ["관악", "C"], ["동작", "C"],
+      ["경기", "D"], ["인천", "D"], ["고양", "D"], ["일산", "D"], ["파주", "D"], ["부천", "D"], ["성남", "D"], ["수원", "D"], ["안양", "D"], ["용인", "D"], ["김포", "D"], ["평택", "D"], ["화성", "D"], ["안산", "D"], ["시흥", "D"], ["하남", "D"], ["과천", "D"], ["의정부", "D"], ["남양주", "D"],
+      ["충청", "E"], ["충남", "E"], ["충북", "E"], ["경상", "E"], ["경남", "E"], ["경북", "E"], ["전라", "E"], ["전남", "E"], ["전북", "E"], ["강원", "E"], ["제주", "E"], ["대전", "E"], ["대구", "E"], ["부산", "E"], ["울산", "E"], ["세종", "E"],
+    ];
+    const teamFromAddress = (address: string) => { for (const [key, tm] of DISTRICT_TEAM) if (address.includes(key)) return tm; return ""; };
+    // 임대리스트 양식 본문의 "지역 수도권C" / "방문담당자 수도권C" / "지방"
+    const teamFromText = (text: string) => { const m = text.match(/(?:지역|방문담당자)\s+(?:수도권\s*([A-Ea-e])|(지방))/); return m ? (m[1] ? m[1].toUpperCase() : "E") : ""; };
+    /**
+     * 수기 일정의 팀: 기본은 시간대(12시=B). 단 본문의 지역 표기가 시간대와 다르면 주소의 구로 판가름한다 —
+     * 원격팀이 12시에 올린 강남 건이 B팀으로 잡혀 완료 카톡이 B방으로 간 실사고(2026-08-26 헤라클래스). 주소로도 못 가르면 시간대를 따른다.
+     */
+    const resolveTeam = (slotTeam: string, ev: { title: string; description: string; location: string }) => {
+      if (!slotTeam || slotTeam === "기타") return slotTeam;
+      const bodyTeam = teamFromText(`${ev.title}\n${ev.description}`);
+      if (!bodyTeam || bodyTeam === slotTeam) return slotTeam;
+      const addrText = ev.location || ((ev.description.match(/주소\s+([^\n]+)/) || [])[1] || "");
+      const addrTeam = teamFromAddress(addrText);
+      return addrTeam === bodyTeam ? bodyTeam : slotTeam;
+    };
 
     const now = Date.now();
     const todayKst0 = new Date(now + 9 * 3600_000).toISOString().slice(0, 10);
@@ -310,7 +333,7 @@ Deno.serve(async (req) => {
       if (!ev.uid.startsWith("firstoa") && !ticketUids.has(ev.uid) && ev.date) {
         // 팀 시간대(09/12/15/18/21)면 그 팀. 시간대 밖이면 완료 캘린더의 팀(하나일 때)으로, 그것도 없으면 "기타" — 종일만 오버레이
         const calTeams = teamCals[item.cal] || [];
-        const team = TEAM_BY_SLOT[ev.time] || (ev.time ? (calTeams.length === 1 ? calTeams[0] : "기타") : "");
+        const team = resolveTeam(TEAM_BY_SLOT[ev.time] || (ev.time ? (calTeams.length === 1 ? calTeams[0] : "기타") : ""), ev);
         // 점검마감 캘린더는 수입하지 않는다(표시 전용) — 일정리스트가 점검 메모 수백 건으로 덮인다
         const importable = team && ev.date >= todayKst && kind !== "inspection";
         if (importable) {

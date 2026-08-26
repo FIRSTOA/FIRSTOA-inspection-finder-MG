@@ -645,7 +645,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
     if (vendor) {
       const [name, recent, devices] = await Promise.all([
-        findWorkinMapName(vendor),
+        findWorkinMapName(vendor, pick(hit, "업체명")), // 시트 원문 업체명(지점 표기 포함)으로 어느 지점인지 가른다
         getRecentInspections(vendor, serial, assetNo),
         getLeaseDeviceSummary(exactVendor || vendor),
       ]);
@@ -713,7 +713,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   const report = useMemo(() => {
     if (!reportSource) return "";
-    const 업체명 = workinName || pick(reportSource, "거래처명", "_업체명", "업체명");
+    // 워킨맵 이름 → 시트 원문 업체명(지점 표기 포함 "25V(주) 드림엔지니어링삼성동현장…") → 회사명만 — 본사·현장이 여럿인 업체가 엉뚱한 지점으로 적히지 않게
+    const 업체명 = workinName || pick(reportSource, "업체명", "거래처명", "_업체명");
     const 등급 = pick(reportSource, "등급");
     const 모델명 = pick(reportSource, "모델명", "기종");
     const 기번 = pick(reportSource, "시리얼번호(기번)", "기번");

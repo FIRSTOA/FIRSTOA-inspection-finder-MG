@@ -357,18 +357,29 @@ export async function getLeaseDeviceSummary(vendor: string): Promise<LeaseDevice
 function coreVendorKey(name: string) {
   return String(name || "").replace(/\(.*?\)/g, "").replace(/㈜|주식회사|유한회사|\(주\)/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 }
-export async function findWorkinMapName(vendor: string): Promise<string> {
+/**
+ * 워킨맵에 등록된 업체명(지점 포함 표기)을 찾는다.
+ * 임대리스트 _업체명은 회사명만("(주) 드림엔지니어링")이라 같은 회사의 본사·현장이 워킨맵에 여럿이면 어느 지점인지 알 수 없다 —
+ * 예전엔 첫 행을 잡아 삼성동현장 접수가 "드림엔지니어링본사"로 적혔다(2026-08-26 실사고, 세안이엔씨도 동일).
+ * 그래서 ① 시트 원문 업체명(fullName, 지점 표기 포함)과 맞는 행을 먼저 찾고 ② 없으면 회사명이 한 지점뿐일 때만 돌려준다.
+ */
+export async function findWorkinMapName(vendor: string, fullName = ""): Promise<string> {
   const core = coreVendorKey(vendor);
   if (core.length < 2) return "";
+  const full = coreVendorKey(fullName).replace(/^\d+#?[a-z]+/i, ""); // 등급 접두(25V·25#V) 제거
   const nameCol = encodeURIComponent("name");
   const probe = core.slice(0, 4);
   try {
-    const rows = await selectRows<{ name?: string }>("workin_map_places", `select=name&${nameCol}=ilike.*${encodeURIComponent(probe)}*&limit=30`);
-    const hit = rows.find((r) => {
-      const k = coreVendorKey(r.name || "");
-      return k.includes(core) || core.includes(k);
-    });
-    return hit?.name || "";
+    const rows = await selectRows<{ name?: string }>("workin_map_places", `select=name&${nameCol}=ilike.*${encodeURIComponent(probe)}*&limit=60`);
+    const keyOf = (r: { name?: string }) => coreVendorKey(r.name || "").replace(/^\d+#?[a-z]+/i, "");
+    const cands = rows.filter((r) => { const k = keyOf(r); return k.includes(core) || core.includes(k); });
+    if (!cands.length) return "";
+    if (full.length > core.length) {
+      const exact = cands.find((r) => keyOf(r) === full) || cands.find((r) => { const k = keyOf(r); return k.includes(full) || full.includes(k); });
+      if (exact) return exact.name || "";
+    }
+    const distinct = new Set(cands.map(keyOf));
+    return distinct.size === 1 ? (cands[0].name || "") : "";
   } catch {
     return "";
   }

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "500d394100",
+    "date": "2026-08-26",
+    "note": "물류 일정 완료는 네이버를 건드리지 않음(웹만) + 통합 전송은 사진을 먼저 한 번 올리고 실패 시 어느 방에도 안 보냄"
+  },
+  {
     "hash": "4e64fdc9f6",
     "date": "2026-08-26",
     "note": "사이드바 기본 순서 — 홈 · 서비스접수 · 일정리스트 · 캘린더 · FIELD"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b27d875011",
     "date": "2026-08-14",
     "note": "내 일정 지도를 카카오맵으로 — SDK 로더 + 이중 엔진 (실패 시 Leaflet 폴백)"
-  },
-  {
-    "hash": "b9a5ea8984",
-    "date": "2026-08-14",
-    "note": "내 일정: 워킨맵에 없는 업체는 일정 주소를 카카오 지오코딩으로 좌표 확보 — 무암 같은 AS 일정도 핀·동선·클릭 이동 전부 동작"
   }
 ];
