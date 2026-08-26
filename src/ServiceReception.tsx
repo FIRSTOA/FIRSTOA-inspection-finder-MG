@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send } from "lucide-react";
 import {
-  searchLeaseList, getAsHistory, getRecentInspections, findWorkinMapName, sendServiceReception,
+  searchLeaseList, getAsHistory, getRecentInspections, sendServiceReception,
   saveServiceReception, getServiceReceptions, updateServiceReception, getLeaseDeviceSummary,
   type LeaseHit, type ServiceReceptionRow, type AsHistoryEntry, type InspectionSnapshot, type LeaseDeviceSummary,
 } from "./api";
@@ -317,7 +317,6 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [snapshots, setSnapshots] = useState<InspectionSnapshot[]>([]);
   const [snapshotDeviceMatch, setSnapshotDeviceMatch] = useState(true);
   const [deviceSummary, setDeviceSummary] = useState<LeaseDeviceSummary>({ active: 0, items: [] });
-  const [workinName, setWorkinName] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savedRowId, setSavedRowId] = useState<string | null>(null);
@@ -635,7 +634,6 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     setSnapshots([]);
     setSnapshotDeviceMatch(true);
     setDeviceSummary({ active: 0, items: [] });
-    setWorkinName("");
     setActionResult("");
     const vendor = pick(hit, "거래처명", "_업체명", "업체명");
     const exactVendor = pick(hit, "_업체명");
@@ -645,12 +643,10 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     const assetNo = pick(hit, "자산번호");
     if (vendor || serial) setAsHistory(await getAsHistory(vendor, serial, assetNo));
     if (vendor) {
-      const [name, recent, devices] = await Promise.all([
-        findWorkinMapName(vendor, pick(hit, "업체명")), // 시트 원문 업체명(지점 표기 포함)으로 어느 지점인지 가른다
+      const [recent, devices] = await Promise.all([
         getRecentInspections(vendor, serial, assetNo),
         getLeaseDeviceSummary(exactVendor || vendor),
       ]);
-      setWorkinName(name);
       setSnapshots(recent.snapshots);
       setSnapshotDeviceMatch(recent.deviceMatch);
       setDeviceSummary(devices);
@@ -799,7 +795,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       usage.length ? usage.join("\n\n") : "점검 기록 없음",
     ];
     return lines.join("\n");
-  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, workinName, region, fieldFinal, paidFinal, photos, author]);
+  }, [reportSource, manual, asHistory, snapshots, snapshotDeviceMatch, route, type, region, fieldFinal, paidFinal, photos, author]);
 
   const copyReport = async () => {
     if (!report) return;
@@ -850,7 +846,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   const resetForm = () => {
     setLease(null); setManual(EMPTY_MANUAL); setRegionPick(""); leaseAddressRef.current = ""; setAsHistory([]); setSnapshots([]); setSnapshotDeviceMatch(true); setDeviceSummary({ active: 0, items: [] }); setQuery(""); setResults([]);
-    setSearched(false); setWorkinName(""); setManualVendor(""); setSavedRowId(null); setPhotos([]);
+    setSearched(false); setManualVendor(""); setSavedRowId(null); setPhotos([]);
     setFirstNo(""); setFieldChoice("A/S"); setFieldCustom(""); setPaidCustom(""); setCustKind("기존"); setNewLease({ ...EMPTY_NEW_LEASE }); setNewRemote({}); setRemote({ hanjoCustom: "", hanjoDirect: false });
   };
 
@@ -1501,7 +1497,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
             <div className="flex items-center gap-2">
               <span className="flex rounded-full bg-slate-100 p-1">
                 {(["기존", "신규"] as const).map((k) => (
-                  <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setWorkinName(""); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded-full px-5 py-2 text-xs font-black transition ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{k}</button>
+                  <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded-full px-5 py-2 text-xs font-black transition ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{k}</button>
                 ))}
               </span>
             </div>
@@ -1544,7 +1540,6 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-base font-black text-slate-950 lg:text-lg">{pick(lease, "거래처명", "_업체명")}</span>
                   <VendorAlertChip flags={vendorAlert} onOpen={() => setHistVendor(historyCoreName(vendorName))} />
-                  {workinName && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">워킨맵 매칭</span>}
                   {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
