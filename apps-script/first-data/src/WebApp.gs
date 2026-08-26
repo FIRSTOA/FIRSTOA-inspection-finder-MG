@@ -23,6 +23,11 @@ function doGet(e) {
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
     else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
     else if (action === 'ingestnow') result = ingestFromDriveFolder();  // 드라이브 수집 즉시 실행 (CS 웹앱 관리 탭)
+    else if (action === 'retryheld') result = retryHeldFiles();          // 확인필요 파일을 수집함으로 되돌림
+    else if (action === 'cellreport') result = sheetCellReport();      // 통합시트 셀 사용 현황(1,000만 한도)
+    else if (action === 'celltrim') result = trimSheetCells(e.parameter.keep); // 빈 격자 잘라 셀 되돌리기
+    else if (action === 'uploadlog') result = readUploadLog(e.parameter.limit); // 최근 수집 로그(실패 원인 확인)
+    else if (action === 'dedupe') result = dedupeMasterByRaw(e.parameter.cat || '점검'); // 원문 같은 중복행 정리(첫 행만 남김)
     else if (action === 'seenreset') result = resetSeenRoom(e.parameter.room || ''); // 메시지 지문 초기화 → 그 방 전체 재해석
     else if (action === 'cursorlist') result = listUploadCursors();     // 수집 앵커(증분 기준점) 목록
     else if (action === 'cursorreset') result = resetUploadCursor(e.parameter.key || ''); // 앵커 초기화 → 다음 업로드는 파일 전체 재처리
@@ -97,13 +102,81 @@ function doPost(e) {
 // ── 업로드 이력 로그 (누가/언제/무엇을/몇 건 올렸는지 — 중복 작업 방지) ──
 const UPLOAD_LOG_TAB = '_upload_log';
 
+/**
+ * 통합시트 셀 사용 현황. 구글 스프레드시트는 통합문서당 셀 1,000만 개가 한도라
+ * 넘으면 "셀 개수가 한도를 초과합니다"로 모든 적재가 실패한다(2026-08-27 수집 중단 원인).
+ * 빈 행·빈 열도 셀로 계산되므로, 데이터보다 훨씬 큰 격자를 잡고 있는 탭이 범인이다.
+ */
+function sheetCellReport() {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let total = 0, waste = 0;
+    const rows = ss.getSheets().map(function (sh) {
+      const mr = sh.getMaxRows(), mc = sh.getMaxColumns();
+      const lr = sh.getLastRow(), lc = sh.getLastColumn();
+      const cells = mr * mc, used = lr * lc;
+      total += cells; waste += (cells - used);
+      return { tab: sh.getName(), maxRows: mr, maxCols: mc, lastRow: lr, lastCol: lc, cells: cells, empty: cells - used };
+    });
+    rows.sort(function (a, b) { return b.cells - a.cells; });
+    return { ok: true, totalCells: total, emptyCells: waste, limit: 10000000, tabs: rows };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/** 데이터 아래·오른쪽의 빈 격자를 잘라 셀을 되돌린다(빈 칸만 삭제하므로 데이터는 그대로). */
+function trimSheetCells(keepRows) {
+  try {
+    const pad = Math.max(10, parseInt(keepRows, 10) || 200);
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    let freed = 0;
+    const detail = [];
+    ss.getSheets().forEach(function (sh) {
+      const mr = sh.getMaxRows(), mc = sh.getMaxColumns();
+      const lr = Math.max(1, sh.getLastRow()), lc = Math.max(1, sh.getLastColumn());
+      let f = 0;
+      const keepR = Math.min(mr, lr + pad);
+      if (mr > keepR) { sh.deleteRows(keepR + 1, mr - keepR); f += (mr - keepR) * mc; }
+      const mc2 = sh.getMaxColumns();
+      if (mc2 > lc) { sh.deleteColumns(lc + 1, mc2 - lc); f += (mc2 - lc) * Math.min(mr, keepR); }
+      if (f) detail.push({ tab: sh.getName(), freed: f });
+      freed += f;
+    });
+    return { ok: true, freedCells: freed, tabs: detail };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/** 최근 수집 로그 (관리탭·진단용) */
+function readUploadLog(limit) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_LOG_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, rows: [] };
+    const n = Math.min(parseInt(limit, 10) || 15, 100);
+    const start = Math.max(2, sh.getLastRow() - n + 1);
+    const data = sh.getRange(start, 1, sh.getLastRow() - start + 1, 8).getValues();
+    return { ok: true, rows: data.map(function (r) {
+      return { t: String(r[0]), cat: String(r[1]), team: String(r[2]), room: String(r[3]),
+               parsed: r[4], added: r[5], skipped: r[6], status: String(r[7]) };
+    }).reverse() };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/**
+ * 보조 탭은 쓰는 열만 남긴다. insertSheet는 1000행×26열 격자를 잡는데, 2열만 쓰는 탭이 12만 행이 되면
+ * 빈 셀 300만 개를 먹어 통합문서 셀 한도(1,000만)를 터뜨린다(2026-08-27 수집 전면 중단 원인).
+ */
+function narrowSheet_(sh, cols) {
+  try { const mc = sh.getMaxColumns(); if (mc > cols) sh.deleteColumns(cols + 1, mc - cols); } catch (e) {}
+  return sh;
+}
+
 function logUpload(entry) {
   try {
     entry = entry || {};
     const ss = SpreadsheetApp.openById(MASTER_SS_ID);
     let sh = ss.getSheetByName(UPLOAD_LOG_TAB);
     if (!sh) {
-      sh = ss.insertSheet(UPLOAD_LOG_TAB); sh.hideSheet();
+      sh = ss.insertSheet(UPLOAD_LOG_TAB); sh.hideSheet(); narrowSheet_(sh, 9);
       sh.getRange(1, 1, 1, 9).setValues([['시각', '카테고리', '지역', '방이름', '추출', '추가', '중복', '상태', '올린사람']]);
     }
     let who = '';
@@ -269,7 +342,7 @@ function setUploadCursor(key, anchor) {
     const ss = SpreadsheetApp.openById(MASTER_SS_ID);
     let sh = ss.getSheetByName(UPLOAD_CURSOR_TAB);
     if (!sh) {
-      sh = ss.insertSheet(UPLOAD_CURSOR_TAB); sh.hideSheet();
+      sh = ss.insertSheet(UPLOAD_CURSOR_TAB); sh.hideSheet(); narrowSheet_(sh, 2);
       sh.getRange(1, 1, 1, 2).setValues([['key', 'anchor']]);
     }
     // 앞에 '!' 센티넬: 앵커가 '='·'+'·'@' 등으로 시작해도 수식으로 해석되지 않게. 조회 시 떼어낸다.

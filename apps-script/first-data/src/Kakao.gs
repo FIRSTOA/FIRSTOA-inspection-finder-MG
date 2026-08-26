@@ -150,6 +150,50 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
   return { added: newRows.length, skipped: records.length - newRows.length, tab: tabName };
 }
 
+/**
+ * 같은 원문(_원문)이 두 번 들어간 행을 정리한다. 첫 행만 남기고 뒤에 들어온 것을 지운다.
+ * 왜 필요한가: _dupKey는 "파싱된 필드값"으로 만든다. 파서를 고치면 같은 메시지가 다른 키가 되어
+ * 재업로드 때 중복으로 들어온다(2026-08-26 실사고 11,000여 건). 원문이 같으면 같은 카톡 메시지다.
+ */
+function dedupeMasterByRaw(cat) {
+  try {
+    const tab = MASTER_TABS[cat] || cat;
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sheet = ss.getSheetByName(tab);
+    if (!sheet || sheet.getLastRow() < 3) return { ok: true, cat: cat, removed: 0, note: '행 없음' };
+    const lastCol = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    const srcIdx = headers.indexOf('_출처'), rawIdx = headers.indexOf('_원문');
+    if (srcIdx === -1 || rawIdx === -1) return { ok: false, error: '_출처/_원문 열을 찾지 못했습니다' };
+    const n = sheet.getLastRow() - 1;
+    const src = sheet.getRange(2, srcIdx + 1, n, 1).getValues();
+    const raw = sheet.getRange(2, rawIdx + 1, n, 1).getValues();
+    const seen = {}, del = [];
+    for (let i = 0; i < n; i++) {
+      const key = String(src[i][0] || '') + '\u0001' + md5Text_(String(raw[i][0] || '').replace(/\s+/g, ' ').trim());
+      if (seen[key]) del.push(i + 2); else seen[key] = true;
+    }
+    // 아래에서 위로, 연속 구간을 묶어 지운다 (한 줄씩 지우면 수천 번이라 못 끝낸다)
+    del.sort(function (a, b) { return b - a; });
+    let removed = 0, i = 0;
+    while (i < del.length) {
+      const end = del[i]; let start = end;
+      while (i + 1 < del.length && del[i + 1] === start - 1) { i++; start = del[i]; }
+      sheet.deleteRows(start, end - start + 1);
+      removed += end - start + 1;
+      i++;
+    }
+    return { ok: true, cat: cat, tab: tab, scanned: n, removed: removed };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+function md5Text_(text) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(text || ''), Utilities.Charset.UTF_8);
+  let hex = '';
+  for (let b = 0; b < bytes.length; b++) { const v = bytes[b] < 0 ? bytes[b] + 256 : bytes[b]; hex += (v < 16 ? '0' : '') + v.toString(16); }
+  return hex;
+}
+
 // ── 큰 파일용 청크 업로드 (멈춤/시간초과 방지) ──
 const KAKAO_TMP_TAB = '_kakao_tmp';
 
@@ -508,6 +552,7 @@ function appendSeenHashes_(room, hashes) {
   if (!sh) {
     sh = ss.insertSheet(KAKAO_SEEN_TAB);
     sh.hideSheet();
+    narrowSheet_(sh, 2); // 2열만 쓰는 탭이 26열 격자를 잡으면 셀 한도(1,000만)를 먹는다
     sh.getRange(1, 1, 1, 2).setValues([['room', 'hash']]);
   }
   const rows = hashes.map(h => [room, h]);

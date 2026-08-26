@@ -99,6 +99,22 @@ function saveAnchor_(key, fullText) {
 }
 
 // 메인: 수신함의 .txt를 전부 처리. 트리거(시간) 또는 화면 "지금 적재" 버튼이 호출.
+/** 확인필요 폴더의 TXT를 수집함으로 되돌린다(실패 원인을 고친 뒤 재시도용). */
+function retryHeldFiles() {
+  try {
+    const f = ensureInboxFolder_();
+    const moved = [];
+    const it = f.hold.getFiles();
+    while (it.hasNext()) {
+      const file = it.next();
+      if (!/\.txt$/i.test(file.getName())) continue;
+      file.moveTo(f.folder);
+      moved.push(file.getName());
+    }
+    return { ok: true, moved: moved.length, files: moved };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
 function ingestFromDriveFolder() {
   const f = ensureInboxFolder_();
   const mapRes = getRoomMap();
@@ -113,7 +129,10 @@ function ingestFromDriveFolder() {
   }
 
   let added = 0, done = 0, held = 0, failed = 0, queuedAny = false;
-  const deadline = Date.now() + 4 * 60 * 1000; // GAS 6분 한도 — 4분까지만 새 배치를 시작한다
+  // 처리할 파일이 있으면 "이어달리기" 트리거를 미리 걸어 둔다 — 실행이 6분 한도로 강제 종료돼도 스스로 다시 시작한다.
+  // (예전엔 강제 종료되면 아무도 이어받지 않아 수집이 조용히 멈췄다)
+  const deadline = Date.now() + 3 * 60 * 1000; // GAS 6분 한도 — 3분까지만 새 배치를 시작한다(배치 한 번이 오래 걸려도 여유가 남게)
+  if (files.length) scheduleDriveContinue_(4 * 60 * 1000);
   for (const file of files) {
     try {
       const text = readDriveFileText_(file);
@@ -171,6 +190,14 @@ function ingestFromDriveFolder() {
   }
 
   if (queuedAny) { try { kakaoStartWorker(); } catch (e) {} }
+  // 남은 파일이 없으면 이어달리기 트리거를 지운다(무한 반복 방지)
+  try {
+    let left = 0; const it2 = f.folder.getFiles();
+    while (it2.hasNext()) { if (/\.txt$/i.test(it2.next().getName())) left++; }
+    if (!left) ScriptApp.getProjectTriggers().forEach(function (t) {
+      if (t.getHandlerFunction() === 'driveIngestContinue') ScriptApp.deleteTrigger(t);
+    });
+  } catch (e) {}
   Logger.log('드라이브 자동적재: 파일 ' + files.length + ' / 처리 ' + done + ' / 신규 ' + added + ' / 확인필요 ' + held + ' / 실패 ' + failed);
   return { ok: true, files: files.length, done: done, added: added, held: held, failed: failed };
 }
@@ -180,7 +207,7 @@ function ingestFromDriveFolder() {
  * 메시지 4,000개씩 나눠 처리하고, 시간이 모자라면 "몇 번째 메시지까지 했는지"를 저장해 다음 실행에서 이어간다.
  * 중복은 appendKakaoRecords_ 의 _dupKey 판정이 걸러주므로 같은 파일을 다시 올려도 안전하다.
  */
-const FORM_BATCH_MSGS = 4000;
+const FORM_BATCH_MSGS = 1500; // 한 배치가 커지면 6분 한도에 강제 종료돼 진행이 멈춘다(2026-08-27)
 function ingestFormsResumable_(mode, route, text, fileId, deadline) {
   const messages = parseKakaoMessages_(String(text));
   if (!messages.length) {
@@ -214,8 +241,8 @@ function ingestFormsResumable_(mode, route, text, fileId, deadline) {
     }
     if (newHashes.length) appendSeenHashes_(seenRoom, newHashes);
     at += slice.length;
+    setUploadCursor(key, String(at)); // 배치마다 저장 — 6분 한도로 강제 종료돼도 여기서 이어간다
     if (at < messages.length && Date.now() > deadline) {
-      setUploadCursor(key, String(at));
       return { ok: true, pending: true, at: at, parsed: messages.length, fresh: fresh, records: records, added: added, skipped: skipped };
     }
   }
@@ -225,11 +252,11 @@ function ingestFormsResumable_(mode, route, text, fileId, deadline) {
 
 /** 중간에서 멈춘 파일을 1분 뒤 이어서 처리 (정기 트리거와 별도 핸들러라 서로 지우지 않는다) */
 function driveIngestContinue() { ingestFromDriveFolder(); }
-function scheduleDriveContinue_() {
+function scheduleDriveContinue_(afterMs) {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'driveIngestContinue') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('driveIngestContinue').timeBased().after(60 * 1000).create();
+  ScriptApp.newTrigger('driveIngestContinue').timeBased().after(afterMs || 60 * 1000).create();
 }
 
 // 폴더 URL/ID에서 폴더 ID 추출
