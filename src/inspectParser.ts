@@ -1,3 +1,4 @@
+import { regionLetter } from "./region";
 /**
  * 점검/AS 양식 텍스트 → 26칸 레코드 파서 (기존 GAS Kakao.gs 로직의 충실한 포팅).
  *
@@ -113,7 +114,7 @@ function extractObj(content: string, dateStr: string, author: string, regionFall
   const vendor = f["업체명"];
   if (!vendor || vendor.length < 2 || /^부서명/.test(vendor)) return null;
   if (!f["작성자"]) f["작성자"] = String(author || "").replace(/님$/, "");
-  if (!f["지역"]) f["지역"] = regionFallback || "";
+  f["지역"] = regionLetter(f["지역"] || "", regionFallback); // 저장은 항상 A~E 한 글자 (표기 변형·라벨 오삼킴이 지역 칸에 남지 않게)
   if (!f["작성일"]) f["작성일"] = dateStr || "";
   if (asDefault && !f["구분"]) f["구분"] = "AS";
   const obj: Record<string, string> = {};

@@ -29,3 +29,18 @@ export function vendorRegion(h: VendorHit): string {
   const r = primaryRegion(h);
   return REGIONS.includes(r) ? r : "기타";
 }
+
+/**
+ * 저장용 지역 글자(A~E): "수도권D"·"c"·"강서B" → 글자, 경기권 지명 → D, 지방 표기 → E,
+ * 못 알아보면(라벨 오삼킴 "키맨/접수자: …" 등) fallback 글자 → 없으면 빈칸. normRegion과 달리 아무 값이나 E로 몰지 않는다.
+ * GAS Kakao.gs regionLetter_ 와 같은 규칙 — 어긋나면 카톡 수집분과 웹앱 저장분 표기가 갈린다.
+ */
+export function regionLetter(value: string, fallback = ""): string {
+  const v = String(value || "").trim();
+  const m = v.match(/^\s*(?:강서|강남|강북|강동|서울)?\s*(?:수도권)?\s*([A-Ea-e])\s*(?:지역|팀)?\s*$/);
+  if (m) return m[1].toUpperCase();
+  if (/(경기|평택|수원|화성|오산|성남|인천|용인|안양|부천|고양|일산|파주|김포|하남|과천|안산|시흥|의정부|남양주|포승|광명|구리|이천|안성|양주|동탄)/.test(v)) return "D";
+  if (/(지방|충청|충남|충북|경상|경남|경북|전라|전남|전북|강원|제주|대전|대구|부산|울산|세종)/.test(v)) return "E";
+  const f = String(fallback || "").trim().toUpperCase().match(/^(?:수도권)?([A-E])$/);
+  return f ? f[1] : "";
+}

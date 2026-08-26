@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "701d49a7b1",
+    "date": "2026-08-26",
+    "note": "지역 값은 A~E 한 글자로 저장(FIELD 저장 경로 regionLetter + GAS 카톡 수집 regionLetter_) + 기존 데이터 정리 SQL(supabase/region-cleanup-20260826.sql)"
+  },
+  {
     "hash": "b18eb8fe64",
     "date": "2026-08-26",
     "note": "서비스접수 업체명을 시트 원문(CA열) 기준으로 실제 연결 — 직전 커밋에서 빠진 배선"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1607359991",
     "date": "2026-08-14",
     "note": "워킨맵 이력 팝업 조회탭 수준 + 라벨 정렬·팝업 닫기 + 내 일정 유형·분석·자가신청"
-  },
-  {
-    "hash": "d1bcb0a71d",
-    "date": "2026-08-14",
-    "note": "카카오 워킨맵 라벨에 흰 말풍선 배경(지도 글자와 분리, 선택 시 다크 반전 유지) + 자동일정 '1차 시안' 뱃지 제거"
   }
 ];
