@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "8d65a6c8f9",
+    "date": "2026-08-27",
+    "note": "맛동여지도 설명서 7장(자동 채우기: 이름 검색·사진 자동·메뉴판 인식) + 목록 설명 갱신"
+  },
+  {
     "hash": "0b63847114",
     "date": "2026-08-27",
     "note": "맛동여지도 상세 사진: 한 장 확대 크롭 대신 큰 사진+옆 두 장 갤러리 배치, 이름 띠 가독성 보강, 사진 없을 때 안내 축소"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8af0a5fdf1",
     "date": "2026-08-14",
     "note": "보안 점검 후속 — 워킨맵 데모 데이터의 실제 이름·전화번호를 더미로 교체, .gitignore에 .env 추가"
-  },
-  {
-    "hash": "078e9a66e7",
-    "date": "2026-08-14",
-    "note": "개발 도구 취약점 정리 — npm audit fix (vite·postcss 등 데브 체인, 빌드·테스트 통과 확인)"
   }
 ];

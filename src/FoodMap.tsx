@@ -506,7 +506,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
                       </span>
                     </span>
                     {thumb
-                      ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-[84px] w-[84px] shrink-0 rounded-2xl object-cover ring-1 ring-slate-200/60" />
+                      ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" className="block h-[84px] w-[84px] shrink-0 rounded-2xl object-cover ring-1 ring-slate-200/60" style={{ width: 84, height: 84 }} />
                       : <span className="grid h-[84px] w-[84px] shrink-0 place-items-center rounded-2xl bg-slate-50 text-xl text-slate-300 ring-1 ring-slate-200/60">🍴</span>}
                   </button>
                 </li>
@@ -529,23 +529,25 @@ export default function FoodMap({ author, team }: { author: string; team: string
             <div className="relative">
               {(focused.photos || []).length > 0 ? (
                 // 한 장을 크게 늘려 자르면 고기 클로즈업처럼 이상하게 보인다 — 큰 사진 + 옆 두 장의 갤러리 배치
-                <div className="grid h-44 grid-cols-3 gap-1 bg-white sm:h-56">
+                // 높이는 컨테이너가 정한다. 그리드 칸은 기본이 min-height:auto라 원본 사진 크기만큼 늘어나
+                // 지정한 높이를 무시하고 화면을 뒤덮었다(2026-08-27) → 칸마다 min-h-0, 컨테이너에 overflow-hidden.
+                <div className="grid h-40 grid-cols-3 gap-1 overflow-hidden bg-white sm:h-48" style={{ maxHeight: 200 }}>
                   <button type="button" onClick={() => setViewer({ urls: focused.photos, at: 0 })}
-                    className={`relative overflow-hidden ${focused.photos.length > 1 ? "col-span-2" : "col-span-3"}`}>
-                    <img src={focused.photos[0]} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
+                    className={`relative min-h-0 overflow-hidden ${focused.photos.length > 1 ? "col-span-2" : "col-span-3"}`}>
+                    <img src={focused.photos[0]} alt="" referrerPolicy="no-referrer" className="block h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
                   </button>
                   {focused.photos.length > 1 && (
-                    <div className="grid grid-rows-2 gap-1">
+                    <div className="grid min-h-0 grid-rows-2 gap-1 overflow-hidden">
                       {focused.photos.slice(1, 3).map((url, i) => {
                         const more = i === 1 && focused.photos.length > 3 ? focused.photos.length - 3 : 0;
                         return (
-                          <button key={url} type="button" onClick={() => setViewer({ urls: focused.photos, at: i + 1 })} className="relative overflow-hidden">
-                            <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover transition duration-300 hover:scale-[1.04]" />
+                          <button key={url} type="button" onClick={() => setViewer({ urls: focused.photos, at: i + 1 })} className="relative min-h-0 overflow-hidden">
+                            <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" className="block h-full w-full object-cover transition duration-300 hover:scale-[1.04]" />
                             {more > 0 && <span className="absolute inset-0 grid place-items-center bg-slate-950/55 text-[15px] font-black text-white backdrop-blur-[1px]">+{more}</span>}
                           </button>
                         );
                       })}
-                      {focused.photos.length === 2 && <div className="bg-slate-50" />}
+                      {focused.photos.length === 2 && <div className="min-h-0 bg-slate-50" />}
                     </div>
                   )}
                 </div>
@@ -776,8 +778,8 @@ export default function FoodMap({ author, team }: { author: string; team: string
                     <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:grid-cols-5">
                       {photoHits.map((h) => (
                         <button key={h.url} type="button" disabled={photoBusy} onClick={() => void takePhoto(h)} title={h.site}
-                          className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-slate-200 transition hover:ring-2 hover:ring-orange-400 disabled:opacity-50">
-                          <img src={h.thumb || h.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                          className="group relative aspect-square min-h-0 overflow-hidden rounded-lg ring-1 ring-slate-200 transition hover:ring-2 hover:ring-orange-400 disabled:opacity-50">
+                          <img src={h.thumb || h.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="block h-full w-full object-cover" />
                           <span className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-1 py-0.5 text-[8px] font-bold text-white">{h.site || "웹"}</span>
                         </button>
                       ))}
@@ -789,7 +791,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
                   <div className="mt-2 flex gap-1.5 overflow-x-auto">
                     {form.photos.map((url, i) => (
                       <div key={url} className="relative shrink-0">
-                        <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                        <img src={url} alt="" className="block rounded-lg object-cover" style={{ width: 80, height: 80 }} />
                         {i === 0 && <span className="absolute left-1 top-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-black text-white">대표</span>}
                         <button type="button" onClick={() => setForm({ ...form, photos: form.photos.filter((_, j) => j !== i) })} className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-slate-900 text-[11px] font-black text-white">✕</button>
                       </div>
