@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "d92087df42",
+    "date": "2026-08-27",
+    "note": "맛동여지도 네이버지도식 개편 — 목록 대표사진 썸네일·하단 상세(사진 캐러셀·메뉴판·주차·길찾기), 사진 여러 장 업로드, 네이버 메뉴 붙여넣기 파서(테스트 6), 업종·영업시간·전화"
+  },
+  {
     "hash": "06dcd2b647",
     "date": "2026-08-27",
     "note": "수집 안정화: 시트 셀 한도 진단·빈격자 정리(604만 셀 회수)·보조탭 열 축소 · 확인필요 파일 되돌리기 · 수집 로그 조회 · 원문 기준 중복행 정리 + DB 중복 정리 SQL"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "177564e0b5",
     "date": "2026-08-14",
     "note": "내 일정 FIELD 불러오기 — 필드탭과 동일 변환(점검/AS 자동감지)으로 교체, autoplan 티켓에 워킨맵 기번·시리얼 기입, 자동일정 모바일 가로 넘침 보정"
-  },
-  {
-    "hash": "cbbebcd88b",
-    "date": "2026-08-14",
-    "note": "모바일 가로 넘침 보정 — 자동일정·내 일정의 긴 업체명이 truncate 없이 카드 밖으로 밀리던 것 (min-w-0 제약 + 루트 overflow-x 차단)"
   }
 ];
