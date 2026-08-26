@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9abece95d1",
+    "date": "2026-08-26",
+    "note": "양식 업체명 지점 오선택 수리(워킨맵 본사/현장 여럿이면 시트 원문 업체명으로) + 네이버 수입 팀 판정(본문 지역≠시간대면 주소로) + 물류 완료 문구·설명서, schedule 설명서 복원"
+  },
+  {
     "hash": "500d394100",
     "date": "2026-08-26",
     "note": "물류 일정 완료는 네이버를 건드리지 않음(웹만) + 통합 전송은 사진을 먼저 한 번 올리고 실패 시 어느 방에도 안 보냄"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "240a176219",
     "date": "2026-08-14",
     "note": "내 일정 상세 모달 — 워킨맵 안 봐도 되는 실행 화면으로"
-  },
-  {
-    "hash": "b27d875011",
-    "date": "2026-08-14",
-    "note": "내 일정 지도를 카카오맵으로 — SDK 로더 + 이중 엔진 (실패 시 Leaflet 폴백)"
   }
 ];
