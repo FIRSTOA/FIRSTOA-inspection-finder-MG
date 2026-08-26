@@ -4736,8 +4736,22 @@ export default function App() {
       }
     }
     let mainOk = !picked.inspection && !picked.as; // 주 보고 미선택(자가·부품만)이면 바로 진행
-    if (picked.inspection) mainOk = await handleSendAll("normal", "inspection", true) || mainOk;
-    if (picked.as) mainOk = await handleSendAll("normal", "as", true) || mainOk;
+    const sent: string[] = [];
+    const failed: string[] = [];
+    if (picked.inspection) {
+      const ok = await handleSendAll("normal", "inspection", true);
+      (ok ? sent : failed).push("점검방");
+      mainOk = ok || mainOk;
+    }
+    if (picked.as) {
+      const ok = await handleSendAll("normal", "as", true);
+      (ok ? sent : failed).push("AS방");
+      mainOk = ok || mainOk;
+    }
+    // 한쪽만 갔을 때 그냥 다시 누르면 이미 간 방에 두 번 올라간다 — 어느 방을 다시 골라야 하는지 알려준다
+    if (sent.length && failed.length) {
+      showToast(`${sent.join("·")}은 전송됐고 ${failed.join("·")}만 실패했습니다 — 다시 보낼 때는 ${failed.join("·")}만 선택하세요(같은 방에 두 번 올라가지 않게).`, "error", { duration: 12000 });
+    }
     if (!mainOk) return; // 주 보고 전부 실패 — 자가·부품 부속 전송 중단
     if (picked.self) await handleSendAll("자가", undefined, true);
     if (picked.parts) await handleSendAll("부품", undefined, true);

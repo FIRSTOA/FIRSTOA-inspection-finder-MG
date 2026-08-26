@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "6d1f342d36",
+    "date": "2026-08-26",
+    "note": "반쪽 전송 방지 — 고른 방 매핑이 없으면(예: 점검|E 미등록) 아무 방에도 보내지 않고 안내 네이버 수입 팀 판정: 본문 지역 표기를 우선(주소가 명백히 다를 때만 시간대) + 지방 시 단독 표기 흡수 지역 정규화에 서울 구·지방 시 보강(프론트·GAS 거울)"
+  },
+  {
     "hash": "604a056e56",
     "date": "2026-08-26",
     "note": "FIELD 저장 지역을 A~E 한 글자로 정규화(regionLetter + 테스트) + 기존 데이터 정리 SQL 파일"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "2064bad7d2",
     "date": "2026-08-14",
     "note": "워킨맵 이력 → 조회탭 상세 모달 그대로 + \"(주)\" 매칭 버그 수리"
-  },
-  {
-    "hash": "1ad38473c0",
-    "date": "2026-08-14",
-    "note": "이력 팝업 조회탭 디자인 + FIELD 불러오기 표기 차이 해결 + 스마트 기본 날짜"
   }
 ];
