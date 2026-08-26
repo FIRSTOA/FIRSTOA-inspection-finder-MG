@@ -23,6 +23,7 @@ function doGet(e) {
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
     else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
     else if (action === 'ingestnow') result = ingestFromDriveFolder();  // 드라이브 수집 즉시 실행 (CS 웹앱 관리 탭)
+    else if (action === 'seenreset') result = resetSeenRoom(e.parameter.room || ''); // 메시지 지문 초기화 → 그 방 전체 재해석
     else if (action === 'cursorlist') result = listUploadCursors();     // 수집 앵커(증분 기준점) 목록
     else if (action === 'cursorreset') result = resetUploadCursor(e.parameter.key || ''); // 앵커 초기화 → 다음 업로드는 파일 전체 재처리
     else if (action === 'roommap') result = getRoomMap();               // 수집 방 매핑 목록
@@ -224,6 +225,26 @@ function listUploadCursors() {
       var a = String(r[1] || ''); if (a.charAt(0) === '!') a = a.slice(1);
       return { key: String(r[0]), anchorLen: a.length, anchorTail: a.slice(-60) };
     }) };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/**
+ * 메시지 지문(_kakao_seen) 초기화. 파서를 고친 뒤 "옛 메시지를 다시 읽히고 싶을 때"만 쓴다.
+ * 지우면 다음 업로드에서 그 방 전체를 다시 해석한다(중복은 _dupKey가 막는다) — 대신 오래 걸린다.
+ * room 값: AI 방은 '불만'·'미수'처럼 방 종류, 점검·AS는 '점검|D'·'AS|C' 형식.
+ */
+function resetSeenRoom(room) {
+  try {
+    if (!room) return { ok: false, error: 'room 값이 필요합니다 (예: 점검|D)' };
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(KAKAO_SEEN_TAB);
+    if (!sh || sh.getLastRow() < 2) return { ok: true, removed: 0 };
+    const data = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    const keep = data.filter(function (r) { return String(r[0]) !== String(room); });
+    const removed = data.length - keep.length;
+    sh.getRange(2, 1, data.length, 2).clearContent();
+    if (keep.length) sh.getRange(2, 1, keep.length, 2).setValues(keep);
+    return { ok: true, room: room, removed: removed };
   } catch (err) { return { ok: false, error: err.toString() }; }
 }
 

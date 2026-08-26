@@ -142,6 +142,12 @@ function supabaseReplaceAll_(table, rows) {
 // 배열 bulk insert + 중복(_dupKey) 무시. 절대 throw 안 함.
 function supabaseInsertIgnore_(table, rows) {
   if (!rows || !rows.length) return;
+  // 한 번에 수천 행(원문 포함 수 MB)을 보내면 실패한다 — 500행씩 나눠 보낸다
+  var CHUNK = 500;
+  if (rows.length > CHUNK) {
+    for (var i = 0; i < rows.length; i += CHUNK) supabaseInsertIgnore_(table, rows.slice(i, i + CHUNK));
+    return;
+  }
   var url = SUPABASE_URL + '/rest/v1/' + table + '?on_conflict=_dupKey';
   try {
     var res = UrlFetchApp.fetch(url, {

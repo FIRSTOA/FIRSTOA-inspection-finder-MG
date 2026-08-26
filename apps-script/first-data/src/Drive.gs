@@ -113,6 +113,7 @@ function ingestFromDriveFolder() {
   }
 
   let added = 0, done = 0, held = 0, failed = 0, queuedAny = false;
+  const deadline = Date.now() + 4 * 60 * 1000; // GAS 6분 한도 — 4분까지만 새 배치를 시작한다
   for (const file of files) {
     try {
       const text = readDriveFileText_(file);
@@ -127,8 +128,6 @@ function ingestFromDriveFolder() {
       }
 
       const mode = modeForCategory_(route.category);
-      const key = route.category + '|' + route.team + '|' + mode;
-      const sl = sliceIncremental_(key, text);
 
       // 재계약방: "초과업체조정" 폼 별도 캡처(전체 text 스캔, dupKey 중복방어로 재스캔 안전).
       // nothingNew/mode 와 무관하게 항상 실행 → 과거분·재업로드도 누락 없이 잡힘. 결과는 별도 로그.
@@ -139,28 +138,30 @@ function ingestFromDriveFolder() {
         } catch (e) {}
       }
 
+      // 파일은 항상 처음부터 끝까지 읽는다 — 중복은 _dupKey(점검·AS)와 메시지 해시(AI 방)가 걸러준다.
+      // 예전에는 "직전 업로드의 마지막 300자"를 앵커로 삼아 그 앞을 버렸는데, 첫 업로드가 부분 내보내기였으면
+      // 그 앞 기간이 전체 파일을 다시 올려도 영구히 안 들어왔다 (2026-08-26 D 점검방 3,846건 실사고).
       let res;
-      if (sl.nothingNew) {
-        res = { ok: true, added: 0, nothingNew: true, parsed: 0, skipped: 0 };
-      } else if (mode === 'asform') {
-        res = ingestASFormsUpload(sl.text, route.team);
-      } else if (mode === 'inspectform') {
-        res = ingestInspectFormsUpload(sl.text, route.team);
+      if (mode === 'asform' || mode === 'inspectform') {
+        res = ingestFormsResumable_(mode, route, text, file.getId(), deadline);
       } else {
-        res = kakaoEnqueue(route.category, route.team, sl.text);
+        res = kakaoEnqueue(route.category, route.team, text);
       }
 
       if (!res || !res.ok) throw new Error(res && res.error ? res.error : '적재 실패');
-      saveAnchor_(key, text);
 
       let status;
-      if (sl.nothingNew) status = '새 내용 없음';
-      else if (mode === 'ai') { status = res.batches ? '대기열 등록(드라이브)' : '새 메시지 없음'; if (res.batches) queuedAny = true; }
-      else { added += (res.added || 0); status = '완료(드라이브)'; }
+      if (mode === 'ai') { status = res.batches ? '대기열 등록(드라이브)' : '새 메시지 없음'; if (res.batches) queuedAny = true; }
+      else {
+        added += (res.added || 0);
+        status = res.pending ? ('이어서 처리 (' + res.at + '/' + res.parsed + '번째 메시지까지)')
+          : (res.fresh === 0 ? '새 메시지 없음' : '완료(드라이브)');
+      }
       done++;
 
-      if (sl.skippedChars > 100000) status += ' · 앞부분 ' + Math.round(sl.skippedChars / 1048576 * 10) / 10 + 'MB 건너뜀(증분)';
       logUpload({ category: route.category, team: route.team, roomName: room, parsed: res.parsed || 0, added: res.added || 0, skipped: res.skipped || 0, status: status });
+      // 시간이 모자라 중간에서 멈췄으면 파일을 그대로 두고 1분 뒤 이어서 처리한다
+      if (res.pending) { scheduleDriveContinue_(); break; }
       file.moveTo(f.done);
     } catch (err) {
       failed++;
@@ -172,6 +173,63 @@ function ingestFromDriveFolder() {
   if (queuedAny) { try { kakaoStartWorker(); } catch (e) {} }
   Logger.log('드라이브 자동적재: 파일 ' + files.length + ' / 처리 ' + done + ' / 신규 ' + added + ' / 확인필요 ' + held + ' / 실패 ' + failed);
   return { ok: true, files: files.length, done: done, added: added, held: held, failed: failed };
+}
+
+/**
+ * 점검·AS 양식 파일을 처음부터 끝까지 적재한다. 큰 파일(수 MB·수천 건)은 GAS 6분 한도에 걸리므로
+ * 메시지 4,000개씩 나눠 처리하고, 시간이 모자라면 "몇 번째 메시지까지 했는지"를 저장해 다음 실행에서 이어간다.
+ * 중복은 appendKakaoRecords_ 의 _dupKey 판정이 걸러주므로 같은 파일을 다시 올려도 안전하다.
+ */
+const FORM_BATCH_MSGS = 4000;
+function ingestFormsResumable_(mode, route, text, fileId, deadline) {
+  const messages = parseKakaoMessages_(String(text));
+  if (!messages.length) {
+    return { ok: false, error: '카톡 메시지 파싱 0건 (수신 ' + String(text || '').length + '자)' };
+  }
+  const key = 'progress|' + route.category + '|' + route.team + '|' + fileId;
+  const cur = getUploadCursor(key);
+  let at = parseInt(String((cur && cur.anchor) || '0'), 10) || 0;
+  // 이미 처리한 메시지는 지문(해시)으로 건너뛴다 — 매번 전체 파일을 다시 뜯지 않게(AI 방과 같은 방식).
+  // 위치가 아니라 메시지 단위라, 파일 앞부분에 처음 보는 옛 메시지가 있으면 그건 정상적으로 들어온다.
+  const seenRoom = route.category + '|' + route.team;
+  const seen = loadSeenHashes_(seenRoom);
+  let added = 0, skipped = 0, records = 0, fresh = 0;
+  while (at < messages.length) {
+    const slice = messages.slice(at, at + FORM_BATCH_MSGS);
+    const newMsgs = [], newHashes = [];
+    for (let i = 0; i < slice.length; i++) {
+      const hh = msgHash_(seenRoom, slice[i]);
+      if (seen[hh]) continue;
+      seen[hh] = true;
+      newMsgs.push(slice[i]); newHashes.push(hh);
+    }
+    fresh += newMsgs.length;
+    const recs = newMsgs.length
+      ? (mode === 'asform' ? extractASFormsFull_(newMsgs, route.team) : extractInspectForms_(newMsgs, route.team))
+      : [];
+    records += recs.length;
+    if (recs.length) {
+      const r = appendKakaoRecords_(route.category, route.category, route.team, recs);
+      added += r.added; skipped += r.skipped;
+    }
+    if (newHashes.length) appendSeenHashes_(seenRoom, newHashes);
+    at += slice.length;
+    if (at < messages.length && Date.now() > deadline) {
+      setUploadCursor(key, String(at));
+      return { ok: true, pending: true, at: at, parsed: messages.length, fresh: fresh, records: records, added: added, skipped: skipped };
+    }
+  }
+  resetUploadCursor(key); // 다 끝났으니 진행 표시 삭제
+  return { ok: true, at: at, parsed: messages.length, fresh: fresh, records: records, added: added, skipped: skipped };
+}
+
+/** 중간에서 멈춘 파일을 1분 뒤 이어서 처리 (정기 트리거와 별도 핸들러라 서로 지우지 않는다) */
+function driveIngestContinue() { ingestFromDriveFolder(); }
+function scheduleDriveContinue_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'driveIngestContinue') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('driveIngestContinue').timeBased().after(60 * 1000).create();
 }
 
 // 폴더 URL/ID에서 폴더 ID 추출
