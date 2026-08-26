@@ -39,8 +39,12 @@ export function regionLetter(value: string, fallback = ""): string {
   const v = String(value || "").trim();
   const m = v.match(/^\s*(?:강서|강남|강북|강동|서울)?\s*(?:수도권)?\s*([A-Ea-e])\s*(?:지역|팀)?\s*$/);
   if (m) return m[1].toUpperCase();
+  if (/(강북|노원|도봉|성북|중랑|동대문|성동|광진|종로|용산)/.test(v)) return "A";
+  if (/(강서|양천|영등포|구로|금천|마포|은평|서대문)/.test(v)) return "B";
+  if (/(강남|서초|송파|강동|관악|동작)/.test(v)) return "C";
   if (/(경기|평택|수원|화성|오산|성남|인천|용인|안양|부천|고양|일산|파주|김포|하남|과천|안산|시흥|의정부|남양주|포승|광명|구리|이천|안성|양주|동탄)/.test(v)) return "D";
   if (/(지방|충청|충남|충북|경상|경남|경북|전라|전남|전북|강원|제주|대전|대구|부산|울산|세종)/.test(v)) return "E";
+  if (/(천안|아산|청주|서산|당진|공주|논산|제천|충주|창원|김해|양산|포항|구미|경주|안동|진주|사천|거제|전주|익산|군산|광양|여수|순천|목포|나주|춘천|원주|강릉)/.test(v)) return "E";
   const f = String(fallback || "").trim().toUpperCase().match(/^(?:수도권)?([A-E])$/);
   return f ? f[1] : "";
 }

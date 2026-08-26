@@ -15,6 +15,12 @@ describe("regionLetter", () => {
     expect(regionLetter("지방")).toBe("E");
     expect(regionLetter("충남 천안")).toBe("E");
   });
+  it("서울 구 이름도 팀 글자로 — 양식에 '지역: 서울 강남구'로 쓰는 사람이 있어 전송이 막히면 안 된다", () => {
+    expect(regionLetter("서울 강남구")).toBe("C");
+    expect(regionLetter("노원구")).toBe("A");
+    expect(regionLetter("영등포구 여의도")).toBe("B");
+    expect(regionLetter("천안시 서북구")).toBe("E");
+  });
   it("못 알아보면 fallback 글자, 없으면 빈칸 — 아무 값이나 E로 몰지 않는다", () => {
     expect(regionLetter("키맨/접수자: 010-1234-5678", "D")).toBe("D");
     expect(regionLetter("D450", "수도권C")).toBe("C");

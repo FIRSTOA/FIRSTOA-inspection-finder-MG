@@ -48,6 +48,7 @@ import { getTeamVisits, kstDate, saveVisit, type VisitDraft, type VisitRow, type
 import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategoryForm, sendLogisticsForm, sendContactChangeForm, getRecentInspections, type LogisticsFormState, type SendDestination  } from "./api";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus, sendServiceReception } from "./api";
+import { checkSendRooms } from "./api";
 import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, teamForAuthor, type ActivityKind } from "./operations";
 
@@ -4717,6 +4718,14 @@ export default function App() {
     if (!sendPicker) return;
     const picked = sendPicker;
     setSendPicker(null);
+    // 방 매핑이 없는 방을 고른 채로 시작하면 한쪽만 전송된다 — 사진을 올리기 전에 먼저 막는다
+    const destinations: SendDestination[] = [];
+    if (picked.inspection) destinations.push("inspection");
+    if (picked.as) destinations.push("as");
+    if (destinations.length) {
+      const roomIssue = await checkSendRooms(destinations, buildResultText(), new Date().toISOString(), author);
+      if (roomIssue) { showToast(roomIssue, "error", { duration: 10000 }); return; }
+    }
     // 사진은 방별 전송 전에 한 번만 올린다 — 예전엔 점검방 전송에서 업로드가 실패해 그 방만 빠지고,
     // 이어진 AS방 전송이 남은 사진을 재시도해 성공하는 "AS방만 갔다" 사고가 있었다. 실패하면 어느 방에도 보내지 않는다.
     if (photos.length) {

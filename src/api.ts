@@ -800,6 +800,31 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   return [room];
 }
 
+/**
+ * 전송 전 방 매핑 점검 — 고른 방 중 하나라도 매핑이 없으면 "반쪽 전송"이 되므로 아예 시작하지 않는다.
+ * 실사고(2026-08-26): 지방(E) 양식은 `점검|E` 매핑이 없어 점검방만 실패하고 AS방만 전송돼, 사용자가 다시 보내야 했다.
+ * 빈 문자열이면 정상, 값이 있으면 그 문장이 곧 사용자에게 보여줄 중단 이유다.
+ */
+export async function checkSendRooms(destinations: SendDestination[], text: string, ts?: string, author?: string): Promise<string> {
+  if (!destinations.length) return "";
+  try {
+    const cfg = await getConfig();
+    if (isTestModeValue(cfg.TEST_MODE)) return "";
+    const built = buildRecords(String(text || ""), toKstDate(ts), author || "", "");
+    const region = String(built.region || "").trim();
+    if (!region) return "지역이 비어 있어 전송하지 않았습니다 — 양식의 '지역' 값을 채운 뒤 다시 보내주세요.";
+    const key = normRegion(region);
+    const map = await getRoomMap();
+    const missing = destinations
+      .map((d) => (d === "inspection" ? "점검" : "AS"))
+      .filter((label) => !map[`${label}|${key}`]);
+    if (!missing.length) return "";
+    return `${missing.map((m) => `${m}|${key}`).join(", ")} 방 매핑이 없어 아무 방에도 보내지 않았습니다 — 관리 탭 [카톡 수집 방 매핑]에서 방을 추가한 뒤 다시 보내주세요. (한쪽만 전송되는 것을 막기 위해 전부 중단합니다)`;
+  } catch {
+    return ""; // 점검 자체가 실패하면 막지 않는다 — 실제 전송 단계에서 다시 걸러진다
+  }
+}
+
 async function resolveForcedRoom(destination: SendDestination, region: string): Promise<string[]> {
   const cfg = await getConfig();
   const testRoom = cfg.TEST_ROOM || "테스트 전용방";

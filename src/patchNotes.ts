@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "604a056e56",
+    "date": "2026-08-26",
+    "note": "FIELD 저장 지역을 A~E 한 글자로 정규화(regionLetter + 테스트) + 기존 데이터 정리 SQL 파일"
+  },
+  {
     "hash": "701d49a7b1",
     "date": "2026-08-26",
     "note": "지역 값은 A~E 한 글자로 저장(FIELD 저장 경로 regionLetter + GAS 카톡 수집 regionLetter_) + 기존 데이터 정리 SQL(supabase/region-cleanup-20260826.sql)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "1ad38473c0",
     "date": "2026-08-14",
     "note": "이력 팝업 조회탭 디자인 + FIELD 불러오기 표기 차이 해결 + 스마트 기본 날짜"
-  },
-  {
-    "hash": "1607359991",
-    "date": "2026-08-14",
-    "note": "워킨맵 이력 팝업 조회탭 수준 + 라벨 정렬·팝업 닫기 + 내 일정 유형·분석·자가신청"
   }
 ];

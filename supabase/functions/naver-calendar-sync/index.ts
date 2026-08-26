@@ -171,21 +171,28 @@ Deno.serve(async (req) => {
       ["강남", "C"], ["서초", "C"], ["송파", "C"], ["강동", "C"], ["관악", "C"], ["동작", "C"],
       ["경기", "D"], ["인천", "D"], ["고양", "D"], ["일산", "D"], ["파주", "D"], ["부천", "D"], ["성남", "D"], ["수원", "D"], ["안양", "D"], ["용인", "D"], ["김포", "D"], ["평택", "D"], ["화성", "D"], ["안산", "D"], ["시흥", "D"], ["하남", "D"], ["과천", "D"], ["의정부", "D"], ["남양주", "D"],
       ["충청", "E"], ["충남", "E"], ["충북", "E"], ["경상", "E"], ["경남", "E"], ["경북", "E"], ["전라", "E"], ["전남", "E"], ["전북", "E"], ["강원", "E"], ["제주", "E"], ["대전", "E"], ["대구", "E"], ["부산", "E"], ["울산", "E"], ["세종", "E"],
+      // 지방은 시 이름만 적히는 일이 많다 — 도 이름이 없어도 E로 잡아야 18시(D) 슬롯에 끌려가지 않는다
+      ["천안", "E"], ["아산", "E"], ["청주", "E"], ["대덕", "E"], ["서산", "E"], ["당진", "E"], ["공주", "E"], ["논산", "E"], ["제천", "E"], ["충주", "E"],
+      ["창원", "E"], ["김해", "E"], ["양산", "E"], ["포항", "E"], ["구미", "E"], ["경주", "E"], ["안동", "E"], ["진주", "E"], ["사천", "E"], ["거제", "E"],
+      ["전주", "E"], ["익산", "E"], ["군산", "E"], ["광양", "E"], ["여수", "E"], ["순천", "E"], ["목포", "E"], ["나주", "E"], ["춘천", "E"], ["원주", "E"], ["강릉", "E"], ["광주 ", "E"],
     ];
     const teamFromAddress = (address: string) => { for (const [key, tm] of DISTRICT_TEAM) if (address.includes(key)) return tm; return ""; };
     // 임대리스트 양식 본문의 "지역 수도권C" / "방문담당자 수도권C" / "지방"
     const teamFromText = (text: string) => { const m = text.match(/(?:지역|방문담당자)\s+(?:수도권\s*([A-Ea-e])|(지방))/); return m ? (m[1] ? m[1].toUpperCase() : "E") : ""; };
     /**
-     * 수기 일정의 팀: 기본은 시간대(12시=B). 단 본문의 지역 표기가 시간대와 다르면 주소의 구로 판가름한다 —
-     * 원격팀이 12시에 올린 강남 건이 B팀으로 잡혀 완료 카톡이 B방으로 간 실사고(2026-08-26 헤라클래스). 주소로도 못 가르면 시간대를 따른다.
+     * 수기 일정의 팀 결정.
+     * 원칙: 본문 양식의 "지역 수도권X"(임대리스트 AV열 관리담당자에서 온 값 = 팀 배정의 정답)가 있으면 그 팀.
+     *       단 주소의 구·시가 본문과 명백히 다르면(다른 팀 구역) 본문을 의심해 시간대 팀을 쓴다.
+     * 시간대(12시=B)는 "언제 갈지"일 뿐이라 팀의 근거가 못 된다 — 원격팀이 12시에 올린 강남 건이 B팀으로 잡혀
+     * 완료 카톡이 B방으로 간 실사고(2026-08-26 헤라클래스). 지방(E) 건이 18시에 올라와 D로 잡히던 것도 같은 원인이다.
      */
     const resolveTeam = (slotTeam: string, ev: { title: string; description: string; location: string }) => {
-      if (!slotTeam || slotTeam === "기타") return slotTeam;
       const bodyTeam = teamFromText(`${ev.title}\n${ev.description}`);
-      if (!bodyTeam || bodyTeam === slotTeam) return slotTeam;
+      if (!bodyTeam) return slotTeam;
+      if (!slotTeam || slotTeam === "기타" || bodyTeam === slotTeam) return bodyTeam;
       const addrText = ev.location || ((ev.description.match(/주소\s+([^\n]+)/) || [])[1] || "");
       const addrTeam = teamFromAddress(addrText);
-      return addrTeam === bodyTeam ? bodyTeam : slotTeam;
+      return addrTeam && addrTeam !== bodyTeam ? slotTeam : bodyTeam;
     };
 
     const now = Date.now();
