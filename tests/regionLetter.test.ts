@@ -67,3 +67,24 @@ describe("키맨 변경 판정", () => {
     expect(sameVendor("", "무암")).toBe(false);
   });
 });
+
+// "담당자삭제"처럼 새로 인사할 사람이 없는 건은 인사 대상이 아니다(2026-08-28 현장 지적)
+describe("인사 대상 판정 — 삭제류 제외·새 담당자 필수", () => {
+  it("삭제·해지·폐업 건은 사람 변경으로 보지 않는다", async () => {
+    const { isPersonChange } = await import("../src/keyman");
+    expect(isPersonChange("담당자삭제", "")).toBe(false);
+    expect(isPersonChange("키맨", "중복 삭제")).toBe(false);
+    expect(isPersonChange("담당자변경", "해지")).toBe(false);
+    expect(isPersonChange("담당자변경", "퇴사")).toBe(true);
+    expect(isPersonChange("키맨", "교체")).toBe(true);
+  });
+  it("변경후(새 담당자)가 없으면 인사를 요청하지 않는다", async () => {
+    const { needsGreeting } = await import("../src/keyman");
+    const base = { category: "담당자변경", reason: "퇴사", greeting_done: false };
+    expect(needsGreeting({ ...base, after_text: "박영희 팀장 010-0000-0000" }, 5)).toBe(true);
+    expect(needsGreeting({ ...base, after_text: "" }, 5)).toBe(false);          // 인사할 사람 미상
+    expect(needsGreeting({ ...base, after_text: "박영희" }, 45)).toBe(false);    // 30일 지난 건은 완료 간주
+    expect(needsGreeting({ ...base, after_text: "박영희", greeting_done: true }, 5)).toBe(false);
+    expect(needsGreeting({ category: "담당자삭제", reason: "", after_text: "-", greeting_done: false }, 3)).toBe(false);
+  });
+});

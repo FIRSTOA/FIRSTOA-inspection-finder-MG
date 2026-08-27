@@ -6,6 +6,7 @@ import { LocateFixed, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
 import { workinVendorName } from "./ids";
+import { isPersonChange } from "./keyman";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -1518,12 +1519,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           if (!company || !date) continue;
           const category = String(row["category"] || "").trim();
           const reason = String(row["reason"] || "").trim();
-          const isPerson = !/주소/.test(category) && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(`${category} ${reason}`);
+          const afterText = String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60);
+          // 판정은 keyman.ts 한 곳에서 — "담당자삭제"처럼 새로 인사할 사람이 없는 건은 인사 대상이 아니다
+          const isPerson = isPersonChange(category, reason) && !!afterText.trim();
           const entry: KeymanFlag = {
             id: String(row["id"] || ""),
             date, days: Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)),
             category: category || "변경",
-            after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
+            after: afterText,
             before: String(row["before_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
             isPerson, greeted: row["greeting_done"] === true,
           };
@@ -2368,7 +2371,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                           title={`${keyman.date} · ${keyman.category}${keyman.before ? `\n이전: ${keyman.before}` : ""}${keyman.after ? `\n현재: ${keyman.after}` : ""}${needGreet ? "\n인사 필요 — 오른쪽 🤝 버튼으로 체크" : ""}`}>
                           {keyman.isPerson ? "🤝 키맨" : "📍 주소"} D+{keyman.days}
                         </span>
-                        {keyman.after && <span className="min-w-0 truncate text-[11px] font-bold text-slate-600">→ {keyman.after}</span>}
                         {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">인사</span>}
                       </span>
                     );
@@ -2385,23 +2387,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   )}
                 </span>
               </button>
+              {/* 버튼은 아이콘 한 줄로 — 세로로 쌓이면 줄 높이만 먹는다(2026-08-28 요청). 순서: 설정 · 내 일정 · 인사 */}
               {!editMode && (
-                <>
-                {/* 새 키맨 인사 체크 — 줄 안쪽(선택 버튼) 밖에 둬야 버튼 중첩이 안 된다 */}
-                {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
-                  <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
-                    disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-500 text-[13px] leading-none text-white transition hover:bg-amber-400 disabled:opacity-50">🤝</button>
-                )}
-                <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
-                  onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
-                </>
+                <span className="flex shrink-0 items-center gap-1">
+                  <button type="button" title="이 업체 정보 수정" aria-label="수정"
+                    onClick={() => setDraft({ ...place, memos: [...place.memos] })}
+                    className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
+                  <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
+                    onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
+                    className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
+                  {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
+                    <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
+                      disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-amber-500 text-[13px] leading-none text-white transition hover:bg-amber-400 disabled:opacity-50">🤝</button>
+                  )}
+                </span>
               )}
-              {/* 목록 줄은 좁다 — 글자 버튼 대신 아이콘으로(2026-08-28 요청). 마우스를 올리면 무슨 버튼인지 뜬다 */}
-              {!editMode && <button type="button" title="이 업체 정보 수정" aria-label="수정"
-                onClick={() => setDraft({ ...place, memos: [...place.memos] })}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">⚙</button>}
               </div>
               {expandedId === place.id && !editMode && (
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">

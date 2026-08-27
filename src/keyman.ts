@@ -26,11 +26,29 @@ export type ContactChange = {
   greeting_at: string | null;
 };
 
-/** 사람이 바뀐 건인가 — 주소·전화만 바뀐 건은 인사 대상이 아니다 */
+/**
+ * 사람이 바뀐 건인가 — 주소·전화만 바뀐 건, 그리고 "담당자삭제"처럼 **없어진** 건은 인사 대상이 아니다.
+ * (2026-08-28: "크립토매거진은 담당자삭제인데 왜 인사 필요냐"는 지적으로 삭제류를 제외)
+ */
+export function isPersonChange(category: string, reason: string): boolean {
+  const cat = String(category || "");
+  const text = `${cat} ${String(reason || "")}`;
+  if (/주소/.test(cat)) return false;
+  if (/삭제|제거|해지|말소|취소|중복|폐업|철수|종료/.test(text)) return false; // 새로 인사할 사람이 없다
+  // "변경"만으로는 넓다 — "전화번호 번호 변경"까지 사람 변경으로 잡혔다(테스트로 잡음)
+  return /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|입사|교체|변경자/.test(text);
+}
+
 export function isKeymanChange(row: Pick<ContactChange, "category" | "reason">): boolean {
-  const text = `${row.category || ""} ${row.reason || ""}`;
-  if (/주소/.test(row.category || "")) return false;
-  return /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(text);
+  return isPersonChange(row.category, row.reason);
+}
+
+/** 인사할 대상이 실제로 있는가 — 변경후(새 담당자) 정보가 있어야 인사를 요청한다 */
+export function needsGreeting(row: Pick<ContactChange, "category" | "reason" | "after_text" | "greeting_done">, days: number): boolean {
+  if (row.greeting_done) return false;
+  if (!isPersonChange(row.category, row.reason)) return false;
+  if (!String(row.after_text || "").trim()) return false; // 누구에게 인사할지 모르면 재촉하지 않는다
+  return days <= 30; // 최근 것만 (그 전은 완료 간주)
 }
 
 /** 변경일로부터 며칠 지났나 (음수는 0으로) */

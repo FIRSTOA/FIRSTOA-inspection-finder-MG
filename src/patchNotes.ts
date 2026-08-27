@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "3f90a35503",
+    "date": "2026-08-28",
+    "note": "워킨맵 키맨 배지 정리 — 구분 원문 대신 짧은 라벨(줄바뀜 해결), 바뀐 사람은 같은 줄에 → 현재 …, 인사 체크는 🤝 아이콘 버튼으로 바로 가능"
+  },
+  {
     "hash": "ec8c42e69a",
     "date": "2026-08-28",
     "note": "워킨맵에도 키맨 변경 배지(최근 90일, 인사 필요는 30일 안쪽만 주황) + 목록 버튼을 아이콘으로(📅 내 일정 · ⚙ 수정)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "46ea3a721c",
     "date": "2026-08-14",
     "note": "네이버 연동 방향 확정 — '원본은 한 곳' + 납품일정 캘린더 추가"
-  },
-  {
-    "hash": "a3dca57942",
-    "date": "2026-08-14",
-    "note": "네이버 일정 표시·수정 보강 — 내용 편집, 목록 탭 포함, 그날 전체 팝업"
   }
 ];

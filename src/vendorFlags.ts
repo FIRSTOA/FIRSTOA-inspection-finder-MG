@@ -5,6 +5,7 @@
  */
 import { selectAllRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
+import { isPersonChange } from "./keyman";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 
 export type VendorWorkFlags = {
@@ -238,14 +239,15 @@ async function loadSources(): Promise<Sources> {
   const keyman = new Map<string, KeymanEntry>();
   const keymanByCode = new Map<string, KeymanEntry>();
   const change90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const personChange = (category: string, reason: string) =>
-    !/주소/.test(category) && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(`${category} ${reason}`);
+  const personChange = isPersonChange; // 판정은 keyman.ts 한 곳에서 (삭제류 제외 규칙 포함)
   const foldChange = (map: Map<string, KeymanEntry>, key: string, row: Record<string, unknown>) => {
     const date = String(row["change_date"] || row["created_at"] || "").slice(0, 10);
     if (!key || !date) return;
     const category = String(row["category"] || "").trim();
     const reason = String(row["reason"] || "").trim();
-    const isPerson = personChange(category, reason);
+    const after = String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60);
+    // 새 담당자 정보가 없으면 인사할 대상이 없다 — 사람 변경으로만 표시하고 인사는 요청하지 않는다
+    const isPerson = personChange(category, reason) && !!after.trim();
     const greeted = row["greeting_done"] === true;
     const prev = map.get(key);
     const recent = date >= change90 ? 1 : 0;
@@ -254,7 +256,7 @@ async function loadSources(): Promise<Sources> {
       map.set(key, {
         date, days: Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)),
         category: category || "변경", before: String(row["before_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
-        after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
+        after,
         isPerson, greeted,
         count90: (prev?.count90 || 0) + recent, pending: (prev?.pending || 0) + pend,
       });
