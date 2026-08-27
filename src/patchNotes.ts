@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5017656884",
+    "date": "2026-08-27",
+    "note": "맛동여지도 사진이 화면을 뒤덮던 문제 수리 — 그리드 칸 min-h-0 + 컨테이너 overflow-hidden + 인라인 최대높이(그리드 기본 min-height:auto가 지정 높이를 무시하고 원본 크기로 늘어나던 것)"
+  },
+  {
     "hash": "8d65a6c8f9",
     "date": "2026-08-27",
     "note": "맛동여지도 설명서 7장(자동 채우기: 이름 검색·사진 자동·메뉴판 인식) + 목록 설명 갱신"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "fd5beae9d4",
     "date": "2026-08-14",
     "note": "판정 테스트를 빌드에 연결 — prebuild로 vitest 자동 실행, 실패 시 배포 차단"
-  },
-  {
-    "hash": "8af0a5fdf1",
-    "date": "2026-08-14",
-    "note": "보안 점검 후속 — 워킨맵 데모 데이터의 실제 이름·전화번호를 더미로 교체, .gitignore에 .env 추가"
   }
 ];

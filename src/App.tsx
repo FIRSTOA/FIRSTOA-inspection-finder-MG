@@ -4772,7 +4772,15 @@ export default function App() {
 
   // 첨부 사진(갤러리 다중선택, 대량 60장+). 전송 시 Storage 병렬 업로드 → 카톡 메시지에 링크 첨부.
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const all = Array.from(e.target.files || []);
+    // 폰 영상은 몇십 MB가 예사다 — 보내기 단계에서 실패하면 양식 전체가 막히니 고르는 순간에 걸러 알려준다(2026-08-27 신고)
+    const MAX_VIDEO = 45 * 1024 * 1024;
+    const tooBig = all.filter((f) => f.type.startsWith("video/") && f.size > MAX_VIDEO);
+    const files = all.filter((f) => !tooBig.includes(f));
+    if (tooBig.length) {
+      const names = tooBig.map((f) => `${f.name.slice(0, 18)} ${(f.size / 1048576).toFixed(0)}MB`).join(", ");
+      showToast(`영상이 너무 커서 뺐습니다: ${names}\n45MB까지 올라갑니다 — 갤러리에서 필요한 10~20초만 잘라서(트리밍) 다시 넣어 주세요.`, "error", { duration: 11000 });
+    }
     if (files.length) {
       const items = files.map((file) => ({ file, url: URL.createObjectURL(file), id: crypto.randomUUID() }));
       setPhotos((prev) => [...prev, ...items]);
@@ -4834,7 +4842,9 @@ export default function App() {
         if (f.type.startsWith("video/")) {
           // 동영상은 원본 그대로 업로드 (다운스케일/변환 X)
           const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
-          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4");
+          // 영상은 사진보다 훨씬 크다 — 60초 제한으로 끊기던 것을 크기에 맞춰 늘린다(1MB당 8초, 최대 6분)
+          const budget = Math.min(360_000, 60_000 + Math.round(f.size / 1048576) * 8_000);
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${ext}`, f, f.type || "video/mp4", budget);
         } else {
           // 모바일(HEIC·고화소)에서도 실패하지 않게: 축소 실패 시 원본을 실제 형식으로 올린다
           const prepared = await prepareImageForUpload(f, 1600);
@@ -6361,7 +6371,9 @@ export default function App() {
             reportTypeOther={reportTypeOther}
             setReportTypes={setReportTypes}
             setReportTypeOther={setReportTypeOther}
-            canManageDevices={mode === "inspection"}
+            // AS 나갔다가 다른 기기 점검을 같이 하는 경우가 많다 — AS 양식에서도 기기를 추가·선택할 수 있게(2026-08-27 요청).
+            // 구분은 미리보기에서 [점검]까지 함께 체크하면 "구분: AS, 점검"으로 나간다.
+            canManageDevices={mode === "inspection" || mode === "blank-report"}
             allItemForms={itemForms}
             onAddDevice={addInspectionDevice}
             onUpdateDevice={updateInspectionDevice}

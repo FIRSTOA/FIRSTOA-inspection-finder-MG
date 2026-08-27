@@ -31,3 +31,13 @@ grant delete, update on public.mfp_expansion to anon;
 
 -- 부서 요청 대상 지정 (2026-08-01): 전체 / 팀 / 개인
 -- alter table dept_requests add column target_type text default '전체', target text default '';
+
+-- 키맨 인사 관리 (2026-08-27) — 키맨이 바뀌면 초반에 인사를 드려야 재계약·친밀도가 다르다(대표님 취지).
+-- 담당자변경 이력에 "인사 완료" 체크를 붙이고, FIELD 전송 때 지역 점검방에도 공유한다. (이미 적용됨)
+alter table public.contact_changes
+  add column if not exists greeting_done boolean not null default false,
+  add column if not exists greeting_by text not null default '',
+  add column if not exists greeting_at timestamptz,
+  add column if not exists greeting_memo text not null default '';
+grant update (greeting_done, greeting_by, greeting_at, greeting_memo) on public.contact_changes to anon;
+notify pgrst, 'reload schema';

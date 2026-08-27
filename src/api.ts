@@ -1376,8 +1376,25 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
       data: form,
       dupKey,
     });
-    if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) await enqueueOutbox(room, text);
-    return { ok: true, message: automation.message, testMode: automation.testMode };
+    let shared = "";
+    if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) {
+      await enqueueOutbox(room, text);
+      // 키맨이 바뀌면 그 지역 사람들이 알아야 인사도 드리고 초반 관리를 할 수 있다 → 지역 점검방에도 같이 올린다.
+      // (대표님 요청, 2026-08-27) 이력 검색을 점검방에서 하니 점검방이 맞다. 방 매핑이 없으면 조용히 건너뛴다.
+      if (!isTestModeValue(cfg.TEST_MODE)) {
+        const key = normRegion(form.region);
+        const map = await getRoomMap();
+        const teamRoom = map[`점검|${key}`];
+        if (teamRoom && teamRoom !== room) {
+          const head = `📌 ${form.category || "담당자"} 변경 공유 — ${form.company || "업체명 미기재"}${form.grade ? ` (${form.grade})` : ""}`;
+          const tip = form.category && /키맨|담당|대표|소장|점장/.test(form.category)
+            ? "\n※ 새 키맨입니다 — 다음 방문 때 인사 부탁드립니다." : "";
+          await enqueueOutbox(teamRoom, `${head}${tip}\n\n${text}`);
+          shared = ` · ${teamRoom}에도 공유`;
+        }
+      }
+    }
+    return { ok: true, message: `${automation.message || "전송 완료"}${shared}`, testMode: automation.testMode };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }

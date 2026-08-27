@@ -19,6 +19,20 @@ type ContactChangeRow = {
   notes: string;
   source_text: string;
   photo_link: string;
+  greeting_done: boolean;
+  greeting_by: string;
+  greeting_at: string | null;
+  greeting_memo: string;
+};
+
+/** 키맨(사람) 변경인가 — 주소·전화만 바뀐 건은 인사 대상이 아니다 */
+const isKeymanChange = (row: ContactChangeRow) =>
+  /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|인사/.test(`${row.category} ${row.reason}`) && !/주소/.test(row.category);
+/** 변경 후 며칠 지났나 */
+const daysSince = (value: string) => {
+  const t = new Date(value).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.floor((Date.now() - t) / 86400000);
 };
 
 const REGIONS = ["전체", "A", "B", "C", "D"];
@@ -37,6 +51,25 @@ export default function ContactChangeHistory() {
   const [error, setError] = useState("");
   const [applyBusyId, setApplyBusyId] = useState("");
   const [deleteBusyId, setDeleteBusyId] = useState("");
+  const [greetBusyId, setGreetBusyId] = useState("");
+  const [onlyTodo, setOnlyTodo] = useState(false); // 인사 안 한 키맨 변경만 보기
+
+  // 키맨이 바뀌면 초반에 인사를 드려야 나중 재계약·친밀도가 다르다(대표님 취지) — 인사 여부를 여기서 체크한다.
+  const toggleGreeting = async (row: ContactChangeRow) => {
+    if (greetBusyId) return;
+    const next = !row.greeting_done;
+    const who = (typeof window !== "undefined" && window.localStorage.getItem("firstoa.author")) || "";
+    setGreetBusyId(row.id);
+    try {
+      const patch = next
+        ? { greeting_done: true, greeting_by: who || "미지정", greeting_at: new Date().toISOString() }
+        : { greeting_done: false, greeting_by: "", greeting_at: null };
+      await updateRows("contact_changes", `id=eq.${row.id}`, patch);
+      setRows((cur) => cur.map((r) => (r.id === row.id ? { ...r, ...patch } as ContactChangeRow : r)));
+      notify(next ? "인사 완료로 표시했습니다" : "인사 표시를 해제했습니다", "success");
+    } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); }
+    finally { setGreetBusyId(""); }
+  };
 
   const removeRow = async (row: ContactChangeRow) => {
     if (!await askConfirm(`이 변경이력을 삭제할까요?\n\n${row.company || "업체명 미기재"} · ${dateLabel(row.change_date || row.created_at)}`)) return;
@@ -99,22 +132,37 @@ ${names}${matches.length > 5 ? `
     return () => { mounted = false; };
   }, []);
 
+  // 최근 60일 안에 키맨이 바뀌었는데 아직 인사하지 않은 건 (오래된 것까지 재촉하지 않는다)
+  const keymanTodo = useMemo(
+    () => rows.filter((r) => isKeymanChange(r) && !r.greeting_done && daysSince(r.change_date || r.created_at) <= 60).length,
+    [rows],
+  );
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return rows.filter((row) => {
       if (region !== "전체" && row.region.trim().toUpperCase() !== region) return false;
+      if (onlyTodo && !(isKeymanChange(row) && !row.greeting_done)) return false;
       if (!keyword) return true;
       return [row.company, row.author, row.category, row.reason, row.before_text, row.after_text, row.notes]
         .join(" ").toLowerCase().includes(keyword);
     });
-  }, [rows, query, region]);
+  }, [rows, query, region, onlyTodo]);
 
   return (
     <div className="space-y-3 pb-12">
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-xs font-semibold text-slate-500">FIELD에서 전송한 변경 요청을 업체·지역별로 확인하고, 워킨맵에 반영합니다.</p>
-          <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
+          <div className="flex items-center gap-2">
+            {keymanTodo > 0 && (
+              <button type="button" onClick={() => setOnlyTodo((v) => !v)}
+                className={`rounded-full px-3 py-1.5 text-xs font-black transition ${onlyTodo ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-800 hover:bg-amber-200"}`}>
+                🤝 인사 대기 {keymanTodo}건{onlyTodo ? " · 전체 보기" : ""}
+              </button>
+            )}
+            <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
+          </div>
         </div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="업체명 · 담당자 · 변경 내용 검색" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -132,7 +180,14 @@ ${names}${matches.length > 5 ? `
             <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50">
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">{row.region || "-"}</span>
               <span className="min-w-0"><b className="block truncate text-sm text-slate-900">{row.company || "업체명 미기재"}</b><span className="block truncate text-xs font-semibold text-slate-500">{row.category || "변경"} · {row.reason || "사유 미기재"}</span></span>
-              <span className="text-right text-[11px] font-semibold text-slate-400">{dateLabel(row.change_date || row.created_at)}<br />{row.author || "-"}</span>
+              <span className="text-right text-[11px] font-semibold text-slate-400">
+                {isKeymanChange(row) && (
+                  row.greeting_done
+                    ? <span className="mb-0.5 block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">🤝 인사 완료</span>
+                    : <span className="mb-0.5 block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🤝 인사 필요 D+{daysSince(row.change_date || row.created_at)}</span>
+                )}
+                {dateLabel(row.change_date || row.created_at)}<br />{row.author || "-"}
+              </span>
             </summary>
             <div className="grid gap-3 border-t border-slate-100 bg-slate-50 p-4 md:grid-cols-2">
               <div><div className="text-[11px] font-black text-slate-400">변경 전</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-700">{row.before_text || "-"}</div></div>
@@ -141,6 +196,12 @@ ${names}${matches.length > 5 ? `
               <div className="flex flex-wrap items-center gap-2 md:col-span-2">
                 <span className="rounded bg-white px-2 py-1 text-xs font-bold text-slate-600">등급 {row.grade || "-"}</span>
                 {row.photo_link && <a href={row.photo_link} target="_blank" rel="noreferrer" className="rounded-full border border-blue-200 bg-white px-3.5 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-50">첨부 사진 보기</a>}
+                {isKeymanChange(row) && (
+                  <button type="button" disabled={greetBusyId === row.id} onClick={() => void toggleGreeting(row)}
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${row.greeting_done ? "bg-emerald-600 text-white" : "border border-amber-300 bg-white text-amber-700 hover:bg-amber-50"}`}>
+                    {row.greeting_done ? `🤝 인사 완료 (${row.greeting_by || "-"}${row.greeting_at ? ` · ${dateLabel(row.greeting_at)}` : ""}) — 해제` : "🤝 인사 완료로 표시"}
+                  </button>
+                )}
                 <button type="button" disabled={applyBusyId === row.id} onClick={() => void applyToWorkinMap(row)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">{applyBusyId === row.id ? "반영 중…" : "워킨맵 반영"}</button>
                 <span className="text-[10px] font-semibold text-slate-400">임대리스트는 시트가 원본이라 시트에서 수정해야 합니다</span>
                 <button type="button" disabled={deleteBusyId === row.id} onClick={() => void removeRow(row)} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40">{deleteBusyId === row.id ? "삭제 중…" : "이력 삭제"}</button>

@@ -124,14 +124,14 @@ export async function getRoomMap(): Promise<Record<string, string>> {
 }
 
 // 사진 → Supabase Storage(photos 버킷) 업로드 후 공개 URL 반환. (버킷/정책은 SQL로 1회 생성)
-export async function uploadPhoto(path: string, file: Blob, contentType = "image/jpeg"): Promise<string> {
+export async function uploadPhoto(path: string, file: Blob, contentType = "image/jpeg", timeoutMs = 60_000): Promise<string> {
   // 현장 LTE에서 "Failed to fetch"(연결 끊김·타임아웃)가 잦아 3회까지 자동 재시도한다.
   // 실패해도 매번 새 경로를 쓰지 않고 같은 경로로 재시도 — 중복 업로드가 쌓이지 않는다.
   const url = `${SUPABASE_URL}/storage/v1/object/photos/${path}`;
   let lastError = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000); // 대용량 사진도 넉넉히
+    const timer = setTimeout(() => controller.abort(), timeoutMs); // 사진 60초 · 영상은 크기에 맞춰 호출부에서 늘린다
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -145,13 +145,15 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
       lastError = `${res.status}: ${t.slice(0, 120)}`;
       if (res.status < 500 && res.status !== 429) break; // 권한·용량 등은 재시도해도 같다
     } catch (e) {
-      lastError = (e as Error).name === "AbortError" ? "시간 초과(60초)" : (e as Error).message || "네트워크 오류";
+      lastError = (e as Error).name === "AbortError" ? `시간 초과(${Math.round(timeoutMs / 1000)}초)` : (e as Error).message || "네트워크 오류";
     } finally {
       clearTimeout(timer);
     }
     if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
   }
-  throw new Error(`사진 업로드 실패 — ${lastError} (전파 상태를 확인하고 다시 시도해 주세요)`);
+  const sizeMb = Math.round((file.size || 0) / 1048576);
+  const hint = sizeMb >= 20 ? ` · 파일이 ${sizeMb}MB로 큽니다 — 영상은 10~20초로 잘라서 올려 주세요` : " (전파 상태를 확인하고 다시 시도해 주세요)";
+  throw new Error(`업로드 실패 — ${lastError}${hint}`);
 }
 
 // PostgREST의 기본 1,000행 제한을 넘는 공용 목록을 끝까지 조회한다.
