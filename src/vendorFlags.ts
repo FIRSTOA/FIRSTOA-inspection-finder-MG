@@ -24,7 +24,13 @@ export type VendorWorkFlags = {
   // ids: 이 업체에 실제로 매칭된 vendor_notes 행들 — 수정·삭제는 반드시 이 id로 한다
   //      (표기가 다른 별칭·부분일치로 잡힌 행을 새 행으로 덧쓰면 같은 내용이 계속 중복 누적된다)
   note: { text: string; grade: string; count: number; ids: string[]; workStart: string; lunchTime: string; author: string; updatedAt: string } | null;
+  // 담당자·키맨 변경 (contact_changes) — 최근 1건 요약 + 최근 90일 건수 + 인사 미완료 건수.
+  // 키맨이 바뀐 직후 인사드리는 게 재계약·친밀도로 이어진다는 취지(대표님, 2026-08-27)라
+  // 목록·현장 화면 어디서든 배지로 보이게 배치 조회에 함께 싣는다. 전체 이력은 통합이력에서 본다.
+  keyman: { date: string; days: number; category: string; before: string; after: string; isPerson: boolean; greeted: boolean; count90: number; pending: number } | null;
 };
+
+type KeymanEntry = { date: string; days: number; category: string; before: string; after: string; isPerson: boolean; greeted: boolean; count90: number; pending: number };
 
 type NoteEntry = { text: string; grade: string; count: number; ids: string[]; workStart: string; lunchTime: string; author: string; updatedAt: string };
 
@@ -71,6 +77,7 @@ type Sources = {
   overage: Map<string, OverEntry>;
   bulman: Map<string, BulEntry>;
   notes: Map<string, NoteEntry>;
+  keyman: Map<string, KeymanEntry>;
   // 거래처 코드 계층 — 이름 키와 병행 구축, 조회 시 코드 일치를 먼저 본다
   alias: Map<string, string | null>;
   misuByCode: Map<string, MisuEntry>;
@@ -78,6 +85,7 @@ type Sources = {
   renewalByCode: Map<string, RenewEntry[]>;
   overageByCode: Map<string, OverEntry>;
   bulmanByCode: Map<string, BulEntry>;
+  keymanByCode: Map<string, KeymanEntry>;
 };
 
 let cached: { at: number; promise: Promise<Sources> } | null = null;
@@ -97,7 +105,9 @@ async function loadSources(): Promise<Sources> {
   const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
   const bulmanCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes, noteRows] = await Promise.all([
+  // 담당자·키맨 변경: 배지는 최근 것만 보여주지만 "인사 미완료"는 오래된 것도 상기시켜야 해서 1년치를 읽는다
+  const changeCutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes, noteRows, changeRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
     selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
     selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter},${nextQuarter})`),
@@ -107,6 +117,7 @@ async function loadSources(): Promise<Sources> {
     getAliasCodeMap().catch(() => new Map<string, string | null>()),
     getWorkinCodeMap().catch(() => new Map<number, string>()),
     selectAllRows<{ id: string; vendor: string; vendor_key: string; grade: string; note: string; work_start?: string; lunch_time?: string; author?: string; updated_at?: string }>("vendor_notes", "select=id,vendor,vendor_key,grade,note,work_start,lunch_time,author,updated_at&order=updated_at.desc").catch(() => []),
+    selectAllRows<Record<string, unknown>>("contact_changes", `select=company,category,reason,before_text,after_text,change_date,created_at,greeting_done&change_date=gte.${changeCutoff}&order=change_date.desc&limit=1000`).catch(() => []),
   ]);
 
   // 거래처 특이사항 — 한 업체에 여러 건이면 최신부터 이어 붙이고 건수를 남긴다
@@ -223,7 +234,42 @@ async function loadSources(): Promise<Sources> {
     }
   }
 
-  return { quarter, misu, inspection, renewal, overage, bulman, notes, alias, misuByCode, inspectionByCode, renewalByCode, overageByCode, bulmanByCode };
+  // 담당자·키맨 변경 집계 — 최신 1건을 요약으로, 90일 건수와 인사 미완료 건수를 함께
+  const keyman = new Map<string, KeymanEntry>();
+  const keymanByCode = new Map<string, KeymanEntry>();
+  const change90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const personChange = (category: string, reason: string) =>
+    !/주소/.test(category) && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(`${category} ${reason}`);
+  const foldChange = (map: Map<string, KeymanEntry>, key: string, row: Record<string, unknown>) => {
+    const date = String(row["change_date"] || row["created_at"] || "").slice(0, 10);
+    if (!key || !date) return;
+    const category = String(row["category"] || "").trim();
+    const reason = String(row["reason"] || "").trim();
+    const isPerson = personChange(category, reason);
+    const greeted = row["greeting_done"] === true;
+    const prev = map.get(key);
+    const recent = date >= change90 ? 1 : 0;
+    const pend = isPerson && !greeted ? 1 : 0;
+    if (!prev || date > prev.date) {
+      map.set(key, {
+        date, days: Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)),
+        category: category || "변경", before: String(row["before_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
+        after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
+        isPerson, greeted,
+        count90: (prev?.count90 || 0) + recent, pending: (prev?.pending || 0) + pend,
+      });
+    } else {
+      map.set(key, { ...prev, count90: prev.count90 + recent, pending: prev.pending + pend });
+    }
+  };
+  for (const row of changeRows) {
+    const company = String(row["company"] || "");
+    foldChange(keyman, vendorMatchKey(company), row);
+    const code = translateVendor(alias, company);
+    if (code) foldChange(keymanByCode, code, row);
+  }
+
+  return { quarter, misu, inspection, renewal, overage, bulman, notes, keyman, alias, misuByCode, inspectionByCode, renewalByCode, overageByCode, bulmanByCode, keymanByCode };
 }
 
 function getSources(): Promise<Sources> {
@@ -280,8 +326,9 @@ export async function getVendorFlagsBatch(vendors: string[]): Promise<Map<string
       overage: over || null,
       bulman: bul || null,
       note: lookup(sources.notes, key) || null,
+      keyman: (code ? sources.keymanByCode.get(code) : undefined) ?? lookup(sources.keyman, key) ?? null,
     };
-    if (flags.inspection || flags.misu || flags.renewal || flags.overage || flags.bulman || flags.note) result.set(vendor, flags);
+    if (flags.inspection || flags.misu || flags.renewal || flags.overage || flags.bulman || flags.note || flags.keyman) result.set(vendor, flags);
   }
   return result;
 }

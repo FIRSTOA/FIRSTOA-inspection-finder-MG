@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "bbf453e52f",
+    "date": "2026-08-27",
+    "note": "키맨 카드 — FIELD 점검·AS에서 그 업체 90일 내 담당자·키맨·주소 변경을 띄우고 현장에서 바로 [인사 완료] 체크(대표님 키맨 관리 취지)"
+  },
+  {
     "hash": "7527a0da23",
     "date": "2026-08-27",
     "note": "현장 피드백 3건 — AS 양식에서도 기기 추가·선택(다른 기기 점검 동행), 영상 첨부 실패 수리(45MB 사전 안내 + 크기별 업로드 제한시간), 키맨/담당자 변경을 지역 점검방에도 공유 + 인사 완료 체크(키맨 관리)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "148df190dc",
     "date": "2026-08-14",
     "note": "자산번호 매칭 폐기 — 43곳 중 39곳 오연결(자산번호 칸에 모델명·임의 값 혼입 확인)"
-  },
-  {
-    "hash": "c6de97c6cd",
-    "date": "2026-08-14",
-    "note": "거래처 코드 2단계 — 뱃지·이력·재계약 매칭을 코드 조인 우선으로 전환"
   }
 ];

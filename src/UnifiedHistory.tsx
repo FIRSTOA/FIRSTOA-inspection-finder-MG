@@ -13,6 +13,7 @@ import {
 import { getVendorHistoryDetail, searchVendorHistoryCandidates, type DetailResp, type VendorHit } from "./api";
 import { normRegion, primaryRegion, REGIONS, REGION_LABEL, vendorRegion } from "./region";
 import { getVendorFlagsBatch, resetVendorFlagsCache, type VendorWorkFlags } from "./vendorFlags";
+import { isKeymanChange, recentChangesFor, daysSince, type ContactChange } from "./keyman";
 import { normalizeId, parseInspectionBlocks, vendorMatchKey, type InspBlock } from "./ids";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { notify } from "./toast";
@@ -233,6 +234,10 @@ function SearchResult({ hit, onSelect }: { hit: VendorHit; onSelect: (vendor: st
 
 export default function UnifiedHistory({ vendor, accent, open, onClose, onError, author = "" }: Props) {
   const [queryVendor, setQueryVendor] = useState("");
+  // 담당자·키맨 변경은 통합이력에서 "전체 기간"을 본다 — 재계약·인수인계 때 변천사가 근거가 된다.
+  // (목록·현장 화면 배지는 최근 90일 + 인사 미완료만 — 성격이 다르다)
+  const [changes, setChanges] = useState<ContactChange[]>([]);
+  const [greetBusy, setGreetBusy] = useState("");
   const [detail, setDetail] = useState<DetailResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeCat, setActiveCat] = useState("전체");
@@ -370,6 +375,26 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   const [noteAdd, setNoteAdd] = useState("");   // 항목 추가 — 쓸 때마다 날짜·작성자를 붙여 본문 끝에 쌓는다
   const [noteBusy, setNoteBusy] = useState(false);
   useEffect(() => { setNoteEdit(null); setNoteAdd(""); }, [queryVendor]); // 다른 업체로 옮기면 편집 상태 해제
+  useEffect(() => {
+    if (!open || !queryVendor) { setChanges([]); return; }
+    let alive = true;
+    recentChangesFor(queryVendor, 3650) // 전체 기간
+      .then((rows) => { if (alive) setChanges(rows); })
+      .catch(() => { if (alive) setChanges([]); });
+    return () => { alive = false; };
+  }, [open, queryVendor]);
+  const markGreeted = async (row: ContactChange) => {
+    if (greetBusy) return;
+    setGreetBusy(row.id);
+    try {
+      const patch = { greeting_done: true, greeting_by: author || "미지정", greeting_at: new Date().toISOString() };
+      await updateRows("contact_changes", `id=eq.${row.id}`, patch);
+      setChanges((cur) => cur.map((r) => (r.id === row.id ? { ...r, ...patch } : r)));
+      resetVendorFlagsCache(); // 배지도 바로 회색으로
+      notify("인사 완료로 표시했습니다", "success");
+    } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); }
+    finally { setGreetBusy(""); }
+  };
   /**
    * 특이사항 항목 추가 — 규칙은 시간이 지나며 쌓인다(카드키 → 주차 → 담당자 변경…).
    * 전체 수정은 "최종 수정일" 하나만 남아 언제 생긴 규칙인지 알 수 없었다(사용자 지적) →
@@ -393,7 +418,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
       } else {
         await insertRow("vendor_notes", { vendor: queryVendor.slice(0, 120), vendor_key: key, note: merged, author: author || "미지정", source: "webapp" });
       }
-      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
+      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null, keyman: null };
       setFlags((cur) => {
         const base = cur || blank;
         return { ...base, note: { text: merged, grade: base.note?.grade || "", count: 1, ids: ids.length ? [ids[0]] : [],
@@ -438,7 +463,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
         notify("특이사항을 등록했습니다 ✓");
       }
       // flags가 null이어도 낙관적 표시가 유지되게 기본 객체로 시작한다 (저장했는데 '없음'으로 돌아가 보이던 문제)
-      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
+      const blank: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null, keyman: null };
       setFlags((cur) => {
         const base = cur || blank;
         if (!text && !hasHours) return { ...base, note: null };
@@ -463,7 +488,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
     let active = true;
     getVendorFlagsBatch(names).then((map) => {
       if (!active) return;
-      const merged: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null };
+      const merged: VendorWorkFlags = { inspection: null, misu: null, renewal: null, overage: null, bulman: null, note: null, keyman: null };
       for (const name of names) {
         const f = map.get(name);
         if (!f) continue;
@@ -748,6 +773,44 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
             📌 이 거래처의 특이사항 적기 — 방문 규칙·출입 방법·점검 제외 기기 등
           </button>
         )}
+        {/* 담당자·키맨 변경 이력 — 전체 기간. 누가 언제 바뀌었는지가 재계약·분쟁·인수인계 때 근거가 된다 */}
+        {!loading && queryVendor && activeCat === "전체" && changes.length > 0 && (
+          <section className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center gap-2 bg-slate-800 px-4 py-2.5">
+              <h3 className="text-[13.5px] font-black text-white">🤝 담당자·키맨 변경 이력</h3>
+              <span className="text-[11px] font-bold text-slate-300">전체 {changes.length}건</span>
+              {changes.some((r) => isKeymanChange(r) && !r.greeting_done) && (
+                <span className="ml-auto rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-black text-amber-950">
+                  인사 필요 {changes.filter((r) => isKeymanChange(r) && !r.greeting_done).length}
+                </span>
+              )}
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {changes.map((row) => {
+                const person = isKeymanChange(row);
+                return (
+                  <li key={row.id} className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-600">{(row.change_date || row.created_at).slice(0, 10)}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${person ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{row.category || "변경"}</span>
+                      {row.reason && <span className="text-[11px] font-bold text-slate-500">{row.reason.slice(0, 24)}</span>}
+                      <span className="text-[10px] font-semibold text-slate-400">D+{daysSince(row.change_date || row.created_at)} · {row.author || "-"}</span>
+                      {person && (row.greeting_done
+                        ? <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">인사 완료 · {row.greeting_by || "-"}</span>
+                        : <button type="button" disabled={greetBusy === row.id} onClick={() => void markGreeted(row)}
+                            className="ml-auto rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black text-white transition hover:bg-amber-400 disabled:opacity-50">인사 완료로 표시</button>)}
+                    </div>
+                    <div className="mt-1 grid gap-x-3 gap-y-0.5 text-[12px] leading-5 sm:grid-cols-2">
+                      {row.before_text && <div className="min-w-0"><span className="mr-1 text-[10px] font-black text-slate-400">이전</span><span className="font-semibold text-slate-500 line-through decoration-slate-300">{row.before_text.replace(/\n/g, " · ").slice(0, 70)}</span></div>}
+                      {row.after_text && <div className="min-w-0"><span className="mr-1 text-[10px] font-black text-slate-400">현재</span><span className="font-black text-slate-900">{row.after_text.replace(/\n/g, " · ").slice(0, 70)}</span></div>}
+                    </div>
+                    {row.notes && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{row.notes.slice(0, 100)}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
         {!loading && detail && activeCat === "전체" && (() => {
           // 같은 라벨(여분·사용량)은 한 섹션으로 묶는다 — "점검/여분/사용량/기기/교체"가 딱 나뉘어 읽히도록
           const sections: CheckSection[] = [];
@@ -767,6 +830,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
             : f.inspection.carried
               ? { dot: "bg-slate-300", headline: "다음 분기로 이관", tone: "text-slate-600" }
               : { dot: "bg-blue-500", headline: `${f.inspection.quarter}분기 방문 대상`, tone: "text-blue-700" });
+          if (f?.keyman) add("담당자", f.keyman.isPerson && !f.keyman.greeted
+            ? { dot: "bg-amber-500", headline: `${f.keyman.category} 변경 · 인사 필요`, detail: `${f.keyman.date} (D+${f.keyman.days})${f.keyman.after ? ` · 현재 ${f.keyman.after}` : ""}`, tone: "text-amber-700" }
+            : { dot: "bg-slate-300", headline: `${f.keyman.category} 변경${f.keyman.isPerson ? " · 인사 완료" : ""}`, detail: `${f.keyman.date}${f.keyman.after ? ` · 현재 ${f.keyman.after}` : ""}`, tone: "text-slate-600" });
           if (f?.renewal) add("재계약", f.renewal.done
             ? { dot: "bg-slate-300", headline: "완료", tone: "text-slate-600" }
             : { dot: "bg-blue-500", headline: `도래${f.renewal.due ? ` · ${f.renewal.due} 종료` : ""}`, tone: "text-blue-700" });

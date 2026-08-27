@@ -26,12 +26,42 @@ const CHIP_STYLE = {
   blue: "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100",
 } as const;
 
+/**
+ * 키맨·담당자 변경 배지 표시 여부.
+ * 최근 90일 변경은 무조건 보여주고, 사람이 바뀐 건인데 인사가 안 됐으면 90일이 지나도 계속 보여준다
+ * (놓친 인사를 상기시키는 게 이 기능의 취지 — 대표님, 2026-08-27). D+숫자로 오래된 건임을 알 수 있게 한다.
+ */
+export function keymanBadge(flags: VendorWorkFlags | undefined | null): { label: string; tone: "amber" | "slate"; title: string } | null {
+  const k = flags?.keyman;
+  if (!k) return null;
+  const pendingGreeting = k.isPerson && !k.greeted;
+  if (!k.count90 && !pendingGreeting) return null;
+  const label = `${k.isPerson ? "🤝 키맨" : "📍 변경"} D+${k.days}`;
+  const title = [
+    `${k.date} ${k.category} 변경${k.isPerson ? (k.greeted ? " · 인사 완료" : " · 인사 필요") : ""}`,
+    k.before ? `이전: ${k.before}` : "",
+    k.after ? `현재: ${k.after}` : "",
+    k.count90 > 1 ? `최근 90일 ${k.count90}건` : "",
+    "누르면 통합이력에서 전체 변경 이력을 봅니다",
+  ].filter(Boolean).join("\n");
+  return { label, tone: pendingGreeting ? "amber" : "slate", title };
+}
+
 export function VendorAlertChip({ flags, onOpen }: { flags: VendorWorkFlags | undefined | null; onOpen: () => void }) {
   const alert = vendorAlertLevel(flags);
   const note = flags?.note || null;
-  if (!alert && !note) return null;
+  const keyman = keymanBadge(flags);
+  if (!alert && !note && !keyman) return null;
   return (
     <>
+      {/* 키맨이 바뀐 걸 모르고 방문하면 이전 담당자 이름을 부르게 된다 — 분기체크 개수와 섞지 않고 따로 세운다 */}
+      {keyman && (
+        <button type="button" title={keyman.title}
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
+          className={`shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-black transition ${keyman.tone === "amber" ? "border-amber-400 bg-amber-100 text-amber-800 hover:bg-amber-200" : "border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+          {keyman.label}
+        </button>
+      )}
       {/* 거래처 특이사항은 방문 전에 반드시 봐야 하는 층이라 분기체크 개수에 섞지 않고 따로 세운다 */}
       {note && (
         <button type="button" title={note.text.slice(0, 300)}
