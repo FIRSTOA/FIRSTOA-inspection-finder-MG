@@ -47,3 +47,23 @@ describe("지역 정규화와 _dupKey 분리", () => {
     expect(a.region).toBe("C");
   });
 });
+
+// 키맨 변경 판정 — 주소·전화만 바뀐 건은 인사 대상이 아니다(2026-08-27)
+describe("키맨 변경 판정", () => {
+  it("사람이 바뀐 건만 인사 대상", async () => {
+    const { isKeymanChange } = await import("../src/keyman");
+    expect(isKeymanChange({ category: "키맨변경", reason: "담당자 퇴사" })).toBe(true);
+    expect(isKeymanChange({ category: "담당자", reason: "" })).toBe(true);
+    expect(isKeymanChange({ category: "소장 교체", reason: "" })).toBe(true);
+    expect(isKeymanChange({ category: "주소변경", reason: "이전" })).toBe(false);
+    expect(isKeymanChange({ category: "주소", reason: "담당자 퇴사" })).toBe(false); // 주소 건은 제외
+    expect(isKeymanChange({ category: "전화번호", reason: "번호 변경" })).toBe(false);
+  });
+  it("같은 업체 판정은 지점 표기 차이를 흡수한다", async () => {
+    const { sameVendor } = await import("../src/keyman");
+    expect(sameVendor("주식회사 무암", "(주)무암")).toBe(true);
+    expect(sameVendor("드림엔지니어링 삼성동현장", "드림엔지니어링")).toBe(true);
+    expect(sameVendor("무암", "세안이엔씨")).toBe(false);
+    expect(sameVendor("", "무암")).toBe(false);
+  });
+});

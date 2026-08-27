@@ -27,6 +27,7 @@ import WalkingMap from "./WalkingMap";
 import FoodMap from "./FoodMap";
 import HelpCenter from "./HelpCenter";
 import InspectionChecklist from "./InspectionChecklist";
+import KeymanCard from "./KeymanCard";
 import ServiceReception from "./ServiceReception";
 import { PromoWorkspace } from "./CustomerEngagement";
 import CustomerReport from "./CustomerReport";
@@ -6485,6 +6486,7 @@ export default function App() {
             </div>
           )}
           <div className="space-y-2 border-t border-slate-200 bg-slate-50 p-3">
+            {(mode === "inspection" || mode === "blank-report") && currentVendor && <KeymanCard vendor={currentVendor} author={author} />}
             {(mode === "inspection" || mode === "blank-report") && <InspectionChecklist resetToken={`${mode}:${hasOutput ? "filled" : "empty"}`} />}
             <div className="grid grid-cols-3 gap-2">
               <button onClick={handleReset} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500 shadow-sm transition hover:bg-slate-50 active:scale-[0.99]">초기화</button>
@@ -6584,7 +6586,8 @@ export default function App() {
 
         {/* 액션: 보조줄(초기화·복사·사진첨부) + 전송줄(보내기·자가·부품) */}
         <div className="mx-auto max-w-3xl space-y-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
-          {(mode === "inspection" || mode === "blank-report") && <InspectionChecklist resetToken={`${mode}:${hasOutput ? "filled" : "empty"}`} />}
+          {(mode === "inspection" || mode === "blank-report") && currentVendor && <KeymanCard vendor={currentVendor} author={author} />}
+            {(mode === "inspection" || mode === "blank-report") && <InspectionChecklist resetToken={`${mode}:${hasOutput ? "filled" : "empty"}`} />}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleReset}

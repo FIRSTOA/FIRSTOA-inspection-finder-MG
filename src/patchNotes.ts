@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7527a0da23",
+    "date": "2026-08-27",
+    "note": "현장 피드백 3건 — AS 양식에서도 기기 추가·선택(다른 기기 점검 동행), 영상 첨부 실패 수리(45MB 사전 안내 + 크기별 업로드 제한시간), 키맨/담당자 변경을 지역 점검방에도 공유 + 인사 완료 체크(키맨 관리)"
+  },
+  {
     "hash": "5017656884",
     "date": "2026-08-27",
     "note": "맛동여지도 사진이 화면을 뒤덮던 문제 수리 — 그리드 칸 min-h-0 + 컨테이너 overflow-hidden + 인라인 최대높이(그리드 기본 min-height:auto가 지정 높이를 무시하고 원본 크기로 늘어나던 것)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c6de97c6cd",
     "date": "2026-08-14",
     "note": "거래처 코드 2단계 — 뱃지·이력·재계약 매칭을 코드 조인 우선으로 전환"
-  },
-  {
-    "hash": "fd5beae9d4",
-    "date": "2026-08-14",
-    "note": "판정 테스트를 빌드에 연결 — prebuild로 vitest 자동 실행, 실패 시 배포 차단"
   }
 ];
