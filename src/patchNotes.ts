@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ec8c42e69a",
+    "date": "2026-08-28",
+    "note": "워킨맵에도 키맨 변경 배지(최근 90일, 인사 필요는 30일 안쪽만 주황) + 목록 버튼을 아이콘으로(📅 내 일정 · ⚙ 수정)"
+  },
+  {
     "hash": "8217c90962",
     "date": "2026-08-28",
     "note": "시트의 신규키맨인사 열은 참고 정보로만(메모에 '영업 인사: …') — 인사 완료 표시는 앱에서만 관리, 시트에는 쓰지 않음(시트는 우리 관할 아님)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a3dca57942",
     "date": "2026-08-14",
     "note": "네이버 일정 표시·수정 보강 — 내용 편집, 목록 탭 포함, 그날 전체 팝업"
-  },
-  {
-    "hash": "0058de6ce7",
-    "date": "2026-08-14",
-    "note": "접수 삭제 연쇄 정리 + 네이버 일정 수정 모달"
   }
 ];

@@ -1219,9 +1219,21 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
   // 담당자·키맨 변경 — 방문 전에 "키맨이 바뀌었다"를 알아야 이전 담당자 이름을 부르지 않는다(2026-08-28)
-  type KeymanFlag = { date: string; days: number; category: string; after: string; isPerson: boolean; greeted: boolean };
+  type KeymanFlag = { id: string; date: string; days: number; category: string; after: string; before: string; isPerson: boolean; greeted: boolean };
   const [keymanByVendor, setKeymanByVendor] = useState<Map<string, KeymanFlag>>(new Map());
   const [keymanByCode, setKeymanByCode] = useState<Map<string, KeymanFlag>>(new Map());
+  const [greetedIds, setGreetedIds] = useState<Set<string>>(new Set()); // 이 화면에서 인사 완료로 누른 건
+  const [greetBusyId, setGreetBusyId] = useState("");
+  const markKeymanGreeted = useCallback(async (flag: KeymanFlag) => {
+    if (!flag.id || greetBusyId) return;
+    setGreetBusyId(flag.id);
+    try {
+      await upsertRows("contact_changes", [{ id: flag.id, greeting_done: true, greeting_by: userKey || "미지정", greeting_at: new Date().toISOString() }], "id");
+      setGreetedIds((current) => new Set(current).add(flag.id));
+      notify("인사 완료로 표시했습니다", "success");
+    } catch (error) { notify(`저장 실패: ${(error as Error).message}`, "error"); }
+    finally { setGreetBusyId(""); }
+  }, [greetBusyId, userKey]);
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   // 미수·초과·불만은 지도 알림에 내용이 다 담기므로 통합이력 연결은 두지 않는다 (2026-08-15 사용자 결정 — 워킨맵은 표시 전용)
   const [misuFailed, setMisuFailed] = useState(false);
@@ -1495,7 +1507,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       try {
         const [rows, alias] = await Promise.all([
           selectRows<Record<string, unknown>>("contact_changes",
-            `select=company,category,reason,after_text,change_date,greeting_done&change_date=gte.${cutoff}&order=change_date.desc&limit=1000`),
+            `select=id,company,category,reason,before_text,after_text,change_date,greeting_done&change_date=gte.${cutoff}&order=change_date.desc&limit=1000`),
           getAliasCodeMap().catch(() => new Map<string, string | null>()),
         ]);
         const map = new Map<string, KeymanFlag>();
@@ -1508,8 +1520,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const reason = String(row["reason"] || "").trim();
           const isPerson = !/주소/.test(category) && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(`${category} ${reason}`);
           const entry: KeymanFlag = {
+            id: String(row["id"] || ""),
             date, days: Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)),
-            category: category || "변경", after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 50),
+            category: category || "변경",
+            after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
+            before: String(row["before_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 60),
             isPerson, greeted: row["greeting_done"] === true,
           };
           const key = vendorMatchKey(company);
@@ -2344,14 +2359,20 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
-                  {keyman && (
-                    <span className="mt-1 block">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
-                        title={`${keyman.date} ${keyman.category} 변경${keyman.after ? ` · 현재 ${keyman.after}` : ""}${keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? " · 인사 필요" : ""}`}>
-                        {keyman.isPerson ? "🤝" : "📍"} {keyman.category} D+{keyman.days}{keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? " · 인사 필요" : ""}
+                  {keyman && (() => {
+                    // 구분 원문이 길어("총괄키맨등록(계약관련 외 전화하지 말 것.)") 줄이 밀렸다 — 라벨은 짧게, 원문은 말풍선으로.
+                    const needGreet = keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
+                    return (
+                      <span className="mt-1 flex min-w-0 items-center gap-1">
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
+                          title={`${keyman.date} · ${keyman.category}${keyman.before ? `\n이전: ${keyman.before}` : ""}${keyman.after ? `\n현재: ${keyman.after}` : ""}${needGreet ? "\n인사 필요 — 오른쪽 🤝 버튼으로 체크" : ""}`}>
+                          {keyman.isPerson ? "🤝 키맨" : "📍 주소"} D+{keyman.days}
+                        </span>
+                        {keyman.after && <span className="min-w-0 truncate text-[11px] font-bold text-slate-600">→ {keyman.after}</span>}
+                        {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">인사</span>}
                       </span>
-                    </span>
-                  )}
+                    );
+                  })()}
                   {((place.kind === "quarter" && renewalMatch) || misu || overage || bulman) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
@@ -2365,9 +2386,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 </span>
               </button>
               {!editMode && (
+                <>
+                {/* 새 키맨 인사 체크 — 줄 안쪽(선택 버튼) 밖에 둬야 버튼 중첩이 안 된다 */}
+                {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
+                  <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
+                    disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-500 text-[13px] leading-none text-white transition hover:bg-amber-400 disabled:opacity-50">🤝</button>
+                )}
                 <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
                   onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
                   className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
+                </>
               )}
               {/* 목록 줄은 좁다 — 글자 버튼 대신 아이콘으로(2026-08-28 요청). 마우스를 올리면 무슨 버튼인지 뜬다 */}
               {!editMode && <button type="button" title="이 업체 정보 수정" aria-label="수정"
