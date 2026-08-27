@@ -1218,6 +1218,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [overageByVendor, setOverageByVendor] = useState<Map<string, { total: string; date: string; grade: string }>>(new Map());
   // 불만: 최근 90일 접수분 거래처별 최신 1건 — 방문 전 대응 준비용
   const [bulmanByVendor, setBulmanByVendor] = useState<Map<string, { date: string; content: string }>>(new Map());
+  // 담당자·키맨 변경 — 방문 전에 "키맨이 바뀌었다"를 알아야 이전 담당자 이름을 부르지 않는다(2026-08-28)
+  type KeymanFlag = { date: string; days: number; category: string; after: string; isPerson: boolean; greeted: boolean };
+  const [keymanByVendor, setKeymanByVendor] = useState<Map<string, KeymanFlag>>(new Map());
+  const [keymanByCode, setKeymanByCode] = useState<Map<string, KeymanFlag>>(new Map());
   // 뱃지 클릭 → 최근 이력 팝업 (미수·초과·불만)
   // 미수·초과·불만은 지도 알림에 내용이 다 담기므로 통합이력 연결은 두지 않는다 (2026-08-15 사용자 결정 — 워킨맵은 표시 전용)
   const [misuFailed, setMisuFailed] = useState(false);
@@ -1484,6 +1488,41 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       } catch (error) { console.error("Bulman load failed", error); }
     })();
   }, []);
+
+  const loadKeyman = useCallback(() => {
+    const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    void (async () => {
+      try {
+        const [rows, alias] = await Promise.all([
+          selectRows<Record<string, unknown>>("contact_changes",
+            `select=company,category,reason,after_text,change_date,greeting_done&change_date=gte.${cutoff}&order=change_date.desc&limit=1000`),
+          getAliasCodeMap().catch(() => new Map<string, string | null>()),
+        ]);
+        const map = new Map<string, KeymanFlag>();
+        const codeMap = new Map<string, KeymanFlag>();
+        for (const row of rows) {
+          const company = String(row["company"] || "");
+          const date = String(row["change_date"] || "").slice(0, 10);
+          if (!company || !date) continue;
+          const category = String(row["category"] || "").trim();
+          const reason = String(row["reason"] || "").trim();
+          const isPerson = !/주소/.test(category) && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|퇴사|입사|교체|변경자/.test(`${category} ${reason}`);
+          const entry: KeymanFlag = {
+            date, days: Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)),
+            category: category || "변경", after: String(row["after_text"] || "").replace(/\s*\n\s*/g, " · ").slice(0, 50),
+            isPerson, greeted: row["greeting_done"] === true,
+          };
+          const key = vendorMatchKey(company);
+          if (key) { const prev = map.get(key); if (!prev || date > prev.date) map.set(key, entry); }
+          const code = translateVendor(alias, company);
+          if (code) { const prevCode = codeMap.get(code); if (!prevCode || date > prevCode.date) codeMap.set(code, entry); }
+        }
+        setKeymanByVendor(map);
+        setKeymanByCode(codeMap);
+      } catch (error) { console.error("Keyman load failed", error); }
+    })();
+  }, []);
+  useEffect(() => { loadKeyman(); }, [loadKeyman]);
 
   useEffect(() => { void getWorkinCodeMap().then(setPlaceCodeById).catch(() => undefined); }, []);
   useEffect(() => { loadInspectionVisits(); }, [loadInspectionVisits]);
@@ -2272,6 +2311,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const misu = flagFor(misuByCode, misuByVendor, place);
           const overage = flagFor(overageByCode, overageByVendor, place);
           const bulman = flagFor(bulmanByCode, bulmanByVendor, place);
+          const keyman = flagFor(keymanByCode, keymanByVendor, place);
           const misuMonths = misu ? misu.months.replace(/개월/g, "").trim() : "";
           const misuBal = misu ? misuBalanceLabel(misu.balance) : "";
           const onDemandHistory = deviceHistoryCache[place.id];
@@ -2304,6 +2344,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
                   {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
+                  {keyman && (
+                    <span className="mt-1 block">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
+                        title={`${keyman.date} ${keyman.category} 변경${keyman.after ? ` · 현재 ${keyman.after}` : ""}${keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? " · 인사 필요" : ""}`}>
+                        {keyman.isPerson ? "🤝" : "📍"} {keyman.category} D+{keyman.days}{keyman.isPerson && !keyman.greeted && keyman.days <= 30 ? " · 인사 필요" : ""}
+                      </span>
+                    </span>
+                  )}
                   {((place.kind === "quarter" && renewalMatch) || misu || overage || bulman) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
@@ -2317,11 +2365,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 </span>
               </button>
               {!editMode && (
-                <button type="button" title="이 업체를 내 일정에 넣기"
+                <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
                   onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
-                  className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700 transition hover:bg-blue-100">📅 내 일정</button>
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
               )}
-              {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
+              {/* 목록 줄은 좁다 — 글자 버튼 대신 아이콘으로(2026-08-28 요청). 마우스를 올리면 무슨 버튼인지 뜬다 */}
+              {!editMode && <button type="button" title="이 업체 정보 수정" aria-label="수정"
+                onClick={() => setDraft({ ...place, memos: [...place.memos] })}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">⚙</button>}
               </div>
               {expandedId === place.id && !editMode && (
                 <div className="border-t border-blue-100 bg-white px-4 py-3 text-xs text-slate-700">
