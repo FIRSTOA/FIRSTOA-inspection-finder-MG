@@ -33,7 +33,8 @@ export default function KeymanCard({ vendor, author, days = 90 }: { vendor: stri
 
   if (!rows.length) return null;
 
-  const todo = rows.filter((r) => isKeymanChange(r) && !r.greeting_done);
+  // 인사 대기는 최근 30일 건만 — 그 전 건은 이미 인사했다고 본다(2026-08-28 결정)
+  const todo = rows.filter((r) => isKeymanChange(r) && !r.greeting_done && daysSince(r.change_date || r.created_at) <= 30);
 
   const markGreeted = async (row: ContactChange) => {
     if (busyId) return;
@@ -70,7 +71,7 @@ export default function KeymanCard({ vendor, author, days = 90 }: { vendor: stri
                     {row.category || "변경"}
                   </span>
                   {row.reason && <span className="text-[11px] font-bold text-slate-500">{row.reason.slice(0, 20)}</span>}
-                  {keyman && (row.greeting_done
+                  {keyman && d <= 30 && (row.greeting_done
                     ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">인사 완료 · {row.greeting_by || "-"}</span>
                     : <button type="button" disabled={busyId === row.id} onClick={() => void markGreeted(row)}
                         className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black text-white transition hover:bg-amber-400 disabled:opacity-50">인사 완료로 표시</button>)}

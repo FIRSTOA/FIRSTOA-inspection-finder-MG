@@ -34,7 +34,9 @@ const CHIP_STYLE = {
 export function keymanBadge(flags: VendorWorkFlags | undefined | null): { label: string; tone: "amber" | "slate"; title: string } | null {
   const k = flags?.keyman;
   if (!k) return null;
-  const pendingGreeting = k.isPerson && !k.greeted;
+  // 인사는 "최근 것부터"가 현실적이다(사용자 결정 2026-08-28) — 30일 안쪽만 주황으로 상기시키고
+  // 그보다 오래된 건은 이미 인사했다고 본다. 오래된 건까지 계속 경고하면 배지가 무뎌진다.
+  const pendingGreeting = k.isPerson && !k.greeted && k.days <= 30;
   if (!k.count90 && !pendingGreeting) return null;
   const label = `${k.isPerson ? "🤝 키맨" : "📍 변경"} D+${k.days}`;
   const title = [

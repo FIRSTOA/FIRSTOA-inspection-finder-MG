@@ -3,6 +3,7 @@ import { askConfirm } from "./confirmModal";
 import { deleteRows, selectAllRows, selectRows, updateRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
+import { maybePullContactSheet, pullContactSheet } from "./keyman";
 
 type ContactChangeRow = {
   id: string;
@@ -52,6 +53,24 @@ export default function ContactChangeHistory() {
   const [applyBusyId, setApplyBusyId] = useState("");
   const [deleteBusyId, setDeleteBusyId] = useState("");
   const [greetBusyId, setGreetBusyId] = useState("");
+  const [pullBusy, setPullBusy] = useState(false);
+
+  const reload = () => selectRows<ContactChangeRow>("contact_changes", "select=*&order=change_date.desc,created_at.desc&limit=500")
+    .then(setRows).catch((e) => setError((e as Error).message));
+
+  // 시트가 최종 저장소다 — 카톡봇·Make로 시트에만 들어온 변경까지 보이게 가져온다
+  const pullFromSheet = async () => {
+    if (pullBusy) return;
+    setPullBusy(true);
+    try {
+      const result = await pullContactSheet(400);
+      await reload();
+      notify(result.inserted
+        ? `시트에서 ${result.inserted}건 새로 가져왔습니다 (읽은 줄 ${result.read})`
+        : `새로 가져올 건이 없습니다 (읽은 줄 ${result.read})`, "success");
+    } catch (e) { notify(`가져오기 실패: ${(e as Error).message}`, "error"); }
+    finally { setPullBusy(false); }
+  };
   const [onlyTodo, setOnlyTodo] = useState(false); // 인사 안 한 키맨 변경만 보기
 
   // 키맨이 바뀌면 초반에 인사를 드려야 나중 재계약·친밀도가 다르다(대표님 취지) — 인사 여부를 여기서 체크한다.
@@ -124,6 +143,11 @@ ${names}${matches.length > 5 ? `
   };
 
   useEffect(() => {
+    // 화면을 열 때 시트 최신분을 조용히 가져온다(브라우저당 1시간 1회)
+    void maybePullContactSheet().then((result) => { if (result?.inserted) void reload(); }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     selectRows<ContactChangeRow>("contact_changes", "select=*&order=change_date.desc,created_at.desc&limit=500")
       .then((result) => { if (mounted) setRows(result); })
@@ -132,9 +156,9 @@ ${names}${matches.length > 5 ? `
     return () => { mounted = false; };
   }, []);
 
-  // 최근 60일 안에 키맨이 바뀌었는데 아직 인사하지 않은 건 (오래된 것까지 재촉하지 않는다)
+  // 최근 30일 안에 키맨이 바뀌었는데 아직 인사하지 않은 건 — 그 전 건은 이미 인사했다고 본다(2026-08-28 결정)
   const keymanTodo = useMemo(
-    () => rows.filter((r) => isKeymanChange(r) && !r.greeting_done && daysSince(r.change_date || r.created_at) <= 60).length,
+    () => rows.filter((r) => isKeymanChange(r) && !r.greeting_done && daysSince(r.change_date || r.created_at) <= 30).length,
     [rows],
   );
 
@@ -161,6 +185,10 @@ ${names}${matches.length > 5 ? `
                 🤝 인사 대기 {keymanTodo}건{onlyTodo ? " · 전체 보기" : ""}
               </button>
             )}
+            <button type="button" disabled={pullBusy} onClick={() => void pullFromSheet()} title="담당자변경(키맨체크) 시트에서 최신 변경을 가져옵니다"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+              {pullBusy ? "가져오는 중…" : "⭳ 시트에서 가져오기"}
+            </button>
             <div className="text-sm font-black text-slate-700">{filtered.length}건</div>
           </div>
         </div>
@@ -181,7 +209,7 @@ ${names}${matches.length > 5 ? `
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">{row.region || "-"}</span>
               <span className="min-w-0"><b className="block truncate text-sm text-slate-900">{row.company || "업체명 미기재"}</b><span className="block truncate text-xs font-semibold text-slate-500">{row.category || "변경"} · {row.reason || "사유 미기재"}</span></span>
               <span className="text-right text-[11px] font-semibold text-slate-400">
-                {isKeymanChange(row) && (
+                {isKeymanChange(row) && daysSince(row.change_date || row.created_at) <= 30 && (
                   row.greeting_done
                     ? <span className="mb-0.5 block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">🤝 인사 완료</span>
                     : <span className="mb-0.5 block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🤝 인사 필요 D+{daysSince(row.change_date || row.created_at)}</span>

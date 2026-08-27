@@ -26,6 +26,7 @@ function doGet(e) {
     else if (action === 'retryheld') result = retryHeldFiles();          // 확인필요 파일을 수집함으로 되돌림
     else if (action === 'cellreport') result = sheetCellReport();      // 통합시트 셀 사용 현황(1,000만 한도)
     else if (action === 'celltrim') result = trimSheetCells(e.parameter.keep); // 빈 격자 잘라 셀 되돌리기
+    else if (action === 'contactpeek') result = contactSheetPeek(e.parameter.id, e.parameter.tab); // 담당자변경 시트 구조 확인
     else if (action === 'uploadlog') result = readUploadLog(e.parameter.limit); // 최근 수집 로그(실패 원인 확인)
     else if (action === 'dedupe') result = dedupeMasterByRaw(e.parameter.cat || '점검'); // 원문 같은 중복행 정리(첫 행만 남김)
     else if (action === 'seenreset') result = resetSeenRoom(e.parameter.room || ''); // 메시지 지문 초기화 → 그 방 전체 재해석
@@ -142,6 +143,27 @@ function trimSheetCells(keepRows) {
       freed += f;
     });
     return { ok: true, freedCells: freed, tabs: detail };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+/**
+ * 담당자변경 시트 훑어보기 (구조 파악용) — 헤더와 최근 몇 줄만 돌려준다.
+ * 담당자 변경은 웹앱뿐 아니라 카톡방 메신저봇+Make로도 시트에 직접 쌓인다.
+ * 앱(Supabase)은 웹앱분만 알고 있어 시트분이 안 보였다 → 시트를 읽어 역방향으로 채우기 위한 첫 단계.
+ */
+function contactSheetPeek(sheetId, tabName) {
+  try {
+    const ss = SpreadsheetApp.openById(String(sheetId || '').trim());
+    const sheets = ss.getSheets().map(function (sh) { return { name: sh.getName(), gid: sh.getSheetId(), rows: sh.getLastRow(), cols: sh.getLastColumn() }; });
+    const sheet = tabName ? ss.getSheetByName(String(tabName)) : ss.getSheets()[0];
+    if (!sheet) return { ok: true, title: ss.getName(), sheets: sheets, note: '탭을 못 찾음' };
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    const headers = lastRow ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); }) : [];
+    const from = Math.max(2, lastRow - 4);
+    const sample = lastRow >= 2 ? sheet.getRange(from, 1, Math.min(5, lastRow - 1), lastCol).getValues()
+      .map(function (row) { return row.map(function (v) { return v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd') : String(v).slice(0, 40); }); }) : [];
+    return { ok: true, title: ss.getName(), sheets: sheets, tab: sheet.getName(), lastRow: lastRow, headers: headers, sample: sample };
   } catch (err) { return { ok: false, error: err.toString() }; }
 }
 
