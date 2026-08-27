@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ca4460ad2e",
+    "date": "2026-08-28",
+    "note": "키맨 설명 카드가 아래 줄에 가려지던 것 수리 — 마우스 올린 줄을 위로 올림(relative hover:z-30) + 카드에 꼬리표"
+  },
+  {
     "hash": "e9a995c690",
     "date": "2026-08-28",
     "note": "워킨맵 목록: 버튼을 오른쪽 세로 한 열로(가로폭 확보) + 키맨 알약 설명을 직접 그린 카드로(날짜·구분·이전→현재·인사 상태 색 구분)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "059d51a6c4",
     "date": "2026-08-15",
     "note": "납품철수교체휴가교육 색 = 진한 로즈 (사진 기준, 갈색 → 로즈로 교체)"
-  },
-  {
-    "hash": "fc7ffd9bb6",
-    "date": "2026-08-15",
-    "note": "캘린더 색 조정 — 익일통합as=연두(라임), 납품철수교체휴가교육=짙은 갈색 (웹앱 일정·네이버 칩·필터·모바일 점 통일)"
   }
 ];

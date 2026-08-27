@@ -2701,6 +2701,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         if (!place) return null;
         const meta = labelMeta(place.label);
         const address = [place.address, place.addressDetail].filter(Boolean).join(" ");
+        const keyman = flagFor(keymanByCode, keymanByVendor, place);
+        const needGreet = !!keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
         return <div className="absolute bottom-0 left-0 right-0 z-[950] overflow-hidden rounded-t-md border-x border-t border-slate-300 bg-white/95 shadow-2xl backdrop-blur-sm lg:hidden">
           {address && <div className="truncate bg-slate-800/90 px-3 py-1.5 text-[11px] font-bold text-white">{address}</div>}
           <div className="flex items-stretch">
@@ -2708,7 +2710,20 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <button type="button" onClick={() => setMobileDetailId(place.id)} className="min-w-0 flex-1 px-3 py-2.5 text-left active:bg-slate-50">
               <span className="block truncate text-sm font-black text-slate-950">{place.name}</span>
               <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || "상세 정보 보기"}</span>
+              {keyman && (
+                <span className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
+                    {keyman.isPerson ? "🤝 키맨" : "📍 주소"} D+{keyman.days}
+                  </span>
+                  {keyman.after && <span className="min-w-0 truncate text-[11px] font-bold text-slate-600">{keyman.after}</span>}
+                </span>
+              )}
             </button>
+            {needGreet && keyman && (
+              <button type="button" aria-label="인사 완료로 표시" disabled={greetBusyId === keyman.id}
+                onClick={() => void markKeymanGreeted(keyman)}
+                className="grid w-11 shrink-0 place-items-center bg-amber-500 text-[15px] text-white active:bg-amber-600 disabled:opacity-50">🤝</button>
+            )}
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="w-10 shrink-0 border-l border-slate-100 text-lg font-black text-slate-400 active:bg-slate-100">×</button>
           </div>
         </div>;
@@ -2801,6 +2816,30 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <div className="min-w-0 flex-1"><div className="text-lg font-black leading-7">{place.name}</div><div className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-5 text-slate-500">{place.comment || "기기 정보 없음"}</div></div>
               </div>
             </section>
+            {(() => {
+              const keyman = flagFor(keymanByCode, keymanByVendor, place);
+              if (!keyman) return null;
+              const needGreet = keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
+              return (
+                <section className={`border-b-8 border-slate-100 px-4 py-4 ${needGreet ? "bg-amber-50" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${needGreet ? "bg-amber-500 text-white" : "bg-slate-200 text-slate-700"}`}>
+                      {keyman.isPerson ? "🤝 키맨 변경" : "📍 주소 변경"}
+                    </span>
+                    <span className="text-[12px] font-black tabular-nums text-slate-600">{keyman.date}</span>
+                    <span className="text-[11px] font-bold text-slate-400">D+{keyman.days}</span>
+                  </div>
+                  {keyman.category && <div className="mt-1.5 text-[12px] font-bold leading-4 text-slate-500">{keyman.category}</div>}
+                  {keyman.before && <div className="mt-2 text-[13px]"><span className="mr-1 text-[10px] font-black text-slate-400">이전</span><span className="font-semibold text-slate-500 line-through decoration-slate-300">{keyman.before}</span></div>}
+                  {keyman.after && <div className="mt-0.5 text-[14px]"><span className="mr-1 text-[10px] font-black text-slate-400">현재</span><span className="font-black text-slate-900">{keyman.after}</span></div>}
+                  {needGreet && (
+                    <button type="button" disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
+                      className="mt-3 w-full rounded-xl bg-amber-500 py-2.5 text-sm font-black text-white active:bg-amber-600 disabled:opacity-50">🤝 인사 완료로 표시</button>
+                  )}
+                  {!needGreet && keyman.isPerson && <div className="mt-2 text-[11px] font-bold text-emerald-700">인사 완료{keyman.greeted ? "" : " 간주(30일 지난 건)"}</div>}
+                </section>
+              );
+            })()}
             {place.kind === "quarter" && <section className="border-b-8 border-slate-100 px-4 py-4">
               <div className="text-xs font-black text-slate-400">최근 점검 비교</div>
               {historyLoading ? <div className="mt-2 text-sm font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
