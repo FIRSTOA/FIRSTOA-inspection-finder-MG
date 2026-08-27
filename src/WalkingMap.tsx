@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { LocateFixed, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
+import { workinVendorName } from "./ids";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -1122,6 +1123,8 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
   );
 });
 
+const LIST_PAGE = 60; // 목록 한 번에 그리는 줄 수 (지도 선택 추적에서도 쓴다)
+
 export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userKey?: string; onSelfRequest?: (text: string) => void }) {
   const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
   const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
@@ -1563,9 +1566,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const mobile = window.matchMedia("(max-width: 1023px)").matches;
     if (source === "list" || source === "other" || (mobile && source === "map")) return;
     if (mobile && mobileView !== "list") return;
-    window.requestAnimationFrame(() => {
-      document.querySelector(`[data-place-id="${selectedId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    // 목록은 60개씩만 그린다(더 보기) — 지도에서 고른 업체가 아직 안 그려져 있으면 스크롤할 대상이 없어서
+    // "지도를 눌러도 목록이 안 따라온다"가 됐다(2026-08-28 신고). 그 줄이 나올 만큼 목록을 늘린 뒤 스크롤한다.
+    const index = filteredRef.current.findIndex((place) => place.id === selectedId);
+    if (index >= 0) setListLimit((current) => (index < current ? current : Math.ceil((index + 1) / LIST_PAGE) * LIST_PAGE));
+    let tries = 0;
+    const seek = () => {
+      const target = document.querySelector(`[data-place-id="${selectedId}"]`);
+      if (target) { target.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+      if (tries++ < 8) window.setTimeout(seek, 80); // 목록이 늘어나 그려질 때까지 잠깐 기다린다
+    };
+    window.requestAnimationFrame(seek);
   }, [selectedId, mobileView, mapSelectionRevision]);
 
   const inspectionHistoryByPlace = useMemo(() => {
@@ -1758,10 +1769,37 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   }, [deferredQuery, scopedPlaces, scopedAllColors]);
 
   // 목록은 한 번에 다 그리지 않는다 — 600곳이면 카드 600개(각 80여 개 노드)가 즉시 만들어져 모바일이 멈춘다
-  const LIST_PAGE = 60;
+
   const [listLimit, setListLimit] = useState(LIST_PAGE);
+  // 워킨맵에서 바로 내 일정에 넣기 — 자동일정까지 가지 않아도 되게(2026-08-28 요청)
+  const [planTarget, setPlanTarget] = useState<MapPlace | null>(null);
+  const [planDate, setPlanDate] = useState(kstDate());
+  const [planBusy, setPlanBusy] = useState(false);
+  const registerPlan = async () => {
+    if (!planTarget || planBusy) return;
+    setPlanBusy(true);
+    try {
+      const vendor = workinVendorName(planTarget.name) || planTarget.name;
+      const renewal = planTarget.kind === "renewal";
+      await upsertRows("as_tickets", [{
+        id: `wk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        team: planTarget.team, date: planDate, time: "", // 시간 미정 — 내 일정에서 동선 순서로 잡는다
+        vendor, contact: planTarget.phone || "", address: planTarget.address || "", department: planTarget.addressDetail || "",
+        model: "", serial: "", asset: "", grade: "", keyman: "",
+        issue: renewal ? "재계약 방문 (워킨맵에서 등록)" : "정기점검 (워킨맵에서 등록)",
+        note: planTarget.comment ? planTarget.comment.slice(0, 300) : "",
+        assignee: userKey, status: "배정", scheduleType: renewal ? "AS" : "매월점검",
+        receptionId: "", calendarTitle: `${renewal ? "재계약" : "점검"} ${vendor}`, source: "workin",
+      }], "id");
+      notify(`${vendor} — ${planDate} 내 일정에 넣었습니다`, "success");
+      setPlanTarget(null);
+    } catch (e) { notify(`등록 실패: ${(e as Error).message}`, "error"); }
+    finally { setPlanBusy(false); }
+  };
   useEffect(() => { setListLimit(LIST_PAGE); }, [deferredQuery, teamFilter, quarterFilter, kindFilter, labelFilters]);
   const listRows = filtered.slice(0, listLimit);
+  const filteredRef = useRef(filtered); // 지도 선택 시 "그 줄이 몇 번째인지"만 보면 되므로 ref로 들고 간다
+  filteredRef.current = filtered;
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]); // includes()는 행마다 O(n) — 목록이 커지면 제곱으로 느려진다
 
   const mapSearchResults = useMemo(() => {
@@ -2278,6 +2316,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   )}
                 </span>
               </button>
+              {!editMode && (
+                <button type="button" title="이 업체를 내 일정에 넣기"
+                  onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
+                  className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700 transition hover:bg-blue-100">📅 내 일정</button>
+              )}
               {!editMode && <button type="button" onClick={() => setDraft({ ...place, memos: [...place.memos] })} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 lg:opacity-0 lg:group-hover:opacity-100">수정</button>}
               </div>
               {expandedId === place.id && !editMode && (
@@ -2864,6 +2907,28 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 );
               })}
               <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준 · 매월점검은 G2×1·G3×2·G5×3로 환산. 과거 완료분은 완료일 기록이 없어 주차엔 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {planTarget && (
+        <div className="fixed inset-0 z-[200] flex items-end bg-slate-950/50 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!planBusy) setPlanTarget(null); }}>
+          <div className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-sm sm:rounded-3xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="text-[18px] font-black tracking-tight text-slate-950">내 일정에 넣기</div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-500">{workinVendorName(planTarget.name) || planTarget.name}</div>
+            {planTarget.address && <div className="text-[11px] font-semibold text-slate-400">{planTarget.address}</div>}
+            <label className="mt-4 block">
+              <span className="text-[11px] font-black text-slate-500">방문 날짜</span>
+              <input type="date" value={planDate} onChange={(event) => setPlanDate(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white" />
+            </label>
+            <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-4 text-slate-500">
+              {planTarget.kind === "renewal" ? "재계약 방문" : "정기점검"}으로 <b className="text-slate-700">{userKey}</b>에게 배정됩니다 · 시간은 내 일정에서 동선 순서로 잡습니다
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setPlanTarget(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50">취소</button>
+              <button type="button" disabled={planBusy || !planDate} onClick={() => void registerPlan()}
+                className="flex-[2] rounded-xl bg-blue-600 py-3 text-sm font-black text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-500 disabled:opacity-50">{planBusy ? "등록 중…" : "내 일정에 넣기"}</button>
             </div>
           </div>
         </div>
