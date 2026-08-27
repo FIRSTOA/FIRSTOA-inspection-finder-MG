@@ -8,6 +8,7 @@
  * 이 함수가 시트를 읽어 없는 건만 채운다(있는 건은 절대 건드리지 않음 — 인사 완료 표시가 지워지면 안 된다).
  *
  * 안전 규칙
+ * - 시트는 **읽기만** 한다. 시트는 우리 관할이 아니라서 쓰지 않는다(2026-08-28 결정) — 인사 완료 표시는 앱에서만 관리.
  * - 쓰기는 insert + on_conflict=_dupKey&resolution=ignore-duplicates (갱신 아님)
  * - _dupKey는 웹앱과 같은 재료로 만든다 → 같은 건이 시트·앱 양쪽에 있어도 한 행으로 합쳐진다
  * - 시트는 읽기만 한다 (원본 훼손 없음)
@@ -183,7 +184,6 @@ Deno.serve(async (req) => {
     const at = (row: string[], i: number) => (i >= 0 ? String(row[i] ?? "").trim() : "");
     const payload: Record<string, unknown>[] = [];
     let skippedOld = 0, skippedEmpty = 0;
-    const greetings: Array<{ dupKey: string; by: string; memo: string }> = [];
     for (const row of rows.slice(headerRow + 1)) {
       const company = at(row, idx.company);
       if (!company) { skippedEmpty += 1; continue; }
@@ -200,21 +200,21 @@ Deno.serve(async (req) => {
       const after = at(row, idx.after) || composed;
       // 웹앱과 같은 재료·순서로 키를 만든다 → 같은 건이면 웹앱 행과 합쳐진다(중복 표시 방지)
       const dupKey = await md5Hex(["contact_change", date, author, company, category, reason, before, after].join("|"));
+      // 시트의 "신규키맨인사"는 영업파트가 채우는 칸이다. 인사 관리는 앱에서만 하기로 정했으므로(2026-08-28)
+      // 앱의 완료 표시로는 쓰지 않고, 참고 정보로만 남긴다("영업 인사: 통화완료" 형태).
       const greetingRaw = at(row, idx.greeting);
-      const greeted = !!greetingRaw && !/^(x|X|-|미완료|예정|대기)$/.test(greetingRaw);
       payload.push({
         change_date: date || new Date().toISOString().slice(0, 10),
         author, company, region: at(row, idx.region), category, reason,
         grade: at(row, idx.grade), before_text: before, after_text: after,
-        notes: [at(row, idx.notes), composed && at(row, idx.after) ? `신규키맨: ${composed}` : ""].filter(Boolean).join(" / "),
-        source_text: `시트: 키맨체크${greetingRaw ? ` · 인사 ${greetingRaw}` : ""}`, photo_link: "",
-        greeting_done: greeted,
-        greeting_by: greeted ? (at(row, idx.greetingBy) || author || "시트") : "",
-        greeting_at: greeted ? new Date().toISOString() : null,
-        greeting_memo: greeted ? greetingRaw : "",
+        notes: [
+          at(row, idx.notes),
+          composed && at(row, idx.after) ? `신규키맨: ${composed}` : "",
+          greetingRaw ? `영업 인사: ${greetingRaw}${at(row, idx.greetingBy) ? ` (${at(row, idx.greetingBy)})` : ""}` : "",
+        ].filter(Boolean).join(" / "),
+        source_text: "시트: 키맨체크", photo_link: "",
         _dupKey: dupKey,
       });
-      if (greeted) greetings.push({ dupKey, by: at(row, idx.greetingBy) || author || "시트", memo: greetingRaw });
     }
     if (!payload.length) return Response.json({ ok: true, tab: title, read: rows.length - 1, inserted: 0, skippedOld, skippedEmpty }, { headers: jsonHeaders });
 
@@ -236,18 +236,8 @@ Deno.serve(async (req) => {
       if (!res.ok) return Response.json({ error: `적재 실패(${res.status}) ${(await res.text()).slice(0, 200)}`, inserted }, { status: 502, headers: jsonHeaders });
       inserted += ((await res.json()) as unknown[]).length;
     }
-    // 이미 앱에 있던 건이라 새로 들어가지 않은 행 중, 시트에서 "인사 완료"로 바뀐 것은 그 표시만 따라 올린다.
-    // (false로 되돌리지는 않는다 — 앱에서 먼저 체크한 것을 시트가 지우면 안 되므로 한 방향만 반영)
-    let greetingSynced = 0;
-    for (const g of greetings) {
-      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/contact_changes?_dupKey=eq.${encodeURIComponent(g.dupKey)}&greeting_done=is.false`, {
-        method: "PATCH",
-        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ greeting_done: true, greeting_by: g.by, greeting_at: new Date().toISOString(), greeting_memo: g.memo }),
-      });
-      if (res.ok) greetingSynced += ((await res.json()) as unknown[]).length;
-    }
-    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, greetingSynced, skippedOld, skippedEmpty }, { headers: jsonHeaders });
+    // 인사 완료 표시는 앱에서만 만든다 — 시트 값으로 앱 상태를 바꾸지 않는다(2026-08-28 결정)
+    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, skippedOld, skippedEmpty }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 500, headers: jsonHeaders });
   }
