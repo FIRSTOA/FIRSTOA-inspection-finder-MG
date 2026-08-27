@@ -2366,12 +2366,41 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     // 구분 원문이 길어("총괄키맨등록(계약관련 외 전화하지 말 것.)") 줄이 밀렸다 — 라벨은 짧게, 원문은 말풍선으로.
                     const needGreet = keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
                     return (
-                      <span className="mt-1 flex min-w-0 items-center gap-1">
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
-                          title={`${keyman.date} · ${keyman.category}${keyman.before ? `\n이전: ${keyman.before}` : ""}${keyman.after ? `\n현재: ${keyman.after}` : ""}${needGreet ? "\n인사 필요 — 오른쪽 🤝 버튼으로 체크" : ""}`}>
+                      <span className="group/keyman relative mt-1 flex min-w-0 items-center gap-1">
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
                           {keyman.isPerson ? "🤝 키맨" : "📍 주소"} D+{keyman.days}
                         </span>
                         {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">인사</span>}
+                        {/* 설명 카드 — 브라우저 기본 말풍선 대신 직접 그린다(줄바꿈·강조·색을 쓸 수 있다) */}
+                        <span className="pointer-events-none absolute left-0 top-full z-40 mt-1.5 hidden w-[17rem] max-w-[calc(100vw-4rem)] rounded-2xl bg-slate-900/97 p-3 text-left shadow-2xl ring-1 ring-white/10 backdrop-blur group-hover/keyman:block">
+                          <span className="flex items-center gap-1.5">
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${keyman.isPerson ? "bg-amber-400 text-amber-950" : "bg-slate-600 text-white"}`}>
+                              {keyman.isPerson ? "키맨 변경" : "주소 변경"}
+                            </span>
+                            <span className="text-[11px] font-black tabular-nums text-white">{keyman.date}</span>
+                            <span className="text-[10px] font-bold text-slate-400">D+{keyman.days}</span>
+                          </span>
+                          {keyman.category && <span className="mt-1.5 block text-[11px] font-bold leading-4 text-slate-300">{keyman.category}</span>}
+                          {keyman.before && (
+                            <span className="mt-2 block">
+                              <span className="mr-1 text-[9px] font-black tracking-wide text-slate-500">이전</span>
+                              <span className="text-[11px] font-semibold text-slate-400 line-through decoration-slate-600">{keyman.before}</span>
+                            </span>
+                          )}
+                          {keyman.after && (
+                            <span className="mt-0.5 block">
+                              <span className="mr-1 text-[9px] font-black tracking-wide text-slate-500">현재</span>
+                              <span className="text-[12px] font-black text-white">{keyman.after}</span>
+                            </span>
+                          )}
+                          <span className="mt-2 block border-t border-white/10 pt-1.5 text-[10px] font-bold leading-4">
+                            {needGreet
+                              ? <span className="text-amber-300">🤝 인사 필요 — 오른쪽 🤝 버튼으로 체크</span>
+                              : keyman.isPerson
+                                ? <span className="text-emerald-300">인사 완료{keyman.greeted ? "" : " 간주(30일 지난 건)"}</span>
+                                : <span className="text-slate-400">주소·연락처 변경 — 헛걸음 주의</span>}
+                          </span>
+                        </span>
                       </span>
                     );
                   })()}
@@ -2387,9 +2416,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   )}
                 </span>
               </button>
-              {/* 버튼은 아이콘 한 줄로 — 세로로 쌓이면 줄 높이만 먹는다(2026-08-28 요청). 순서: 설정 · 내 일정 · 인사 */}
+              {/* 버튼은 오른쪽 끝에 세로 한 열(28px) — 가로를 아껴 업체명·배지가 넓게 쓰인다(2026-08-28 요청). 위에서부터 설정 · 내 일정 · 인사 */}
               {!editMode && (
-                <span className="flex shrink-0 items-center gap-1">
+                <span className="flex shrink-0 flex-col items-center gap-1">
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
