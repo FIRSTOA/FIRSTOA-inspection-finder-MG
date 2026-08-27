@@ -2340,7 +2340,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const inspectionSnapshots = historyEntries.map((visit) => visitSnapshot(visit, place));
           const spareAdviceResult = !rowExpanded || place.label === "G7" || historyLoading ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
           return (
-            <div key={place.id} data-place-id={place.id} className={`${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
+            <div key={place.id} data-place-id={place.id} className={`relative hover:z-30 ${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
               <button type="button" onClick={() => {
                 if (editMode) return toggleChecked(place.id);
@@ -2372,7 +2372,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                         </span>
                         {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">인사</span>}
                         {/* 설명 카드 — 브라우저 기본 말풍선 대신 직접 그린다(줄바꿈·강조·색을 쓸 수 있다) */}
-                        <span className="pointer-events-none absolute left-0 top-full z-40 mt-1.5 hidden w-[17rem] max-w-[calc(100vw-4rem)] rounded-2xl bg-slate-900/97 p-3 text-left shadow-2xl ring-1 ring-white/10 backdrop-blur group-hover/keyman:block">
+                        <span className="pointer-events-none absolute left-0 top-full z-40 mt-1 hidden w-[17rem] max-w-[calc(100vw-4rem)] rounded-2xl bg-slate-900/97 p-3 text-left shadow-2xl ring-1 ring-white/10 backdrop-blur group-hover/keyman:block">
+                          {/* 알약과 카드를 이어 보이게 하는 꼬리표 — 어느 배지의 설명인지 헷갈리지 않게 */}
+                          <span className="absolute -top-1 left-4 h-2 w-2 rotate-45 bg-slate-900/97" />
                           <span className="flex items-center gap-1.5">
                             <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${keyman.isPerson ? "bg-amber-400 text-amber-950" : "bg-slate-600 text-white"}`}>
                               {keyman.isPerson ? "키맨 변경" : "주소 변경"}
