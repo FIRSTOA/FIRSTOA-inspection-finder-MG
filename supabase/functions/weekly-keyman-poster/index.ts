@@ -23,14 +23,17 @@ const DRIVE = "https://www.googleapis.com/drive/v3/files";
 // 폴더: 드라이브 "CS 주간 키맨 포스터" (편집자로 sheet-mg@… 공유됨, 2026-08-28)
 const FOLDER_ID = Deno.env.get("KEYMAN_POSTER_FOLDER") || "1CUtmSkE9gPAP9W0AufQ3wm5x2Oeqlbe7";
 
-// ── 디자인 토큰 (한 곳에서 관리) ──────────────────────────────────
-const INK = { red: 0.086, green: 0.106, blue: 0.133 };        // #161B22 배경
-const INK_SOFT = { red: 0.129, green: 0.157, blue: 0.196 };   // 카드
-const AMBER = { red: 0.976, green: 0.647, blue: 0.106 };      // 키맨(강조)
-const SKY = { red: 0.353, green: 0.686, blue: 0.925 };        // 주소
-const MINT = { red: 0.204, green: 0.827, blue: 0.600 };       // 업체명
+// ── 디자인 토큰 ─────────────────────────────────────────────
+// 방향: 밝은 편집 디자인(종이 같은 바탕 + 진한 잉크 + 강조색 하나).
+// 카드 박스를 쓰지 않고 여백과 얇은 선으로 나눈다 — 카톡 목록에서도 밝아서 눈에 띈다.
+const PAPER = { red: 0.969, green: 0.969, blue: 0.961 };   // #F7F7F5 바탕
+const INK = { red: 0.086, green: 0.094, blue: 0.114 };     // #16181D 제목·업체명
+const INK2 = { red: 0.357, green: 0.376, blue: 0.408 };     // #5B6068 본문
+const MUTED = { red: 0.616, green: 0.631, blue: 0.659 };    // #9DA1A8 보조
+const RULE = { red: 0.890, green: 0.882, blue: 0.855 };     // #E3E1DA 구분선
+const ACCENT = { red: 0.169, green: 0.361, blue: 0.902 };   // #2B5CE6 강조(하나만 쓴다)
+const WATERMARK = { red: 0.875, green: 0.871, blue: 0.847 };// #DFDED8 큰 지역 글자
 const WHITE = { red: 1, green: 1, blue: 1 };
-const MUTED = { red: 0.612, green: 0.639, blue: 0.686 };
 
 function b64url(bytes: Uint8Array): string {
   let bin = "";
@@ -148,6 +151,14 @@ type Req = Record<string, unknown>;
 function clipText(value: string, max: number): string {
   const one = String(value || "").replace(/\s*\n\s*/g, " · ").replace(/\s+/g, " ").trim().replace(/^[:;,.\-·]+\s*/, "");
   return one.length > max ? `${one.slice(0, max - 1)}…` : one;
+}
+
+/**
+ * 슬라이드 텍스트 상자는 안쪽 여백(좌우 7.2PT, 위아래 3.6PT)이 강제로 붙는다 — API로 못 끈다.
+ * 그래서 좌표를 그만큼 밀어, 우리가 적은 x·y에 글자가 정확히 오게 한다.
+ */
+function T(id: string, x: number, y: number, w: number, h: number, text: string, opts: Parameters<typeof textBox>[6], pageId: string): Req[] {
+  return textBox(id, x - 7.2, y - 3.6, w + 14.4, h + 7.2, text, opts, pageId);
 }
 
 function textBox(id: string, x: number, y: number, w: number, h: number, text: string, opts: {
@@ -281,116 +292,110 @@ Deno.serve(async (req) => {
       // 배경 (16:9 가로 판형 — 새로 만든 슬라이드의 기본값. 두 단으로 나눠 담는다)
       reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: INK } } } }, fields: "pageBackgroundFill" } });
 
-      // ── 판형: 16:9 가로(720×405PT → PNG 1600×900). 내용이 적어도 아래가 비지 않게
-      //    카드 높이와 인사 문구 칸이 남는 공간을 나눠 갖는다.
-      const PAD = 24;
-      const GAP = 10;
-      const BAND = 64;
+      // ── 판형 720×405PT(→PNG 1600×900). 카드 박스 없이 선과 여백으로 나눈다.
+      const PAD = 36;
 
-      // ── 헤더 띠
-      reqs.push(...rect(nid(), 0, 0, W, BAND, INK_SOFT, pageId, 1, "RECTANGLE"));
-      reqs.push(...rect(nid(), 0, BAND, W, 2, AMBER, pageId, 1, "RECTANGLE"));
-      reqs.push(...rect(nid(), PAD, 16, 64, 31, AMBER, pageId));
-      reqs.push(...textBox(nid(), PAD, 23, 64, 20, `${letter}지역`, { size: 13.5, bold: true, color: INK, align: "CENTER" }, pageId));
-      reqs.push(...textBox(nid(), PAD + 78, 11, 400, 24, "지난주 담당자·키맨 변경", { size: 17, bold: true }, pageId));
-      reqs.push(...textBox(nid(), PAD + 80, 38, 400, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 9.5, color: MUTED }, pageId));
+      reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: PAPER } } } }, fields: "pageBackgroundFill" } });
 
-      // 헤더 오른쪽 요약 칩 (키맨·주소·업체명)
-      const CHIP_W = 76;
-      const chips = [
-        { label: "키맨", n: persons.length, color: AMBER },
-        { label: "주소", n: addresses.length, color: SKY },
-        { label: "업체명", n: names.length, color: MINT },
-      ];
-      chips.forEach((chip, i) => {
-        const cx = W - PAD - (chips.length - i) * (CHIP_W + 8) + 8;
-        reqs.push(...rect(nid(), cx, 17, CHIP_W, 30, chip.color, pageId, chip.n ? 0.18 : 0.07));
-        reqs.push(...textBox(nid(), cx + 10, 25, 44, 14, chip.label, { size: 9, bold: true, color: chip.n ? chip.color : MUTED }, pageId));
-        reqs.push(...textBox(nid(), cx + CHIP_W - 40, 21, 30, 20, String(chip.n), { size: 14, bold: true, color: chip.n ? WHITE : MUTED, align: "END" }, pageId));
-      });
+      const rule = (y: number, x = PAD, w = W - PAD * 2, thick = 0.75, color = RULE) =>
+        reqs.push(...rect(nid(), x, y, w, thick, color, pageId, 1, "RECTANGLE"));
 
-      // ── 카드: 키맨 먼저, 그다음 주소·업체명
+      // ── 머리말
+      reqs.push(...T(nid(), PAD, 26, 300, 12, "W E E K L Y   R E P O R T", { size: 7.5, bold: true, color: MUTED }, pageId));
+      reqs.push(...T(nid(), PAD, 40, 460, 30, "지난주 담당자·키맨 변경", { size: 23, bold: true, color: INK }, pageId));
+      reqs.push(...T(nid(), PAD, 74, 460, 16, `${week.label} 접수 · 방문하시면 인사 한마디 부탁드립니다`, { size: 10, color: INK2 }, pageId));
+      // 오른쪽에 지역 글자를 크게 — 어느 지역 것인지 멀리서도 보인다
+      reqs.push(...T(nid(), W - PAD - 140, 18, 140, 72, letter, { size: 58, bold: true, color: WATERMARK, align: "END" }, pageId));
+      reqs.push(...T(nid(), W - PAD - 140, 78, 140, 14, `${letter}지역 점검`, { size: 9, bold: true, color: MUTED, align: "END" }, pageId));
+
+      rule(102);
+
+      // 건수는 있는 것만 (0은 적지 않는다 — 줄이 지저분해진다)
+      const counts = [
+        persons.length ? `키맨 ${persons.length}` : "",
+        addresses.length ? `주소 ${addresses.length}` : "",
+        names.length ? `업체명 ${names.length}` : "",
+      ].filter(Boolean).join("      ");
+      reqs.push(...T(nid(), PAD, 111, 320, 14, counts || "지난주 접수된 변경 없음", { size: 9.5, bold: true, color: ACCENT }, pageId));
+      reqs.push(...T(nid(), W - PAD - 300, 111, 300, 14,
+        persons.length ? "이전 담당자 이름은 부르지 않습니다" : addresses.length ? "방문 전 새 주소를 다시 확인해 주세요" : "서류의 옛 상호도 함께 확인해 주세요",
+        { size: 9, color: MUTED, align: "END" }, pageId));
+
+      // ── 목록
       const items = [
-        ...persons.map((row) => ({ row, kind: "키맨 변경", color: AMBER })),
-        ...addresses.map((row) => ({ row, kind: "주소 변경", color: SKY })),
-        ...names.map((row) => ({ row, kind: "업체명 변경", color: MINT })),
+        ...persons.map((row) => ({ row, kind: "키맨", tone: "solid" as const })),
+        ...addresses.map((row) => ({ row, kind: "주소", tone: "tint" as const })),
+        ...names.map((row) => ({ row, kind: "업체명", tone: "plain" as const })),
       ];
-      const shown = items.slice(0, 8);
-      const wide = shown.length <= 2; // 한두 건이면 한 단으로 크게
-      const cardW = wide ? W - PAD * 2 : (W - PAD * 2 - GAP) / 2;
-      const perRow = wide ? 1 : 2;
-      const rowsN = Math.max(1, Math.ceil(shown.length / perRow));
+      const shown = items.slice(0, 5);
+      const TIP_MIN = 56;   // 인사 블록 최소 높이 — 남는 공간은 이 블록이 흡수한다
+      const listTop = 130;
+      const listBottom = H - 26 - 14 - TIP_MIN;
+      const rowH = shown.length ? Math.min(74, Math.max(34, (listBottom - listTop) / shown.length)) : 0;
+      const roomy = rowH >= 56;                 // 넉넉하면 '이전'까지 보여준다
+      const contentH = roomy ? 54 : 36;         // 글 묶음 높이 — 행 안에서 세로 가운데로 놓는다
 
-      const areaTop = BAND + 30;
-      const hint = persons.length ? "이전 담당자 이름은 부르지 않습니다"
-        : addresses.length ? "방문 전 새 주소를 지도에 다시 찍어 확인해 주세요"
-        : "서류·명세서에 옛 상호가 남아 있는지 확인해 주세요";
-      reqs.push(...textBox(nid(), PAD, BAND + 10, 520, 16,
-        items.length ? `방문 시 확인 ${items.length}건 — ${hint}` : "지난주 접수된 변경 없음 — 평소처럼 방문하시면 됩니다",
-        { size: 10.5, bold: true, color: MUTED }, pageId));
-
-      const areaMax = H - 30 - 96 - areaTop; // 인사 문구 칸 최소 96PT는 남긴다
-      const cardH = Math.min(116, Math.max(56, (areaMax - (rowsN - 1) * GAP) / rowsN));
       shown.forEach((it, i) => {
-        // 마지막 한 장이 홀수로 남으면 두 칸 폭으로 늘려 빈칸을 없앤다
-        const last = i === shown.length - 1;
-        const solo = perRow === 2 && last && i % 2 === 0;
-        const w = solo ? W - PAD * 2 : cardW;
-        const roomy = wide || solo;
-        const x = PAD + (i % perRow) * (cardW + GAP);
-        const y = areaTop + Math.floor(i / perRow) * (cardH + GAP);
-        reqs.push(...rect(nid(), x, y, w, cardH, INK_SOFT, pageId));
-        reqs.push(...rect(nid(), x, y + 6, 4, cardH - 12, it.color, pageId, 1, "RECTANGLE"));
-        const tx = x + 18;
-        const tw = w - 34;
+        const y = listTop + i * rowH;
+        if (i > 0) rule(y - 0.4, PAD, W - PAD * 2, 0.6);
+        const mid = y + rowH / 2 - 2;
+
+        // 구분 라벨 — 색은 하나만 쓰고, 채움·연한 채움·없음으로 종류를 구분한다
+        const pillW = 42;
+        if (it.tone === "solid") reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, ACCENT, pageId, 1));
+        else if (it.tone === "tint") reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, ACCENT, pageId, 0.12));
+        else reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, INK, pageId, 0.06));
+        reqs.push(...T(nid(), PAD, mid - 5, pillW, 12, it.kind,
+          { size: 8, bold: true, color: it.tone === "solid" ? WHITE : it.tone === "tint" ? ACCENT : INK2, align: "CENTER" }, pageId));
+
+        const tx = PAD + pillW + 14;
+        const dateW = 92;
+        const tw = W - PAD - tx - dateW - 12;
         const grade = gradeLabel(it.row.grade);
-        reqs.push(...textBox(nid(), tx, y + 10, tw - 110, 22, clipText(it.row.company, roomy ? 32 : 17), { size: 14, bold: true }, pageId));
-        reqs.push(...textBox(nid(), x + w - 118, y + 13, 104, 15,
-          `${it.kind}${grade ? `  ${grade}` : ""}`, { size: 9.5, bold: true, color: it.color, align: "END" }, pageId));
-        const after = clipText(it.row.after_text, roomy ? 68 : 32);
-        reqs.push(...textBox(nid(), tx, y + 35, tw, 18, after || "새 정보 없음 — 방문 시 확인 부탁드립니다", { size: 11.5, bold: true, color: after ? WHITE : MUTED }, pageId));
-        if (it.row.before_text) {
-          reqs.push(...textBox(nid(), tx, y + 55, tw, 15, `이전  ${clipText(it.row.before_text, roomy ? 64 : 30)}`, { size: 9.5, color: MUTED }, pageId));
+        if (grade) reqs.push(...T(nid(), PAD, mid + 12, pillW, 11, grade, { size: 7.5, color: MUTED, align: "CENTER" }, pageId));
+        const top = y + (rowH - contentH) / 2;
+        reqs.push(...T(nid(), tx, top, tw, 20, clipText(it.row.company, 26), { size: roomy ? 14.5 : 13, bold: true, color: INK }, pageId));
+        reqs.push(...T(nid(), tx, top + (roomy ? 21 : 18), tw, 16,
+          clipText(it.row.after_text, 44) || "새 정보 없음 — 방문 시 확인 부탁드립니다", { size: 10.5, color: INK2 }, pageId));
+        if (roomy && it.row.before_text) {
+          reqs.push(...T(nid(), tx, top + 39, tw, 14, `이전  ${clipText(it.row.before_text, 46)}`, { size: 9, color: MUTED }, pageId));
         }
-        const foot = [dayLabel(it.row.change_date), clipText(it.row.reason, roomy ? 42 : 18), it.row.author].filter(Boolean).join(" · ");
-        if (cardH >= 74) reqs.push(...textBox(nid(), tx, y + cardH - 21, tw, 14, foot, { size: 8.5, color: MUTED }, pageId));
+        // 오른쪽: 접수일·사유
+        reqs.push(...T(nid(), W - PAD - dateW, top + 1, dateW, 14, dayLabel(it.row.change_date), { size: 10, bold: true, color: INK2, align: "END" }, pageId));
+        reqs.push(...T(nid(), W - PAD - dateW - 60, top + (roomy ? 19 : 17), dateW + 60, 13,
+          [clipText(it.row.reason, 14), it.row.author].filter(Boolean).join(" · "), { size: 8.5, color: MUTED, align: "END" }, pageId));
       });
 
-      // ── 인사 문구 칸 (남는 공간을 모두 차지해 아래가 비지 않게)
-      const cardsBottom = shown.length ? areaTop + rowsN * (cardH + GAP) - GAP : areaTop;
-      const tipTop = cardsBottom + 16;
-      const tipH = Math.max(60, H - 30 - tipTop);
-      const lines = Math.max(2, Math.floor((tipH - 40) / 19)); // 남는 높이에 맞춰 문구 수를 정한다
-      // 이번 주에 실제로 들어온 종류만 골라 문구를 섞는다 (키맨 우선, 남는 줄에 주소·업체명)
+      let listUsed = listTop + shown.length * rowH;
+      if (items.length > shown.length) {
+        reqs.push(...T(nid(), PAD, listUsed + 6, 400, 14, `외 ${items.length - shown.length}곳 — 앱 통합이력에서 확인`, { size: 9, color: MUTED }, pageId));
+        listUsed += 22;
+      }
+
+      // ── 인사 한마디 (한 가지만, 그 주에 가장 많이 들어온 종류로)
       const kinds = [
         persons.length ? "키맨" : "",
         addresses.length ? "주소" : "",
         names.length ? "업체명" : "",
       ].filter(Boolean);
       const tipKey = kinds[0] || "키맨";
-      // 종류가 여러 개면 한 개씩 돌아가며 담는다 — 주소 변경이 있는데 키맨 문구만 나오면 쓸모가 없다
-      const tips: string[] = [];
-      const pools = (kinds.length ? kinds : ["키맨"]).map((kind) => ({ kind, list: [...(GREETING_TIPS[kind] || [])] }));
-      const cap = Math.min(4, lines);
-      while (tips.length < cap && pools.some((p) => p.list.length)) {
-        for (const pool of pools) {
-          const t = pool.list.shift();
-          if (t && tips.length < cap) tips.push(pools.length > 1 ? `${pool.kind} — ${t}` : t);
-        }
-      }
-      const tipColor = tipKey === "주소" ? SKY : tipKey === "업체명" ? MINT : AMBER;
-      const josa = tipKey === "주소" ? "가" : "이"; // 주소가 / 키맨이 / 업체명이
+      const tipTop = Math.min(H - 26 - TIP_MIN, listUsed + 16);
+      const tipH = H - 26 - tipTop;
+      const howMany = Math.max(1, Math.min(3, Math.floor((tipH - 26) / 24)));
+      // 여러 종류가 들어온 주에는 종류별로 한 줄씩 (키맨 문구만 나오면 주소 온 곳은 도움이 안 된다)
+      const tips = kinds.length > 1
+        ? kinds.map((kind) => `${kind} · ${(GREETING_TIPS[kind] || [])[0] || ""}`).filter((t) => t.length > 6).slice(0, howMany)
+        : (GREETING_TIPS[tipKey] || []).slice(0, howMany);
       if (tips.length) {
-        reqs.push(...rect(nid(), PAD, tipTop, W - PAD * 2, tipH, tipColor, pageId, 0.11));
-        reqs.push(...rect(nid(), PAD, tipTop + 8, 4, tipH - 16, tipColor, pageId, 1, "RECTANGLE"));
-        reqs.push(...textBox(nid(), PAD + 18, tipTop + 11, 520, 16, kinds.length > 1 ? "방문하시면 이렇게 한마디 — 관리받는 느낌이 재계약 때 다릅니다" : `${tipKey}${josa} 바뀐 곳 — 이렇게 인사하면 좋습니다`, { size: 10.5, bold: true, color: tipColor }, pageId));
-        reqs.push(...textBox(nid(), PAD + 18, tipTop + 34, W - PAD * 2 - 36, tipH - 44,
-          tips.map((t) => `· ${t}`).join("\n"), { size: 10, lineSpacing: 140 }, pageId));
+        reqs.push(...rect(nid(), PAD, tipTop, W - PAD * 2, tipH, ACCENT, pageId, 0.07));
+        reqs.push(...T(nid(), PAD + 18, tipTop + 12, 240, 12, kinds.length > 1 ? "인사 한마디" : `인사 한마디 · ${tipKey} 변경`, { size: 8.5, bold: true, color: ACCENT }, pageId));
+        reqs.push(...T(nid(), PAD + 18, tipTop + 30, W - PAD * 2 - 36, tipH - 36,
+          tips.join("\n"), { size: tips.length > 1 ? 10.5 : 11, color: INK, lineSpacing: 135 }, pageId));
       }
 
-      const more = items.length > shown.length ? `외 ${items.length - shown.length}건은 앱 통합이력에서 확인 · ` : "";
-      reqs.push(...textBox(nid(), PAD, H - 22, W - PAD * 2, 14,
-        `${more}인사 후 FIELD·워킨맵의 🤝 버튼으로 표시해 주세요 · 퍼스트전산 CS`, { size: 8.5, color: MUTED, align: "CENTER" }, pageId));
+      // ── 꼬리말
+      reqs.push(...T(nid(), PAD, H - 20, 400, 12, "인사 후 FIELD·워킨맵에서 🤝 버튼으로 표시", { size: 8, color: MUTED }, pageId));
+      reqs.push(...T(nid(), W - PAD - 240, H - 20, 240, 12, "퍼스트전산 CS", { size: 8, bold: true, color: MUTED, align: "END" }, pageId));
 
       const batch = await fetch(`${SLIDES}/${presentationId}:batchUpdate`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
