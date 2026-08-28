@@ -26,7 +26,9 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from datetime import datetime
@@ -152,6 +154,22 @@ def set_clipboard_image(png_bytes: bytes) -> None:
         win32clipboard.CloseClipboard()
 
 
+def set_clipboard_file(path: str) -> bool:
+    """
+    파일을 클립보드에 올린다(CF_HDROP). GIF는 그림으로 붙이면 움직임이 죽어서 **파일로** 붙여야 한다.
+    파워셸 Set-Clipboard 가 이 형식을 만들어 준다.
+    """
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", f"Set-Clipboard -LiteralPath '{path}'"],
+            check=True, timeout=30, capture_output=True,
+        )
+        return True
+    except Exception as e:
+        log(f"    파일 클립보드 실패: {e}")
+        return False
+
+
 def paste_and_send(hwnd: int, room: str, wait: float) -> bool:
     """붙여넣고 보낸다 — 직전에 창 제목을 다시 확인해 엉뚱한 방을 막는다"""
     import pyautogui
@@ -170,7 +188,7 @@ def paste_and_send(hwnd: int, room: str, wait: float) -> bool:
 
 
 # ── 본 작업 ────────────────────────────────────────────────
-def send_to_room(room: str, text: str, png: bytes) -> bool:
+def send_to_room(room: str, text: str, media: bytes, animated: bool = False) -> bool:
     hwnd, title = find_room_window(room)
     if not hwnd:
         log(f"    ✗ 방 창이 안 열려 있음: {room}")
@@ -180,7 +198,15 @@ def send_to_room(room: str, text: str, png: bytes) -> bool:
         set_clipboard_text(text)
         if not paste_and_send(hwnd, room, 0.8):
             return False
-    set_clipboard_image(png)
+    if animated:
+        # 움직이는 브리핑(GIF)은 파일로 붙여야 움직임이 유지된다
+        path = os.path.join(tempfile.gettempdir(), "firstoa_brief.gif")
+        with open(path, "wb") as f:
+            f.write(media)
+        if not set_clipboard_file(path):
+            return False
+        return paste_and_send(hwnd, room, 2.6)
+    set_clipboard_image(media)
     return paste_and_send(hwnd, room, 2.0)  # 이미지는 미리보기가 붙는 시간이 필요하다
 
 
@@ -216,7 +242,7 @@ def weekly(plan: bool) -> int:
         except Exception as e:
             log(f"발송 여부 확인 실패(계속 진행): {e}")
     try:
-        data = post_json(FN, {"action": "run", "dry": True})
+        data = post_json(FN, {"action": "run", "dry": True, "gif": True})
     except Exception as e:
         log(f"✗ 이미지 생성 실패: {e}")
         return 1
@@ -240,14 +266,15 @@ def weekly(plan: bool) -> int:
             ok, fail = (ok + 1, fail) if hwnd else (ok, fail + 1)
             continue
         try:
-            png = urllib.request.urlopen(r["url"], timeout=60).read()
+            media = urllib.request.urlopen(r["url"], timeout=90).read()
         except Exception as e:
             log(f"    ✗ 이미지 내려받기 실패: {e}")
             queue_text(room, text)
             fail += 1
             continue
-        if send_to_room(room, text, png):
-            log("    ✓ 사진 전송 완료")
+        animated = str(r["url"]).lower().endswith(".gif")
+        if send_to_room(room, text, media, animated):
+            log(f"    ✓ {'움직이는 브리핑' if animated else '사진'} 전송 완료")
             ok += 1
         else:
             queue_text(room, text)
@@ -271,7 +298,7 @@ def check() -> int:
     if not rooms:
         log("  (없음 — 카톡에서 방을 더블클릭해 별도 창으로 열어 두세요)")
     try:
-        data = post_json(FN, {"action": "run", "dry": True})
+        data = post_json(FN, {"action": "run", "dry": True, "gif": True})
         log("이번 주 보낼 방:")
         for r in data.get("regions") or []:
             hwnd, _ = find_room_window(r.get("room") or "")
@@ -287,7 +314,8 @@ def main() -> int:
     ap.add_argument("--plan", action="store_true", help="보내지 않고 어디에 보낼 수 있는지만 본다")
     ap.add_argument("--check", action="store_true", help="열려 있는 방 창과 이번 주 대상 확인")
     ap.add_argument("--room", help="테스트로 보낼 방 이름")
-    ap.add_argument("--test", action="store_true", help="--room 방으로 포스터 1장 테스트 발송")
+    ap.add_argument("--test", action="store_true", help="--room 방으로 브리핑 1개 테스트 발송")
+    ap.add_argument("--region", help="테스트에 쓸 지역(기본 C)")
     args = ap.parse_args()
 
     if args.check:
@@ -302,13 +330,14 @@ def main() -> int:
         log(f"창 확인: '{title}'")
         if not args.test:
             return 0
-        data = post_json(FN, {"action": "preview", "region": "C"})
+        data = post_json(FN, {"action": "gif", "region": args.region or "C"})
         regions = data.get("regions") or []
         if not regions:
             log("만들 이미지가 없습니다")
             return 1
-        png = urllib.request.urlopen(regions[0]["url"], timeout=60).read()
-        ok = send_to_room(args.room, "테스트 — 주간 키맨 포스터 자동전송 점검입니다", png)
+        target = regions[0]["url"]
+        media = urllib.request.urlopen(target, timeout=90).read()
+        ok = send_to_room(args.room, "테스트 — 주간 키맨 브리핑 자동전송 점검입니다", media, str(target).lower().endswith(".gif"))
         log("결과: " + ("성공" if ok else "실패"))
         return 0 if ok else 2
     ap.print_help()

@@ -24,16 +24,18 @@ const DRIVE = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_ID = Deno.env.get("KEYMAN_POSTER_FOLDER") || "1CUtmSkE9gPAP9W0AufQ3wm5x2Oeqlbe7";
 
 // ── 디자인 토큰 ─────────────────────────────────────────────
-// 방향: 밝은 편집 디자인(종이 같은 바탕 + 진한 잉크 + 강조색 하나).
-// 카드 박스를 쓰지 않고 여백과 얇은 선으로 나눈다 — 카톡 목록에서도 밝아서 눈에 띈다.
-const PAPER = { red: 0.969, green: 0.969, blue: 0.961 };   // #F7F7F5 바탕
-const INK = { red: 0.086, green: 0.094, blue: 0.114 };     // #16181D 제목·업체명
-const INK2 = { red: 0.357, green: 0.376, blue: 0.408 };     // #5B6068 본문
-const MUTED = { red: 0.616, green: 0.631, blue: 0.659 };    // #9DA1A8 보조
-const RULE = { red: 0.890, green: 0.882, blue: 0.855 };     // #E3E1DA 구분선
-const ACCENT = { red: 0.169, green: 0.361, blue: 0.902 };   // #2B5CE6 강조(하나만 쓴다)
-const WATERMARK = { red: 0.875, green: 0.871, blue: 0.847 };// #DFDED8 큰 지역 글자
+// 방향: 우리 앱과 같은 톤 — 다크 헤더바 + 흰 본문 + 알약 + 연파랑 강조.
+// 구성은 표가 아니라 '브리핑 카드' — 인사할 사람 이름이 카드의 주인공이다.
+const NAVY = { red: 0.086, green: 0.137, blue: 0.227 };     // #16233A 헤더바
+const NAVY_SUB = { red: 0.624, green: 0.690, blue: 0.788 }; // #9FB0C9 헤더 보조글
 const WHITE = { red: 1, green: 1, blue: 1 };
+const CARD = { red: 0.961, green: 0.969, blue: 0.980 };     // #F5F7FA 카드
+const BAND = { red: 0.953, green: 0.961, blue: 0.976 };     // #F3F5F9 아래 띠
+const INK = { red: 0.090, green: 0.106, blue: 0.145 };      // #171B25 이름·제목
+const SUB = { red: 0.420, green: 0.451, blue: 0.502 };      // #6B7380 업체명
+const MUTED = { red: 0.604, green: 0.639, blue: 0.698 };    // #9AA3B2 보조
+const BLUE = { red: 0.145, green: 0.388, blue: 0.922 };     // #2563EB 강조(키맨)
+const MINT = { red: 0.059, green: 0.725, blue: 0.506 };     // #0FB981 주소
 
 function b64url(bytes: Uint8Array): string {
   let bin = "";
@@ -97,6 +99,33 @@ function dedupe(list: ChangeRow[]): ChangeRow[] {
     out.push(row);
   }
   return out;
+}
+
+/** 한글 글자 수 — 어느 쪽이 사람 이름인지 고를 때 쓴다 */
+const hangul = (v: string) => (String(v || "").match(/[가-힣]/g) || []).length;
+
+/**
+ * 변경후 글에서 **인사할 사람**과 전화번호를 뽑는다.
+ * 원문 순서가 제각각이고("010-4944-0410 윤상필 팀장"), 번호가 두 개 섞이기도 한다
+ * ("진달래 010-… (육아휴직) · 점검 연락 010-…"). 그래서 번호를 걷어내고 남은 한글 앞 두 마디를 이름으로 쓴다.
+ */
+function readPerson(text: string): { name: string; phone: string; note: string } {
+  const one = String(text || "").replace(/\s*\n\s*/g, " · ").replace(/\s+/g, " ").trim();
+  const phones = one.match(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g) || [];
+  const bare = one.replace(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
+  const words = bare.split(" ").filter((w) => hangul(w) > 0);
+  // 첫 마디가 이름, 두 번째는 **직급일 때만** 붙인다 (사유가 이름에 붙던 것 수리: "진달래 육아휴직")
+  const TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당)/;
+  const name = [words[0] || "", TITLE.test(words[1] || "") ? words[1] : ""].filter(Boolean).join(" ");
+  const rest = words.slice(name.split(" ").length);
+  return { name: clipText(name || bare.slice(0, 12), 14), phone: phones[0] || "", note: clipText(rest.join(" "), 22) };
+}
+
+/** 주소에서 눈에 들어오는 앞부분(구·동·번지)과 전체를 나눈다 */
+function readAddress(text: string): { head: string; full: string } {
+  const one = String(text || "").replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim();
+  const cut = one.replace(/^(서울특별시|서울시|서울|경기도|경기|인천광역시|인천)\s*/, "");
+  return { head: clipText(cut, 24), full: clipText(one, 54) };
 }
 
 /** 카드에 보일 만한 등급·계약형태만 남긴다 — 시트 등급 열에는 'NN'처럼 뜻 없는 값도 섞여 있다 */
@@ -205,6 +234,25 @@ Deno.serve(async (req) => {
       const text = await res.text();
       return Response.json({ ok: res.ok, status: res.status, folder: id, detail: text.slice(0, 400) }, { headers: jsonHeaders });
     }
+    // GIF 인코딩이 이 런타임에서 되는지 확인용 (한 번만 쓰고 지워도 되는 진단)
+    if (action === "gifselftest") {
+      const { Image, GIF, Frame } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+      const mk = (r: number, g: number, b: number) => {
+        const img = new Image(160, 90);
+        img.fill(Image.rgbToColor(r, g, b));
+        return Frame.from(img, 60); // 0.6초
+      };
+      const gif = new GIF([mk(20, 35, 60), mk(37, 99, 235), mk(15, 185, 129)], -1);
+      const bytes = await gif.encode();
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      const up = await fetch(`${Deno.env.get("SUPABASE_URL")}/storage/v1/object/photos/keyman/_selftest.gif`, {
+        method: "POST",
+        headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "image/gif", "x-upsert": "true" },
+        body: bytes,
+      });
+      return Response.json({ ok: up.ok, bytes: bytes.byteLength, status: up.status,
+        url: `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/keyman/_selftest.gif` }, { headers: jsonHeaders });
+    }
     if (action === "whoami") {
       const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT") || "{}");
       return Response.json({ ok: true, client_email: sa.client_email || "(없음)", note: "이 주소를 슬라이드 파일 편집자로 공유해 주세요" }, { headers: jsonHeaders });
@@ -257,7 +305,7 @@ Deno.serve(async (req) => {
 
     const token = await accessToken();
     let queuedAny = false;
-    const out: Array<{ region: string; url: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
+    const out: Array<{ region: string; url: string; gif?: string; poster?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
 
     for (const [letter, list] of byRegion) {
       const persons = dedupe(list.filter(isPerson));
@@ -285,117 +333,205 @@ Deno.serve(async (req) => {
       const H = toPt(info.pageSize?.height, 405);
       if (!pageId) return Response.json({ error: "새 슬라이드의 첫 장을 못 찾았습니다" }, { status: 502, headers: jsonHeaders });
 
+      const items = [
+        ...persons.map((row) => ({ row, kind: "키맨" as const })),
+        ...addresses.map((row) => ({ row, kind: "주소" as const })),
+        ...names.map((row) => ({ row, kind: "업체명" as const })),
+      ];
+      // 움직이는 브리핑(GIF): 슬라이드를 여러 장 만들어 한 장씩 넘어가게 한다
+      const animate = action === "gif" || body.gif === true;
+      const frameItems = items.slice(0, 4);
+      const framePages: string[] = [];
+
       const reqs: Req[] = [];
       let seq = 0;
       const nid = () => `obj_${letter}_${String(seq++).padStart(3, "0")}`; // 슬라이드 objectId는 5자 이상이어야 한다
 
-      // 배경 (16:9 가로 판형 — 새로 만든 슬라이드의 기본값. 두 단으로 나눠 담는다)
-      reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: INK } } } }, fields: "pageBackgroundFill" } });
+      if (animate) {
+        for (let i = 0; i < frameItems.length + 2; i++) { // 표지 + 곳마다 + 마무리
+          const id = `frm_${letter}_${i}`;
+          framePages.push(id);
+          reqs.push({ createSlide: { objectId: id, insertionIndex: i + 1, slideLayoutReference: { predefinedLayout: "BLANK" } } });
+        }
+      }
 
-      // ── 판형 720×405PT(→PNG 1600×900). 카드 박스 없이 선과 여백으로 나눈다.
-      const PAD = 36;
+      // ── 판형 720×405PT(→PNG 1600×900)
+      //   위: 다크 헤더바에 큰 숫자(몇 곳 인사해야 하는지) / 가운데: 곳마다 카드 한 장 / 아래: 인사 문구 띠
+      const PAD = 34;
+      const GAP = 14;
+      const HEAD = 96;
+      const FOOT = 52;
 
-      reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: PAPER } } } }, fields: "pageBackgroundFill" } });
+      reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: WHITE } } } }, fields: "pageBackgroundFill" } });
 
-      const rule = (y: number, x = PAD, w = W - PAD * 2, thick = 0.75, color = RULE) =>
-        reqs.push(...rect(nid(), x, y, w, thick, color, pageId, 1, "RECTANGLE"));
+      // ── 헤더바
+      reqs.push(...rect(nid(), 0, 0, W, HEAD, NAVY, pageId, 1, "RECTANGLE"));
+      reqs.push(...rect(nid(), PAD, HEAD - 4, 84, 4, BLUE, pageId, 1, "RECTANGLE")); // 짧은 강조선
+      reqs.push(...T(nid(), PAD, 24, 520, 26, `${letter}지역 · 주간 키맨 브리핑`, { size: 19, bold: true, color: WHITE }, pageId));
+      reqs.push(...T(nid(), PAD, 56, 520, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 10, color: NAVY_SUB }, pageId));
+      // 오른쪽: 몇 곳인지 크게
+      reqs.push(...T(nid(), W - PAD - 120, 20, 92, 48, String(items.length), { size: 38, bold: true, color: WHITE, align: "END" }, pageId));
+      reqs.push(...T(nid(), W - PAD - 24, 38, 24, 22, "곳", { size: 13, bold: true, color: NAVY_SUB }, pageId));
+      reqs.push(...T(nid(), W - PAD - 160, 66, 160, 14, items.length ? "이번 주 인사 대상" : "지난주 변경 없음", { size: 9.5, color: NAVY_SUB, align: "END" }, pageId));
 
-      // ── 머리말
-      reqs.push(...T(nid(), PAD, 26, 300, 12, "W E E K L Y   R E P O R T", { size: 7.5, bold: true, color: MUTED }, pageId));
-      reqs.push(...T(nid(), PAD, 40, 460, 30, "지난주 담당자·키맨 변경", { size: 23, bold: true, color: INK }, pageId));
-      reqs.push(...T(nid(), PAD, 74, 460, 16, `${week.label} 접수 · 방문하시면 인사 한마디 부탁드립니다`, { size: 10, color: INK2 }, pageId));
-      // 오른쪽에 지역 글자를 크게 — 어느 지역 것인지 멀리서도 보인다
-      reqs.push(...T(nid(), W - PAD - 140, 18, 140, 72, letter, { size: 58, bold: true, color: WATERMARK, align: "END" }, pageId));
-      reqs.push(...T(nid(), W - PAD - 140, 78, 140, 14, `${letter}지역 점검`, { size: 9, bold: true, color: MUTED, align: "END" }, pageId));
-
-      rule(102);
-
-      // 건수는 있는 것만 (0은 적지 않는다 — 줄이 지저분해진다)
-      const counts = [
-        persons.length ? `키맨 ${persons.length}` : "",
-        addresses.length ? `주소 ${addresses.length}` : "",
-        names.length ? `업체명 ${names.length}` : "",
-      ].filter(Boolean).join("      ");
-      reqs.push(...T(nid(), PAD, 111, 320, 14, counts || "지난주 접수된 변경 없음", { size: 9.5, bold: true, color: ACCENT }, pageId));
-      reqs.push(...T(nid(), W - PAD - 300, 111, 300, 14,
-        persons.length ? "이전 담당자 이름은 부르지 않습니다" : addresses.length ? "방문 전 새 주소를 다시 확인해 주세요" : "서류의 옛 상호도 함께 확인해 주세요",
-        { size: 9, color: MUTED, align: "END" }, pageId));
-
-      // ── 목록
-      const items = [
-        ...persons.map((row) => ({ row, kind: "키맨", tone: "solid" as const })),
-        ...addresses.map((row) => ({ row, kind: "주소", tone: "tint" as const })),
-        ...names.map((row) => ({ row, kind: "업체명", tone: "plain" as const })),
-      ];
-      const shown = items.slice(0, 5);
-      const TIP_MIN = 56;   // 인사 블록 최소 높이 — 남는 공간은 이 블록이 흡수한다
-      const listTop = 130;
-      const listBottom = H - 26 - 14 - TIP_MIN;
-      const rowH = shown.length ? Math.min(74, Math.max(34, (listBottom - listTop) / shown.length)) : 0;
-      const roomy = rowH >= 56;                 // 넉넉하면 '이전'까지 보여준다
-      const contentH = roomy ? 54 : 36;         // 글 묶음 높이 — 행 안에서 세로 가운데로 놓는다
+      // ── 카드 (한 곳에 한 장)
+      const shown = items.slice(0, 4);
+      const cardW = (W - PAD * 2 - GAP) / 2;
+      const perRow = 2;
+      const rowsN = Math.max(1, Math.ceil(shown.length / perRow));
+      const bodyTop = HEAD + 18;
+      const bodyH = H - FOOT - 12 - bodyTop;
+      const cardH = Math.min(138, (bodyH - (rowsN - 1) * GAP) / rowsN);
+      const gridTop = bodyTop + Math.max(0, (bodyH - (cardH * rowsN + GAP * (rowsN - 1))) / 2);
 
       shown.forEach((it, i) => {
-        const y = listTop + i * rowH;
-        if (i > 0) rule(y - 0.4, PAD, W - PAD * 2, 0.6);
-        const mid = y + rowH / 2 - 2;
+        // 홀수로 남는 마지막 장은 두 칸 폭으로 늘려 빈칸을 없앤다
+        const wideLast = perRow === 2 && i === shown.length - 1 && i % 2 === 0;
+        const w = wideLast ? W - PAD * 2 : cardW;
+        const roomy = wideLast || shown.length === 1;
+        const x = PAD + (i % perRow) * (cardW + GAP);
+        const y = gridTop + Math.floor(i / perRow) * (cardH + GAP);
+        reqs.push(...rect(nid(), x, y, w, cardH, CARD, pageId));
 
-        // 구분 라벨 — 색은 하나만 쓰고, 채움·연한 채움·없음으로 종류를 구분한다
-        const pillW = 42;
-        if (it.tone === "solid") reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, ACCENT, pageId, 1));
-        else if (it.tone === "tint") reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, ACCENT, pageId, 0.12));
-        else reqs.push(...rect(nid(), PAD, mid - 9, pillW, 18, INK, pageId, 0.06));
-        reqs.push(...T(nid(), PAD, mid - 5, pillW, 12, it.kind,
-          { size: 8, bold: true, color: it.tone === "solid" ? WHITE : it.tone === "tint" ? ACCENT : INK2, align: "CENTER" }, pageId));
+        // 카드가 낮으면 '이전' 줄을 빼고 위쪽으로 모은다 — 글이 겹치지 않게 좌표를 높이에서 뽑는다
+        const tight = cardH < 126;
+        const yCompany = y + (tight ? 36 : 42);
+        const yHero = y + (tight ? 51 : 60);
+        const ySub = y + (tight ? 78 : 90);
+        const heroSize = tight ? 17.5 : 21;
 
-        const tx = PAD + pillW + 14;
-        const dateW = 92;
-        const tw = W - PAD - tx - dateW - 12;
+        const tone = it.kind === "키맨" ? BLUE : it.kind === "주소" ? MINT : SUB;
+        const chipW = 44;
+        reqs.push(...rect(nid(), x + 18, y + 14, chipW, 18, tone, pageId));
+        reqs.push(...T(nid(), x + 18, y + 18, chipW, 12, it.kind, { size: 8, bold: true, color: WHITE, align: "CENTER" }, pageId));
         const grade = gradeLabel(it.row.grade);
-        if (grade) reqs.push(...T(nid(), PAD, mid + 12, pillW, 11, grade, { size: 7.5, color: MUTED, align: "CENTER" }, pageId));
-        const top = y + (rowH - contentH) / 2;
-        reqs.push(...T(nid(), tx, top, tw, 20, clipText(it.row.company, 26), { size: roomy ? 14.5 : 13, bold: true, color: INK }, pageId));
-        reqs.push(...T(nid(), tx, top + (roomy ? 21 : 18), tw, 16,
-          clipText(it.row.after_text, 44) || "새 정보 없음 — 방문 시 확인 부탁드립니다", { size: 10.5, color: INK2 }, pageId));
-        if (roomy && it.row.before_text) {
-          reqs.push(...T(nid(), tx, top + 39, tw, 14, `이전  ${clipText(it.row.before_text, 46)}`, { size: 9, color: MUTED }, pageId));
+        reqs.push(...T(nid(), x + w - 170, y + 16, 152, 14,
+          [dayLabel(it.row.change_date), grade, clipText(it.row.reason, 10)].filter(Boolean).join("  ·  "),
+          { size: 9, bold: true, color: MUTED, align: "END" }, pageId));
+
+        const tx = x + 18;
+        const tw = w - 36;
+        const wide = roomy ? 2 : 1;
+        reqs.push(...T(nid(), tx, yCompany, tw, 15, clipText(it.row.company, 22 * wide), { size: 10.5, bold: true, color: SUB }, pageId));
+
+        if (it.kind === "주소") {
+          const a = readAddress(it.row.after_text);
+          reqs.push(...T(nid(), tx, yHero, tw, 26, clipText(a.head, 22 * wide) || "새 주소 확인 필요", { size: heroSize - 1, bold: true, color: INK }, pageId));
+          reqs.push(...T(nid(), tx, ySub, tw, 14, clipText(a.full, 46 * wide), { size: 9, color: MUTED }, pageId));
+          if (!tight && it.row.before_text) {
+            reqs.push(...T(nid(), tx, y + cardH - 24, tw, 13, `이전  ${clipText(readAddress(it.row.before_text).full, 46 * wide)}`, { size: 8.5, color: MUTED }, pageId));
+          }
+        } else if (it.kind === "업체명") {
+          reqs.push(...T(nid(), tx, yHero, tw, 28, clipText(it.row.after_text, 18 * wide) || "새 상호 확인 필요", { size: heroSize, bold: true, color: INK }, pageId));
+          reqs.push(...T(nid(), tx, ySub, tw, 14, `이전 상호  ${clipText(it.row.before_text, 30 * wide)}`, { size: 9, color: MUTED }, pageId));
+        } else {
+          const person = readPerson(it.row.after_text);
+          reqs.push(...T(nid(), tx, yHero, tw, 30, person.name || "새 담당자", { size: heroSize, bold: true, color: INK }, pageId));
+          reqs.push(...T(nid(), tx, ySub, tw, 16, [person.phone, person.note].filter(Boolean).join("   ") || "연락처 확인 필요",
+            { size: 11.5, bold: true, color: BLUE }, pageId));
+          if (!tight && it.row.before_text) {
+            const before = readPerson(it.row.before_text);
+            reqs.push(...T(nid(), tx, y + cardH - 24, tw, 13, `이전  ${[before.name, before.phone].filter(Boolean).join("  ")}`, { size: 9, color: MUTED }, pageId));
+          }
         }
-        // 오른쪽: 접수일·사유
-        reqs.push(...T(nid(), W - PAD - dateW, top + 1, dateW, 14, dayLabel(it.row.change_date), { size: 10, bold: true, color: INK2, align: "END" }, pageId));
-        reqs.push(...T(nid(), W - PAD - dateW - 60, top + (roomy ? 19 : 17), dateW + 60, 13,
-          [clipText(it.row.reason, 14), it.row.author].filter(Boolean).join(" · "), { size: 8.5, color: MUTED, align: "END" }, pageId));
       });
 
-      let listUsed = listTop + shown.length * rowH;
-      if (items.length > shown.length) {
-        reqs.push(...T(nid(), PAD, listUsed + 6, 400, 14, `외 ${items.length - shown.length}곳 — 앱 통합이력에서 확인`, { size: 9, color: MUTED }, pageId));
-        listUsed += 22;
+      if (!shown.length) {
+        reqs.push(...T(nid(), PAD, bodyTop + 40, W - PAD * 2, 24, "지난주에 접수된 담당자·주소 변경이 없습니다 — 평소처럼 방문하시면 됩니다",
+          { size: 13, bold: true, color: SUB, align: "CENTER" }, pageId));
       }
 
-      // ── 인사 한마디 (한 가지만, 그 주에 가장 많이 들어온 종류로)
-      const kinds = [
-        persons.length ? "키맨" : "",
-        addresses.length ? "주소" : "",
-        names.length ? "업체명" : "",
-      ].filter(Boolean);
+      // ── 아래 띠: 인사 문구 + 남은 곳 안내
+      const kinds = [persons.length ? "키맨" : "", addresses.length ? "주소" : "", names.length ? "업체명" : ""].filter(Boolean);
       const tipKey = kinds[0] || "키맨";
-      const tipTop = Math.min(H - 26 - TIP_MIN, listUsed + 16);
-      const tipH = H - 26 - tipTop;
-      const howMany = Math.max(1, Math.min(3, Math.floor((tipH - 26) / 24)));
-      // 여러 종류가 들어온 주에는 종류별로 한 줄씩 (키맨 문구만 나오면 주소 온 곳은 도움이 안 된다)
-      const tips = kinds.length > 1
-        ? kinds.map((kind) => `${kind} · ${(GREETING_TIPS[kind] || [])[0] || ""}`).filter((t) => t.length > 6).slice(0, howMany)
-        : (GREETING_TIPS[tipKey] || []).slice(0, howMany);
-      if (tips.length) {
-        reqs.push(...rect(nid(), PAD, tipTop, W - PAD * 2, tipH, ACCENT, pageId, 0.07));
-        reqs.push(...T(nid(), PAD + 18, tipTop + 12, 240, 12, kinds.length > 1 ? "인사 한마디" : `인사 한마디 · ${tipKey} 변경`, { size: 8.5, bold: true, color: ACCENT }, pageId));
-        reqs.push(...T(nid(), PAD + 18, tipTop + 30, W - PAD * 2 - 36, tipH - 36,
-          tips.join("\n"), { size: tips.length > 1 ? 10.5 : 11, color: INK, lineSpacing: 135 }, pageId));
-      }
+      const tip = (GREETING_TIPS[tipKey] || [])[0] || "";
+      const footTop = H - FOOT;
+      reqs.push(...rect(nid(), PAD, footTop, W - PAD * 2, 40, BAND, pageId));
+      reqs.push(...T(nid(), PAD + 18, footTop + 8, 90, 12, `인사 한마디`, { size: 8.5, bold: true, color: BLUE }, pageId));
+      reqs.push(...T(nid(), PAD + 18, footTop + 21, W - PAD * 2 - 200, 14, tip, { size: 10, color: INK }, pageId));
+      const more = items.length > shown.length ? `외 ${items.length - shown.length}곳은 앱에서 · ` : "";
+      reqs.push(...T(nid(), W - PAD - 250, footTop + 15, 232, 13, `${more}인사 후 🤝 버튼으로 표시`, { size: 8.5, color: MUTED, align: "END" }, pageId));
 
-      // ── 꼬리말
-      reqs.push(...T(nid(), PAD, H - 20, 400, 12, "인사 후 FIELD·워킨맵에서 🤝 버튼으로 표시", { size: 8, color: MUTED }, pageId));
-      reqs.push(...T(nid(), W - PAD - 240, H - 20, 240, 12, "퍼스트전산 CS", { size: 8, bold: true, color: MUTED, align: "END" }, pageId));
+      // ── 움직이는 브리핑 프레임 (한 화면에 한 가지만, 폰에서 읽히도록 크게)
+      if (animate) {
+        const bg = (page: string, color: typeof NAVY) =>
+          reqs.push({ updatePageProperties: { objectId: page, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: color } } } }, fields: "pageBackgroundFill" } });
+
+        // 표지
+        const cover = framePages[0];
+        bg(cover, NAVY);
+        reqs.push(...rect(nid(), PAD, 96, 84, 5, BLUE, cover, 1, "RECTANGLE"));
+        reqs.push(...T(nid(), PAD, 58, 400, 16, "W E E K L Y   B R I E F I N G", { size: 9.5, bold: true, color: NAVY_SUB }, cover));
+        reqs.push(...T(nid(), PAD, 112, 420, 60, `${letter}지역`, { size: 46, bold: true, color: WHITE }, cover));
+        reqs.push(...T(nid(), PAD, 176, 420, 30, "주간 키맨 브리핑", { size: 21, bold: true, color: NAVY_SUB }, cover));
+        reqs.push(...T(nid(), PAD, 214, 420, 20, `${week.label} 접수분`, { size: 12, color: NAVY_SUB }, cover));
+        reqs.push(...T(nid(), W - PAD - 300, 92, 250, 130, String(items.length), { size: 108, bold: true, color: WHITE, align: "END" }, cover));
+        reqs.push(...T(nid(), W - PAD - 44, 158, 44, 40, "곳", { size: 26, bold: true, color: NAVY_SUB }, cover));
+        reqs.push(...T(nid(), W - PAD - 320, 232, 320, 22, items.length ? "이번 주 인사 대상" : "지난주 변경 없음", { size: 13, bold: true, color: NAVY_SUB, align: "END" }, cover));
+        reqs.push(...T(nid(), PAD, H - 46, 500, 18, "방문하시면 인사 한마디 부탁드립니다 · 퍼스트전산 CS", { size: 11, color: NAVY_SUB }, cover));
+
+        // 곳마다 한 화면
+        frameItems.forEach((it, i) => {
+          const page = framePages[i + 1];
+          bg(page, WHITE);
+          const tone = it.kind === "키맨" ? BLUE : it.kind === "주소" ? MINT : SUB;
+          reqs.push(...rect(nid(), 0, 0, 12, H, tone, page, 1, "RECTANGLE"));
+
+          reqs.push(...rect(nid(), PAD, 34, 56, 22, tone, page));
+          reqs.push(...T(nid(), PAD, 39, 56, 14, it.kind, { size: 9.5, bold: true, color: WHITE, align: "CENTER" }, page));
+          reqs.push(...T(nid(), W - PAD - 200, 30, 200, 32, dayLabel(it.row.change_date), { size: 22, bold: true, color: MUTED, align: "END" }, page));
+          reqs.push(...T(nid(), W - PAD - 220, 62, 220, 18,
+            [gradeLabel(it.row.grade), clipText(it.row.reason, 12), it.row.author].filter(Boolean).join("  ·  "),
+            { size: 11, color: MUTED, align: "END" }, page));
+
+          reqs.push(...T(nid(), PAD, 74, W - PAD * 2, 22, clipText(it.row.company, 34), { size: 15, bold: true, color: SUB }, page));
+
+          if (it.kind === "주소") {
+            const a = readAddress(it.row.after_text);
+            reqs.push(...T(nid(), PAD, 100, W - PAD * 2, 56, clipText(a.head, 20) || "새 주소 확인 필요", { size: 38, bold: true, color: INK }, page));
+            reqs.push(...T(nid(), PAD, 162, W - PAD * 2, 24, a.full, { size: 15, color: SUB }, page));
+            if (it.row.before_text) {
+              reqs.push(...T(nid(), PAD, 196, W - PAD * 2, 20, `이전  ${readAddress(it.row.before_text).full}`, { size: 12.5, color: MUTED }, page));
+            }
+          } else if (it.kind === "업체명") {
+            reqs.push(...T(nid(), PAD, 100, W - PAD * 2, 58, clipText(it.row.after_text, 18) || "새 상호 확인 필요", { size: 40, bold: true, color: INK }, page));
+            reqs.push(...T(nid(), PAD, 168, W - PAD * 2, 22, `이전 상호  ${clipText(it.row.before_text, 30)}`, { size: 14, color: MUTED }, page));
+          } else {
+            const person = readPerson(it.row.after_text);
+            reqs.push(...T(nid(), PAD, 98, W - PAD * 2, 62, person.name || "새 담당자", { size: 44, bold: true, color: INK }, page));
+            reqs.push(...T(nid(), PAD, 166, W - PAD * 2, 28, person.phone || "연락처 확인 필요", { size: 22, bold: true, color: BLUE }, page));
+            if (person.note) reqs.push(...T(nid(), PAD, 198, W - PAD * 2, 20, person.note, { size: 12.5, color: SUB }, page));
+            if (it.row.before_text) {
+              const before = readPerson(it.row.before_text);
+              reqs.push(...T(nid(), PAD, 224, W - PAD * 2, 20,
+                `이전  ${[before.name, before.phone].filter(Boolean).join("  ")}`, { size: 12.5, color: MUTED }, page));
+            }
+          }
+
+          // 아래 띠: 그 종류에 맞는 인사 문구 + 몇 번째인지
+          const line = (GREETING_TIPS[it.kind] || [])[0] || "";
+          reqs.push(...rect(nid(), 0, H - 76, W, 76, BAND, page, 1, "RECTANGLE"));
+          reqs.push(...T(nid(), PAD, H - 60, 200, 16, "인사 한마디", { size: 10, bold: true, color: BLUE }, page));
+          reqs.push(...T(nid(), PAD, H - 42, W - PAD * 2 - 110, 22, line, { size: 13.5, color: INK }, page));
+          reqs.push(...T(nid(), W - PAD - 110, H - 58, 110, 20, `${i + 1} / ${frameItems.length}`, { size: 13, bold: true, color: MUTED, align: "END" }, page));
+        });
+
+        // 마무리
+        const last = framePages[framePages.length - 1];
+        bg(last, NAVY);
+        reqs.push(...rect(nid(), PAD, 92, 84, 5, BLUE, last, 1, "RECTANGLE"));
+        reqs.push(...T(nid(), PAD, 56, 500, 20, "H O W   T O   G R E E T", { size: 9.5, bold: true, color: NAVY_SUB }, last));
+        reqs.push(...T(nid(), PAD, 108, W - PAD * 2, 40, "방문하시면 이렇게 한마디", { size: 28, bold: true, color: WHITE }, last));
+        const closing = [
+          persons.length ? (GREETING_TIPS["키맨"] || [])[0] : "",
+          addresses.length ? (GREETING_TIPS["주소"] || [])[0] : "",
+          names.length ? (GREETING_TIPS["업체명"] || [])[0] : "",
+          (GREETING_TIPS["키맨"] || [])[1],
+        ].filter(Boolean).slice(0, 3);
+        reqs.push(...T(nid(), PAD, 162, W - PAD * 2, 120, closing.map((t) => `· ${t}`).join("\n"), { size: 14, color: NAVY_SUB, lineSpacing: 150 }, last));
+        reqs.push(...T(nid(), PAD, H - 52, 520, 20, "인사 후 FIELD·워킨맵에서 🤝 버튼으로 표시해 주세요", { size: 12, color: NAVY_SUB }, last));
+        reqs.push(...T(nid(), W - PAD - 220, H - 52, 220, 20, "퍼스트전산 CS", { size: 12, bold: true, color: WHITE, align: "END" }, last));
+      }
 
       const batch = await fetch(`${SLIDES}/${presentationId}:batchUpdate`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -416,38 +552,73 @@ Deno.serve(async (req) => {
         }, { headers: jsonHeaders });
       }
 
-      // PNG 썸네일 → 저장소
-      // 구글은 썸네일을 비동기로 만들어, 방금 그린 요소가 빠진 그림이 오는 일이 있다(실측). 그래서
-      // 잠시 기다린 뒤 여러 번 받아 "가장 큰(=요소가 다 들어간) 파일"을 고른다. 주 1회 작업이라 몇 초는 문제없다.
-      let png: ArrayBuffer | null = null;
-      let bestSize = 0;
-      for (let attempt = 1; attempt <= Number(body.tries || 4); attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 8000 : 7000));
-        const thumb = await fetch(`${SLIDES}/${presentationId}/pages/${pageId}/thumbnail?thumbnailProperties.mimeType=PNG&thumbnailProperties.thumbnailSize=LARGE`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!thumb.ok) continue;
-        const { contentUrl } = await thumb.json();
-        const buf = await (await fetch(contentUrl)).arrayBuffer();
-        if (buf.byteLength > bestSize) { bestSize = buf.byteLength; png = buf; }
-        // 두 번 연속 같은 크기면 렌더가 끝난 것으로 본다
-        if (attempt >= 2 && buf.byteLength === bestSize) break;
-      }
+      // ── 슬라이드 → PNG 썸네일
+      // 좌표 사고를 겪은 뒤로는 한 번에 잘 나온다. 그래도 첫 장은 3초 기다리고, 너무 작으면 한 번 더 받는다.
+      const shot = async (page: string): Promise<Uint8Array | null> => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const thumb = await fetch(`${SLIDES}/${presentationId}/pages/${page}/thumbnail?thumbnailProperties.mimeType=PNG&thumbnailProperties.thumbnailSize=LARGE`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (thumb.ok) {
+            const { contentUrl } = await thumb.json();
+            const buf = new Uint8Array(await (await fetch(contentUrl)).arrayBuffer());
+            if (buf.byteLength > 8000) return buf;   // 8KB 미만이면 아직 덜 그려진 그림
+          }
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+        return null;
+      };
+
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const png = await shot(pageId);
       if (!png) return Response.json({ error: "이미지 변환 실패(썸네일을 못 받음)" }, { status: 502, headers: jsonHeaders });
-      const path = `keyman/${week.from}_${letter}.png`;
-      const up = await fetch(`${Deno.env.get("SUPABASE_URL")}/storage/v1/object/photos/${path}`, {
-        method: "POST",
-        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "image/png", "x-upsert": "true" },
-        body: new Uint8Array(png as ArrayBuffer),
-      });
-      if (!up.ok) return Response.json({ error: `이미지 저장 실패(${up.status})` }, { status: 502, headers: jsonHeaders });
-      const url = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${path}`;
+
+      const store = async (path: string, bytes: Uint8Array, mime: string) => {
+        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/storage/v1/object/${path}`, {
+          method: "POST",
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": mime, "x-upsert": "true" },
+          body: bytes,
+        });
+        return res.ok;
+      };
+
+      const pngPath = `keyman/${week.from}_${letter}.png`;
+      if (!await store(`photos/${pngPath}`, png, "image/png")) {
+        return Response.json({ error: "이미지 저장 실패" }, { status: 502, headers: jsonHeaders });
+      }
+      let url = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
+      let gifUrl = "";
+
+      // ── 움직이는 GIF (표지 → 곳마다 → 마무리)
+      if (animate && framePages.length) {
+        const { Image, GIF, Frame } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+        const frames: InstanceType<typeof Frame>[] = [];
+        for (let i = 0; i < framePages.length; i++) {
+          const buf = await shot(framePages[i]);
+          if (!buf) continue;
+          const img = await Image.decode(buf);
+          img.resize(880, 495);                       // 파일 크기와 읽기 편함의 균형
+          const isCover = i === 0;
+          const isLast = i === framePages.length - 1;
+          frames.push(Frame.from(img, isCover ? 2200 : isLast ? 3200 : 2800)); // 머무는 시간(ms)
+        }
+        if (frames.length >= 2) {
+          const gif = new GIF(frames, -1);            // -1 = 무한 반복
+          const bytes = await gif.encode();
+          const gifPath = `keyman/${week.from}_${letter}.gif`;
+          if (await store(`photos/${gifPath}`, bytes, "image/gif")) {
+            gifUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${gifPath}`;
+            url = gifUrl;                             // 발송은 움직이는 쪽으로
+          }
+        }
+      }
 
       // 슬라이드 원본은 지운다 (서비스 계정 드라이브에 쌓이지 않게)
       await fetch(`${DRIVE}/${presentationId}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined);
 
-      const entry: { region: string; url: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
-        region: letter, url, counts: { 키맨: persons.length, 주소: addresses.length, 업체명: names.length },
+      const entry: { region: string; url: string; gif?: string; poster?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
+        region: letter, url, gif: gifUrl || undefined, poster: `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`,
+        counts: { 키맨: persons.length, 주소: addresses.length, 업체명: names.length },
       };
 
       if (action === "run") {
