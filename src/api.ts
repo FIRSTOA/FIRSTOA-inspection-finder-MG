@@ -1358,6 +1358,8 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
       notes: form.notes,
       source_text: text,
       photo_link: photoLink,
+      // 웹앱 경로는 아래에서 바로 카톡을 보낸다 — 시트에서 같은 건을 다시 읽어도 두 번 보내지 않게 표시해 둔다
+      shared_at: new Date().toISOString(),
       "_dupKey": dupKey,
     });
     const testRoom = cfg.TEST_ROOM || "테스트 전용방";

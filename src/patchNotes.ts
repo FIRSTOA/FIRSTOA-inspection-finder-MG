@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c944a0f193",
+    "date": "2026-08-28",
+    "note": "모바일 워킨맵에도 키맨·주소 변경 표시 — 지도 하단 카드(배지+🤝 버튼)와 상세보기 전용 섹션(이전→현재·인사 버튼). 목록만 있고 모바일 두 화면에 빠져 있었다"
+  },
+  {
     "hash": "ca4460ad2e",
     "date": "2026-08-28",
     "note": "키맨 설명 카드가 아래 줄에 가려지던 것 수리 — 마우스 올린 줄을 위로 올림(relative hover:z-30) + 카드에 꼬리표"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cac9e06fd4",
     "date": "2026-08-15",
     "note": "캘린더 사용 흐름 개편 — 목록 우선·날짜 클릭=그날 목록·N 표시 제거·팀 필터 확장"
-  },
-  {
-    "hash": "059d51a6c4",
-    "date": "2026-08-15",
-    "note": "납품철수교체휴가교육 색 = 진한 로즈 (사진 기준, 갈색 → 로즈로 교체)"
   }
 ];

@@ -6107,9 +6107,16 @@ export default function App() {
               <div className="text-lg font-black text-slate-950">전송 완료 — 일정을 정리할까요?</div>
               <div className="mt-1 truncate text-sm font-semibold text-slate-500">{fieldTicketVendor(ticketDonePrompt.vendor || "").vendor || ticketDonePrompt.vendor || "이 일정"}</div>
               <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] font-bold leading-5 text-emerald-800">
+                {mode === "logistics" ? <>
+                  물류방 전송은 끝났습니다. <b>여기서 완료하면 일정리스트만 완료</b>됩니다 —
+                  카톡도, 네이버 캘린더도 더 나가지 않습니다.<br />
+                  <b>✓ 완료</b> → 일정 완료 (추가 알림 없음)<br />
+                  <b>→ 익일로</b> → 날짜만 옮깁니다
+                </> : <>
                 카톡방 전송은 끝났습니다. 여기서 정리하면 <b>일정리스트와 네이버 캘린더가 함께</b> 바뀝니다.<br />
                 <b>✓ 완료</b> → 일정 완료 + 네이버 일정이 팀 완료 캘린더로 이동·완료 체크<br />
                 <b>→ 익일로</b> → 사유를 적으면 팀 AS방에 <b>별도 메시지</b>로 나가고, 네이버 일정 날짜도 옮겨집니다
+                </>}
                 {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양식과 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">

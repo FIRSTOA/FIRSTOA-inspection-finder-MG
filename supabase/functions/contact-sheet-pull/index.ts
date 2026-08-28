@@ -128,6 +128,65 @@ async function md5Hex(text: string): Promise<string> {
   return Array.from(out).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** 지역 표기("수도권A" · "수도권지역 :A" · "A") → 팀 글자. 못 알아보면 빈칸. */
+function regionLetter(value: string): string {
+  const v = String(value || "").toUpperCase();
+  const m = v.match(/[A-E]/);
+  return m ? m[0] : "";
+}
+
+/**
+ * 시트로 들어온 새 변경을 지역 점검방에 카톡으로 알린다.
+ * 왜: 담당자 변경은 대부분 카톡방+Make로 시트에만 쌓이고, 그 경로는 점검방에 알림을 보내지 않는다.
+ *     그래서 웹앱으로 작성한 건(주로 C팀)만 점검방에 떠서 A·B·D는 키맨이 바뀐 걸 몰랐다(2026-08-28).
+ * 어떻게: 우리가 시트를 읽어오는 김에, 아직 공유하지 않은 최근 건만 골라 지역 점검방으로 보낸다.
+ *         shared_at을 찍어 다시 보내지 않는다. 웹앱 경로는 이미 즉시 보내므로 대상에서 제외한다.
+ */
+async function shareNewChanges(serviceKey: string, restBase: string, limit = 20): Promise<{ shared: number; skipped: number; rooms: string[] }> {
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+  const since = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  const rows = await (await fetch(
+    `${restBase}/contact_changes?select=id,change_date,company,region,category,reason,grade,before_text,after_text,author,notes&shared_at=is.null&source_text=like.${encodeURIComponent("시트%")}&change_date=gte.${since}&order=change_date.desc&limit=${limit}`,
+    { headers },
+  )).json();
+  if (!Array.isArray(rows) || !rows.length) return { shared: 0, skipped: 0, rooms: [] };
+
+  const mapRows = await (await fetch(`${restBase}/room_map?select=category,region,room&category=eq.${encodeURIComponent("점검")}`, { headers })).json();
+  const roomOf = new Map<string, string>();
+  for (const r of Array.isArray(mapRows) ? mapRows : []) roomOf.set(String(r.region).trim().toUpperCase(), String(r.room));
+
+  let shared = 0, skipped = 0;
+  const rooms = new Set<string>();
+  for (const row of rows) {
+    const letter = regionLetter(String(row.region || ""));
+    const room = letter ? roomOf.get(letter) : "";
+    if (!room) { skipped += 1; continue; } // 지역을 못 읽거나 그 지역 점검방 매핑이 없으면 건너뛴다(E 등)
+    const person = !/주소/.test(String(row.category || ""))
+      && !/삭제|제거|해지|말소|취소|중복|폐업|철수|종료/.test(`${row.category} ${row.reason}`)
+      && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|입사|교체|변경자/.test(`${row.category} ${row.reason}`);
+    const text = [
+      `📌 ${row.category || "담당자"} 변경 공유 — ${row.company || "업체명 미기재"}${row.grade ? ` (${row.grade})` : ""}`,
+      person && String(row.after_text || "").trim() ? "※ 새 키맨입니다 — 다음 방문 때 인사 부탁드립니다." : "",
+      "",
+      `지역: 수도권${letter}${row.reason ? ` · 사유: ${row.reason}` : ""}`,
+      row.before_text ? `변경전: ${String(row.before_text).replace(/\s*\n\s*/g, " · ")}` : "",
+      row.after_text ? `변경후: ${String(row.after_text).replace(/\s*\n\s*/g, " · ")}` : "",
+      row.notes ? `특이사항: ${String(row.notes).replace(/\s*\n\s*/g, " · ").slice(0, 200)}` : "",
+      `(${row.change_date} 담당자변경 시트 등록${row.author ? ` · ${row.author}` : ""})`,
+    ].filter((line) => line !== "").join("\n");
+
+    const queued = await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
+    if (!queued.ok) { skipped += 1; continue; }
+    await fetch(`${restBase}/contact_changes?id=eq.${row.id}`, {
+      method: "PATCH", headers: { ...headers, Prefer: "return=minimal" },
+      body: JSON.stringify({ shared_at: new Date().toISOString(), shared_room: room }),
+    });
+    shared += 1;
+    rooms.add(room);
+  }
+  return { shared, skipped, rooms: Array.from(rooms) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: jsonHeaders });
   try {
@@ -237,7 +296,9 @@ Deno.serve(async (req) => {
       inserted += ((await res.json()) as unknown[]).length;
     }
     // 인사 완료 표시는 앱에서만 만든다 — 시트 값으로 앱 상태를 바꾸지 않는다(2026-08-28 결정)
-    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, skippedOld, skippedEmpty }, { headers: jsonHeaders });
+    // 새로 들어온 변경은 지역 점검방으로 알린다(Make 경로가 점검방에 안 보내서 A·B·D가 몰랐던 문제)
+    const share = body.share === false ? { shared: 0, skipped: 0, rooms: [] } : await shareNewChanges(serviceKey, `${Deno.env.get("SUPABASE_URL")}/rest/v1`);
+    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, skippedOld, skippedEmpty, shared: share.shared, shareSkipped: share.skipped, rooms: share.rooms }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 500, headers: jsonHeaders });
   }
