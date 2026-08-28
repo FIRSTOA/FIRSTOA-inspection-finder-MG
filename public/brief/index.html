@@ -158,6 +158,9 @@
   try { me.value = localStorage.getItem("firstoa.me") || ""; } catch (e) {}
   me.addEventListener("change", function () { try { localStorage.setItem("firstoa.me", me.value.trim()); } catch (e) {} });
 
+  // 원본에 남은 앞 기호를 걷어낸다(":명문비엠에스" 같은 흔적)
+  var clean = function (v) { return String(v == null ? "" : v).replace(/^[:;,.\-·]+\s*/, "").trim(); };
+
   function esc(v) {
     return String(v == null ? "" : v).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
@@ -208,7 +211,7 @@
       '<div class="row"><span class="chip">' + esc(kind) + "</span>" +
       '<span class="when">' + esc(md(r.change_date)) + (r.reason ? " · " + esc(String(r.reason).slice(0, 14)) : "") +
       (r.author ? "<br>" + esc(r.author) : "") + "</span></div>" +
-      '<p class="vendor">' + esc(String(r.company || "").slice(0, 40)) + (g ? '<span class="grade">' + esc(g) + "</span>" : "") + "</p>" +
+      '<p class="vendor">' + esc(clean(r.company).slice(0, 40)) + (g ? '<span class="grade">' + esc(g) + "</span>" : "") + "</p>" +
       '<p class="hero">' + esc(hero) + "</p>" +
       (sub ? '<p class="sub">' + esc(sub) + "</p>" : "") +
       (before ? '<p class="before">' + esc(before) + "</p>" : "") +
