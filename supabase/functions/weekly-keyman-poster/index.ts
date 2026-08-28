@@ -199,9 +199,34 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, client_email: sa.client_email || "(없음)", note: "이 주소를 슬라이드 파일 편집자로 공유해 주세요" }, { headers: jsonHeaders });
     }
     const week = lastWeekRange(typeof body.base === "string" ? body.base : undefined);
+    const SENT_KEY = "KEYMAN_POSTER_SENT"; // 사진으로 보낸 주(=지난주 시작일). PC 자동전송이 성공하면 여기 적는다.
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const restBase = `${Deno.env.get("SUPABASE_URL")}/rest/v1`;
     const restHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+
+    // 이번 주 발송 여부 — PC 스크립트가 먼저 물어보고 중복 발송을 피한다
+    if (action === "status") {
+      const cfg = await (await fetch(`${restBase}/app_config?select=key,value&key=eq.${SENT_KEY}`, { headers: restHeaders })).json();
+      const sent = (Array.isArray(cfg) ? cfg : [])[0]?.value || "";
+      return Response.json({ ok: true, week, sent, already: String(sent) === week.from }, { headers: jsonHeaders });
+    }
+    // PC(카톡 자동전송)가 이미 사진으로 보냈다고 표시하는 창구
+    if (action === "mark") {
+      await fetch(`${restBase}/app_config`, {
+        method: "POST",
+        headers: { ...restHeaders, Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({ key: SENT_KEY, value: week.from }),
+      });
+      return Response.json({ ok: true, marked: week.from }, { headers: jsonHeaders });
+    }
+    // 서버 발송은 안전망이다 — PC가 사진으로 이미 보냈으면 건너뛴다(같은 내용 두 번 가지 않게)
+    if (action === "run" && body.ifMissing) {
+      const cfg = await (await fetch(`${restBase}/app_config?select=key,value&key=eq.${SENT_KEY}`, { headers: restHeaders })).json();
+      const sent = (Array.isArray(cfg) ? cfg : [])[0]?.value;
+      if (String(sent || "") === week.from) {
+        return Response.json({ ok: true, skipped: "PC가 이미 사진으로 발송함", week }, { headers: jsonHeaders });
+      }
+    }
 
     // ── 지난주 변경 읽기
     const rows: ChangeRow[] = await (await fetch(
@@ -220,6 +245,7 @@ Deno.serve(async (req) => {
     if (!byRegion.size) return Response.json({ ok: true, week, note: "지난주 변경 없음", regions: [] }, { headers: jsonHeaders });
 
     const token = await accessToken();
+    let queuedAny = false;
     const out: Array<{ region: string; url: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
 
     for (const [letter, list] of byRegion) {
@@ -445,12 +471,21 @@ Deno.serve(async (req) => {
           else {
             await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...restHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
             entry.queued = true;
+            queuedAny = true;
           }
         }
       }
       out.push(entry);
     }
 
+    if (queuedAny) {
+      // 서버가 보냈다는 표시 — PC가 늦게 켜져도 같은 내용을 또 보내지 않는다
+      await fetch(`${restBase}/app_config`, {
+        method: "POST",
+        headers: { ...restHeaders, Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({ key: SENT_KEY, value: week.from }),
+      });
+    }
     return Response.json({ ok: true, week, action, regions: out }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 500, headers: jsonHeaders });
