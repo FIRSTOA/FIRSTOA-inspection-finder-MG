@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>주간 키맨 브리핑 · 퍼스트전산 CS</title>
+<meta name="description" content="지난주 담당자·주소 변경 — 눌러서 전화·지도·인사완료">
+<meta property="og:title" content="주간 키맨 브리핑">
+<meta property="og:description" content="지난주 담당자·주소 변경 — 눌러서 전화 걸고, 지도 열고, 인사 완료를 남기세요">
+<meta property="og:type" content="website">
+<link rel="icon" href="/favicon.svg">
+<!--
+  주간 키맨 브리핑 안내문 (2026-08-28)
+
+  카톡방에는 움직이는 브리핑(GIF)이 사진으로 올라가고, 이 페이지 링크가 함께 간다.
+  사진은 눌러도 아무 일이 없으니, "눌러서 되는 것"은 여기에 둔다 — 전화 걸기 · 지도 열기 · 인사 완료.
+
+  왜 정적 파일인가: Supabase는 저장소·엣지 함수 응답을 text/plain + 샌드박스로 강제해 HTML을 못 띄운다(실측).
+  그래서 사용설명서(public/guide/*.html)와 같은 방식으로 우리 도메인에 둔다.
+  데이터는 열 때마다 직접 읽으므로 링크가 낡지 않는다. 주소: /brief/?r=C&w=2026-08-17 (w 없으면 지난주)
+-->
+<style>
+  :root{
+    --navy:#16233A; --navy2:#1E3050; --blue:#2563EB; --mint:#0FB981;
+    --ink:#171B25; --sub:#6B7380; --muted:#9AA3B2; --line:#E7EAF0; --bg:#F4F6FA; --card:#FFFFFF;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --ink:#F2F4F8; --sub:#A8B0BE; --muted:#79839A; --line:#28313F; --bg:#0E141D; --card:#161E29; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink)}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+       -webkit-text-size-adjust:100%;padding-bottom:env(safe-area-inset-bottom)}
+  header{background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;padding:22px 18px 26px;position:relative;overflow:hidden}
+  header:after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;background:rgba(37,99,235,.28)}
+  .eyebrow{font-size:11px;letter-spacing:.2em;font-weight:800;color:#9FB0C9}
+  header h1{margin:10px 0 6px;font-size:23px;letter-spacing:-.03em;line-height:1.25}
+  header p{margin:0;font-size:13px;color:#9FB0C9}
+  .count{position:absolute;right:18px;top:22px;text-align:right;z-index:1}
+  .count b{font-size:46px;line-height:1;font-weight:800;letter-spacing:-.04em}
+  .count span{display:block;font-size:11px;color:#9FB0C9;font-weight:700;margin-top:4px}
+  .who{background:var(--card);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;align-items:center;
+       position:sticky;top:0;z-index:5}
+  .who label{font-size:12px;font-weight:800;color:var(--sub);white-space:nowrap}
+  .who input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+             border-radius:11px;padding:10px 12px;font-size:15px}
+  main{padding:14px 14px 8px;display:grid;gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:16px;
+        padding:15px 16px 14px;animation:rise .32s ease both}
+  .card.addr{border-left-color:var(--mint)} .card.name{border-left-color:var(--sub)}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.card{animation:none}}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .chip{background:var(--blue);color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:999px}
+  .card.addr .chip{background:var(--mint)} .card.name .chip{background:var(--sub)}
+  .when{font-size:12px;font-weight:700;color:var(--muted);text-align:right}
+  .vendor{margin:12px 0 1px;font-size:13px;font-weight:700;color:var(--sub)}
+  .grade{margin-left:6px;font-size:11px;color:var(--muted)}
+  .hero{margin:2px 0 6px;font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.2;word-break:keep-all}
+  .sub{margin:0;font-size:15px;font-weight:800;color:var(--blue)}
+  .card.addr .sub,.card.name .sub{color:var(--sub);font-weight:600;font-size:13.5px}
+  .before{margin:7px 0 0;font-size:12.5px;color:var(--muted)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .btn{appearance:none;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:14px;font-weight:800;
+       padding:11px 15px;border-radius:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .btn.go{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.hi{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.28);color:var(--blue)}
+  .btn:active{transform:translateY(1px)}
+  .done{font-size:13px;font-weight:800;color:var(--mint);align-self:center}
+  .tips{background:var(--card);border:1px solid var(--line);border-radius:16px;margin:12px 14px 18px;padding:15px 16px}
+  .tips h2{margin:0 0 9px;font-size:13px;color:var(--blue)}
+  .tips li{font-size:13.5px;line-height:1.65;margin-bottom:7px;color:var(--ink)}
+  .tips ul{margin:0;padding-left:18px}
+  .poster{margin:0 14px 16px;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--card)}
+  .poster img{display:block;width:100%;height:auto}
+  footer{padding:6px 18px 32px;text-align:center;font-size:12px;color:var(--muted);line-height:1.7}
+  .state{padding:44px 18px;text-align:center;color:var(--sub);font-weight:700}
+  .weekpick{display:flex;gap:8px;justify-content:center;padding:0 14px 18px}
+  .weekpick a{font-size:12px;font-weight:800;color:var(--sub);text-decoration:none;border:1px solid var(--line);
+              background:var(--card);border-radius:999px;padding:8px 14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="count"><b id="cnt">–</b><span>인사 대상</span></div>
+  <div class="eyebrow">WEEKLY BRIEFING</div>
+  <h1 id="title">주간 키맨 브리핑</h1>
+  <p id="range">불러오는 중…</p>
+</header>
+
+<div class="who">
+  <label for="me">내 이름</label>
+  <input id="me" placeholder="인사 완료 표시에 남습니다" autocomplete="name" enterkeyhint="done">
+</div>
+
+<div id="body"><div class="state">불러오는 중…</div></div>
+
+<div class="tips" id="tips" hidden><h2>이렇게 인사하면 좋습니다</h2><ul id="tiplist"></ul></div>
+<div class="poster" id="posterBox" hidden><img id="poster" alt="주간 브리핑 이미지" loading="lazy"></div>
+<div class="weekpick"><a id="prev" href="#">← 그 전주</a><a id="next" href="#">다음주 →</a></div>
+<footer>퍼스트전산 CS · 인사 완료는 FIELD·워킨맵·담당자변경 이력에 함께 남습니다</footer>
+
+<script>
+(function () {
+  "use strict";
+  var SUPA = "https://kkdiihazgzesbqxjytqv.supabase.co";
+  var KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrZGlpaGF6Z3plc2JxeGp5dHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjE0NjcsImV4cCI6MjEwMDczNzQ2N30.fjKIbDpj0QhNgc7Qr2z79xBkrYD9LqCxc88hHzpJ0kw";
+  var REST = SUPA + "/rest/v1";
+
+  var q = new URLSearchParams(location.search);
+  var region = (q.get("r") || "").toUpperCase().replace(/[^A-E]/g, "").slice(0, 1);
+
+  // 지난주 월~일 (KST)
+  function weekFrom(base) {
+    var d = base ? new Date(base + "T00:00:00+09:00") : new Date(Date.now() + 9 * 3600e3);
+    var day = d.getUTCDay(), back = day === 0 ? 6 : day - 1;
+    var monday = new Date(d.getTime() - back * 86400e3);
+    return new Date(monday.getTime() - 7 * 86400e3);
+  }
+  var ymd = function (d) { return d.toISOString().slice(0, 10); };
+  var from = /^\d{4}-\d{2}-\d{2}$/.test(q.get("w") || "") ? q.get("w") : ymd(weekFrom());
+  var to = ymd(new Date(new Date(from + "T00:00:00Z").getTime() + 6 * 86400e3));
+  var md = function (s) { var m = /^\d{4}-(\d{2})-(\d{2})/.exec(s || ""); return m ? (+m[1]) + "/" + (+m[2]) : ""; };
+
+  // 분류 규칙은 앱(src/keyman.ts)과 같은 기준을 쓴다
+  var isAddr = function (r) { return /주소|이전/.test(r.category || "") && !/담당|키맨/.test(r.category || ""); };
+  var isName = function (r) { return /업체명|상호|사명|법인명/.test(r.category || ""); };
+  var isPerson = function (r) {
+    var t = (r.category || "") + " " + (r.reason || "");
+    if (isAddr(r) || isName(r)) return false;
+    if (/삭제|제거|해지|말소|취소|중복|폐업|철수|종료/.test(t)) return false;
+    return /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|입사|교체|변경자/.test(t);
+  };
+  var GRADE = /^(특S|S|A|B|C|D)$/;
+  var gradeOf = function (v) { v = (v || "").trim(); return GRADE.test(v) || /유지보수|임대|렌탈|리스|판매/.test(v) ? v : ""; };
+
+  var TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당)/;
+  function readPerson(text) {
+    var one = String(text || "").replace(/\s+/g, " ").trim();
+    var phones = one.match(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g) || [];
+    var bare = one.replace(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
+    var words = bare.split(" ").filter(function (w) { return /[가-힣]/.test(w); });
+    var name = [words[0] || "", TITLE.test(words[1] || "") ? words[1] : ""].filter(Boolean).join(" ");
+    var used = name ? name.split(" ").length : 0;
+    return { name: name || bare.slice(0, 12), phone: phones[0] || "", note: words.slice(used).join(" ").slice(0, 26) };
+  }
+  function readAddress(text) {
+    var one = String(text || "").replace(/\s+/g, " ").trim();
+    return { head: one.replace(/^(서울특별시|서울시|서울|경기도|경기|인천광역시|인천)\s*/, "").slice(0, 30), full: one };
+  }
+  var TIPS = {
+    "키맨": "\"안녕하세요, 퍼스트전산 OOO입니다. 담당이 바뀌셨다고 들어 인사드리러 왔습니다.\" — 명함을 함께 드리면 첫 통로가 생깁니다.",
+    "주소": "방문 전 새 주소를 지도에서 다시 확인해 주세요. 헛걸음이 제일 큰 손해입니다.",
+    "업체명": "서류·명세서에 옛 상호가 남아 있는지 확인해 드리면 신뢰가 확 올라갑니다."
+  };
+
+  var me = document.getElementById("me");
+  try { me.value = localStorage.getItem("firstoa.me") || ""; } catch (e) {}
+  me.addEventListener("change", function () { try { localStorage.setItem("firstoa.me", me.value.trim()); } catch (e) {} });
+
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  var tel = function (p) { return "tel:" + String(p || "").replace(/[^0-9]/g, ""); };
+  var mapLink = function (a) { return "https://map.naver.com/p/search/" + encodeURIComponent(String(a || "").slice(0, 60)); };
+
+  function letterOf(v) { var m = /[A-E]/.exec(String(v || "").toUpperCase()); return m ? m[0] : ""; }
+
+  function dedupe(list) {
+    var seen = {}, out = [];
+    list.forEach(function (r) {
+      var k = [r.company, r.category, r.after_text].join("|").replace(/\s+/g, "");
+      if (seen[k]) return;
+      seen[k] = 1; out.push(r);
+    });
+    return out;
+  }
+
+  function card(r, kind) {
+    var cls = kind === "주소" ? "addr" : kind === "업체명" ? "name" : "";
+    var hero, sub, before = "", btns = [];
+    if (kind === "주소") {
+      var a = readAddress(r.after_text);
+      hero = a.head || "새 주소";
+      sub = a.full;
+      if (r.before_text) before = "이전 " + readAddress(r.before_text).full;
+      if (a.full) btns.push('<a class="btn go" target="_blank" rel="noopener" href="' + esc(mapLink(a.full)) + '">지도 열기</a>');
+    } else if (kind === "업체명") {
+      hero = (r.after_text || "새 상호").slice(0, 26);
+      sub = r.before_text ? "이전 상호 " + r.before_text.slice(0, 40) : "";
+    } else {
+      var p = readPerson(r.after_text);
+      hero = p.name || "새 담당자";
+      sub = [p.phone, p.note].filter(Boolean).join("   ");
+      if (r.before_text) {
+        var b = readPerson(r.before_text);
+        before = "이전 " + [b.name, b.phone].filter(Boolean).join("  ");
+      }
+      if (p.phone) btns.push('<a class="btn go" href="' + esc(tel(p.phone)) + '">전화 걸기</a>');
+      btns.push(r.greeting_done
+        ? '<span class="done">인사 완료 · ' + esc(r.greeting_by || "") + "</span>"
+        : '<button class="btn hi" type="button" data-id="' + esc(r.id) + '">인사 완료로 표시</button>');
+    }
+    var g = gradeOf(r.grade);
+    return '<article class="card ' + cls + '">' +
+      '<div class="row"><span class="chip">' + esc(kind) + "</span>" +
+      '<span class="when">' + esc(md(r.change_date)) + (r.reason ? " · " + esc(String(r.reason).slice(0, 14)) : "") +
+      (r.author ? "<br>" + esc(r.author) : "") + "</span></div>" +
+      '<p class="vendor">' + esc(String(r.company || "").slice(0, 40)) + (g ? '<span class="grade">' + esc(g) + "</span>" : "") + "</p>" +
+      '<p class="hero">' + esc(hero) + "</p>" +
+      (sub ? '<p class="sub">' + esc(sub) + "</p>" : "") +
+      (before ? '<p class="before">' + esc(before) + "</p>" : "") +
+      '<div class="btns">' + btns.join("") + "</div>" +
+      "</article>";
+  }
+
+  function shift(days) {
+    var d = new Date(from + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return "?r=" + region + "&w=" + ymd(d);
+  }
+
+  function render(rows) {
+    document.getElementById("title").textContent = (region ? region + "지역 " : "") + "주간 키맨 브리핑";
+    document.getElementById("range").textContent = md(from) + " ~ " + md(to) + " 접수분 · 방문하시면 인사 한마디 부탁드립니다";
+    document.getElementById("prev").href = shift(-7);
+    document.getElementById("next").href = shift(7);
+
+    var list = dedupe(rows.filter(function (r) { return !region || letterOf(r.region) === region; }));
+    var groups = [
+      { kind: "키맨", rows: list.filter(isPerson) },
+      { kind: "주소", rows: list.filter(isAddr) },
+      { kind: "업체명", rows: list.filter(isName) }
+    ].filter(function (g) { return g.rows.length; });
+    var total = groups.reduce(function (n, g) { return n + g.rows.length; }, 0);
+    document.getElementById("cnt").textContent = total;
+
+    var box = document.getElementById("body");
+    if (!total) {
+      box.innerHTML = '<div class="state">이 주에 접수된 담당자·주소 변경이 없습니다<br>평소처럼 방문하시면 됩니다</div>';
+      return;
+    }
+    var html = "<main>";
+    groups.forEach(function (g) { g.rows.forEach(function (r) { html += card(r, g.kind); }); });
+    box.innerHTML = html + "</main>";
+
+    var tl = document.getElementById("tiplist");
+    tl.innerHTML = groups.map(function (g) { return "<li><b>" + esc(g.kind) + "</b> " + esc(TIPS[g.kind] || "") + "</li>"; }).join("");
+    document.getElementById("tips").hidden = false;
+
+    if (region) {
+      var img = document.getElementById("poster");
+      img.src = SUPA + "/storage/v1/object/public/photos/keyman/" + from + "_" + region + ".gif";
+      img.onload = function () { document.getElementById("posterBox").hidden = false; };
+      img.onerror = function () {
+        img.onerror = null;
+        img.src = SUPA + "/storage/v1/object/public/photos/keyman/" + from + "_" + region + ".png";
+      };
+    }
+
+    box.querySelectorAll("button[data-id]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var name = (me.value || "").trim();
+        if (!name) { me.focus(); btn.textContent = "이름을 먼저 적어 주세요"; return; }
+        try { localStorage.setItem("firstoa.me", name); } catch (e) {}
+        btn.disabled = true;
+        btn.textContent = "표시 중…";
+        fetch(REST + "/contact_changes?id=eq." + encodeURIComponent(btn.dataset.id), {
+          method: "PATCH",
+          headers: { apikey: KEY, Authorization: "Bearer " + KEY, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ greeting_done: true, greeting_by: name, greeting_at: new Date().toISOString() })
+        }).then(function (res) {
+          if (!res.ok) throw new Error(res.status);
+          var span = document.createElement("span");
+          span.className = "done";
+          span.textContent = "인사 완료 · " + name;
+          btn.replaceWith(span);
+        }).catch(function () {
+          btn.disabled = false;
+          btn.textContent = "다시 시도";
+        });
+      });
+    });
+  }
+
+  var url = REST + "/contact_changes?select=id,change_date,company,region,category,reason,grade,before_text,after_text,author,greeting_done,greeting_by"
+    + "&change_date=gte." + from + "&change_date=lte." + to + "&order=change_date.asc&limit=500";
+  fetch(url, { headers: { apikey: KEY, Authorization: "Bearer " + KEY } })
+    .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+    .then(function (rows) { render(Array.isArray(rows) ? rows : []); })
+    .catch(function () {
+      document.getElementById("body").innerHTML =
+        '<div class="state">불러오지 못했습니다<br>잠시 뒤 다시 눌러 주세요</div>';
+      document.getElementById("range").textContent = md(from) + " ~ " + md(to);
+    });
+})();
+</script>
+</body>
+</html>

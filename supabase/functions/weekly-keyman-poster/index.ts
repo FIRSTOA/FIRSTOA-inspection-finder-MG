@@ -21,6 +21,7 @@ const SLIDES = "https://slides.googleapis.com/v1/presentations";
 const DRIVE = "https://www.googleapis.com/drive/v3/files";
 // 서비스 계정은 자기 드라이브에 파일을 못 만든다(저장용량 없음) — 사람이 공유해 준 폴더 안에 만든다.
 // 폴더: 드라이브 "CS 주간 키맨 포스터" (편집자로 sheet-mg@… 공유됨, 2026-08-28)
+const APP_URL = Deno.env.get("APP_URL") || "https://firstoa-inspection-finder-mg.vercel.app";
 const FOLDER_ID = Deno.env.get("KEYMAN_POSTER_FOLDER") || "1CUtmSkE9gPAP9W0AufQ3wm5x2Oeqlbe7";
 
 // ── 디자인 토큰 ─────────────────────────────────────────────
@@ -75,6 +76,7 @@ async function accessToken(): Promise<string> {
 type ChangeRow = {
   id: string; change_date: string; company: string; region: string; category: string;
   reason: string; grade: string; before_text: string; after_text: string; notes: string; author: string;
+  greeting_done?: boolean; greeting_by?: string;
 };
 
 const letterOf = (v: string) => (String(v || "").toUpperCase().match(/[A-E]/) || [""])[0];
@@ -289,7 +291,7 @@ Deno.serve(async (req) => {
 
     // ── 지난주 변경 읽기
     const rows: ChangeRow[] = await (await fetch(
-      `${restBase}/contact_changes?select=id,change_date,company,region,category,reason,grade,before_text,after_text,notes,author&change_date=gte.${week.from}&change_date=lte.${week.to}&order=change_date.asc&limit=1000`,
+      `${restBase}/contact_changes?select=id,change_date,company,region,category,reason,grade,before_text,after_text,notes,author,greeting_done,greeting_by&change_date=gte.${week.from}&change_date=lte.${week.to}&order=change_date.asc&limit=1000`,
       { headers: restHeaders },
     )).json();
 
@@ -305,7 +307,7 @@ Deno.serve(async (req) => {
 
     const token = await accessToken();
     let queuedAny = false;
-    const out: Array<{ region: string; url: string; gif?: string; poster?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
+    const out: Array<{ region: string; url: string; gif?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
 
     for (const [letter, list] of byRegion) {
       const persons = dedupe(list.filter(isPerson));
@@ -616,8 +618,14 @@ Deno.serve(async (req) => {
       // 슬라이드 원본은 지운다 (서비스 계정 드라이브에 쌓이지 않게)
       await fetch(`${DRIVE}/${presentationId}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined);
 
-      const entry: { region: string; url: string; gif?: string; poster?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
-        region: letter, url, gif: gifUrl || undefined, poster: `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`,
+      // ── 눌러서 보는 안내문: 우리 도메인의 정적 페이지(public/brief)
+      //   Supabase는 저장소·엣지 함수 응답을 text/plain + 샌드박스로 강제해 HTML을 못 띄운다(실측).
+      //   그 페이지는 열 때마다 데이터를 직접 읽으므로 링크가 낡지 않는다.
+      const posterUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
+      const pageUrl = `${APP_URL}/brief/?r=${letter}&w=${week.from}`;
+
+      const entry: { region: string; url: string; gif?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
+        region: letter, url, gif: gifUrl || undefined, poster: posterUrl, page: pageUrl || undefined,
         counts: { 키맨: persons.length, 주소: addresses.length, 업체명: names.length },
       };
 
@@ -625,9 +633,7 @@ Deno.serve(async (req) => {
         const mapRows = await (await fetch(`${restBase}/room_map?select=region,room&category=eq.${encodeURIComponent("점검")}`, { headers: restHeaders })).json();
         const room = (Array.isArray(mapRows) ? mapRows : []).find((r: { region: string }) => String(r.region).trim().toUpperCase() === letter)?.room;
         if (room) {
-          const cfg = await (await fetch(`${restBase}/app_config?select=key,value&key=eq.KAKAO_IMAGE_SEND`, { headers: restHeaders })).json();
-          const imageMode = (Array.isArray(cfg) ? cfg : []).some((r: { value: string }) => /on|true|1/i.test(String(r.value)));
-          // 봇이 이미지 전송을 지원하면 #사진# 표시로 보내고(봇이 내려받아 사진으로 전송), 아니면 링크로 보낸다
+          // 봇(알림 답장)은 글자만 보낼 수 있다 — 그림은 PC가 붙여 보내고, 글에는 눌러지는 안내문 링크를 담는다
           const brief = [
             ...persons.map((r) => `🤝 ${clipText(r.company, 16)} — 새 키맨`),
             ...addresses.map((r) => `📍 ${clipText(r.company, 16)} — 주소 변경`),
@@ -635,12 +641,11 @@ Deno.serve(async (req) => {
           ];
           const shownBrief = brief.slice(0, 6);
           const head = [
-            `📸 ${letter}지역 지난주 담당자·주소 변경 (${week.label})`,
+            `🗓 ${letter}지역 주간 키맨 브리핑 (${week.label})`,
             ...shownBrief,
-            brief.length > shownBrief.length ? `외 ${brief.length - shownBrief.length}건` : "",
-            "자세한 내용·인사 문구는 아래 한 장 이미지에 정리했습니다 👇",
-          ].filter(Boolean).join("\n");
-          const text = imageMode ? `#사진#${url}\n${head}` : `${head}\n${url}`;
+            brief.length > shownBrief.length ? `외 ${brief.length - shownBrief.length}곳` : "",
+          ].filter(Boolean).join("\n") + "\n\n👉 눌러서 전화·지도·인사완료";
+          const text = `${head}\n${pageUrl || url}`;
           entry.room = room;
           entry.text = text;
           if (body.dry) { entry.queued = false; } // 실제 발송 없이 방·문구만 확인
