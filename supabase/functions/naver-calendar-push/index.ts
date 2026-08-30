@@ -78,6 +78,37 @@ function caldavEventUrl(authId: string, calendarId: string, uid: string) {
   return `${CALDAV_BASE}/caldav/${encodeURIComponent(authId)}/calendar/${encodeURIComponent(calendarId)}/${encodeURIComponent(uid)}.ics`;
 }
 
+const DELIVERY_CAL = "75632617"; // 납품철수교체휴가교육 — 프론트 NAVER_DELIVERY_CAL과 거울
+
+/** 팀 완료 캘린더 ID 전부 (app_config NAVER_TEAM_CALENDAR_*) */
+async function teamCalendarIds(): Promise<string[]> {
+  const sUrl = Deno.env.get("SUPABASE_URL") || "";
+  const sKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!sUrl || !sKey) return [];
+  const r = await fetch(`${sUrl}/rest/v1/app_config?key=like.NAVER_TEAM_CALENDAR_*&select=value`, { headers: { apikey: sKey, Authorization: `Bearer ${sKey}` } });
+  const rows = await r.json().catch(() => []);
+  return (Array.isArray(rows) ? rows : []).map((row: { value?: string }) => String(row?.value || "").trim()).filter(Boolean);
+}
+
+/**
+ * uid의 일정이 실제로 있는 캘린더를 찾는다.
+ * 완료 이동(팀 캘린더)·납품 일정 승격·네이버에서 수동 이동으로 일정이 힌트 캘린더 밖에 있을 수 있는데,
+ * 예전엔 한 곳만 보고 404를 내서 **배정자 이름 동기화가 조용히 실패**했다(2026-08-28 실사고).
+ * REPORT 검색이 아니라 후보 주소 직접 GET(3~7회)이라 네이버 부하 걱정이 없다.
+ */
+async function findEventCal(auth: { id: string; header: string }, uid: string, hint: string): Promise<{ cal: string; ics: string; status: number }> {
+  const seen = new Set<string>();
+  const candidates = [hint, await configCalendarIdOf(), DELIVERY_CAL, ...(await teamCalendarIds())]
+    .map((v) => String(v || "").trim())
+    .filter((v) => v && !seen.has(v) && (seen.add(v), true));
+  for (const cal of candidates) {
+    const r = await fetch(caldavEventUrl(auth.id, cal, uid), { headers: { Authorization: auth.header } });
+    if (r.ok) return { cal, ics: await r.text(), status: 200 };
+    if (r.status === 401) return { cal: "", ics: "", status: 401 };
+  }
+  return { cal: "", ics: "", status: 404 };
+}
+
 // VEVENT 구간만 잘라낸다 — VTIMEZONE 블록에도 DTSTART가 있어 통째로 찾으면 1970년을 집는다
 function eventBlockOf(ics: string): string {
   const m = ics.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/);
@@ -140,13 +171,10 @@ Deno.serve(async (req) => {
           teamCal = String(rows?.[0]?.value || "").trim();
         }
         // 일정 위치 탐색: 방향에 맞는 캘린더부터, 없으면 반대쪽도 (이동 전·후 상태 모두 대응)
-        let srcCal = "";
-        let srcIcs = "";
-        for (const cal of [back ? teamCal : calId, back ? calId : teamCal].filter(Boolean)) {
-          const r = await fetch(caldavEventUrl(auth.id, cal, uid), { headers: { Authorization: auth.header } });
-          if (r.ok) { srcCal = cal; srcIcs = await r.text(); break; }
-        }
-        if (!srcCal) return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다" }, { status: 404, headers: jsonHeaders });
+        const foundMove = await findEventCal(auth, uid, back ? teamCal || calId : calId);
+        const srcCal = foundMove.cal;
+        const srcIcs = foundMove.ics;
+        if (!srcCal) return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다 — 연동된 모든 캘린더를 확인했습니다" }, { status: 404, headers: jsonHeaders });
         let outIcs = srcIcs.replace(/^X-NAVER-COMPLETED:.*\r?\n?/gm, "");
         if (!back) outIcs = outIcs.replace(/BEGIN:VEVENT\r?\n/, (m) => `${m}X-NAVER-COMPLETED:TRUE\r\n`);
         const destCal = back ? calId : (teamCal || srcCal); // 팀 캘린더 미설정이면 제자리에서 완료 체크만
@@ -160,15 +188,17 @@ Deno.serve(async (req) => {
         return Response.json({ ok: true, status: back ? "restored" : "moved", toCalendarId: destCal }, { headers: jsonHeaders });
       }
 
-      const url = caldavEventUrl(auth.id, calId, uid);
-
-      const getRes = await fetch(url, { headers: { Authorization: auth.header } });
-      if (getRes.status === 404) {
-        return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다 — CalDAV 도입 전에 등록됐거나 이미 삭제된 일정입니다" }, { status: 404, headers: jsonHeaders });
+      // 일정이 실제로 있는 캘린더부터 찾는다 — 완료 이동·승격으로 calId 힌트가 낡아도 동작
+      const found = await findEventCal(auth, uid, calId);
+      if (found.status === 401) return Response.json({ error: "CalDAV 인증 실패 — 애플리케이션 비밀번호를 확인하세요" }, { status: 401, headers: jsonHeaders });
+      if (!found.cal) {
+        // 지울 것이 이미 없으면 성공과 같다 — 삭제 흐름이 낡은 미러 때문에 막히지 않게
+        if (body.action === "caldav_delete") return Response.json({ ok: true, status: "already-gone" }, { headers: jsonHeaders });
+        return Response.json({ error: "네이버에서 이 일정을 찾지 못했습니다 — 연동된 모든 캘린더를 확인했습니다 (CalDAV 도입 전 등록이거나 이미 삭제된 일정)" }, { status: 404, headers: jsonHeaders });
       }
-      if (getRes.status === 401) return Response.json({ error: "CalDAV 인증 실패 — 애플리케이션 비밀번호를 확인하세요" }, { status: 401, headers: jsonHeaders });
-      const ics = await getRes.text();
-      if (!getRes.ok) return Response.json({ error: `네이버 일정 조회 실패(${getRes.status})` }, { status: 500, headers: jsonHeaders });
+      const foundCal = found.cal;
+      const ics = found.ics;
+      const url = caldavEventUrl(auth.id, foundCal, uid);
 
       if (body.action === "caldav_get") {
         return Response.json({
@@ -177,6 +207,7 @@ Deno.serve(async (req) => {
           description: icsProp(ics, "DESCRIPTION"),
           location: icsProp(ics, "LOCATION"),
           dtstart: icsProp(ics, "DTSTART"),
+          calendarId: foundCal, // 실제 위치 — 프론트 미러가 낡았으면 이 값으로 갱신
         }, { headers: jsonHeaders });
       }
       // 복제 — 같은 캘린더에 새 UID로 사본 생성, newDate가 오면 그 날짜로 (시간 유지)
@@ -188,7 +219,7 @@ Deno.serve(async (req) => {
           const ymd = newDate.replace(/-/g, "");
           out = out.replace(/^(DTSTART[^:]*:)(\d{8})/mi, `$1${ymd}`).replace(/^(DTEND[^:]*:)(\d{8})/mi, `$1${ymd}`);
         }
-        const putD = await fetch(caldavEventUrl(auth.id, calId, newUid), {
+        const putD = await fetch(caldavEventUrl(auth.id, foundCal, newUid), {
           method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: out,
         });
         if (putD.status >= 400) throw new Error(`일정 복제 실패(${putD.status})`);
@@ -198,7 +229,7 @@ Deno.serve(async (req) => {
       if (body.action === "caldav_transfer") {
         const toCal = String(body.toCal || "").trim();
         if (!toCal) return Response.json({ error: "toCal(이동할 캘린더 ID)이 필요합니다" }, { status: 400, headers: jsonHeaders });
-        if (toCal === calId) return Response.json({ ok: true, status: "unchanged" }, { headers: jsonHeaders });
+        if (toCal === foundCal) return Response.json({ ok: true, status: "unchanged" }, { headers: jsonHeaders });
         const putT = await fetch(caldavEventUrl(auth.id, toCal, uid), {
           method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: ics,
         });
@@ -269,7 +300,7 @@ Deno.serve(async (req) => {
       const newIcs = ics.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, () => newEvent);
       const put = await fetch(url, { method: "PUT", headers: { Authorization: auth.header, "Content-Type": "text/calendar; charset=utf-8" }, body: newIcs });
       if (put.status >= 400) throw new Error(`네이버 일정 수정 실패(${put.status})`);
-      return Response.json({ ok: true, status: "updated" }, { headers: jsonHeaders });
+      return Response.json({ ok: true, status: "updated", calendarId: foundCal }, { headers: jsonHeaders });
     }
 
     // 최초 연동: 웹앱이 네이버 로그인 후 받은 code를 넘기면 토큰 교환 → refresh token을
