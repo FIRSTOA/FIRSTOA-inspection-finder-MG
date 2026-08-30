@@ -5319,8 +5319,11 @@ export default function App() {
     }
     setSending(false);
     // 일정리스트·내 일정에서 [FIELD]로 넘어온 건만 — 전송 성공 시 일정 정리(완료/익일) 팝업.
+    // 점검방 전송은 묻지 않는다(2026-08-28 결정) — 점검은 보내기가 곧 끝이고,
+    // 매월점검 일정 완료는 위 completeMonthlyCalendarTicket이 이미 조용히 처리한다.
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
-      setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
+      if (destination === "inspection") setPendingTicket(null);
+      else setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
     }
     // 복붙으로 양식을 만들어 보낸 경우 — 일정리스트에 같은 업체 미완료 일정이 있으면 정리를 묻는다.
