@@ -695,15 +695,24 @@ Deno.serve(async (req) => {
         if (testMode && room) room = String(cfg.TEST_ROOM || "테스트 전용방").trim();
         if (room) {
           // 봇(알림 답장)은 글자만 보낼 수 있다 — 그림은 PC가 붙여 보내고, 글에는 눌러지는 안내문 링크를 담는다
-          // 문구는 짧게 — 내용은 사진이 다 말한다 (업체 나열은 사진과 중복이라 뺐다, 2026-08-28 피드백)
-          const parts = [
-            persons.length ? `담당 ${persons.length}` : "",
-            addresses.length ? `주소 ${addresses.length}` : "",
-            names.length ? `업체명 ${names.length}` : "",
-          ].filter(Boolean).join(" · ");
+          // 문구에 업체명을 다시 싣는다(2026-08-28 확정) — 점검 가며 방을 검색하는 관행이 있어
+          // 업체명이 글에 있어야 검색에 걸린다. 이모지 없이 등급 + 업체명 + 변경 종류, ---구분선.
+          const SEP_LINE = "---------------";
+          const lineOf = (r: ChangeRow, tag: string) => {
+            const g = letterGrade(r.grade);
+            return `${g ? `${g} ` : ""}${clipText(r.company, 18)} — ${tag}`;
+          };
           const head = [
-            `🗓 ${letter}지역 주간 키맨 브리핑 (${week.label})`,
-            `지난주 변경 ${items.length}곳 (${parts}) — 아래 사진 한 장으로 확인해 주세요 👇`,
+            `[${week.label.replace(/\s+/g, "")}]`,
+            `${letter}지역 주간 키맨 브리핑`,
+            SEP_LINE,
+            "",
+            ...persons.map((r) => lineOf(r, "새 키맨")),
+            ...addresses.map((r) => lineOf(r, "주소 변경")),
+            ...names.map((r) => lineOf(r, "업체명 변경")),
+            "",
+            SEP_LINE,
+            "👇 한 장 요약 (눌러서 크게 보기)",
           ].join("\n");
           const text = `${testMode ? `[테스트 · 원래는 ${realRoom}]\n` : ""}${head}\n${url}`; // url = 사진. 카톡이 미리보기 썸네일을 붙여 준다
           entry.room = room;
