@@ -622,7 +622,7 @@ Deno.serve(async (req) => {
       //   Supabase는 저장소·엣지 함수 응답을 text/plain + 샌드박스로 강제해 HTML을 못 띄운다(실측).
       //   그 페이지는 열 때마다 데이터를 직접 읽으므로 링크가 낡지 않는다.
       const posterUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
-      const pageUrl = `${APP_URL}/brief/?r=${letter}&w=${week.from}`;
+      const pageUrl = `${APP_URL}/brief/?r=${letter}&w=${week.from}`; // 눌러서 보는 안내문(원하면 문구에 쓸 수 있다)
 
       const entry: { region: string; url: string; gif?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
         region: letter, url, gif: gifUrl || undefined, poster: posterUrl, page: pageUrl || undefined,
@@ -644,8 +644,8 @@ Deno.serve(async (req) => {
             `🗓 ${letter}지역 주간 키맨 브리핑 (${week.label})`,
             ...shownBrief,
             brief.length > shownBrief.length ? `외 ${brief.length - shownBrief.length}곳` : "",
-          ].filter(Boolean).join("\n") + "\n\n👉 눌러서 전화·지도·인사완료";
-          const text = `${head}\n${pageUrl || url}`;
+          ].filter(Boolean).join("\n") + "\n\n👇 한 장 요약 (눌러서 크게 보기)";
+          const text = `${head}\n${url}`; // url = 사진(정지 이미지). 카톡이 미리보기 썸네일을 붙여 준다
           entry.room = room;
           entry.text = text;
           if (body.dry) { entry.queued = false; } // 실제 발송 없이 방·문구만 확인

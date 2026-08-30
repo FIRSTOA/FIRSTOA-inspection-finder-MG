@@ -242,7 +242,7 @@ def weekly(plan: bool) -> int:
         except Exception as e:
             log(f"발송 여부 확인 실패(계속 진행): {e}")
     try:
-        data = post_json(FN, {"action": "run", "dry": True, "gif": True})
+        data = post_json(FN, {"action": "run", "dry": True})
     except Exception as e:
         log(f"✗ 이미지 생성 실패: {e}")
         return 1
@@ -298,7 +298,7 @@ def check() -> int:
     if not rooms:
         log("  (없음 — 카톡에서 방을 더블클릭해 별도 창으로 열어 두세요)")
     try:
-        data = post_json(FN, {"action": "run", "dry": True, "gif": True})
+        data = post_json(FN, {"action": "run", "dry": True})
         log("이번 주 보낼 방:")
         for r in data.get("regions") or []:
             hwnd, _ = find_room_window(r.get("room") or "")
