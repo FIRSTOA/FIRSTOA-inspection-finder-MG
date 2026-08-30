@@ -133,27 +133,39 @@ function readAddress(text: string): { head: string; full: string } {
   return { head: clipText(head, 14), full: clipText(one, 54) };
 }
 
-/** 등급 색 — S는 금색, 아래로 갈수록 차분하게. 등급이 중요하다는 요청(2026-08-28) */
+/**
+ * 등급 색 — 실제 등급 체계는 SS·S·V·N·NN (임대리스트·워킨맵 접두와 동일, src/ids.ts 참고).
+ * A~E로 넘겨짚어 N·NN·V를 잘랐던 실사고(2026-08-28) 뒤 데이터로 확인해 고정했다.
+ * SS·S는 금색 계열로 눈에 박히게, V는 보라, N·NN은 차분하게. 유지보수 계약은 "유지" 배지.
+ */
 const GRADE_COLORS: Record<string, Rgb> = {
-  "특S": { red: 1, green: 0.773, blue: 0.239 },
-  S: { red: 1, green: 0.773, blue: 0.239 },
+  SS: { red: 1, green: 0.815, blue: 0.290 },        // 금색(밝게)
+  S: { red: 0.965, green: 0.690, blue: 0.180 },     // 호박색
+  V: { red: 0.655, green: 0.545, blue: 0.980 },     // 보라
   A: { red: 0.298, green: 0.576, blue: 1 },
   B: { red: 0.204, green: 0.827, blue: 0.600 },
-  C: { red: 0.596, green: 0.663, blue: 0.749 },
-  D: { red: 0.478, green: 0.537, blue: 0.624 },
-};
-/** 배지로 세울 수 있는 글자 등급만 (유지보수·임대 같은 계약형태는 오른쪽 꼬리말로) */
-const letterGrade = (v: string) => {
-  const g = String(v || "").trim().toUpperCase().replace("특S", "특S");
-  return /^(특S|S|A|B|C|D)$/.test(g) ? g : "";
+  N: { red: 0.494, green: 0.576, blue: 0.706 },     // 차분한 강청
+  NN: { red: 0.333, green: 0.404, blue: 0.498 },    // 더 낮게
+  C: { red: 0.600, green: 0.651, blue: 0.722 },
+  D: { red: 0.420, green: 0.478, blue: 0.561 },
+  E: { red: 0.420, green: 0.478, blue: 0.561 },
+  유지: { red: 0.176, green: 0.831, blue: 0.749 },  // 청록 — 유지보수 계약
+  임대: { red: 0.376, green: 0.647, blue: 0.980 },
 };
 
-/** 카드에 보일 만한 등급·계약형태만 남긴다 — 시트 등급 열에는 'NN'처럼 뜻 없는 값도 섞여 있다 */
+/** 배지에 세울 등급 — "N, V"·"S/NN"처럼 겹쳐 적힌 건 첫 것을 쓴다. 계약형태는 두 글자로 줄인다 */
+const letterGrade = (value: string) => {
+  const raw = String(value || "").trim();
+  if (/유지보수|유지/.test(raw)) return "유지";
+  if (/임대|렌탈|리스/.test(raw)) return "임대";
+  const g = raw.toUpperCase().replace(/Ⅴ/g, "V").split(/[,/\s]+/)[0] || "";
+  return /^(특S|SS|S|V|N|NN|[A-E])$/.test(g) ? g : "";
+};
+
+/** 꼬리말용 등급 표기 — 배지와 같은 판정, 계약형태만 원말로 */
 function gradeLabel(value: string): string {
-  const g = String(value || "").trim();
-  if (/^(특S|S|A|B|C|D)$/.test(g)) return g;
-  if (/유지보수|임대|렌탈|리스|판매/.test(g)) return g;
-  return "";
+  const g = letterGrade(value);
+  return g === "유지" ? "유지보수" : g;
 }
 
 /** 접수일 표시 (8/17) — change_date는 'YYYY-MM-DD' 문자열이라 시차 계산 없이 자른다 */
@@ -198,10 +210,10 @@ const GREETING_TIPS: Record<string, string[]> = {
  * 대표님 취지: 변경 직후 인사가 나중에 다가가기 쉽게 만들고 인식을 좋게 한다.
  */
 const WHY_GREET = [
-  "첫 통로 선점 — 처음 인사드린 사람이 새 담당자의 '기본 연락처'가 됩니다",
-  "재계약 — 갱신을 결정하는 사람이 바로 이분입니다",
-  "추가 발주·지인 추천 — 기기 늘릴 때 '아는 기사님'부터 찾습니다",
-  "해지 방어 — 관계가 있으면 불만이 해지 전에 전화로 먼저 옵니다",
+  "첫 얼굴 — 지금 인사한 사람이 '아는 기사님 1호'가 됩니다",
+  "관계 선점 — 미리 친해 두면 재계약·추가 발주 때 훨씬 수월합니다",
+  "지인 추천 — 소개는 늘 친한 기사님에게 먼저 갑니다",
+  "해지 방어 — 불만이 생겨도 해지 대신 전화가 먼저 옵니다",
 ];
 
 // ── 사진 스타일 ─────────────────────────────────────────────
@@ -458,8 +470,8 @@ Deno.serve(async (req) => {
         lines.push({ t: "title", h: 36, label: g.label, n: g.rows.length });
         for (const row of g.rows.slice(0, 8)) lines.push({ t: "row", h: ROW_H, row, kind: g.label });
       }
-      lines.push({ t: "tips", h: portrait ? 96 : 84 });
-      lines.push({ t: "why", h: portrait ? 112 : 100 });
+      lines.push({ t: "why", h: portrait ? 126 : 110 });   // 취지 — 중요해서 인사 문구보다 위, 강조 박스
+      lines.push({ t: "tips", h: portrait ? 86 : 78 });
 
       // 조각으로 나누기 — 줄을 넘치지 않게 담는다
       const sections: Array<{ lines: Line[]; h: number }> = [];
@@ -524,7 +536,7 @@ Deno.serve(async (req) => {
             // 등급 배지 — 한 열로 서 있어 훑기만 해도 S가 보인다. 등급 없는 곳은 흐린 자리표시로 열을 지킨다
             if (badge) {
               reqs.push(...rect(nid(), PAD, y + 28, badgeW, 30, GRADE_COLORS[badge] || st.accent, page));
-              reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, badge, { size: 14, bold: true, color: st.bg, align: "CENTER" }, page));
+              reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, badge, { size: badge.length >= 2 ? 11.5 : 14, bold: true, color: st.bg, align: "CENTER" }, page));
             } else if (st.gradeBadge) {
               reqs.push(...rect(nid(), PAD, y + 28, badgeW, 30, st.line, page, 0.4));
               reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, "–", { size: 11, bold: true, color: st.muted, align: "CENTER" }, page));
@@ -570,25 +582,22 @@ Deno.serve(async (req) => {
                 { size: 9.5, color: st.muted }, page));
             }
             if (st.rowRule) reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, 0.7, st.line, page, st.key === "news" ? 0.35 : 1, "RECTANGLE"));
-          } else if (line.t === "tips") {
+          } else if (line.t === "why") {
+            // 취지 — 직원들이 왜 하는지 알아야 움직인다. 잘 보이게 강조 박스 (2026-08-28)
+            reqs.push(...rect(nid(), PAD, y + 6, PW - PAD * 2, line.h - 14, st.accent, page, st.key === "bold" ? 0.15 : 0.08));
+            reqs.push(...rect(nid(), PAD, y + 6, 4, line.h - 14, st.accent, page, 1, "RECTANGLE"));
+            reqs.push(...T(nid(), PAD + 16, y + 17, PW - PAD * 2 - 28, 14, "지금 인사드려야 하는 이유", { size: 10.5, bold: true, color: st.accent }, page));
+            reqs.push(...T(nid(), PAD + 16, y + 36, PW - PAD * 2 - 30, line.h - 44,
+              WHY_GREET.map((t) => `· ${t}`).join("\n"), { size: 10, color: st.ink, lineSpacing: 148 }, page));
+          } else {
+            // 인사 한마디 — 맨 아래 각주 톤 (실제 멘트만 간단히)
             const kinds = groups.filter((g) => g.rows.length).map((g) => g.label);
             const key = kinds[0] === "담당" ? "키맨" : kinds[0] === "주소" ? "주소" : "업체명";
             const tips = (GREETING_TIPS[key] || []).slice(0, 2);
-            const boxed = st.key === "light" || st.key === "bold" || st.key === "soft";
-            if (boxed) {
-              reqs.push(...rect(nid(), PAD, y + 8, PW - PAD * 2, line.h - 18, st.accent, page, st.key === "bold" ? 0.12 : 0.07));
-              reqs.push(...rect(nid(), PAD, y + 8, 4, line.h - 18, st.accent, page, 1, "RECTANGLE"));
-            }
-            const ix = PAD + (boxed ? 16 : 0);
-            reqs.push(...T(nid(), ix, y + 20, PW - PAD * 2 - 24, 13, "인사 한마디", { size: 9, bold: true, color: st.accent }, page));
-            reqs.push(...T(nid(), ix, y + 36, PW - PAD - ix - (boxed ? 14 : 0), line.h - 46,
-              tips.join("\n"), { size: 10, color: st.ink, lineSpacing: 130 }, page));
-          } else {
-            // 취지 — 조용한 각주 톤으로, 인사 문구보다 한 단계 낮게
-            reqs.push(...rect(nid(), PAD, y + 10, PW - PAD * 2, 0.7, st.line, page, 1, "RECTANGLE"));
-            reqs.push(...T(nid(), PAD, y + 20, PW - PAD * 2, 13, "왜 바로 인사드리나요", { size: 9, bold: true, color: st.muted }, page));
-            reqs.push(...T(nid(), PAD, y + 36, PW - PAD * 2, line.h - 40,
-              WHY_GREET.map((t) => `· ${t}`).join("\n"), { size: 9.5, color: st.sub, lineSpacing: 145 }, page));
+            reqs.push(...rect(nid(), PAD, y + 8, PW - PAD * 2, 0.7, st.line, page, 1, "RECTANGLE"));
+            reqs.push(...T(nid(), PAD, y + 18, PW - PAD * 2, 13, "인사 한마디", { size: 9, bold: true, color: st.muted }, page));
+            reqs.push(...T(nid(), PAD, y + 34, PW - PAD * 2, line.h - 38,
+              tips.join("\n"), { size: 9.5, color: st.sub, lineSpacing: 140 }, page));
           }
           y += line.h;
         }
