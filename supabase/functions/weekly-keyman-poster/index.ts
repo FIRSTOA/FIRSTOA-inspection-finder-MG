@@ -193,6 +193,17 @@ const GREETING_TIPS: Record<string, string[]> = {
   ],
 };
 
+/**
+ * 왜 바로 인사드리나 — 매주 포스터 맨 아래에 실어 취지를 계속 상기시킨다.
+ * 대표님 취지: 변경 직후 인사가 나중에 다가가기 쉽게 만들고 인식을 좋게 한다.
+ */
+const WHY_GREET = [
+  "첫 통로 선점 — 처음 인사드린 사람이 새 담당자의 '기본 연락처'가 됩니다",
+  "재계약 — 갱신을 결정하는 사람이 바로 이분입니다",
+  "추가 발주·지인 추천 — 기기 늘릴 때 '아는 기사님'부터 찾습니다",
+  "해지 방어 — 관계가 있으면 불만이 해지 전에 전화로 먼저 옵니다",
+];
+
 // ── 사진 스타일 ─────────────────────────────────────────────
 // 세 가지를 만들어 고르게 한다. 색·선·서체만 다르고 담는 내용은 같다.
 type Rgb = { red: number; green: number; blue: number };
@@ -433,7 +444,8 @@ Deno.serve(async (req) => {
         | { t: "head"; h: number }
         | { t: "title"; h: number; label: string; n: number }
         | { t: "row"; h: number; row: ChangeRow; kind: "담당" | "주소" | "업체명" }
-        | { t: "tips"; h: number };
+        | { t: "tips"; h: number }
+        | { t: "why"; h: number };
       const ROW_H = portrait ? 118 : 80;
       const groups: Array<{ label: "담당" | "주소" | "업체명"; rows: ChangeRow[] }> = [
         { label: "담당", rows: persons },
@@ -447,6 +459,7 @@ Deno.serve(async (req) => {
         for (const row of g.rows.slice(0, 8)) lines.push({ t: "row", h: ROW_H, row, kind: g.label });
       }
       lines.push({ t: "tips", h: portrait ? 96 : 84 });
+      lines.push({ t: "why", h: portrait ? 112 : 100 });
 
       // 조각으로 나누기 — 줄을 넘치지 않게 담는다
       const sections: Array<{ lines: Line[]; h: number }> = [];
@@ -557,7 +570,7 @@ Deno.serve(async (req) => {
                 { size: 9.5, color: st.muted }, page));
             }
             if (st.rowRule) reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, 0.7, st.line, page, st.key === "news" ? 0.35 : 1, "RECTANGLE"));
-          } else {
+          } else if (line.t === "tips") {
             const kinds = groups.filter((g) => g.rows.length).map((g) => g.label);
             const key = kinds[0] === "담당" ? "키맨" : kinds[0] === "주소" ? "주소" : "업체명";
             const tips = (GREETING_TIPS[key] || []).slice(0, 2);
@@ -570,6 +583,12 @@ Deno.serve(async (req) => {
             reqs.push(...T(nid(), ix, y + 20, PW - PAD * 2 - 24, 13, "인사 한마디", { size: 9, bold: true, color: st.accent }, page));
             reqs.push(...T(nid(), ix, y + 36, PW - PAD - ix - (boxed ? 14 : 0), line.h - 46,
               tips.join("\n"), { size: 10, color: st.ink, lineSpacing: 130 }, page));
+          } else {
+            // 취지 — 조용한 각주 톤으로, 인사 문구보다 한 단계 낮게
+            reqs.push(...rect(nid(), PAD, y + 10, PW - PAD * 2, 0.7, st.line, page, 1, "RECTANGLE"));
+            reqs.push(...T(nid(), PAD, y + 20, PW - PAD * 2, 13, "왜 바로 인사드리나요", { size: 9, bold: true, color: st.muted }, page));
+            reqs.push(...T(nid(), PAD, y + 36, PW - PAD * 2, line.h - 40,
+              WHY_GREET.map((t) => `· ${t}`).join("\n"), { size: 9.5, color: st.sub, lineSpacing: 145 }, page));
           }
           y += line.h;
         }
