@@ -1188,18 +1188,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     }
     if (day === "next") {
       // 익일스케줄 보고 — 내일 일정만, 미배정 포함 전부. 퇴근 전에 보내는 별도 보고(2026-08-28 요청)
-      return [
-        `${reportStamp()} 익일스케줄 보고`,
-        `(${Number(tomorrowYmd.slice(5, 7))}/${Number(tomorrowYmd.slice(8, 10))} 예정 — 누락·변경은 보내기 전에 직접 수정)`,
-        "",
-        REPORT_SEP,
-        "익일 처리예정",
-        "",
-        ...(groups.length ? groups : ["없음"]),
-        "",
-        REPORT_SEP,
-        "특이사항",
-      ].join("\n");
+      // 양식 확정(2026-08-28): 머리말 한 줄 + 이름 그룹만 — 시각·구분선·특이사항 없이 짧게
+      return ["익일 스케줄", "", ...(groups.length ? groups : ["없음"])].join("\n");
     }
     // 익일일정 — 다음 영업일에 잡힌 팀 일정 전부. 누가 갈지 아직 모르니 이름 없이 적는다.
     // 오늘 익일로 넘긴 건도 날짜가 내일이면 자연히 여기 들어오고, 이름 없는 납품은 물류 몫이라 금일과 같은 기준으로 뺀다.
@@ -1297,18 +1287,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           ...tomorrows.map(() => `•${res.lines[index++]}`),
           ...deferredLater.map((ticket) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
         ];
-        const text = (day === "next" ? [
-          `${reportStamp()} 익일스케줄 보고`,
-          `(${Number(tomorrowYmd.slice(5, 7))}/${Number(tomorrowYmd.slice(8, 10))} 예정 — 누락·변경은 보내기 전에 직접 수정)`,
-          "",
-          REPORT_SEP,
-          "익일 처리예정",
-          "",
-          ...(groups.length ? groups : ["없음"]),
-          "",
-          REPORT_SEP,
-          "특이사항",
-        ] : [
+        const text = (day === "next"
+          ? ["익일 스케줄", "", ...(groups.length ? groups : ["없음"])]
+          : [
           `${reportStamp()} 중간보고`,
           "(진행중인 업무는 * 표시)",
           "",
