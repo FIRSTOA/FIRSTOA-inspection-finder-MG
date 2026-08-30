@@ -175,6 +175,56 @@ const GREETING_TIPS: Record<string, string[]> = {
   ],
 };
 
+// ── 사진 스타일 ─────────────────────────────────────────────
+// 세 가지를 만들어 고르게 한다. 색·선·서체만 다르고 담는 내용은 같다.
+type Rgb = { red: number; green: number; blue: number };
+type Style = {
+  key: string;
+  bg: Rgb; ink: Rgb; sub: Rgb; muted: Rgb; line: Rgb; accent: Rgb;
+  heroFont?: string; titleFont?: string;
+  chip: "solid" | "tint" | "text";
+  ruleThick: number;      // 묶음 제목 아래 선 두께
+  rowRule: boolean;       // 줄 사이 얇은 선
+};
+const hx = (v: string): Rgb => ({
+  red: parseInt(v.slice(1, 3), 16) / 255,
+  green: parseInt(v.slice(3, 5), 16) / 255,
+  blue: parseInt(v.slice(5, 7), 16) / 255,
+});
+const STYLES: Record<string, Style> = {
+  // 1) 밝고 하얀 — 후지리포토 같은 흰 바탕, 강조는 파랑 하나
+  light: {
+    key: "light",
+    bg: hx("#FFFFFF"), ink: hx("#14171F"), sub: hx("#6B7380"), muted: hx("#9AA3B2"),
+    line: hx("#E7EAF0"), accent: hx("#2563EB"), chip: "solid", ruleThick: 1, rowRule: true,
+  },
+  // 2) 진한 배경 — 화면 전체가 짙은 남색, 큰 흰 글씨
+  bold: {
+    key: "bold",
+    bg: hx("#101A2E"), ink: hx("#FFFFFF"), sub: hx("#9FB0C9"), muted: hx("#7C8DA8"),
+    line: hx("#22314C"), accent: hx("#5B9DFF"), chip: "tint", ruleThick: 1.4, rowRule: false,
+  },
+  // 4) 부드러운 민트 — 밝고 친근한 톤, 라운드 알약
+  soft: {
+    key: "soft",
+    bg: hx("#F2F7F4"), ink: hx("#16241E"), sub: hx("#5C6B64"), muted: hx("#93A29A"),
+    line: hx("#DCE7E1"), accent: hx("#0E9F6E"), chip: "solid", ruleThick: 1, rowRule: true,
+  },
+  // 5) 흑백 — 색을 아예 쓰지 않고 굵기와 선으로만. 가장 담백하다
+  mono: {
+    key: "mono",
+    bg: hx("#FFFFFF"), ink: hx("#000000"), sub: hx("#4A4A4A"), muted: hx("#8A8A8A"),
+    line: hx("#000000"), accent: hx("#000000"), chip: "text", ruleThick: 2.4, rowRule: true,
+  },
+  // 3) 신문 헤드라인 — 종이색, 굵은 검은 선, 이름은 명조로
+  news: {
+    key: "news",
+    bg: hx("#F7F5F0"), ink: hx("#111111"), sub: hx("#5A5A55"), muted: hx("#8C8C85"),
+    line: hx("#111111"), accent: hx("#B3402B"), heroFont: "Nanum Myeongjo", titleFont: "Nanum Myeongjo",
+    chip: "text", ruleThick: 2.2, rowRule: true,
+  },
+};
+
 // ── 슬라이드 만들기 ────────────────────────────────────────────
 type Req = Record<string, unknown>;
 
@@ -307,7 +357,7 @@ Deno.serve(async (req) => {
 
     const token = await accessToken();
     let queuedAny = false;
-    const out: Array<{ region: string; url: string; gif?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
+    const out: Array<{ region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
 
     for (const [letter, list] of byRegion) {
       const persons = dedupe(list.filter(isPerson));
@@ -340,200 +390,148 @@ Deno.serve(async (req) => {
         ...addresses.map((row) => ({ row, kind: "주소" as const })),
         ...names.map((row) => ({ row, kind: "업체명" as const })),
       ];
-      // 움직이는 브리핑(GIF): 슬라이드를 여러 장 만들어 한 장씩 넘어가게 한다
-      const animate = action === "gif" || body.gif === true;
-      const frameItems = items.slice(0, 4);
-      const framePages: string[] = [];
-
       const reqs: Req[] = [];
       let seq = 0;
       const nid = () => `obj_${letter}_${String(seq++).padStart(3, "0")}`; // 슬라이드 objectId는 5자 이상이어야 한다
 
-      if (animate) {
-        for (let i = 0; i < frameItems.length + 2; i++) { // 표지 + 곳마다 + 마무리
-          const id = `frm_${letter}_${i}`;
-          framePages.push(id);
-          reqs.push({ createSlide: { objectId: id, insertionIndex: i + 1, slideLayoutReference: { predefinedLayout: "BLANK" } } });
-        }
+      // ── 세로 사진 만들기 ────────────────────────────────────────
+      //   슬라이드는 16:9 가로로 고정이라 판형을 못 바꾼다. 그래서 내용을 **조각(section)** 으로 나눠
+      //   여러 장에 그린 뒤, 썸네일을 필요한 만큼 잘라 위아래로 이어 붙여 세로 사진을 만든다.
+      const st = STYLES[String(body.style || "light")] || STYLES.light;
+      const portrait = body.portrait !== false;
+      const PW = portrait ? 440 : 720;      // 그리는 폭(PT) — 세로는 좁은 단
+      const PAD = portrait ? 30 : 40;
+      const SEC_MAX = 392;                  // 한 슬라이드에 담을 수 있는 높이(PT)
+
+      // 담을 줄 목록 만들기 (건수는 종류별로 따로 센다)
+      type Line =
+        | { t: "head"; h: number }
+        | { t: "title"; h: number; label: string; n: number }
+        | { t: "row"; h: number; row: ChangeRow; kind: "담당" | "주소" | "업체명" }
+        | { t: "tips"; h: number };
+      const ROW_H = portrait ? 104 : 78;
+      const groups: Array<{ label: "담당" | "주소" | "업체명"; rows: ChangeRow[] }> = [
+        { label: "담당", rows: persons },
+        { label: "주소", rows: addresses },
+        { label: "업체명", rows: names },
+      ];
+      const lines: Line[] = [{ t: "head", h: portrait ? 136 : 116 }];
+      for (const g of groups) {
+        if (!g.rows.length) continue;
+        lines.push({ t: "title", h: 36, label: g.label, n: g.rows.length });
+        for (const row of g.rows.slice(0, 8)) lines.push({ t: "row", h: ROW_H, row, kind: g.label });
+      }
+      lines.push({ t: "tips", h: portrait ? 96 : 84 });
+
+      // 조각으로 나누기 — 줄을 넘치지 않게 담는다
+      const sections: Array<{ lines: Line[]; h: number }> = [];
+      let cur: { lines: Line[]; h: number } = { lines: [], h: 0 };
+      for (const line of lines) {
+        if (cur.h + line.h > SEC_MAX && cur.lines.length) { sections.push(cur); cur = { lines: [], h: 0 }; }
+        cur.lines.push(line);
+        cur.h += line.h;
+      }
+      if (cur.lines.length) sections.push(cur);
+
+      // 필요한 만큼 슬라이드를 더 만든다 (첫 장은 이미 있다)
+      const sectionPages: string[] = [pageId];
+      for (let i = 1; i < sections.length; i++) {
+        const id = `sec_${letter}_${i}`;
+        sectionPages.push(id);
+        reqs.push({ createSlide: { objectId: id, insertionIndex: i, slideLayoutReference: { predefinedLayout: "BLANK" } } });
       }
 
-      // ── 판형 720×405PT(→PNG 1600×900)
-      //   위: 다크 헤더바에 큰 숫자(몇 곳 인사해야 하는지) / 가운데: 곳마다 카드 한 장 / 아래: 인사 문구 띠
-      const PAD = 34;
-      const GAP = 14;
-      const HEAD = 96;
-      const FOOT = 52;
-
-      reqs.push({ updatePageProperties: { objectId: pageId, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: WHITE } } } }, fields: "pageBackgroundFill" } });
-
-      // ── 헤더바
-      reqs.push(...rect(nid(), 0, 0, W, HEAD, NAVY, pageId, 1, "RECTANGLE"));
-      reqs.push(...rect(nid(), PAD, HEAD - 4, 84, 4, BLUE, pageId, 1, "RECTANGLE")); // 짧은 강조선
-      reqs.push(...T(nid(), PAD, 24, 520, 26, `${letter}지역 · 주간 키맨 브리핑`, { size: 19, bold: true, color: WHITE }, pageId));
-      reqs.push(...T(nid(), PAD, 56, 520, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 10, color: NAVY_SUB }, pageId));
-      // 오른쪽: 몇 곳인지 크게
-      reqs.push(...T(nid(), W - PAD - 120, 20, 92, 48, String(items.length), { size: 38, bold: true, color: WHITE, align: "END" }, pageId));
-      reqs.push(...T(nid(), W - PAD - 24, 38, 24, 22, "곳", { size: 13, bold: true, color: NAVY_SUB }, pageId));
-      reqs.push(...T(nid(), W - PAD - 160, 66, 160, 14, items.length ? "이번 주 인사 대상" : "지난주 변경 없음", { size: 9.5, color: NAVY_SUB, align: "END" }, pageId));
-
-      // ── 카드 (한 곳에 한 장)
-      const shown = items.slice(0, 4);
-      const cardW = (W - PAD * 2 - GAP) / 2;
-      const perRow = 2;
-      const rowsN = Math.max(1, Math.ceil(shown.length / perRow));
-      const bodyTop = HEAD + 18;
-      const bodyH = H - FOOT - 12 - bodyTop;
-      const cardH = Math.min(138, (bodyH - (rowsN - 1) * GAP) / rowsN);
-      const gridTop = bodyTop + Math.max(0, (bodyH - (cardH * rowsN + GAP * (rowsN - 1))) / 2);
-
-      shown.forEach((it, i) => {
-        // 홀수로 남는 마지막 장은 두 칸 폭으로 늘려 빈칸을 없앤다
-        const wideLast = perRow === 2 && i === shown.length - 1 && i % 2 === 0;
-        const w = wideLast ? W - PAD * 2 : cardW;
-        const roomy = wideLast || shown.length === 1;
-        const x = PAD + (i % perRow) * (cardW + GAP);
-        const y = gridTop + Math.floor(i / perRow) * (cardH + GAP);
-        reqs.push(...rect(nid(), x, y, w, cardH, CARD, pageId));
-
-        // 카드가 낮으면 '이전' 줄을 빼고 위쪽으로 모은다 — 글이 겹치지 않게 좌표를 높이에서 뽑는다
-        const tight = cardH < 126;
-        const yCompany = y + (tight ? 36 : 42);
-        const yHero = y + (tight ? 51 : 60);
-        const ySub = y + (tight ? 78 : 90);
-        const heroSize = tight ? 17.5 : 21;
-
-        const tone = it.kind === "키맨" ? BLUE : it.kind === "주소" ? MINT : SUB;
-        const chipW = 44;
-        reqs.push(...rect(nid(), x + 18, y + 14, chipW, 18, tone, pageId));
-        reqs.push(...T(nid(), x + 18, y + 18, chipW, 12, it.kind, { size: 8, bold: true, color: WHITE, align: "CENTER" }, pageId));
-        const grade = gradeLabel(it.row.grade);
-        reqs.push(...T(nid(), x + w - 170, y + 16, 152, 14,
-          [dayLabel(it.row.change_date), grade, clipText(it.row.reason, 10)].filter(Boolean).join("  ·  "),
-          { size: 9, bold: true, color: MUTED, align: "END" }, pageId));
-
-        const tx = x + 18;
-        const tw = w - 36;
-        const wide = roomy ? 2 : 1;
-        reqs.push(...T(nid(), tx, yCompany, tw, 15, clipText(it.row.company, 22 * wide), { size: 10.5, bold: true, color: SUB }, pageId));
-
-        if (it.kind === "주소") {
-          const a = readAddress(it.row.after_text);
-          reqs.push(...T(nid(), tx, yHero, tw, 26, clipText(a.head, 22 * wide) || "새 주소 확인 필요", { size: heroSize - 1, bold: true, color: INK }, pageId));
-          reqs.push(...T(nid(), tx, ySub, tw, 14, clipText(a.full, 46 * wide), { size: 9, color: MUTED }, pageId));
-          if (!tight && it.row.before_text) {
-            reqs.push(...T(nid(), tx, y + cardH - 24, tw, 13, `이전  ${clipText(readAddress(it.row.before_text).full, 46 * wide)}`, { size: 8.5, color: MUTED }, pageId));
-          }
-        } else if (it.kind === "업체명") {
-          reqs.push(...T(nid(), tx, yHero, tw, 28, clipText(it.row.after_text, 18 * wide) || "새 상호 확인 필요", { size: heroSize, bold: true, color: INK }, pageId));
-          reqs.push(...T(nid(), tx, ySub, tw, 14, `이전 상호  ${clipText(it.row.before_text, 30 * wide)}`, { size: 9, color: MUTED }, pageId));
+      // ── 그리기
+      const chipFor = (page: string, x: number, y: number, label: string) => {
+        const w = 44;
+        if (st.chip === "solid") {
+          reqs.push(...rect(nid(), x, y, w, 18, st.accent, page));
+          reqs.push(...T(nid(), x, y + 4, w, 12, label, { size: 8, bold: true, color: st.bg, align: "CENTER" }, page));
+        } else if (st.chip === "tint") {
+          reqs.push(...rect(nid(), x, y, w, 18, st.accent, page, 0.18));
+          reqs.push(...T(nid(), x, y + 4, w, 12, label, { size: 8, bold: true, color: st.accent, align: "CENTER" }, page));
         } else {
-          const person = readPerson(it.row.after_text);
-          reqs.push(...T(nid(), tx, yHero, tw, 30, person.name || "새 담당자", { size: heroSize, bold: true, color: INK }, pageId));
-          reqs.push(...T(nid(), tx, ySub, tw, 16, [person.phone, person.note].filter(Boolean).join("   ") || "연락처 확인 필요",
-            { size: 11.5, bold: true, color: BLUE }, pageId));
-          if (!tight && it.row.before_text) {
-            const before = readPerson(it.row.before_text);
-            reqs.push(...T(nid(), tx, y + cardH - 24, tw, 13, `이전  ${[before.name, before.phone].filter(Boolean).join("  ")}`, { size: 9, color: MUTED }, pageId));
+          reqs.push(...T(nid(), x, y + 3, w, 13, label, { size: 8.5, bold: true, color: st.accent }, page));
+        }
+      };
+
+      sections.forEach((section, si) => {
+        const page = sectionPages[si];
+        reqs.push({ updatePageProperties: { objectId: page, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: st.bg } } } }, fields: "pageBackgroundFill" } });
+        let y = 0;
+        for (const line of section.lines) {
+          if (line.t === "head") {
+            reqs.push(...T(nid(), PAD, y + 24, PW - PAD * 2, 14, "W E E K L Y   B R I E F I N G", { size: 7.5, bold: true, color: st.muted }, page));
+            reqs.push(...T(nid(), PAD, y + 40, PW - PAD * 2, 30, `${letter}지역 주간 키맨 브리핑`,
+              { size: portrait ? 21 : 24, bold: true, color: st.ink, font: st.titleFont }, page));
+            reqs.push(...T(nid(), PAD, y + 72, PW - PAD * 2, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 9.5, color: st.sub }, page));
+            // 건수를 종류별로 따로
+            const stat = [
+              { label: "담당 변경", n: persons.length },
+              { label: "주소 변경", n: addresses.length },
+              { label: "업체명 변경", n: names.length },
+            ];
+            const cw = (PW - PAD * 2) / 3;
+            stat.forEach((it, i) => {
+              const x = PAD + i * cw;
+              reqs.push(...T(nid(), x, y + 100, cw - 8, 26, String(it.n),
+                { size: 20, bold: true, color: it.n ? st.accent : st.muted }, page));
+              reqs.push(...T(nid(), x + (String(it.n).length * 12 + 6), y + 108, cw - 30, 14, `${it.label}건`,
+                { size: 9, bold: true, color: it.n ? st.sub : st.muted }, page));
+            });
+            reqs.push(...rect(nid(), PAD, y + line.h - 10, PW - PAD * 2, st.ruleThick, st.line, page, 1, "RECTANGLE"));
+          } else if (line.t === "title") {
+            reqs.push(...T(nid(), PAD, y + 12, PW - PAD * 2, 18, `${line.label} 변경 ${line.n}건`,
+              { size: 12.5, bold: true, color: st.accent, font: st.titleFont }, page));
+            reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, st.ruleThick, st.line, page, 1, "RECTANGLE"));
+          } else if (line.t === "row") {
+            const r = line.row;
+            const tx = PAD;
+            const tw = PW - PAD * 2 - 60;
+            chipFor(page, PW - PAD - 44, y + 8, line.kind);
+            reqs.push(...T(nid(), tx, y + 8, tw, 15, clipText(r.company, 24), { size: 10.5, bold: true, color: st.sub }, page));
+            let hero = "", sub = "", before = "";
+            if (line.kind === "주소") {
+              const a = readAddress(r.after_text);
+              hero = a.head || "새 주소 확인";
+              sub = a.full;
+              before = r.before_text ? `이전 ${readAddress(r.before_text).full}` : "";
+            } else if (line.kind === "업체명") {
+              hero = clipText(r.after_text, 18) || "새 상호 확인";
+              before = r.before_text ? `이전 상호 ${clipText(r.before_text, 30)}` : "";
+            } else {
+              const person = readPerson(r.after_text);
+              hero = person.name || "새 담당자";
+              sub = [person.phone, person.note].filter(Boolean).join("   ");
+              const b = r.before_text ? readPerson(r.before_text) : null;
+              before = b ? `이전 ${[b.name, b.phone].filter(Boolean).join("  ")}` : "";
+            }
+            reqs.push(...T(nid(), tx, y + 26, PW - PAD * 2, 30, clipText(hero, portrait ? 20 : 30),
+              { size: portrait ? 23 : 26, bold: true, color: st.ink, font: st.heroFont }, page));
+            if (sub) {
+              reqs.push(...T(nid(), tx, y + (portrait ? 58 : 54), PW - PAD * 2, 18, clipText(sub, portrait ? 34 : 52),
+                { size: 12.5, bold: line.kind === "담당", color: line.kind === "담당" ? st.accent : st.sub }, page));
+            }
+            if (before) {
+              reqs.push(...T(nid(), tx, y + (portrait ? 78 : 70), PW - PAD * 2, 16, clipText(before, portrait ? 38 : 56),
+                { size: 9.5, color: st.muted }, page));
+            }
+            const foot = [dayLabel(r.change_date), gradeLabel(r.grade), clipText(r.reason, 10)].filter(Boolean).join(" · ");
+            reqs.push(...T(nid(), PW - PAD - 150, y + 30, 150, 14, foot, { size: 9.5, bold: true, color: st.muted, align: "END" }, page));
+            if (st.rowRule) reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, 0.7, st.line, page, st.key === "news" ? 0.35 : 1, "RECTANGLE"));
+          } else {
+            const kinds = groups.filter((g) => g.rows.length).map((g) => g.label);
+            const key = kinds[0] === "담당" ? "키맨" : kinds[0] === "주소" ? "주소" : "업체명";
+            const tips = (GREETING_TIPS[key] || []).slice(0, 2);
+            if (st.key === "light") reqs.push(...rect(nid(), PAD, y + 8, PW - PAD * 2, line.h - 18, st.accent, page, 0.07));
+            reqs.push(...T(nid(), PAD + (st.key === "light" ? 14 : 0), y + 20, PW - PAD * 2, 13, "인사 한마디",
+              { size: 9, bold: true, color: st.accent }, page));
+            reqs.push(...T(nid(), PAD + (st.key === "light" ? 14 : 0), y + 36, PW - PAD * 2 - (st.key === "light" ? 28 : 0), line.h - 46,
+              tips.join("\n"), { size: 10, color: st.ink, lineSpacing: 130 }, page));
           }
+          y += line.h;
         }
       });
-
-      if (!shown.length) {
-        reqs.push(...T(nid(), PAD, bodyTop + 40, W - PAD * 2, 24, "지난주에 접수된 담당자·주소 변경이 없습니다 — 평소처럼 방문하시면 됩니다",
-          { size: 13, bold: true, color: SUB, align: "CENTER" }, pageId));
-      }
-
-      // ── 아래 띠: 인사 문구 + 남은 곳 안내
-      const kinds = [persons.length ? "키맨" : "", addresses.length ? "주소" : "", names.length ? "업체명" : ""].filter(Boolean);
-      const tipKey = kinds[0] || "키맨";
-      const tip = (GREETING_TIPS[tipKey] || [])[0] || "";
-      const footTop = H - FOOT;
-      reqs.push(...rect(nid(), PAD, footTop, W - PAD * 2, 40, BAND, pageId));
-      reqs.push(...T(nid(), PAD + 18, footTop + 8, 90, 12, `인사 한마디`, { size: 8.5, bold: true, color: BLUE }, pageId));
-      reqs.push(...T(nid(), PAD + 18, footTop + 21, W - PAD * 2 - 200, 14, tip, { size: 10, color: INK }, pageId));
-      const more = items.length > shown.length ? `외 ${items.length - shown.length}곳은 앱에서 · ` : "";
-      reqs.push(...T(nid(), W - PAD - 250, footTop + 15, 232, 13, `${more}인사 후 🤝 버튼으로 표시`, { size: 8.5, color: MUTED, align: "END" }, pageId));
-
-      // ── 움직이는 브리핑 프레임 (한 화면에 한 가지만, 폰에서 읽히도록 크게)
-      if (animate) {
-        const bg = (page: string, color: typeof NAVY) =>
-          reqs.push({ updatePageProperties: { objectId: page, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: color } } } }, fields: "pageBackgroundFill" } });
-
-        // 표지
-        const cover = framePages[0];
-        bg(cover, NAVY);
-        reqs.push(...rect(nid(), PAD, 96, 84, 5, BLUE, cover, 1, "RECTANGLE"));
-        reqs.push(...T(nid(), PAD, 58, 400, 16, "W E E K L Y   B R I E F I N G", { size: 9.5, bold: true, color: NAVY_SUB }, cover));
-        reqs.push(...T(nid(), PAD, 112, 420, 60, `${letter}지역`, { size: 46, bold: true, color: WHITE }, cover));
-        reqs.push(...T(nid(), PAD, 176, 420, 30, "주간 키맨 브리핑", { size: 21, bold: true, color: NAVY_SUB }, cover));
-        reqs.push(...T(nid(), PAD, 214, 420, 20, `${week.label} 접수분`, { size: 12, color: NAVY_SUB }, cover));
-        reqs.push(...T(nid(), W - PAD - 300, 92, 250, 130, String(items.length), { size: 108, bold: true, color: WHITE, align: "END" }, cover));
-        reqs.push(...T(nid(), W - PAD - 44, 158, 44, 40, "곳", { size: 26, bold: true, color: NAVY_SUB }, cover));
-        reqs.push(...T(nid(), W - PAD - 320, 232, 320, 22, items.length ? "이번 주 인사 대상" : "지난주 변경 없음", { size: 13, bold: true, color: NAVY_SUB, align: "END" }, cover));
-        reqs.push(...T(nid(), PAD, H - 46, 500, 18, "방문하시면 인사 한마디 부탁드립니다 · 퍼스트전산 CS", { size: 11, color: NAVY_SUB }, cover));
-
-        // 곳마다 한 화면
-        frameItems.forEach((it, i) => {
-          const page = framePages[i + 1];
-          bg(page, WHITE);
-          const tone = it.kind === "키맨" ? BLUE : it.kind === "주소" ? MINT : SUB;
-          reqs.push(...rect(nid(), 0, 0, 12, H, tone, page, 1, "RECTANGLE"));
-
-          reqs.push(...rect(nid(), PAD, 34, 56, 22, tone, page));
-          reqs.push(...T(nid(), PAD, 39, 56, 14, it.kind, { size: 9.5, bold: true, color: WHITE, align: "CENTER" }, page));
-          reqs.push(...T(nid(), W - PAD - 200, 30, 200, 32, dayLabel(it.row.change_date), { size: 22, bold: true, color: MUTED, align: "END" }, page));
-          reqs.push(...T(nid(), W - PAD - 220, 62, 220, 18,
-            [gradeLabel(it.row.grade), clipText(it.row.reason, 12), it.row.author].filter(Boolean).join("  ·  "),
-            { size: 11, color: MUTED, align: "END" }, page));
-
-          reqs.push(...T(nid(), PAD, 74, W - PAD * 2, 22, clipText(it.row.company, 34), { size: 15, bold: true, color: SUB }, page));
-
-          if (it.kind === "주소") {
-            const a = readAddress(it.row.after_text);
-            reqs.push(...T(nid(), PAD, 100, W - PAD * 2, 56, clipText(a.head, 20) || "새 주소 확인 필요", { size: 38, bold: true, color: INK }, page));
-            reqs.push(...T(nid(), PAD, 162, W - PAD * 2, 24, a.full, { size: 15, color: SUB }, page));
-            if (it.row.before_text) {
-              reqs.push(...T(nid(), PAD, 196, W - PAD * 2, 20, `이전  ${readAddress(it.row.before_text).full}`, { size: 12.5, color: MUTED }, page));
-            }
-          } else if (it.kind === "업체명") {
-            reqs.push(...T(nid(), PAD, 100, W - PAD * 2, 58, clipText(it.row.after_text, 18) || "새 상호 확인 필요", { size: 40, bold: true, color: INK }, page));
-            reqs.push(...T(nid(), PAD, 168, W - PAD * 2, 22, `이전 상호  ${clipText(it.row.before_text, 30)}`, { size: 14, color: MUTED }, page));
-          } else {
-            const person = readPerson(it.row.after_text);
-            reqs.push(...T(nid(), PAD, 98, W - PAD * 2, 62, person.name || "새 담당자", { size: 44, bold: true, color: INK }, page));
-            reqs.push(...T(nid(), PAD, 166, W - PAD * 2, 28, person.phone || "연락처 확인 필요", { size: 22, bold: true, color: BLUE }, page));
-            if (person.note) reqs.push(...T(nid(), PAD, 198, W - PAD * 2, 20, person.note, { size: 12.5, color: SUB }, page));
-            if (it.row.before_text) {
-              const before = readPerson(it.row.before_text);
-              reqs.push(...T(nid(), PAD, 224, W - PAD * 2, 20,
-                `이전  ${[before.name, before.phone].filter(Boolean).join("  ")}`, { size: 12.5, color: MUTED }, page));
-            }
-          }
-
-          // 아래 띠: 그 종류에 맞는 인사 문구 + 몇 번째인지
-          const line = (GREETING_TIPS[it.kind] || [])[0] || "";
-          reqs.push(...rect(nid(), 0, H - 76, W, 76, BAND, page, 1, "RECTANGLE"));
-          reqs.push(...T(nid(), PAD, H - 60, 200, 16, "인사 한마디", { size: 10, bold: true, color: BLUE }, page));
-          reqs.push(...T(nid(), PAD, H - 42, W - PAD * 2 - 110, 22, line, { size: 13.5, color: INK }, page));
-          reqs.push(...T(nid(), W - PAD - 110, H - 58, 110, 20, `${i + 1} / ${frameItems.length}`, { size: 13, bold: true, color: MUTED, align: "END" }, page));
-        });
-
-        // 마무리
-        const last = framePages[framePages.length - 1];
-        bg(last, NAVY);
-        reqs.push(...rect(nid(), PAD, 92, 84, 5, BLUE, last, 1, "RECTANGLE"));
-        reqs.push(...T(nid(), PAD, 56, 500, 20, "H O W   T O   G R E E T", { size: 9.5, bold: true, color: NAVY_SUB }, last));
-        reqs.push(...T(nid(), PAD, 108, W - PAD * 2, 40, "방문하시면 이렇게 한마디", { size: 28, bold: true, color: WHITE }, last));
-        const closing = [
-          persons.length ? (GREETING_TIPS["키맨"] || [])[0] : "",
-          addresses.length ? (GREETING_TIPS["주소"] || [])[0] : "",
-          names.length ? (GREETING_TIPS["업체명"] || [])[0] : "",
-          (GREETING_TIPS["키맨"] || [])[1],
-        ].filter(Boolean).slice(0, 3);
-        reqs.push(...T(nid(), PAD, 162, W - PAD * 2, 120, closing.map((t) => `· ${t}`).join("\n"), { size: 14, color: NAVY_SUB, lineSpacing: 150 }, last));
-        reqs.push(...T(nid(), PAD, H - 52, 520, 20, "인사 후 FIELD·워킨맵에서 🤝 버튼으로 표시해 주세요", { size: 12, color: NAVY_SUB }, last));
-        reqs.push(...T(nid(), W - PAD - 220, H - 52, 220, 20, "퍼스트전산 CS", { size: 12, bold: true, color: WHITE, align: "END" }, last));
-      }
 
       const batch = await fetch(`${SLIDES}/${presentationId}:batchUpdate`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -554,8 +552,7 @@ Deno.serve(async (req) => {
         }, { headers: jsonHeaders });
       }
 
-      // ── 슬라이드 → PNG 썸네일
-      // 좌표 사고를 겪은 뒤로는 한 번에 잘 나온다. 그래도 첫 장은 3초 기다리고, 너무 작으면 한 번 더 받는다.
+      // ── 슬라이드 → PNG (조각마다 필요한 높이만 잘라 위아래로 이어 붙인다)
       const shot = async (page: string): Promise<Uint8Array | null> => {
         for (let attempt = 0; attempt < 3; attempt++) {
           const thumb = await fetch(`${SLIDES}/${presentationId}/pages/${page}/thumbnail?thumbnailProperties.mimeType=PNG&thumbnailProperties.thumbnailSize=LARGE`, {
@@ -564,16 +561,12 @@ Deno.serve(async (req) => {
           if (thumb.ok) {
             const { contentUrl } = await thumb.json();
             const buf = new Uint8Array(await (await fetch(contentUrl)).arrayBuffer());
-            if (buf.byteLength > 8000) return buf;   // 8KB 미만이면 아직 덜 그려진 그림
+            if (buf.byteLength > 6000) return buf;   // 너무 작으면 아직 덜 그려진 그림
           }
           await new Promise((resolve) => setTimeout(resolve, 3000));
         }
         return null;
       };
-
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const png = await shot(pageId);
-      if (!png) return Response.json({ error: "이미지 변환 실패(썸네일을 못 받음)" }, { status: 502, headers: jsonHeaders });
 
       const store = async (path: string, bytes: Uint8Array, mime: string) => {
         const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/storage/v1/object/${path}`, {
@@ -584,48 +577,40 @@ Deno.serve(async (req) => {
         return res.ok;
       };
 
-      const pngPath = `keyman/${week.from}_${letter}.png`;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const { Image } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+      const SCALE = 900 / H;                        // 썸네일(1600×900) 배율
+      const colW = Math.round(PW * SCALE);
+      const pieces: Array<InstanceType<typeof Image>> = [];
+      for (let i = 0; i < sections.length; i++) {
+        const buf = await shot(sectionPages[i]);
+        if (!buf) return Response.json({ error: `이미지 변환 실패(${i + 1}번째 조각)` }, { status: 502, headers: jsonHeaders });
+        const img = await Image.decode(buf);
+        const cutH = Math.max(40, Math.min(img.height, Math.round(sections[i].h * SCALE)));
+        pieces.push(img.crop(0, 0, Math.min(img.width, colW), cutH));
+      }
+      const totalH = pieces.reduce((n, p) => n + p.height, 0);
+      const canvas = new Image(colW, totalH);
+      canvas.fill(Image.rgbToColor(Math.round(st.bg.red * 255), Math.round(st.bg.green * 255), Math.round(st.bg.blue * 255)));
+      let oy = 0;
+      for (const piece of pieces) { canvas.composite(piece, 0, oy); oy += piece.height; }
+      const png = await canvas.encode();
+
+      const suffix = st.key === "light" ? "" : `_${st.key}`;
+      const pngPath = `keyman/${week.from}_${letter}${suffix}.png`;
       if (!await store(`photos/${pngPath}`, png, "image/png")) {
         return Response.json({ error: "이미지 저장 실패" }, { status: 502, headers: jsonHeaders });
       }
-      let url = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
-      let gifUrl = "";
-
-      // ── 움직이는 GIF (표지 → 곳마다 → 마무리)
-      if (animate && framePages.length) {
-        const { Image, GIF, Frame } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
-        const frames: InstanceType<typeof Frame>[] = [];
-        for (let i = 0; i < framePages.length; i++) {
-          const buf = await shot(framePages[i]);
-          if (!buf) continue;
-          const img = await Image.decode(buf);
-          img.resize(880, 495);                       // 파일 크기와 읽기 편함의 균형
-          const isCover = i === 0;
-          const isLast = i === framePages.length - 1;
-          frames.push(Frame.from(img, isCover ? 2200 : isLast ? 3200 : 2800)); // 머무는 시간(ms)
-        }
-        if (frames.length >= 2) {
-          const gif = new GIF(frames, -1);            // -1 = 무한 반복
-          const bytes = await gif.encode();
-          const gifPath = `keyman/${week.from}_${letter}.gif`;
-          if (await store(`photos/${gifPath}`, bytes, "image/gif")) {
-            gifUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${gifPath}`;
-            url = gifUrl;                             // 발송은 움직이는 쪽으로
-          }
-        }
-      }
-
-      // 슬라이드 원본은 지운다 (서비스 계정 드라이브에 쌓이지 않게)
-      await fetch(`${DRIVE}/${presentationId}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined);
+      const url = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
 
       // ── 눌러서 보는 안내문: 우리 도메인의 정적 페이지(public/brief)
       //   Supabase는 저장소·엣지 함수 응답을 text/plain + 샌드박스로 강제해 HTML을 못 띄운다(실측).
       //   그 페이지는 열 때마다 데이터를 직접 읽으므로 링크가 낡지 않는다.
-      const posterUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/photos/${pngPath}`;
+      const posterUrl = url;
       const pageUrl = `${APP_URL}/brief/?r=${letter}&w=${week.from}`; // 눌러서 보는 안내문(원하면 문구에 쓸 수 있다)
 
-      const entry: { region: string; url: string; gif?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
-        region: letter, url, gif: gifUrl || undefined, poster: posterUrl, page: pageUrl || undefined,
+      const entry: { region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
+        region: letter, url, style: st.key, poster: posterUrl, page: pageUrl || undefined,
         counts: { 키맨: persons.length, 주소: addresses.length, 업체명: names.length },
       };
 
