@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "eb42e30aa3",
+    "date": "2026-08-30",
+    "note": "점검 전송 후 완료 팝업 생략 + 포스터 '기사님' → 'CS'"
+  },
+  {
     "hash": "a4c74e4520",
     "date": "2026-08-30",
     "note": "네이버 캘린더 \"찾지 못했습니다\"·이름 동기화 실패 수리 — 일정 위치를 직접 찾는다"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ab7558cb1e",
     "date": "2026-08-15",
     "note": "캘린더 6종 개선 — E·종일 팀 선택, 행 높이, 사이드 필터 복귀(다크 칩), 분류 정렬, 달력 라벨, 지역구 컬럼"
-  },
-  {
-    "hash": "84d621bb22",
-    "date": "2026-08-15",
-    "note": "목록 행 좌측을 '팀 (시간)' 한 칸으로 — 우측 팀 칸 제거, 오후12시 표기, 필터 칩에 시간"
   }
 ];

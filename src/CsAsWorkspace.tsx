@@ -501,7 +501,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
-  const [midReport, setMidReport] = useState<{ team: Team; text: string; polishing?: boolean; diag?: string } | null>(null);
+  const [midReport, setMidReport] = useState<{ team: Team; day: "today" | "next"; text: string; polishing?: boolean; diag?: string } | null>(null);
   const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
   // 팀 전용 캘린더가 보여줄 팀 — 작성자의 팀(팀장은 칩으로 선택). 명단에 없는 사람은 현재 팀 필터, 그것도 없으면 C
   const [teamCalTeam, setTeamCalTeam] = useState<Team | null>(null);
@@ -1131,7 +1131,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
    * 규칙: 완료된 건은 자동으로 빠진다(완료 여부를 눈으로 대조하던 일이 이 기능의 이유).
    *       오늘 연기 처리한 건은 '익일변경'에 → 날짜와 함께. 진행중 * 표시는 사람이 아는 것이라 손으로.
    */
-  const buildMidReport = (reportTeam: Team) => {
+  const buildMidReport = (reportTeam: Team, day: "today" | "next" = "today") => {
+    const targetYmd = day === "next" ? tomorrowYmd : todayYmd;
     // 필수 일정만 — 자동일정으로 만든 점검 동선(source=autoplan)과 매월점검은 개인 계획이지 보고 대상이 아니다
     const teamTickets = tickets.filter((ticket) =>
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
@@ -1168,10 +1169,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", category, cut(issue, 14)].filter(Boolean).join(" ");
     };
     const todays = teamTickets.filter((ticket) =>
-      ticket.date === todayYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
-    // 담당자가 아직 없는 AS 접수 건(제목에도 이름 없음) — "#미배정"으로 묶어 빠뜨리지 않는다 (이름 없는 납품은 물류 몫이라 제외)
+      ticket.date === targetYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
+    // 담당자가 아직 없는 건 — "#미배정"으로 묶어 빠뜨리지 않는다.
+    // 금일 보고는 이름 없는 납품을 뺀다(물류 몫). 익일 보고는 물류까지 전부 — 누락을 눈으로 잡아 직접 지우는 쪽이 안전하다(2026-08-28 요청)
     const unassigned = teamTickets.filter((ticket) =>
-      ticket.date === todayYmd && ticket.status !== "완료" && !assigneeOf(ticket) && !isLogistics(ticket));
+      ticket.date === targetYmd && ticket.status !== "완료" && !assigneeOf(ticket) && (day === "next" || !isLogistics(ticket)));
     const groups: string[] = [];
     for (const name of order) {
       const mine = todays.filter((ticket) => assigneeOf(ticket) === name);
@@ -1183,6 +1185,21 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (unassigned.length) {
       if (groups.length) groups.push("");
       groups.push("#미배정", ...unassigned.map(lineOf));
+    }
+    if (day === "next") {
+      // 익일스케줄 보고 — 내일 일정만, 미배정 포함 전부. 퇴근 전에 보내는 별도 보고(2026-08-28 요청)
+      return [
+        `${reportStamp()} 익일스케줄 보고`,
+        `(${Number(tomorrowYmd.slice(5, 7))}/${Number(tomorrowYmd.slice(8, 10))} 예정 — 누락·변경은 보내기 전에 직접 수정)`,
+        "",
+        REPORT_SEP,
+        "익일 처리예정",
+        "",
+        ...(groups.length ? groups : ["없음"]),
+        "",
+        REPORT_SEP,
+        "특이사항",
+      ].join("\n");
     }
     // 익일일정 — 다음 영업일에 잡힌 팀 일정 전부. 누가 갈지 아직 모르니 이름 없이 적는다.
     // 오늘 익일로 넘긴 건도 날짜가 내일이면 자연히 여기 들어오고, 이름 없는 납품은 물류 몫이라 금일과 같은 기준으로 뺀다.
@@ -1219,8 +1236,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
    * 보고 열기·재생성 — 규칙 기반 본문을 즉시 띄우고, AI(report-polish)가 줄을 사람 수준으로
    * 다듬어 교체한다("쇼군웨이크스노우보드 3220 용지제거 후 소음"). 실패하면 규칙 기반 그대로.
    */
-  const composeMidReport = (reportTeam: Team) => {
+  const composeMidReport = (reportTeam: Team, day: "today" | "next" = "today") => {
     const seq = ++midReportSeq.current;
+    const targetYmd = day === "next" ? tomorrowYmd : todayYmd;
     // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
     const order = reportOrder(reportTeam);
     const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
@@ -1230,23 +1248,24 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
     const pending = [
       ...order.flatMap((name) =>
-        eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료" && assigneeOf(ticket) === name)
+        eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료" && assigneeOf(ticket) === name)
           .map((ticket) => ({ name, ticket }))),
-      ...eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료" && !assigneeOf(ticket) && !isLogistics(ticket))
+      ...eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료" && !assigneeOf(ticket) && (day === "next" || !isLogistics(ticket)))
         .map((ticket) => ({ name: "미배정", ticket })),
     ];
-    const tomorrows = eligible.filter((ticket) =>
+    // 익일스케줄 보고에는 익일일정·연기 꼬리 섹션이 없다 — 본문이 곧 익일이다
+    const tomorrows = day === "next" ? [] : eligible.filter((ticket) =>
       ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
-    const deferredLater = eligible.filter((ticket) =>
+    const deferredLater = day === "next" ? [] : eligible.filter((ticket) =>
       ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
       && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
     // 진단 줄 — "왜 안 뜨지?"를 원격으로 잡기 위한 단계별 건수 (모달에만 표시, 복사 안 됨)
-    const todayAll = tickets.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
-    const todayTeam = eligible.filter((ticket) => ticket.date === todayYmd && ticket.status !== "완료");
+    const todayAll = tickets.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료");
+    const todayTeam = eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료");
     const diag = pending.length ? undefined
-      : `오늘 ${todayYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 0건 · 명단 ${order.join("·")}`;
+      : `${day === "next" ? "익일" : "오늘"} ${targetYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 0건 · 명단 ${order.join("·")}`;
     // 규칙 기반 초안은 화면에 먼저 보여주지 않는다 — 거친 줄이 헷갈리게 한다. AI 실패 시의 대체본으로만 쓴다.
-    const draft = buildMidReport(reportTeam);
+    const draft = buildMidReport(reportTeam, day);
     const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
       vendor: ticket.vendor,
       title: ticket.calendarTitle || "",
@@ -1256,8 +1275,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       category: extractCategory(ticket.vendor, ticket.calendarTitle, reportAssignee(ticket, order)),
       kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
     }));
-    if (!payload.length) { setMidReport({ team: reportTeam, text: draft, polishing: false, diag }); return; }
-    setMidReport({ team: reportTeam, text: "", polishing: true, diag });
+    if (!payload.length) { setMidReport({ team: reportTeam, day, text: draft, polishing: false, diag }); return; }
+    setMidReport({ team: reportTeam, day, text: "", polishing: true, diag });
     const fallback = () => setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text: draft, polishing: false } : cur));
     void invokeEdgeFunction<{ lines: string[] }>("report-polish", { lines: payload })
       .then((res) => {
@@ -1278,7 +1297,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           ...tomorrows.map(() => `•${res.lines[index++]}`),
           ...deferredLater.map((ticket) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
         ];
-        const text = [
+        const text = (day === "next" ? [
+          `${reportStamp()} 익일스케줄 보고`,
+          `(${Number(tomorrowYmd.slice(5, 7))}/${Number(tomorrowYmd.slice(8, 10))} 예정 — 누락·변경은 보내기 전에 직접 수정)`,
+          "",
+          REPORT_SEP,
+          "익일 처리예정",
+          "",
+          ...(groups.length ? groups : ["없음"]),
+          "",
+          REPORT_SEP,
+          "특이사항",
+        ] : [
           `${reportStamp()} 중간보고`,
           "(진행중인 업무는 * 표시)",
           "",
@@ -1293,14 +1323,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           "",
           REPORT_SEP,
           "특이사항",
-        ].join("\n");
+        ]).join("\n");
         setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));
       })
       .catch(fallback);
   };
-  const openMidReport = () => {
+  const openMidReport = (day: "today" | "next" = "today") => {
     const myTeam = (Object.keys(teamAssignees) as Team[]).find((t) => teamAssignees[t].includes(author)) || (teams.includes(team as Team) ? team as Team : "C");
-    composeMidReport(myTeam);
+    composeMidReport(myTeam, day);
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
@@ -1745,8 +1775,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   );
                 })}
                 {/* 중간보고 — 12시·14시 카톡 보고 자동 생성 */}
-                <button type="button" onClick={openMidReport}
+                <button type="button" onClick={() => openMidReport()}
                   className="ml-auto shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
+                {/* 익일스케줄 보고 — 내일 일정 전부(미배정 포함), 퇴근 전 카톡 보고 */}
+                <button type="button" onClick={() => openMidReport("next")}
+                  className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">🌙 익일스케줄</button>
                 <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
                   {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
                 </span>
@@ -2153,14 +2186,16 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
               <div>
-                <div className="text-[15px] font-black text-white">중간보고 생성</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 보고를 만드는 중…" : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
+                <div className="text-[15px] font-black text-white">{midReport.day === "next" ? "익일스케줄 보고" : "중간보고"} 생성</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 보고를 만드는 중…"
+                  : midReport.day === "next" ? "내일 일정 전부입니다(미배정 포함) — 누락 건은 직접 추가하고 복사하세요"
+                  : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
               </div>
               <button type="button" onClick={() => setMidReport(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
               {teams.map((value) => (
-                <button key={value} type="button" onClick={() => composeMidReport(value)}
+                <button key={value} type="button" onClick={() => composeMidReport(value, midReport.day)}
                   className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{value}팀</button>
               ))}
             </div>
@@ -2168,9 +2203,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             <textarea value={midReport.text} readOnly={midReport.polishing} placeholder="🤖 AI가 보고를 만드는 중… 몇 초만 기다려 주세요" onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
               className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
-              <button type="button" onClick={() => composeMidReport(midReport.team)}
+              <button type="button" onClick={() => composeMidReport(midReport.team, midReport.day)}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">다시 생성</button>
-              <button type="button" disabled={midReport.polishing} onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify("중간보고를 복사했습니다 — 카톡방에 붙여넣으세요 ✓", "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
+              <button type="button" disabled={midReport.polishing} onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify(`${midReport.day === "next" ? "익일스케줄 보고" : "중간보고"}를 복사했습니다 — 카톡방에 붙여넣으세요 ✓`, "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{midReport.polishing ? "생성 중…" : "복사"}</button>
             </div>
           </div>

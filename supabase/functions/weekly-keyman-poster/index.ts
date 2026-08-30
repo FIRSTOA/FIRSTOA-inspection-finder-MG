@@ -686,7 +686,13 @@ Deno.serve(async (req) => {
 
       if (action === "run") {
         const mapRows = await (await fetch(`${restBase}/room_map?select=region,room&category=eq.${encodeURIComponent("점검")}`, { headers: restHeaders })).json();
-        const room = (Array.isArray(mapRows) ? mapRows : []).find((r: { region: string }) => String(r.region).trim().toUpperCase() === letter)?.room;
+        let room = (Array.isArray(mapRows) ? mapRows : []).find((r: { region: string }) => String(r.region).trim().toUpperCase() === letter)?.room;
+        // 앱의 테스트방 모드를 존중 — TEST_MODE=true면 모든 발송이 테스트방으로 (src/api.ts와 같은 규칙)
+        const cfgRows = await (await fetch(`${restBase}/app_config?select=key,value&key=in.(TEST_MODE,TEST_ROOM)`, { headers: restHeaders })).json();
+        const cfg = Object.fromEntries((Array.isArray(cfgRows) ? cfgRows : []).map((r: { key: string; value: string }) => [r.key, r.value]));
+        const testMode = String(cfg.TEST_MODE ?? "true").toLowerCase() === "true";
+        const realRoom = room;
+        if (testMode && room) room = String(cfg.TEST_ROOM || "테스트 전용방").trim();
         if (room) {
           // 봇(알림 답장)은 글자만 보낼 수 있다 — 그림은 PC가 붙여 보내고, 글에는 눌러지는 안내문 링크를 담는다
           const brief = [
@@ -700,14 +706,14 @@ Deno.serve(async (req) => {
             ...shownBrief,
             brief.length > shownBrief.length ? `외 ${brief.length - shownBrief.length}곳` : "",
           ].filter(Boolean).join("\n") + "\n\n👇 한 장 요약 (눌러서 크게 보기)";
-          const text = `${head}\n${url}`; // url = 사진(정지 이미지). 카톡이 미리보기 썸네일을 붙여 준다
+          const text = `${testMode ? `[테스트 · 원래는 ${realRoom}]\n` : ""}${head}\n${url}`; // url = 사진. 카톡이 미리보기 썸네일을 붙여 준다
           entry.room = room;
           entry.text = text;
           if (body.dry) { entry.queued = false; } // 실제 발송 없이 방·문구만 확인
           else {
             await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...restHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
             entry.queued = true;
-            queuedAny = true;
+            if (!testMode) queuedAny = true; // 테스트 발송은 '보냈음' 표시를 남기지 않는다
           }
         }
       }
