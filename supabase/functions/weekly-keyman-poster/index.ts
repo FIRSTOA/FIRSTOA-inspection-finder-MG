@@ -553,10 +553,10 @@ Deno.serve(async (req) => {
               const a = readAddress(r.after_text);
               hero = a.head || "새 주소 확인";
               sub = a.full;
-              before = r.before_text ? `이전 ${readAddress(r.before_text).full}` : "";
+              before = r.before_text ? `옛 주소  ${readAddress(r.before_text).full}` : ""; // "이전"은 移轉으로 읽혀 헷갈린다
             } else if (line.kind === "업체명") {
               hero = clipText(r.after_text, 18) || "새 상호 확인";
-              before = r.before_text ? `이전 상호 ${clipText(r.before_text, 30)}` : "";
+              before = r.before_text ? `옛 상호  ${clipText(r.before_text, 30)}` : "";
             } else {
               const person = readPerson(r.after_text);
               hero = person.name || "새 담당자";
