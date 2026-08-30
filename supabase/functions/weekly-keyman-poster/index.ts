@@ -127,8 +127,26 @@ function readPerson(text: string): { name: string; phone: string; note: string }
 function readAddress(text: string): { head: string; full: string } {
   const one = String(text || "").replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim();
   const cut = one.replace(/^(서울특별시|서울시|서울|경기도|경기|인천광역시|인천)\s*/, "");
-  return { head: clipText(cut, 24), full: clipText(one, 54) };
+  // 제목 칸에는 '구 + 동(로·길)' 만 — 전체 주소는 아래 줄에서 보여 준다
+  const m = cut.match(/([가-힣]+(?:구|군|시))\s+([가-힣0-9]+(?:동|읍|면|리|로\d*|길))/);
+  const head = m ? `${m[1]} ${m[2]}` : cut.split(" ").slice(0, 2).join(" ");
+  return { head: clipText(head, 14), full: clipText(one, 54) };
 }
+
+/** 등급 색 — S는 금색, 아래로 갈수록 차분하게. 등급이 중요하다는 요청(2026-08-28) */
+const GRADE_COLORS: Record<string, Rgb> = {
+  "특S": { red: 1, green: 0.773, blue: 0.239 },
+  S: { red: 1, green: 0.773, blue: 0.239 },
+  A: { red: 0.298, green: 0.576, blue: 1 },
+  B: { red: 0.204, green: 0.827, blue: 0.600 },
+  C: { red: 0.596, green: 0.663, blue: 0.749 },
+  D: { red: 0.478, green: 0.537, blue: 0.624 },
+};
+/** 배지로 세울 수 있는 글자 등급만 (유지보수·임대 같은 계약형태는 오른쪽 꼬리말로) */
+const letterGrade = (v: string) => {
+  const g = String(v || "").trim().toUpperCase().replace("특S", "특S");
+  return /^(특S|S|A|B|C|D)$/.test(g) ? g : "";
+};
 
 /** 카드에 보일 만한 등급·계약형태만 남긴다 — 시트 등급 열에는 'NN'처럼 뜻 없는 값도 섞여 있다 */
 function gradeLabel(value: string): string {
@@ -185,12 +203,18 @@ type Style = {
   chip: "solid" | "tint" | "text";
   ruleThick: number;      // 묶음 제목 아래 선 두께
   rowRule: boolean;       // 줄 사이 얇은 선
+  wm?: Rgb;               // 머리에 깔리는 큰 지역 글자
+  gradeBadge?: boolean;   // 등급을 왼쪽 배지로 크게 (등급이 중요하다는 요청)
+  edgeBar?: boolean;      // 줄 왼쪽 끝 강조 바
+  heroSize?: number;      // 이름 크기
+  countsBig?: boolean;    // 건수 숫자를 크게
 };
 const hx = (v: string): Rgb => ({
   red: parseInt(v.slice(1, 3), 16) / 255,
   green: parseInt(v.slice(3, 5), 16) / 255,
   blue: parseInt(v.slice(5, 7), 16) / 255,
 });
+const DEFAULT_STYLE = "bold"; // 2026-08-28 선택: 짙은 남색 + 등급 배지
 const STYLES: Record<string, Style> = {
   // 1) 밝고 하얀 — 후지리포토 같은 흰 바탕, 강조는 파랑 하나
   light: {
@@ -201,8 +225,9 @@ const STYLES: Record<string, Style> = {
   // 2) 진한 배경 — 화면 전체가 짙은 남색, 큰 흰 글씨
   bold: {
     key: "bold",
-    bg: hx("#101A2E"), ink: hx("#FFFFFF"), sub: hx("#9FB0C9"), muted: hx("#7C8DA8"),
-    line: hx("#22314C"), accent: hx("#5B9DFF"), chip: "tint", ruleThick: 1.4, rowRule: false,
+    bg: hx("#0D1626"), ink: hx("#FFFFFF"), sub: hx("#9FB0C9"), muted: hx("#77899F"),
+    line: hx("#24344F"), accent: hx("#4C93FF"), chip: "tint", ruleThick: 2, rowRule: true,
+    wm: hx("#16233A"), gradeBadge: true, heroSize: 27, countsBig: true,
   },
   // 4) 부드러운 민트 — 밝고 친근한 톤, 라운드 알약
   soft: {
@@ -397,7 +422,7 @@ Deno.serve(async (req) => {
       // ── 세로 사진 만들기 ────────────────────────────────────────
       //   슬라이드는 16:9 가로로 고정이라 판형을 못 바꾼다. 그래서 내용을 **조각(section)** 으로 나눠
       //   여러 장에 그린 뒤, 썸네일을 필요한 만큼 잘라 위아래로 이어 붙여 세로 사진을 만든다.
-      const st = STYLES[String(body.style || "light")] || STYLES.light;
+      const st = STYLES[String(body.style || DEFAULT_STYLE)] || STYLES[DEFAULT_STYLE];
       const portrait = body.portrait !== false;
       const PW = portrait ? 440 : 720;      // 그리는 폭(PT) — 세로는 좁은 단
       const PAD = portrait ? 30 : 40;
@@ -409,13 +434,13 @@ Deno.serve(async (req) => {
         | { t: "title"; h: number; label: string; n: number }
         | { t: "row"; h: number; row: ChangeRow; kind: "담당" | "주소" | "업체명" }
         | { t: "tips"; h: number };
-      const ROW_H = portrait ? 104 : 78;
+      const ROW_H = portrait ? 118 : 80;
       const groups: Array<{ label: "담당" | "주소" | "업체명"; rows: ChangeRow[] }> = [
         { label: "담당", rows: persons },
         { label: "주소", rows: addresses },
         { label: "업체명", rows: names },
       ];
-      const lines: Line[] = [{ t: "head", h: portrait ? 136 : 116 }];
+      const lines: Line[] = [{ t: "head", h: portrait ? (st.wm ? 182 : 142) : 120 }];
       for (const g of groups) {
         if (!g.rows.length) continue;
         lines.push({ t: "title", h: 36, label: g.label, n: g.rows.length });
@@ -442,54 +467,62 @@ Deno.serve(async (req) => {
       }
 
       // ── 그리기
-      const chipFor = (page: string, x: number, y: number, label: string) => {
-        const w = 44;
-        if (st.chip === "solid") {
-          reqs.push(...rect(nid(), x, y, w, 18, st.accent, page));
-          reqs.push(...T(nid(), x, y + 4, w, 12, label, { size: 8, bold: true, color: st.bg, align: "CENTER" }, page));
-        } else if (st.chip === "tint") {
-          reqs.push(...rect(nid(), x, y, w, 18, st.accent, page, 0.18));
-          reqs.push(...T(nid(), x, y + 4, w, 12, label, { size: 8, bold: true, color: st.accent, align: "CENTER" }, page));
-        } else {
-          reqs.push(...T(nid(), x, y + 3, w, 13, label, { size: 8.5, bold: true, color: st.accent }, page));
-        }
-      };
-
       sections.forEach((section, si) => {
         const page = sectionPages[si];
         reqs.push({ updatePageProperties: { objectId: page, pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: st.bg } } } }, fields: "pageBackgroundFill" } });
         let y = 0;
         for (const line of section.lines) {
           if (line.t === "head") {
-            reqs.push(...T(nid(), PAD, y + 24, PW - PAD * 2, 14, "W E E K L Y   B R I E F I N G", { size: 7.5, bold: true, color: st.muted }, page));
-            reqs.push(...T(nid(), PAD, y + 40, PW - PAD * 2, 30, `${letter}지역 주간 키맨 브리핑`,
-              { size: portrait ? 21 : 24, bold: true, color: st.ink, font: st.titleFont }, page));
-            reqs.push(...T(nid(), PAD, y + 72, PW - PAD * 2, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 9.5, color: st.sub }, page));
-            // 건수를 종류별로 따로
+            // 큰 지역 글자를 뒤에 깔아 임팩트를 준다
+            if (st.wm) reqs.push(...T(nid(), PW - PAD - 150, y + 6, 150, 130, letter, { size: 104, bold: true, color: st.wm, align: "END" }, page));
+            reqs.push(...T(nid(), PAD, y + 26, PW - PAD * 2, 14, "W E E K L Y   B R I E F I N G", { size: 7.5, bold: true, color: st.muted }, page));
+            reqs.push(...T(nid(), PAD, y + 42, PW - PAD * 2 - (st.wm ? 90 : 0), 32, `${letter}지역`,
+              { size: portrait ? 30 : 32, bold: true, color: st.accent, font: st.titleFont }, page));
+            reqs.push(...T(nid(), PAD, y + 76, PW - PAD * 2 - (st.wm ? 60 : 0), 24, "주간 키맨 브리핑",
+              { size: portrait ? 20 : 22, bold: true, color: st.ink, font: st.titleFont }, page));
+            reqs.push(...T(nid(), PAD, y + 104, PW - PAD * 2, 16, `${week.label} 접수분 · 방문하시면 인사 한마디 부탁드립니다`, { size: 9.5, color: st.sub }, page));
+            // 건수는 종류별로 따로 — 칸을 나눠 숫자를 크게
             const stat = [
               { label: "담당 변경", n: persons.length },
               { label: "주소 변경", n: addresses.length },
               { label: "업체명 변경", n: names.length },
             ];
+            const big = st.countsBig ? 26 : 20;
+            const statY = y + line.h - (st.countsBig ? 60 : 48);
             const cw = (PW - PAD * 2) / 3;
             stat.forEach((it, i) => {
               const x = PAD + i * cw;
-              reqs.push(...T(nid(), x, y + 100, cw - 8, 26, String(it.n),
-                { size: 20, bold: true, color: it.n ? st.accent : st.muted }, page));
-              reqs.push(...T(nid(), x + (String(it.n).length * 12 + 6), y + 108, cw - 30, 14, `${it.label}건`,
-                { size: 9, bold: true, color: it.n ? st.sub : st.muted }, page));
+              if (i > 0) reqs.push(...rect(nid(), x - 8, statY + 4, 0.8, 28, st.line, page, 1, "RECTANGLE"));
+              reqs.push(...T(nid(), x, statY, cw - 10, big + 8, String(it.n),
+                { size: big, bold: true, color: it.n ? st.accent : st.muted }, page));
+              reqs.push(...T(nid(), x, statY + big + 4, cw - 10, 14, `${it.label}건`,
+                { size: 8.5, bold: true, color: it.n ? st.sub : st.muted }, page));
             });
-            reqs.push(...rect(nid(), PAD, y + line.h - 10, PW - PAD * 2, st.ruleThick, st.line, page, 1, "RECTANGLE"));
+            reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, st.ruleThick, st.accent, page, st.key === "bold" ? 1 : 0.9, "RECTANGLE"));
           } else if (line.t === "title") {
             reqs.push(...T(nid(), PAD, y + 12, PW - PAD * 2, 18, `${line.label} 변경 ${line.n}건`,
               { size: 12.5, bold: true, color: st.accent, font: st.titleFont }, page));
             reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, st.ruleThick, st.line, page, 1, "RECTANGLE"));
           } else if (line.t === "row") {
             const r = line.row;
-            const tx = PAD;
-            const tw = PW - PAD * 2 - 60;
-            chipFor(page, PW - PAD - 44, y + 8, line.kind);
-            reqs.push(...T(nid(), tx, y + 8, tw, 15, clipText(r.company, 24), { size: 10.5, bold: true, color: st.sub }, page));
+            const badge = st.gradeBadge ? letterGrade(r.grade) : "";
+            const badgeW = st.gradeBadge ? 40 : 0;
+            const tx = PAD + (st.gradeBadge ? badgeW + 12 : 0);
+            // 등급 배지 — 한 열로 서 있어 훑기만 해도 S가 보인다. 등급 없는 곳은 흐린 자리표시로 열을 지킨다
+            if (badge) {
+              reqs.push(...rect(nid(), PAD, y + 28, badgeW, 30, GRADE_COLORS[badge] || st.accent, page));
+              reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, badge, { size: 14, bold: true, color: st.bg, align: "CENTER" }, page));
+            } else if (st.gradeBadge) {
+              reqs.push(...rect(nid(), PAD, y + 28, badgeW, 30, st.line, page, 0.4));
+              reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, "–", { size: 11, bold: true, color: st.muted, align: "CENTER" }, page));
+            }
+            reqs.push(...T(nid(), tx, y + 8, PW - PAD - tx - 128, 15, clipText(r.company, 20), { size: 10.5, bold: true, color: st.sub }, page));
+            // 오른쪽 위: 접수일, 그 아래 종류·사유·접수자 — 조각이 넘어가 묶음 제목이 안 보여도 종류를 알 수 있다
+            reqs.push(...T(nid(), PW - PAD - 120, y + 6, 120, 16, dayLabel(r.change_date), { size: 11.5, bold: true, color: st.sub, align: "END" }, page));
+            const gradeText = st.gradeBadge ? (badge ? "" : gradeLabel(r.grade)) : gradeLabel(r.grade);
+            reqs.push(...T(nid(), PW - PAD - 200, y + 20, 200, 12,
+              [line.kind, gradeText, clipText(r.reason, 8), r.author].filter(Boolean).join(" · "),
+              { size: 8.5, color: st.muted, align: "END" }, page));
             let hero = "", sub = "", before = "";
             if (line.kind === "주소") {
               const a = readAddress(r.after_text);
@@ -506,27 +539,36 @@ Deno.serve(async (req) => {
               const b = r.before_text ? readPerson(r.before_text) : null;
               before = b ? `이전 ${[b.name, b.phone].filter(Boolean).join("  ")}` : "";
             }
-            reqs.push(...T(nid(), tx, y + 26, PW - PAD * 2, 30, clipText(hero, portrait ? 20 : 30),
-              { size: portrait ? 23 : 26, bold: true, color: st.ink, font: st.heroFont }, page));
+            const heroW = PW - PAD - tx - 40;
+            const heroSize = !portrait ? 26
+              : line.kind === "주소" ? Math.min(20, st.heroSize || 23)
+              : line.kind === "업체명" ? Math.min(22, st.heroSize || 23)
+              : (st.heroSize || 23);
+            // 한글은 글자 폭이 거의 글자 크기와 같다 — 칸에 들어갈 글자 수를 폭에서 뽑아 줄바꿈을 막는다
+            reqs.push(...T(nid(), tx, y + 32, heroW, 36, clipText(hero, Math.max(6, Math.floor(heroW / (heroSize * 0.98)))),
+              { size: heroSize, bold: true, color: st.ink, font: st.heroFont }, page));
             if (sub) {
-              reqs.push(...T(nid(), tx, y + (portrait ? 58 : 54), PW - PAD * 2, 18, clipText(sub, portrait ? 34 : 52),
-                { size: 12.5, bold: line.kind === "담당", color: line.kind === "담당" ? st.accent : st.sub }, page));
+              // 담당 변경이면 이 줄이 전화번호 — 현장에서 바로 걸 번호라 크게
+              reqs.push(...T(nid(), tx, y + (portrait ? 66 : 56), PW - PAD - tx, 20, clipText(sub, portrait ? 28 : 52),
+                { size: line.kind === "담당" ? 13.5 : 12, bold: line.kind === "담당", color: line.kind === "담당" ? st.accent : st.sub }, page));
             }
             if (before) {
-              reqs.push(...T(nid(), tx, y + (portrait ? 78 : 70), PW - PAD * 2, 16, clipText(before, portrait ? 38 : 56),
+              reqs.push(...T(nid(), tx, y + (portrait ? 90 : 72), PW - PAD - tx, 16, clipText(before, portrait ? 36 : 56),
                 { size: 9.5, color: st.muted }, page));
             }
-            const foot = [dayLabel(r.change_date), gradeLabel(r.grade), clipText(r.reason, 10)].filter(Boolean).join(" · ");
-            reqs.push(...T(nid(), PW - PAD - 150, y + 30, 150, 14, foot, { size: 9.5, bold: true, color: st.muted, align: "END" }, page));
             if (st.rowRule) reqs.push(...rect(nid(), PAD, y + line.h - 6, PW - PAD * 2, 0.7, st.line, page, st.key === "news" ? 0.35 : 1, "RECTANGLE"));
           } else {
             const kinds = groups.filter((g) => g.rows.length).map((g) => g.label);
             const key = kinds[0] === "담당" ? "키맨" : kinds[0] === "주소" ? "주소" : "업체명";
             const tips = (GREETING_TIPS[key] || []).slice(0, 2);
-            if (st.key === "light") reqs.push(...rect(nid(), PAD, y + 8, PW - PAD * 2, line.h - 18, st.accent, page, 0.07));
-            reqs.push(...T(nid(), PAD + (st.key === "light" ? 14 : 0), y + 20, PW - PAD * 2, 13, "인사 한마디",
-              { size: 9, bold: true, color: st.accent }, page));
-            reqs.push(...T(nid(), PAD + (st.key === "light" ? 14 : 0), y + 36, PW - PAD * 2 - (st.key === "light" ? 28 : 0), line.h - 46,
+            const boxed = st.key === "light" || st.key === "bold" || st.key === "soft";
+            if (boxed) {
+              reqs.push(...rect(nid(), PAD, y + 8, PW - PAD * 2, line.h - 18, st.accent, page, st.key === "bold" ? 0.12 : 0.07));
+              reqs.push(...rect(nid(), PAD, y + 8, 4, line.h - 18, st.accent, page, 1, "RECTANGLE"));
+            }
+            const ix = PAD + (boxed ? 16 : 0);
+            reqs.push(...T(nid(), ix, y + 20, PW - PAD * 2 - 24, 13, "인사 한마디", { size: 9, bold: true, color: st.accent }, page));
+            reqs.push(...T(nid(), ix, y + 36, PW - PAD - ix - (boxed ? 14 : 0), line.h - 46,
               tips.join("\n"), { size: 10, color: st.ink, lineSpacing: 130 }, page));
           }
           y += line.h;
@@ -596,7 +638,7 @@ Deno.serve(async (req) => {
       for (const piece of pieces) { canvas.composite(piece, 0, oy); oy += piece.height; }
       const png = await canvas.encode();
 
-      const suffix = st.key === "light" ? "" : `_${st.key}`;
+      const suffix = st.key === DEFAULT_STYLE ? "" : `_${st.key}`; // 기본 스타일은 이름에 붙이지 않는다
       const pngPath = `keyman/${week.from}_${letter}${suffix}.png`;
       if (!await store(`photos/${pngPath}`, png, "image/png")) {
         return Response.json({ error: "이미지 저장 실패" }, { status: 502, headers: jsonHeaders });
