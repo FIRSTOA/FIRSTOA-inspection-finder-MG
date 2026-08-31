@@ -793,6 +793,11 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-600">{(row.change_date || row.created_at).slice(0, 10)}</span>
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${person ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{row.category || "변경"}</span>
+                      {vendorMatchKey(row.company || "") !== vendorMatchKey(queryVendor || "") && (
+                        <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600" title="이름이 비슷한 다른 표기의 기록 — 다른 지점일 수 있습니다">
+                          {String(row.company || "").slice(0, 22)}{row.region ? ` · ${String(row.region).slice(0, 3)}지역` : ""}
+                        </span>
+                      )}
                       {row.reason && <span className="text-[11px] font-bold text-slate-500">{row.reason.slice(0, 24)}</span>}
                       <span className="text-[10px] font-semibold text-slate-400">D+{daysSince(row.change_date || row.created_at)} · {row.author || "-"}</span>
                       {person && (row.greeting_done

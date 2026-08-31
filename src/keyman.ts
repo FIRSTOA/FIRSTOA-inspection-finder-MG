@@ -67,16 +67,40 @@ export function sameVendor(a: string, b: string): boolean {
   return ka.length >= 4 && kb.length >= 4 && (ka.includes(kb) || kb.includes(ka));
 }
 
-/** 이 업체의 최근 변경 이력 (기본 90일) — 최신순 */
-export async function recentChangesFor(vendor: string, days = 90): Promise<ContactChange[]> {
+/** 지역 칸에서 A~E 한 글자만 — 기록 쪽 지역 값에는 잡문이 섞여 있을 수 있다 */
+const regionLetterOf = (value: string) => (String(value || "").toUpperCase().match(/[A-E]/) || [""])[0];
+
+/**
+ * 이 업체의 최근 변경 이력 (기본 90일) — 최신순.
+ * region(A~E)을 주면 **부분일치는 같은 지역일 때만** 인정한다 — 부분일치는 같은 브랜드의
+ * 다른 지점일 수 있어서다(실사고 2026-08-28: C지역 "넥스트라이프" 점검 카드에
+ * B지역 "넥스트라이프 롯데시네마 인천검단관"의 주소 이력이 붙었다). 정확일치는 지역 무관.
+ */
+export async function recentChangesFor(vendor: string, days = 90, region = ""): Promise<ContactChange[]> {
   const name = String(vendor || "").trim();
-  if (vendorMatchKey(name).length < 2) return [];
+  const key = vendorMatchKey(name);
+  if (key.length < 2) return [];
+  const want = regionLetterOf(region);
   const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const rows = await selectRows<ContactChange>(
     "contact_changes",
     `select=*&change_date=gte.${from}&order=change_date.desc,created_at.desc&limit=500`,
   );
-  return rows.filter((row) => sameVendor(row.company, name));
+  return rows.filter((row) => matchesVendorRecord(row.company, row.region, name, want));
+}
+
+/** recentChangesFor의 필터 규칙(순수 함수) — 테스트가 실사고 사례를 지킨다 */
+export function matchesVendorRecord(rowCompany: string, rowRegion: string, name: string, region = ""): boolean {
+  const key = vendorMatchKey(name || "");
+  const rowKey = vendorMatchKey(rowCompany || "");
+  if (!rowKey || !key) return false;
+  if (rowKey === key) return true;
+  const partial = rowKey.length >= 4 && key.length >= 4 && (rowKey.includes(key) || key.includes(rowKey));
+  if (!partial) return false;
+  const want = regionLetterOf(region);
+  if (!want) return true; // 지역을 모르는 화면(통합이력)은 넓게 — 대신 화면에서 기록의 업체명·지역을 보여준다
+  const rowLetter = regionLetterOf(rowRegion);
+  return !rowLetter || rowLetter === want;
 }
 
 /**

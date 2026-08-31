@@ -7,13 +7,14 @@ import { useEffect, useState } from "react";
 import { updateRows } from "./supabase";
 import { notify } from "./toast";
 import { daysSince, isKeymanChange, recentChangesFor, type ContactChange } from "./keyman";
+import { vendorMatchKey } from "./ids";
 
 const dateLabel = (v: string) => {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? (v || "-") : `${d.getMonth() + 1}/${d.getDate()}`;
 };
 
-export default function KeymanCard({ vendor, author, days = 90 }: { vendor: string; author: string; days?: number }) {
+export default function KeymanCard({ vendor, author, days = 90, region = "" }: { vendor: string; author: string; days?: number; region?: string }) {
   const [rows, setRows] = useState<ContactChange[]>([]);
   const [busyId, setBusyId] = useState("");
   const [open, setOpen] = useState(true);
@@ -24,12 +25,12 @@ export default function KeymanCard({ vendor, author, days = 90 }: { vendor: stri
     let alive = true;
     // 업체명은 미리보기를 고치는 동안 계속 바뀐다 — 잠깐 기다린 뒤 한 번만 조회한다
     const timer = window.setTimeout(() => {
-      recentChangesFor(name, days)
+      recentChangesFor(name, days, region)
         .then((found) => { if (alive) setRows(found); })
         .catch(() => { if (alive) setRows([]); });
     }, 400);
     return () => { alive = false; window.clearTimeout(timer); };
-  }, [vendor, days]);
+  }, [vendor, days, region]);
 
   if (!rows.length) return null;
 
@@ -67,6 +68,11 @@ export default function KeymanCard({ vendor, author, days = 90 }: { vendor: stri
               <div key={row.id} className="px-3 py-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-black text-slate-600">{dateLabel(row.change_date || row.created_at)} · D+{d}</span>
+                  {vendorMatchKey(row.company || "") !== vendorMatchKey(vendor || "") && (
+                    <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600" title="이름이 비슷한 다른 표기의 기록입니다 — 다른 지점일 수 있어요">
+                      {String(row.company || "").slice(0, 18)}{row.region ? ` · ${String(row.region).slice(0, 3)}` : ""}
+                    </span>
+                  )}
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${keyman ? "bg-amber-200 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
                     {row.category || "변경"}
                   </span>

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c4fdbe1aa0",
+    "date": "2026-08-31",
+    "note": "내 일정 [내일로 →] + 워킨맵 등록에 오늘/내일 칩"
+  },
+  {
     "hash": "5f4072fcaa",
     "date": "2026-08-30",
     "note": "카톡 문구 확정 — 등급+업체명 목록으로 복원(검색용), 이모지 없이 --- 구분"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d530eeffd9",
     "date": "2026-08-15",
     "note": "일정리스트 개선 — 상태 요약 바·미배정 강조·행에서 바로 전화 + 팀 선택 시 종일 제외"
-  },
-  {
-    "hash": "39fd3fc79e",
-    "date": "2026-08-15",
-    "note": "목록에서 모달 안 뜨던 버그 수정 + 팀 필터를 단일 선택 드롭다운으로"
   }
 ];
