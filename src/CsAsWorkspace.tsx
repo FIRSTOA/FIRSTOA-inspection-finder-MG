@@ -1770,6 +1770,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           </div>
 
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm}
+            onDefer={(t, newDate) => { update(t.id, { date: newDate }); notify(`${t.vendor} — ${Number(newDate.slice(5, 7))}/${Number(newDate.slice(8, 10))}로 옮겼습니다 ✓`, "success"); }}
             // AS 일정은 일정리스트 [FIELD]와 같은 직행 — 접수원본이 있으면 그걸, 없으면 제목으로 조립한 양식으로 바로 FIELD 탭 (예전엔 과거 양식 검색창이 먼저 떴다)
             onFieldDirect={(t) => {
               const ticket = tickets.find((x) => x.id === t.id);

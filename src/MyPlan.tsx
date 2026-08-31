@@ -39,7 +39,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -487,6 +487,11 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
               <span className="flex w-full items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
                 {onUseField && <button type="button" onClick={() => (onFieldDirect && /^(AS|익일AS|납품철수교체휴가교육|물류)$/.test(t.scheduleType) && !/휴가|연차/.test(t.vendor) ? onFieldDirect(t) : openFieldPick(t))} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
+                {/* 못 간 점검·재계약을 다음 영업일로 — 워킨맵에서 다시 등록하던 불편(2026-08-28). AS는 일정리스트의 익일(사유·보고) 흐름을 쓴다 */}
+                {onDefer && (t.source === "workin" || t.source === "autoplan" || t.scheduleType === "매월점검") && (
+                  <button type="button" onClick={() => onDefer(t, nextBusinessDay(t.date))}
+                    className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700 transition hover:bg-purple-100">내일로 →</button>
+                )}
                 {/* 길찾기 — 팀마다 쓰는 지도가 다르다(네이버 사용자 다수). 일정리스트 상세의 N/K/T와 같은 구성 */}
                 <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(t.address || t.vendor)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#03C75A] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">N</a>
                 <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">K</a>

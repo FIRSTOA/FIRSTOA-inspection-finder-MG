@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
+import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { askConfirm } from "./confirmModal";
 import L from "leaflet";
 import { createPortal } from "react-dom";
@@ -1830,7 +1831,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [listLimit, setListLimit] = useState(LIST_PAGE);
   // 워킨맵에서 바로 내 일정에 넣기 — 자동일정까지 가지 않아도 되게(2026-08-28 요청)
   const [planTarget, setPlanTarget] = useState<MapPlace | null>(null);
-  const [planDate, setPlanDate] = useState(kstDate());
+  const [planDate, setPlanDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일 — 저녁은 내일 동선을 짜는 시간
   const [planBusy, setPlanBusy] = useState(false);
   const registerPlan = async () => {
     if (!planTarget || planBusy) return;
@@ -3068,11 +3069,18 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <div className="text-[18px] font-black tracking-tight text-slate-950">내 일정에 넣기</div>
             <div className="mt-1 text-[12px] font-semibold text-slate-500">{workinVendorName(planTarget.name) || planTarget.name}</div>
             {planTarget.address && <div className="text-[11px] font-semibold text-slate-400">{planTarget.address}</div>}
-            <label className="mt-4 block">
+            <div className="mt-4">
               <span className="text-[11px] font-black text-slate-500">방문 날짜</span>
-              <input type="date" value={planDate} onChange={(event) => setPlanDate(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white" />
-            </label>
+              {/* 익일 동선을 짤 때 달력을 두 번 누르던 불편(2026-08-28) — 오늘·내일은 한 번에. 고른 날짜는 다음 등록에도 유지된다 */}
+              <div className="mt-1 flex items-center gap-1.5">
+                {([["오늘", kstDate()], ["내일", nextBusinessDay(kstDate())]] as const).map(([label, d]) => (
+                  <button key={label} type="button" onClick={() => setPlanDate(d)}
+                    className={`rounded-xl px-3.5 py-2.5 text-sm font-black transition ${planDate === d ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{label}</button>
+                ))}
+                <input type="date" value={planDate} onChange={(event) => setPlanDate(event.target.value)}
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white" />
+              </div>
+            </div>
             <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-4 text-slate-500">
               {planTarget.kind === "renewal" ? "재계약 방문" : "정기점검"}으로 <b className="text-slate-700">{userKey}</b>에게 배정됩니다 · 시간은 내 일정에서 동선 순서로 잡습니다
             </div>

@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5f4072fcaa",
+    "date": "2026-08-30",
+    "note": "카톡 문구 확정 — 등급+업체명 목록으로 복원(검색용), 이모지 없이 --- 구분"
+  },
+  {
+    "hash": "2c30c373de",
+    "date": "2026-08-30",
+    "note": "익일스케줄 양식 확정 — \"익일 스케줄\" 한 줄 + 이름 그룹만"
+  },
+  {
     "hash": "20d2b3bf0f",
     "date": "2026-08-30",
     "note": "카톡 문구 간소화 — 업체 나열 대신 건수 + 사진으로 확인 한 줄"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "39fd3fc79e",
     "date": "2026-08-15",
     "note": "목록에서 모달 안 뜨던 버그 수정 + 팀 필터를 단일 선택 드롭다운으로"
-  },
-  {
-    "hash": "1f715cc89f",
-    "date": "2026-08-15",
-    "note": "목록에서 오늘 날짜 그룹 강조 — 파란 2px 테두리+옅은 광 효과, 헤더도 파란 톤"
-  },
-  {
-    "hash": "754113e1c7",
-    "date": "2026-08-15",
-    "note": "사이드 필터 손질 — 팀은 체크 상자 목록(다크 톤·시간 표기), 숨김 알림 제거"
   }
 ];
