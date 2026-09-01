@@ -31,11 +31,38 @@ export const FIELD_SHEETS: Record<string, { spreadsheetId: string; sheetId: numb
 export type SheetApiRequest = {
   category: string;
   jobId: string;
+  probeOnly?: boolean; // 진단: 지문 검사까지만 하고 아무것도 쓰지 않는다
   author: string;
   submittedAt: string;
   sourceText: string;
   payload: { data?: Record<string, unknown> } & Record<string, unknown>;
 };
+
+/**
+ * 진단용 훑어보기 — 탭의 머리행과, 특정 낱말이 든 행들(선택 열만)을 돌려준다.
+ * 중복 기입 사고 조사에 쓴다(2026-09-02 "자산운용별내" 증식 건).
+ */
+export async function peekSheet(category: string, keyword: string): Promise<Record<string, unknown>> {
+  const config = FIELD_SHEETS[category];
+  if (!config) throw new Error("지원하지 않는 종류");
+  const meta = await spreadsheetMeta(config.spreadsheetId);
+  const title = meta.sheets.get(config.sheetId)?.title || "";
+  if (!title) throw new Error("대상 탭을 찾지 못했습니다");
+  const top = await getValues(config.spreadsheetId, `'${title}'!A1:AZ6`);
+  let headerRow = 1;
+  for (let i = 0; i < top.length; i++) if ((top[i] || []).filter(Boolean).length >= 5) { headerRow = i + 1; break; }
+  const headers = top[headerRow - 1] || [];
+  const all = await getValues(config.spreadsheetId, `'${title}'!A${headerRow + 1}:AZ2000`);
+  const hits: Array<Record<string, string>> = [];
+  all.forEach((row, i) => {
+    if (!keyword || row.some((cell) => String(cell).includes(keyword))) {
+      const slim: Record<string, string> = { _row: String(headerRow + 1 + i) };
+      headers.forEach((h, c) => { if (h && row[c]) slim[h] = String(row[c]).slice(0, 40); });
+      if (keyword) hits.push(slim);
+    }
+  });
+  return { sheet: title, headerRow, headers, hasJobIdCol: headers.includes("웹앱 전송ID"), rows: all.length, hits: hits.slice(0, 12) };
+}
 
 export function sheetsApiConfigured(): boolean {
   return !!Deno.env.get("GOOGLE_SERVICE_ACCOUNT");
@@ -579,6 +606,49 @@ export async function appendViaSheetsApi(
       throw new Error(`찾기 갱신 실패: ${findHeader || findCol}=${findValue} 행 없음`);
     }
     if (updateOnly) throw new Error("갱신 대상 행을 찾지 못했습니다 (새 행 추가 금지)");
+
+    // ── 지문 중복검사: '웹앱 전송ID' 열이 어느 탭에도 없어서(실측) 재시도가 같은 접수를
+    //    또 붙이던 실사고(2026-09-02 "자산운용별내" 증식) 방어. 우리가 그대로 써 넣는
+    //    열들의 값이 모두 같은 최근 행이 있으면 그 행을 돌려준다. 하나라도 빈 값이면
+    //    판단하지 않는다(같은 업체의 정상 재접수를 오탐하지 않게 — 시각까지 같아야 중복).
+    const FP_HEADERS: Record<string, string[]> = {
+      reception_remote: ["접수일", "접수", "연락처", "상호", "기종", "증상", "특이사항"],
+      reception_copier: ["날짜", "접수시간", "전화번호", "업체명", "내용", "자산번호", "제목(짧게)"],
+      reception_copier_new: ["날짜", "접수시간", "전화번호", "업체명", "내용", "자산번호", "제목(짧게)"],
+    };
+    const fpHeaders = FP_HEADERS[request.category] || [];
+    if (fpHeaders.length) {
+      const probe = valuesForRow(0); // 값은 행 번호와 무관하다
+      // 후보 중 "실제로 기입값이 있는" 열만 지문으로 쓴다 — 상호처럼 시트 수식이 채우는 열은
+      // 기입값이 없어 비교가 성립하지 않는다(실측). 3개 이상 모일 때만 판단한다(오탐 방지).
+      const fpCols = fpHeaders
+        .map((name) => headers.indexOf(name) + 1)
+        .filter((col) => col > 0 && String(probe[col] || "").trim() !== "");
+      if (fpCols.length >= 3) {
+        const missing = fpCols.filter((col) => !colValues.has(col));
+        if (missing.length) {
+          const ranges = missing.map((col) => `${T}!${colA1(col)}${bodyStart}:${colA1(col)}`);
+          const extra = await batchGetValues(config.spreadsheetId, ranges);
+          missing.forEach((col, i) => colValues.set(col, (extra.get(ranges[i]) || []).map((r) => String(r[0] ?? ""))));
+        }
+        let fpLast = lastRow;
+        for (const col of fpCols) fpLast = Math.max(fpLast, bodyStart + (colValues.get(col) || []).length - 1);
+        const normFp = (v: string) => String(v || "").replace(/\s+/g, "");
+        for (let r = Math.max(bodyStart, fpLast - 80); r <= fpLast; r++) {
+          if (fpCols.every((col) => normFp(cellAt(r, col)) === normFp(String(probe[col] || "")))) {
+            return { row: r, sheet: title }; // 같은 접수가 이미 있다 — 재기입하지 않는다
+          }
+        }
+      }
+      if (request.probeOnly) {
+        const detail = fpHeaders.map((name) => {
+          const col = headers.indexOf(name) + 1;
+          return `${name}=${String((col > 0 && probe[col]) || "(빈값)")}`;
+        }).join(" | ");
+        throw new Error(`PROBE_NO_MATCH 지문열 ${fpCols.length}개 → ${detail}`);
+      }
+    }
+    if (request.probeOnly) throw new Error("PROBE_NO_MATCH 이 종류에는 지문 규칙이 없습니다");
 
     // 행 재사용: 마커 열(직접 입력 열)로 마지막 데이터 행을 찾는다
     const DATA_START: Record<string, number> = { reception_remote: 5, reception_copier: 8, reception_copier_new: 8, praise: headerRow + 1 };

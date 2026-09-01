@@ -1,4 +1,4 @@
-import { appendViaSheetsApi, sheetsApiConfigured } from "./sheets-api.ts";
+import { appendViaSheetsApi, peekSheet, sheetsApiConfigured } from "./sheets-api.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -152,7 +152,31 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
 
   try {
-    const { jobId, action, maxAgeHours } = await req.json().catch(() => ({}));
+    const { jobId, action, maxAgeHours, category, keyword } = await req.json().catch(() => ({}));
+
+    // 진단: 탭 머리행·키워드 행 훑어보기 (읽기 전용 — 중복 기입 조사용, 2026-09-02)
+    if (!jobId && action === "peek") {
+      const result = await peekSheet(String(category || ""), String(keyword || ""));
+      return Response.json({ ok: true, ...result }, { headers: jsonHeaders });
+    }
+
+    // 진단: 잡의 지문이 시트의 기존 행과 맞는지 (아무것도 쓰지 않음)
+    if (jobId && action === "probe") {
+      const env = makeEnv();
+      const jobRes = await fetch(`${env.rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(jobId)}&select=*`, { headers: env.headers });
+      const job = (await jobRes.json())[0];
+      if (!job) return Response.json({ error: "잡 없음" }, { status: 404, headers: jsonHeaders });
+      try {
+        const hit = await appendViaSheetsApi({
+          category: String(job.category), jobId: String(job.id), author: String(job.author || ""),
+          submittedAt: String(job.created_at || ""), sourceText: String(job.source_text || ""),
+          payload: (job.payload || {}) as { data?: Record<string, unknown> }, probeOnly: true,
+        }, { rest: env.rest, headers: env.headers });
+        return Response.json({ ok: true, matched: true, row: hit.row, sheet: hit.sheet }, { headers: jsonHeaders });
+      } catch (probeError) {
+        return Response.json({ ok: true, matched: false, detail: (probeError as Error).message }, { headers: jsonHeaders });
+      }
+    }
 
     // 만료 정리 (관리자): 지정 시간보다 오래된 pending 잡을 failed로 마킹 — 재시도 대상에서 제외
     if (!jobId && action === "expire_stale") {
@@ -261,8 +285,12 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
     // ① 시트 API 직행 (1~3초) — 서비스 계정이 설정돼 있고 테스트 모드가 아니면 우선 시도.
     //    실패하면 아래 ② GAS 웹훅으로 폴백 (무회귀 — SHEET_API_DIRECT=false로 강제 GAS 가능)
     if (sheetsApiConfigured() && config.SHEET_API_DIRECT !== "false" && !enabled(config.FIELD_SHEET_TEST_MODE)) {
+      // 직행이 행을 **쓴 다음** 실패하면 GAS 폴백이 같은 접수를 또 붙인다(실사고 2026-09-02
+      // "자산운용별내" 증식). 그래서 append 성공과 그 이후(마킹)를 갈라, 폴백은 append 자체가
+      // 실패했을 때만 탄다.
+      let direct: { row?: number | null; sheet?: string } | null = null;
       try {
-        const direct = await appendViaSheetsApi({
+        direct = await appendViaSheetsApi({
           category: String(job.category),
           jobId: String(job.id),
           author: String(job.author || ""),
@@ -270,15 +298,17 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
           sourceText: String(job.source_text || ""),
           payload: payload as { data?: Record<string, unknown> },
         }, { rest, headers });
+      } catch (directError) {
+        console.error("Sheets API 직행 실패 — GAS 폴백:", (directError as Error).message);
+      }
+      if (direct) {
         const markDirect = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
           method: "PATCH",
           headers: { ...headers, Prefer: "return=minimal" },
           body: JSON.stringify({ sheet_status: "synced", sheet_row: direct.row || null, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
         });
-        if (!markDirect.ok) throw new Error(`synced 마킹 실패(${markDirect.status})`);
+        if (!markDirect.ok) throw new Error(`synced 마킹 실패(${markDirect.status}) — 시트에는 기록됨(행 ${direct.row || "?"})`);
         return { status: "synced", row: direct.row, sheet: direct.sheet };
-      } catch (directError) {
-        console.error("Sheets API 직행 실패 — GAS 폴백:", (directError as Error).message);
       }
     }
 
