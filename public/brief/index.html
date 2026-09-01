@@ -146,15 +146,21 @@
     return /^(특S|SS|S|V|N|NN|[A-E])$/.test(g) ? g : "";
   };
 
-  var TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당)/;
+  var TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|사모|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당|매니저|프로|센터장|지점장|총무|경리|회계|부원장)(님)?$/;
   function readPerson(text) {
     var one = String(text || "").replace(/\s+/g, " ").trim();
-    var phones = one.match(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g) || [];
-    var bare = one.replace(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
+    var PHONE = /(?:01[016789]|0\d{1,2})[-\s.)]?\d{3,4}[-\s.]?\d{4}/g;
+    var phones = one.match(PHONE) || [];
+    var bare = one.replace(PHONE, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
     var words = bare.split(" ").filter(function (w) { return /[가-힣]/.test(w); });
-    var name = [words[0] || "", TITLE.test(words[1] || "") ? words[1] : ""].filter(Boolean).join(" ");
-    var used = name ? name.split(" ").length : 0;
-    return { name: name || bare.slice(0, 12), phone: phones[0] || "", note: words.slice(used).join(" ").slice(0, 26) };
+    var title = "", person = "";
+    for (var i = 0; i < words.length; i++) {
+      if (!title && TITLE.test(words[i])) { title = words[i]; continue; }
+      if (!person && !TITLE.test(words[i])) person = words[i];
+    }
+    var name = [person, title].filter(Boolean).join(" ");
+    var rest = words.filter(function (w) { return w !== person && w !== title; });
+    return { name: name || bare.slice(0, 12), phone: phones[0] || "", note: rest.join(" ").slice(0, 26) };
   }
   function readAddress(text) {
     var one = String(text || "").replace(/\s+/g, " ").trim();

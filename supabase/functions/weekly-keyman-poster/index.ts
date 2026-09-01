@@ -113,14 +113,20 @@ const hangul = (v: string) => (String(v || "").match(/[가-힣]/g) || []).length
  */
 function readPerson(text: string): { name: string; phone: string; note: string } {
   const one = String(text || "").replace(/\s*\n\s*/g, " · ").replace(/\s+/g, " ").trim();
-  const phones = one.match(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g) || [];
-  const bare = one.replace(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
+  // 휴대폰뿐 아니라 02·031 같은 지역번호도 전화다 (실측: "02-2015-0…"이 이름 자리에 크게 박혔다)
+  const PHONE = /(?:01[016789]|0\d{1,2})[-\s.)]?\d{3,4}[-\s.]?\d{4}/g;
+  const phones = one.match(PHONE) || [];
+  const bare = one.replace(PHONE, " ").replace(/[()·,]/g, " ").replace(/\s+/g, " ").trim();
   const words = bare.split(" ").filter((w) => hangul(w) > 0);
-  // 첫 마디가 이름, 두 번째는 **직급일 때만** 붙인다 (사유가 이름에 붙던 것 수리: "진달래 육아휴직")
-  const TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당)/;
-  const name = [words[0] || "", TITLE.test(words[1] || "") ? words[1] : ""].filter(Boolean).join(" ");
-  const rest = words.slice(name.split(" ").length);
-  return { name: clipText(name || bare.slice(0, 12), 14), phone: phones[0] || "", note: clipText(rest.join(" "), 22) };
+  const TITLE = /^(팀장|과장|부장|차장|대리|주임|실장|소장|사장|사모|이사|상무|전무|본부장|점장|원장|대표|사원|기사|님|담당|매니저|프로|센터장|지점장|총무|경리|회계|부원장)(님)?$/;
+  // 순서가 제각각이다: "최영숙 이사"도 "이사 최영숙"도 온다 — 직급이 아닌 첫 한글 마디를 이름으로,
+  // 직급 마디는 이름 뒤에 붙인다 (실측: "이사"가 이름 자리에 크게 박혔다)
+  const title = words.find((w) => TITLE.test(w)) || "";
+  const person = words.find((w) => !TITLE.test(w)) || "";
+  const name = [person, title].filter(Boolean).join(" ");
+  const used = new Set([person, title].filter(Boolean));
+  const rest = words.filter((w) => !used.has(w));
+  return { name: clipText(name, 14), phone: phones[0] || "", note: clipText(rest.join(" "), 22) };
 }
 
 /** 주소에서 눈에 들어오는 앞부분(구·동·번지)과 전체를 나눈다 */
