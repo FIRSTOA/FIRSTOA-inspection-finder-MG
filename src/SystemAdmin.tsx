@@ -59,6 +59,10 @@ export default function SystemAdmin() {
   const [ingestResult, setIngestResult] = useState("");
   const [collectRooms, setCollectRooms] = useState<Array<{ roomName: string; category: string; team: string }> | null>(null);
   const [collectDraft, setCollectDraft] = useState({ room: "", category: "점검", team: "A" });
+  // 시트 진단 (2026-09-02 접수 증식 사고 후) — 시트를 직접 열지 않고도 행을 찾고, 잡의 지문을 확인한다
+  const [peekCat, setPeekCat] = useState("reception_remote");
+  const [peekWord, setPeekWord] = useState("");
+  const [diagOut, setDiagOut] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -424,6 +428,37 @@ export default function SystemAdmin() {
           <h3 className="text-base font-black text-slate-950 lg:text-lg">시트 기입 최근 작업</h3>
           <p className="mt-0.5 text-[11px] font-semibold text-slate-400">FIELD·접수에서 구글시트로 보낸 요청의 결과입니다. 실패가 쌓이면 Apps Script 배포를 확인하세요.</p>
         </div>
+        {/* 시트 진단 — 키워드로 실제 시트 행을 찾아본다 (읽기 전용) */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+          <PortalSelect direction="down" className="py-1.5 text-xs font-bold" width={170} value={peekCat} onChange={(v) => setPeekCat(v)}
+            options={[
+              { value: "reception_remote", label: "접수시트 · 원격" },
+              { value: "reception_copier", label: "접수시트 · 복합기" },
+              { value: "praise", label: "칭찬" },
+              { value: "complaint", label: "불만" },
+              { value: "contact_change", label: "키맨체크" },
+              { value: "expansion_it", label: "확장성 IT" },
+              { value: "expansion_copier", label: "확장성 복합기" },
+            ]} />
+          <input value={peekWord} onChange={(e) => setPeekWord(e.target.value)} placeholder="업체명·키워드"
+            onKeyDown={(e) => { if (e.key === "Enter" && peekWord.trim()) (e.target as HTMLInputElement).blur(); }}
+            className="w-40 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-500" />
+          <button type="button" disabled={busy === "peek" || !peekWord.trim()}
+            onClick={() => { void (async () => {
+              setBusy("peek"); setDiagOut("시트를 읽는 중…");
+              try {
+                const r = await invokeEdgeFunction<{ sheet?: string; hits?: Array<Record<string, string>> }>("field-sheet-sync", { action: "peek", category: peekCat, keyword: peekWord.trim() });
+                const hits = r.hits || [];
+                setDiagOut(hits.length
+                  ? `[${r.sheet}] ${hits.length}행 발견\n` + hits.map((h) => `행 ${h._row} · ` + Object.entries(h).filter(([k, v]) => k !== "_row" && v).slice(0, 6).map(([k, v]) => `${k}=${v}`).join(" · ")).join("\n")
+                  : `[${r.sheet}] "${peekWord.trim()}" 행 없음`);
+              } catch (e) { setDiagOut(`실패: ${(e as Error).message}`); }
+              finally { setBusy(""); }
+            })(); }}
+            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+            {busy === "peek" ? "읽는 중…" : "시트에서 찾기"}</button>
+          {diagOut && <pre className="w-full whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{diagOut}</pre>}
+        </div>
         <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
           {jobs.map((job) => {
             const state = job.sheet_status === "synced" ? "완료" : job.sheet_status === "failed" ? "실패" : "대기";
@@ -433,6 +468,21 @@ export default function SystemAdmin() {
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${tone}`}>{state}{job.attempts ? ` ${job.attempts}회` : ""}</span>
                 <span className="w-32 shrink-0 truncate text-xs font-bold text-slate-600">{job.category || "-"}</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-500" title={job.last_error || ""}>{job.last_error || (state === "완료" ? `행 ${job.sheet_row ?? "-"}` : "-")}</span>
+                {state !== "완료" && (
+                  <button type="button" disabled={busy === `probe-${job.id}`}
+                    onClick={() => { void (async () => {
+                      setBusy(`probe-${job.id}`);
+                      try {
+                        const r = await invokeEdgeFunction<{ matched?: boolean; row?: number; sheet?: string; detail?: string }>("field-sheet-sync", { action: "probe", jobId: job.id });
+                        setDiagOut(r.matched ? `이 접수는 [${r.sheet}] 행 ${r.row}에 이미 있습니다 — [다시 실행]을 누르면 그 행으로 완료 처리됩니다` : `시트에 아직 없습니다 · ${r.detail || ""}`);
+                      } catch (e) { setDiagOut(`지문 확인 실패: ${(e as Error).message}`); }
+                      finally { setBusy(""); }
+                    })(); }}
+                    className="shrink-0 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+                    title="시트에 이미 기입됐는지 확인만 합니다 (아무것도 쓰지 않음)">
+                    {busy === `probe-${job.id}` ? "확인 중…" : "지문"}
+                  </button>
+                )}
                 {state !== "완료" && (
                   <button type="button" disabled={busy === `retry-${job.id}`}
                     onClick={() => { void (async () => { setBusy(`retry-${job.id}`); try { await invokeEdgeFunction("field-sheet-sync", { jobId: job.id }); await load(); } catch { /* 결과는 목록 갱신으로 확인 */ } finally { setBusy(""); } })(); }}
