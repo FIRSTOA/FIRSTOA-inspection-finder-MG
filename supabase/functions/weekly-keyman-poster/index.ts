@@ -547,7 +547,7 @@ Deno.serve(async (req) => {
               reqs.push(...rect(nid(), PAD, y + 28, badgeW, 30, st.line, page, 0.4));
               reqs.push(...T(nid(), PAD, y + 36, badgeW, 18, "–", { size: 11, bold: true, color: st.muted, align: "CENTER" }, page));
             }
-            reqs.push(...T(nid(), tx, y + 8, PW - PAD - tx - 128, 15, clipText(r.company, 20), { size: 10.5, bold: true, color: st.sub }, page));
+            reqs.push(...T(nid(), tx, y + 6, PW - PAD - tx - 128, 18, clipText(r.company, 18), { size: 12.5, bold: true, color: st.ink }, page));
             // 오른쪽 위: 접수일, 그 아래 종류·사유·접수자 — 조각이 넘어가 묶음 제목이 안 보여도 종류를 알 수 있다
             reqs.push(...T(nid(), PW - PAD - 120, y + 6, 120, 16, dayLabel(r.change_date), { size: 11.5, bold: true, color: st.sub, align: "END" }, page));
             const gradeText = st.gradeBadge ? (badge ? "" : gradeLabel(r.grade)) : gradeLabel(r.grade);
