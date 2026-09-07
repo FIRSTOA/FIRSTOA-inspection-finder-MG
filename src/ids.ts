@@ -130,6 +130,40 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
 // 일정리스트→FIELD 변환용: 네이버 미러 제목("이민구 셋팅요청 S D450 30S업체명…분기마감 종료일 …")에서
 // 업체명부(슬래시·공백 보존)와 구분을 꺼낸다 — 접수원본 변환(A양식)과 같은 모양이 되도록.
 const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(as|a\/s)$/i;
+// FIELD 미양식 변환기의 업체명 추출 — App.tsx에서 이사(2026-09-02, 테스트 가능하게).
+// 임대리스트 등급 접두("12#V주식회사 디쉐어…")는 마감 꼬리가 없어도 접두 뒤가 업체명이다.
+// 이 규칙이 없으면 아래 일반 규칙(…회사 꼬리)이 왼쪽부터 훑다 등급 글자를 이름에 붙인다
+// ("V주식회사" 실사고 — A/S V SL-X7500LX 12#V주식회사 디쉐어분당점백업).
+export function extractCompanyForTemplate(text: string): string {
+  const compact = text.replace(/\s+/g, " ");
+  const quotedMatch = compact.match(
+    /"\s*\d*(주식회사[^"]*?|법무법인[^"]*?|세무법인[^"]*?|[^"]*?(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))\s*(?:분기마감|매월마감|매년마감)/
+  );
+  if (quotedMatch) return quotedMatch[1].trim().replace(/-\s*$/, "");
+
+  const companyAfterGradeMatch = compact.match(
+    /(?:^|\s)\d+(NN|SS|S|N|V)([^\n]*?)(분기마감|매월마감|매년마감|오픈\s*\d*시?반?분기마감|오픈\s*\d*시?반?|단순마감마감|단순마감)/
+  );
+  if (companyAfterGradeMatch) {
+    return companyAfterGradeMatch[2]
+      .replace(/^\s*"/, "")
+      .replace(/"\s*$/, "")
+      .trim()
+      .replace(/-\s*$/, "");
+  }
+
+  // 마감 꼬리가 없는 등급 접두 — 접두 바로 뒤부터 줄 끝까지가 업체명부
+  const gradedLease = compact.match(/(?:^|\s)\d{1,4}#?(?:NN|SS|S|N|V)((?:주식회사|㈜|\(주\)|법무법인|세무법인|[가-힣])[^\n]*)/);
+  if (gradedLease) {
+    return gradedLease[1].replace(/(분기마감|매월마감|매년마감|단순마감|마감).*$/, "").trim().replace(/-\s*$/, "");
+  }
+
+  const fallback = compact.match(
+    /(법무법인\s*[가-힣A-Za-z0-9\s]+|세무법인\s*[가-힣A-Za-z0-9\s]+|주식회사\s*[가-힣A-Za-z0-9\s]+|㈜\s*[가-힣A-Za-z0-9\s]+|[가-힣A-Za-z0-9\s]+(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))/
+  );
+  return fallback ? fallback[1].trim().replace(/-\s*$/, "") : "";
+}
+
 export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
   const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
   const tokens = flat.split(" ");

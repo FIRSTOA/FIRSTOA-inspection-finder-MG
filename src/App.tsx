@@ -9,7 +9,7 @@ import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
-import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey } from "./ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
@@ -1304,30 +1304,6 @@ function extractGrade(text: string): string {
   const companyPrefixedMatch = text.match(/(?:^|\s)\d+(NN|SS|S|N|V)(?=[^A-Za-z0-9])/);
   if (companyPrefixedMatch) return companyPrefixedMatch[1];
   return "";
-}
-
-function extractCompanyForTemplate(text: string): string {
-  const compact = text.replace(/\s+/g, " ");
-  const quotedMatch = compact.match(
-    /"\s*\d*(주식회사[^"]*?|법무법인[^"]*?|세무법인[^"]*?|[^"]*?(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))\s*(?:분기마감|매월마감|매년마감)/
-  );
-  if (quotedMatch) return quotedMatch[1].trim().replace(/-\s*$/, "");
-
-  const companyAfterGradeMatch = compact.match(
-    /(?:^|\s)\d+(NN|SS|S|N|V)([^\n]*?)(분기마감|매월마감|매년마감|오픈\s*\d*시?반?분기마감|오픈\s*\d*시?반?|단순마감마감|단순마감)/
-  );
-  if (companyAfterGradeMatch) {
-    return companyAfterGradeMatch[2]
-      .replace(/^\s*"/, "")
-      .replace(/"\s*$/, "")
-      .trim()
-      .replace(/-\s*$/, "");
-  }
-
-  const fallback = compact.match(
-    /(법무법인\s*[가-힣A-Za-z0-9\s]+|세무법인\s*[가-힣A-Za-z0-9\s]+|주식회사\s*[가-힣A-Za-z0-9\s]+|㈜\s*[가-힣A-Za-z0-9\s]+|[가-힣A-Za-z0-9\s]+(?:의원|치과|회사|교회|법인|디자인|피앤씨|기획|팩토리|택스))/
-  );
-  return fallback ? fallback[1].trim().replace(/-\s*$/, "") : "";
 }
 
 function extractDepartment(text: string): string {
@@ -5770,6 +5746,21 @@ export default function App() {
     // buildResultText는 아래 상태들로 결정되므로 같은 deps를 쓴다
   }, [mode, hasOutput, textOutput, listOutput, itemForms, sharedForm, editedBlocks, author]);
   const fieldRegionMissing = fieldFormIssue !== "";
+  // 지역 없는 양식(임대리스트에 지역 값이 없는 업체 등)을 그 자리에서 살린다 — 2026-09-02 지투지 사례.
+  // 점검 모드는 sharedForm.region이 원본이고, 미양식 모드는 출력 텍스트가 원본이라 둘 다 채운다.
+  const fillRegionEverywhere = (r: string) => {
+    setSharedForm((cur) => ({ ...cur, region: r }));
+    setEditedBlocks((prev: Record<number, string>) => {
+      const next = { ...prev };
+      resultBlocks.forEach((block: ResultBlock, i: number) => {
+        const text = next[i] !== undefined ? next[i] : block.text;
+        const filled = text.replace(/^([ \t]*지역[ \t]*[:：])[ \t]*$/gm, `$1${r}`);
+        if (filled !== text) next[i] = filled;
+      });
+      return next;
+    });
+    showToast(`지역을 ${r}로 채웠습니다 — 전송 전에 맞는지 확인해 주세요`, "success");
+  };
   // 양식에 이미 적힌 지역(첫 항목) — 공유 폼의 지역 셀렉트 초기 표시용
   const fieldParsedRegion = useMemo(() => {
     if (mode !== "inspection" && mode !== "blank-report") return "";
@@ -6506,7 +6497,19 @@ export default function App() {
                 <input type="file" accept="image/*,video/*" multiple onChange={handlePhotoSelect} className="hidden" />
               </label>
             </div>
-            {fieldRegionMissing && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">{fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요 (전송 안 됨)" : "⚠ 양식에 지역이 없습니다 — 지역이 있어야 팀 점검·AS방으로 보낼 수 있어요 (없으면 전송 안 됨)"}</div>}
+            {fieldRegionMissing && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">
+                {fieldFormIssue === "vendor" ? "⚠ 업체명을 읽지 못했습니다 — 양식의 업체명을 확인해 주세요 (전송 안 됨)" : "⚠ 양식에 지역이 없습니다 — 아래에서 바로 고르면 채워집니다 (없으면 전송 안 됨)"}
+                {fieldFormIssue === "region" && (
+                  <span className="ml-2 inline-flex gap-1 align-middle">
+                    {(["A", "B", "C", "D", "E"] as const).map((r) => (
+                      <button key={r} type="button" onClick={() => fillRegionEverywhere(r)}
+                        className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-black text-slate-700 ring-1 ring-rose-200 transition hover:bg-rose-100">{r}</button>
+                    ))}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-6 gap-2">
               {(mode === "inspection" || mode === "blank-report") ? (
                 /* 통합 전송 팝업(방 선택·자가/부품 자동 감지) — 일정리스트에서 왔든 필드탭에서 직접 붙여넣었든 같은 버튼.

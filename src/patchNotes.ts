@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "61952a5374",
+    "date": "2026-09-02",
+    "note": "관리 탭에 시트 진단 도구 — 키워드로 행 찾기(peek) + 잡 지문 확인(probe)"
+  },
+  {
     "hash": "d8ea26a10e",
     "date": "2026-09-02",
     "note": "접수 시트 증식 사고 수리 — 폴백 이중 기입 차단 + 내용 지문 중복검사"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "d0d5997718",
     "date": "2026-08-15",
     "note": "3면 동기화 완성 — 수동 일정 네이버 등록, 내용·주소 동기, 네이버 로드 범위 확장"
-  },
-  {
-    "hash": "b893f63f24",
-    "date": "2026-08-15",
-    "note": "일정리스트 헤더 다크 통합 + 색 체계 일치"
   }
 ];
