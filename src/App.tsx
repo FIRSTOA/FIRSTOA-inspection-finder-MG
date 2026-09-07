@@ -1625,13 +1625,22 @@ function buildBlankReport(blockLines: string[]): ResultItem {
 function transformBlankReports(input: string): ResultItem[] {
   if (!input || !input.trim()) return [];
 
-  const format = detectInputFormat(input);
+  // 꼬리 정리: 전송본을 재활용해 붙여넣으면 앨범 링크·빈 줄이 딸려 온다 — 양식 재료가 아니다
+  const cleaned = input.replace(/\n*📷[^\n]*\n+https?:\/\/\S+/g, "").trim();
+
+  // 이미 완성된 양식(구분:+업체명:)은 다시 만들지 않고 통째로 한 건 — 완성본을 붙여넣으면
+  // 처리내용의 "1. 2. 3."과 섹션 사이 빈 줄 때문에 쪼개져 "양식이 3~4개 더 생기는" 실사고(2026-09-02 유스트)
+  if (/^\s*구분\s*[:：]/m.test(cleaned) && /^\s*업체명\s*[:：]/m.test(cleaned)) {
+    return [{ content: cleaned }];
+  }
+
+  const format = detectInputFormat(cleaned);
   if (format === "compact") {
-    const blocks = splitCompactBlocks(input);
+    const blocks = splitCompactBlocks(cleaned);
     return blocks.map((block: string[]) => buildBlankReportCompact(block));
   }
 
-  const blocks = splitParagraphBlocks(input);
+  const blocks = splitParagraphBlocks(cleaned);
   return blocks.map((block: string[]) => buildBlankReport(block));
 }
 
@@ -1937,6 +1946,12 @@ const TEST_CASES: TestCase[] = [
     input:
       'A/S\tV\t모델\t"19V회사단순마감"\n기번\tX1\t자산번호\tA1\n접수자연락처\t010-1111-2222\n주소\t서울 강남구 테헤란로 123 B1층 기계실',
     expected: "부서명:B1층",
+    mode: "blank-report",
+  },
+  {
+    name: "완성 양식 재붙여넣기는 한 건 그대로 (유스트 실사고)",
+    input: "작성자:이민구\n구분: AS\n레벨:3\n등급:SS\n업체명:법무법인 유스트\n부서명:3층\n지역:C\n키맨/접수자:박재혁 02-3476-3600\nㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ\n1.\n모델명: APEOSPORT-C4570\n처리내용: 1.방문시 확인\n2.adf 조정\n\nㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ\n※부품신청※\n물품명:\n\n도착 시간: 10:30\n\n\n\n📷 현장사진 8장 모아보기:\nhttps://firstoa-inspection-finder-mg.vercel.app/?album=abc",
+    expected: "업체명:법무법인 유스트",
     mode: "blank-report",
   },
   {
