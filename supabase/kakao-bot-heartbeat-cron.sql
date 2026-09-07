@@ -5,10 +5,10 @@
 -- 원리: 대화가 있는 방은 죽지 않는다 → 봇이 살아 있는 동안 매일 한 줄을 스스로 보내
 --       세션을 갱신하면 조용한 방도 죽지 않는다. (죽어버린 방은 사람이 한 번 살려줘야 시작)
 --
--- ① 심박: 매일 07:45 KST(22:45 UTC) — room_map의 모든 방에 상태 한 줄
+-- ① 심박: 매일 08:00 KST(23:00 UTC) — room_map의 모든 방에 상태 한 줄
 select cron.schedule(
   'kakao-bot-heartbeat',
-  '45 22 * * *',
+  '0 23 * * *',
   $$
   insert into outbox (room, text)
   select distinct room,
