@@ -164,16 +164,20 @@ async function shareNewChanges(serviceKey: string, restBase: string, limit = 20)
     const person = !/주소/.test(String(row.category || ""))
       && !/삭제|제거|해지|말소|취소|중복|폐업|철수|종료/.test(`${row.category} ${row.reason}`)
       && /키맨|담당|대표|소장|점장|팀장|과장|부장|실장|사장|이사|인사|입사|교체|변경자/.test(`${row.category} ${row.reason}`);
+    // 원문의 줄바꿈은 살린다("이름\n번호"가 " · "로 뭉개지지 않게) — 2026-09-08 피드백
+    const keepLines = (v: unknown) => String(v || "").replace(/\s*\n\s*/g, "\n").trim();
     const text = [
-      `📌 ${row.category || "담당자"} 변경 공유 — ${row.company || "업체명 미기재"}${row.grade ? ` (${row.grade})` : ""}`,
+      `📌 담당자변경 공유 — ${row.company || "업체명 미기재"}${row.grade ? ` (${row.grade})` : ""}`,
       person && String(row.after_text || "").trim() ? "※ 새 키맨입니다 — 다음 방문 때 인사 부탁드립니다." : "",
       "",
-      `지역: 수도권${letter}${row.reason ? ` · 사유: ${row.reason}` : ""}`,
-      row.before_text ? `변경전: ${String(row.before_text).replace(/\s*\n\s*/g, " · ")}` : "",
-      row.after_text ? `변경후: ${String(row.after_text).replace(/\s*\n\s*/g, " · ")}` : "",
-      row.notes ? `특이사항: ${String(row.notes).replace(/\s*\n\s*/g, " · ").slice(0, 200)}` : "",
+      `지역: 수도권${letter}`,
+      `구분: ${row.category || "담당자"}${row.reason ? ` · 사유: ${row.reason}` : ""}`,
+      row.before_text ? `변경전: ${keepLines(row.before_text)}` : "",
+      row.after_text ? `변경후: ${keepLines(row.after_text)}` : "",
+      row.notes ? `특이사항: ${keepLines(row.notes).slice(0, 200)}` : "",
+      "",
       `(${row.change_date} 담당자변경 시트 등록${row.author ? ` · ${row.author}` : ""})`,
-    ].filter((line) => line !== "").join("\n");
+    ].filter((line, i, arr) => !(line === "" && (i === arr.length - 1 || arr[i + 1] === ""))).join("\n");
 
     const queued = await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
     if (!queued.ok) { skipped += 1; continue; }
@@ -251,6 +255,12 @@ Deno.serve(async (req) => {
       const date = toYmd(rawDate) || "";
       if (date && date < cutoff) { skippedOld += 1; continue; }
       const author = at(row, idx.author);
+      // 직원이 시트를 채우는 도중에 3분 크론이 반쯤 된 행을 읽으면, 나중에 완성된 행과
+      // dupKey가 달라져 같은 변경이 두 번 들어간다(실사고 2026-09-08 베이커리텍스타일).
+      // 접수자가 아직 빈 행은 이번엔 보류 — 다음 크론(3분 뒤)에 완성본으로 가져온다.
+      // 사흘이 지나도 빈 행은 원래 그런 행으로 보고 수용한다(영원히 누락되지 않게).
+      const staleEnough = date && date <= new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+      if (!author.trim() && !staleEnough) { skippedEmpty += 1; continue; }
       const category = at(row, idx.category);
       const reason = at(row, idx.reason);
       const before = at(row, idx.before);
