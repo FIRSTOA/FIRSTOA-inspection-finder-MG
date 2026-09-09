@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "./toast";
 import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
-import { selectRows, updateRows, SUPABASE_ANON, SUPABASE_URL } from "./supabase";
+import { selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
 import { setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
@@ -446,7 +446,10 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                             ...(newRaw ? { rawRewritten: true } : {}),
                           }];
                           try {
-                            await updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, patch);
+                            // 8/17 보안 강화로 anon UPDATE가 회수된 테이블 — 엣지 함수가 화이트리스트 검증 후 대신 쓴다
+                            const r = await invokeEdgeFunction<{ ok?: boolean; error?: string }>("record-edit",
+                              { action: "edit", table: category.table, id: String(detail.id), patch });
+                            if (r.error) throw new Error(r.error);
                             setDetail({ ...detail, ...patch });
                             setRows((cur) => cur.map((row) => (row.id === detail.id ? { ...row, ...patch } : row)));
                             setEditDraft(null);
@@ -467,7 +470,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                     const hiding = !showHidden;
                     if (!await askConfirm(hiding ? "이 기록을 숨길까요?\n목록·집계에서 빠지고, 원문은 보존됩니다 (숨긴 기록 보기에서 복원 가능)" : "이 기록을 복원할까요?")) return;
                     setHideBusy(true);
-                    void updateRows(category.table, `id=eq.${encodeURIComponent(String(detail.id))}`, hiding ? { _hidden: true, _hidden_by: author || "미지정", _hidden_at: new Date().toISOString() } : { _hidden: false })
+                    void invokeEdgeFunction<{ ok?: boolean; error?: string }>("record-edit",
+                      { action: "hide", table: category.table, id: String(detail.id), hidden: hiding, by: author || "미지정" })
+                      .then((r) => { if (r.error) throw new Error(r.error); })
                       .then(() => {
                         // 현장 기록(점검·AS·물류)은 업무현황판 집계에서도 같이 제외/복원 — 오발송 기능 일원화
                         if (["jeomgeom", "as_records", "logistics_records"].includes(category.table)) {

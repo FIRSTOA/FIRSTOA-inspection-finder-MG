@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "93f8616502",
+    "date": "2026-09-09",
+    "note": "담당자변경 이중 공유 수리 — 공백 하나가 dupKey를 어긋내던 것 + 조회탭 전 칸 수정"
+  },
+  {
     "hash": "ddd27877c1",
     "date": "2026-09-08",
     "note": "담당자변경 시트 pull — 작성 중인 행 보류 + 공유 문구 개선"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "44167e3509",
     "date": "2026-08-15",
     "note": "일정리스트 정렬 진짜 통합 — 티켓·네이버 행을 한 줄기로 섞어 정렬"
-  },
-  {
-    "hash": "30eb008786",
-    "date": "2026-08-15",
-    "note": "일정리스트 다듬기 — 방문일정은 예정 탭만, 전화는 접수 연락처만, 구분·지역 우선 정렬"
   }
 ];
