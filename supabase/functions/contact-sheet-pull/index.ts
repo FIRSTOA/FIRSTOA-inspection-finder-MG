@@ -290,6 +290,29 @@ Deno.serve(async (req) => {
     const restUrl = `${Deno.env.get("SUPABASE_URL")}/rest/v1/contact_changes?on_conflict=_dupKey`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     if (!serviceKey) return Response.json({ error: "SUPABASE_SERVICE_ROLE_KEY가 없습니다" }, { status: 500, headers: jsonHeaders });
+
+    // 내용 기반 중복 차단 — dupKey는 공백 하나만 달라도 어긋난다(실사고 2026-09-09: 웹앱 구분 값의
+    // 꼬리 공백이 시트를 돌며 사라져 같은 변경이 두 번 등록·공유됨). 업체+날짜+변경후가 같으면 같은 건이다.
+    {
+      const svcHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+      const normKey = (company: unknown, date: unknown, after: unknown) =>
+        [company, date, after].map((v) => String(v || "").replace(/\s+/g, "")).join("|");
+      const existing = new Set<string>();
+      for (let offset = 0; offset < 20000; offset += 1000) {
+        const page = await (await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/rest/v1/contact_changes?select=company,change_date,after_text&change_date=gte.${cutoff}&limit=1000&offset=${offset}`,
+          { headers: svcHeaders },
+        )).json();
+        if (!Array.isArray(page) || !page.length) break;
+        for (const row of page) existing.add(normKey(row.company, row.change_date, row.after_text));
+        if (page.length < 1000) break;
+      }
+      const beforeCount = payload.length;
+      for (let i = payload.length - 1; i >= 0; i--) {
+        if (existing.has(normKey(payload[i].company, payload[i].change_date, payload[i].after_text))) payload.splice(i, 1);
+      }
+      if (!payload.length) return Response.json({ ok: true, tab: title, read: rows.length - 1, inserted: 0, dedupedByContent: beforeCount, skippedOld, skippedEmpty }, { headers: jsonHeaders });
+    }
     let inserted = 0;
     for (let i = 0; i < payload.length; i += 200) {
       const slice = payload.slice(i, i + 200);

@@ -1343,6 +1343,10 @@ export async function sendContactChangeForm(form: ContactChangeFormState, author
   try {
     const cfg = await getConfig();
     const changeDate = toKstDate(ts);
+    // 값 끝의 공백이 그대로 저장되면("담당자 변경 ") 시트를 한 바퀴 돈 값과 dupKey가 어긋나
+    // 같은 변경이 두 번 등록·공유된다(실사고 2026-09-09 파사드패턴) — 저장 전에 정리한다
+    form = { ...form, company: form.company.trim(), category: form.category.trim(), reason: form.reason.trim(),
+      grade: form.grade.trim(), before: form.before.trim(), after: form.after.trim(), region: form.region.trim() };
     const dupKey = md5(["contact_change", changeDate, author, form.company, form.category, form.reason, form.before, form.after].join("|"));
     const photoLink = text.match(/https?:\/\/\S+\?album=[a-z0-9-]+/i)?.[0] || "";
     await insertRow("contact_changes", {

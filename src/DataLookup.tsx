@@ -55,12 +55,19 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [loading, setLoading] = useState(false);
   // 잘못된 기록 숨김(soft delete) — 원문 보존, 누가·언제 숨겼는지 기록. 지원 테이블에만 노출
   const HIDEABLE = useMemo(() => new Set(["jeomgeom", "as_records", "logistics_records", "bulman", "misu", "overage", "overage_adjust", "recontract", "churn_defense", "mgmt_support", "pc_expansion", "mfp_expansion", "contact_changes", "stock_items"]), []);
-  // 기기 식별자 수정 — 접수팀이 기번·자산번호를 잘못 적으면 그 기록이 이력으로 남아 다음 AS 판단이 틀려진다.
+  // 기록 수정 — 접수팀이 잘못 적은 값이 이력으로 남으면 다음 판단이 틀려진다.
   // 통합이력·FIELD 검색·접수 AS히스토리가 전부 이 행을 직접 읽으므로 여기서 고치면 모든 화면에 반영된다.
+  // 처음엔 기기 식별자 4칸만 열었는데 "다른 것도 실수를 고치고 싶다"(2026-09-09)로 전 칸 개방 —
+  // 원문 동기화·수정 이력(_edit_log)이 같은 흐름을 타므로 어떤 칸이든 변경 전 값이 남는다.
+  const RECORD_FIELDS = useMemo(() => [
+    "작성일", "작성자", "구분", "레벨", "등급", "업체명", "부서명", "지역", "키맨/접수자",
+    "모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분",
+    "한틴이카유무", "주차비지원유무", "특이사항",
+  ], []);
   const EDITABLE_FIELDS: Record<string, string[]> = useMemo(() => ({
-    jeomgeom: ["업체명", "모델명", "시리얼넘버", "자산기번"],
-    as_records: ["업체명", "모델명", "시리얼넘버", "자산기번"],
-  }), []);
+    jeomgeom: RECORD_FIELDS,
+    as_records: RECORD_FIELDS,
+  }), [RECORD_FIELDS]);
   const [showHidden, setShowHidden] = useState(false);
   const [chip, setChip] = useState(""); // chipFilter 유형 선택 (빈 값 = 전체)
   const [hideBusy, setHideBusy] = useState(false);
@@ -386,7 +393,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               {(EDITABLE_FIELDS[category.table] || []).length > 0 && detail.id != null && (
                 editDraft === null
                   ? <button type="button" onClick={() => setEditDraft({})}
-                      className="mr-auto rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-100">✏️ 기기정보 수정</button>
+                      className="mr-auto rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-100">✏️ 기록 수정</button>
                   : <>
                       <button type="button" onClick={() => setEditDraft(null)}
                         className="mr-auto rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
