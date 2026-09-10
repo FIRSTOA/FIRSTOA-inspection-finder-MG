@@ -8,12 +8,17 @@
  *   - 실패분은 큐에 남아 다음 폴링 재시도
  *   - WakeLock 으로 화면 꺼도 CPU 유지(Doze 방지), 메시지 오면 즉시 폴링
  *
+ *  2026-09-10 갱신 (이 파일 전체를 붙여넣으면 됨):
+ *   ① sentIds — 보냈는데 삭제(ack)만 실패한 메시지 기억 → 재발송 방지 (포스터 2번 발송 수리)
+ *   ② reportSeen — 방에 사람 메시지가 오면 room_activity에 보고(30분에 1번) →
+ *      심박 크론이 "20시간 조용한 방"에만 봇 줄을 보냄 = 활발한 방엔 아침 봇 메시지 없음
+ *
  *  ★ 봇이 알림 보낼 방(테스트 전용방 / 운영 방)의 멤버여야 함.
  */
 
 // ===================== 설정 =====================
-const SUPABASE_URL  = "https://jwhwicplfwrorrgtqrlw.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3aHdpY3BsZndyb3JyZ3Rxcmx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODg0MTQsImV4cCI6MjA5NzM2NDQxNH0.Dx227ZN2b8w6116mrjimoRiYkElddB3pqk9ys4DL72U";
+const SUPABASE_URL  = "https://kkdiihazgzesbqxjytqv.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrZGlpaGF6Z3plc2JxeGp5dHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNjE0NjcsImV4cCI6MjEwMDczNzQ2N30.fjKIbDpj0QhNgc7Qr2z79xBkrYD9LqCxc88hHzpJ0kw";
 const POLL_INTERVAL = 7000;   // 7초
 // ================================================
 
@@ -21,6 +26,9 @@ const REST = SUPABASE_URL + "/rest/v1";
 const bot = BotManager.getCurrentBot();
 var wakePoll = false;
 var lastPull = 0;
+var sentIds = {};    // 보냈는데 삭제만 실패한 메시지 기억 — 재발송 방지 (2026-09-02 포스터 2번 발송 수리)
+var sentOrder = [];
+var _seenAt = {};    // 방별 활동 보고 스로틀 (30분)
 
 // ---- WakeLock: CPU가 얼지(Doze) 않게 ----
 var _wakeLock = null;
@@ -39,6 +47,27 @@ function acquireWakeLock() {
   } catch (e) { Log.e("[WakeLock] 실패: " + e); }
 }
 
+// 방 활동 보고 — 사람 메시지가 있는 방은 심박(아침 봇 줄) 대상에서 빠진다.
+// 방마다 30분에 1번만 보내 트래픽·배터리 부담 없음. 실패해도 무시(심박이 예전처럼 돌 뿐).
+function reportSeen(room) {
+  try {
+    if (!room) return;
+    var key = String(room);
+    var nowMs = java.lang.System.currentTimeMillis();
+    if (_seenAt[key] && nowMs - _seenAt[key] < 30 * 60 * 1000) return;
+    _seenAt[key] = nowMs;
+    org.jsoup.Jsoup.connect(REST + "/room_activity")
+      .header("apikey", SUPABASE_ANON)
+      .header("Authorization", "Bearer " + SUPABASE_ANON)
+      .header("Content-Type", "application/json")
+      .header("Prefer", "resolution=merge-duplicates")
+      .requestBody(JSON.stringify({ room: key, last_at: new Date().toISOString(), source: "message" }))
+      .ignoreContentType(true).followRedirects(true).timeout(15000)
+      .method(org.jsoup.Connection.Method.POST)
+      .execute();
+  } catch (e) {}
+}
+
 function onMessage(msg) {
   try {
     if (java.lang.System.currentTimeMillis() - lastPull > 2000) {
@@ -46,6 +75,7 @@ function onMessage(msg) {
       try { pollOnce(); } catch (e) {}
     }
   } catch (e) {}
+  try { reportSeen(msg.room); } catch (e) {}
 }
 bot.addListener(Event.MESSAGE, onMessage);
 
@@ -74,9 +104,14 @@ function pollOnce() {
   var acked = [];
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
+    if (sentIds[it.id]) { acked.push(it.id); continue; }  // 이미 보낸 것 — 삭제만 다시
     var r = false;
     try { r = bot.send(it.room, it.text); } catch (e) {}
-    if (r === true) { acked.push(it.id); Log.i("[게시] " + it.room); }
+    if (r === true) {
+      sentIds[it.id] = true; sentOrder.push(it.id);
+      if (sentOrder.length > 200) delete sentIds[sentOrder.shift()];
+      acked.push(it.id); Log.i("[게시] " + it.room);
+    }
   }
   if (acked.length) {
     // PostgREST in 필터: id=in.(uuid1,uuid2,...)

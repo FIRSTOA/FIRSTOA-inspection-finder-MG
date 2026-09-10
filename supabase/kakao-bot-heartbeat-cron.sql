@@ -5,18 +5,20 @@
 -- 원리: 대화가 있는 방은 죽지 않는다 → 봇이 살아 있는 동안 매일 한 줄을 스스로 보내
 --       세션을 갱신하면 조용한 방도 죽지 않는다. (죽어버린 방은 사람이 한 번 살려줘야 시작)
 --
--- ① 심박: 매일 08:00 KST(23:00 UTC) — room_map의 모든 방에 상태 한 줄
-select cron.schedule(
-  'kakao-bot-heartbeat',
-  '0 23 * * *',
-  $$
-  insert into outbox (room, text)
-  select distinct room,
-    '🤖 ' || to_char(now() at time zone 'Asia/Seoul', 'MM/DD') || ' 카톡봇 정상 대기 중 [봇점검]'
-  from room_map
-  where coalesce(trim(room), '') <> ''
-  $$
-);
+-- ① 심박: ★ 2026-09-10 교체됨 — "모든 방 매일 08:00"이 시끄럽다는 컴플레인(대표님)으로
+--    "20시간 조용한 방만, 매시(KST 08~22) 검사"로 바뀌었다.
+--    현행 정의는 room-activity-quiet-heartbeat.sql 참고. (아래 원본은 기록용)
+-- select cron.schedule(
+--   'kakao-bot-heartbeat',
+--   '0 23 * * *',
+--   $$
+--   insert into outbox (room, text)
+--   select distinct room,
+--     '🤖 ' || to_char(now() at time zone 'Asia/Seoul', 'MM/DD') || ' 카톡봇 정상 대기 중 [봇점검]'
+--   from room_map
+--   where coalesce(trim(room), '') <> ''
+--   $$
+-- );
 
 -- ② 파수꾼: 매시 20분 — 30분 넘게 안 나간 메시지가 있으면(=그 방 봇이 잠듦) 관리자에게 웹푸시,
 --    6시간 지난 심박은 삭제(늦게 살아난 방에 아침 인사가 뒷북으로 가지 않게)
