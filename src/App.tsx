@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
-import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
+import { clearSession as clearGwSession, loadSession as loadGwSession, startLogin as startGwLogin, type GroupwareSession } from "./groupwareAuth";
+import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen, LogIn, LogOut } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
@@ -3998,6 +3999,20 @@ export default function App() {
     }
   }, [author]);
 
+  // 그룹웨어 로그인(SSO) 세션 — 콜백 처리는 main.tsx에서 마운트 전에 끝나 있다.
+  // 지금은 '추가 기능'이다: 로그인하면 작성자가 자동으로 잡히고, 안 해도 기존처럼 쓸 수 있다
+  // (도메인 허용목록 등록 전이라 강제 게이트를 켜면 전 직원이 잠긴다 — 등록 후 별도 결정).
+  const [gwUser, setGwUser] = useState<GroupwareSession | null>(() => loadGwSession());
+  useEffect(() => {
+    if (!gwUser?.name) return;
+    // 방금 로그인해서 돌아온 경우(30초 이내)는 작성자를 그 사람으로 맞춘다.
+    // 복원된 세션은 작성자가 비어 있을 때만 채운다 — 사용자가 다른 작성자를 골라둔 걸 덮지 않는다.
+    const fresh = Date.now() - new Date(gwUser.loginAt).getTime() < 30_000;
+    if (fresh || !author) setAuthor(gwUser.name);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gwUser]);
+  const gwLogout = () => { clearGwSession(); setGwUser(null); };
+
   // 웹푸시: 켜둔 기기라면 구독을 살리고 작성자 이름 연동을 최신화 (알림 대상 매칭의 기준)
   useEffect(() => { void syncPush(author); }, [author]);
 
@@ -5883,10 +5898,18 @@ export default function App() {
               </div>
             </nav>
             <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3">
-              <UserRound size={16} className="text-slate-400" />
-              <span className="text-[12px] font-bold text-slate-200">{author || "작성자 미선택"}</span>
-              <span className="text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
+              <UserRound size={16} className="shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-bold text-slate-200">{author || "작성자 미선택"}</span>
+                <span className="block truncate text-[10px] font-semibold text-slate-500">{gwUser ? `${gwUser.department} ${gwUser.position} · 그룹웨어 ✓` : authorTeamLabel}</span>
+              </span>
+              {gwUser
+                ? <button type="button" onClick={gwLogout} className="flex shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-slate-200"><LogOut size={13} />로그아웃</button>
+                : <button type="button" onClick={startGwLogin} className="flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-950"><LogIn size={13} />그룹웨어 로그인</button>}
             </div>
+            {gwUser?.mustChangePassword && (
+              <a href="https://firstoa-groupware.vercel.app" target="_blank" rel="noreferrer" className="mx-4 mb-3 block rounded-lg bg-amber-500/15 px-3 py-2 text-[11px] font-bold leading-snug text-amber-300">그룹웨어에서 비밀번호를 먼저 설정해 주세요 →</a>
+            )}
           </div>
           <div className="flex-1 bg-black/30" />
         </div>
@@ -5986,13 +6009,19 @@ export default function App() {
               </button>
             );
           })}
-          <div className={`flex items-center gap-2 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={author || "작성자 미선택"}>
+          <div className={`flex items-center gap-2 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={gwUser ? `${gwUser.name} · ${gwUser.department} ${gwUser.position} (그룹웨어 로그인)` : author || "작성자 미선택"}>
             <UserRound size={16} className="shrink-0 text-slate-400" />
-            {!sidebarCollapsed && <span className="min-w-0">
+            {!sidebarCollapsed && <span className="min-w-0 flex-1">
               <span className="block truncate text-[12px] font-bold leading-tight text-slate-200">{author || "작성자 미선택"}</span>
-              <span className="block text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
+              <span className="block truncate text-[10px] font-semibold text-slate-500">{gwUser ? `${gwUser.department} ${gwUser.position} · 그룹웨어 ✓` : authorTeamLabel}</span>
             </span>}
+            {!sidebarCollapsed && (gwUser
+              ? <button type="button" onClick={gwLogout} title="그룹웨어 로그아웃" className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-white"><LogOut size={14} /></button>
+              : <button type="button" onClick={startGwLogin} title="그룹웨어로 로그인" className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-white"><LogIn size={14} /></button>)}
           </div>
+          {!sidebarCollapsed && gwUser?.mustChangePassword && (
+            <a href="https://firstoa-groupware.vercel.app" target="_blank" rel="noreferrer" className="mt-1.5 block rounded-lg bg-amber-500/15 px-3 py-1.5 text-[10px] font-bold leading-snug text-amber-300">그룹웨어에서 비밀번호를 먼저 설정해 주세요 →</a>
+          )}
         </div>
       </aside>
 
