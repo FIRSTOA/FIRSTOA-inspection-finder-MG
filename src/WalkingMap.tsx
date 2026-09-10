@@ -1339,9 +1339,22 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     };
   }, [mobileDetailId]);
 
+  // 공용 목록 미러(오프라인·첫 화면 가속용) — 전량(4천 행+)을 담으면 localStorage 5MB 한도를
+  // 넘고, 한도 초과가 여기서 그대로 터지면 리액트 트리 전체가 내려가 흰 화면이 된다
+  // (실사고: 4분기 불러오기로 행이 늘자 워킨맵 진입 즉시 먹통). 그래서 지금 보는 팀 것만,
+  // MapPlace 칸만 추려 저장한다(최대 팀도 2.5MB). 그래도 넘치면 미러를 지우고 포기한다 —
+  // 미러는 DB 응답 전 첫 화면용일 뿐이라 없어도 그대로 동작한다.
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(places));
-  }, [places]);
+    try {
+      const slim = places
+        .filter((place) => (place.team || "C") === teamFilter)
+        .map(({ id, number, team, quarter, kind, label, visible, name, comment, phone, address, addressDetail, latitude, longitude, memos }) =>
+          ({ id, number, team, quarter, kind, label, visible, name, comment, phone, address, addressDetail, latitude, longitude, memos }));
+      localStorage.setItem(storageKey, JSON.stringify(slim));
+    } catch {
+      try { localStorage.removeItem(storageKey); } catch { /* 저장이 막힌 환경 — 미러 없이 동작 */ }
+    }
+  }, [places, teamFilter]);
 
   const loadInspectionVisits = useCallback(() => {
     const startDate = dateDaysAgo(370);
@@ -1615,7 +1628,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   }, [sharedReady, loadSharedPlaces]);
 
   useEffect(() => {
-    localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
+    try {
+      localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
+    } catch { /* 저장 공간 부족·차단 환경 — 취향 저장은 없어도 동작한다 */ }
   }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters]);
 
   useEffect(() => {
