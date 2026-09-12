@@ -104,8 +104,11 @@ export async function getVisits(author: string, start: string, end: string): Pro
   }));
 }
 
-export async function getTeamVisits(start: string, end: string): Promise<VisitRow[]> {
-  const q = `select=*&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled&order=work_date.asc,arrival_time.asc,created_at.asc,id.asc`;
+// options.columns — 받을 열(기본 * ). 워킨맵처럼 일부 열만 쓰는 화면이 큰 source_text 등을 통째로 받지 않게.
+// options.filter — 추가 PostgREST 조건(예: visited=is.true&work_kinds=cs.{inspection}). 빠진 열은 빈 값으로 채워진다.
+export async function getTeamVisits(start: string, end: string, options: { columns?: string; filter?: string } = {}): Promise<VisitRow[]> {
+  const extra = options.filter ? `&${options.filter}` : "";
+  const q = `select=${options.columns || "*"}&work_date=gte.${start}&work_date=lte.${end}&status=neq.cancelled${extra}&order=work_date.asc,arrival_time.asc,created_at.asc,id.asc`;
   const rows = await selectAllRowsFast<DbVisit>("visit_logs", q);
   return rows.map((r) => ({
     id: r.id, created_at: r.created_at, workDate: r.work_date, author: r.author, vendor: r.vendor,

@@ -16,6 +16,7 @@ import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
 import { RENEWAL_LABEL_DESC, contractEnd, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
+import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./placesSync";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
 
@@ -45,6 +46,7 @@ type MapPlace = {
   latitude: number;
   longitude: number;
   memos: string[];
+  updatedAt?: string; // DB의 updated_at — 증분 폴링이 "더 새로운 행만 덮어쓰기"를 판단하는 기준(로컬 임시 행은 없음)
 };
 
 type DbMapPlace = {
@@ -63,9 +65,21 @@ type DbMapPlace = {
   latitude: number;
   longitude: number;
   memos: string[];
+  updated_at?: string;
+  updated_by?: string;
 };
 
 const storageKey = "cs_workin_map_places_v2";
+// ── 공용 목록(workin_map_places) 폴링 — 4,500행(≈5MB)을 30초마다 통째로 다시 받던 것을 증분으로.
+// 실제 변경은 하루 20여 행이라 마지막으로 본 updated_at 이후 행만 받는다.
+const PLACES_POLL_MS = 30_000;
+// updated_at은 저장한 브라우저 시계로 쓰인다(toDbPlace) — 시계가 늦은 기기의 저장이 새치기로 빠지지 않게
+// 마지막으로 본 시각보다 이만큼 앞부터 다시 본다(그 구간 행은 매번 다시 받지만 몇 행 수준).
+const PLACES_DELTA_MARGIN_MS = 5 * 60_000;
+// 삭제와 시계 어긋남은 updated_at으로 볼 수 없다 — N번째 폴링마다 id,updated_at 전량(≈300KB, 실측)으로 대조한다.
+const PLACES_RECONCILE_EVERY = 10;
+// 점검 방문일·미수·초과·불만 재조회(≈7MB) — 탭 복귀 때 최대 10분에 한 번만.
+const SECONDARY_REFRESH_MIN_MS = 10 * 60_000;
 const excelBaseHeaders = ["번호", "라벨", "지도에서", "이름", "코멘트", "전화번호", "주소", "상세주소", "위도", "경도"];
 const defaultMemoColumnCount = 15;
 const memoHeaders = (count: number) => Array.from({ length: count }, (_, index) => `메모${index + 1}`);
@@ -524,7 +538,7 @@ function loadMigratablePlaces() {
 }
 
 function fromDbPlace(place: DbMapPlace): MapPlace {
-  return { ...place, addressDetail: place.address_detail || "", memos: Array.isArray(place.memos) ? place.memos : [] };
+  return { ...place, addressDetail: place.address_detail || "", memos: Array.isArray(place.memos) ? place.memos : [], updatedAt: place.updated_at };
 }
 
 function toDbPlace(place: MapPlace, userKey: string): Record<string, unknown> {
@@ -561,6 +575,7 @@ function samePlaces(current: MapPlace[], next: MapPlace[]) {
   if (current.length !== next.length) return false;
   return JSON.stringify(current) === JSON.stringify(next);
 }
+
 
 function styleMapLabel(element: HTMLDivElement, active: boolean) {
   // 카카오 라벨은 자체 흰 말풍선 배경을 갖는다(data-kakao) — 비활성 복귀 시 흰 배경으로 되돌린다
@@ -1403,13 +1418,48 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
   }, []);
 
+  // 증분 폴링 상태 — 마지막으로 본 updated_at(서버 값의 최대치), 폴링 횟수(대조 주기용), 전량 재조회 예약(오류 뒤).
+  const lastSeenUpdatedAtRef = useRef("");
+  const placesPollCountRef = useRef(0);
+  const needFullReloadRef = useRef(false);
+  const lastPlacesPollAtRef = useRef(0);
+  const placesRef = useRef(places);
+  useEffect(() => { placesRef.current = places; }, [places]);
+
+  // 전량 조회 — 첫 진입·엑셀 불러오기 뒤·증분 폴링이 실패한 다음 틱에 쓴다.
   const loadSharedPlaces = useCallback(async () => {
     const remote = await selectAllRowsFast<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
     const next = remote.map(fromDbPlace);
     setPlaces((current) => samePlaces(current, next) ? current : next);
+    lastSeenUpdatedAtRef.current = maxUpdatedAt(remote, lastSeenUpdatedAtRef.current);
+    needFullReloadRef.current = false;
     setSyncState("saved");
     return remote;
   }, []);
+
+  // 증분 폴링 — 마지막으로 본 updated_at 이후 바뀐 행만 받아 id로 병합한다(규칙은 placesSync.ts, 테스트 tests/placesSync.test.ts).
+  // PLACES_RECONCILE_EVERY번째마다 id,updated_at 전량으로 대조해 삭제된 행을 지우고,
+  // 시계 어긋남 등으로 증분에서 빠진 행(updated_at이 로컬과 다른 행)은 id로 다시 받는다.
+  const pollSharedPlaces = useCallback(async () => {
+    if (needFullReloadRef.current || !lastSeenUpdatedAtRef.current) { await loadSharedPlaces(); return; }
+    placesPollCountRef.current += 1;
+    const since = new Date(updatedAtMs(lastSeenUpdatedAtRef.current) - PLACES_DELTA_MARGIN_MS).toISOString();
+    const changed = await selectAllRowsFast<DbMapPlace>("workin_map_places", `select=*&updated_at=gt.${encodeURIComponent(since)}&order=id.asc`);
+    let liveIds: Set<number> | null = null;
+    let recovered: DbMapPlace[] = [];
+    if (placesPollCountRef.current % PLACES_RECONCILE_EVERY === 0) {
+      const stamps = await selectAllRowsFast<Pick<DbMapPlace, "id" | "updated_at">>("workin_map_places", "select=id,updated_at&order=id.asc");
+      liveIds = new Set(stamps.map((row) => row.id));
+      const staleIds = staleIdsFromStamps(stamps, placesRef.current, changed.map((row) => row.id));
+      const chunks: number[][] = [];
+      for (let index = 0; index < staleIds.length; index += 200) chunks.push(staleIds.slice(index, index + 200));
+      recovered = (await Promise.all(chunks.map((ids) => selectRows<DbMapPlace>("workin_map_places", `select=*&id=in.(${ids.join(",")})&order=id.asc`)))).flat();
+    }
+    const incoming = [...changed, ...recovered];
+    lastSeenUpdatedAtRef.current = maxUpdatedAt(incoming, lastSeenUpdatedAtRef.current);
+    if (incoming.length || liveIds) setPlaces((current) => mergePlaces(current, incoming.map(fromDbPlace), liveIds));
+    setSyncState("saved");
+  }, [loadSharedPlaces]);
 
   const selectMapPlace = useCallback((id: number) => {
     selectionSourceRef.current = "map";
@@ -1468,8 +1518,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         return selectAllRowsFast<InspectionArchiveRow>("jeomgeom", `select=${encodeURIComponent(baseCols)}&${archiveDate}=gte.${startDate}&order=${archiveDate}.desc,id.desc`);
       }
     };
+    // 여기서 쓰는 건 점검 방문(visited·inspection)의 날짜·업체·원문뿐 — 서버에서 그 행·그 열만 받는다
+    // (source_text는 매월·재계약 곳의 비교 팝업과 자가신청이 실제로 파싱하므로 유지).
     void Promise.all([
-      getTeamVisits(startDate, kstDate()),
+      getTeamVisits(startDate, kstDate(), {
+        columns: "id,work_date,vendor,visited,work_kinds,note,source_text",
+        filter: `visited=is.true&work_kinds=cs.${encodeURIComponent("{inspection}")}`,
+      }),
       fetchArchive(),
     ])
       .then(([rows, archiveRows]) => {
@@ -1660,13 +1715,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   useEffect(() => { loadOverage(); }, [loadOverage]);
   useEffect(() => { loadBulman(); }, [loadBulman]);
 
-  // 점검 방문일·미수는 창 포커스/탭 복귀 시 최신으로 다시 불러온다(재계약/색칠처럼).
+  // 점검 방문일·미수·초과·불만은 탭 복귀 시 최신으로 다시 불러온다(재계약/색칠처럼) — 단 10분에 한 번만.
+  // 예전엔 focus와 visibilitychange를 둘 다 걸어 복귀 한 번에 ≈7MB를 두 번 받았다(감사 실측).
+  const lastSecondaryLoadAtRef = useRef(Date.now()); // 진입 시 로드와 같은 시각으로 시작
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState !== "hidden") { loadInspectionVisits(); loadMisu(); loadOverage(); loadBulman(); } };
-    window.addEventListener("focus", refresh);
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastSecondaryLoadAtRef.current < SECONDARY_REFRESH_MIN_MS) return;
+      lastSecondaryLoadAtRef.current = Date.now();
+      loadInspectionVisits(); loadMisu(); loadOverage(); loadBulman();
+    };
     document.addEventListener("visibilitychange", refresh);
-    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [loadInspectionVisits, loadMisu]);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [loadInspectionVisits, loadMisu, loadOverage, loadBulman]);
 
   useEffect(() => {
     let active = true;
@@ -1674,6 +1735,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       try {
         const remote = await selectAllRowsFast<DbMapPlace>("workin_map_places", "select=*&order=id.asc");
         if (!active) return;
+        lastSeenUpdatedAtRef.current = maxUpdatedAt(remote);
+        placesPollCountRef.current = 0;
         if (remote.length) {
           setPlaces(remote.map(fromDbPlace));
         } else {
@@ -1709,12 +1772,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     let active = true;
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
-      void loadSharedPlaces().catch((error) => {
+      // 복귀 때 focus·visibilitychange가 같이 울린다 — 몇 초 안의 중복 폴링은 한 번으로.
+      if (Date.now() - lastPlacesPollAtRef.current < 3_000) return;
+      lastPlacesPollAtRef.current = Date.now();
+      void pollSharedPlaces().catch((error) => {
         console.error("Workin map shared refresh failed", error);
+        needFullReloadRef.current = true; // 다음 틱엔 전량으로 맞춘다
         if (active) setSyncState("error");
       });
     };
-    const timer = window.setInterval(refresh, 30_000);
+    const timer = window.setInterval(refresh, PLACES_POLL_MS);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
@@ -1723,7 +1790,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [sharedReady, loadSharedPlaces]);
+  }, [sharedReady, pollSharedPlaces]);
 
   useEffect(() => {
     try {
