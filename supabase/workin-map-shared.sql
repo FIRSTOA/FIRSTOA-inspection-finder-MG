@@ -35,3 +35,13 @@ create policy "workin_map_places anon all"
 
 grant select, insert, update, delete
   on public.workin_map_places to anon;
+
+-- 2026-09-12: updated_at을 서버 시각으로 강제 — 브라우저 시계로 쓰던 값은 증분 폴링(updated_at=gt.)에서 빠질 수 있었다
+create or replace function set_workin_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists workin_map_places_updated_at on workin_map_places;
+create trigger workin_map_places_updated_at before insert or update on workin_map_places
+for each row execute function set_workin_updated_at();
