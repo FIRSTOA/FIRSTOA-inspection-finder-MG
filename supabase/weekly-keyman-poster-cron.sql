@@ -10,7 +10,7 @@
 -- 키는 anon만 쓴다(service_role은 코드·SQL에 넣지 않는다).
 select cron.schedule(
   'weekly-keyman-poster',
-  '0 23 * * 0',
+  '0 1 * * 1',
   $$
   select net.http_post(
     url := 'https://kkdiihazgzesbqxjytqv.supabase.co/functions/v1/weekly-keyman-poster',

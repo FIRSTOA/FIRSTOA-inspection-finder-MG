@@ -879,7 +879,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
   // 리플릿 모바일(circleMarker on canvas)과 같은 방식으로 맞춘다. 점 탭은 지도 click 좌표로 가장 가까운 점을 찾는다.
   const dotCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dotOverlayRef = useRef<KakaoNS | null>(null);
-  const dotHitsRef = useRef<Array<{ lat: number; lng: number; group: MapPlace[] }>>([]);
+  const dotHitsRef = useRef<Array<{ lat: number; lng: number; group: MapPlace[]; size: number; labelW: number }>>([]);
   const openGroupPopupRef = useRef<((group: MapPlace[], position: KakaoNS) => void) | null>(null);
   const dotsBrokenRef = useRef(false); // 캔버스 경로에서 예외가 나면 true → 그 뒤로는 예전 DOM 핀 방식으로 그린다(안전장치)
   const [ready, setReady] = useState(false);
@@ -919,8 +919,11 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       let best: { d: number; group: MapPlace[]; lat: number; lng: number } | null = null;
       for (const hit of hits) {
         const pt = projection.containerPointFromCoords(new kakao.maps.LatLng(hit.lat, hit.lng));
-        const d = Math.hypot(pt.x - tapped.x, pt.y - tapped.y);
-        if (d <= 16 && (!best || d < best.d)) best = { d, group: hit.group, lat: hit.lat, lng: hit.lng };
+        const dx = tapped.x - pt.x, dy = tapped.y - pt.y;
+        const d = Math.hypot(dx, dy);
+        // 점 반경 16px, 또는 점 위에 그린 라벨 상자(글자 폭 × 18px) 안이면 그 곳을 고른 것으로 본다
+        const inLabel = hit.labelW > 0 && Math.abs(dx) <= hit.labelW / 2 && dy <= -(hit.size + 4) && dy >= -(hit.size + 4 + 18);
+        if ((d <= 16 || inLabel) && (!best || d < best.d)) best = { d, group: hit.group, lat: hit.lat, lng: hit.lng };
       }
       if (!best) return;
       if (best.group.length === 1) onSelect(best.group[0].id);
@@ -1020,7 +1023,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     labelByIdRef.current.forEach((_, id) => { if (!visiblePlaceIds.has(id)) labelByIdRef.current.delete(id); });
 
     const projection = map.getProjection();
-    const dots: Array<{ lat: number; lng: number; color: string; size: number; group: MapPlace[] }> = [];
+    const dots: Array<{ lat: number; lng: number; color: string; size: number; group: MapPlace[]; label: string; labelW: number }> = [];
     // 같은 주소 여러 곳 팝업 — DOM 핀과 캔버스 점(지도 click 경로)이 함께 쓴다
     const openGroupPopup = (group: MapPlace[], position: KakaoNS) => {
       if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
@@ -1074,12 +1077,15 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       const meta = labelMeta(place.label);
       const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
       const groupSelected = group.some((item) => item.id === selectedId);
-      const permanentLabel = !mobile || map.getLevel() <= 5 || groupSelected;
+      // 모바일은 선택된 곳만 DOM 라벨(상호작용 필요). 확대 시 나머지 라벨은 캔버스 글자로 —
+      // 예전엔 레벨 ≤5에서 핀 전부가 라벨 달린 DOM으로 돌아가 확대할 때만 심하게 끊겼다(실사용 신고 2026-09-12)
+      const labelZoom = map.getLevel() <= 5;
+      const permanentLabel = !mobile || groupSelected;
       if (mobile && !permanentLabel && !dotsBrokenRef.current && dotCanvasRef.current) {
         // 라벨 없는 핀은 캔버스 점으로. 남아 있는 DOM 오버레이(선택 해제로 라벨→점 전환 등)는 치운다
         const existingDom = overlaysRef.current.get(place.id);
         if (existingDom) { existingDom.setMap(null); overlaysRef.current.delete(place.id); signaturesRef.current.delete(place.id); group.forEach((item) => labelByIdRef.current.delete(item.id)); }
-        dots.push({ lat: displayPos.getLat(), lng: displayPos.getLng(), color: meta.color, size: group.length > 1 ? 8 : 6, group });
+        dots.push({ lat: displayPos.getLat(), lng: displayPos.getLng(), color: meta.color, size: group.length > 1 ? 8 : 6, group, label: labelZoom ? groupLabel : "", labelW: 0 });
         return;
       }
       const signature = [displayPos.getLat().toFixed(7), displayPos.getLng().toFixed(7), meta.color, groupLabel, permanentLabel ? "label" : "dot", group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
@@ -1139,12 +1145,28 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, cssW, cssH);
         ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff";
-        for (const dot of dots) {
-          const pt = projection.containerPointFromCoords(new kakao.maps.LatLng(dot.lat, dot.lng));
-          const x = pt.x + ox, y = pt.y + oy;
-          if (x < -10 || y < -10 || x > cssW + 10 || y > cssH + 10) continue;
+        const positions = dots.map((dot) => { const pt = projection.containerPointFromCoords(new kakao.maps.LatLng(dot.lat, dot.lng)); return { x: pt.x + ox, y: pt.y + oy }; });
+        dots.forEach((dot, i) => {
+          const { x, y } = positions[i];
+          if (x < -10 || y < -10 || x > cssW + 10 || y > cssH + 10) return;
           ctx.beginPath(); ctx.arc(x, y, dot.size, 0, Math.PI * 2); ctx.fillStyle = dot.color; ctx.fill(); ctx.stroke();
-        }
+        });
+        // 라벨(확대 배율) — 점 위에 흰 말풍선 글자. DOM 툴팁과 같은 생김새를 캔버스로
+        ctx.font = "700 11px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const roundRect = (bx: number, by: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.moveTo(bx + r, by); ctx.arcTo(bx + w, by, bx + w, by + h, r); ctx.arcTo(bx + w, by + h, bx, by + h, r); ctx.arcTo(bx, by + h, bx, by, r); ctx.arcTo(bx, by, bx + w, by, r); ctx.closePath(); };
+        dots.forEach((dot, i) => {
+          if (!dot.label) return;
+          const { x, y } = positions[i];
+          if (x < -80 || y < -30 || x > cssW + 80 || y > cssH + 30) return;
+          const w = Math.ceil(ctx.measureText(dot.label).width) + 12, h = 18;
+          dot.labelW = w;
+          const bx = x - w / 2, by = y - dot.size - 4 - h;
+          roundRect(bx, by, w, h, 5);
+          ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fill();
+          ctx.lineWidth = 1; ctx.strokeStyle = "rgba(100,116,139,.45)"; ctx.stroke();
+          ctx.fillStyle = "#0f172a"; ctx.fillText(dot.label, x, by + h / 2 + 0.5);
+        });
         dotOverlay.setPosition(center);
         canvas.style.opacity = "1";
       }
@@ -1156,7 +1178,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       dotCanvasRef.current = null;
       setViewportRevision((cur) => cur + 1);
     }
-    dotHitsRef.current = dotsBrokenRef.current ? [] : dots.map((dot) => ({ lat: dot.lat, lng: dot.lng, group: dot.group }));
+    dotHitsRef.current = dotsBrokenRef.current ? [] : dots.map((dot) => ({ lat: dot.lat, lng: dot.lng, group: dot.group, size: dot.size, labelW: dot.labelW }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geoPlaces, onSelect, selectedId, viewportRevision]);
 

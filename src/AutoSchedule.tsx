@@ -335,7 +335,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">② 추천 조건</div>
             <div className="mt-2 flex gap-1 rounded-full bg-slate-100 p-1">
-              {[currentQuarter, currentQuarter < 4 ? currentQuarter + 1 : null].filter((q): q is number => q !== null).map((q) => (
+              {[currentQuarter, currentQuarter === 4 ? 1 : currentQuarter + 1].map((q) => (
                 <button key={q} type="button" onClick={() => setQuarter(q)} className={`${chip} flex-1 ${quarter === q ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>{q}분기 워킨맵{q !== currentQuarter ? " (미리)" : ""}</button>
               ))}
             </div>

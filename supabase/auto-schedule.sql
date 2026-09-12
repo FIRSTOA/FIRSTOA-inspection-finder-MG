@@ -174,7 +174,8 @@ create function suggest_workin_candidates(
       end as distance_km,
       case when workin_grade_(p.place_name) in ('SS','V')
            -- 대상 분기 시작 + 40일 이후만 권장. 다음 분기를 미리 짤 때는 아직 초반이라 '보류 권장'이 뜬다
-           then current_date >= make_date(extract(year from current_date)::int, (coalesce(p_quarter, extract(quarter from current_date)::int) - 1) * 3 + 1, 1) + 40 else true end as quarter_ok
+           -- 지금 분기보다 작은 분기를 골랐으면 다음 해 것(12월에 1분기 미리)
+           then current_date >= make_date(extract(year from current_date)::int + (case when coalesce(p_quarter, extract(quarter from current_date)::int) < extract(quarter from current_date)::int then 1 else 0 end), (coalesce(p_quarter, extract(quarter from current_date)::int) - 1) * 3 + 1, 1) + 40 else true end as quarter_ok
     from places p
     left join by_code bc on p.code <> '' and bc.hcode = p.code
     left join by_key bk on bk.hk = p.pkey and length(p.pkey) >= 3
