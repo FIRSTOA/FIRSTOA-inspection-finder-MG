@@ -4130,7 +4130,8 @@ export default function App() {
   // Result blocks for the bottom panel, tagged with their device index so
   // selecting a device scrolls its block into view.
   // IT통합(PC) 폼 상태 (탭 전환에도 유지, 초기화 시 리셋)
-  const [pcSubTab, setPcSubTab] = useState<"it" | "copier">("it");
+  // "bo" = IT파트장님이 만든 영업기회 관리(FIRSTOA BO) 통합판을 iframe으로 — 정식 공지 전이라 "테스트(사용금지)"로만 노출(2026-09-12)
+  const [pcSubTab, setPcSubTab] = useState<"it" | "copier" | "bo">("it");
   const [pcForm, setPcForm] = useState<PcFormState>(() => ({ ...EMPTY_PC_FORM, ...(ss.pcForm as object || {}) }));
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
@@ -4166,6 +4167,7 @@ export default function App() {
     if (mode === "air-purifier") return displayedTextOutput ? [{ text: displayedTextOutput, device: null }] : [];
     if (mode === "samsung-note") return displayedList.map((item: ResultItem) => ({ text: item.content, device: null }));
     if (mode === "pc") {
+      if (pcSubTab === "bo") return []; // BO 화면은 자체 저장 — 이 앱의 미리보기·전송 대상이 아니다
       if (pcSubTab === "copier") return copierExpansionFilled ? [{ text: copierExpansionText, device: null }] : [];
       return pcFilled ? [{ text: pcText, device: null }] : [];
     }
@@ -5218,6 +5220,7 @@ export default function App() {
 
     // 확장성: IT는 PC확장성, 복합기(기타)는 복합기확장성으로 저장/전송.
     if (mode === "pc") {
+      if (pcSubTab === "bo") { setSending(false); return; } // BO 화면은 자체 저장 — 전송 버튼은 어차피 비활성(hasOutput false)
       const res = pcSubTab === "copier"
         ? await sendCopierExpansionForm(copierExpansionForm, author, target, new Date().toISOString())
         : await sendPcForm(pcForm, author, target, new Date().toISOString());
@@ -5735,9 +5738,9 @@ export default function App() {
 
   // 시트 기입 4종이면 대상 시트 링크 (전송 버튼 옆 '시트 열기')
   const fieldSheetUrl = mode === "pc"
-    ? FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"]
+    ? (pcSubTab === "bo" ? "" : FIELD_SHEET_LINKS[pcSubTab === "copier" ? "pc-copier" : "pc-it"])
     : FIELD_SHEET_LINKS[mode] || "";
-  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
+  const hasOutput = textOutput.length > 0 || listOutput.length > 0 || (mode === "pc" && pcSubTab !== "bo" && (pcSubTab === "copier" ? copierExpansionFilled : pcFilled)) || (mode === "logistics" && logisticsFilled) || (mode === "replacement" && replacementFilled) || (mode === "contact-change" && contactChangeFilled) || (isCat && catFilled);
   // 점검·AS 양식 검증 — 전송과 같은 파서(buildRecords)로 판정한다.
   // "vendor": 업체명을 못 읽어 파스 실패(예전엔 이걸 지역 탓으로 잘못 안내했다)
   // "region": 지역 없음 — 여러 업체를 한 번에 보낼 때 일부 항목만 비어도 잡는다
@@ -6255,7 +6258,7 @@ export default function App() {
         )}
         {mode === "pc" && (
           <div className="mt-2 flex gap-1 rounded-xl bg-white/10 p-1">
-            {([["it", "IT"], ["copier", "복합기(기타)"]] as [typeof pcSubTab, string][]).map(([key, label]) => {
+            {([["it", "IT"], ["copier", "복합기(기타)"], ["bo", "테스트(사용금지)"]] as [typeof pcSubTab, string][]).map(([key, label]) => {
               const active = pcSubTab === key;
               return (
                 <button
@@ -6418,7 +6421,15 @@ export default function App() {
         {/* 확장성 form */}
         {mode === "pc" && (
           <div className="space-y-3">
-            {pcSubTab === "it" ? (
+            {pcSubTab === "bo" ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] font-bold text-amber-800">
+                  <span>🧪 테스트 중 — IT파트장님이 만든 <b>영업기회 관리(BO)</b> 통합판입니다. 정식 공지 전이라 <b>실사용 금지</b>. 여기 입력한 내용은 이 앱이 아니라 BO 쪽에 저장됩니다.</span>
+                  <a href="https://firstoa-bo.vercel.app/" target="_blank" rel="noreferrer" className="shrink-0 rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white">새 창으로 열기 ↗</a>
+                </div>
+                <iframe title="FIRSTOA BO (테스트)" src="https://firstoa-bo.vercel.app/" allow="microphone; clipboard-write" className="h-[78vh] min-h-[560px] w-full rounded-xl border border-slate-200 bg-white" />
+              </div>
+            ) : pcSubTab === "it" ? (
               <PcForm
                 form={pcForm}
                 setForm={setPcForm}
