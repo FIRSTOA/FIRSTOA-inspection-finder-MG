@@ -589,7 +589,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
   const markerByIdRef = useRef(new Map<number, L.Marker | L.CircleMarker>());
   // 좌표·주소 그룹키 사전계산 — 지도 이동·선택마다 전체를 다시 정규화하지 않도록 (모바일 밀림의 원인)
   const geoPlaces = useMemo(() => places
-    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude))
+    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && !(place.latitude === 0 && place.longitude === 0)) // 좌표 0은 무좌표(실측 17곳)
     .map((place) => ({ place, gkey: addressGroupKey(place) })), [places]);
   const markerSignatureRef = useRef(new Map<number, string>());
   const labelByIdRef = useRef(new Map<number, HTMLDivElement>());
@@ -817,7 +817,8 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     const map = mapRef.current;
     const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
     if (map && place) map.panTo([place.latitude, place.longitude], { animate: true, duration: 0.25 });
-  }, [selectedId, places]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]); // places는 의존성에서 뺀다 — 30초 폴링·색칠마다 선택지로 지도가 되돌아갔다(감사 #13)
 
   useEffect(() => {
     const map = mapRef.current;
@@ -989,7 +990,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
    * 다시 필터링하고 주소 문자열을 정규화해 모바일에서 눈에 보이게 밀렸다.
    */
   const geoPlaces = useMemo(() => places
-    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude))
+    .filter((place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && !(place.latitude === 0 && place.longitude === 0)) // 좌표 0은 무좌표(실측 17곳)
     .map((place) => ({ place, gkey: addressGroupKey(place) })), [places]);
 
   // 핀 렌더 — 화면(+여유) 안만 생성, 시그니처 같으면 재사용
@@ -1194,7 +1195,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const place = selectedId === null ? null : places.find((item) => item.id === selectedId);
     if (map && place && Number.isFinite(place.latitude)) map.panTo(new kakao.maps.LatLng(place.latitude, place.longitude));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, places]);
+  }, [selectedId]); // places는 의존성에서 뺀다 — 30초 폴링·색칠마다 선택지로 지도가 되돌아갔다(감사 #13)
 
   // 현재 위치(GPS)
   useEffect(() => {
@@ -2220,6 +2221,20 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     setPlaces((current) => current.map((place) => changedById.get(place.id) || place));
   };
 
+  // 한 곳 라벨 바꾸기 — 하단 띠 "완료" 버튼용(감사 #2: 완료 색칠이 4탭이었다). 이력 메모·저장·실패 알림은 bulkSetLabel과 같다
+  const setPlaceLabel = (id: number, label: string) => {
+    const target = places.find((place) => place.id === id);
+    if (!target || target.label === label) return;
+    const next = withLabelHistory({ ...target, label }, target.label);
+    if (sharedReady) {
+      setSyncState("loading");
+      void upsertRows("workin_map_places", [toDbPlace(next, userKey)], "id")
+        .then(() => { setSyncState("saved"); notify(`${workinVendorName(target.name) || target.name} — ${labelMeta(label).name}(${label})으로 표시했습니다`, "success"); })
+        .catch((error) => { console.error(error); setSyncState("error"); notify(`저장 실패 — 네트워크를 확인하고 다시 시도해 주세요 (${(error as Error).message.slice(0, 60)})`, "error"); });
+    }
+    setPlaces((current) => current.map((place) => (place.id === id ? next : place)));
+  };
+
   const toggleChecked = (id: number) => {
     setCheckedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
@@ -2911,6 +2926,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 onClick={() => void markKeymanGreeted(keyman)}
                 className="grid w-11 shrink-0 place-items-center bg-amber-500 text-[15px] text-white active:bg-amber-600 disabled:opacity-50">🤝</button>
             )}
+            {!editMode && place.kind !== "renewal" && place.label !== "G5" && place.label !== "G12" && (
+              <button type="button" aria-label="점검 완료로 표시" title="점검 완료(G5)로 표시"
+                onClick={() => { void askConfirm(`${workinVendorName(place.name) || place.name}\n점검 완료(G5)로 표시할까요?`, { okLabel: "완료" }).then((ok) => { if (ok) setPlaceLabel(place.id, "G5"); }); }}
+                className="grid w-12 shrink-0 place-items-center border-l border-slate-100 bg-emerald-600 text-[11px] font-black text-white active:bg-emerald-700">완료</button>
+            )}
             {!editMode && (
               <button type="button" aria-label="내 일정에 넣기" title="이 업체를 내 일정에 넣기"
                 onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
@@ -2932,7 +2952,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           {placeList}
           {mapPanel}
         </div> : <div className="flex h-[calc(100dvh-48px)] min-h-[440px] flex-col">
-          <div className="relative min-h-0 flex-1 overflow-hidden">{mobileView === "map" ? mapPanel : placeList}</div>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {/* 탭을 오갈 때 지도를 다시 만들지 않는다(감사 #1: 전환마다 카카오 지도 재생성 1초 멈춤) — 둘 다 그려두고 비활성 쪽만 숨긴다 */}
+            <div className={mobileView === "map" ? "absolute inset-0" : "invisible absolute inset-0 pointer-events-none"} aria-hidden={mobileView !== "map"}>{mapPanel}</div>
+            <div className={mobileView === "list" ? "absolute inset-0" : "invisible absolute inset-0 pointer-events-none"} aria-hidden={mobileView !== "list"}>{placeList}</div>
+          </div>
           <div className="grid shrink-0 grid-cols-2 border-t border-slate-200 bg-white shadow-[0_-3px_10px_rgba(15,23,42,0.08)]">
             <button type="button" onClick={() => setMobileView("map")} className={`pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs font-black ${mobileView === "map" ? "bg-blue-50 text-blue-700" : "bg-white text-slate-500"}`}>지도</button>
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setMobileView("list"); }} className={`pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs font-black ${mobileView === "list" ? "bg-blue-50 text-blue-700" : "bg-white text-slate-500"}`}>목록</button>
