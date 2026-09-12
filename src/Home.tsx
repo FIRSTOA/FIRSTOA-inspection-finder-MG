@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
-  ArrowUpRight,
   BarChart3,
   BookOpen,
   Bot,
@@ -30,6 +29,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import FeedbackBoard from "./FeedbackBoard";
 import { PATCH_NOTES } from "./patchNotes";
 import { countRows, selectAllRowsFast, selectRows } from "./supabase";
 import { getTeamVisits, kstDate, weekRange } from "./visits";
@@ -37,7 +37,7 @@ import { getTeamVisits, kstDate, weekRange } from "./visits";
 // 홈 = 실시간 운영 현황판 (2026-09-12 개편, 같은 날 하단부까지 전면 다크 통일)
 // ① 관제 덱: 라이브 시계·시스템 상태·개인 인사(내 이번 주 기록)
 // ② 지표: 오늘/이번 주 기록·방문·키맨 변경·데이터 자산·7일 추이·지역별 주간 기록·팀별 분기 진행률·실시간 피드
-// ③ 실행 타일(라이브 배지) → 절약 효과(실측 기반 카운터) → 모듈 그리드 → 릴리스 타임라인 → 온보딩 스테퍼 → 시스템 푸터
+// ③ 피드백 보드(직원 의견 → 개발자 컨펌) → 절약 효과(실측 기반 카운터) → 모듈 그리드 → 릴리스 타임라인 → 온보딩 스테퍼 → 시스템 푸터
 // 데이터는 전부 anon 읽기 가능한 테이블만. 조회가 실패해도 화면은 뜬다(하단 경고 한 줄).
 // 주의: selectRows는 1,000행에서 잘린다 — 워킨맵(3천 행+)처럼 클 수 있는 조회는 selectAllRowsFast(실사고: 진행률 오표시).
 
@@ -340,14 +340,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const savedWeekHours = Math.round((weekRecords * MINUTES_SAVED_PER_RECORD) / 60);
   const savedTotalHours = data ? Math.round((data.totalRecords * MINUTES_SAVED_PER_RECORD) / 60) : 0;
 
-  // 실행 타일 — 라이브 배지
-  const launch: Array<{ key: Screen; title: string; desc: string; icon: LucideIcon; tone: string; badge: string | null }> = [
-    { key: "serviceReception", title: "서비스접수", desc: "접수·확인 팝업·일정 자동등록", icon: ClipboardList, tone: "bg-rose-500", badge: data ? `오늘 AS ${data.todayAs}` : null },
-    { key: "asReception", title: "일정리스트", desc: "상세·통화·네비·FIELD 변환", icon: CalendarDays, tone: "bg-violet-500", badge: data ? `이번 주 방문 ${data.weekVisits}` : null },
-    { key: "walkingMap", title: "워킨맵", desc: "점검·재계약·미수·여분 분석", icon: MapPinned, tone: "bg-emerald-500", badge: data ? `${quarter}분기 남은 ${fmt(Math.max(0, totalProgress - doneProgress))}` : null },
-    { key: "field", title: "FIELD 작성", desc: "양식·사진·업무방 전송", icon: FilePenLine, tone: "bg-blue-600", badge: data ? `오늘 기록 ${data.todayInspections + data.todayAs}` : null },
-  ];
-
   return (
     <div className="pb-8">
       <div className="relative overflow-hidden rounded-3xl bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
@@ -451,28 +443,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
         {data?.errors.length ? <div className="relative border-t border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[11px] font-bold text-amber-200 sm:px-6">일부 지표를 못 불러왔습니다: {data.errors.slice(0, 3).join(" · ")}</div> : null}
 
-        {/* ── ③ 실행 타일 ── */}
-        <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">
-          <div className="mb-3 flex items-end justify-between"><div><div className={eyebrow}>Launch</div><h3 className="mt-0.5 text-[15px] font-black text-white">바로 시작</h3></div><span className="text-[11px] font-bold text-slate-500">현장과 이동 중 가장 자주 쓰는 4개</span></div>
-          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            {launch.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button key={item.key} type="button" onClick={() => go(item.key)} className={`group relative flex min-h-[104px] flex-col justify-between overflow-hidden p-3.5 text-left transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:translate-y-0 ${card}`}>
-                  <div className="flex items-start justify-between">
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${item.tone} text-white shadow-lg`}><Icon size={20} strokeWidth={2.2} /></span>
-                    <ArrowUpRight size={16} className="text-slate-500 transition group-hover:text-white" />
-                  </div>
-                  <div className="mt-3 min-w-0">
-                    <div className="text-[14px] font-black text-white">{item.title}</div>
-                    <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{item.desc}</div>
-                  </div>
-                  {item.badge && <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10.5px] font-black tabular-nums text-slate-200"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{item.badge}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* ── ③ 피드백 보드 — 직원 불편·버그·개선점 → 개발자 답글·지시 → 컨펌(개발 대기) ── */}
+        <FeedbackBoard author={author} />
 
         {/* ── ④ 절약 효과 ── */}
         <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">

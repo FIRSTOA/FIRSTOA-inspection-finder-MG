@@ -544,9 +544,10 @@ function withLabelHistory(place: MapPlace, previousLabel?: string): MapPlace {
   return place.memos.includes(entry) ? place : { ...place, memos: [...place.memos, entry] };
 }
 
-function blankPlace(number: number): MapPlace {
+// 새 곳의 팀·분기·업무는 지금 보고 있는 필터를 따른다 — 예전엔 C팀·3분기 고정이라 A팀 4Q에서 추가하면 저장 직후 화면에서 사라졌다
+function blankPlace(number: number, team: Team = "C", quarter: Quarter = 3, kind: WorkKind = "quarter"): MapPlace {
   return {
-    id: Date.now(), number, team: "C", quarter: 3, kind: "quarter", label: "G1", visible: true, name: "", comment: "", phone: "",
+    id: Date.now(), number, team, quarter, kind, label: "G1", visible: true, name: "", comment: "", phone: "",
     address: "", addressDetail: "", latitude: 37.5665, longitude: 126.978, memos: [],
   };
 }
@@ -2182,7 +2183,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       setSyncState("loading");
       void upsertRows("workin_map_places", [toDbPlace(savedDraft, userKey)], "id")
         .then(() => setSyncState("saved"))
-        .catch((error) => { console.error(error); setSyncState("error"); });
+        .catch((error) => { console.error(error); setSyncState("error"); notify(`저장 실패 — 네트워크를 확인하고 다시 저장해 주세요 (${(error as Error).message.slice(0, 60)})`, "error"); });
     }
     setPlaces((current) => current.some((place) => place.id === savedDraft.id)
       ? current.map((place) => place.id === savedDraft.id ? savedDraft : place)
@@ -2213,7 +2214,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       setSyncState("loading");
       void upsertRows("workin_map_places", changed.map((place) => toDbPlace(place, userKey)), "id")
         .then(() => setSyncState("saved"))
-        .catch((error) => { console.error(error); setSyncState("error"); });
+        .catch((error) => { console.error(error); setSyncState("error"); notify(`저장 실패 — 네트워크를 확인하고 다시 저장해 주세요 (${(error as Error).message.slice(0, 60)})`, "error"); });
     }
     const changedById = new Map(changed.map((place) => [place.id, place]));
     setPlaces((current) => current.map((place) => changedById.get(place.id) || place));
@@ -2255,8 +2256,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         if (rowNumber === 1) return;
         const values: Record<string, string | number> = {};
         importedHeaders.forEach((header) => {
-          const cell = row.getCell(headerIndexes.get(header) || 0);
-          values[header] = ["번호", "위도", "경도"].includes(header) ? Number(cell.value) || 0 : cell.text || "";
+          // 시트에 없는 열(메모 15개 미만·전화·상세주소 등)은 빈 값 — 예전엔 getCell(0) 예외로 손으로 만든 시트가 통째로 실패했다
+          const column = headerIndexes.get(header);
+          const cell = column ? row.getCell(column) : null;
+          values[header] = ["번호", "위도", "경도"].includes(header) ? (cell ? Number(cell.value) || 0 : 0) : (cell ? cell.text || "" : "");
         });
         if (String(values["이름"] || "").trim()) rows.push(values);
       });
@@ -2294,6 +2297,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   };
 
   const applyExcelImport = async () => {
+    // "교체"는 그 팀·분기·업무 목록을 통째로 지우고 넣는다 — 확인 없이 남의 팀 목록을 날릴 수 있어 반드시 묻는다(감사 #3)
+    if (importMode === "replace") {
+      const existing = places.filter((place) => place.team === importTeam && place.quarter === importQuarter && place.kind === importKind).length;
+      const kindLabel = workKinds.find((item) => item.value === importKind)?.label || importKind;
+      const ok = await askConfirm(`${importTeam}팀 ${importQuarter}분기 ${kindLabel} 기존 ${existing}곳을 지우고 새 파일 ${pendingImport.length}곳으로 교체합니다. 되돌릴 수 없어요 — 계속할까요?`, { danger: true, okLabel: "교체" });
+      if (!ok) return;
+    }
     const imported = pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind }));
     if (sharedReady && importMode === "replace") {
       try {
@@ -2422,7 +2432,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           {addressPinLabel && <button type="button" onClick={() => { addressClearBridge?.(); setAddressPinLabel(""); }} title="지도의 주소 핀 지우기"
             className="flex max-w-[10rem] shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-[11px] font-black text-blue-700 transition hover:bg-blue-100"><span className="truncate">📍{addressPinLabel}</span><span>✕</span></button>}
           {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
-          <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
+          <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1, teamFilter, quarterFilter, kindFilter === "ALL" ? "quarter" : kindFilter))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
         </div>
         {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-3 gap-1">
@@ -2764,7 +2774,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <LocateFixed size={16} strokeWidth={2.4} />
           </button>
           <div className="flex gap-1">
-          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" || quarterGrades.length > 0 || renewalGradeFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건{quarterGrades.length > 0 ? ` · ${quarterGrades.join("/")}` : renewalGradeFilter !== "ALL" ? ` · ${renewalGradeFilter}` : ""}</button>
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" || quarterGrades.length > 0 || renewalGradeFilter !== "ALL" || quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건{quarterGrades.length > 0 ? ` · ${quarterGrades.join("/")}` : renewalGradeFilter !== "ALL" ? ` · ${renewalGradeFilter}` : ""}</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
           </div>
@@ -2785,6 +2795,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 {workKinds.map((item) => <button key={item.value} type="button" onClick={() => { setKindFilter(item.value); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
               </div>
               {kindFilter === "quarter" && (<>
+                <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>특성 <span className="font-bold text-slate-300">(있는 곳만)</span></span>{(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterHasBulman(false); }} className="text-[10px] font-black text-blue-600">해제</button>}</div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1">
+                  <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600"}`}>재계약 있음</button>
+                  <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"}`}>미수 있음</button>
+                  <button type="button" onClick={() => setQuarterHasOverage((current) => !current)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterHasOverage ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"}`}>초과 있음</button>
+                  <button type="button" onClick={() => setQuarterHasBulman((current) => !current)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterHasBulman ? "bg-red-600 text-white" : "bg-slate-100 text-slate-600"}`}>불만 있음</button>
+                </div>
                 <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>등급 <span className="font-bold text-slate-300">(중복 선택)</span></span>{quarterGrades.length > 0 && <button type="button" onClick={() => setQuarterGrades([])} className="text-[10px] font-black text-blue-600">해제</button>}</div>
                 <div className="mt-1.5 grid grid-cols-5 gap-1">
                   {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`rounded px-2 py-1.5 text-xs font-black ${quarterGrades.includes(grade) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{grade}</button>)}
