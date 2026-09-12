@@ -161,7 +161,7 @@ async function loadTelemetry(): Promise<Telemetry> {
     safe("점검누적", countRows("jeomgeom"), 0),
     safe("AS누적", countRows("as_records"), 0),
     safe("사진", countRows("photo_assets"), 0),
-    safe("워킨맵", selectRows<{ team: string; label: string }>("workin_map_places", `select=team,label&quarter=eq.${quarter}&kind=eq.quarter&visible=not.is.false`), []),
+    safe("워킨맵", selectRows<{ team: string; label: string; kind: string }>("workin_map_places", `select=team,label,kind&quarter=eq.${quarter}&kind=in.(quarter,monthly)&visible=not.is.false`), []),
   ]);
 
   const dayKeys = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
@@ -185,7 +185,7 @@ async function loadTelemetry(): Promise<Telemetry> {
     daily,
     weekAuthors: new Set(weekRows.map((r) => r.작성자).filter(Boolean)).size,
     weekVisits: visited.length,
-    weekMinutes: visited.reduce((s, v) => s + (Number((v as unknown as { minutes?: number | null }).minutes) || 0), 0),
+    weekMinutes: visited.reduce((s, v) => s + Object.values((v as unknown as { minutes?: Record<string, number> }).minutes || {}).reduce((a, b) => a + (Number(b) || 0), 0), 0),
     outboxPending: outbox.length, outboxOldestMin: oldest,
     botLastDelivery: activity[0]?.last_at || null,
     sheetPending: sheetJobs.filter((j) => ["pending", "queued", "retry"].includes(statusOf(j.sheet_status))).length,
@@ -193,9 +193,17 @@ async function loadTelemetry(): Promise<Telemetry> {
     keymanChanges7d: keyman.length,
     keymanGreetWaiting: keyman.filter((k) => !k.greeting_done && /담당|키맨|명의/.test(k.category || "")).length,
     totalRecords: totalInsp + totalAs, totalPhotos, activeMembers,
+    // 워킨맵 '팀별 진행률'과 같은 셈법 — 분기점검은 G5·G12가 완료, 매월점검은 한 곳이 3단위(G2=1·G3=2·G5/G12=3)
     teamProgress: teams.map((team) => {
       const rows = workin.filter((w) => w.team === team);
-      return { team, total: rows.length, done: rows.filter((w) => w.label === "G5").length };
+      const quarterly = rows.filter((w) => w.kind === "quarter");
+      const monthly = rows.filter((w) => w.kind === "monthly");
+      const monthlyUnits = (label: string) => (label === "G2" ? 1 : label === "G3" ? 2 : label === "G5" || label === "G12" ? 3 : 0);
+      return {
+        team,
+        total: quarterly.length + monthly.length * 3,
+        done: quarterly.filter((w) => w.label === "G5" || w.label === "G12").length + monthly.reduce((sum, w) => sum + monthlyUnits(w.label), 0),
+      };
     }),
     recent: [...recentInsp, ...recentAs].sort((a, b) => String(b.created_at || b.작성일).localeCompare(String(a.created_at || a.작성일))).slice(0, 10),
     errors,
@@ -366,8 +374,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           </div>
         </div>
 
-        <div className="relative grid gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12">
-          <div className="grid gap-3 sm:grid-cols-2 lg:col-span-7">
+        <div className="relative grid gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
+          <div className="grid auto-rows-min gap-3 sm:grid-cols-2 lg:col-span-7">
             <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300"
               value={data ? fmtNum(data.todayInspections + data.todayAs) : "—"}
               sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmtNum(data.weekInspections + data.weekAs)}건` : loading ? "불러오는 중" : ""} />
@@ -392,7 +400,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           <div className="grid gap-3 lg:col-span-5">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{quarter}분기 점검 진행률</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{quarter}분기 점검 진행률 <span className="normal-case tracking-normal text-slate-600">· 워킨맵 기준</span></span>
                 <span className="text-[12px] font-black tabular-nums text-white">{data ? `${pct(doneProgress, totalProgress)}%` : "—"} <span className="text-slate-500">{data ? `${fmtNum(doneProgress)}/${fmtNum(totalProgress)}` : ""}</span></span>
               </div>
               <div className="mt-3 space-y-2.5">
@@ -412,10 +420,10 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                 <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>실시간 활동</span>
                 <button type="button" onClick={() => void refresh()} className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white"><RefreshCw size={11} />새로고침</button>
               </div>
-              <ul className="divide-y divide-white/[0.06]">
+              <ul className="max-h-[372px] divide-y divide-white/[0.06] overflow-y-auto">
                 {(data?.recent || []).map((row) => (
                   <li key={`${row.구분}-${row.id}`} className="flex items-center gap-3 px-4 py-2">
-                    <span className="w-[68px] shrink-0 font-mono text-[10.5px] font-bold tabular-nums text-slate-500">{clockOf(row)}</span>
+                    <span className="w-[86px] shrink-0 whitespace-nowrap font-mono text-[10.5px] font-bold tabular-nums text-slate-500">{clockOf(row)}</span>
                     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${/AS/i.test(row.구분) ? "bg-violet-500/20 text-violet-200" : "bg-blue-500/20 text-blue-200"}`}>{row.구분 || "기록"}</span>
                     <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-slate-100">{row.업체명}</span>
                     <span className="shrink-0 text-[11px] font-black text-slate-400">{row.작성자}{row.지역 ? ` · ${row.지역}` : ""}</span>
