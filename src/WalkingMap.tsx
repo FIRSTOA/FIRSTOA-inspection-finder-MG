@@ -2383,9 +2383,24 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     URL.revokeObjectURL(url);
   };
 
+  // 모바일 목록 뷰의 상단바 — 예전엔 ≡ 버튼만 한 줄을 차지했다(요청: 거래처 N곳을 그 옆에). 지도 뷰의 headerControls와 같은 자리
+  const listHeaderControls = headerSlot && createPortal(
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+      <div className="min-w-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[14px] font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
+          <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>{syncState === "loading" ? "저장 중" : syncState === "error" ? "DB 연결 필요" : "저장됨"}</span>
+        </div>
+        <div className="truncate text-[10.5px] font-bold text-slate-400">{conditionTitle}</div>
+      </div>
+      <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`shrink-0 rounded-full px-3 py-1.5 text-[11.5px] font-black transition ${editMode ? "bg-white text-slate-950" : "bg-white/10 text-slate-200"}`}>{editMode ? "편집 종료" : "목록 편집"}</button>
+    </div>,
+    headerSlot,
+  );
+
   const placeList = (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex items-center justify-between gap-2 bg-[#151A23] px-3 py-2.5">
+      <div className="hidden items-center justify-between gap-2 bg-[#151A23] px-3 py-2.5 lg:flex">
         <div className="min-w-0">
           <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
           <div className="flex items-baseline gap-2">
@@ -2749,7 +2764,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <LocateFixed size={16} strokeWidth={2.4} />
           </button>
           <div className="flex gap-1">
-          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건</button>
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" || quarterGrades.length > 0 || renewalGradeFilter !== "ALL" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건{quarterGrades.length > 0 ? ` · ${quarterGrades.join("/")}` : renewalGradeFilter !== "ALL" ? ` · ${renewalGradeFilter}` : ""}</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
           </div>
@@ -2769,6 +2784,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <button type="button" onClick={() => { setKindFilter("ALL"); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
                 {workKinds.map((item) => <button key={item.value} type="button" onClick={() => { setKindFilter(item.value); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
               </div>
+              {kindFilter === "quarter" && (<>
+                <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>등급 <span className="font-bold text-slate-300">(중복 선택)</span></span>{quarterGrades.length > 0 && <button type="button" onClick={() => setQuarterGrades([])} className="text-[10px] font-black text-blue-600">해제</button>}</div>
+                <div className="mt-1.5 grid grid-cols-5 gap-1">
+                  {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`rounded px-2 py-1.5 text-xs font-black ${quarterGrades.includes(grade) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{grade}</button>)}
+                </div>
+              </>)}
+              {kindFilter === "renewal" && (<>
+                <div className="mt-3 text-[11px] font-black text-slate-400">등급</div>
+                <div className="mt-1.5 grid grid-cols-6 gap-1">
+                  {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`rounded px-1.5 py-1.5 text-xs font-black ${renewalGradeFilter === grade ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{grade === "ALL" ? "전체" : grade}</button>)}
+                </div>
+              </>)}
+              {kindFilter === "ALL" && <div className="mt-3 text-[10px] font-bold text-slate-400">업무(분기·재계약)를 고르면 등급 필터가 나옵니다.</div>}
             </div>
           )}
 
@@ -2881,6 +2909,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   return (
     <div>
       {mobileView === "map" && headerControls}
+      {mobileView === "list" && listHeaderControls}
       <section className="overflow-hidden bg-white">
         {desktopLayout ? <div className="grid h-[calc(100dvh-48px)] min-h-[520px] grid-cols-[340px_minmax(0,1fr)]">
           {placeList}
