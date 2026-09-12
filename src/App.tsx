@@ -5220,7 +5220,7 @@ export default function App() {
 
     // 확장성: IT는 PC확장성, 복합기(기타)는 복합기확장성으로 저장/전송.
     if (mode === "pc") {
-      if (pcSubTab === "bo") { setSending(false); return; } // BO 화면은 자체 저장 — 전송 버튼은 어차피 비활성(hasOutput false)
+      if (pcSubTab === "bo") { setSending(false); return false; } // BO 화면은 자체 저장 — 전송 버튼은 어차피 비활성(hasOutput false)
       const res = pcSubTab === "copier"
         ? await sendCopierExpansionForm(copierExpansionForm, author, target, new Date().toISOString())
         : await sendPcForm(pcForm, author, target, new Date().toISOString());
