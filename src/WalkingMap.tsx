@@ -1668,6 +1668,38 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       byKey.set(item.key, list);
     }
     const keys = Array.from(byKey.keys());
+    // 부분일치(한쪽이 다른 쪽을 포함) 후보를 5글자 조각(5-gram) 색인으로 좁힌다.
+    // 예전엔 곳 수 × 키 수만큼 includes를 돌려(약 2천만 회) 모바일 진입·색칠 때 수 초 멈췄다(실측).
+    // 5자 이상 두 문자열이 포함 관계면 반드시 5글자 조각을 하나는 공유하므로,
+    // 조각을 공유하는 키만 모아 실제 포함 검사를 하면 결과가 예전과 같다(순서도 keys 순으로 맞춘다).
+    const keyOrder = new Map(keys.map((k, index) => [k, index] as [string, number]));
+    const gramIndex = new Map<string, string[]>();
+    for (const k of keys) {
+      if (k.length < 5) continue;
+      for (let i = 0; i + 5 <= k.length; i += 1) {
+        const gram = k.slice(i, i + 5);
+        const list = gramIndex.get(gram);
+        if (!list) gramIndex.set(gram, [k]);
+        else if (list[list.length - 1] !== k) list.push(k);
+      }
+    }
+    const poolByKey = new Map<string, PoolEntry[]>();
+    const partialPool = (key: string): PoolEntry[] => {
+      if (key.length < 5) return [];
+      const cached = poolByKey.get(key);
+      if (cached) return cached;
+      const candidates = new Set<string>();
+      for (let i = 0; i + 5 <= key.length; i += 1) {
+        for (const k of gramIndex.get(key.slice(i, i + 5)) || []) {
+          if (k.includes(key) || key.includes(k)) candidates.add(k);
+        }
+      }
+      const result = Array.from(candidates)
+        .sort((left, right) => (keyOrder.get(left) || 0) - (keyOrder.get(right) || 0))
+        .flatMap((k) => byKey.get(k) || []);
+      poolByKey.set(key, result);
+      return result;
+    };
     const serialIndex = new Map<string, VisitLike[]>();
     for (const row of archiveVisits) {
       for (const id of row.idKeys) {
@@ -1679,9 +1711,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return new Map(places.map((place) => {
       const key = vendorMatchKey(place.name);
       const exact = byKey.get(key) || [];
-      const entryPool = exact.length ? exact : key.length >= 5
-        ? keys.filter((k) => k.length >= 5 && (k.includes(key) || key.includes(k))).flatMap((k) => byKey.get(k) || [])
-        : [];
+      const entryPool = exact.length ? exact : partialPool(key);
       const serialKey = normalizeIdKey(deviceSerial(place));
       // 방문일 판단용으로는 업체 매칭 전부 사용(원본은 첫 기기 열만 있어도 방문일은 맞다).
       // 기기별 정확한 표시는 카드 펼침 시 _원문을 즉석 조회해 해결한다(deviceHistoryCache).
@@ -2441,7 +2471,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
                   <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
-                    onClick={() => { setPlanDate(kstDate()); setPlanTarget(place); }}
+                    onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
                     className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
                   {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
                     <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
@@ -2739,6 +2769,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <button type="button" aria-label="인사 완료로 표시" disabled={greetBusyId === keyman.id}
                 onClick={() => void markKeymanGreeted(keyman)}
                 className="grid w-11 shrink-0 place-items-center bg-amber-500 text-[15px] text-white active:bg-amber-600 disabled:opacity-50">🤝</button>
+            )}
+            {!editMode && (
+              <button type="button" aria-label="내 일정에 넣기" title="이 업체를 내 일정에 넣기"
+                onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
+                className="grid w-11 shrink-0 place-items-center border-l border-slate-100 bg-blue-50 text-[15px] text-blue-700 active:bg-blue-100">📅</button>
             )}
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="w-10 shrink-0 border-l border-slate-100 text-lg font-black text-slate-400 active:bg-slate-100">×</button>
           </div>
