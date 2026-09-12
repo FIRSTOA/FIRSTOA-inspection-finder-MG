@@ -377,8 +377,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
 
         {/* ── ② 지표 ── */}
-        <div className="relative grid gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
-          <div className="grid auto-rows-min gap-3 sm:grid-cols-2 lg:col-span-7">
+        <div className="relative grid grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
+          <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-7">
             <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections + data.todayAs : null} sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmt(weekRecords)}건` : undefined} />
             <Metric label="이번 주 방문" icon={Route} accent="text-blue-300" loading={loading} value={data ? data.weekVisits : null} sub={data ? `${Math.round(data.weekMinutes / 60)}시간 현장 · 작성자 ${new Set(data.weekRows.map((r) => r.작성자).filter(Boolean)).size}명` : undefined} />
             <Metric label="키맨·주소 변경 7일" icon={UsersRound} accent="text-amber-300" loading={loading} value={data ? data.keymanChanges7d : null} sub={data ? (data.keymanGreetWaiting ? `인사 대기 ${data.keymanGreetWaiting}건 — 워킨맵에서 체크` : "인사 대기 없음") : undefined} />
@@ -404,7 +404,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             </div>
           </div>
 
-          <div className="grid gap-3 lg:col-span-5">
+          <div className="grid min-w-0 grid-cols-1 gap-3 lg:col-span-5">
             <div className={`p-4 ${card}`}>
               <div className="flex items-center justify-between">
                 <span className={eyebrow}>{quarter}분기 점검 진행률 <span className="normal-case tracking-normal text-slate-600">· 워킨맵 기준</span></span>
@@ -448,8 +448,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
         {/* ── ④ 절약 효과 ── */}
         <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">
-          <div className="grid gap-3 lg:grid-cols-12">
-            <div className={`p-5 lg:col-span-5 ${card}`}>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+            <div className={`min-w-0 p-5 lg:col-span-5 ${card}`}>
               <div className={`flex items-center gap-2 ${eyebrow}`}><Timer size={13} className="text-emerald-300" />Impact · 절약 추정</div>
               <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
                 <div><div className="text-[38px] font-black leading-none text-white sm:text-[44px]">{data ? <BigNumber value={savedWeekHours} /> : "—"}<span className="ml-1 text-[16px] font-black text-emerald-300">시간</span></div><div className="mt-1.5 text-[11px] font-bold text-slate-400">이번 주 · 기록 {fmt(weekRecords)}건 × 약 {MINUTES_SAVED_PER_RECORD}분</div></div>
@@ -494,8 +494,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         </div>
 
         {/* ── ⑥ 릴리스 타임라인 + ⑦ 온보딩 ── */}
-        <div className="relative grid gap-3 border-t border-white/[0.08] px-4 py-5 sm:px-6 lg:grid-cols-12">
-          <div className={`lg:col-span-5 ${card}`}>
+        <div className="relative grid grid-cols-1 gap-3 border-t border-white/[0.08] px-4 py-5 sm:px-6 lg:grid-cols-12">
+          <div className={`min-w-0 lg:col-span-5 ${card}`}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-3.5">
               <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white"><Zap size={15} /></span><div><div className={eyebrow}>Releases</div><h3 className="text-[13.5px] font-black text-white">업데이트</h3></div></div>
               <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-black tabular-nums"><span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-300">누적 {PATCH_NOTES.length}</span>{patchGroups[0] && <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-300">v{patchGroups[0][0].replaceAll("-", ".")}</span>}</div>
@@ -517,7 +517,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <button type="button" onClick={() => setPatchExpanded(!patchExpanded)} className="flex w-full items-center justify-center gap-1.5 border-t border-white/[0.08] py-2.5 text-[11.5px] font-black text-slate-400 transition hover:bg-white/[0.04] hover:text-white">{patchExpanded ? "접기" : "최근 배포 더 보기"}<ChevronDown size={14} className={`transition ${patchExpanded ? "rotate-180" : ""}`} /></button>
           </div>
 
-          <div className={`lg:col-span-7 ${card}`}>
+          <div className={`min-w-0 lg:col-span-7 ${card}`}>
             <div className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-3.5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white"><BookOpen size={15} /></span><div><div className={eyebrow}>Onboarding</div><h3 className="text-[13.5px] font-black text-white">처음 쓰는 분을 위한 4단계</h3></div></div>
             <div className="grid grid-cols-2 gap-1 p-2 sm:grid-cols-4">
               {manuals.map((m, i) => { const Icon = m.icon; const open = openManual === m.id; return (

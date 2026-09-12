@@ -19,3 +19,11 @@ create index if not exists feedback_items_status_idx on feedback_items (status, 
 grant select, insert, update on feedback_items to anon, authenticated;   -- 보드는 앱 안에서만 쓴다(outbox·room_activity와 같은 신뢰 모델)
 grant usage, select on sequence feedback_items_id_seq to anon, authenticated;
 notify pgrst, 'reload schema';
+
+-- 2026-09-12 보강: 반려 사유·삭제(소프트)·개발 시작 옵션·실행 기록
+alter table feedback_items add column if not exists deleted_at timestamptz;         -- 삭제(소프트) — 작성자 본인(접수 상태) 또는 개발자
+alter table feedback_items add column if not exists auto_deploy boolean not null default false; -- 개발자 선택: 미리보기 없이 main까지
+alter table feedback_items add column if not exists branch text default '';         -- 파이프라인이 만든 브랜치
+alter table feedback_items add column if not exists run_log text default '';        -- 파이프라인 실행 기록(마지막 실행)
+alter table feedback_items add column if not exists started_at timestamptz;
+notify pgrst, 'reload schema';
