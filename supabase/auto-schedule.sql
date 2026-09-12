@@ -36,9 +36,11 @@ grant execute on function safe_date_(text), workin_grade_(text), workin_vendor_(
 
 -- 반환 컬럼이 늘어 drop 후 재생성 (return type 변경은 replace 불가)
 drop function if exists suggest_workin_candidates(text, text, text[], double precision, double precision, int, int);
+drop function if exists suggest_workin_candidates(text, text, int, text[], double precision, double precision, int, int);
 create function suggest_workin_candidates(
   p_team text,
   p_kind text default 'quarter',        -- quarter=점검 / renewal=재계약 / monthly=매월
+  p_quarter int default null,           -- 대상 분기(없으면 현재 분기). 9월에 4분기 워킨맵을 미리 올려두고 짜는 경우(2026-09-12)
   p_grades text[] default '{}',         -- 비우면 전체 등급
   p_lat double precision default null,  -- 앵커 좌표 (없으면 거리 정렬 생략)
   p_lng double precision default null,
@@ -70,8 +72,8 @@ create function suggest_workin_candidates(
       and (p_kind = '' or w.kind = p_kind)
       -- G5(점검 완료)·G12(이관)는 이번 분기 방문 대상이 아니다 — 추천에서 제외
       and coalesce(w.label, '') not in ('G5', 'G12')
-      -- 현재 분기 대상만 (워킨맵은 분기마다 갱신된다)
-      and (w.quarter is null or w.quarter = extract(quarter from current_date)::int)
+      -- 고른 분기(기본 현재 분기) 대상만 (워킨맵은 분기마다 갱신된다)
+      and (w.quarter is null or w.quarter = coalesce(p_quarter, extract(quarter from current_date)::int))
   ),
   -- 점검 이력 원장: 거래처 코드(별칭 번역)와 이름 키를 같이 들고 간다
   hist as (
@@ -171,7 +173,8 @@ create function suggest_workin_candidates(
            else round((sqrt(power((p.lat - p_lat) * 111.0, 2) + power((p.lng - p_lng) * 88.0, 2)))::numeric, 2)
       end as distance_km,
       case when workin_grade_(p.place_name) in ('SS','V')
-           then current_date >= date_trunc('quarter', current_date)::date + 40 else true end as quarter_ok
+           -- 대상 분기 시작 + 40일 이후만 권장. 다음 분기를 미리 짤 때는 아직 초반이라 '보류 권장'이 뜬다
+           then current_date >= make_date(extract(year from current_date)::int, (coalesce(p_quarter, extract(quarter from current_date)::int) - 1) * 3 + 1, 1) + 40 else true end as quarter_ok
     from places p
     left join by_code bc on p.code <> '' and bc.hcode = p.code
     left join by_key bk on bk.hk = p.pkey and length(p.pkey) >= 3
@@ -206,5 +209,5 @@ create function suggest_workin_candidates(
   order by distance_km asc nulls last, days_since desc
   limit p_limit * 6;
 $$;
-grant execute on function suggest_workin_candidates(text, text, text[], double precision, double precision, int, int) to anon, authenticated;
+grant execute on function suggest_workin_candidates(text, text, int, text[], double precision, double precision, int, int) to anon, authenticated;
 notify pgrst, 'reload schema';

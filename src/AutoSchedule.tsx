@@ -2,7 +2,8 @@
  * 자동 일정 짜기 (1차 시안)
  * CS팀 실무 순서 그대로: ① 그날 필수 스케줄을 놓고 → ② 마지막 일정(앵커) 좌표에서
  * 가까운 순으로 워킨맵 점검 후보를 뽑고 → ③ 같은 동선의 재계약도 끼워 넣는다.
- * 후보는 전부 **현재 분기 워킨맵**에서만 찾는다 (suggest_workin_candidates RPC).
+ * 후보는 전부 **고른 분기(기본 현재 분기) 워킨맵**에서만 찾는다 (suggest_workin_candidates RPC, p_quarter).
+ * 재계약 추천은 2026-09-12 요청으로 뺐다(점검만).
  * 규칙: 마지막 점검 경과일 기준(조절 가능) · N·NN·S는 언제든 · SS·V는 분기 중반부터 권장.
  */
 import { fieldTicketVendor, parseEquipComment } from "./ids";
@@ -48,7 +49,10 @@ export default function AutoSchedule({ author }: { author: string }) {
   const [anchorPin, setAnchorPin] = useState<{ id: number; reason: string } | null>(null);
   const [grades, setGrades] = useState<string[]>(["N", "NN", "S"]);
   const [minDays, setMinDays] = useState(60);
-  const [kind, setKind] = useState<"quarter" | "renewal">("quarter");
+  const kind = "quarter" as "quarter" | "renewal"; // 재계약 추천은 뺐다(2026-09-12 요청) — 점검만. 타입은 아래 분기 코드와 호환되게 유지
+  // 워킨맵은 다음 분기 것을 미리 올려두기도 한다(9월에 4분기) — 현재 분기 기본, 다음 분기도 고를 수 있게
+  const currentQuarter = Math.floor(new Date().getMonth() / 3) + 1;
+  const [quarter, setQuarter] = useState<number>(currentQuarter);
   const [rows, setRows] = useState<Place[]>([]);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map()); // 불만·미수·초과·재계약·점검 (일정리스트와 같은 기준)
   const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
@@ -121,7 +125,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   // 기준 업체 한 줄 만들기: ① 조건 없는 RPC로 그 자리 데이터(최근 점검·기기)를 얻고 ② 그래도 없으면(완료 라벨·타팀) 워킨맵 행으로 최소 구성
   const pinnedAnchorRow = async (placeId: number, lat: number, lng: number): Promise<{ row: Place; reason: string } | null> => {
     try {
-      const near = await rpc<Place[]>("suggest_workin_candidates", { p_team: team, p_kind: kind, p_grades: [], p_lat: lat, p_lng: lng, p_min_days: 0, p_limit: 3 });
+      const near = await rpc<Place[]>("suggest_workin_candidates", { p_team: team, p_kind: kind, p_quarter: quarter, p_grades: [], p_lat: lat, p_lng: lng, p_min_days: 0, p_limit: 3 });
       const hit = (near || []).find((r) => r.id === placeId);
       if (hit) {
         const reason = kind === "quarter" && hit.days_since < minDays ? `최근 점검 ${hit.days_since}일 전`
@@ -151,7 +155,7 @@ export default function AutoSchedule({ author }: { author: string }) {
     setNotice("");
     try {
       const list = await rpc<Place[]>("suggest_workin_candidates", {
-        p_team: team, p_kind: kind, p_grades: grades,
+        p_team: team, p_kind: kind, p_quarter: quarter, p_grades: grades,
         p_lat: anchorGeo?.lat ?? null, p_lng: anchorGeo?.lng ?? null,
         p_min_days: kind === "quarter" ? minDays : 0, p_limit: 60, // 등급별 상한(가까운 60곳씩) — 전체 120 캡은 SS·V가 S를 밀어냈다
       });
@@ -279,7 +283,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
             <div className="text-[15px] font-black text-white">자동 일정 짜기</div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검·재계약을 추천합니다.</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">필수 일정을 놓고 → 마지막 일정에서 가까운 워킨맵 점검을 추천합니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex max-w-full flex-wrap items-center gap-1">
@@ -293,7 +297,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           </div>
         </div>
         <div className="bg-[#151A23] px-5 py-2 text-[11px] font-bold text-slate-400">
-          현재 분기 워킨맵에서만 찾습니다 · 앵커 {anchorGeo ? <span className="text-emerald-300">좌표 확인됨</span> : <span className="text-amber-300">좌표 없음</span>}
+          {quarter}분기 워킨맵에서 찾습니다{quarter !== currentQuarter ? " — 다음 분기 미리보기" : ""} · 앵커 {anchorGeo ? <span className="text-emerald-300">좌표 확인됨</span> : <span className="text-amber-300">좌표 없음</span>}
         </div>
       </section>
 
@@ -331,8 +335,8 @@ export default function AutoSchedule({ author }: { author: string }) {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">② 추천 조건</div>
             <div className="mt-2 flex gap-1 rounded-full bg-slate-100 p-1">
-              {([["quarter", "점검"], ["renewal", "재계약"]] as const).map(([k, label]) => (
-                <button key={k} type="button" onClick={() => setKind(k)} className={`${chip} flex-1 ${kind === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>{label}</button>
+              {[currentQuarter, currentQuarter < 4 ? currentQuarter + 1 : null].filter((q): q is number => q !== null).map((q) => (
+                <button key={q} type="button" onClick={() => setQuarter(q)} className={`${chip} flex-1 ${quarter === q ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>{q}분기 워킨맵{q !== currentQuarter ? " (미리)" : ""}</button>
               ))}
             </div>
             <div className="mt-3 text-[11px] font-black text-slate-500">등급 (중복 선택)</div>

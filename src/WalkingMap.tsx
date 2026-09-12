@@ -874,6 +874,14 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
   const popupOpenedAtRef = useRef(0);                          // 핀 클릭이 지도 클릭으로도 잡혀 곧장 닫히는 것 방지
   const gpsRef = useRef<KakaoNS[]>([]);
   const addressPinRef = useRef<KakaoNS | null>(null);
+  // 모바일 점(dot) 캔버스 — 라벨 없는 핀은 DOM 오버레이 대신 캔버스 한 장에 점으로 그린다.
+  // 카카오 CustomOverlay는 개수가 곧 비용이라(팬마다 최대 180개 생성·삭제 → 끊김 실측 2026-09-12)
+  // 리플릿 모바일(circleMarker on canvas)과 같은 방식으로 맞춘다. 점 탭은 지도 click 좌표로 가장 가까운 점을 찾는다.
+  const dotCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const dotOverlayRef = useRef<KakaoNS | null>(null);
+  const dotHitsRef = useRef<Array<{ lat: number; lng: number; group: MapPlace[] }>>([]);
+  const openGroupPopupRef = useRef<((group: MapPlace[], position: KakaoNS) => void) | null>(null);
+  const dotsBrokenRef = useRef(false); // 캔버스 경로에서 예외가 나면 true → 그 뒤로는 예전 DOM 핀 방식으로 그린다(안전장치)
   const [ready, setReady] = useState(false);
   const [viewportRevision, setViewportRevision] = useState(0);
 
@@ -883,11 +891,40 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const map = new kakao.maps.Map(elementRef.current, { center: new kakao.maps.LatLng(view.lat, view.lng), level: view.level });
     mapRef.current = map;
     kakao.maps.event.addListener(map, "tilesloaded", () => setReady(true));
+    // 점 캔버스 — 지도 중심에 고정된 오버레이 한 장. 드래그 중엔 지도와 함께 움직이고 idle 뒤 다시 그린다.
+    // pointer-events:none 이라 터치는 지도가 받는다(드래그 방해 없음). 줌 중엔 배율이 어긋나므로 숨긴다.
+    // 0×0 래퍼를 오버레이 content로 두고 캔버스를 그 안에 음수 오프셋으로 놓는다 — 카카오는 content 크기를
+    // 처음(캔버스 기본 300×150) 기준으로 앵커를 잡아, 뒤에 캔버스를 키우면 중심이 우하단으로 밀렸다(실측).
+    const dotWrap = document.createElement("div");
+    dotWrap.style.cssText = "position:relative;width:0;height:0;pointer-events:none";
+    const dotCanvas = document.createElement("canvas");
+    dotCanvas.style.cssText = "position:absolute;left:0;top:0;display:block;pointer-events:none;transition:opacity .12s";
+    dotWrap.appendChild(dotCanvas);
+    const dotOverlay = new kakao.maps.CustomOverlay({ position: map.getCenter(), content: dotWrap, xAnchor: 0, yAnchor: 0, zIndex: 50, clickable: false });
+    dotOverlay.setMap(map);
+    if (import.meta.env.DEV) (window as unknown as { __kakaoMap?: KakaoNS }).__kakaoMap = map; // 헤드리스 테스트에서 줌 제어용(개발 빌드만)
+    dotCanvasRef.current = dotCanvas;
+    dotOverlayRef.current = dotOverlay;
+    kakao.maps.event.addListener(map, "zoom_start", () => { dotCanvas.style.opacity = "0"; });
     // 그룹 팝업은 지도 아무 데나 누르면 닫힌다 (✕만 고집하지 않게).
     // 단 핀 클릭 직후의 지도 클릭(같은 터치)은 무시 — 열리자마자 닫히는 경쟁 방지
-    kakao.maps.event.addListener(map, "click", () => {
+    kakao.maps.event.addListener(map, "click", (mouseEvent: KakaoNS) => {
       if (Date.now() - popupOpenedAtRef.current < 350) return;
       if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
+      // 캔버스 점 탭 — 점은 DOM이 아니라서 지도 클릭 좌표에서 16px 이내 가장 가까운 점을 고른다
+      const hits = dotHitsRef.current;
+      if (!hits.length || !mouseEvent?.latLng) return;
+      const projection = map.getProjection();
+      const tapped = projection.containerPointFromCoords(mouseEvent.latLng);
+      let best: { d: number; group: MapPlace[]; lat: number; lng: number } | null = null;
+      for (const hit of hits) {
+        const pt = projection.containerPointFromCoords(new kakao.maps.LatLng(hit.lat, hit.lng));
+        const d = Math.hypot(pt.x - tapped.x, pt.y - tapped.y);
+        if (d <= 16 && (!best || d < best.d)) best = { d, group: hit.group, lat: hit.lat, lng: hit.lng };
+      }
+      if (!best) return;
+      if (best.group.length === 1) onSelect(best.group[0].id);
+      else openGroupPopupRef.current?.(best.group, new kakao.maps.LatLng(best.lat, best.lng));
     });
     window.setTimeout(() => setReady(true), 2500); // 이벤트가 안 와도 로딩막은 걷는다
     // 주소 검색 다리
@@ -915,6 +952,9 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       labelByIdRef.current.clear();
       if (popupRef.current) popupRef.current.setMap(null);
       gpsRef.current.forEach((o) => o.setMap(null));
+      if (dotOverlayRef.current) { dotOverlayRef.current.setMap(null); dotOverlayRef.current = null; }
+      dotCanvasRef.current = null;
+      dotHitsRef.current = [];
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -955,7 +995,8 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     const mobile = window.matchMedia("(max-width: 1023px)").matches;
     const bounds = map.getBounds();
     const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
-    const latPad = (ne.getLat() - sw.getLat()) * 0.12, lngPad = (ne.getLng() - sw.getLng()) * 0.12;
+    const padRatio = mobile ? 0.35 : 0.12; // 모바일은 점 캔버스 여유(35%)만큼 넓게 담아 드래그 직후 가장자리도 점이 있게
+    const latPad = (ne.getLat() - sw.getLat()) * padRatio, lngPad = (ne.getLng() - sw.getLng()) * padRatio;
     const contains = (lat: number, lng: number) =>
       lat >= sw.getLat() - latPad && lat <= ne.getLat() + latPad && lng >= sw.getLng() - lngPad && lng <= ne.getLng() + lngPad;
     // 좌표·그룹키는 사전계산분을 쓰고, 그룹에 담을 때 배열을 복사하지 않는다(복사하면 곳 수의 제곱으로 느려진다)
@@ -967,21 +1008,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       const bucket = groups.get(gkey);
       if (bucket) bucket.push(place); else groups.set(gkey, [place]);
     }
-    let groupedPlaces = Array.from(groups.values());
-    // 카카오 마커는 DOM 오버레이라 개수가 곧 속도다 — 넓게 볼 때(level ≥ 8, 핀이 겹쳐 읽지도 못하는 배율)만
-    // 화면 중심에서 가까운 순으로 180곳까지 그린다. 확대하면 전부 나온다.
-    if (mobile && map.getLevel() >= 8 && groupedPlaces.length > 180) {
-      const center = map.getCenter();
-      const cLat = center.getLat(), cLng = center.getLng();
-      groupedPlaces = groupedPlaces
-        .map((group) => {
-          const dLat = group[0].latitude - cLat, dLng = (group[0].longitude - cLng) * 0.79; // 위도 보정
-          return { group, d: dLat * dLat + dLng * dLng };
-        })
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 180)
-        .map((x) => x.group);
-    }
+    const groupedPlaces = Array.from(groups.values());
     const visibleIds = new Set(groupedPlaces.map((group) => group[0].id));
     const visiblePlaceIds = new Set(visiblePlaces.map((place) => place.id));
     overlaysRef.current.forEach((overlay, id) => {
@@ -993,6 +1020,37 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
     labelByIdRef.current.forEach((_, id) => { if (!visiblePlaceIds.has(id)) labelByIdRef.current.delete(id); });
 
     const projection = map.getProjection();
+    const dots: Array<{ lat: number; lng: number; color: string; size: number; group: MapPlace[] }> = [];
+    // 같은 주소 여러 곳 팝업 — DOM 핀과 캔버스 점(지도 click 경로)이 함께 쓴다
+    const openGroupPopup = (group: MapPlace[], position: KakaoNS) => {
+      if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
+      const popup = document.createElement("div");
+      popup.className = "min-w-[220px] max-w-[280px] space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl";
+      const heading = document.createElement("div");
+      heading.className = "flex items-center justify-between border-b border-slate-200 px-2 pb-2 text-xs font-black text-slate-500";
+      heading.innerHTML = `<span>같은 주소 · ${group.length}곳</span>`;
+      const close = document.createElement("button");
+      close.type = "button"; close.textContent = "✕"; close.className = "px-1 text-slate-400";
+      close.addEventListener("click", () => { popupRef.current?.setMap(null); popupRef.current = null; });
+      heading.appendChild(close);
+      popup.appendChild(heading);
+      const list = document.createElement("div");
+      list.style.cssText = "max-height:240px;overflow-y:auto";
+      group.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "block w-full rounded px-2 py-2 text-left text-xs font-bold hover:bg-slate-100";
+        button.textContent = item.name;
+        button.addEventListener("click", () => { onSelect(item.id); popupRef.current?.setMap(null); popupRef.current = null; });
+        list.appendChild(button);
+      });
+      popup.appendChild(list);
+      const overlay = new kakao.maps.CustomOverlay({ position, content: popup, yAnchor: 1.15, zIndex: 600, clickable: true });
+      overlay.setMap(map);
+      popupRef.current = overlay;
+      popupOpenedAtRef.current = Date.now();
+    };
+    openGroupPopupRef.current = openGroupPopup;
     const counts = new Map<string, number>();
     groupedPlaces.forEach(([place]) => {
       const key = `${place.latitude.toFixed(6)},${place.longitude.toFixed(6)}`;
@@ -1017,6 +1075,13 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       const groupLabel = group.length > 1 ? `${compactMapName(place.name, 12)} 외 ${group.length - 1}곳` : compactMapName(place.name);
       const groupSelected = group.some((item) => item.id === selectedId);
       const permanentLabel = !mobile || map.getLevel() <= 5 || groupSelected;
+      if (mobile && !permanentLabel && !dotsBrokenRef.current && dotCanvasRef.current) {
+        // 라벨 없는 핀은 캔버스 점으로. 남아 있는 DOM 오버레이(선택 해제로 라벨→점 전환 등)는 치운다
+        const existingDom = overlaysRef.current.get(place.id);
+        if (existingDom) { existingDom.setMap(null); overlaysRef.current.delete(place.id); signaturesRef.current.delete(place.id); group.forEach((item) => labelByIdRef.current.delete(item.id)); }
+        dots.push({ lat: displayPos.getLat(), lng: displayPos.getLng(), color: meta.color, size: group.length > 1 ? 8 : 6, group });
+        return;
+      }
       const signature = [displayPos.getLat().toFixed(7), displayPos.getLng().toFixed(7), meta.color, groupLabel, permanentLabel ? "label" : "dot", group.map((item) => `${item.id}:${item.name}`).join(",")].join("|");
       if (overlaysRef.current.has(place.id) && signaturesRef.current.get(place.id) === signature) {
         const currentLabel = labelByIdRef.current.get(place.id);
@@ -1028,35 +1093,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
 
       const container = document.createElement("div");
       container.style.cssText = "position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center";
-      const openGroupPopup = () => {
-        if (popupRef.current) { popupRef.current.setMap(null); popupRef.current = null; }
-        const popup = document.createElement("div");
-        popup.className = "min-w-[220px] max-w-[280px] space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl";
-        const heading = document.createElement("div");
-        heading.className = "flex items-center justify-between border-b border-slate-200 px-2 pb-2 text-xs font-black text-slate-500";
-        heading.innerHTML = `<span>같은 주소 · ${group.length}곳</span>`;
-        const close = document.createElement("button");
-        close.type = "button"; close.textContent = "✕"; close.className = "px-1 text-slate-400";
-        close.addEventListener("click", () => { popupRef.current?.setMap(null); popupRef.current = null; });
-        heading.appendChild(close);
-        popup.appendChild(heading);
-        const list = document.createElement("div");
-        list.style.cssText = "max-height:240px;overflow-y:auto";
-        group.forEach((item) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "block w-full rounded px-2 py-2 text-left text-xs font-bold hover:bg-slate-100";
-          button.textContent = item.name;
-          button.addEventListener("click", () => { onSelect(item.id); popupRef.current?.setMap(null); popupRef.current = null; });
-          list.appendChild(button);
-        });
-        popup.appendChild(list);
-        const overlay = new kakao.maps.CustomOverlay({ position: displayPos, content: popup, yAnchor: 1.15, zIndex: 600, clickable: true });
-        overlay.setMap(map);
-        popupRef.current = overlay;
-        popupOpenedAtRef.current = Date.now();
-      };
-      const handleClick = () => { if (group.length === 1) onSelect(place.id); else openGroupPopup(); };
+      const handleClick = () => { if (group.length === 1) onSelect(place.id); else openGroupPopup(group, displayPos); };
 
       if (permanentLabel) {
         const tooltip = document.createElement("div");
@@ -1083,6 +1120,43 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       signaturesRef.current.set(place.id, signature);
       if (permanentLabel) group.forEach((item) => labelByIdRef.current.set(item.id, container.firstChild as HTMLDivElement));
     });
+    // 점 캔버스 그리기 — 화면(+35% 여유) 크기 한 장에 전부. 중심 좌표에 고정해 두면 드래그 중엔 지도와 같이 움직인다.
+    const canvas = dotCanvasRef.current, dotOverlay = dotOverlayRef.current, host = elementRef.current;
+    if (canvas && dotOverlay && host && !dotsBrokenRef.current) try {
+      const pad = 0.35;
+      const cssW = Math.ceil(host.clientWidth * (1 + pad * 2)), cssH = Math.ceil(host.clientHeight * (1 + pad * 2));
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // 3배 화면도 2배까지 — 캔버스 메모리(폰)
+      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+        canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+        canvas.style.width = `${cssW}px`; canvas.style.height = `${cssH}px`;
+        canvas.style.left = `${-cssW / 2}px`; canvas.style.top = `${-cssH / 2}px`; // 래퍼(지도 중심)에 캔버스 중심을 맞춘다
+      }
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const center = map.getCenter();
+        const centerPt = projection.containerPointFromCoords(center);
+        const ox = cssW / 2 - centerPt.x, oy = cssH / 2 - centerPt.y;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssW, cssH);
+        ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff";
+        for (const dot of dots) {
+          const pt = projection.containerPointFromCoords(new kakao.maps.LatLng(dot.lat, dot.lng));
+          const x = pt.x + ox, y = pt.y + oy;
+          if (x < -10 || y < -10 || x > cssW + 10 || y > cssH + 10) continue;
+          ctx.beginPath(); ctx.arc(x, y, dot.size, 0, Math.PI * 2); ctx.fillStyle = dot.color; ctx.fill(); ctx.stroke();
+        }
+        dotOverlay.setPosition(center);
+        canvas.style.opacity = "1";
+      }
+    } catch (error) {
+      // 캔버스 실패 → 다음 렌더부터 DOM 핀으로 복귀. 점으로 빠진 핀들을 이번에 바로 다시 그린다
+      console.error("워킨맵 점 캔버스 실패 — DOM 핀으로 복귀", error);
+      dotsBrokenRef.current = true;
+      try { dotOverlay.setMap(null); } catch { /* 무시 */ }
+      dotCanvasRef.current = null;
+      setViewportRevision((cur) => cur + 1);
+    }
+    dotHitsRef.current = dotsBrokenRef.current ? [] : dots.map((dot) => ({ lat: dot.lat, lng: dot.lng, group: dot.group }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geoPlaces, onSelect, selectedId, viewportRevision]);
 
