@@ -48,6 +48,7 @@ function csvCell(value: string) {
 export default function DataLookup({ author = "" }: { author?: string }) {
   const [categoryKey, setCategoryKey] = useState<string>(() => window.localStorage.getItem("cs_lookup_category_v1") || "jeomgeom");
   const [period, setPeriod] = useState<PeriodKey>("3m");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
   const [team, setTeam] = useState("전체");
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
@@ -113,10 +114,10 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       if (category.teamSourceParen) conds.push(`"_출처".ilike."*(*${team}*)*"`);
       parts.push(`or=(${conds.map((cond) => encodeURIComponent(cond)).join(",")})`);
     }
-    parts.push(`order=${encodeURIComponent(category.orderField)}.desc`, `limit=${PAGE}`);
+    parts.push(`order=${encodeURIComponent(category.orderField)}.${sortDir}`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query, team, HIDEABLE, showHidden, chip]);
+  }, [category, period, query, team, HIDEABLE, showHidden, chip, sortDir]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -235,6 +236,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             {PERIODS.map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label.replace("최근 ", "")}</button>
+            ))}
+            <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:inline-block" />
+            {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setSortDir(value)} title={`${category.orderField} 기준`}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${sortDir === value ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</button>
             ))}
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <button type="button" onClick={exportCsv} disabled={!rows.length}
