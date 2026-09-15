@@ -11,7 +11,7 @@ import { isPersonChange } from "./keyman";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
-import { normalizeId as normalizeIdKey, vendorMatchKey } from "./ids";
+import { normalizeId as normalizeIdKey, vendorMatchKey, vendorTokensContained } from "./ids";
 // 등급·계약종료월·라벨 뜻은 재계약 준비 탭과 공유한다 (규칙이 어긋나면 방문 대상이 화면마다 달라진다)
 import { RENEWAL_LABEL_DESC, contractEnd, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
@@ -1284,7 +1284,6 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     const timer = window.setTimeout(find, 60); // 헤더가 늦게 붙는 경우 한 번 더
     return () => window.clearTimeout(timer);
   }, []);
-  const [mapSearchFocused, setMapSearchFocused] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | null>(null);
   const [locationTracking, setLocationTracking] = useState(false);
   const locationWatchRef = useRef<number | null>(null);
@@ -1811,7 +1810,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     let tries = 0;
     const seek = () => {
       const target = document.querySelector(`[data-place-id="${selectedId}"]`);
-      if (target) { target.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+      // 지도에서 고른 업체는 목록 맨 위에 오게 — 가운데에 서면 어디가 선택됐는지 한눈에 안 들어왔다(2026-09-16 요청)
+      if (target) { target.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       if (tries++ < 8) window.setTimeout(seek, 80); // 목록이 늘어나 그려질 때까지 잠깐 기다린다
     };
     window.requestAnimationFrame(seek);
@@ -1865,6 +1865,24 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       poolByKey.set(key, result);
       return result;
     };
+    // 낱말 매칭 — 완전일치·부분포함이 모두 빗나간 곳만. 워킨맵 지명이 여러 칸을 이어 붙인 경우
+    // ("태인회계법인 화성 분사무소기존 가정집강남구 / 전 대치동가정집…" vs 점검기록 "태인회계법인 대치동 가정집")
+    // 점검기록 업체명의 낱말이 모두 지명 안에 있으면 같은 곳으로 본다(2026-09-16). 후보는 5글자 조각 색인으로 좁힌다.
+    const tokenPoolByKey = new Map<string, PoolEntry[]>();
+    const tokenPool = (key: string): PoolEntry[] => {
+      if (key.length < 5) return [];
+      const cached = tokenPoolByKey.get(key);
+      if (cached) return cached;
+      const candidates = new Set<string>();
+      for (let i = 0; i + 5 <= key.length; i += 1) {
+        for (const k of gramIndex.get(key.slice(i, i + 5)) || []) candidates.add(k);
+      }
+      const result = Array.from(candidates)
+        .sort((left, right) => (keyOrder.get(left) || 0) - (keyOrder.get(right) || 0))
+        .flatMap((k) => (byKey.get(k) || []).filter((entry) => vendorTokensContained(entry.visit.vendor, key)));
+      tokenPoolByKey.set(key, result);
+      return result;
+    };
     const serialIndex = new Map<string, VisitLike[]>();
     for (const row of archiveVisits) {
       for (const id of row.idKeys) {
@@ -1876,7 +1894,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     return new Map(places.map((place) => {
       const key = vendorMatchKey(place.name);
       const exact = byKey.get(key) || [];
-      const entryPool = exact.length ? exact : partialPool(key);
+      const partial = exact.length ? exact : partialPool(key);
+      const entryPool = partial.length ? partial : tokenPool(key);
       const serialKey = normalizeIdKey(deviceSerial(place));
       // 방문일 판단용으로는 업체 매칭 전부 사용(원본은 첫 기기 열만 있어도 방문일은 맞다).
       // 기기별 정확한 표시는 카드 펼침 시 _원문을 즉석 조회해 해결한다(deviceHistoryCache).
@@ -2524,18 +2543,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
           </div>
         </div>}
-        {kindFilter === "quarter" && <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-          <div className="flex flex-wrap items-center gap-1">
-            <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>재계약 있음</button>
-            <button type="button" onClick={() => setQuarterHasMisu((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasMisu ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>미수 있음</button>
-            <button type="button" onClick={() => setQuarterHasOverage((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasOverage ? "bg-purple-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>초과 있음</button>
-            <button type="button" onClick={() => setQuarterHasBulman((current) => !current)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${quarterHasBulman ? "bg-red-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>불만 있음</button>
-            {(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman || quarterGrades.length > 0) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterHasBulman(false); setQuarterGrades([]); }} className="ml-auto rounded-full px-2.5 py-1.5 text-[11px] font-black text-slate-400 transition hover:bg-white hover:text-slate-600">초기화</button>}
-          </div>
-          <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {["N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setQuarterGrades((current) => current.includes(grade) ? current.filter((item) => item !== grade) : [...current, grade])} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${quarterGrades.includes(grade) ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade}</button>)}
-          </div>
-        </div>}
+        {/* 분기점검의 재계약·미수·초과·불만·등급 필터 칩은 지도의 [조건] 메뉴와 같은 것이라 여기서 뺐다(2026-09-16) — 그만큼 업체 목록이 더 보인다 */}
         {kindFilter === "monthly" && <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-2 gap-1">
             {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded-full px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
@@ -2801,43 +2809,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         : kakaoNs
           ? <MapCanvasKakao kakao={kakaoNs} places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />
           : <MapCanvas places={mapPlaces} selectedId={selectedId} team={teamFilter} viewStorageKey={`${preferenceStorageKey}_views`} onSelect={selectMapPlace} currentPosition={currentPosition} />}
-      <div className="absolute left-[7.25rem] top-3 z-[900] hidden w-[260px] lg:block">
-        <div className="relative">
-          <input
-            value={mapQuery}
-            onChange={(event) => setMapQuery(event.target.value)}
-            onFocus={() => setMapSearchFocused(true)}
-            onBlur={() => window.setTimeout(() => setMapSearchFocused(false), 120)}
-            placeholder="거래처 검색"
-            className="w-full rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 pr-9 text-sm font-semibold shadow-lg outline-none focus:border-blue-500"
-          />
-          {mapQuery && <button type="button" onClick={() => setMapQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm font-black text-slate-400">×</button>}
-          {mapSearchFocused && mapQuery.trim() && (
-            <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-[280px] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl">
-              {mapSearchResults.map((place) => (
-                <button
-                  key={place.id}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    selectMapPlace(place.id);
-                    setMapQuery(place.name);
-                    setMapSearchFocused(false);
-                  }}
-                  className="flex w-full items-center gap-2.5 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50 active:bg-blue-100"
-                >
-                  <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: labelMeta(place.label).color }} title={labelDesc(place.label, place.kind) || place.label} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-black text-slate-900">{place.name}</span>
-                    <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">{place.comment || [place.address, place.addressDetail].filter(Boolean).join(" ") || `${place.team}팀 · ${place.label}`}</span>
-                  </span>
-                </button>
-              ))}
-              {!mapSearchResults.length && <div className="px-3 py-3 text-xs font-bold text-slate-400">현재 조건에 맞는 거래처가 없습니다.</div>}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* 넓은 화면의 지도 위 거래처 검색창은 뺐다(2026-09-16) — 왼쪽 목록에 같은 검색이 있다. 모바일 상단바 검색(headerControls)은 목록이 안 보일 때 쓰므로 유지 */}
       <button
         type="button"
         onClick={toggleLocationTracking}
