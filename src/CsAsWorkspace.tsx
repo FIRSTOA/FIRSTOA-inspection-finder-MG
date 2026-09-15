@@ -21,6 +21,8 @@ const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 import TeamCalendar from "./TeamCalendar";
+import { regionLetter } from "./region";
+import type { ManualScheduleEntry } from "./manualSchedule";
 
 type Team = "A" | "B" | "C" | "D" | "E" | "기타"; // 기타 = 팀 시간대 밖(11시 등)의 네이버 수입 일정
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -994,6 +996,29 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void trackWrite(upsertRows("as_tickets", moved.map(toDbRow), "id"), "반복 일정 이동 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
+  // 내 일정 직접 추가 — 스케줄 원문(분기마감 방문처럼 워킨맵에 없는 곳)을 티켓으로 (2026-09-15).
+  // 워킨맵 [내 일정에 넣기]와 같은 모양(시간 미정·배정 상태·source)으로 만들고, 팀은 주소로 읽되 못 읽으면 고른 팀.
+  const addManualSchedules = (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => {
+    const created = entries.map((e, i) => {
+      const team = (regionLetter(e.address, opts.team) || opts.team || "C") as Team;
+      const isAs = /^(AS|A\/S|에이에스|익일)/i.test(e.kind);
+      return normalizeTicketSchedule(blankTicket(opts.date, {
+        id: `mp-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        team, time: "", // 시간 미정 — 내 일정에서 동선 순서로 잡는다
+        vendor: e.vendor.slice(0, 80), contact: e.phone, address: e.address, department: e.addressNote,
+        model: e.model, serial: e.serial, asset: e.asset, grade: e.grade, keyman: e.keyman,
+        issue: [e.kind, e.title].filter(Boolean).join(" · ") || "직접 등록",
+        note: [e.hantin && `한틴이카: ${e.hantin}`, e.leaseNo && `임대순번 ${e.leaseNo}`, e.memo].filter(Boolean).join("\n").slice(0, 400),
+        assignee: author, status: "배정", scheduleType: isAs ? "AS" : "매월점검",
+        calendarTitle: [e.kind, e.vendor].filter(Boolean).join(" ").slice(0, 120), source: "manual",
+      }));
+    });
+    if (!created.length) return;
+    setTickets([...tickets, ...created]);
+    void trackWrite(upsertRows("as_tickets", created.map((t) => ({ ...toDbRow(t), source: "manual" })), "id"), "일정 서버 저장에 실패했습니다 — 네트워크 확인 후 다시 시도해 주세요.");
+    notify(`${created.length}건을 ${opts.date} 내 일정에 넣었습니다 ✓`, "success");
+  };
+
   // 간소 일정 추가(캘린더용) — 제목·날짜·팀·장소·내용·캘린더(분류)·매월반복만
   const [simpleAdd, setSimpleAdd] = useState<{ date: string; title: string; team: Team; address: string; note: string; cal: ScheduleType; repeat: boolean } | null>(null);
   const openSimpleAdd = (date: string) => setSimpleAdd({ date, title: "", team: (teams.find((t) => visibleTeams.includes(t)) || "A") as Team, address: "", note: "", cal: "AS", repeat: false });
@@ -1769,7 +1794,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             )}
           </div>
 
-          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm}
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} onAddManual={addManualSchedules}
             onDefer={(t, newDate) => { update(t.id, { date: newDate }); notify(`${t.vendor} — ${Number(newDate.slice(5, 7))}/${Number(newDate.slice(8, 10))}로 옮겼습니다 ✓`, "success"); }}
             // AS 일정은 일정리스트 [FIELD]와 같은 직행 — 접수원본이 있으면 그걸, 없으면 제목으로 조립한 양식으로 바로 FIELD 탭 (예전엔 과거 양식 검색창이 먼저 떴다)
             onFieldDirect={(t) => {

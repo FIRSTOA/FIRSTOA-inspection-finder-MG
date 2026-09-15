@@ -16,6 +16,7 @@ import { getInspForms, getRecentInspections, leaseAddressOf, type InspectionSnap
 import { selectRows, upsertRow } from "./supabase";
 import VendorSearch from "./VendorSearch";
 import { notify } from "./toast";
+import { parseManualSchedules, type ManualScheduleEntry } from "./manualSchedule";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
@@ -39,10 +40,12 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer, onAddManual }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void; onAddManual?: (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
+  // 직접 추가(원문 붙여넣기) 모달 — 워킨맵에 없는 마감 방문 등을 내 일정에 넣는 유일한 길(2026-09-15)
+  const [manual, setManual] = useState<{ text: string; team: string } | null>(null);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const storageKey = `cs_myplan_order_${date}_${author}`;
   const [pinned, setPinned] = useState<string[]>([]);
@@ -436,6 +439,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
           <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />미배정 포함
         </label>
+        {onAddManual && (
+          <button type="button" onClick={() => setManual({ text: "", team: "C" })} title="스케줄 원문을 붙여 넣어 내 일정에 추가 — 워킨맵에 없는 곳도 됩니다"
+            className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
+        )}
         {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">순서 초기화</button>}
         <span className="ml-auto text-[10px] font-bold text-slate-400">[고정]을 누른 순서가 먼저, 나머지는 가까운 순 자동</span>
       </div>
@@ -680,6 +687,59 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   className="flex-[2] rounded-full bg-[#FEE500] py-2.5 text-center text-sm font-black text-slate-900">카카오</a>
                 <a href={g ? tmapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(detail.address || detail.vendor)}
                   className="flex-[2] rounded-full bg-[#2C5FD8] py-2.5 text-center text-sm font-black text-white">티맵</a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 직접 추가 — 스케줄 원문 붙여넣기 → 한 건씩 일정으로 (워킨맵에 없는 분기마감 방문 등) */}
+      {manual && onAddManual && (() => {
+        const parsed = parseManualSchedules(manual.text);
+        return (
+          <div className="fixed inset-0 z-[2400] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setManual(null)}>
+            <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+                <div className="min-w-0">
+                  <div className="text-[15px] font-black text-white">＋ 직접 추가</div>
+                  <div className="mt-0.5 text-[11px] font-bold leading-4 text-slate-400">스케줄 원문을 그대로 붙여 넣으면 한 건씩 <b className="text-slate-200">{date}</b> 내 일정에 들어갑니다 — 워킨맵에 없는 곳도 됩니다</div>
+                </div>
+                <button type="button" onClick={() => setManual(null)} className="shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white" aria-label="닫기">✕</button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+                <textarea value={manual.text} onChange={(e) => setManual({ ...manual, text: e.target.value })} rows={9} autoFocus
+                  placeholder={"1.마감/한공\n16N웰스매니지먼트 주식회사-분기마감\n010-9707-9066 허경무 매니저님(총괄)\n23093 / ECOSYS-M5526CDN / VUV0511991 / C1916\n서울 강남구 역삼동 832-7 황화빌딩 1301호\n첫 분기마감\n\n2.마감/한공\n…"}
+                  className="w-full resize-y rounded-lg border border-slate-300 bg-slate-50/50 p-3 font-mono text-[12.5px] leading-[1.6] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                  <span>팀</span>
+                  {["A", "B", "C", "D", "E"].map((tm) => (
+                    <button key={tm} type="button" onClick={() => setManual({ ...manual, team: tm })}
+                      className={`rounded-full px-3 py-1 text-[11px] font-black transition ${manual.team === tm ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{tm}</button>
+                  ))}
+                  <span className="text-[10px] font-bold text-slate-400">주소로 팀을 알 수 있으면 주소가 우선, 못 읽으면 여기서 고른 팀</span>
+                </div>
+                {parsed.length > 0 ? (
+                  <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+                    {parsed.map((e, i) => (
+                      <div key={i} className="px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{e.kind || "일정"}</span>
+                          <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{e.vendor}</span>
+                          {e.title && <span className="shrink-0 text-[11px] font-bold text-slate-400">{e.title}</span>}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{[e.model, e.phone, e.address].filter(Boolean).join(" · ") || "연락처·주소 없음"}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : manual.text.trim() ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold leading-5 text-amber-700">업체명을 읽지 못했어요 — 각 건이 "1.마감/한공" 같은 번호 줄로 시작하고 그 다음 줄에 업체명이 오는지 확인해 주세요</div>
+                ) : null}
+              </div>
+              <div className="border-t border-slate-100 px-4 py-3">
+                <button type="button" disabled={!parsed.length} onClick={() => { onAddManual(parsed, { date, team: manual.team }); setManual(null); }}
+                  className="w-full rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">
+                  {parsed.length ? `${parsed.length}건 ${date} 내 일정에 넣기` : "내 일정에 넣기"}
+                </button>
               </div>
             </div>
           </div>
