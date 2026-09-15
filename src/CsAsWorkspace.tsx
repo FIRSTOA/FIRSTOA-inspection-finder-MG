@@ -1506,7 +1506,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const calendarDays = useMemo(() => monthGrid(currentMonth), [currentMonth]);
   const visibleTickets = useMemo(
     () => tickets.filter((ticket) => {
-      if (ticket.source === "autoplan") return false; // 자동일정 생성 건은 캘린더를 어지럽히지 않는다 (내 일정·일정리스트에는 표시)
+      // 자동일정·워킨맵 [내 일정에 넣기]·[직접 추가]로 만든 개인 동선 건은 캘린더를 어지럽히지 않는다 (내 일정·일정리스트에는 표시)
+      // — 2026-09-16: 직접 추가한 건이 매월점검 캘린더에 올라와 보였다
+      if (ticket.source === "autoplan" || ticket.source === "workin" || ticket.source === "manual") return false;
       if (!visibleScheduleTypes.includes(displayTypeOf(ticket))) return false;
       if (!ticket.time) return visibleExtra.includes("종일");
       if (ticket.team === "E") return visibleExtra.includes("E");
@@ -2194,6 +2196,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </div>
                 {view === "as" && (ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && (
                   <button type="button" onClick={() => { setDetailId(""); const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="w-full whitespace-nowrap rounded-lg bg-slate-900 py-2.5 text-xs font-black text-white transition hover:bg-slate-800">FIELD — 내용 확인했으면 바로 양식으로</button>
+                )}
+                {/* 납품·철수·교체도 상세보기에서 바로 FIELD 물류 양식으로 — 목록의 [FIELD]와 같은 경로(2026-09-16 요청). 휴가·연차는 제외 */}
+                {view === "as" && (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && (
+                  <button type="button" onClick={() => { setDetailId(""); onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note }); }} className="w-full whitespace-nowrap rounded-lg bg-slate-700 py-2.5 text-xs font-black text-white transition hover:bg-slate-600">FIELD — 물류 양식으로 (구분·거래처·품목 미리 채움)</button>
                 )}
                 <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`w-full whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
               </div>

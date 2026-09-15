@@ -31,6 +31,7 @@ export type MyPlanTicket = {
 // 자동일정 생성 건은 분기점검 워킨맵에서 온 것 — 저장 유형(매월점검) 대신 실제 의미로 표시
 function planTypeLabel(t: MyPlanTicket): string {
   if (t.source === "autoplan") return t.scheduleType === "AS" ? "재계약" : "분기점검";
+  if (t.source === "manual") return (t.issue || "").split(" · ")[0] || "직접 등록"; // [직접 추가] 건은 원문의 구분(마감·점검…)으로
   return t.scheduleType;
 }
 
