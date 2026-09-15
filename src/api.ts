@@ -781,13 +781,32 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
  * 실사고(2026-08-26): 지방(E) 양식은 `점검|E` 매핑이 없어 점검방만 실패하고 AS방만 전송돼, 사용자가 다시 보내야 했다.
  * 빈 문자열이면 정상, 값이 있으면 그 문장이 곧 사용자에게 보여줄 중단 이유다.
  */
+/**
+ * 전송 전 지역 읽기 — 구분이 여분·마감·세팅처럼 점검/AS 글자가 없으면 buildRecords가 지역을 아예 뽑지 않아
+ * 양식에 '지역:C'가 있어도 "지역 비어 있음"으로 막혔다(실사고 2026-09-15 보림토건 여분 — 구분에 AS를 손으로 써서 보냄).
+ * sendForm이 저장 때 쓰는 것과 같은 규칙으로 누른 방의 구분을 보정해 읽고, 그래도 없으면 '지역:' 줄을 직접 읽는다.
+ */
+export function formRegionForSend(text: string, destination: SendDestination | undefined, date: string, author: string): string {
+  const src = String(text || "");
+  let built = buildRecords(src, date, author, "");
+  if (!built.hasInspect && !built.hasAS && destination) {
+    const label = destination === "inspection" ? "점검" : "AS";
+    const fixed = src.match(/^구분\s*[:：]/m)
+      ? src.replace(/^구분\s*[:：]\s*(.*)$/m, `구분: ${label}, $1`)
+      : `구분: ${label}\n${src}`;
+    built = buildRecords(fixed, date, author, "");
+  }
+  const region = String(built.region || "").trim();
+  if (region) return region;
+  return (src.match(/^[ \t]*지역[ \t]*[:：][ \t]*([^\n\t]+)/m)?.[1] || "").trim();
+}
+
 export async function checkSendRooms(destinations: SendDestination[], text: string, ts?: string, author?: string): Promise<string> {
   if (!destinations.length) return "";
   try {
     const cfg = await getConfig();
     if (isTestModeValue(cfg.TEST_MODE)) return "";
-    const built = buildRecords(String(text || ""), toKstDate(ts), author || "", "");
-    const region = String(built.region || "").trim();
+    const region = formRegionForSend(String(text || ""), destinations[0], toKstDate(ts), author || "");
     if (!region) return "지역이 비어 있어 전송하지 않았습니다 — 양식의 '지역' 값을 채운 뒤 다시 보내주세요.";
     const key = normRegion(region);
     const map = await getRoomMap();
