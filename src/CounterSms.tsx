@@ -13,7 +13,7 @@ import { askConfirm } from "./confirmModal";
 import { MessageSquare, RotateCcw, Save, Settings2, Trash2, Upload, X } from "lucide-react";
 import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
-import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS } from "./counterSmsData";
+import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
@@ -87,8 +87,9 @@ export default function CounterSms({ author }: { author: string }) {
     const hit = profiles.find((p) => p.region === region) || profiles[0];
     return {
       region: hit?.region || region,
-      machines: { ...DEFAULT_FORMATS, ...(hit?.machines || {}) },
-      templates: { ...DEFAULT_TEMPLATES, ...(hit?.templates || {}) },
+      // 옛 기본 문구 그대로 저장된 칸은 새 기본값({업체명} 포함)으로 승격 — 안 그러면 새 기본이 영영 안 보인다
+      machines: mergeFormats(hit?.machines),
+      templates: mergeTemplates(hit?.templates),
     };
   }, [profiles, region]);
 
@@ -118,8 +119,8 @@ export default function CounterSms({ author }: { author: string }) {
   const openSendRow = (row: TargetRow) => {
     const regionName = regionForTeam(row.team);
     const profile = profiles.find((p) => p.region === regionName);
-    const machinesSet = { ...DEFAULT_FORMATS, ...(profile?.machines || {}) };
-    const templatesSet = { ...DEFAULT_TEMPLATES, ...(profile?.templates || {}) };
+    const machinesSet = mergeFormats(profile?.machines);
+    const templatesSet = mergeTemplates(profile?.templates);
     const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group, row.vendor);
     setPickedPhone(row.sent_phone || row.phones[0] || "");
     setSendTarget({
@@ -145,7 +146,7 @@ export default function CounterSms({ author }: { author: string }) {
     if (!uploadRaw.trim()) { setNotice("마감 목록을 붙여넣어 주세요."); return; }
     const regionName = regionForTeam(team);
     const profile = profiles.find((p) => p.region === regionName);
-    const keys = Object.keys({ ...DEFAULT_FORMATS, ...(profile?.machines || {}) });
+    const keys = Object.keys(mergeFormats(profile?.machines));
     const parsed = parseBlocks(uploadRaw, keys);
     setUploadBlocks(parsed);
     setNotice(parsed.length ? `${parsed.length}개 블록을 인식했습니다 — 확인 후 [${team}팀에 등록]을 누르세요.` : "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요.");
@@ -428,7 +429,7 @@ export default function CounterSms({ author }: { author: string }) {
                   const key = `${grp === "v_group" ? "v" : "s"}_${suffix}`;
                   return (
                     <label key={key} className="text-[11px] font-black text-slate-500">{title}
-                      <textarea value={editing.templates[key] || ""} onChange={(e) => setDraftValue("templates", key, e.target.value)} rows={suffix.includes("greeting") ? 4 : 2}
+                      <textarea value={editing.templates[key] || ""} onChange={(e) => setDraftValue("templates", key, e.target.value)} rows={suffix.includes("greeting") ? 5 : 2}
                         className={`mt-1 resize-y ${field}`} />
                     </label>
                   );

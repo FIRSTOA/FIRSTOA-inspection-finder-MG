@@ -49,6 +49,35 @@ export const DEFAULT_TEMPLATES: Record<string, string> = {
   s_multi_closing: "매번 번거롭게 해드려 죄송합니다.",
 };
 
+// 자리표시자가 생기기 전(2026-09-15 이전) 기본 문구 — 지역 프로필이 DB에 이 문장 그대로 저장돼 있으면 손대지 않은 기본값으로 보고 새 기본으로 승격한다.
+// (그대로 두면 새 기본값이 영영 적용되지 않는다 — "{업체명} 넣고 저장해도 안 된다" 신고의 배경)
+const LEGACY_SINGLE_GREETING = "안녕하세요 퍼스트 전산입니다.\n세금계산서 발행을 위해 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다.\n카운터 한장만 보내주시면 감사하겠습니다.";
+const LEGACY_MULTI_GREETING = "안녕하세요 퍼스트 전산입니다.\n세금계산서 발행을 위해 보유하신 총 {total}대 기기의 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다.\n각 기기별 카운터 한장씩 보내주시면 감사하겠습니다.";
+const LEGACY_TEMPLATES: Record<string, string> = {
+  v_single_greeting: LEGACY_SINGLE_GREETING, v_multi_greeting: LEGACY_MULTI_GREETING,
+  s_single_greeting: LEGACY_SINGLE_GREETING, s_multi_greeting: LEGACY_MULTI_GREETING,
+};
+const LEGACY_FORMATS: Record<string, string> = { "5473": txt5473.replace(/^\{업체명\} 담당자님\n/, "") };
+const norm = (s: string) => String(s || "").replace(/\r/g, "").trim();
+
+/** 저장된 지역 문구 + 기본값 병합 — 옛 기본 문구 그대로인 칸은 새 기본값(자리표시자 포함)으로 */
+export function mergeTemplates(saved?: Record<string, string> | null): Record<string, string> {
+  const out = { ...DEFAULT_TEMPLATES };
+  for (const [key, value] of Object.entries(saved || {})) {
+    if (LEGACY_TEMPLATES[key] !== undefined && norm(value) === norm(LEGACY_TEMPLATES[key])) continue;
+    out[key] = value;
+  }
+  return out;
+}
+export function mergeFormats(saved?: Record<string, string> | null): Record<string, string> {
+  const out = { ...DEFAULT_FORMATS };
+  for (const [key, value] of Object.entries(saved || {})) {
+    if (LEGACY_FORMATS[key] !== undefined && norm(value) === norm(LEGACY_FORMATS[key])) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 /** 설정 화면의 기종 묶음 (원본 machine_groups) */
 export const MACHINE_GROUPS: Array<{ label: string; models: string[] }> = [
   { label: "📠 신도리코 (N/D 시리즈)", models: ["N500", "N501", "N502", "N600", "N601", "D320", "D400", "D410", "D420", "D450", "D460", "D470"] },

@@ -252,16 +252,19 @@ export function vendorSalutation(vendor: string): string {
 
 /** 인사말·기종 문구에 쓰는 자리표시자 — 설정 화면에서 직접 넣고 빼고 옮길 수 있다(2026-09-16 요청: 하드코딩 대신 편집 가능하게) */
 export const VENDOR_PLACEHOLDER = "{업체명}";
+// 손으로 칠 때 생기는 변형도 받는다 — "{ 업체명 }", 전각 괄호 ｛업체명｝, "{업체}" (설정에서 넣고 저장했는데 안 된다는 신고 2026-09-16)
+const VENDOR_PLACEHOLDER_RE = /[{｛]\s*업체(?:명)?\s*[}｝]/g;
 
 /**
  * "{업체명}"을 호칭용 업체명으로 바꾼다. 이름이 하나도 안 남으면 그 줄의 앞 공백만 지운다("담당자님").
  * vendor를 아예 모르면(옛 호출) 자리표시자가 든 줄을 통째로 뺀다 — "{업체명} 담당자님"이 그대로 나가는 일이 없게.
  */
 export function fillVendorPlaceholder(text: string, vendor?: string): string {
-  if (!text.includes(VENDOR_PLACEHOLDER)) return text;
-  if (vendor === undefined) return text.split("\n").filter((line) => !line.includes(VENDOR_PLACEHOLDER)).join("\n");
+  const has = (line: string) => { VENDOR_PLACEHOLDER_RE.lastIndex = 0; return VENDOR_PLACEHOLDER_RE.test(line); };
+  if (!has(text)) return text;
+  if (vendor === undefined) return text.split("\n").filter((line) => !has(line)).join("\n");
   const name = salutationName(vendor);
-  return text.split("\n").map((line) => (line.includes(VENDOR_PLACEHOLDER) ? line.split(VENDOR_PLACEHOLDER).join(name).replace(/^\s+/, "") : line)).join("\n");
+  return text.split("\n").map((line) => (has(line) ? line.replace(VENDOR_PLACEHOLDER_RE, name).replace(/^\s+/, "") : line)).join("\n");
 }
 
 /** 등급군별 문구 생성 (원본 build_message_by_grade). 인사말·기종 문구의 {업체명}을 호칭용 업체명으로 채운다 */

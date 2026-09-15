@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { buildMessage, fillVendorPlaceholder, parseCompanyAndGrade, salutationName, vendorSalutation } from "../src/counterSmsParser";
-import { DEFAULT_FORMATS, DEFAULT_TEMPLATES } from "../src/counterSmsData";
+import { DEFAULT_FORMATS, DEFAULT_TEMPLATES, mergeFormats, mergeTemplates } from "../src/counterSmsData";
+
+describe("mergeTemplates — 지역 프로필 저장본과 기본값 병합", () => {
+  const legacy = "안녕하세요 퍼스트 전산입니다.\n세금계산서 발행을 위해 사용량 확인을 위한 카운터 사진이 필요하여 연락드렸습니다.\n카운터 한장만 보내주시면 감사하겠습니다.";
+  it("옛 기본 문구 그대로인 칸은 새 기본({업체명} 포함)으로 승격한다 — 자리표시자 이전에 시드된 DB 행", () => {
+    const merged = mergeTemplates({ s_single_greeting: legacy, v_single_greeting: `${legacy}\n` });
+    expect(merged.s_single_greeting).toBe(DEFAULT_TEMPLATES.s_single_greeting);
+    expect(merged.v_single_greeting).toBe(DEFAULT_TEMPLATES.v_single_greeting);
+  });
+  it("팀이 손본 문구는 그대로 둔다", () => {
+    const merged = mergeTemplates({ s_single_greeting: "{업체명} 담당자님, 퍼스트전산입니다." });
+    expect(merged.s_single_greeting).toBe("{업체명} 담당자님, 퍼스트전산입니다.");
+    expect(merged.s_single_closing).toBe(DEFAULT_TEMPLATES.s_single_closing);
+  });
+  it("기종 문구도 같은 규칙 — 옛 5473 문구는 승격, 다른 기종은 저장본 우선", () => {
+    const merged = mergeFormats({ "5473": DEFAULT_FORMATS["5473"].replace("{업체명} 담당자님\n", ""), N500: "직접 쓴 안내" });
+    expect(merged["5473"]).toBe(DEFAULT_FORMATS["5473"]);
+    expect(merged.N500).toBe("직접 쓴 안내");
+  });
+});
 
 describe("salutationName — 문자 첫 줄 호칭용 업체명", () => {
   it("파서가 만든 '등급 업체명'에서 등급·주식회사·영문 괄호·꼬리를 뗀다", () => {
@@ -35,6 +54,11 @@ describe("fillVendorPlaceholder — 인사말의 {업체명}", () => {
   });
   it("자리표시자가 없으면 그대로 — 직접 지운 인사말에 다시 붙이지 않는다", () => {
     expect(fillVendorPlaceholder("안녕하세요 퍼스트 전산입니다.", "N 무암")).toBe("안녕하세요 퍼스트 전산입니다.");
+  });
+  it("손으로 친 변형도 받는다 — 띄어쓰기·전각 괄호·{업체}", () => {
+    expect(fillVendorPlaceholder("{ 업체명 } 담당자님", "N 무암")).toBe("무암 담당자님");
+    expect(fillVendorPlaceholder("｛업체명｝ 담당자님", "N 무암")).toBe("무암 담당자님");
+    expect(fillVendorPlaceholder("{업체} 담당자님", "N 무암")).toBe("무암 담당자님");
   });
 });
 
