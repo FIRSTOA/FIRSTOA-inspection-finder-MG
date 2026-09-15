@@ -619,7 +619,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
     const markerSignatures = markerSignatureRef.current;
     const labelsById = labelByIdRef.current;
     const map = L.map(elementRef.current, {
-      zoomControl: true,
+      zoomControl: false, // 왼쪽 위 구석은 내 위치 버튼 자리 — 줌 버튼은 아래(setView 뒤)에서 오른쪽 아래에 단다
       attributionControl: false,
       minZoom: 6,
       fadeAnimation: false,
@@ -628,6 +628,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
       maxBoundsViscosity: 0.8,
     });
     map.setView(teamMapViews.C.center, teamMapViews.C.zoom);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
     const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       updateWhenIdle: true,
@@ -787,7 +788,7 @@ const MapCanvas = memo(function MapCanvas({ places, selectedId, team, viewStorag
       let tooltip: HTMLDivElement | null = null;
       if (permanentLabel) {
         tooltip = document.createElement("div");
-        tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
+        tooltip.className = "cursor-pointer whitespace-nowrap text-[12.5px] font-bold";
         tooltip.textContent = groupLabel;
         tooltip.title = groupTitle;
         styleMapLabel(tooltip, groupSelected);
@@ -1120,7 +1121,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
 
       if (permanentLabel) {
         const tooltip = document.createElement("div");
-        tooltip.className = "cursor-pointer whitespace-nowrap text-[11px] font-bold";
+        tooltip.className = "cursor-pointer whitespace-nowrap text-[12.5px] font-bold";
         tooltip.textContent = groupLabel;
         tooltip.title = group.map((item) => item.name).join("\n");
         // 지도 위 글자와 섞이지 않게 흰 말풍선 배경 (리플릿 tooltip CSS 대응)
@@ -1169,17 +1170,18 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
           ctx.beginPath(); ctx.arc(x, y, dot.size, 0, Math.PI * 2); ctx.fillStyle = dot.color; ctx.fill(); ctx.stroke();
         });
         // 라벨(확대 배율) — 점 위에 흰 말풍선 글자. DOM 툴팁과 같은 생김새를 캔버스로
-        ctx.font = "700 11px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
+        // 글자 11→12.5px, 말풍선 18→22px — 지도 위 업체명이 작아 눈에 안 띈다는 요청(2026-09-16)
+        ctx.font = "700 12.5px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         const roundRect = (bx: number, by: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.moveTo(bx + r, by); ctx.arcTo(bx + w, by, bx + w, by + h, r); ctx.arcTo(bx + w, by + h, bx, by + h, r); ctx.arcTo(bx, by + h, bx, by, r); ctx.arcTo(bx, by, bx + w, by, r); ctx.closePath(); };
         dots.forEach((dot, i) => {
           if (!dot.label) return;
           const { x, y } = positions[i];
-          if (x < -80 || y < -30 || x > cssW + 80 || y > cssH + 30) return;
-          const w = Math.ceil(ctx.measureText(dot.label).width) + 12, h = 18;
+          if (x < -90 || y < -34 || x > cssW + 90 || y > cssH + 34) return;
+          const w = Math.ceil(ctx.measureText(dot.label).width) + 16, h = 22;
           dot.labelW = w;
           const bx = x - w / 2, by = y - dot.size - 4 - h;
-          roundRect(bx, by, w, h, 5);
+          roundRect(bx, by, w, h, 6);
           ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fill();
           ctx.lineWidth = 1; ctx.strokeStyle = "rgba(100,116,139,.45)"; ctx.stroke();
           ctx.fillStyle = "#0f172a"; ctx.fillText(dot.label, x, by + h / 2 + 0.5);
@@ -2596,6 +2598,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const historyEntries = !rowExpanded ? [] : (onDemandHistory !== undefined && onDemandHistory.length ? onDemandHistory : (onDemandHistory !== undefined ? [] : (inspectionHistoryByPlace.get(place.id) || [])));
           const inspectionSnapshots = historyEntries.map((visit) => visitSnapshot(visit, place));
           const spareAdviceResult = !rowExpanded || place.label === "G7" || historyLoading ? null : usageSpareAdvice(inspectionSnapshots[0], inspectionSnapshots[1], `${place.comment} ${place.name}`);
+          // 목록 카드 정리(2026-09-16 "난잡해 보인다"): 업체명은 한 줄로, 순번·등급 코드와 마감 종류는 작게 따로,
+          // 상태 문구는 회색 글자 + 색 점만. 원문 지명 전체는 마우스를 올리면(title) 보인다.
+          const displayName = workinVendorName(place.name) || place.name;
+          const placeCode = place.name.match(/^\s*((?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?)(?=[가-힣(㈜\s])/i)?.[1]?.trim() || "";
+          const placeTail = place.name.match(/(매월마감|분기마감|매주마감|월말마감|단순마감|매년마감|매월방문|매주방문|격주방문|월말방문)/)?.[1] || "";
           return (
             <div key={place.id} data-place-id={place.id} className={`relative hover:z-30 ${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
@@ -2614,11 +2621,19 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 ) : (
                   <span className="mt-1 h-4 w-4 shrink-0 rounded-full border-2 border-white shadow" style={{ backgroundColor: meta.color }} />
                 )}
-                <span className="min-w-0">
-                  <span className="block text-sm font-black leading-5 text-slate-900">{place.name}</span>
-                  <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{place.comment || place.address}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2" title={place.name}>
+                    <span className="min-w-0 flex-1 truncate text-sm font-black leading-5 text-slate-900">{displayName}</span>
+                    {placeCode && <span className="shrink-0 text-[10.5px] font-bold tabular-nums text-slate-400">{placeCode}</span>}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11.5px] font-medium text-slate-500">{[place.comment || place.address, placeTail].filter(Boolean).join(" · ")}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
-                  {place.kind === "quarter" && <span className={`mt-1 block text-[11px] font-black ${inspectionDays === null ? "text-slate-400" : inspectionDays >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 (${inspectionDays}일 경과)` : `방문 대기 · ${lastInspection} 점검 (${60 - inspectionDays}일 후 가능)`}</span>}
+                  {place.kind === "quarter" && (
+                    <span className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${inspectionDays === null ? "bg-slate-300" : inspectionDays >= 60 ? "bg-emerald-500" : "bg-amber-400"}`} />
+                      <span className="truncate">{inspectionDays === null ? "최근 점검 이력 없음" : inspectionDays >= 60 ? `방문 가능 · ${lastInspection} 점검 · ${inspectionDays}일 경과` : `방문 대기 · ${lastInspection} 점검 · ${60 - inspectionDays}일 후 가능`}</span>
+                    </span>
+                  )}
                   {keyman && (() => {
                     // 구분 원문이 길어("총괄키맨등록(계약관련 외 전화하지 말 것.)") 줄이 밀렸다 — 라벨은 짧게, 원문은 말풍선으로.
                     const needGreet = keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
@@ -2683,7 +2698,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
                   <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
                     onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
-                    className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100">📅</button>
+                    className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100 lg:opacity-40 lg:group-hover:opacity-100">📅</button>
                   {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
                     <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
                       disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
@@ -2815,7 +2830,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         onClick={toggleLocationTracking}
         title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"}
         aria-pressed={locationTracking}
-        className={`absolute left-[3.5rem] top-3 z-[900] hidden h-10 w-10 items-center justify-center rounded-xl border shadow-lg lg:flex ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+        // 왼쪽 위 구석에 초록색으로 — 다른 흰 버튼들과 구분되게(2026-09-16 요청). 예전엔 검색창 옆(left 3.5rem)에 흰색이었다
+        className={`absolute left-3 top-3 z-[900] hidden h-10 w-10 items-center justify-center rounded-xl border shadow-lg lg:flex ${locationTracking ? "border-emerald-700 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
       >
         <LocateFixed size={19} strokeWidth={2.4} />
       </button>
@@ -2824,7 +2840,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         <div className="relative flex justify-end gap-1">
           {/* 내 위치 — 모바일은 이 묶음 안, 넓은 화면은 검색창 옆(왼쪽 상단) */}
           <button type="button" onClick={toggleLocationTracking} title={locationTracking ? "내 위치 추적 중지" : "현재 내 위치 추적"} aria-pressed={locationTracking}
-            className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-lg lg:hidden ${locationTracking ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
+            className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-lg lg:hidden ${locationTracking ? "border-emerald-700 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}>
             <LocateFixed size={16} strokeWidth={2.4} />
           </button>
           <div className="flex gap-1">
