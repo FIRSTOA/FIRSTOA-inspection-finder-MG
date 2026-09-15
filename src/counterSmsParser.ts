@@ -250,7 +250,21 @@ export function vendorSalutation(vendor: string): string {
   return name ? `${name} 담당자님` : "담당자님";
 }
 
-/** 등급군별 문구 생성 (원본 build_message_by_grade). vendor를 주면 첫 줄에 "○○ 담당자님" 호칭이 붙는다 */
+/** 인사말·기종 문구에 쓰는 자리표시자 — 설정 화면에서 직접 넣고 빼고 옮길 수 있다(2026-09-16 요청: 하드코딩 대신 편집 가능하게) */
+export const VENDOR_PLACEHOLDER = "{업체명}";
+
+/**
+ * "{업체명}"을 호칭용 업체명으로 바꾼다. 이름이 하나도 안 남으면 그 줄의 앞 공백만 지운다("담당자님").
+ * vendor를 아예 모르면(옛 호출) 자리표시자가 든 줄을 통째로 뺀다 — "{업체명} 담당자님"이 그대로 나가는 일이 없게.
+ */
+export function fillVendorPlaceholder(text: string, vendor?: string): string {
+  if (!text.includes(VENDOR_PLACEHOLDER)) return text;
+  if (vendor === undefined) return text.split("\n").filter((line) => !line.includes(VENDOR_PLACEHOLDER)).join("\n");
+  const name = salutationName(vendor);
+  return text.split("\n").map((line) => (line.includes(VENDOR_PLACEHOLDER) ? line.split(VENDOR_PLACEHOLDER).join(name).replace(/^\s+/, "") : line)).join("\n");
+}
+
+/** 등급군별 문구 생성 (원본 build_message_by_grade). 인사말·기종 문구의 {업체명}을 호칭용 업체명으로 채운다 */
 export function buildMessage(machines: string[], formats: Record<string, string>, templates: Record<string, string>, gradeGroup: GradeGroup, vendor?: string): string {
   const counts = new Map<string, number>();
   for (const m of machines) counts.set(m, (counts.get(m) || 0) + 1);
@@ -258,27 +272,26 @@ export function buildMessage(machines: string[], formats: Record<string, string>
   const total = machines.length;
   const prefix = gradeGroup === "v_group" ? "v_" : "s_";
   const singleClosing = templates[`${prefix}single_closing`] || "";
-  // 업체명이 바뀔 때마다 호칭도 따라 바뀐다 — 답장이 와도 누구 건지 바로 보이게(2026-09-15 요청)
-  const salute = vendor ? `${vendorSalutation(vendor)}\n` : "";
+  const fill = (text: string) => fillVendorPlaceholder(text, vendor);
 
   if (models.length === 1 && total === 1) {
     const m = models[0];
     const how = formats[m] || TXT_DEFAULT;
     // 문구 자체가 완결형(인사말 포함)인 기종은 템플릿을 덧붙이지 않는다 — 원본 동작
-    if (how.includes("안녕하세요") || how.includes("사용량확인차")) return `${salute}${how}\n(기종: ${m})\n${singleClosing}`;
-    const greeting = templates[`${prefix}single_greeting`] || "";
-    return `${salute}${greeting}\n\n▶ 기종: ${m}\n▶ 방법: ${how}\n\n${singleClosing}`;
+    if (how.includes("안녕하세요") || how.includes("사용량확인차")) return `${fill(how)}\n(기종: ${m})\n${singleClosing}`;
+    const greeting = fill(templates[`${prefix}single_greeting`] || "");
+    return `${greeting}\n\n▶ 기종: ${m}\n▶ 방법: ${fill(how)}\n\n${singleClosing}`;
   }
 
-  const greeting = (templates[`${prefix}multi_greeting`] || "").replace(/\{total\}/g, String(total));
+  const greeting = fill((templates[`${prefix}multi_greeting`] || "").replace(/\{total\}/g, String(total)));
   const closing = templates[`${prefix}multi_closing`] || "";
-  const lines: string[] = [`${salute}${greeting}`, ""];
+  const lines: string[] = [greeting, ""];
   let idx = 0;
   for (const [m, count] of counts) {
     idx += 1;
     const how = formats[m] || TXT_DEFAULT;
     lines.push(`▶ 기종${idx}: ${m}${count > 1 ? ` (${count}대)` : ""}`);
-    lines.push(`    방법: ${how}\n`);
+    lines.push(`    방법: ${fill(how)}\n`);
   }
   lines.push(closing);
   return lines.join("\n");

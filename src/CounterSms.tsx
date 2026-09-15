@@ -424,7 +424,7 @@ export default function CounterSms({ author }: { author: string }) {
             <details key={grp} open className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="cursor-pointer bg-slate-50/70 px-4 py-3 text-sm font-black text-slate-900">{label} 문자 양식</summary>
               <div className="grid gap-3 p-4 md:grid-cols-2">
-                {([["single_greeting", "인사말 (단일 기기)"], ["single_closing", "마무리말 (단일)"], ["multi_greeting", "인사말 (여러 기기) — {total} 사용 가능"], ["multi_closing", "마무리말 (여러 기기)"]] as const).map(([suffix, title]) => {
+                {([["single_greeting", "인사말 (단일 기기) — {업체명} 자리에 업체명이 들어갑니다"], ["single_closing", "마무리말 (단일)"], ["multi_greeting", "인사말 (여러 기기) — {total}·{업체명} 사용 가능"], ["multi_closing", "마무리말 (여러 기기)"]] as const).map(([suffix, title]) => {
                   const key = `${grp === "v_group" ? "v" : "s"}_${suffix}`;
                   return (
                     <label key={key} className="text-[11px] font-black text-slate-500">{title}
