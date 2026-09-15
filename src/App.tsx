@@ -5002,9 +5002,12 @@ export default function App() {
     }));
     const vendor = extractVendorFromText(target) || currentVendor;
     const vendorKey = matchVendor(vendor);
+    // 이번 분기 + 다음 분기 행을 함께 본다 — 분기 말에 다음 분기 점검을 미리 돌 때(9월에 4분기 선점검)
+    // 현재 분기만 조회하면 "일치 항목 없음"으로 끝나 색칠이 안 됐다(2026-09-15). 어느 분기 행을 칠할지는 아래 규칙.
+    const nextQuarter = quarter === 4 ? 1 : quarter + 1;
     const rows = await selectAllRows<FieldWorkinMapRow>(
       "workin_map_places",
-      `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}`,
+      `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=in.(${quarter},${nextQuarter})`,
     );
     const searchableRows = rows
       .filter((row) => row.kind === "quarter" || row.kind === "monthly")
@@ -5072,13 +5075,31 @@ export default function App() {
         details.push("같은 기종이 여러 대라 업체명+기종만으로는 기기를 구분할 수 없습니다.");
       } else {
         (["quarter", "monthly"] as const).forEach((kind) => {
-          const kindCandidates = candidates.filter(({ row }) => row.kind === kind);
-          if (kindCandidates.length === 1) {
-            selectedRows.push(kindCandidates[0].row);
-          } else if (kindCandidates.length > 1) {
+          const kindLabel = kind === "quarter" ? "분기점검" : "매월점검";
+          // 매월점검은 이번 분기 행만 본다 — 다음 분기 행까지 칠하면 월 횟수(G2→G3→G5)가 어긋난다
+          const inCurrent = candidates.filter(({ row }) => row.kind === kind && row.quarter === quarter);
+          const inNext = kind === "quarter" ? candidates.filter(({ row }) => row.kind === kind && row.quarter === nextQuarter) : [];
+          if (inCurrent.length > 1) {
             ambiguous = true;
-            details.push(`${kind === "quarter" ? "분기점검" : "매월점검"} 후보 ${kindCandidates.length}곳 · 자동 반영 제외`);
+            details.push(`${kindLabel} ${quarter}분기 후보 ${inCurrent.length}곳 · 자동 반영 제외`);
+            return;
           }
+          const current = inCurrent[0]?.row;
+          // 규칙 ① 이번 분기 행이 아직 안 끝났으면(G5·G12 아님) 이번 분기에만 반영 — 3·4분기 양쪽에 있어도 한 곳만 칠한다
+          if (current && current.label !== "G5" && current.label !== "G12") { selectedRows.push(current); return; }
+          if (inNext.length > 1) {
+            ambiguous = true;
+            details.push(`${kindLabel} ${nextQuarter}분기 후보 ${inNext.length}곳 · 자동 반영 제외`);
+            return;
+          }
+          const next = inNext[0]?.row;
+          if (next) {
+            // 규칙 ② 이번 분기가 이미 완료(G5)·이관(G12)이거나 등재가 없으면 다음 분기 행에 선반영(분기 말 선점검)
+            if (current) details.push(`${kindLabel} ${quarter}분기: ${current.label === "G12" ? "다음 분기 이관(G12)" : "이미 반영(G5)"} → ${nextQuarter}분기 행에 반영`);
+            selectedRows.push(next);
+            return;
+          }
+          if (current) selectedRows.push(current); // 다음 분기 등재 없음 — 이번 분기 행 상태(이미 반영/이관)로 보고
         });
       }
 
@@ -5086,7 +5107,8 @@ export default function App() {
       let hasUpdated = false;
       let hasCarried = false;
       for (const row of selectedRows) {
-        const kindLabel = row.kind === "monthly" ? "매월점검" : "분기점검";
+        // 다음 분기 행에 선반영한 경우 어느 분기인지 함께 적는다 — 결과 패널·메모에서 3분기/4분기가 구분되게
+        const kindLabel = `${row.kind === "monthly" ? "매월점검" : "분기점검"}${row.quarter !== quarter ? ` ${row.quarter}분기` : ""}`;
         if (row.label === "G12") {
           hasCarried = true;
           details.push(`${kindLabel}: 다음 분기 이관(G12) · ${workinStatusDate(row)}`);
@@ -5106,7 +5128,7 @@ export default function App() {
           continue;
         }
         const history = nextLabel === "G5"
-          ? `[G5 완료] ${workDate}`
+          ? `[G5 완료] ${workDate}${row.quarter !== quarter ? ` (${row.quarter}분기 선반영)` : ""}`
           : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}`;
         const memos = (row.memos || []).includes(history) ? row.memos : [...(row.memos || []), history];
         await updateRows("workin_map_places", `id=eq.${row.id}`, {
