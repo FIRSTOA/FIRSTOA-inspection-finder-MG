@@ -15,6 +15,7 @@ import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supa
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
+import { contactChoices, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
@@ -40,6 +41,26 @@ export default function CounterSms({ author }: { author: string }) {
   const [pickedPhone, setPickedPhone] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // 업체별 연락처 규칙(🚫 보내지 말 것 / ⭐ 새 담당) — 팀 공유. 표가 아직 없으면 빈 목록으로 동작(2026-09-16)
+  const [contactRules, setContactRules] = useState<ContactRule[]>([]);
+  const reloadRules = useCallback(async () => { setContactRules(await loadContactRules()); }, []);
+  useEffect(() => { void reloadRules(); }, [reloadRules]);
+  // 목록 카드의 규칙 표시 — 🚫 차단 번호가 섞여 있거나 ⭐ 새 담당이 기록된 업체
+  const ruleBadges = (vendor: string, phones: string[]) => {
+    const rr = rulesForVendor(contactRules, vendor);
+    if (!rr.length) return null;
+    const digits = phones.map(normalizePhone);
+    const blocked = rr.filter((r) => r.kind === "block" && digits.includes(normalizePhone(r.phone)));
+    const prefer = rr.find((r) => r.kind === "prefer");
+    const allBlocked = blocked.length > 0 && digits.length > 0 && digits.every((p) => blocked.some((r) => normalizePhone(r.phone) === p)) && !prefer;
+    return (
+      <>
+        {prefer && <span title={`⭐ 새 담당 ${prefer.name || formatPhone(prefer.phone)} · ${ruleStamp(prefer)}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-black text-amber-800">⭐</span>}
+        {blocked.length > 0 && <span title={blocked.map((r) => `🚫 ${formatPhone(r.phone)} ${r.memo || ""} · ${ruleStamp(r)}`).join("\n")} className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-black ${allBlocked ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"}`}>🚫{allBlocked ? " 전부" : ""}</span>}
+      </>
+    );
+  };
 
   // ── 팀 공유 마감 리스트 ──
   const myTeam = useMemo(() => { const t = teamForAuthor(author); return (TEAMS as readonly string[]).includes(t) ? t : "C"; }, [author]);
@@ -111,7 +132,7 @@ export default function CounterSms({ author }: { author: string }) {
 
   const openSend = (target: MergedTarget) => {
     const message = buildMessage(target.machines, active.machines, active.templates, target.gradeGroup, target.vendor);
-    setPickedPhone(target.phones[0] || "");
+    setPickedPhone(pickDefaultPhone(contactChoices(target.phones, target.labels, rulesForVendor(contactRules, target.vendor))));
     setSendTarget({ target, message });
   };
 
@@ -122,7 +143,7 @@ export default function CounterSms({ author }: { author: string }) {
     const machinesSet = mergeFormats(profile?.machines);
     const templatesSet = mergeTemplates(profile?.templates);
     const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group, row.vendor);
-    setPickedPhone(row.sent_phone || row.phones[0] || "");
+    setPickedPhone(row.sent_phone || pickDefaultPhone(contactChoices(row.phones, row.labels, rulesForVendor(contactRules, row.vendor))));
     setSendTarget({
       target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names },
       message, row,
@@ -317,6 +338,7 @@ export default function CounterSms({ author }: { author: string }) {
                       <button type="button" onClick={() => openSendRow(row)} className="block w-full text-left">
                         <div className="flex items-center gap-1.5">
                           <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
+                          {ruleBadges(row.vendor, row.phones)}
                           {row.sent_at && <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓</span>}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
@@ -368,7 +390,7 @@ export default function CounterSms({ author }: { author: string }) {
                   {shown.map((t) => (
                     <button key={t.key} type="button" onClick={() => openSend(t)}
                       className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
-                      <div className="truncate text-[13px] font-black text-slate-900">{t.gradeGroup === "v_group" ? "💎" : "✉️"} {t.vendor}</div>
+                      <div className="flex items-center gap-1"><span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{t.gradeGroup === "v_group" ? "💎" : "✉️"} {t.vendor}</span>{ruleBadges(t.vendor, t.phones)}</div>
                       <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
                         {t.machines.length}대 · {t.phones.length ? t.phones.map(formatPhone).join(", ") : "번호 없음"}
                       </div>
@@ -523,7 +545,9 @@ export default function CounterSms({ author }: { author: string }) {
 
       {sendTarget && (() => {
         const { target, message } = sendTarget;
-        const label = target.labels[pickedPhone] || "";
+        const vendorRules = rulesForVendor(contactRules, target.vendor);
+        const pickedChoice = contactChoices(target.phones, target.labels, vendorRules).find((c) => c.phone === pickedPhone);
+        const label = pickedChoice?.label || target.labels[pickedPhone] || "";
         return (
           <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setSendTarget(null)}>
             <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -541,18 +565,8 @@ export default function CounterSms({ author }: { author: string }) {
                     <ul className="mt-1 space-y-0.5 text-[11px] font-bold text-slate-600">{target.vendorNames.map((n) => <li key={n}>· {n}</li>)}</ul>
                   </div>
                 )}
-                {target.phones.length ? (
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-black text-slate-400">수신 연락처</div>
-                    {target.phones.map((p) => (
-                      <label key={p} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition ${pickedPhone === p ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                        <input type="radio" checked={pickedPhone === p} onChange={() => setPickedPhone(p)} className="h-4 w-4 accent-blue-600" />
-                        {target.labels[p] && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-black text-emerald-700">👤 {target.labels[p]}</span>}
-                        <span className="font-mono tabular-nums">{formatPhone(p)}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">번호가 없습니다 — 인식 결과에서 연락처를 입력해 주세요.</div>}
+                <ContactRulesPanel vendor={target.vendor} phones={target.phones} labels={target.labels} rules={vendorRules}
+                  picked={pickedPhone} onPick={setPickedPhone} author={author} onRulesChanged={reloadRules} onNotice={setNotice} />
                 {sendTarget.row && (
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-bold text-emerald-800">
                     [문자 보내기]를 누르면 팀 목록에 <b>전송 완료 ✓</b>로 표시됩니다 (누가·언제 보냈는지 팀원 모두에게 보입니다). 실제로 안 보냈으면 카드의 [전송 취소]로 되돌리세요.
@@ -565,7 +579,7 @@ export default function CounterSms({ author }: { author: string }) {
               </div>
               <div className="flex shrink-0 items-center gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
                 <button type="button" onClick={() => { void navigator.clipboard.writeText(message).then(() => setNotice("문구를 복사했습니다.")); }} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">복사</button>
-                {pickedPhone && (
+                {pickedPhone && !pickedChoice?.blocked && (
                   <a href={`sms:${pickedPhone}?body=${encodeURIComponent(message)}`}
                     onClick={() => { if (sendTarget.row) { markSent(sendTarget.row, pickedPhone); setSendTarget(null); } }}
                     className="flex-1 rounded-full bg-emerald-600 py-2.5 text-center text-sm font-black text-white transition hover:bg-emerald-700">
@@ -577,6 +591,100 @@ export default function CounterSms({ author }: { author: string }) {
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+/**
+ * 전송 모달의 수신 연락처 — 파싱된 번호 + 업체 연락처 규칙(🚫 보내지 말 것 / ⭐ 새 담당)을 한 목록으로.
+ * 여기서 한 번 표시해 두면 팀 전체가 다음 마감에 그 업체가 다시 올라와도 바로 본다(2026-09-16 요청).
+ * 사유·기록자·날짜가 함께 남아 나중에 헷갈리지 않는다.
+ */
+function ContactRulesPanel({ vendor, phones, labels, rules, picked, onPick, author, onRulesChanged, onNotice }: {
+  vendor: string; phones: string[]; labels: Record<string, string>; rules: ContactRule[];
+  picked: string; onPick: (phone: string) => void; author: string; onRulesChanged: () => Promise<void> | void; onNotice: (message: string) => void;
+}) {
+  const choices = contactChoices(phones, labels, rules);
+  const sendable = choices.filter((c) => !c.blocked);
+  const [blockDraft, setBlockDraft] = useState<{ phone: string; memo: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [add, setAdd] = useState({ name: "", phone: "", memo: "" });
+  const [busy, setBusy] = useState(false);
+  const run = async (work: () => Promise<void>, done: string) => {
+    setBusy(true);
+    try { await work(); await onRulesChanged(); onNotice(done); }
+    catch (e) { onNotice(`연락처 규칙 저장 실패: ${(e as Error).message} — DB에 counter_sms_contact_rules 표가 있는지 확인 (supabase/counter-sms-contact-rules.sql)`); }
+    finally { setBusy(false); }
+  };
+  const block = (phone: string, memo: string) => run(async () => {
+    await saveContactRule({ vendor, phone, kind: "block", memo, author });
+    if (picked === phone) onPick(sendable.find((c) => c.phone !== phone)?.phone || ""); // 차단한 번호가 선택돼 있었으면 다음 번호로
+  }, `🚫 ${formatPhone(phone)} — 이 업체엔 보내지 않기로 기록했습니다 (다음 마감에도 표시됩니다)`);
+  const unset = (rule: ContactRule) => run(() => removeContactRule(rule.id), "규칙을 해제했습니다");
+  const addPrefer = () => run(async () => {
+    const saved = await saveContactRule({ vendor, phone: add.phone, kind: "prefer", name: add.name, memo: add.memo, author });
+    onPick(saved.phone);
+    setAdd({ name: "", phone: "", memo: "" });
+    setAddOpen(false);
+  }, "⭐ 새 담당자 연락처를 기록했습니다 — 다음 마감부터 이 업체는 이 번호가 먼저 나옵니다");
+  const smallBtn = "rounded border px-2 py-1 text-[10px] font-black transition";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black text-slate-400">수신 연락처</span>
+        {rules.length > 0 && <span className="text-[10px] font-bold text-slate-400">연락처 기록 {rules.length}건 · 최근 {ruleStamp(rules[0])}</span>}
+      </div>
+      {!choices.length && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-600">번호가 없습니다 — 인식 결과에서 연락처를 입력하거나 아래에서 새 담당자를 기록해 주세요.</div>}
+      {choices.length > 0 && !sendable.length && <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">🚫 이 업체 번호는 전부 "보내지 말 것"으로 기록돼 있습니다 — 새 담당자 연락처를 확인해 아래에 기록해 주세요.</div>}
+      {choices.map((c) => {
+        const isPicked = picked === c.phone;
+        const rule = c.blocked || c.preferred;
+        return (
+          <div key={c.phone} className={`rounded-lg border px-3 py-2 transition ${c.blocked ? "border-rose-200 bg-rose-50/60" : isPicked ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
+            <label className={`flex flex-wrap items-center gap-2 text-sm font-bold ${c.blocked ? "cursor-not-allowed text-slate-400" : "cursor-pointer text-slate-700"}`}>
+              <input type="radio" disabled={!!c.blocked} checked={isPicked} onChange={() => onPick(c.phone)} className="h-4 w-4 accent-blue-600" />
+              {c.preferred && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-800">⭐ 새 담당</span>}
+              {c.label && <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${c.blocked ? "bg-slate-100 text-slate-400 line-through" : "bg-emerald-50 text-emerald-700"}`}>👤 {c.label}</span>}
+              <span className={`font-mono tabular-nums ${c.blocked ? "line-through" : ""}`}>{formatPhone(c.phone)}</span>
+              {c.blocked && <span className="rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white">🚫 보내지 말 것</span>}
+              <span className="ml-auto flex shrink-0 gap-1">
+                {c.blocked
+                  ? <button type="button" disabled={busy} onClick={() => { if (c.blocked) void unset(c.blocked); }} className={`${smallBtn} border-slate-300 bg-white text-slate-600 hover:bg-slate-50`}>해제</button>
+                  : <>
+                    {c.preferred && <button type="button" disabled={busy} onClick={() => { if (c.preferred) void unset(c.preferred); }} className={`${smallBtn} border-amber-300 bg-white text-amber-700 hover:bg-amber-50`}>담당 해제</button>}
+                    <button type="button" disabled={busy} onClick={() => setBlockDraft({ phone: c.phone, memo: "" })} className={`${smallBtn} border-rose-200 bg-white text-rose-600 hover:bg-rose-50`}>🚫 보내지 말 것</button>
+                  </>}
+              </span>
+            </label>
+            {rule && <div className="mt-1 pl-6 text-[11px] font-bold text-slate-500">{rule.memo ? `${rule.kind === "block" ? "사유" : "메모"}: ${rule.memo} ` : ""}<span className="text-slate-400">· {ruleStamp(rule)} 기록</span></div>}
+            {blockDraft?.phone === c.phone && (
+              <div className="mt-2 flex gap-1.5 pl-6">
+                <input autoFocus value={blockDraft.memo} onChange={(e) => setBlockDraft({ phone: c.phone, memo: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") { void block(c.phone, blockDraft.memo); setBlockDraft(null); } }}
+                  placeholder="사유 (예: 퇴사 · 담당 아님 · 문자 거부)" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-rose-500" />
+                <button type="button" disabled={busy} onClick={() => { void block(c.phone, blockDraft.memo); setBlockDraft(null); }} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-black text-white">기록</button>
+                <button type="button" onClick={() => setBlockDraft(null)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-black text-slate-500">취소</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {addOpen ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+          <div className="text-[10px] font-black text-amber-700">⭐ 새 마감 담당자 — 다음 마감부터 이 업체는 이 번호가 먼저 나옵니다</div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <input value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} placeholder="이름·직함 (예: 김철수 과장)" className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-amber-500" />
+            <input value={add.phone} onChange={(e) => setAdd({ ...add, phone: e.target.value })} placeholder="010-0000-0000" inputMode="tel" className="rounded-lg border border-slate-300 px-2.5 py-1.5 font-mono text-xs font-semibold outline-none focus:border-amber-500" />
+          </div>
+          <input value={add.memo} onChange={(e) => setAdd({ ...add, memo: e.target.value })} placeholder="메모 (예: 전 담당 퇴사 — 9/16 통화로 안내받음)" className="mt-1.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-amber-500" />
+          <div className="mt-2 flex gap-1.5">
+            <button type="button" disabled={busy || normalizePhone(add.phone).length < 10} onClick={() => void addPrefer()} className="flex-1 rounded-lg bg-amber-600 py-1.5 text-xs font-black text-white disabled:opacity-40">기록하고 이 번호로 보내기</button>
+            <button type="button" onClick={() => setAddOpen(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-500">취소</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAddOpen(true)} className="w-full rounded-lg border border-dashed border-amber-300 bg-white py-2 text-[11px] font-black text-amber-700 transition hover:bg-amber-50">＋ 새 마감 담당자 연락처 기록 (다른 사람에게 보내라고 했을 때)</button>
+      )}
     </div>
   );
 }
