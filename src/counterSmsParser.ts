@@ -226,27 +226,53 @@ export function mergeTargets(blocks: ParsedBlock[]): MergedTarget[] {
   return [...groups.values()];
 }
 
-/** 등급군별 문구 생성 (원본 build_message_by_grade) */
-export function buildMessage(machines: string[], formats: Record<string, string>, templates: Record<string, string>, gradeGroup: GradeGroup): string {
+// 법인 형태·괄호 영문·일정 꼬리 등 호칭에서 빼는 것들 — "N 주식회사 무암 (Mooam)-" → "무암"
+const CORP_FORM_RE = /주식회사|㈜|\(주\)|유한회사|\(유\)|유한책임회사|합자회사|합명회사|사단법인|재단법인|\(사\)|\(재\)/g;
+const SALUTATION_TAIL_RE = /(분기마감|매월마감|월말마감|매월방문|매주방문|매주마감|격주방문|격주마감|월말방문|USAGE TRACKER|USAGE)/gi;
+
+/**
+ * 문자 첫 줄 호칭용 업체명 — 등급(N·V·SS)·순번·주식회사·(영문)·"-분기마감" 꼬리를 모두 떼고 이름만 남긴다.
+ * "N 웰스매니지먼트 주식회사" → "웰스매니지먼트", "N 주식회사 무암 (Mooam)-" → "무암". 남는 게 없으면 빈칸.
+ */
+export function salutationName(vendor: string): string {
+  let name = String(vendor || "").replace(/_x000d_/gi, " ").trim();
+  name = name.replace(/^(?:\d+\s*,\s*)?\d*\s*#?\s*(?:SS|NN|V|S|N)\s+/i, ""); // 파서가 붙인 "N " 접두(순번 포함)
+  name = name.replace(/^(?:\d+\s*,\s*)?\d+#?(?:SS|NN|V|S|N)?(?=[가-힣(㈜])/i, ""); // 원문 그대로 온 "16N웰스…"
+  name = name.replace(/\([A-Za-z0-9 .&'-]+\)/g, " "); // (Mooam) 같은 영문 표기
+  name = name.replace(CORP_FORM_RE, " ").replace(SALUTATION_TAIL_RE, " ");
+  name = name.replace(/[\s\-·,/／]+$/g, "").replace(/^[\s\-·,/／]+/g, "").replace(/\s{2,}/g, " ").trim();
+  return name;
+}
+
+/** "무암 담당자님" — 이름을 못 남기면 "담당자님"만 (문자가 이름 없이 나가는 것보다 낫다) */
+export function vendorSalutation(vendor: string): string {
+  const name = salutationName(vendor);
+  return name ? `${name} 담당자님` : "담당자님";
+}
+
+/** 등급군별 문구 생성 (원본 build_message_by_grade). vendor를 주면 첫 줄에 "○○ 담당자님" 호칭이 붙는다 */
+export function buildMessage(machines: string[], formats: Record<string, string>, templates: Record<string, string>, gradeGroup: GradeGroup, vendor?: string): string {
   const counts = new Map<string, number>();
   for (const m of machines) counts.set(m, (counts.get(m) || 0) + 1);
   const models = [...counts.keys()];
   const total = machines.length;
   const prefix = gradeGroup === "v_group" ? "v_" : "s_";
   const singleClosing = templates[`${prefix}single_closing`] || "";
+  // 업체명이 바뀔 때마다 호칭도 따라 바뀐다 — 답장이 와도 누구 건지 바로 보이게(2026-09-15 요청)
+  const salute = vendor ? `${vendorSalutation(vendor)}\n` : "";
 
   if (models.length === 1 && total === 1) {
     const m = models[0];
     const how = formats[m] || TXT_DEFAULT;
     // 문구 자체가 완결형(인사말 포함)인 기종은 템플릿을 덧붙이지 않는다 — 원본 동작
-    if (how.includes("안녕하세요") || how.includes("사용량확인차")) return `${how}\n(기종: ${m})\n${singleClosing}`;
+    if (how.includes("안녕하세요") || how.includes("사용량확인차")) return `${salute}${how}\n(기종: ${m})\n${singleClosing}`;
     const greeting = templates[`${prefix}single_greeting`] || "";
-    return `${greeting}\n\n▶ 기종: ${m}\n▶ 방법: ${how}\n\n${singleClosing}`;
+    return `${salute}${greeting}\n\n▶ 기종: ${m}\n▶ 방법: ${how}\n\n${singleClosing}`;
   }
 
   const greeting = (templates[`${prefix}multi_greeting`] || "").replace(/\{total\}/g, String(total));
   const closing = templates[`${prefix}multi_closing`] || "";
-  const lines: string[] = [greeting, ""];
+  const lines: string[] = [`${salute}${greeting}`, ""];
   let idx = 0;
   for (const [m, count] of counts) {
     idx += 1;

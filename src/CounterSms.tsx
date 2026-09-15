@@ -109,7 +109,7 @@ export default function CounterSms({ author }: { author: string }) {
   const shown = targets.filter((t) => t.gradeGroup === gradeTab);
 
   const openSend = (target: MergedTarget) => {
-    const message = buildMessage(target.machines, active.machines, active.templates, target.gradeGroup);
+    const message = buildMessage(target.machines, active.machines, active.templates, target.gradeGroup, target.vendor);
     setPickedPhone(target.phones[0] || "");
     setSendTarget({ target, message });
   };
@@ -120,7 +120,7 @@ export default function CounterSms({ author }: { author: string }) {
     const profile = profiles.find((p) => p.region === regionName);
     const machinesSet = { ...DEFAULT_FORMATS, ...(profile?.machines || {}) };
     const templatesSet = { ...DEFAULT_TEMPLATES, ...(profile?.templates || {}) };
-    const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group);
+    const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group, row.vendor);
     setPickedPhone(row.sent_phone || row.phones[0] || "");
     setSendTarget({
       target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names },
