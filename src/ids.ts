@@ -22,6 +22,29 @@ export function vendorMatchKey(value: string) {
     .replace(/(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/g, "");
 }
 
+// 업체명을 낱말로 — vendorMatchKey와 같은 정규화(법인표기·괄호·접두 등급 제거)를 낱말 단위로 한 것
+export function vendorTokens(value: string): string[] {
+  return String(value || "")
+    .replace(/㈜|\(주\)|\(유\)/g, " ")
+    .replace(/\([^)]*\)?/g, " ")
+    .replace(/^(?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?(?=[가-힣])/i, "")
+    .split(/[\s/,·\-–—]+/)
+    .map((token) => token.replace(/[^0-9a-z가-힣]/gi, "").toLowerCase().replace(/(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/g, ""))
+    .filter((token) => token.length >= 2);
+}
+
+/**
+ * 점검기록 업체명의 낱말이 **모두** 워킨맵 비교키 안에 들어 있는가.
+ * 워킨맵 지명이 "태인회계법인 화성 분사무소기존 가정집강남구 / 전 대치동가정집…"처럼 여러 칸이 이어 붙어
+ * 완전일치도 부분포함도 빗나갈 때 "태인회계법인 대치동 가정집"(25-12-09 점검)을 같은 곳으로 잇는다(2026-09-16).
+ * 낱말 합이 5자 미만("태인")이면 너무 헐거워 거절 — 태인시설·태인주안지사까지 붙어버린다.
+ */
+export function vendorTokensContained(vendor: string, targetKey: string): boolean {
+  const tokens = vendorTokens(vendor);
+  if (!tokens.length || tokens.join("").length < 5) return false;
+  return tokens.every((token) => targetKey.includes(token));
+}
+
 // 워킨맵 지명에서 **표시용** 업체명을 꺼낸다 — vendorMatchKey(비교키)와 달리 공백·괄호를 살려
 // 통합이력 검색어로 쓸 수 있는 형태. supabase/auto-schedule.sql의 workin_vendor_()와 거울.
 export function workinVendorName(value: string) {
