@@ -60,6 +60,7 @@ import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import { buildActionBlock } from "./actionBlock";
+import { isDividerLine, isSpareNoteBlock, itemStartFlags } from "./inspectionBlocks";
 import type { AuthorTeam } from "./authors";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
@@ -179,15 +180,7 @@ const SECTION_DIVIDER = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
 // Shared text utilities
 // ────────────────────────────────────────────────────────────────────────────
 
-// Recognizes divider lines made of ASCII `-`/`_`, ㅡ (U+3161, our new default for Samsung Notes safety),
-// `═` (U+2550), and common Unicode dashes/box-drawing chars that appear when output is round-tripped
-// through apps like Samsung Notes.
-const DIVIDER_CHAR_CLASS = "[-_\\u3161\\u2550\\u2500\\u2501\\u23BC\\u2015\\u2014\\u2013]";
-const DIVIDER_LINE_REGEX = new RegExp(`^\\s*${DIVIDER_CHAR_CLASS}{3,}\\s*$`);
-
-function isDividerLine(line: string): boolean {
-  return DIVIDER_LINE_REGEX.test(line);
-}
+// 구분선 판정(isDividerLine)·기기 시작 줄(itemStartFlags)·메모 블록(isSpareNoteBlock)은 inspectionBlocks.ts — 테스트와 공유
 
 function findLine(lines: string[], regex: RegExp): string | null {
   return lines.find((line: string) => regex.test(line)) || null;
@@ -428,6 +421,9 @@ function normalizeInspectionItemBlock(blockLines: string[], blockIndex: number):
     .filter((line: string) => line !== "" && !isDividerLine(line));
 
   if (cleaned.length === 0) return [];
+  // "12.토너 통합보관(…)" + 기종별 여분 수량처럼 번호만 붙은 메모 블록은 기기 양식으로 바꾸지 않고 그대로 둔다
+  // — 예전엔 빈 모델명·시리얼 칸을 만들고 아래 줄들을 버렸다(2026-09-16 아시아프라퍼티)
+  if (isSpareNoteBlock(cleaned)) return cleaned;
 
   const titleLine = buildItemTitleLine(cleaned, blockIndex);
   const contentLines = stripConsumedTitleLine(cleaned);
@@ -2340,17 +2336,7 @@ function isStructuralLine(line: string, isStart: boolean): boolean {
 // A numbered line ("1.", "2. 7층") only starts a new item when it directly
 // follows a divider — this avoids treating numbered lines inside multi-line
 // 처리내용/특이사항 (e.g. "2.토너교체") as a new device.
-function itemStartFlags(lines: string[]): boolean[] {
-  const flags: boolean[] = new Array(lines.length).fill(false);
-  let prevDivider = false;
-  lines.forEach((line: string, i: number) => {
-    if (isDividerLine(line)) { prevDivider = true; return; }
-    if (line.trim() === "") return;
-    if (prevDivider && /^\s*\d+\./.test(line) && !/※/.test(line)) flags[i] = true;
-    prevDivider = false;
-  });
-  return flags;
-}
+// itemStartFlags는 inspectionBlocks.ts로 옮겼다 — 번호 붙은 메모 블록("12.토너 통합보관…")을 기기로 세지 않는 규칙을 테스트와 같이 쓰기 위해
 
 function applyProcessingFormV2(
   text: string,
