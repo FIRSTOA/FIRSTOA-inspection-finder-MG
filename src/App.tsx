@@ -60,7 +60,7 @@ import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import { buildActionBlock } from "./actionBlock";
-import { isDividerLine, isSpareNoteBlock, itemStartFlags } from "./inspectionBlocks";
+import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags } from "./inspectionBlocks";
 import type { AuthorTeam } from "./authors";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
@@ -2351,9 +2351,12 @@ function applyProcessingFormV2(
   const out: string[] = [];
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
+  const noteLines = noteBlockLineFlags(lines);
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
+    // 메모 블록("13. 14층 창고" 재고 등)은 손대지 않고 그대로 — 그 안의 빈 "모델명:"이 앞 기기 칸으로 병합되지 않게
+    if (noteLines[li]) { skipCont = false; out.push(line); continue; }
     // Skip continuation lines of a 여분/특이사항 we've already re-rendered.
     if (skipCont) {
       if (isStructuralLine(line, starts[li])) {
@@ -2501,6 +2504,7 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
   let collecting: "process" | "spare" | "note" | null = null;
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
+  const noteLines = noteBlockLineFlags(lines);
   if (!starts.some(Boolean)) {
     const firstContent = lines.findIndex((line) => line.trim() !== "");
     if (firstContent >= 0 && /^\s*\d+\./.test(lines[firstContent])) starts[firstContent] = true;
@@ -2509,6 +2513,7 @@ function parseItemDataFromText(text: string, count: number): PerItemForm[] {
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
+    if (noteLines[li]) { collecting = null; continue; } // 메모 블록의 줄은 어느 기기 폼에도 넣지 않는다
     if (starts[li]) {
       idx++;
       collecting = null;
@@ -2778,6 +2783,7 @@ function splitResultBlocks(text: string): ResultBlock[] {
   if (!text) return [];
   const lines = text.split("\n");
   const starts = itemStartFlags(lines);
+  const noteLines = noteBlockLineFlags(lines);
   const blocks: ResultBlock[] = [];
   let cur: string[] = [];
   let curDevice: number | null = null;
@@ -2793,6 +2799,7 @@ function splitResultBlocks(text: string): ResultBlock[] {
   for (let i = 0; i < lines.length; i++) {
     if (!inFooter && /^※/.test(lines[i])) { flush(); inFooter = true; curDevice = null; }
     else if (starts[i]) { flush(); deviceIdx++; curDevice = deviceIdx; }
+    else if (!inFooter && noteLines[i] && !noteLines[i - 1]) { flush(); curDevice = null; } // 메모 블록은 기기 아닌 별도 덩어리
     cur.push(lines[i]);
   }
   flush();

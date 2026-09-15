@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDividerLine, isSpareNoteBlock, itemStartFlags } from "../src/inspectionBlocks";
+import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags } from "../src/inspectionBlocks";
 
 const DIV = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
 const device = (n: number, model: string) => [
@@ -25,6 +25,38 @@ describe("isSpareNoteBlock", () => {
   it("보관·여분 같은 낱말이 없는 번호 블록(위치만 적힌 새 기기)은 기기로 남는다", () => {
     expect(isSpareNoteBlock(["3.", "5층 복사기"])).toBe(false);
     expect(isSpareNoteBlock([])).toBe(false);
+  });
+  // 2026-09-16 휴스틸 — 기기 양식 모양이지만 모델명·시리얼·자산기번이 전부 비고 처리내용에 창고 재고를 적었다
+  const HUSTEEL_NOTE = [
+    "13.", "14층 창고", "모델명:", "시리얼넘버:", "자산기번:", "내용: 정기점검",
+    "처리내용: 450 토너 K 6 C 8 M 10 Y 7 폐 5", "5700 토너 3 드럼 3", "CM305 토너 K 4 C 6 M 5 Y 5",
+    "매수: 흑-    컬-    큰컬-    합-", "토너잔량:K-   C-   M-   Y-", "폐통:        %", "여분: K- C- M- Y- 폐-", "한틴이카유무:", "주차비지원유무:", "특이사항:",
+  ];
+  it("식별칸이 전부 빈 기기 양식에 창고·재고가 적혀 있으면 메모", () => {
+    expect(isSpareNoteBlock(HUSTEEL_NOTE)).toBe(true);
+    // 창고 낱말이 없어도 처리내용의 재고 줄만으로 메모
+    expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "14층 창고" ? "14층" : l)))).toBe(true);
+  });
+  it("식별칸이 하나라도 차 있으면 기기 — 처리내용에 토너 수량이 있어도", () => {
+    expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "모델명:" ? "모델명: 5700" : l)))).toBe(false);
+    expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "자산기번:" ? "자산기번: C0603" : l)))).toBe(false);
+  });
+  it("식별칸이 비어도 재고·보관 낱말이 없는 빈 기기 양식은 기기로 남는다(아직 안 채운 새 기기)", () => {
+    expect(isSpareNoteBlock(["13.", "14층 신규", "모델명:", "시리얼넘버:", "자산기번:", "내용: 정기점검", "처리내용: 정기점검", "매수: 흑- 컬- 큰컬- 합-", "토너잔량:K- C- M- Y-", "여분: K- C- M- Y- 폐-"])).toBe(false);
+  });
+});
+
+describe("noteBlockLineFlags", () => {
+  it("메모 블록의 줄만 표시 — 폼 파싱·병합이 앞 기기 칸을 덮어쓰지 않게", () => {
+    const lines = [DIV, ...device(1, "5700"), DIV, "13.", "14층 창고", "모델명:", "처리내용: 450 토너 K 6 C 8", DIV, "※부품신청※", "물품명:"];
+    const flags = noteBlockLineFlags(lines);
+    expect(flags[lines.indexOf("13.")]).toBe(true);
+    expect(flags[lines.indexOf("14층 창고")]).toBe(true);
+    expect(flags[lines.indexOf("처리내용: 450 토너 K 6 C 8")]).toBe(true);
+    expect(flags[lines.indexOf("1.")]).toBe(false);
+    expect(flags[lines.indexOf("모델명: 5700")]).toBe(false);
+    expect(flags[lines.indexOf("※부품신청※")]).toBe(false);
+    expect(itemStartFlags(lines).filter(Boolean)).toHaveLength(1);
   });
 });
 
