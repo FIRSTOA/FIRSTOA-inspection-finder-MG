@@ -875,7 +875,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (rest.length) void trackWrite(upsertRows("as_tickets", rest.map(toDbRow), "id"), "반복 중지 저장 실패 — 새로고침 후 다시 시도해 주세요.");
   };
 
-  const update = (id: string, patch: Partial<AsTicket>) => {
+  // opts.skipNaver: 완료·연기처럼 네이버 기록과 이동을 순서대로 해야 하는 흐름은 여기서 네이버를 건드리지 않고
+  // syncNaverAfterAction이 맡는다 (두 요청이 같은 일정에 겹쳐 기록이 사라지던 실사고 2026-09-16)
+  const update = (id: string, patch: Partial<AsTicket>, opts: { skipNaver?: boolean } = {}) => {
     const before = tickets.find((ticket) => ticket.id === id);
     const next = tickets.map((ticket) => (ticket.id === id ? normalizeTicketSchedule({ ...ticket, ...patch }) : ticket));
     setTickets(next);
@@ -900,7 +902,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       }).catch(() => undefined);
     }
     // 네이버 미러 동기화: 완료되면 팀 완료 캘린더(예: C→강남C as)로 이동, 날짜·시간이 바뀌면(익일 연기 등) 일정 시간 이동
-    if (changed && before && changed.naverUid) {
+    if (changed && before && changed.naverUid && !opts.skipNaver) {
       const completedNow = changed.status === "완료" && before.status !== "완료";
       const rescheduled = changed.date !== before.date || changed.time !== before.time;
       const uncompletedNow = before.status === "완료" && changed.status !== "완료";
@@ -1096,13 +1098,39 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         .then((r) => { if (!r.ok) notify(`카톡 전송 실패: ${r.error}`, "error"); })
         .catch((e) => notify(`카톡 전송 실패: ${(e as Error).message}`, "error"));
     }
-    if (ticket.naverUid) {
-      try {
+  };
+  // 완료·연기 뒤 네이버 미러 정리 — 내용 기록 → 날짜 이동 → 완료 캘린더 이동을 이 순서로 한 번에 한다.
+  // 예전엔 update()가 이동/날짜 변경을 곧장 보내고 사유 기록이 따로 GET→PUT을 해서 같은 일정에 두 요청이 겹쳤다 —
+  // 이동 중인 일정에 기록이 들어가 지워지거나 옛 내용으로 덮여 "간단 완료는 네이버에 내용이 안 남는다"(2026-09-16 신고).
+  // FIELD 탭 전송 뒤 완료(finishTicket)와 같은 순서.
+  const syncNaverAfterAction = async (ticket: AsTicket, opts: { block?: string; date?: string; complete?: boolean }) => {
+    if (!ticket.naverUid) return;
+    const isDelivery = ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류";
+    if (isDelivery && opts.complete) {
+      // 납품·철수·교체 캘린더는 영업부 소관 — 웹앱에서 완료해도 네이버는 건드리지 않는다(2026-08-26 결정)
+      notify("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더(납품철수교체)는 영업부가 관리", "success");
+      return;
+    }
+    try {
+      const patch: Record<string, unknown> = { action: "caldav_update", uid: ticket.naverUid };
+      if (opts.block?.trim()) {
         const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
-        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: ticket.naverUid, description: `${cur.description || ""}\n\n${block}` });
-      } catch (e) {
-        notify(`네이버 일정 기록 실패: ${(e as Error).message}`, "error");
+        patch.description = `${cur.description || ""}\n\n${opts.block}`;
       }
+      if (opts.date) patch.date = opts.date;
+      if (patch.description !== undefined || patch.date) await invokeEdgeFunction("naver-calendar-push", patch);
+      if (opts.complete) {
+        const r = await invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: ticket.naverUid, team: ticket.team });
+        // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
+        if (r.status === "moved") {
+          const moved = !!r.toCalendarId && r.toCalendarId !== NAVER_CAL_LIST[0].id;
+          notify(moved ? `네이버: ${DONE_CAL_LABEL[ticket.team]} 캘린더로 이동 + 완료 체크 ✓${opts.block?.trim() ? " (내용 기록됨)" : ""}` : "네이버: 완료 체크 ✓ (이 팀은 완료 캘린더가 설정되지 않아 제자리에서 체크)", "success");
+        }
+      } else if (opts.date) {
+        notify(`네이버 일정도 ${opts.date}로 이동 ✓${opts.block?.trim() ? " (사유 기록됨)" : ""}`, "success");
+      }
+    } catch (e) {
+      notify(`네이버 일정 정리 실패: ${(e as Error).message}`, "error");
     }
   };
   // 완료 사유 입력 모달 대상 (완료 취소는 사유 없이 즉시)
@@ -1115,13 +1143,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 상태 저장을 먼저 — 카톡·네이버 왕복을 기다리는 사이 모바일이 카톡으로 전환되면 fetch가 끊겨
     // "네이버 기록 실패"만 뜨고 완료 저장이 영영 안 되던 실사고(2026-08-25). 기록은 뒤에서 이어 남긴다.
     const block = buildActionBlock(ticket, reason);
-    toggleDone(ticket, { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${block}` }); // 웹앱 일정 메모에도 동일 기록
+    toggleDone(ticket, { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${block}` }, { skipNaver: true }); // 웹앱 일정 메모에도 동일 기록 — 네이버는 아래서 기록→이동 순서로
     void shareActionReason(ticket, "", reason);
+    void syncNaverAfterAction(ticket, { block: reason.trim() ? block : "", complete: true });
   };
 
-  const toggleDone = (ticket: AsTicket, extraPatch: Partial<AsTicket> = {}) => {
+  const toggleDone = (ticket: AsTicket, extraPatch: Partial<AsTicket> = {}, opts: { skipNaver?: boolean } = {}) => {
     const completing = ticket.status !== "완료";
-    update(ticket.id, { status: completing ? "완료" : (ticket.assignee ? "배정" : "접수"), ...extraPatch });
+    update(ticket.id, { status: completing ? "완료" : (ticket.assignee ? "배정" : "접수"), ...extraPatch }, opts);
     // 매월 반복: 다음 달 일정이 아직 없으면 만들어 시리즈 말단을 연장한다 (있으면 건너뜀)
     if (completing && ticket.repeatMonthly) {
       const clone = buildMonthlyCloneRow(ticket as unknown as Record<string, unknown>);
@@ -1145,9 +1174,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     setDeferId("");
     const deferLabel = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}로 연기`;
     const notePatch = reason.trim() ? { note: `${(ticket.note || "").trim() ? `${ticket.note}\n\n` : ""}${buildActionBlock(ticket, reason, deferLabel, false)}` } : {};
-    // 날짜·상태 저장 먼저, 카톡·네이버 기록은 뒤에 (applyDone과 같은 이유)
-    update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch });
+    // 날짜·상태 저장 먼저, 카톡·네이버 기록은 뒤에 (applyDone과 같은 이유) — 네이버는 사유 기록과 날짜 이동을 한 요청으로
+    update(ticket.id, { date, status: isAsSchedule ? "익일" : ticket.status, scheduleType: isAsSchedule ? "익일AS" : ticket.scheduleType, ...notePatch }, { skipNaver: true });
     void shareActionReason(ticket, deferLabel, reason);
+    void syncNaverAfterAction(ticket, { block: reason.trim() ? buildActionBlock(ticket, reason, deferLabel) : "", date });
   };
 
   /**
