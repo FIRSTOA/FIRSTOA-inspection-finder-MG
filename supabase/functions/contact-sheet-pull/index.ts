@@ -142,7 +142,11 @@ function regionLetter(value: string): string {
  * 어떻게: 우리가 시트를 읽어오는 김에, 아직 공유하지 않은 최근 건만 골라 지역 점검방으로 보낸다.
  *         shared_at을 찍어 다시 보내지 않는다. 웹앱 경로는 이미 즉시 보내므로 대상에서 제외한다.
  */
-async function shareNewChanges(serviceKey: string, restBase: string, limit = 20): Promise<{ shared: number; skipped: number; rooms: string[] }> {
+async function shareNewChanges(serviceKey: string, restBase: string, limit = 20): Promise<{ shared: number; skipped: number; rooms: string[]; held?: string }> {
+  // 카톡 공유는 10시 이후에만 — 출근 전에 방에 글이 올라가면 안 된다(2026-09-17 규칙). 아침에 돈 당기기는 저장만 하고,
+  // 공유는 10시 이후 첫 실행(매일 10:00 cron 또는 그 뒤 앱에서 연 당기기)에서 나간다. 보류된 건은 shared_at이 비어 있어 그때 자연히 잡힌다.
+  const kstHour = new Date(Date.now() + 9 * 3600_000).getUTCHours();
+  if (kstHour < 10) return { shared: 0, skipped: 0, rooms: [], held: `${kstHour}시 KST — 10시 전이라 카톡 공유 보류` };
   const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
   const since = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
   const rows = await (await fetch(
@@ -331,7 +335,7 @@ Deno.serve(async (req) => {
     // 인사 완료 표시는 앱에서만 만든다 — 시트 값으로 앱 상태를 바꾸지 않는다(2026-08-28 결정)
     // 새로 들어온 변경은 지역 점검방으로 알린다(Make 경로가 점검방에 안 보내서 A·B·D가 몰랐던 문제)
     const share = body.share === false ? { shared: 0, skipped: 0, rooms: [] } : await shareNewChanges(serviceKey, `${Deno.env.get("SUPABASE_URL")}/rest/v1`);
-    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, skippedOld, skippedEmpty, shared: share.shared, shareSkipped: share.skipped, rooms: share.rooms }, { headers: jsonHeaders });
+    return Response.json({ ok: true, tab: title, headerRow: headerRow + 1, read: rows.length - headerRow - 1, candidates: payload.length, inserted, skippedOld, skippedEmpty, shared: share.shared, shareSkipped: share.skipped, rooms: share.rooms, ...(share.held ? { held: share.held } : {}) }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 500, headers: jsonHeaders });
   }
