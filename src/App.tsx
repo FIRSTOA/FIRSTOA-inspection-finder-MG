@@ -5663,8 +5663,14 @@ export default function App() {
                 const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: naverUid });
                 await invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: naverUid, description: `${cur.description || ""}\n\n${ticket.sentText}` });
               }
-              const moved = await invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: naverUid, team: naverTeam });
-              if (moved.status === "moved") showToast(`네이버: ${naverTeam}팀 완료 캘린더로 이동 ✓`, "success");
+              if (String(rows[0]?.["source"] || "") === "it") {
+                // IT 접수 일정은 IT 캘린더에서 제자리 완료 체크 — 팀 완료 캘린더로 옮기지 않는다(2026-09-17)
+                await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: naverUid, done: true });
+                showToast("네이버: IT 캘린더에서 완료 체크 ✓", "success");
+              } else {
+                const moved = await invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_move", uid: naverUid, team: naverTeam });
+                if (moved.status === "moved") showToast(`네이버: ${naverTeam}팀 완료 캘린더로 이동 ✓`, "success");
+              }
             } else if (patch.date) {
               if (deferReason.trim()) {
                 const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: naverUid }).catch(() => ({ description: "" }));

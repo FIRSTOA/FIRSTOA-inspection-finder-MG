@@ -989,7 +989,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
         rowId = await persist("접수");
         setSavedRowId(rowId);
       }
-      const res = await sendServiceReception("AS", region, report);
+      const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, report); // IT 접수 → IT 접수방(room_map IT접수|*), 복합기 → 지역 AS방
       if (!res.ok) {
         setActionResult(`전송 실패: ${res.error} — 접수는 저장됐어요. 다시 누르면 전송만 재시도합니다.`);
         return;
@@ -1075,7 +1075,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     if (!report) throw new Error("보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요");
     if (!region) throw new Error("지역이 비어 있어 보낼 팀 방을 정할 수 없습니다 — 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요");
     const id = await ensureSaved();
-    const res = await sendServiceReception("AS", region, report);
+    const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, report);
     if (!res.ok) throw new Error(res.error || "전송 실패");
     const room = String(res.message || "").replace("게시 대기: ", "");
     await updateServiceReception(id, { status: "전송완료", sent_room: room });
@@ -1084,25 +1084,39 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   // 접수 → 일정리스트(as_tickets) 등록 공용 로직 (수동 버튼·저장 시 자동 등록이 함께 쓴다)
   // 네이버 캘린더 등록 (단독 실행용 — 실패 시 throw). 팀 시간: A 09시 / B 12시 / C 15시 / D 18시
-  const pushNaverCalendar = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null }) => {
+  // IT 접수 캘린더 id — 관리 탭 "네이버 팀 완료 캘린더"의 IT 칸(app_config NAVER_TEAM_CALENDAR_IT). 비어 있으면 기본(익일통합as)으로 간다
+  const itCalendarId = async () => String((await getConfig()).NAVER_TEAM_CALENDAR_IT || "").trim();
+  const pushNaverCalendar = async (
+    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null; type?: string },
+    opts: { stableKey?: string; forceDefaultCal?: boolean; header?: string } = {},
+  ) => {
     const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00", E: "21:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
     const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
+    // IT 접수는 IT 캘린더로(2026-09-17) — CS 이관 복제(forceDefaultCal)는 익일통합as로
+    const calId = !opts.forceDefaultCal && row.type === "IT" ? await itCalendarId() : "";
+    const description = reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n");
     return await invokeEdgeFunction<{ uid?: string; status?: string }>("naver-calendar-push", {
-      stableKey: row.id, // 접수 번호로 UID 고정 — 중복 등록 방지
+      stableKey: opts.stableKey || row.id, // 접수 번호로 UID 고정 — 중복 등록 방지
       title: firstLine || `[AS] ${cleanVendorName(row.vendor)}`,
       date: kstDate(),
       time: TEAM_TIME[teamFromRegion(row.region)] || "09:00",
       location: row.address || "",
-      description: reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n"),
+      description: opts.header ? `${opts.header}\n\n${description}` : description,
+      ...(calId ? { calId } : {}),
     });
   };
 
-  const createTicketFromReception = async (row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null }, confirmDup: boolean, pushNaver = true) => {
+  const createTicketFromReception = async (
+    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null; type?: string },
+    confirmDup: boolean, pushNaver = true, opts: { csTransfer?: boolean } = {},
+  ) => {
     const today = kstDate();
     const vendor = cleanVendorName(row.vendor);
-    // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지)
-    const existing = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}&limit=1`).catch(() => []);
+    // IT 접수 일정은 source "it" — 일정리스트에서 IT 배지 + 완료 시 IT 캘린더 제자리 체크. CS 이관 복제는 "cs-transfer"(2026-09-17)
+    const source = opts.csTransfer ? "cs-transfer" : row.type === "IT" ? "it" : "";
+    // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지) — CS 이관은 IT 일정과 별건이라 이관분만 본다
+    const existing = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}${opts.csTransfer ? "&source=eq.cs-transfer" : ""}&limit=1`).catch(() => []);
     if (existing.length) {
       if (!confirmDup) return true; // 자동 등록: 이미 있으니 그대로 성공 처리
       if (!await askConfirm("이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)")) return false;
@@ -1122,6 +1136,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       note: String(row.report_text || ""), // 카톡 보고양식 전문 — 일정에서도 원문 확인 가능
       calendarTitle: String(row.report_text || "").replace(/\t/g, " ").split("\n")[0]?.trim().slice(0, 120) || "", // 네이버 제목과 동일 (배정 시 이름 접두사)
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
+      ...(source ? { source } : {}),
     }, "id");
     // 네이버 캘린더 미러 등록 (토글 ON + Secrets 설정 시에만 — 실패해도 일정엔 영향 없음)
     if (pushNaver) {
@@ -1129,7 +1144,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
         try {
           const cfg = await getConfig();
           if (!/^(true|1|on|y)$/i.test(cfg.NAVER_CALENDAR_ENABLED || "")) return;
-          const pushed = await pushNaverCalendar(row);
+          const pushed = await pushNaverCalendar(row, opts.csTransfer
+            ? { stableKey: `${row.id}-cs`, forceDefaultCal: true, header: `[IT→CS 방문이관] ${kstDate()} ${author}` } // 익일통합as에 복제 — IT 캘린더 원본은 그대로 둔다
+            : {});
           // uid를 티켓에 저장 — 일정리스트에서 [네이버 일정] 조회·수정·삭제할 열쇠
           if (pushed?.uid) await updateRows("as_tickets", `id=eq.${encodeURIComponent(ticketId)}`, { naverUid: pushed.uid, naverPushedAt: new Date().toISOString() }).catch(() => {});
         } catch { /* 미러 실패는 무해 — 원본은 as_tickets */ }
@@ -1152,9 +1169,38 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     }
   };
 
+  // IT 접수 → CS 방문 이관 (2026-09-17): 원격으로 안 풀려 CS가 나가야 할 때 한 번에
+  //  ① 일정리스트에 CS AS 일정 생성 + 익일통합as 캘린더에 복제(IT 캘린더 원본은 그대로)
+  //  ② 지역 AS 카톡방에 접수 내용 전송  ③ 접수 처리여부 = 방문이관(시트에도 반영)
+  const [csTransferBusyId, setCsTransferBusyId] = useState("");
+  const transferToCs = async (row: ServiceReceptionRow) => {
+    if (csTransferBusyId) return;
+    const meta = handlingOf(row);
+    if (!row.region) { notify("지역이 비어 있어 팀 AS방·시간대를 정할 수 없습니다 — 지역을 먼저 채워 주세요", "error"); return; }
+    const again = !!meta.csTransferAt;
+    if (!await askConfirm(`${again ? `이미 ${meta.csTransferAt}에 CS 이관한 건입니다. 다시 ` : ""}CS 방문으로 이관합니다.\n\n· 일정리스트에 CS AS 일정 생성 (익일통합as 캘린더에 복제)\n· ${row.region} AS 카톡방에 접수 내용 전송\n· 접수 처리여부 = 방문이관\n\n계속할까요?`)) return;
+    setCsTransferBusyId(row.id);
+    try {
+      const created = await createTicketFromReception(row, again, true, { csTransfer: true });
+      const text = [`[IT→CS 방문이관] ${kstDate()} ${author}`, meta.handled ? `원격 처리내용: ${meta.handled}` : "", "", row.report_text || `${row.vendor} / ${row.symptom || row.title || ""}`].join("\n").trim();
+      const res = await sendServiceReception("AS", row.region, text);
+      if (!res.ok) throw new Error(res.error || "카톡 전송 실패");
+      const patch = { result: "방문이관", csTransferAt: kstDate(), csTransferBy: author };
+      patchHandling(row, patch);
+      await mergeReceptionHandling(row.id, patch).catch(() => {});
+      syncRemoteSheet(row, { ...meta, ...patch });
+      setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, remote_meta: { ...(item.remote_meta || {}), ...patch } } : item)));
+      notify(`CS 이관 완료 — ${created ? "일정리스트 등록 + " : ""}${String(res.message || "").replace("게시 대기: ", "")} 전송`, "success");
+    } catch (e) {
+      notify(`CS 이관 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setCsTransferBusyId("");
+    }
+  };
+
   // 저장 직후 자동 일정 등록에 쓸 현재 폼 스냅샷
   const formSnapshotForTicket = (id: string) => ({
-    id, vendor: vendorName, region,
+    id, vendor: vendorName, region, type,
     model: pick(reportSource, "모델명", "기종"), serial: pick(reportSource, "시리얼번호(기번)", "기번"),
     asset_no: pick(reportSource, "자산번호"), grade: pick(reportSource, "등급"),
     keyman_info: [
@@ -1427,6 +1473,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {row.report_text && <button type="button" onClick={() => { setPreviewRow(row); setPreviewCopied(false); }} className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">원본 미리보기</button>}
                     {row.type !== "원격이관" && <button type="button" disabled={scheduleBusyId === row.id} onClick={() => void addToSchedule(row)} className="rounded-full border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-[11px] font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40">{scheduleBusyId === row.id ? "등록 중…" : "일정 등록"}</button>}
+                    {row.type === "IT" && <button type="button" disabled={csTransferBusyId === row.id} onClick={() => void transferToCs(row)} title="CS 방문 이관 — 일정리스트·익일통합as 캘린더에 복제 + 지역 AS방 전송 + 처리여부 방문이관"
+                      className={`rounded-full border px-3.5 py-1.5 text-[11px] font-black transition disabled:opacity-40 ${handlingOf(row).csTransferAt ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}>
+                      {csTransferBusyId === row.id ? "이관 중…" : handlingOf(row).csTransferAt ? `CS 이관됨 ${handlingOf(row).csTransferAt.slice(5).replace("-", "/")}` : "CS 이관"}</button>}
                     <button type="button" onClick={() => void removeReception(row)} className="rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-[11px] font-black text-rose-600 transition hover:bg-rose-100">삭제</button>
                     <span className="ml-auto flex flex-wrap items-center gap-1">
                       <span className="text-[10px] font-black text-slate-400">구분</span>

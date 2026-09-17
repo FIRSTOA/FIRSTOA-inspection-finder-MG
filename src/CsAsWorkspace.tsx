@@ -565,17 +565,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 납품철수교체휴가교육 캘린더(75632617) — 그 외(익일통합as)는 AS 미처리와 같은 보라 계열
   const NAVER_DELIVERY_CAL = "75632617";
   // 팀 완료 캘린더 id — 관리 탭 설정(app_config NAVER_TEAM_CALENDAR_*)이 원본. 완료 캘린더에서 온 일정은 "AS[완료]"로 분류한다
-  const [teamCalIds, setTeamCalIds] = useState<Partial<Record<Team, string>>>({ C: "75904193" });
+  const [teamCalIds, setTeamCalIds] = useState<Partial<Record<Team | "IT", string>>>({ C: "75904193" }); // IT = IT 접수 캘린더(완료 캘린더가 아님 — 아래 doneCalIds에서 제외)
   useEffect(() => {
     selectRows<{ key: string; value: string }>("app_config", "select=key,value&key=like.NAVER_TEAM_CALENDAR_*")
       .then((rows) => {
-        const next: Partial<Record<Team, string>> = {};
-        for (const row of rows) { const t = row.key.replace("NAVER_TEAM_CALENDAR_", "") as Team; if ((row.value || "").trim()) next[t] = row.value.trim(); }
+        const next: Partial<Record<Team | "IT", string>> = {};
+        for (const row of rows) { const t = row.key.replace("NAVER_TEAM_CALENDAR_", "") as Team | "IT"; if ((row.value || "").trim()) next[t] = row.value.trim(); }
         if (Object.keys(next).length) setTeamCalIds(next);
       })
       .catch(() => { /* 설정을 못 읽으면 C만 아는 기본값 유지 */ });
   }, []);
-  const doneCalIds = useMemo(() => new Set(Object.values(teamCalIds).filter(Boolean) as string[]), [teamCalIds]);
+  const doneCalIds = useMemo(() => new Set(Object.entries(teamCalIds).filter(([k, v]) => k !== "IT" && v).map(([, v]) => v as string)), [teamCalIds]);
+  const itCalId = teamCalIds.IT || ""; // IT 접수 일정(source "it")은 이 캘린더에서 제자리 완료 체크
   const naverCategoryOf = (ev: { calendar_id: string }): DisplayFilter =>
     ev.calendar_id === NAVER_DELIVERY_CAL ? "납품철수교체휴가교육" : doneCalIds.has(ev.calendar_id) ? "AS[완료]" : "익일통합as";
   const naverChipStyle = (ev: { calendar_id: string; completed: boolean }) =>
@@ -910,6 +911,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       if ((completedNow || uncompletedNow) && isDelivery) {
         // 납품·철수·교체 캘린더는 영업부 소관 — 웹앱에서 완료/취소해도 네이버는 건드리지 않는다(2026-08-26 결정; 예전엔 제자리 체크를 했다)
         if (completedNow) notify("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더(납품철수교체)는 영업부가 관리", "success");
+      } else if ((completedNow || uncompletedNow) && changed.source === "it") {
+        // IT 접수 일정은 IT 캘린더에서 제자리 완료 체크만 — 팀 완료 캘린더로 옮기지 않는다(2026-09-17). 완료 취소도 제자리에서 해제
+        void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, done: completedNow, ...(itCalId ? { calId: itCalId } : {}) })
+          .then((r) => notify(r.status === "checked" ? "네이버: IT 캘린더에서 완료 체크 ✓" : "네이버: IT 캘린더 완료 체크 해제 ✓", "success"))
+          .catch((e) => notify(`네이버 IT 완료 체크 실패: ${(e as Error).message}`, "error"));
       } else if (completedNow) {
         void invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
           // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
@@ -1112,14 +1118,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       return;
     }
     try {
-      const patch: Record<string, unknown> = { action: "caldav_update", uid: ticket.naverUid };
+      const patch: Record<string, unknown> = { action: "caldav_update", uid: ticket.naverUid, ...(ticket.source === "it" && itCalId ? { calId: itCalId } : {}) };
       if (opts.block?.trim()) {
         const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
         patch.description = `${cur.description || ""}\n\n${opts.block}`;
       }
       if (opts.date) patch.date = opts.date;
       if (patch.description !== undefined || patch.date) await invokeEdgeFunction("naver-calendar-push", patch);
-      if (opts.complete) {
+      if (opts.complete && ticket.source === "it") {
+        // IT 접수 일정 — IT 캘린더 제자리 완료 체크 (팀 완료 캘린더로 옮기지 않음)
+        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: ticket.naverUid, done: true, ...(itCalId ? { calId: itCalId } : {}) });
+        notify(`네이버: IT 캘린더에서 완료 체크 ✓${opts.block?.trim() ? " (내용 기록됨)" : ""}`, "success");
+      } else if (opts.complete) {
         const r = await invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: ticket.naverUid, team: ticket.team });
         // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
         if (r.status === "moved") {
@@ -1886,7 +1896,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
                   {/* PC 표와 같은 구분 칩 — 모바일에서도 익일as(연두)/납품(로즈)/점검(호박)이 한눈에 갈리게 */}
                   <span className={`rounded px-1.5 py-0.5 ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                    {ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? "점검" : "납품"}
+                    {ticket.source === "it" ? "IT" : ticket.source === "cs-transfer" ? "CS이관" : ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? "점검" : "납품"}
                   </span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
                   <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>

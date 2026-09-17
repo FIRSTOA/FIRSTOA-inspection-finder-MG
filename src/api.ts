@@ -419,7 +419,15 @@ export async function sendServiceReception(kind: "IT" | "AS" | "물류", region:
     if (!testMode) {
       const map = await getRoomMap();
       if (kind === "IT") {
-        room = map["IT통합|*"] || map["PC확장성|*"] || FIXED_ROOM.pcIt;
+        // 서비스접수 IT 건 → IT 접수방(room_map "IT접수|*"). 방 이름이 정해지기 전(2026-09-17)엔 예전처럼 지역 AS방으로 보낸다 — 조용히 테스트방으로 새면 접수가 누락된다
+        const itRoom = map["IT접수|*"] || map["IT통합|*"];
+        const fallback = map[`AS|${normRegion(region)}`];
+        if (!itRoom && !fallback) return { ok: false, error: `IT 접수방(IT접수|*)도 지역(${region || "미지정"}) AS방 매핑도 없어 전송할 수 없습니다. 관리 탭 카톡방 매핑을 확인해 주세요.` };
+        room = itRoom || fallback;
+        if (!itRoom) {
+          await enqueueOutbox(room, text);
+          return { ok: true, message: `게시 대기: ${room} (IT 접수방 미설정 — 지역 AS방으로 보냄)` };
+        }
       } else if (kind === "물류") {
         // 납품·철수·교체는 영업부 소관이라 팀 AS방이 아니라 완료방으로 간다
         room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
