@@ -16,7 +16,7 @@ import PortalSelect from "./PortalSelect";
 const DEPTS = ["임원", "CS팀", "영업팀", "CSS·운영지원"] as const;
 const TEAM_OPTIONS: Record<string, string[]> = {
   "임원": [""],
-  "CS팀": ["팀장", "A", "B", "C", "D", "A·B"],
+  "CS팀": ["팀장", "A", "B", "C", "D", "E", "A·B"], // E = 지방(충청외) — 2026-09-17 활성화, 여기 등록한 인원이 E 배정 명단·보고에 잡힌다
   "영업팀": ["", "전략영업", "IT"],
   "CSS·운영지원": ["", "운영지원", "CSS", "경영지원", "지원(비정규)"],
 };
