@@ -714,10 +714,11 @@ Deno.serve(async (req) => {
             const p = readPerson(raw);
             return [p.name, p.phone].filter(Boolean).join(" ") || clipText(raw, 30);
           };
+          // 카톡은 한 줄이 길면 보기 싫다 — 업체 줄 아래에 현재/이전 담당을 한 줄씩(2026-09-17 확정)
           const personLines = (r: ChangeRow) => {
             const now = personText(r.after_text) || "연락처 확인 필요";
             const before = r.before_text ? personText(r.before_text) : "";
-            return [`${titleOf(r, "새 키맨")} (${now})`, ...(before ? [`   이전 담당: ${before}`] : [])];
+            return [titleOf(r, "새 키맨"), `   현재 담당: ${now}`, ...(before ? [`   이전 담당: ${before}`] : [])];
           };
           const addressLines = (r: ChangeRow) => [
             titleOf(r, "주소 변경"),
