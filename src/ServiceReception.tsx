@@ -334,7 +334,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       const uploaded: Array<{ url: string; name: string }> = [];
       for (const file of Array.from(files).slice(0, 6 - photos.length)) {
         // 모바일(HEIC·고화소)에서도 실패하지 않게 — 축소 불가 시 원본을 실제 형식으로 올린다
-        const prepared = await prepareImageForUpload(file, 1600);
+        // 증상 사진은 화면 글자·에러코드가 읽혀야 한다 — 긴 변 2400px·품질 0.88, 2.5MB 아래 원본은 그대로(2026-09-17 "너무 깨진다" 피드백)
+        const prepared = await prepareImageForUpload(file, 2400, { quality: 0.88, keepOriginalUnderBytes: 2_500_000 });
         const url = await uploadPhoto(`reception/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType);
         uploaded.push({ url, name: file.name });
       }

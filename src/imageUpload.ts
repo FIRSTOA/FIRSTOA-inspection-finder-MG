@@ -9,7 +9,14 @@
  */
 export type PreparedImage = { blob: Blob; contentType: string; ext: string };
 
-const MAX_PIXELS = 4_000_000; // 모바일 캔버스 안전선 (약 2400x1600)
+const MAX_PIXELS = 6_000_000; // 모바일 캔버스 안전선 (약 3000x2000 — iOS 캔버스 한계 4096²의 1/3 아래)
+
+export type PrepareOptions = {
+  /** WebP 품질(0~1). JPEG 폴백은 +0.06. 기본 0.80 — 예전 0.72는 복합기 화면·에러코드 글자가 뭉개져 증상 파악이 안 됐다(2026-09-17 AS 접수 사진 피드백) */
+  quality?: number;
+  /** 이 바이트 이하이고 maxDim 안에 들어오는 JPEG/WebP/PNG 원본은 다시 압축하지 않고 그대로 올린다 — 재압축은 항상 화질을 잃는다 */
+  keepOriginalUnderBytes?: number;
+};
 
 function extOf(file: File, fallback: string) {
   const fromName = (file.name.split(".").pop() || "").toLowerCase();
@@ -40,7 +47,7 @@ async function decode(file: File): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
-export async function prepareImageForUpload(file: File, maxDim = 1600): Promise<PreparedImage> {
+export async function prepareImageForUpload(file: File, maxDim = 1600, opts: PrepareOptions = {}): Promise<PreparedImage> {
   const original: PreparedImage = {
     blob: file,
     contentType: file.type || "application/octet-stream",
@@ -52,6 +59,11 @@ export async function prepareImageForUpload(file: File, maxDim = 1600): Promise<
   if (!decoded) return original;   // 디코딩 불가 — 원본 그대로 (형식 표기는 정확히)
 
   const { source, width, height } = decoded;
+  // 작은 원본은 손대지 않는다 — 폰이 이미 압축한 사진을 다시 압축하면 글자가 뭉개진다
+  if (opts.keepOriginalUnderBytes && file.size <= opts.keepOriginalUnderBytes && Math.max(width, height) <= maxDim && /^image\/(jpeg|webp|png)$/i.test(file.type)) {
+    if (typeof (source as ImageBitmap).close === "function") (source as ImageBitmap).close();
+    return original;
+  }
   const dimScale = Math.min(1, maxDim / Math.max(width, height));
   const pixelScale = Math.min(1, Math.sqrt(MAX_PIXELS / (width * height)));
   const scale = Math.min(dimScale, pixelScale);
@@ -68,11 +80,12 @@ export async function prepareImageForUpload(file: File, maxDim = 1600): Promise<
     // WebP 우선(같은 화질에서 JPEG보다 30~50% 작다) — 미지원 브라우저는 요청을 무시하고
     // 다른 형식을 돌려주므로 blob.type을 확인해 JPEG로 폴백한다 (스토리지 용량 절감)
     const encode = (type: string, quality: number) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
-    let blob = await encode("image/webp", 0.72);
+    const quality = Math.min(0.95, Math.max(0.5, opts.quality ?? 0.8));
+    let blob = await encode("image/webp", quality);
     let contentType = "image/webp";
     let ext = "webp";
     if (!blob || blob.type !== "image/webp") {
-      blob = await encode("image/jpeg", 0.78);
+      blob = await encode("image/jpeg", Math.min(0.95, quality + 0.06));
       contentType = "image/jpeg";
       ext = "jpg";
     }
