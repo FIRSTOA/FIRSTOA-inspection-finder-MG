@@ -46,6 +46,17 @@ export default function CounterSms({ author }: { author: string }) {
   const [contactRules, setContactRules] = useState<ContactRule[]>([]);
   const reloadRules = useCallback(async () => { setContactRules(await loadContactRules()); }, []);
   useEffect(() => { void reloadRules(); }, [reloadRules]);
+  // 연락처 기록 목록 모달 — 지금 마감에 안 올라온 업체의 기록도 찾아볼 수 있게(2026-09-17)
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ruleBusy, setRuleBusy] = useState(false);
+  const removeRuleFromBook = async (rule: ContactRule) => {
+    const label = rule.kind === "block" ? "🚫 보내지 말 것" : "⭐ 새 담당";
+    if (!await askConfirm(`${rule.vendor || "업체명 없음"} · ${formatPhone(rule.phone)}\n${label} 기록을 해제할까요? (${ruleStamp(rule)} 기록)`)) return;
+    setRuleBusy(true);
+    try { await removeContactRule(rule.id); await reloadRules(); setNotice(`기록을 해제했습니다 — ${rule.vendor || formatPhone(rule.phone)}`); }
+    catch (e) { setNotice(`기록 해제 실패: ${(e as Error).message}`); }
+    finally { setRuleBusy(false); }
+  };
   // 목록 카드의 규칙 표시 — 🚫 차단 번호가 섞여 있거나 ⭐ 새 담당이 기록된 업체
   const ruleBadges = (vendor: string, phones: string[]) => {
     const rr = rulesForVendor(contactRules, vendor);
@@ -269,6 +280,9 @@ export default function CounterSms({ author }: { author: string }) {
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">카톡 마감 목록을 붙여넣으면 업체별 요청 문자를 만들어 내 휴대폰 문자앱으로 보냅니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setRulesOpen(true)} title="🚫 보내지 말 것 · ⭐ 새 담당 기록 전체 보기"
+              className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-2 text-[12px] font-black text-amber-800 transition hover:bg-amber-100">
+              📒 연락처 기록{contactRules.length ? ` ${contactRules.length}` : ""}</button>
             <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-2 text-xs font-black text-white transition hover:bg-blue-700">
               <Upload size={14} />마감 목록 올리기
@@ -485,6 +499,7 @@ export default function CounterSms({ author }: { author: string }) {
         </>
       )}
 
+      {rulesOpen && <ContactRulesBook rules={contactRules} onClose={() => setRulesOpen(false)} onRemove={removeRuleFromBook} busy={ruleBusy} />}
       {uploadOpen && (
         <div className="fixed inset-0 z-[210] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setUploadOpen(false)}>
           <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -685,6 +700,76 @@ function ContactRulesPanel({ vendor, phones, labels, rules, picked, onPick, auth
       ) : (
         <button type="button" onClick={() => setAddOpen(true)} className="w-full rounded-lg border border-dashed border-amber-300 bg-white py-2 text-[11px] font-black text-amber-700 transition hover:bg-amber-50">＋ 새 마감 담당자 연락처 기록 (다른 사람에게 보내라고 했을 때)</button>
       )}
+    </div>
+  );
+}
+
+/**
+ * 연락처 기록 목록 — 🚫 보내지 말 것 / ⭐ 새 담당 전체를 업체별로 훑어본다.
+ * 전송 모달은 지금 올라온 업체만 보여 주니, 다음 마감에 안 올라온 업체도 "그 사람 번호 어떻게 됐지"가 떠오르면
+ * 여기서 찾는다(2026-09-17 요청). 검색은 업체·이름·번호·메모·기록자 전부.
+ */
+function ContactRulesBook({ rules, onClose, onRemove, busy }: {
+  rules: ContactRule[]; onClose: () => void; onRemove: (rule: ContactRule) => Promise<void>; busy: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<"all" | "block" | "prefer">("all");
+  const q = query.trim().toLowerCase();
+  const digits = q.replace(/\D/g, "");
+  const filtered = rules.filter((r) => (kind === "all" || r.kind === kind) && (!q
+    || [r.vendor, r.name, r.memo, r.updated_by].some((v) => String(v || "").toLowerCase().includes(q))
+    || (digits.length >= 3 && normalizePhone(r.phone).includes(digits))));
+  // 업체별 묶음 — 최근 기록이 위
+  const groups = new Map<string, ContactRule[]>();
+  for (const r of filtered) { const list = groups.get(r.vendor_key) || []; list.push(r); groups.set(r.vendor_key, list); }
+  const blockCount = rules.filter((r) => r.kind === "block").length;
+  const preferCount = rules.length - blockCount;
+  const chip = (active: boolean, tone: string) => `rounded-full px-3 py-1.5 text-[12px] font-black transition ${active ? tone : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
+  return (
+    <div className="fixed inset-0 z-[210] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
+      <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+          <div className="min-w-0">
+            <div className="text-[11px] font-black text-slate-400">마감 문자 연락처 기록 — 팀 전체 공유 · 다음 마감에 그 업체가 올라오면 자동으로 표시됩니다</div>
+            <div className="text-[15px] font-black text-white">🚫 보내지 말 것 {blockCount}건 · ⭐ 새 담당 {preferCount}건</div>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"><X size={17} /></button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
+          <button type="button" onClick={() => setKind("all")} className={chip(kind === "all", "bg-slate-900 text-white")}>전체 {rules.length}</button>
+          <button type="button" onClick={() => setKind("block")} className={chip(kind === "block", "bg-rose-600 text-white")}>🚫 보내지 말 것 {blockCount}</button>
+          <button type="button" onClick={() => setKind("prefer")} className={chip(kind === "prefer", "bg-amber-500 text-white")}>⭐ 새 담당 {preferCount}</button>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체 · 이름 · 번호 · 사유 · 기록자 검색"
+            className="min-w-[180px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+          {!rules.length && <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-xs font-bold text-slate-400">아직 기록이 없습니다 — 전송 모달의 수신 연락처에서 🚫 / ⭐ 를 누르면 여기에 쌓입니다.</div>}
+          {rules.length > 0 && !groups.size && <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
+          {[...groups.entries()].map(([key, list]) => (
+            <div key={key} className="rounded-xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
+                <span className="truncate text-sm font-black text-slate-900">{list[0].vendor || "업체명 없음"}</span>
+                <span className="text-[10px] font-bold text-slate-400">기록 {list.length}건 · 최근 {ruleStamp(list[0])}</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {list.map((r) => (
+                  <div key={r.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs">
+                    {r.kind === "block"
+                      ? <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white">🚫 보내지 말 것</span>
+                      : <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">⭐ 새 담당</span>}
+                    {r.name && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-black text-emerald-700">👤 {r.name}</span>}
+                    <span className={`font-mono font-bold tabular-nums ${r.kind === "block" ? "text-slate-400 line-through" : "text-slate-800"}`}>{formatPhone(r.phone)}</span>
+                    {r.memo && <span className="min-w-0 flex-1 truncate font-semibold text-slate-600" title={r.memo}>{r.kind === "block" ? "사유" : "메모"}: {r.memo}</span>}
+                    <span className="ml-auto shrink-0 text-[10px] font-bold text-slate-400">{ruleStamp(r)} 기록</span>
+                    <button type="button" disabled={busy} onClick={() => void onRemove(r)}
+                      className="shrink-0 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">해제</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
