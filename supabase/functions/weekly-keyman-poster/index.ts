@@ -703,24 +703,45 @@ Deno.serve(async (req) => {
           // 봇(알림 답장)은 글자만 보낼 수 있다 — 그림은 PC가 붙여 보내고, 글에는 눌러지는 안내문 링크를 담는다
           // 문구에 업체명을 다시 싣는다(2026-08-28 확정) — 점검 가며 방을 검색하는 관행이 있어
           // 업체명이 글에 있어야 검색에 걸린다. 이모지 없이 등급 + 업체명 + 변경 종류, ---구분선.
+          // 2026-09-17 대표 요청: ① 새 키맨은 이름·연락처까지, 주소·업체명은 변경전/변경후까지 문구에 싣는다
+          //                    ② 그래서 글이 길어지므로 사진 링크를 맨 위에 둔다 — 카톡 '전체보기'를 안 눌러도 링크가 보인다
           const SEP_LINE = "---------------";
-          const lineOf = (r: ChangeRow, tag: string) => {
+          const titleOf = (r: ChangeRow, tag: string) => {
             const g = letterGrade(r.grade);
-            return `${g ? `${g} ` : ""}${clipText(r.company, 18)} — ${tag}`;
+            return `${g ? `${g} ` : ""}${clipText(r.company, 24)} — ${tag}`;
           };
-          const head = [
+          const personText = (raw: string) => {
+            const p = readPerson(raw);
+            return [p.name, p.phone].filter(Boolean).join(" ") || clipText(raw, 30);
+          };
+          const personLines = (r: ChangeRow) => {
+            const now = personText(r.after_text) || "연락처 확인 필요";
+            const before = r.before_text ? personText(r.before_text) : "";
+            return [`${titleOf(r, "새 키맨")} (${now})`, ...(before ? [`   이전 담당: ${before}`] : [])];
+          };
+          const addressLines = (r: ChangeRow) => [
+            titleOf(r, "주소 변경"),
+            ...(r.before_text ? [`   변경전: ${clipText(r.before_text, 60)}`] : []),
+            `   변경후: ${clipText(r.after_text, 60) || "새 주소 확인"}`,
+          ];
+          const nameLines = (r: ChangeRow) => [
+            titleOf(r, "업체명 변경"),
+            ...(r.before_text ? [`   변경전: ${clipText(r.before_text, 40)}`] : []),
+            `   변경후: ${clipText(r.after_text, 40) || "새 상호 확인"}`,
+          ];
+          const text = [
+            ...(testMode ? [`[테스트 · 원래는 ${realRoom}]`] : []),
             `[${week.label.replace(/\s+/g, "")}]`,
             `${letter}지역 주간 키맨 브리핑`,
             SEP_LINE,
-            "",
-            ...persons.map((r) => lineOf(r, "새 키맨")),
-            ...addresses.map((r) => lineOf(r, "주소 변경")),
-            ...names.map((r) => lineOf(r, "업체명 변경")),
-            "",
-            SEP_LINE,
             "👇 한 장 요약 (눌러서 크게 보기)",
+            url, // 사진. 카톡이 미리보기 썸네일을 붙여 준다
+            SEP_LINE,
+            "",
+            ...persons.flatMap(personLines),
+            ...addresses.flatMap(addressLines),
+            ...names.flatMap(nameLines),
           ].join("\n");
-          const text = `${testMode ? `[테스트 · 원래는 ${realRoom}]\n` : ""}${head}\n${url}`; // url = 사진. 카톡이 미리보기 썸네일을 붙여 준다
           entry.room = room;
           entry.text = text;
           if (body.dry) { entry.queued = false; } // 실제 발송 없이 방·문구만 확인
