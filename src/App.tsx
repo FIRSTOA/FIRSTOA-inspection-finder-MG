@@ -60,7 +60,7 @@ import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
 import { buildActionBlock } from "./actionBlock";
-import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags } from "./inspectionBlocks";
+import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
 import type { AuthorTeam } from "./authors";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
@@ -1636,7 +1636,8 @@ function transformBlankReports(input: string): ResultItem[] {
     return blocks.map((block: string[]) => buildBlankReportCompact(block));
   }
 
-  const blocks = splitParagraphBlocks(cleaned);
+  // 접수 표 원문은 접수 머리줄("A/S⇥…")에서만 나눈다 — 빈 줄·번호 줄로 쪼개면 AS이력 조각이 업체명 없는 양식이 된다(2026-09-17 그루젠)
+  const blocks = format === "table" ? splitTableReceptionBlocks(cleaned) : splitParagraphBlocks(cleaned);
   return blocks.map((block: string[]) => buildBlankReport(block));
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags } from "../src/inspectionBlocks";
+import { isDividerLine, isSpareNoteBlock, isTableReceptionHead, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "../src/inspectionBlocks";
 
 const DIV = "ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ";
 const device = (n: number, model: string) => [
@@ -84,5 +84,39 @@ describe("isDividerLine", () => {
     expect(isDividerLine("---")).toBe(true);
     expect(isDividerLine("──")).toBe(false);
     expect(isDividerLine("12.토너 통합보관")).toBe(false);
+  });
+});
+
+describe("splitTableReceptionBlocks — 접수 표 원문은 접수 머리줄에서만 나눈다 (2026-09-17 그루젠)", () => {
+  const gruzen = [
+    "A/S\tS\tSL-X7400LXR\t20S(주)그루젠남영빌딩2층 > 과천SL-NWE001X 기능 추가매월마감\t매월마감\t종료일\t29. 4. 20",
+    "기번\tZPBLBJSTA00107H",
+    "상태\t프린트시 간헐적으로 줄 발생",
+    "AS접수이력(시리얼기준)",
+    "■ 내용: 1. 프린트시 줄발생",
+    "2. 용지걸림",
+    "",
+    "■ 일시: 26년 1월 30일",
+    "■ 내용: 묻어나옴",
+  ].join("\n");
+  it("빈 줄·번호 줄이 있어도 접수 한 건은 한 블록", () => {
+    const blocks = splitTableReceptionBlocks(gruzen);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0][0]).toMatch(/^A\/S\t/);
+    expect(blocks[0]).not.toContain("");
+    expect(blocks[0]).toContain("2. 용지걸림");
+  });
+  it("접수 여러 건을 이어 붙이면 머리줄(A/S·IT A/S·여분요청 + 탭)마다 나눈다", () => {
+    const two = `${gruzen}\nIT A/S\tN\tHP-M428\t3N주식회사 무암\n기번\tX1\n여분요청\tS\tD450\t7S웰스\n기번\tY2`;
+    const blocks = splitTableReceptionBlocks(two);
+    expect(blocks.map((b) => b[0].split("\t")[0])).toEqual(["A/S", "IT A/S", "여분요청"]);
+    expect(blocks[1]).toEqual(["IT A/S\tN\tHP-M428\t3N주식회사 무암", "기번\tX1"]);
+  });
+  it("머리줄 판정 — 접수분야 토큰 + 탭만 (표 안의 '접수분야⇥A/S'·번호 줄은 아님)", () => {
+    expect(isTableReceptionHead("A/S\tS\tSL-X7400LXR")).toBe(true);
+    expect(isTableReceptionHead("IT A/S\tN\tHP")).toBe(true);
+    expect(isTableReceptionHead("접수분야\tA/S")).toBe(false);
+    expect(isTableReceptionHead("2. 용지걸림")).toBe(false);
+    expect(isTableReceptionHead("■ 내용: A/S 요청")).toBe(false);
   });
 });

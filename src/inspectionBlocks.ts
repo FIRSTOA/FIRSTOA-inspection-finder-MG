@@ -82,3 +82,29 @@ export function noteBlockLineFlags(lines: string[]): boolean[] {
   });
   return flags;
 }
+
+/**
+ * 서비스접수 표 원문(TSV) 붙여넣기 — 접수 한 건이 한 블록.
+ * 빈 줄로 나누면 안 된다: AS이력·자가사용내역이 빈 줄로 구분되고, 이력 내용에 "1. 프린트시 줄발생 / 2. 용지걸림"처럼
+ * 번호 줄이 있으면 미양식 변환기가 "일정 여러 건"으로 오판해 이력 조각마다 업체명 없는 양식을 만들었다
+ * (2026-09-17 그루젠 실사고 — 최근 40건 중 5건이 이 모양). 새 접수는 "A/S⇥…"·"IT A/S⇥…"·"여분요청⇥…"처럼
+ * 접수분야 토큰 + 탭으로 시작하는 줄에서만 시작한다.
+ */
+const TABLE_RECEPTION_HEAD_RE = /^(?:IT\s*)?A\/S\t|^(?:점검|여분요청|불만|샘플전달|셋팅|세팅|납품|철수|교체|기타)\t/;
+
+export function isTableReceptionHead(line: string): boolean {
+  return TABLE_RECEPTION_HEAD_RE.test(line);
+}
+
+export function splitTableReceptionBlocks(input: string): string[][] {
+  const lines = String(input || "").split(/\r?\n/);
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  for (const raw of lines) {
+    if (isTableReceptionHead(raw) && current.length) { blocks.push(current); current = []; }
+    const line = raw.trim();
+    if (line) current.push(line);
+  }
+  if (current.length) blocks.push(current);
+  return blocks;
+}
