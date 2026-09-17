@@ -26,7 +26,7 @@ type MapLabel = {
   color: string;
 };
 
-type Team = "A" | "B" | "C" | "D";
+type Team = "A" | "B" | "C" | "D" | "E";
 type Quarter = 1 | 2 | 3 | 4;
 type WorkKind = "quarter" | "monthly" | "renewal";
 
@@ -83,7 +83,7 @@ const SECONDARY_REFRESH_MIN_MS = 10 * 60_000;
 const excelBaseHeaders = ["번호", "라벨", "지도에서", "이름", "코멘트", "전화번호", "주소", "상세주소", "위도", "경도"];
 const defaultMemoColumnCount = 15;
 const memoHeaders = (count: number) => Array.from({ length: count }, (_, index) => `메모${index + 1}`);
-const teams: Team[] = ["A", "B", "C", "D"];
+const teams: Team[] = ["A", "B", "C", "D", "E"]; // E = 지방(충청외) — 2026-09-17 활성화
 const quarters: Quarter[] = [1, 2, 3, 4];
 const workKinds: { value: WorkKind; label: string }[] = [
   { value: "quarter", label: "분기점검" },
@@ -95,6 +95,7 @@ const teamMapViews: Record<Team, { center: [number, number]; zoom: number }> = {
   B: { center: [37.53, 126.88], zoom: 10 },
   C: { center: [37.52, 127.09], zoom: 10 },
   D: { center: [37.65, 127.2], zoom: 9 },
+  E: { center: [36.6, 127.4], zoom: 8 }, // 충청권 중심 — 지방은 넓게 본다
 };
 
 // MapCanvas(자식)의 지도 인스턴스를 메인 컴포넌트의 주소 검색이 쓸 수 있게 하는 다리

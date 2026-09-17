@@ -34,7 +34,7 @@ type Place = {
   device_count: number; devices: string | null;
 };
 
-const TEAMS = ["A", "B", "C", "D"] as const;
+const TEAMS = ["A", "B", "C", "D", "E"] as const;
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
 
 export default function AutoSchedule({ author }: { author: string }) {

@@ -71,7 +71,7 @@ type RowState = {
   error?: string;
 };
 
-const TEAM_KEYS = ["A", "B", "C", "D"] as const;
+const TEAM_KEYS = ["A", "B", "C", "D", "E"] as const;
 
 /** "카톡:미수(A)" / "카톡:불만(C,D)" / "카톡:불만(AB)" → 팀 글자들 */
 function teamsOfSource(source: string): string[] {

@@ -512,20 +512,20 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const csLeaders = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
   const teamAssignees = useMemo<Record<Team, string[]>>(() => {
     const lead = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
-    const of = (t: "A" | "B" | "C" | "D") => {
+    const of = (t: "A" | "B" | "C" | "D" | "E") => {
       const names = memberBook[t] || []; // DB를 못 읽어도 authors.ts의 시드(AUTHOR_BOOK)가 채워준다 — 예비 명단을 두 벌 두면 서로 어긋난다
       return [...names.filter((n) => !lead.includes(n)), ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
     };
-    return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: [], 기타: [] };
+    return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: of("E"), 기타: [] }; // E(지방)도 명단이 있으면 배정 가능
   }, [memberBook]);
   const teamCalViewTeam: Team = teamCalTeam
-    || ((["A", "B", "C", "D"] as Team[]).find((t) => teamAssignees[t].includes(author) && !csLeaders.includes(author)) as Team | undefined)
+    || ((["A", "B", "C", "D", "E"] as Team[]).find((t) => teamAssignees[t].includes(author) && !csLeaders.includes(author)) as Team | undefined)
     || (teams.includes(team as Team) ? team as Team : "C");
   // 보고 순서: 팀장 최상단 → 명단 순서(부파트장이 첫 번째) 그대로
   const reportOrder = (reportTeam: Team) => {
     const mine = teamAssignees[reportTeam].filter((n) => !csLeaders.includes(n));
     // 다른 지역으로 지원 나간 CS 인원의 건도 보고에 들어가야 한다 — 자기 팀 뒤에 나머지 CS 명단을 붙인다(건이 있을 때만 그룹이 생긴다)
-    const others = (["A", "B", "C", "D"] as Team[]).filter((t) => t !== reportTeam)
+    const others = (["A", "B", "C", "D", "E"] as Team[]).filter((t) => t !== reportTeam)
       .flatMap((t) => teamAssignees[t]).filter((n) => !csLeaders.includes(n) && !mine.includes(n));
     return [...csLeaders, ...mine, ...Array.from(new Set(others))];
   };

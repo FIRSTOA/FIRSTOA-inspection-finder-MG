@@ -174,7 +174,7 @@ async function loadTelemetry(): Promise<Telemetry> {
     keymanGreetWaiting: keyman.filter((k) => !k.greeting_done && /담당|키맨|명의/.test(k.category || "")).length,
     totalRecords: totalInsp + totalAs, totalPhotos, activeMembers,
     // 워킨맵 '팀별 진행률'과 같은 셈법 — 분기점검 G5·G12 완료, 매월점검은 3단위(G2=1·G3=2·G5/G12=3)
-    teamProgress: ["A", "B", "C", "D"].map((team) => {
+    teamProgress: ["A", "B", "C", "D", "E"].map((team) => {
       const rows = workin.filter((w) => w.team === team);
       const quarterly = rows.filter((w) => w.kind === "quarter"), monthly = rows.filter((w) => w.kind === "monthly");
       return { team, total: quarterly.length + monthly.length * 3, done: quarterly.filter((w) => w.label === "G5" || w.label === "G12").length + monthly.reduce((s, w) => s + monthlyUnits(w.label), 0) };
@@ -335,7 +335,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const pct = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);
   const weekRecords = data ? data.weekRows.length : 0;
   const myWeek = data && author ? data.weekRows.filter((r) => r.작성자 === author).length : 0;
-  const regionWeek = useMemo(() => ["A", "B", "C", "D"].map((region) => ({ region, count: data ? data.weekRows.filter((r) => (r.지역 || "").toUpperCase().startsWith(region)).length : 0 })), [data]);
+  const regionWeek = useMemo(() => ["A", "B", "C", "D", "E"].map((region) => ({ region, count: data ? data.weekRows.filter((r) => (r.지역 || "").toUpperCase().startsWith(region)).length : 0 })), [data]);
   const regionMax = Math.max(1, ...regionWeek.map((r) => r.count));
   const savedWeekHours = Math.round((weekRecords * MINUTES_SAVED_PER_RECORD) / 60);
   const savedTotalHours = data ? Math.round((data.totalRecords * MINUTES_SAVED_PER_RECORD) / 60) : 0;
@@ -411,7 +411,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                 <span className="font-mono text-[12px] font-black tabular-nums text-white">{data ? `${pct(doneProgress, totalProgress)}%` : "—"} <span className="text-slate-500">{data ? `${fmt(doneProgress)}/${fmt(totalProgress)}` : ""}</span></span>
               </div>
               <div className="mt-3 space-y-2.5">
-                {(data?.teamProgress || ["A", "B", "C", "D"].map((team) => ({ team, done: 0, total: 0 }))).map((t) => (
+                {(data?.teamProgress || ["A", "B", "C", "D", "E"].map((team) => ({ team, done: 0, total: 0 }))).map((t) => (
                   <div key={t.team} className="flex items-center gap-3">
                     <span className="w-7 shrink-0 text-[12px] font-black text-slate-300">{t.team}팀</span>
                     <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-[width] duration-700" style={{ width: `${pct(t.done, t.total)}%` }} /></div>

@@ -754,7 +754,7 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
 
   // 이번 분기 방문 대상 (워킨맵 재계약 · CS 등급 S/SS) — 누굴 분석할지 여기서 고른다
   const quarter = currentQuarter();
-  const myTeam = useMemo(() => { const t = teamForAuthor(author); return ["A", "B", "C", "D"].includes(t) ? t : "C"; }, [author]);
+  const myTeam = useMemo(() => { const t = teamForAuthor(author); return ["A", "B", "C", "D", "E"].includes(t) ? t : "C"; }, [author]);
   const [team, setTeam] = useState("");
   useEffect(() => { setTeam((cur) => cur || myTeam); }, [myTeam]);
   const [scope, setScope] = useState<RenewalScope | null>(null);
@@ -898,7 +898,7 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-white">{quarter}Q 재계약 방문 대상{scope ? ` — 총 ${scope.targets.length}곳` : ""} <span className="ml-1 text-[11px] font-medium text-slate-400">워킨맵 기준</span></h2>
           </div>
-          {["A", "B", "C", "D"].map((t) => (
+          {["A", "B", "C", "D", "E"].map((t) => (
             <button key={t} type="button" onClick={() => setTeam(t)}
               className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition ${team === t ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`}>
               {t}팀{t === myTeam ? " ★" : ""}

@@ -190,4 +190,4 @@ export async function setActivityEventsCancelledBySource(sourceText: string, aut
   });
 }
 
-export const OPERATIONS_TEAMS: Array<Exclude<AuthorTeam, "팀장">> = ["A", "B", "C", "D"];
+export const OPERATIONS_TEAMS: Array<Exclude<AuthorTeam, "팀장">> = ["A", "B", "C", "D", "E"];

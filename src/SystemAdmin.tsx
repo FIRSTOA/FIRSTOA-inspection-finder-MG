@@ -31,8 +31,8 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
 ];
 
-const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기"];
-const ROOM_REGIONS = ["*", "A", "B", "C", "D", "CD"];
+const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기", "IT접수"]; // IT접수|* = 서비스접수 IT 건이 가는 방(2026-09-17)
+const ROOM_REGIONS = ["*", "A", "B", "C", "D", "E", "CD"];
 
 export default function SystemAdmin() {
   const [config, setConfig] = useState<ConfigRow[]>([]);
@@ -249,8 +249,8 @@ export default function SystemAdmin() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {(["A", "B", "C", "D", "E"] as const).map((t) => (
-                <label key={t} className="flex items-center gap-1 text-xs font-black text-slate-500">{t}
+              {(["A", "B", "C", "D", "E", "IT"] as const).map((t) => (
+                <label key={t} className="flex items-center gap-1 text-xs font-black text-slate-500">{t === "IT" ? "IT(접수 캘린더)" : t}
                   <input defaultValue={valueOf(`NAVER_TEAM_CALENDAR_${t}`)} onBlur={(e) => { if (e.target.value !== valueOf(`NAVER_TEAM_CALENDAR_${t}`)) void saveConfig(`NAVER_TEAM_CALENDAR_${t}`, e.target.value.trim()); }}
                     className="w-32 rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>

@@ -5,9 +5,9 @@ import { insertRow, selectRows, updateRows } from "./supabase";
 // 예전에는 브라우저 localStorage에 두어 신입·퇴사 반영이 그 PC에서만 보였다.
 // 지금은 DB가 원본이고, localStorage는 첫 화면이 비어 보이지 않게 하는 거울(캐시)로만 쓴다.
 
-export type AuthorTeam = "팀장" | "A" | "B" | "C" | "D" | "IT";
+export type AuthorTeam = "팀장" | "A" | "B" | "C" | "D" | "E" | "IT";
 
-export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "IT"]; // IT=원격팀 — 서비스접수·원격 처리에서 자기 이름을 고를 수 있어야 한다
+export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "E", "IT"]; // E=지방(충청외) 2026-09-17 활성화 · IT=원격팀 — 서비스접수·원격 처리에서 자기 이름을 고를 수 있어야 한다
 
 /** DB를 못 읽을 때 쓰는 최소 명단 (초기 시드와 동일) */
 export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
@@ -16,6 +16,7 @@ export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
   B: ["윤기준", "권태혁", "조윤"],
   C: ["이홍진", "이민구", "박영현", "한왕주"],
   D: ["김종희", "이호준", "양승원"],
+  E: [], // 지방(E) — 인원은 관리 탭 인원 명단(cs_members)에서 팀 "E"로 등록
   IT: ["김광태", "김담우", "김정식", "문종주", "손영근", "신동원", "지경민"],
 };
 
@@ -43,7 +44,7 @@ const CHANGE_EVENT = "firstoa-authors-change";
 type Book = Record<AuthorTeam, string[]>;
 
 function emptyBook(): Book {
-  return { "팀장": [], A: [], B: [], C: [], D: [], IT: [] };
+  return { "팀장": [], A: [], B: [], C: [], D: [], E: [], IT: [] };
 }
 
 function bookOf(rows: MemberRow[]): Book {

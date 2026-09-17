@@ -263,7 +263,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           {category.teamField && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
-              {["전체", "A", "B", "C", "D"].map((value) => (
+              {["전체", "A", "B", "C", "D", "E"].map((value) => (
                 <button key={value} type="button" onClick={() => setTeam(value)}
                   className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
                   {value === "전체" ? "전체" : `${value}팀`}

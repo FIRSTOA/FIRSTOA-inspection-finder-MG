@@ -2,7 +2,7 @@
 create table if not exists public.workin_map_places (
   id bigint primary key,
   number integer not null default 0,
-  team text not null check (team in ('A', 'B', 'C', 'D')),
+  team text not null check (team in ('A', 'B', 'C', 'D', 'E')),
   quarter smallint not null check (quarter between 1 and 4),
   kind text not null check (kind in ('quarter', 'monthly', 'renewal')),
   label text not null default 'G12',
