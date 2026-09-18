@@ -151,15 +151,29 @@ export default function AutoSchedule({ author }: { author: string }) {
     return { row, reason };
   };
 
+  // 첫 조회가 시간 초과로 실패하고 10초 뒤엔 되는 현상(2026-09-18, 4분기) — DB가 그 분기 자료를 처음 읽을 때 느리다.
+  // 시간 초과·일시 오류면 사람이 다시 누르기 전에 1.5초·3초 뒤 두 번 더 시도한다.
+  const rpcWithRetry = async <T,>(call: () => Promise<T>, tries = 2): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await call(); }
+      catch (e) {
+        const msg = String((e as Error).message || "");
+        const transient = /timeout|timed out|canceling statement|57014|statement|50[234]|failed to fetch|network|일시/i.test(msg);
+        if (!transient || attempt >= tries) throw e;
+        setNotice(`첫 조회가 느려 다시 시도 중… (${attempt + 1}/${tries})`);
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
+  };
   const suggest = async () => {
     setLoading(true);
     setNotice("");
     try {
-      const list = await rpc<Place[]>("suggest_workin_candidates", {
+      const list = await rpcWithRetry(() => rpc<Place[]>("suggest_workin_candidates", {
         p_team: team, p_kind: kind, p_quarter: quarter, p_grades: grades,
         p_lat: anchorGeo?.lat ?? null, p_lng: anchorGeo?.lng ?? null,
         p_min_days: kind === "quarter" ? minDays : 0, p_limit: 60, // 등급별 상한(가까운 60곳씩) — 전체 120 캡은 SS·V가 S를 밀어냈다
-      });
+      }));
       let merged: Place[] = list || [];
       setAnchorPin(null);
       // 검색한 기준 업체가 조건에 걸려 목록에서 빠졌으면 맨 위에 고정하고 사유를 단다 — "내가 원하는 업체도 추가" 요구(2026-08-25)
