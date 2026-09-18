@@ -144,7 +144,8 @@ export function MisuBoard() {
   const [detail, setDetail] = useState<SheetRecord | null>(null);
   // 관리부가 시트에서 CS체크한 업체만 모아 보는 목록 (misu_cs_checks — GAS 1시간 동기화)
   const [boardView, setBoardView] = useState<"전체" | "CS체크">("전체");
-  const [csChecks, setCsChecks] = useState<CsCheckRow[] | null>(null);
+  // undefined = 불러오는 중(느린 회선에서 0으로 보이던 것 — 2026-09-18) · null = 표 없음/실패 · 배열 = 정상
+  const [csChecks, setCsChecks] = useState<CsCheckRow[] | null | undefined>(undefined);
   useEffect(() => {
     selectRows<CsCheckRow>("misu_cs_checks", "select=*&checked=eq.true&order=team.asc,vendor.asc")
       .then(setCsChecks)
@@ -213,7 +214,7 @@ export function MisuBoard() {
         <div className="space-y-3">
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
             {["전체", ...TEAM_NAMES].map((name) => {
-              const count = name === "전체" ? (csChecks || []).length : (csChecks || []).filter((c) => c.team === name).length;
+              const count = csChecks ? (name === "전체" ? csChecks.length : csChecks.filter((c) => c.team === name).length) : "…";
               return (
                 <button key={name} type="button" onClick={() => setTeam(name)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition sm:px-3.5 ${team === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                   {name === "전체" ? "전체" : `${name}팀`} <span className={team === name ? "text-blue-300" : "text-blue-600"}>{count}</span>
@@ -223,7 +224,8 @@ export function MisuBoard() {
           </div>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체명 검색" className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           {csChecks === null && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700">CS체크 동기화가 아직 설정되지 않았어요 — Supabase에서 misu-cs-check.sql 실행 후 First-DATA GAS의 syncMisuCsToSupabase를 실행해 주세요.</div>}
-          {csChecks !== null && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {csChecks === undefined && <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs font-bold text-slate-400">CS체크 목록을 불러오는 중…</div>}
+          {Array.isArray(csChecks) && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="grid grid-cols-[minmax(0,1fr)_26px_40px_84px] gap-1.5 border-b border-slate-200 bg-slate-100/70 px-3 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_70px_120px_110px_110px] sm:gap-2 sm:px-4">
               <span>업체명</span><span>팀</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="hidden sm:block">CS-1회</span><span className="hidden sm:block">CS-2회</span>
             </div>
