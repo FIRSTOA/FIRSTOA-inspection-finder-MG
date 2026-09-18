@@ -4702,8 +4702,6 @@ export default function App() {
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
   const pendingAsTicketRef = useRef<{ id: string; receptionId: string; vendor: string } | null>(null);
-  // [보내고 익일로] — 양식 전송이 끝나면 완료 팝업 대신 익일 사유 창을 바로 연다. "익일로 미룰 때도 양식 먼저, 사유는 두 번째 메시지"(2026-09-18)
-  const deferAfterSendRef = useRef(false);
   // 통합 전송 팝업은 "일정리스트에서 넘어온 세션"에서만 — ref는 리렌더를 못 일으켜 상태를 병행한다
   // 일정리스트에서 넘어온 세션 표식 — 2026-08-25부터 전송 버튼은 경로와 무관하게 통합 하나라 값은 읽지 않고, 연결 해제 시점 추적용으로만 유지
   const [, setLinkedTicket] = useState<{ id: string; receptionId: string; vendor: string } | null>(null);
@@ -5357,12 +5355,6 @@ export default function App() {
     // 매월점검 일정 완료는 위 completeMonthlyCalendarTicket이 이미 조용히 처리한다.
     if (res.ok && kind === "normal" && pendingAsTicketRef.current) {
       if (destination === "inspection") setPendingTicket(null);
-      else if (deferAfterSendRef.current) {
-        // [보내고 익일로]: 양식은 이미 AS방으로 나갔다 — 바로 사유·날짜를 받아 두 번째 메시지(사유)를 보내고 일정·네이버를 옮긴다
-        deferAfterSendRef.current = false;
-        setTicketDeferPrompt({ ...pendingAsTicketRef.current, sentText: target });
-        setTicketDeferDate(nextBizYmd(kstDate()));
-      }
       else setTicketDonePrompt({ ...pendingAsTicketRef.current, sentText: target });
       // 연결은 유지 — '그대로 두기'를 눌러도 다음 전송에서 다시 물어본다 (완료·익일 처리 시 해제)
     }
@@ -5665,7 +5657,9 @@ export default function App() {
         return buildActionBlock(row, { author, reason: deferReason, deferLabel: `${when}로 연기` });
       })();
       if (reasonBlock) {
-        void sendServiceReception("AS", `수도권${String(rows[0]?.["team"] || "")}`, reasonBlock)
+        // 사유는 양식이 간 방으로 — 양식의 "지역" 값을 우선한다(작성자 팀과 다른 지역을 골랐을 때 양식은 E방, 사유는 C방으로 갈라지던 것 — 2026-09-18). 없으면 일정의 팀
+        const formRegion = regionLetter(String(ticket.sentText || "").match(/^\s*지역\s*[:：]\s*([^\n\r]+)/m)?.[1] || "");
+        void sendServiceReception("AS", `수도권${formRegion || String(rows[0]?.["team"] || "")}`, reasonBlock)
           .then((r) => { if (!r.ok) showToast(`사유 카톡 전송 실패: ${r.error || "오류"}`, "error"); })
           .catch((e) => showToast(`사유 카톡 전송 실패: ${(e as Error).message}`, "error"));
       }
@@ -6160,12 +6154,6 @@ export default function App() {
                 </div>
                 <div className="flex gap-2 border-t border-slate-100 p-4">
                   <button type="button" onClick={() => setSendPicker(null)} className="flex-1 rounded-xl border border-slate-200 bg-white py-3.5 text-sm font-black text-slate-500 transition hover:bg-slate-50">취소</button>
-                  {pendingAsTicketRef.current && sendPicker.as && (
-                    <button type="button" disabled={!pickedLabels.length}
-                      onClick={() => { deferAfterSendRef.current = true; void runSendPicker().finally(() => { deferAfterSendRef.current = false; }); }}
-                      title="양식을 AS방으로 보낸 뒤 바로 익일 사유를 받아 두 번째 메시지로 보냅니다 (처리를 못 해 미루는 경우)"
-                      className="flex-[1.4] rounded-xl border-2 border-purple-300 bg-purple-50 py-3.5 text-sm font-black text-purple-700 transition hover:bg-purple-100 disabled:opacity-40">보내고 익일로</button>
-                  )}
                   <button type="button" disabled={!pickedLabels.length} onClick={() => void runSendPicker()}
                     className="flex-[2] rounded-xl bg-slate-950 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-slate-800 disabled:bg-slate-200 disabled:shadow-none">
                     {pickedLabels.length ? `${pickedLabels.join(" · ")}로 보내기` : "보낼 방을 선택하세요"}
@@ -6189,7 +6177,7 @@ export default function App() {
                 </> : <>
                 카톡방 전송은 끝났습니다. 여기서 정리하면 <b>일정리스트와 네이버 캘린더가 함께</b> 바뀝니다.<br />
                 <b>✓ 완료</b> → 일정 완료 + 네이버 일정이 팀 완료 캘린더로 이동·완료 체크<br />
-                <b>→ 익일로</b> → 사유를 적으면 팀 AS방에 <b>별도 메시지</b>로 나가고, 네이버 일정 날짜도 옮겨집니다
+                <b>→ 익일로</b> → 방금 보낸 양식은 그대로 두고, 사유를 <b>두 번째 메시지</b>로 같은 AS방에 보냅니다. 네이버 일정은 날짜가 옮겨지고 양식+사유가 기록됩니다
                 </>}
                 {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양식과 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
               </div>
