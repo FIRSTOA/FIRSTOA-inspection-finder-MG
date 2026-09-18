@@ -1,3 +1,4 @@
+import { teamLabel } from "./authors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -413,7 +414,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
               <div className="mt-3 space-y-2.5">
                 {(data?.teamProgress || ["A", "B", "C", "D", "E"].map((team) => ({ team, done: 0, total: 0 }))).map((t) => (
                   <div key={t.team} className="flex items-center gap-3">
-                    <span className="w-7 shrink-0 text-[12px] font-black text-slate-300">{t.team}팀</span>
+                    <span className="w-10 shrink-0 text-[12px] font-black text-slate-300">{teamLabel(t.team)}</span>
                     <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-[width] duration-700" style={{ width: `${pct(t.done, t.total)}%` }} /></div>
                     <span className="w-28 shrink-0 text-right font-mono text-[11px] font-black tabular-nums text-slate-300">{pct(t.done, t.total)}% <span className="text-slate-500">{fmt(t.done)}/{fmt(t.total)}</span></span>
                   </div>

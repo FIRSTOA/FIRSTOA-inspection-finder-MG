@@ -35,6 +35,7 @@ function isLeaderRow(row: MemberRow) {
 
 function teamLabel(dept: string, team: string) {
   if (!team) return "팀 미지정";
+  if (dept === "CS팀" && team === "E") return "CSS팀(E지역)";
   return dept === "CS팀" && team.length === 1 ? `${team}팀` : team;
 }
 

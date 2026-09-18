@@ -1,3 +1,4 @@
+import { teamLabel } from "./authors";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "./toast";
 import { askConfirm } from "./confirmModal";
@@ -218,7 +219,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           {([
             [totalCount != null ? totalCount.toLocaleString() + "건" : "…", `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
             [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
-            [team === "전체" ? "전 팀" : `${team}팀`, query ? `"${query}" 검색 중` : "보는 범위"],
+            [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
           ] as [string, string][]).map(([value, label]) => (
             <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
               <div className="truncate text-lg font-black tabular-nums text-slate-950 sm:text-xl">{value}</div>
@@ -266,7 +267,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               {["전체", "A", "B", "C", "D", "E"].map((value) => (
                 <button key={value} type="button" onClick={() => setTeam(value)}
                   className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
-                  {value === "전체" ? "전체" : `${value}팀`}
+                  {value === "전체" ? "전체" : teamLabel(value)}
                 </button>
               ))}
             </div>

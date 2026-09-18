@@ -1,3 +1,4 @@
+import { teamLabel } from "../authors";
 /**
  * 이카운트 분석 — 옛 재계약 웹앱(recontract_webapp) 구조 + 사용자 확정 수정.
  *
@@ -901,7 +902,7 @@ export default function AnalyzeView({ author = "" }: { author?: string }) {
           {["A", "B", "C", "D", "E"].map((t) => (
             <button key={t} type="button" onClick={() => setTeam(t)}
               className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition ${team === t ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`}>
-              {t}팀{t === myTeam ? " ★" : ""}
+              {teamLabel(t)}{t === myTeam ? " ★" : ""}
             </button>
           ))}
           <button type="button" onClick={() => setScopeTick((n) => n + 1)}

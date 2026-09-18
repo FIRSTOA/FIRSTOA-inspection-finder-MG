@@ -1,3 +1,4 @@
+import { teamLabel } from "./authors";
 /**
  * 자동 일정 짜기 (1차 시안)
  * CS팀 실무 순서 그대로: ① 그날 필수 스케줄을 놓고 → ② 마지막 일정(앵커) 좌표에서
@@ -292,7 +293,7 @@ export default function AutoSchedule({ author }: { author: string }) {
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-w-0 rounded-lg border border-white/15 bg-white/10 px-2 py-2 text-xs font-black text-white outline-none" />
             </div>
             <div className="flex gap-1 rounded-full bg-white/10 p-1">
-              {TEAMS.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`${chip} ${team === t ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{t}팀</button>)}
+              {TEAMS.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`${chip} ${team === t ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{teamLabel(t)}</button>)}
             </div>
           </div>
         </div>

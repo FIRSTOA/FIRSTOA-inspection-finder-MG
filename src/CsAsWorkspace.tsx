@@ -13,7 +13,7 @@ import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, slashTrainVend
 import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
-import { useAuthorBook } from "./authors";
+import { useAuthorBook, teamLabel } from "./authors";
 import { escapeRegExp, extractCategory, extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
@@ -512,9 +512,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const csLeaders = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
   const teamAssignees = useMemo<Record<Team, string[]>>(() => {
     const lead = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
+    const css = (memberBook.E || []).filter((n) => !lead.includes(n)); // CSS팀 = E지역 담당이면서 A~D 지원도 나간다(2026-09-18)
     const of = (t: "A" | "B" | "C" | "D" | "E") => {
       const names = memberBook[t] || []; // DB를 못 읽어도 authors.ts의 시드(AUTHOR_BOOK)가 채워준다 — 예비 명단을 두 벌 두면 서로 어긋난다
-      return [...names.filter((n) => !lead.includes(n)), ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
+      const own = names.filter((n) => !lead.includes(n));
+      const helpers = t === "E" ? [] : css.filter((n) => !own.includes(n)); // 자기 팀 뒤에 CSS 지원 인원, 마지막에 팀장
+      return [...own, ...helpers, ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
     };
     return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: of("E"), 기타: [] }; // E(지방)도 명단이 있으면 배정 가능
   }, [memberBook]);
@@ -745,8 +748,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const teamTimeLabel = (team: string | null, time: string) => {
     // 팀이 있으면 항상 팀 시간대로 — 접수 시각(12:53 등)은 표에 따로 보여주지 않는다(접수시간 열 제거, 2026-08-25)
     if (team === "기타" && time) return Number(time.slice(0, 2)) < 12 ? `오전 ${time}` : `오후 ${time}`;
-    if (team && time) return `${team}팀 (${TEAM_SLOT_LABEL[team] || time})`;
-    if (team) return `${team}팀 (종일)`;
+    if (team && time) return `${teamLabel(team)} (${TEAM_SLOT_LABEL[team] || time})`;
+    if (team) return `${teamLabel(team)} (종일)`;
     if (time) return Number(time.slice(0, 2)) < 12 ? `오전 ${time}` : `오후 ${time}`;
     return "종일";
   };
@@ -1598,8 +1601,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             }}
                             options={[
                               { value: "전체", label: "전체 팀" },
-                              ...teams.map((tm) => ({ value: tm, label: `${tm}팀 · ${TEAM_SLOT_LABEL[tm]}` })),
-                              { value: "E", label: "E팀 · 오후 9시" },
+                              ...teams.map((tm) => ({ value: tm, label: `${teamLabel(tm)} · ${TEAM_SLOT_LABEL[tm]}` })),
+                              { value: "E", label: "CSS팀(E지역) · 오후 9시" },
                               { value: "기타", label: "기타 시간 (11시 등)" },
                               { value: "종일", label: "종일만 (연차 등)" },
                             ]} />
@@ -1769,7 +1772,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="space-y-1.5 rounded-xl bg-[#1E252F] px-3 py-2 shadow-sm">
             {/* ① 팀 — 팝업 없이 한 줄, 좁으면 가로 스크롤 */}
             <div className="flex gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 sm:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, t] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
+              {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, t === "E" ? "CSS" : t] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                 <button key={value} type="button" onClick={() => setTeam(value as typeof team)}
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-black transition ${team === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-400"}`}>{label}</button>
               ))}
@@ -1788,7 +1791,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               </div>
               {/* 넓은 화면은 팀 칩을 여기 나란히 (모바일은 위 줄) */}
               <div className="ml-auto hidden gap-0.5 rounded-full bg-white/[0.07] p-0.5 sm:flex">
-                {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, `${t}팀`] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
+                {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, teamLabel(t)] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                   <button key={value} type="button" onClick={() => setTeam(value as typeof team)}
                     className={`rounded-full px-3 py-1 text-xs font-black transition ${team === value ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
                 ))}

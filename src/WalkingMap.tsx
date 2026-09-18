@@ -2854,7 +2854,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <div className="absolute right-0 top-11 z-[1200] w-[280px] max-w-[calc(100vw-1rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
               <div className="text-[11px] font-black text-slate-400">담당 팀</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item}</button>)}
+                {teams.map((item) => <button key={item} type="button" onClick={() => { setTeamFilter(item); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${teamFilter === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item === "E" ? "CSS" : item}</button>)}
               </div>
               <div className="mt-3 text-[11px] font-black text-slate-400">분기</div>
               <div className="mt-1.5 grid grid-cols-4 gap-1">
