@@ -3336,7 +3336,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         </div>
       )}
       {planTarget && (
-        <div className="fixed inset-0 z-[200] flex items-end bg-slate-950/50 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!planBusy) setPlanTarget(null); }}>
+        <div className="fixed inset-0 z-[2500] flex items-end bg-slate-950/50 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { if (!planBusy) setPlanTarget(null); }}>{/* 모바일 리스트 화면(z-2300) 위에 떠야 한다 — 2026-09-18 가려짐 신고 */}
           <div className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-sm sm:rounded-3xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="text-[18px] font-black tracking-tight text-slate-950">내 일정에 넣기</div>
             <div className="mt-1 text-[12px] font-semibold text-slate-500">{workinVendorName(planTarget.name) || planTarget.name}</div>
