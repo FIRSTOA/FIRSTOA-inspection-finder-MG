@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
-import { addMember, displayTitle, fetchMembers, restoreMember, retireMember, updateMember, type MemberRow } from "./authors";
+import { CS_DEPT, addMember, displayTitle, fetchMembers, restoreMember, retireMember, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
 
@@ -13,13 +13,7 @@ import PortalSelect from "./PortalSelect";
  * CS팀의 팀장/A~D 값은 작성자 명단·일정 팀 필터가 그대로 쓰므로 바꾸면 즉시 반영된다.
  * 퇴사는 행을 지우지 않고 재직 여부만 내린다 — 과거 기록의 이름이 살아 있어야 집계가 안 깨진다.
  */
-const DEPTS = ["임원", "CS팀", "영업팀", "CSS·운영지원"] as const;
-const TEAM_OPTIONS: Record<string, string[]> = {
-  "임원": [""],
-  "CS팀": ["팀장", "A", "B", "C", "D", "E", "A·B"], // E = 지방(충청외) — 2026-09-17 활성화, 여기 등록한 인원이 E 배정 명단·보고에 잡힌다
-  "영업팀": ["", "전략영업", "IT"],
-  "CSS·운영지원": ["", "운영지원", "CSS", "경영지원", "지원(비정규)"],
-};
+// 부서·팀 목록은 공용 등록부(app_config TEAM_GROUPS, authors.ts)에서 온다 — 사용자 선택 창에서 만든 그룹·소그룹이 여기도 그대로 보인다(2026-09-18)
 const TITLES = ["", "팀장", "파트장", "부파트장"];
 const TITLE_RANK: Record<string, number> = { 팀장: 0, 파트장: 1, 부파트장: 2 };
 const TITLE_TONE: Record<string, string> = {
@@ -35,8 +29,7 @@ function isLeaderRow(row: MemberRow) {
 
 function teamLabel(dept: string, team: string) {
   if (!team) return "팀 미지정";
-  if (dept === "CS팀" && team === "E") return "CSS팀(E지역)";
-  return dept === "CS팀" && team.length === 1 ? `${team}팀` : team;
+  return dept === CS_DEPT && team.length === 1 ? csTeamLabel(team) : team; // CS 글자는 등록부 표시명(E → CSS팀)
 }
 
 /** 입사일 → "N년 M개월" (미래·파싱 불가면 빈값) */
@@ -61,6 +54,9 @@ export default function MemberAdmin() {
   const [busyId, setBusyId] = useState("");
   const [showLeft, setShowLeft] = useState(false);
   const [deptFilter, setDeptFilter] = useState<string>("전체");
+  const groupsReg = useTeamGroups();
+  const DEPTS = groupsReg.depts;
+  const TEAM_OPTIONS = groupsReg.teams;
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState({ name: "", dept: "CS팀" as string, team: "A", title: "", joined: new Date().toISOString().slice(0, 10) });
   const [adding, setAdding] = useState(false);

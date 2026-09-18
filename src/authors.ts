@@ -14,6 +14,8 @@ export const EXTERNAL_AUTHORS = ["삼성이관", "제록스이관", "신도이�
 
 /** 팀 글자 → 화면 이름. E지역은 별도 E팀이 아니라 CSS팀이 맡는다(A~D 지원도 겸함) — 화면엔 "CSS팀"으로(2026-09-18 결정) */
 export function teamLabel(team: string): string {
+  const custom = groupsCache.labels[team]; // 등록부 표시명(사용자가 바꾼 이름) 우선
+  if (custom) return custom;
   if (team === "E") return "CSS팀";
   if (team === "팀장" || team === "IT" || team === "기타" || team === "종일" || team === "전체" || !team) return team;
   return `${team}팀`;
@@ -179,4 +181,118 @@ export function useAuthorBook() {
   };
 
   return { book, authors, addAuthor, removeAuthor };
+}
+
+// ───────────────────────── 그룹(부서) · 소그룹(팀) 등록부 ─────────────────────────
+// 사용자 선택 창과 관리 탭 인원 명단이 같은 그룹 구조를 본다(2026-09-18 "관리탭 인원이랑도 동기화").
+// 원본은 app_config TEAM_GROUPS(JSON). 인원(cs_members)의 dept/team 값과 짝을 이루며,
+// 사람이 없는 그룹도 여기 있어야 화면에 남는다. CS 팀 글자(A~E)는 일정 시간대·카톡방 배정에 쓰이는 값이라
+// 코드는 바꾸지 않고 표시명(labels)만 바꾼다 — E는 기본 표시명이 "CSS팀".
+export type TeamGroups = {
+  depts: string[];                       // 상위 그룹(부서) 순서
+  teams: Record<string, string[]>;       // 부서별 소그룹(팀) — ""는 팀 미지정
+  labels: Record<string, string>;        // CS 팀 글자 → 표시명 (예: E → CSS팀)
+  hidden: string[];                      // 숨긴 소그룹 "부서|팀" (비어 있을 때만 숨길 수 있다)
+};
+export const CS_DEPT = "CS팀";
+export const DEFAULT_TEAM_GROUPS: TeamGroups = {
+  depts: ["임원", CS_DEPT, "영업팀", "CSS·운영지원"],
+  teams: {
+    "임원": [""],
+    [CS_DEPT]: ["팀장", "A", "B", "C", "D", "E", "A·B"],
+    "영업팀": ["", "전략영업", "IT"],
+    "CSS·운영지원": ["", "운영지원", "CSS", "경영지원", "지원(비정규)"],
+  },
+  labels: { E: "CSS팀" },
+  hidden: [],
+};
+const GROUPS_KEY = "TEAM_GROUPS";
+const GROUPS_MIRROR = "firstoa.teamGroups.v1";
+
+function normalizeGroups(raw: Partial<TeamGroups> | null | undefined): TeamGroups {
+  const base = DEFAULT_TEAM_GROUPS;
+  const depts = Array.from(new Set([...(raw?.depts?.length ? raw.depts : base.depts)].filter(Boolean)));
+  const teams: Record<string, string[]> = {};
+  for (const dept of depts) {
+    const list = raw?.teams?.[dept] ?? base.teams[dept] ?? [""];
+    teams[dept] = Array.from(new Set(list));
+  }
+  return { depts, teams, labels: { ...base.labels, ...(raw?.labels || {}) }, hidden: Array.from(new Set(raw?.hidden || [])) };
+}
+
+function readGroupsMirror(): TeamGroups | null {
+  if (typeof window === "undefined") return null;
+  try { const raw = window.localStorage.getItem(GROUPS_MIRROR); return raw ? normalizeGroups(JSON.parse(raw)) : null; } catch { return null; }
+}
+
+let groupsCache: TeamGroups = readGroupsMirror() || normalizeGroups(null);
+let groupsLoaded = false;
+
+function commitGroups(next: TeamGroups) {
+  groupsCache = next;
+  if (typeof window !== "undefined") {
+    try { window.localStorage.setItem(GROUPS_MIRROR, JSON.stringify(next)); } catch { /* 미러 실패는 무해 */ }
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  }
+}
+
+/** 현재 그룹 등록부(동기) — 화면 렌더에서 바로 쓴다. 아직 못 읽었으면 기본값/미러 */
+export function teamGroups(): TeamGroups { return groupsCache; }
+
+export async function fetchTeamGroups(): Promise<TeamGroups> {
+  const rows = await selectRows<{ key: string; value: string }>("app_config", `select=key,value&key=eq.${GROUPS_KEY}`).catch(() => [] as Array<{ key: string; value: string }>);
+  let parsed: Partial<TeamGroups> | null = null;
+  try { parsed = rows[0]?.value ? JSON.parse(rows[0].value) as Partial<TeamGroups> : null; } catch { parsed = null; }
+  groupsLoaded = true;
+  commitGroups(normalizeGroups(parsed));
+  return groupsCache;
+}
+
+export async function saveTeamGroups(patch: Partial<TeamGroups>): Promise<TeamGroups> {
+  const next = normalizeGroups({ ...groupsCache, ...patch });
+  const value = JSON.stringify(next);
+  const rows = await selectRows<{ key: string }>("app_config", `select=key&key=eq.${GROUPS_KEY}`).catch(() => [] as Array<{ key: string }>);
+  if (rows.length) await updateRows("app_config", `key=eq.${GROUPS_KEY}`, { value });
+  else await insertRow("app_config", { key: GROUPS_KEY, value });
+  commitGroups(next);
+  return next;
+}
+
+/** 소그룹 이름 바꾸기 — 그 부서·팀의 인원 team 값을 함께 바꾼다(CS 글자는 코드 유지·표시명만) */
+export async function renameTeamGroup(dept: string, team: string, next: string): Promise<void> {
+  const clean = next.trim();
+  if (!clean || clean === team) return;
+  if (dept === CS_DEPT && AUTHOR_TEAMS.includes(team as AuthorTeam)) {
+    await saveTeamGroups({ labels: { ...groupsCache.labels, [team]: clean } });
+    return;
+  }
+  await updateRows("cs_members", `dept=eq.${encodeURIComponent(dept)}&team=eq.${encodeURIComponent(team)}`, { team: clean, updated_at: new Date().toISOString() });
+  const teams = { ...groupsCache.teams, [dept]: (groupsCache.teams[dept] || []).map((t) => (t === team ? clean : t)) };
+  await saveTeamGroups({ teams });
+  await fetchMembers();
+}
+
+/** 상위 그룹(부서) 이름 바꾸기 — 인원의 dept 값과 등록부를 함께 바꾼다 */
+export async function renameDeptGroup(dept: string, next: string): Promise<void> {
+  const clean = next.trim();
+  if (!clean || clean === dept) return;
+  await updateRows("cs_members", `dept=eq.${encodeURIComponent(dept)}`, { dept: clean, updated_at: new Date().toISOString() });
+  const depts = groupsCache.depts.map((d) => (d === dept ? clean : d));
+  const teams: Record<string, string[]> = {};
+  for (const d of groupsCache.depts) teams[d === dept ? clean : d] = groupsCache.teams[d] || [""];
+  await saveTeamGroups({ depts, teams });
+  await fetchMembers();
+}
+
+/** 그룹 등록부를 구독하는 훅 — 처음 한 번 서버에서 읽고, 바뀌면 다시 그린다 */
+export function useTeamGroups(): TeamGroups {
+  const [groups, setGroups] = useState<TeamGroups>(groupsCache);
+  useEffect(() => {
+    let alive = true;
+    const sync = () => { if (alive) setGroups(groupsCache); };
+    window.addEventListener(CHANGE_EVENT, sync);
+    if (!groupsLoaded) void fetchTeamGroups().then(sync).catch(() => {});
+    return () => { alive = false; window.removeEventListener(CHANGE_EVENT, sync); };
+  }, []);
+  return groups;
 }

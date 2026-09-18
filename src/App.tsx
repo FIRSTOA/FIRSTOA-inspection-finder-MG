@@ -58,7 +58,7 @@ import { prepareImageForUpload } from "./imageUpload";
 import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { nextBusinessDay } from "./planDate";
-import { AUTHOR_TEAMS, EXTERNAL_AUTHORS, addMember, displayTitle, fetchMembers, retireMember, teamLabel, updateMember, useAuthorBook, useMembers } from "./authors";
+import { AUTHOR_TEAMS, CS_DEPT, EXTERNAL_AUTHORS, addMember, displayTitle, renameDeptGroup, renameTeamGroup, retireMember, saveTeamGroups, teamLabel, updateMember, useAuthorBook, useMembers, useTeamGroups } from "./authors";
 import { buildActionBlock } from "./actionBlock";
 import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
 import type { AuthorTeam, MemberRow } from "./authors";
@@ -3150,164 +3150,205 @@ type AuthorPickerProps = {
   accent: string;
 };
 
-type AuthorGroup = { key: string; label: string; names: string[]; team?: AuthorTeam; dept?: string };
-const CS_DEPT = "CS팀";
-const BASE_DEPTS = ["임원", "영업팀", "CSS·운영지원"];
-// 사용자(작성자) 선택 + 명단 손질 — 한 번 고르면 앱 전체(FIELD 작성자·일정·접수·마감문자)가 그 이름으로 돈다.
-// 2026-09-18: CS팀만 있던 목록을 전 인원으로 넓히고 외부 이관(삼성·제록스·신도)을 추가. 같은 날 "그룹도 고칠 수 있게" —
-// 인원 추가·이름 고치기·삭제(퇴사)·다른 그룹으로 이동, 부서 그룹은 이름 바꾸기·새 그룹·빈 그룹 삭제까지 여기서 한다.
-// CS 팀 글자(A~E)는 일정 시간대·카톡방 배정에 쓰이는 값이라 이름을 바꾸지 않는다(사람만 옮긴다).
+// 사용자(작성자) 선택 + 명단·그룹 손질 — 한 번 고르면 앱 전체(FIELD 작성자·일정·접수·마감문자)가 그 이름으로 돈다.
+// 구조는 그룹(부서) → 소그룹(팀) → 사람, 2단. 관리 탭 인원 명단과 같은 등록부(app_config TEAM_GROUPS + cs_members)를 본다(2026-09-18).
+//  · 그룹/소그룹: 추가·이름 바꾸기·삭제(비어 있을 때만). CS 팀 글자(A~E)는 일정 시간대·카톡방 배정 코드라 표시명만 바뀐다(E → CSS팀).
+//  · 사람: 추가·이름 고치기·다른 소그룹으로 이동·삭제(퇴사 처리 — 과거 기록은 남는다).
+const EXTERNAL_GROUP = "외부 이관";
+type PickerRow = { name: string; member?: MemberRow };
 function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerProps & { onClose: () => void }) {
-  const { book, addAuthor, removeAuthor } = useAuthorBook();
   const members = useMembers();
-  const [extraDepts, setExtraDepts] = useState<string[]>([]); // 아직 인원이 없는 새 그룹 — 사람을 넣으면 명단(cs_members)에 저장된다
-  const groups = useMemo<AuthorGroup[]>(() => {
-    const out: AuthorGroup[] = AUTHOR_TEAMS.map((t) => ({ key: t, label: t === "팀장" ? "팀장" : teamLabel(t), names: book[t] || [], team: t }));
-    const seen = new Set(out.flatMap((g) => g.names));
-    const found = [...new Set(members.filter((m) => m.active && m.dept && m.dept !== CS_DEPT).map((m) => m.dept))];
-    const depts = [...BASE_DEPTS, ...found.filter((d) => !BASE_DEPTS.includes(d)).sort(), ...extraDepts.filter((d) => !BASE_DEPTS.includes(d) && !found.includes(d))];
-    for (const dept of depts) {
-      const names = members.filter((m) => m.active && m.dept === dept && !seen.has(m.name)).map((m) => m.name);
-      out.push({ key: `dept:${dept}`, label: dept, names, dept });
-      names.forEach((n) => seen.add(n));
-    }
-    out.push({ key: "external", label: "외부 이관", names: EXTERNAL_AUTHORS });
-    return out;
-  }, [book, members, extraDepts]);
-  const [groupKey, setGroupKey] = useState<string>(() => groups.find((g) => g.names.includes(value))?.key || "팀장");
-  const group = groups.find((g) => g.key === groupKey) || groups[0];
-  const byName = useMemo(() => new Map(members.filter((m) => m.active).map((m) => [m.name, m] as const)), [members]);
+  const { book } = useAuthorBook();
+  const reg = useTeamGroups();
+  const active = useMemo(() => members.filter((m) => m.active), [members]);
+  const depts = useMemo(() => {
+    const found = [...new Set(active.map((m) => m.dept).filter(Boolean))];
+    return [...reg.depts, ...found.filter((d) => !reg.depts.includes(d)).sort()];
+  }, [reg.depts, active]);
+  const inTeam = (m: MemberRow, t: string) => m.team === t || m.team.split(/[·/,]/).map((x) => x.trim()).includes(t);
+  const [dept, setDept] = useState<string>(() => active.find((m) => m.name === value)?.dept || (EXTERNAL_AUTHORS.includes(value) ? EXTERNAL_GROUP : CS_DEPT));
+  const [team, setTeam] = useState<string>(() => { const me = active.find((m) => m.name === value); return me && !me.team.includes("·") ? me.team : "__all"; });
+  const teams = useMemo(() => {
+    if (dept === EXTERNAL_GROUP) return [] as string[];
+    const listed = reg.teams[dept] || [""];
+    const found = [...new Set(active.filter((m) => m.dept === dept && !m.team.includes("·")).map((m) => m.team))];
+    return [...listed, ...found.filter((t) => !listed.includes(t))]
+      .filter((t) => !reg.hidden.includes(`${dept}|${t}`) || active.some((m) => m.dept === dept && inTeam(m, t)));
+  }, [reg, dept, active]);
+  const subLabel = (d: string, t: string) => (t === "" ? "팀 미지정" : d === CS_DEPT ? teamLabel(t) : t);
+  const rows = useMemo<PickerRow[]>(() => {
+    if (dept === EXTERNAL_GROUP) return EXTERNAL_AUTHORS.map((name) => ({ name }));
+    const list = active.filter((m) => m.dept === dept && (team === "__all" || inTeam(m, team)));
+    // 명단(cs_members)을 아직 못 읽었을 때만 시드 명단으로 — 예비 명단을 두 벌 두면 서로 어긋난다
+    if (!active.length && dept === CS_DEPT && team !== "__all" && (AUTHOR_TEAMS as string[]).includes(team)) return (book[team as AuthorTeam] || []).map((name) => ({ name }));
+    return list.map((m) => ({ name: m.name, member: m }));
+  }, [active, dept, team, book]);
+  const isCsCode = (t: string) => dept === CS_DEPT && (AUTHOR_TEAMS as string[]).includes(t);
+  const teamCount = (t: string) => active.filter((m) => m.dept === dept && inTeam(m, t)).length;
+  const deptCount = (d: string) => (d === EXTERNAL_GROUP ? EXTERNAL_AUTHORS.length : active.filter((m) => m.dept === d).length);
+
+  // ── 사람 ──
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ name: string; next: string } | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
-  const [groupEdit, setGroupEdit] = useState<{ mode: "rename" | "new"; text: string } | null>(null);
   const add = () => {
     const name = newName.trim();
-    if (!name || !group) return;
-    if (group.team) addAuthor(group.team, name);
-    else if (group.dept) void addMember(group.dept === "CSS·운영지원" ? "CSS" : "", name, undefined, group.dept, "").catch((e) => notify(`추가 실패: ${(e as Error).message}`, "error"));
+    if (!name || dept === EXTERNAL_GROUP) return;
+    const t = team === "__all" ? (reg.teams[dept]?.[0] ?? "") : team;
+    void addMember(t, name, undefined, dept, "").then(() => notify(`${name} 추가 — ${dept}${t ? ` · ${subLabel(dept, t)}` : ""}`, "success")).catch((e) => notify(`추가 실패: ${(e as Error).message}`, "error"));
     setNewName("");
   };
   // 이름 고치기 — 과거 기록의 이름(문자열 저장)은 그대로, 명단만 바뀐다. 지금 사용자가 그 사람이면 선택도 새 이름으로 따라간다
   const rename = async () => {
     if (!editing) return;
-    const target = byName.get(editing.name);
+    const target = active.find((m) => m.name === editing.name);
     const next = editing.next.trim();
     setEditing(null);
     if (!target || !next || next === editing.name) return;
     try { await updateMember(target.id, { name: next }); if (value === editing.name) onChange(next); notify(`이름을 "${next}"로 바꿨습니다`, "success"); }
     catch (e) { notify(`이름 변경 실패: ${(e as Error).message}`, "error"); }
   };
-  const remove = async (name: string) => {
-    if (!await askConfirm(`${name}을(를) 명단에서 내릴까요?\n(퇴사 처리 — 과거 기록의 이름은 남습니다)`)) return;
-    if (group?.team) { removeAuthor(group.team, name); return; }
-    const target = byName.get(name);
-    if (target) void retireMember(target.id).catch((e) => notify(`삭제 실패: ${(e as Error).message}`, "error"));
+  const remove = async (row: PickerRow) => {
+    if (!row.member) return;
+    if (!await askConfirm(`${row.name}을(를) 명단에서 내릴까요?\n(퇴사 처리 — 과거 기록의 이름은 남습니다)`)) return;
+    void retireMember(row.member.id).catch((e) => notify(`삭제 실패: ${(e as Error).message}`, "error"));
   };
-  // 다른 그룹으로 이동 — CS 글자 그룹은 dept CS팀 + 팀 글자, IT는 팀 IT(부서는 유지), 부서 그룹은 dept만(CSS·운영지원은 팀 CSS)
-  const targetPatch = (g: AuthorGroup, current: MemberRow): Partial<Pick<MemberRow, "dept" | "team">> =>
-    g.team
-      ? (g.team === "IT" ? { dept: current.dept === CS_DEPT ? "영업팀" : current.dept, team: "IT" } : { dept: CS_DEPT, team: g.team })
-      : { dept: g.dept || current.dept, team: g.dept === "CSS·운영지원" ? "CSS" : "" };
-  const move = async (name: string, key: string) => {
+  const move = async (row: PickerRow, target: string) => {
     setMoving(null);
-    const target = byName.get(name);
-    const g = groups.find((x) => x.key === key);
-    if (!target || !g || g.key === "external") return;
-    try { await updateMember(target.id, targetPatch(g, target)); notify(`${name} → ${g.label}`, "success"); setGroupKey(key); }
+    if (!row.member || !target) return;
+    const [d, t] = target.split("|");
+    try { await updateMember(row.member.id, { dept: d, team: t ?? "" }); notify(`${row.name} → ${d}${t ? ` · ${subLabel(d, t)}` : ""}`, "success"); setDept(d); setTeam(t ?? "__all"); }
     catch (e) { notify(`이동 실패: ${(e as Error).message}`, "error"); }
   };
-  const renameGroup = async () => {
-    if (!groupEdit || !group?.dept) return;
-    const next = groupEdit.text.trim();
-    const prev = group.dept;
-    const hadPeople = group.names.length > 0;
-    setGroupEdit(null);
-    if (!next || next === prev) return;
-    try {
-      if (hadPeople) {
-        await updateRows("cs_members", `dept=eq.${encodeURIComponent(prev)}`, { dept: next, updated_at: new Date().toISOString() });
-        await fetchMembers();
-      }
-      setExtraDepts((cur) => [...cur.filter((d) => d !== prev), ...(hadPeople ? [] : [next])]);
-      setGroupKey(`dept:${next}`);
-      notify(`그룹 이름을 "${next}"로 바꿨습니다`, "success");
-    } catch (e) { notify(`그룹 이름 변경 실패: ${(e as Error).message}`, "error"); }
-  };
-  const createGroup = () => {
+  const moveTargets = useMemo(() => depts.flatMap((d) => (reg.teams[d] || [""]).map((t) => ({ value: `${d}|${t}`, label: `${d} · ${subLabel(d, t)}` }))), [depts, reg.teams]);
+
+  // ── 그룹·소그룹 ──
+  const [groupEdit, setGroupEdit] = useState<{ kind: "dept" | "team"; mode: "rename" | "new"; text: string } | null>(null);
+  const applyGroupEdit = async () => {
     if (!groupEdit) return;
-    const next = groupEdit.text.trim();
+    const text = groupEdit.text.trim();
+    const edit = groupEdit;
     setGroupEdit(null);
-    if (!next) return;
-    const existing = groups.find((g) => g.label === next);
-    if (existing) { setGroupKey(existing.key); return; }
-    setExtraDepts((cur) => [...cur, next]);
-    setGroupKey(`dept:${next}`);
+    if (!text) return;
+    try {
+      if (edit.kind === "dept" && edit.mode === "new") {
+        if (depts.includes(text)) { setDept(text); setTeam("__all"); return; }
+        await saveTeamGroups({ depts: [...reg.depts, text], teams: { ...reg.teams, [text]: [""] } });
+        setDept(text); setTeam("__all");
+      } else if (edit.kind === "dept") {
+        if (dept === EXTERNAL_GROUP) return;
+        await renameDeptGroup(dept, text);
+        setDept(text);
+      } else if (edit.mode === "new") {
+        if ((reg.teams[dept] || []).includes(text)) { setTeam(text); return; }
+        await saveTeamGroups({ teams: { ...reg.teams, [dept]: [...(reg.teams[dept] || []), text] } });
+        setTeam(text);
+      } else {
+        if (team === "__all") return;
+        await renameTeamGroup(dept, team, text);
+        if (!isCsCode(team)) setTeam(text);
+      }
+      notify("그룹을 저장했습니다", "success");
+    } catch (e) { notify(`그룹 저장 실패: ${(e as Error).message}`, "error"); }
   };
-  const deleteGroup = async () => {
-    if (!group?.dept) return;
-    if (group.names.length) { notify("인원이 있는 그룹은 지울 수 없어요 — 먼저 [이동]으로 다른 그룹에 옮겨 주세요", "error"); return; }
-    if (!await askConfirm(`"${group.label}" 그룹을 지울까요?`)) return;
-    const gone = group.dept;
-    setExtraDepts((cur) => cur.filter((d) => d !== gone));
-    setGroupKey("팀장");
+  const deleteDept = async () => {
+    if (dept === EXTERNAL_GROUP) return;
+    if (active.some((m) => m.dept === dept)) { notify("인원이 있는 그룹은 지울 수 없어요 — 먼저 [이동]으로 다른 그룹에 옮겨 주세요", "error"); return; }
+    if (dept === CS_DEPT) { notify("CS팀 그룹은 일정·배정의 기준이라 지울 수 없어요", "error"); return; }
+    if (!await askConfirm(`"${dept}" 그룹을 지울까요?`)) return;
+    const teams = { ...reg.teams }; delete teams[dept];
+    try { await saveTeamGroups({ depts: reg.depts.filter((d) => d !== dept), teams }); setDept(CS_DEPT); setTeam("__all"); }
+    catch (e) { notify(`그룹 삭제 실패: ${(e as Error).message}`, "error"); }
   };
-  const smallBtn = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:bg-slate-50";
+  const deleteTeam = async () => {
+    if (team === "__all") return;
+    if (teamCount(team) > 0) { notify("인원이 있는 소그룹은 지울 수 없어요 — 먼저 [이동]으로 옮겨 주세요", "error"); return; }
+    if (!await askConfirm(`"${subLabel(dept, team)}" 소그룹을 지울까요?`)) return;
+    try {
+      if (isCsCode(team)) await saveTeamGroups({ hidden: [...reg.hidden, `${dept}|${team}`] }); // 코드는 남기고 숨긴다 — 나중에 인원을 넣으면 다시 보인다
+      else await saveTeamGroups({ teams: { ...reg.teams, [dept]: (reg.teams[dept] || []).filter((t) => t !== team) } });
+      setTeam("__all");
+    } catch (e) { notify(`소그룹 삭제 실패: ${(e as Error).message}`, "error"); }
+  };
+
+  const chip = (on: boolean, extra = "") => `rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 ${on ? "text-white" : extra || "bg-slate-100 text-slate-700 hover:bg-slate-200"}`;
+  const smallBtn = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50";
   return (
     <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
-      <div className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" style={{ maxHeight: "84vh" }} onClick={(e) => e.stopPropagation()}>
+      <div className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" style={{ maxHeight: "86vh" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-700">사용자(작성자) 선택 <span className="ml-1 text-[11px] font-bold text-slate-400">— 이 기기에서 계속 이 이름으로 작성됩니다</span></span>
+          <span className="text-sm font-semibold text-slate-700">사용자(작성자) 선택 <span className="ml-1 text-[11px] font-bold text-slate-400">— 이 기기에서 계속 이 이름으로 작성됩니다 · 관리 탭 인원 명단과 같은 명단</span></span>
           <button type="button" onClick={onClose} className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
         </div>
-        <div className="flex flex-wrap gap-1 border-b border-slate-100 px-3 py-2">
-          {groups.map((g) => {
-            const active = group?.key === g.key;
-            return (
-              <button key={g.key} type="button" onClick={() => { setGroupKey(g.key); setGroupEdit(null); setMoving(null); }} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
-                style={{ background: active ? accent : g.key === "external" ? "#FEF3C7" : "#F1F5F9", color: active ? "white" : g.key === "external" ? "#92400E" : "#334155" }}>
-                {g.label}{g.names.length ? <span className="ml-1 opacity-60">{g.names.length}</span> : null}
-              </button>
-            );
-          })}
+        {/* 1단: 그룹(부서) */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
+          {[...depts, EXTERNAL_GROUP].map((d) => (
+            <button key={d} type="button" onClick={() => { setDept(d); setTeam("__all"); setGroupEdit(null); setMoving(null); }}
+              className={chip(dept === d, d === EXTERNAL_GROUP ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "")} style={dept === d ? { background: accent } : undefined}>
+              {d}<span className="ml-1 opacity-60">{deptCount(d)}</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "new", text: "" })} className="rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">＋ 그룹</button>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px]">
+        {/* 2단: 소그룹(팀) */}
+        {dept !== EXTERNAL_GROUP && (
+          <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5">
+            <button type="button" onClick={() => { setTeam("__all"); setGroupEdit(null); }} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${team === "__all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>전체</button>
+            {teams.map((t) => (
+              <button key={t || "_none"} type="button" onClick={() => { setTeam(t); setGroupEdit(null); setMoving(null); }}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${team === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+                {subLabel(dept, t)}<span className="ml-1 opacity-60">{teamCount(t)}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => setGroupEdit({ kind: "team", mode: "new", text: "" })} className="rounded-full border border-dashed border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100">＋ 소그룹</button>
+          </div>
+        )}
+        {/* 그룹 손질 도구 */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 text-[11px]">
           {groupEdit ? (
             <>
+              <span className="font-bold text-slate-500">{groupEdit.kind === "dept" ? "그룹" : "소그룹"} {groupEdit.mode === "new" ? "추가" : "이름 바꾸기"}</span>
               <input autoFocus value={groupEdit.text} onChange={(e) => setGroupEdit({ ...groupEdit, text: e.target.value })}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void (groupEdit.mode === "rename" ? renameGroup() : createGroup()); } if (e.key === "Escape") setGroupEdit(null); }}
-                placeholder={groupEdit.mode === "rename" ? "그룹의 새 이름" : "새 그룹 이름 (예: 영업2팀)"} className="min-w-0 flex-1 rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500" />
-              <button type="button" onClick={() => void (groupEdit.mode === "rename" ? renameGroup() : createGroup())} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white">저장</button>
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyGroupEdit(); } if (e.key === "Escape") setGroupEdit(null); }}
+                placeholder={groupEdit.mode === "new" ? (groupEdit.kind === "dept" ? "새 그룹 이름 (예: 영업2팀)" : "새 소그룹 이름 (예: F)") : "새 이름"}
+                className="min-w-0 flex-1 rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500" />
+              <button type="button" onClick={() => void applyGroupEdit()} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white">저장</button>
               <button type="button" onClick={() => setGroupEdit(null)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-500">취소</button>
             </>
+          ) : dept === EXTERNAL_GROUP ? (
+            <span className="font-bold text-amber-700">제조사·타사로 넘긴 AS 양식에 사람 대신 쓰는 작성자입니다 (고정 목록).</span>
           ) : (
             <>
-              <span className="font-bold text-slate-500">그룹 · {group?.label}</span>
-              {group?.dept && <button type="button" onClick={() => setGroupEdit({ mode: "rename", text: group.dept || "" })} className={smallBtn}>이름 바꾸기</button>}
-              {group?.dept && <button type="button" onClick={() => void deleteGroup()} className={smallBtn}>그룹 삭제</button>}
-              {group?.team && <span className="text-slate-400">CS 팀 글자는 일정·방 배정에 쓰여 이름을 못 바꿉니다 — 사람은 [이동]으로 옮겨요</span>}
-              <button type="button" onClick={() => setGroupEdit({ mode: "new", text: "" })} className="ml-auto rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50">＋ 새 그룹</button>
+              <span className="font-bold text-slate-500">{dept}{team !== "__all" ? ` · ${subLabel(dept, team)}` : ""}</span>
+              {team === "__all" ? (
+                <>
+                  <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "rename", text: dept })} className={smallBtn}>그룹 이름 바꾸기</button>
+                  <button type="button" onClick={() => void deleteDept()} className={smallBtn}>그룹 삭제</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => setGroupEdit({ kind: "team", mode: "rename", text: isCsCode(team) ? subLabel(dept, team) : team })} className={smallBtn}>소그룹 이름 바꾸기</button>
+                  <button type="button" onClick={() => void deleteTeam()} className={smallBtn}>소그룹 삭제</button>
+                  {isCsCode(team) && <span className="text-slate-400">글자 {team}는 배정 코드라 유지되고 표시명만 바뀝니다</span>}
+                </>
+              )}
             </>
           )}
         </div>
         <div className="flex-1 overflow-y-auto py-1 pb-3">
-          {(group?.team || group?.dept) && (
+          {dept !== EXTERNAL_GROUP && (
             <div className="flex gap-1.5 border-b border-slate-100 px-3 py-2">
               <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-                placeholder={`${group.label}에 인원 추가`} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400" />
+                placeholder={`${dept}${team !== "__all" ? ` · ${subLabel(dept, team)}` : ""}에 인원 추가`} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400" />
               <button type="button" onClick={add} className="rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
             </div>
           )}
-          {group?.key === "external" && <div className="px-5 py-2 text-[11px] font-bold text-amber-700">제조사·타사로 넘긴 AS 양식에 사람 대신 쓰는 작성자입니다 (고정 목록).</div>}
-          {group?.key === "E" && <div className="px-5 py-2 text-[11px] font-bold text-slate-500">E지역(지방)은 CSS팀이 맡습니다 — CSS·운영지원 부서의 팀 "CSS" 인원이 여기 나옵니다.</div>}
-          {(group?.names || []).map((name: string) => {
-            const active = value === name;
-            const member = byName.get(name);
-            const editable = !!(group?.team || group?.dept) && !!member;
-            if (editing?.name === name) {
+          {rows.map((row) => {
+            const isActive = value === row.name;
+            if (editing?.name === row.name) {
               return (
-                <div key={name} className="flex items-center gap-1.5 border-b border-slate-50 px-3 py-2">
-                  <input autoFocus value={editing.next} onChange={(e) => setEditing({ name, next: e.target.value })}
+                <div key={row.name} className="flex items-center gap-1.5 border-b border-slate-50 px-3 py-2">
+                  <input autoFocus value={editing.next} onChange={(e) => setEditing({ name: row.name, next: e.target.value })}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void rename(); } if (e.key === "Escape") setEditing(null); }}
                     className="min-w-0 flex-1 rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
                   <button type="button" onClick={() => void rename()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">저장</button>
@@ -3316,28 +3357,28 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
               );
             }
             return (
-              <div key={name} className="flex items-center border-b border-slate-50">
-                <button type="button" onClick={() => { onChange(name); onClose(); }} className="min-w-0 flex-1 px-5 py-3 text-left text-sm transition active:bg-slate-100"
-                  style={{ background: active ? accent : "transparent", color: active ? "white" : "#0F172A", fontWeight: active ? 600 : 400 }}>
-                  {name}
+              <div key={row.name} className="flex items-center border-b border-slate-50">
+                <button type="button" onClick={() => { onChange(row.name); onClose(); }} className="min-w-0 flex-1 px-5 py-3 text-left text-sm transition active:bg-slate-100"
+                  style={{ background: isActive ? accent : "transparent", color: isActive ? "white" : "#0F172A", fontWeight: isActive ? 600 : 400 }}>
+                  {row.name}{row.member && team === "__all" && row.member.team ? <span className={`ml-2 text-[11px] ${isActive ? "text-white/70" : "text-slate-400"}`}>{subLabel(dept, row.member.team)}</span> : null}
                 </button>
-                {moving === name ? (
-                  <select autoFocus defaultValue="" onChange={(e) => { if (e.target.value) void move(name, e.target.value); }} onBlur={() => setMoving(null)}
-                    className="mx-2 my-1.5 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-semibold">
-                    <option value="">옮길 그룹…</option>
-                    {groups.filter((g) => g.key !== "external" && g.key !== group?.key).map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+                {moving === row.name ? (
+                  <select autoFocus defaultValue="" onChange={(e) => void move(row, e.target.value)} onBlur={() => setMoving(null)}
+                    className="mx-2 my-1.5 max-w-[46%] rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-semibold">
+                    <option value="">옮길 그룹 · 소그룹…</option>
+                    {moveTargets.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
-                ) : (
+                ) : row.member ? (
                   <>
-                    {editable && <button type="button" onClick={() => setMoving(name)} title="다른 그룹으로 이동" className="px-2 text-xs font-bold text-slate-500 hover:text-blue-600">이동</button>}
-                    {editable && <button type="button" onClick={() => setEditing({ name, next: name })} title="이름 고치기" className="px-2 text-xs font-bold text-slate-500 hover:text-blue-600">이름</button>}
-                    {(group?.team || group?.dept) && <button type="button" onClick={() => void remove(name)} className="px-3 text-xs font-bold text-rose-500">삭제</button>}
+                    <button type="button" onClick={() => setMoving(row.name)} title="다른 그룹·소그룹으로 이동" className="px-2 text-xs font-bold text-slate-500 hover:text-blue-600">이동</button>
+                    <button type="button" onClick={() => setEditing({ name: row.name, next: row.name })} title="이름 고치기" className="px-2 text-xs font-bold text-slate-500 hover:text-blue-600">이름</button>
+                    <button type="button" onClick={() => void remove(row)} className="px-3 text-xs font-bold text-rose-500">삭제</button>
                   </>
-                )}
+                ) : null}
               </div>
             );
           })}
-          {!group?.names.length && <div className="px-5 py-6 text-center text-xs font-bold text-slate-400">{group?.dept ? "인원이 없습니다 — 위 칸에 이름을 넣어 추가하거나, 다른 그룹에서 [이동]으로 옮겨 오세요" : "이 그룹에 인원이 없습니다"}</div>}
+          {!rows.length && <div className="px-5 py-6 text-center text-xs font-bold text-slate-400">{dept === EXTERNAL_GROUP ? "" : "인원이 없습니다 — 위 칸에 이름을 넣어 추가하거나, 다른 그룹에서 [이동]으로 옮겨 오세요"}</div>}
         </div>
       </div>
     </div>
