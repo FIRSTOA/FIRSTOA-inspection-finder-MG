@@ -89,7 +89,9 @@ export default function MemberAdmin() {
     const rank = (row: MemberRow) => TITLE_RANK[row.title] ?? 9;
     const query = search.trim();
     const out: Array<{ dept: string; count: number; sections: Section[] }> = [];
-    for (const dept of DEPTS) {
+    // 사용자 선택 창에서 만든 새 그룹(부서)도 여기 보여야 관리가 이어진다(2026-09-18) — 고정 4부서 뒤에 이름순
+    const extraDepts = [...new Set(active.map((row) => row.dept))].filter((dept) => dept && !(DEPTS as readonly string[]).includes(dept)).sort();
+    for (const dept of [...DEPTS, ...extraDepts]) {
       if (deptFilter !== "전체" && deptFilter !== dept) continue;
       let list = active.filter((row) => row.dept === dept);
       if (query) list = list.filter((row) => row.name.includes(query) || row.team.includes(query) || teamLabel(dept, row.team).includes(query));
