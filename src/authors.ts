@@ -115,7 +115,7 @@ export async function addMember(team: string, name: string, joinedOn?: string, d
   await fetchMembers();
 }
 
-export async function updateMember(id: string, patch: Partial<Pick<MemberRow, "team" | "dept" | "title">>) {
+export async function updateMember(id: string, patch: Partial<Pick<MemberRow, "name" | "team" | "dept" | "title">>) {
   await updateRows("cs_members", `id=eq.${id}`, { ...patch, updated_at: new Date().toISOString() });
   await fetchMembers();
 }
