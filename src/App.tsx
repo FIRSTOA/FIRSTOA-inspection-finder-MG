@@ -58,7 +58,7 @@ import { prepareImageForUpload } from "./imageUpload";
 import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { nextBusinessDay } from "./planDate";
-import { AUTHOR_TEAMS, displayTitle, useAuthorBook, useMembers } from "./authors";
+import { AUTHOR_TEAMS, EXTERNAL_AUTHORS, displayTitle, teamLabel, useAuthorBook, useMembers } from "./authors";
 import { buildActionBlock } from "./actionBlock";
 import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
 import type { AuthorTeam } from "./authors";
@@ -3149,16 +3149,81 @@ type AuthorPickerProps = {
   accent: string;
 };
 
-function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
-  const [open, setOpen] = useState(false);
-  const [team, setTeam] = useState<AuthorTeam>("팀장");
-  const [newName, setNewName] = useState("");
+// 작성자(사용자) 선택 — 한 번 고르면 앱 전체(FIELD 작성자·일정·접수·마감문자)가 그 이름으로 돈다.
+// 2026-09-18: CS팀만 있던 목록을 전 인원(임원·영업·CSS·운영지원)으로 넓히고, 외부 이관(삼성·제록스·신도)을 추가.
+// 좌하단 프로필·우상단 이름에서도 같은 창을 연다. 로그인은 아니고 이 브라우저에 기억되는 선택이다.
+type AuthorGroup = { key: string; label: string; names: string[]; team?: AuthorTeam };
+function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerProps & { onClose: () => void }) {
   const { book, addAuthor, removeAuthor } = useAuthorBook();
-  const filled = value !== "";
+  const members = useMembers();
+  const groups = useMemo<AuthorGroup[]>(() => {
+    const out: AuthorGroup[] = AUTHOR_TEAMS.map((t) => ({ key: t, label: t === "팀장" ? "팀장" : teamLabel(t), names: book[t] || [], team: t }));
+    const seen = new Set(out.flatMap((g) => g.names));
+    for (const dept of ["임원", "영업팀", "CSS·운영지원"]) {
+      const names = members.filter((m) => m.active && m.dept === dept && !seen.has(m.name)).map((m) => m.name);
+      if (names.length) { out.push({ key: `dept:${dept}`, label: dept, names }); names.forEach((n) => seen.add(n)); }
+    }
+    out.push({ key: "external", label: "외부 이관", names: EXTERNAL_AUTHORS });
+    return out.filter((g) => g.names.length || g.team); // 빈 부서는 숨기고, CS 팀은 비어도(추가 가능) 보인다
+  }, [book, members]);
+  const [groupKey, setGroupKey] = useState<string>(() => groups.find((g) => g.names.includes(value))?.key || "팀장");
+  const group = groups.find((g) => g.key === groupKey) || groups[0];
+  const [newName, setNewName] = useState("");
   const add = () => {
-    addAuthor(team, newName);
+    if (!group?.team) return;
+    addAuthor(group.team, newName);
     setNewName("");
   };
+  return (
+    <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
+      <div className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <span className="text-sm font-semibold text-slate-700">사용자(작성자) 선택 <span className="ml-1 text-[11px] font-bold text-slate-400">— 이 기기에서 계속 이 이름으로 작성됩니다</span></span>
+          <button type="button" onClick={onClose} className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
+        </div>
+        <div className="flex flex-wrap gap-1 border-b border-slate-100 px-3 py-2">
+          {groups.map((g) => {
+            const active = group?.key === g.key;
+            return (
+              <button key={g.key} type="button" onClick={() => setGroupKey(g.key)} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
+                style={{ background: active ? accent : g.key === "external" ? "#FEF3C7" : "#F1F5F9", color: active ? "white" : g.key === "external" ? "#92400E" : "#334155" }}>
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex-1 overflow-y-auto py-1 pb-3">
+          {group?.team && (
+            <div className="flex gap-1.5 border-b border-slate-100 px-3 py-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+                placeholder={`${group.label} 작성자 추가`} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400" />
+              <button type="button" onClick={add} className="rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
+            </div>
+          )}
+          {group?.key === "external" && <div className="px-5 py-2 text-[11px] font-bold text-amber-700">제조사·타사로 넘긴 AS 양식에 사람 대신 쓰는 작성자입니다.</div>}
+          {group?.key === "E" && <div className="px-5 py-2 text-[11px] font-bold text-slate-500">E지역(지방)은 CSS팀이 맡습니다 — 관리 탭 인원 명단에서 CSS·운영지원 부서의 팀을 "CSS"로 두면 여기에 나옵니다.</div>}
+          {(group?.names || []).map((name: string) => {
+            const active = value === name;
+            return (
+              <div key={name} className="flex border-b border-slate-50">
+                <button type="button" onClick={() => { onChange(name); onClose(); }} className="min-w-0 flex-1 px-5 py-3 text-left text-sm transition active:bg-slate-100"
+                  style={{ background: active ? accent : "transparent", color: active ? "white" : "#0F172A", fontWeight: active ? 600 : 400 }}>
+                  {name}
+                </button>
+                {group?.team && <button type="button" onClick={() => removeAuthor(group.team as AuthorTeam, name)} className="px-4 text-xs font-bold text-rose-500">삭제</button>}
+              </div>
+            );
+          })}
+          {!group?.names.length && <div className="px-5 py-6 text-center text-xs font-bold text-slate-400">이 그룹에 인원이 없습니다</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
+  const [open, setOpen] = useState(false);
+  const filled = value !== "";
 
   return (
     <>
@@ -3177,86 +3242,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
         <span className="truncate">{filled ? value : "작성자 선택"}</span>
         <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />
       </button>
-
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-black/40"
-          onClick={() => setOpen(false)}
-          role="dialog"
-        >
-          <div
-            className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-xl"
-            style={{ maxHeight: "80vh" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <span className="text-sm font-semibold text-slate-700">작성자 선택</span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100"
-              >
-                닫기
-              </button>
-            </div>
-            <div className="grid grid-cols-5 gap-1 border-b border-slate-100 px-3 py-2">
-              {AUTHOR_TEAMS.map((t: AuthorTeam) => {
-                const active = team === t;
-                const label = t === "팀장" ? "팀장" : `${t}팀`;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTeam(t)}
-                    className="rounded-lg py-2 text-xs font-semibold transition active:scale-95"
-                    style={{
-                      background: active ? accent : "#F1F5F9",
-                      color: active ? "white" : "#334155",
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex-1 overflow-y-auto py-1 pb-3">
-              <div className="flex gap-1.5 border-b border-slate-100 px-3 py-2">
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-                  placeholder="작성자 추가"
-                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                />
-                <button type="button" onClick={add} className="rounded-lg bg-slate-700 px-3 text-xs font-bold text-white">추가</button>
-              </div>
-              {book[team].map((name: string) => {
-                const active = value === name;
-                return (
-                  <div key={name} className="flex border-b border-slate-50">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChange(name);
-                        setOpen(false);
-                      }}
-                      className="min-w-0 flex-1 px-5 py-3 text-left text-sm transition active:bg-slate-100"
-                      style={{
-                        background: active ? accent : "transparent",
-                        color: active ? "white" : "#0F172A",
-                        fontWeight: active ? 600 : 400,
-                      }}
-                    >
-                      {name}
-                    </button>
-                    <button type="button" onClick={() => removeAuthor(team, name)} className="px-4 text-xs font-bold text-rose-500">삭제</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {open && <AuthorPickerModal value={value} onChange={onChange} accent={accent} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -5835,6 +5821,9 @@ export default function App() {
   const toggleNavGroup = (title: string) => setOpenNavGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   const detectedDraftMode = draftInput.trim() ? detectUnifiedInputMode(draftInput) : null;
   const { book: authorBook } = useAuthorBook();
+  // 사용자(작성자) 선택 창 — 좌하단 프로필·우상단 이름에서 열고, 아직 정한 적 없으면 첫 화면에서 바로 묻는다(2026-09-18)
+  const [userPickOpen, setUserPickOpen] = useState(false);
+  useEffect(() => { if (!author) setUserPickOpen(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 첫 진입 한 번만
   const inboxBadge = useInboxBadge(author);
   const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
   const members = useMembers();
@@ -5844,7 +5833,7 @@ export default function App() {
     ? `${myMember.dept}${myMember.team && myMember.team !== "팀장" ? ` ${myMember.team}` : ""} · ${displayTitle(myMember)}`
     : (() => {
         const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
-        return team ? (team === "팀장" ? "CS팀 · 팀장" : `CS팀 ${team} · 프로`) : "CS팀";
+        return team ? (team === "팀장" ? "CS팀 · 팀장" : team === "E" ? "CSS팀 · 프로" : `CS팀 ${team} · 프로`) : (EXTERNAL_AUTHORS.includes(author) ? "외부 이관" : "CS팀");
       })();
   const authorTitleSuffix = myMember ? ` ${displayTitle(myMember)}` : "";
 
@@ -5852,6 +5841,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F4F7FB] text-slate-900">
       <ToastHost />
       <ConfirmHost />
+      {userPickOpen && <AuthorPickerModal value={author} onChange={setAuthor} accent="#2563EB" onClose={() => setUserPickOpen(false)} />}
       {/* 좌측 메뉴 드로어 */}
       {menuOpen && (
         <div className="fixed inset-0 z-[3000] flex" onClick={() => setMenuOpen(false)}>
@@ -6011,13 +6001,13 @@ export default function App() {
               </button>
             );
           })}
-          <div className={`flex items-center gap-2 rounded-xl bg-white/[0.05] py-2 ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={author || "작성자 미선택"}>
+          <button type="button" onClick={() => setUserPickOpen(true)} className={`flex w-full items-center gap-2 rounded-xl bg-white/[0.05] py-2 text-left transition hover:bg-white/[0.1] ${sidebarCollapsed ? "justify-center px-0" : "px-3"}`} title={`${author || "작성자 미선택"} — 눌러서 사용자 변경`}>
             <UserRound size={16} className="shrink-0 text-slate-400" />
             {!sidebarCollapsed && <span className="min-w-0">
-              <span className="block truncate text-[12px] font-bold leading-tight text-slate-200">{author || "작성자 미선택"}</span>
-              <span className="block text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
+              <span className="block truncate text-[12px] font-bold leading-tight text-slate-200">{author || "사용자 선택"}</span>
+              <span className="block text-[10px] font-semibold text-slate-500">{author ? authorTeamLabel : "눌러서 이름을 고르세요"}</span>
             </span>}
-          </div>
+          </button>
         </div>
       </aside>
 
@@ -6045,7 +6035,7 @@ export default function App() {
           {screen !== "field" && <div className="hidden shrink-0 items-center gap-2 text-[11px] font-bold text-slate-400 lg:flex">
             <span className="tabular-nums">{todayLabel}</span>
             <span className="h-3 w-px bg-white/15" />
-            <span className="text-slate-300">{author ? `${author}${authorTitleSuffix}` : "작성자 미선택"}</span>
+            <button type="button" onClick={() => setUserPickOpen(true)} className="text-slate-300 underline-offset-2 hover:underline" title="사용자 변경">{author ? `${author}${authorTitleSuffix}` : "사용자 선택"}</button>
           </div>}
           {screen === "field" && (
             <div className="flex items-center gap-1">

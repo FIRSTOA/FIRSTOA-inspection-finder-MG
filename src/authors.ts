@@ -7,7 +7,18 @@ import { insertRow, selectRows, updateRows } from "./supabase";
 
 export type AuthorTeam = "팀장" | "A" | "B" | "C" | "D" | "E" | "IT";
 
-export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "E", "IT"]; // E=지방(충청외) 2026-09-17 활성화 · IT=원격팀 — 서비스접수·원격 처리에서 자기 이름을 고를 수 있어야 한다
+export const AUTHOR_TEAMS: AuthorTeam[] = ["팀장", "A", "B", "C", "D", "E", "IT"]; // E=지방(충청외) 2026-09-17 활성화 — 담당은 CSS팀 · IT=원격팀(서비스접수·원격 처리에서 자기 이름을 고를 수 있어야 한다)
+
+/** 외부 이관 작성자 — AS를 제조사·타사로 넘길 때 작성자 칸에 사람 대신 쓴다(2026-09-18 요청). 명단(cs_members)에는 없는 고정 값 */
+export const EXTERNAL_AUTHORS = ["삼성이관", "제록스이관", "신도이관"];
+
+/** 팀 글자 → 화면 이름. E지역은 별도 E팀이 아니라 CSS팀이 맡는다(A~D 지원도 겸함) — 화면엔 "CSS팀"으로(2026-09-18 결정) */
+export function teamLabel(team: string): string {
+  if (team === "E") return "CSS팀";
+  if (team === "팀장" || team === "IT" || team === "기타" || team === "종일" || team === "전체" || !team) return team;
+  return `${team}팀`;
+}
+export function teamShort(team: string): string { return team === "E" ? "CSS" : team; }
 
 /** DB를 못 읽을 때 쓰는 최소 명단 (초기 시드와 동일) */
 export const AUTHOR_BOOK: Record<AuthorTeam, string[]> = {
@@ -52,8 +63,9 @@ function bookOf(rows: MemberRow[]): Book {
   for (const row of rows.filter((item) => item.active)) {
     // 겸직 표기("A·B")는 양쪽 팀 모두에 올린다 — 버리면 그 사람 배정 건이 어느 팀 보고에도 안 잡힌다
     for (const part of row.team.split(/[·/,]/).map((t) => t.trim())) {
-      if (!AUTHOR_TEAMS.includes(part as AuthorTeam)) continue;
-      const team = part as AuthorTeam;
+      // CSS(운영지원) 인원 = E지역 담당 — E 명단에 올린다. 일정리스트 E 배정·A~D 지원 배정이 여기서 나온다(2026-09-18)
+      const team = (part === "CSS" ? "E" : part) as AuthorTeam;
+      if (!AUTHOR_TEAMS.includes(team)) continue;
       if (!next[team].includes(row.name)) next[team].push(row.name);
     }
   }
