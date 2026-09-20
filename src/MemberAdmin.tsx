@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
-import { CS_DEPT, addMember, deleteMember, displayTitle, fetchMembers, restoreMember, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
+import { AUTHOR_TEAMS, CS_DEPT, addMember, deleteMember, displayTitle, fetchMembers, renameDeptGroup, renameTeamGroup, restoreMember, saveTeamGroups, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
 
@@ -52,6 +52,54 @@ export default function MemberAdmin() {
   const groupsReg = useTeamGroups();
   const DEPTS = groupsReg.depts;
   const TEAM_OPTIONS = groupsReg.teams;
+  // 부서(그룹)·팀(소그룹) 손질 — 사용자 선택 창과 같은 등록부를 고친다(2026-09-20 "관리 탭에서도"). 삭제는 비어 있을 때만
+  const [groupEdit, setGroupEdit] = useState<{ kind: "dept" | "team"; mode: "rename" | "new"; team?: string; text: string } | null>(null);
+  const isCsCode = (dept: string, team: string) => dept === CS_DEPT && (AUTHOR_TEAMS as string[]).includes(team);
+  const teamsFor = (dept: string) => (TEAM_OPTIONS[dept] || [""]).filter((team) => !groupsReg.hidden.includes(`${dept}|${team}`) || rows.some((row) => row.active && row.dept === dept && row.team === team));
+  const groupAct = async (run: () => Promise<void>, done: string) => {
+    try { await run(); await load(); setError(""); if (done) window.setTimeout(() => setError(""), 0); }
+    catch (e) { setError((e as Error).message || "그룹을 저장하지 못했습니다."); }
+  };
+  const applyGroupEdit = async () => {
+    if (!groupEdit) return;
+    const edit = groupEdit;
+    const text = edit.text.trim();
+    setGroupEdit(null);
+    if (!text) return;
+    const dept = deptFilter;
+    if (edit.kind === "dept" && edit.mode === "new") {
+      if (DEPTS.includes(text)) { setDeptFilter(text); return; }
+      await groupAct(() => saveTeamGroups({ depts: [...DEPTS, text], teams: { ...TEAM_OPTIONS, [text]: [""] } }).then(() => undefined), "");
+      setDeptFilter(text);
+    } else if (edit.kind === "dept") {
+      if (dept === "전체") return;
+      await groupAct(() => renameDeptGroup(dept, text), "");
+      setDeptFilter(text);
+    } else if (edit.mode === "new") {
+      if (dept === "전체" || (TEAM_OPTIONS[dept] || []).includes(text)) return;
+      await groupAct(() => saveTeamGroups({ teams: { ...TEAM_OPTIONS, [dept]: [...(TEAM_OPTIONS[dept] || []), text] } }).then(() => undefined), "");
+    } else if (edit.team !== undefined) {
+      await groupAct(() => renameTeamGroup(dept, edit.team as string, text), "");
+    }
+  };
+  const deleteDeptGroup = async () => {
+    const dept = deptFilter;
+    if (dept === "전체") return;
+    if (dept === CS_DEPT) { setError("CS팀 그룹은 일정·배정의 기준이라 지울 수 없습니다."); return; }
+    if (rows.some((row) => row.active && row.dept === dept)) { setError("인원이 있는 그룹은 지울 수 없습니다 — 먼저 ✎ 수정으로 다른 부서로 옮겨 주세요."); return; }
+    if (!await askConfirm(`"${dept}" 그룹을 지울까요?`)) return;
+    const teams = { ...TEAM_OPTIONS }; delete teams[dept];
+    await groupAct(() => saveTeamGroups({ depts: DEPTS.filter((d) => d !== dept), teams }).then(() => undefined), "");
+    setDeptFilter("전체");
+  };
+  const deleteTeamGroup = async (team: string) => {
+    const dept = deptFilter;
+    if (dept === "전체") return;
+    if (rows.some((row) => row.active && row.dept === dept && (row.team === team || row.team.split(/[·/,]/).map((t) => t.trim()).includes(team)))) { setError("인원이 있는 소그룹은 지울 수 없습니다 — 먼저 ✎ 수정으로 옮겨 주세요."); return; }
+    if (!await askConfirm(`"${teamLabel(dept, team)}" 소그룹을 지울까요?`)) return;
+    if (isCsCode(dept, team)) await groupAct(() => saveTeamGroups({ hidden: [...groupsReg.hidden, `${dept}|${team}`] }).then(() => undefined), ""); // 코드는 남기고 숨긴다
+    else await groupAct(() => saveTeamGroups({ teams: { ...TEAM_OPTIONS, [dept]: (TEAM_OPTIONS[dept] || []).filter((t) => t !== team) } }).then(() => undefined), "");
+  };
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState({ name: "", dept: "CS팀" as string, team: "A", title: "" });
   const [adding, setAdding] = useState(false);
@@ -212,7 +260,42 @@ export default function MemberAdmin() {
               </button>
             );
           })}
+          <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "new", text: "" })} className="whitespace-nowrap rounded-full border border-dashed border-white/25 px-3 py-1.5 text-xs font-black text-slate-400 transition hover:bg-white/[0.1] hover:text-slate-200">＋ 그룹</button>
         </div>
+
+        {/* 그룹(부서)·소그룹(팀) 손질 — 부서를 고르면 나온다. 사용자 선택 창과 같은 등록부 */}
+        {(deptFilter !== "전체" || groupEdit) && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px]">
+            {groupEdit ? (
+              <>
+                <span className="font-black text-slate-500">{groupEdit.kind === "dept" ? "그룹" : "소그룹"} {groupEdit.mode === "new" ? "추가" : `이름 바꾸기${groupEdit.team !== undefined ? ` (${teamLabel(deptFilter, groupEdit.team)})` : ""}`}</span>
+                <input autoFocus value={groupEdit.text} onChange={(e) => setGroupEdit({ ...groupEdit, text: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyGroupEdit(); } if (e.key === "Escape") setGroupEdit(null); }}
+                  placeholder={groupEdit.mode === "new" ? (groupEdit.kind === "dept" ? "새 그룹 이름 (예: 영업2팀)" : "새 소그룹 이름") : "새 이름"}
+                  className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500" />
+                <button type="button" onClick={() => void applyGroupEdit()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-black text-white">저장</button>
+                <button type="button" onClick={() => setGroupEdit(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-500">취소</button>
+              </>
+            ) : (
+              <>
+                <span className="font-black text-slate-600">그룹 · {deptFilter}</span>
+                <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "rename", text: deptFilter })} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100">이름 바꾸기</button>
+                <button type="button" onClick={() => void deleteDeptGroup()} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600">그룹 삭제</button>
+                <span className="mx-1 h-4 w-px bg-slate-300" />
+                <span className="font-black text-slate-500">소그룹</span>
+                {teamsFor(deptFilter).map((team) => (
+                  <span key={team || "_none"} className="inline-flex items-center overflow-hidden rounded-full border border-slate-300 bg-white text-[11px] font-bold text-slate-600">
+                    <span className="px-2 py-1">{teamLabel(deptFilter, team)}{isCsCode(deptFilter, team) ? <span className="ml-1 text-slate-400">{team}</span> : null}</span>
+                    {team !== "" && <button type="button" title="이름 바꾸기" onClick={() => setGroupEdit({ kind: "team", mode: "rename", team, text: isCsCode(deptFilter, team) ? teamLabel(deptFilter, team) : team })} className="border-l border-slate-200 px-1.5 py-1 hover:bg-slate-100"><Pencil size={11} /></button>}
+                    {team !== "" && <button type="button" title="소그룹 삭제 (비어 있을 때만)" onClick={() => void deleteTeamGroup(team)} className="border-l border-slate-200 px-1.5 py-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600">×</button>}
+                  </span>
+                ))}
+                <button type="button" onClick={() => setGroupEdit({ kind: "team", mode: "new", text: "" })} className="rounded-full border border-dashed border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100">＋ 소그룹</button>
+                {deptFilter === CS_DEPT && <span className="text-slate-400">A~E 글자는 배정 코드라 표시명만 바뀝니다</span>}
+              </>
+            )}
+          </div>
+        )}
 
         {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
         {loading && <div className="p-10 text-center text-sm font-bold text-slate-400">명단을 불러오는 중…</div>}
@@ -298,7 +381,7 @@ export default function MemberAdmin() {
               </div>
               <div className="text-xs font-bold text-slate-500">팀/파트
                 <span className="mt-1 block"><PortalSelect width={170} value={draft.team} onChange={(next) => setDraft({ ...draft, team: next })}
-                  options={(TEAM_OPTIONS[draft.dept] || [""]).map((team) => ({ value: team, label: team || "(없음)" }))} /></span>
+                  options={teamsFor(draft.dept).map((team) => ({ value: team, label: teamLabel(draft.dept, team) }))} /></span>
               </div>
               <div className="text-xs font-bold text-slate-500">직책
                 <span className="mt-1 block"><PortalSelect width={170} value={draft.title} onChange={(next) => setDraft({ ...draft, title: next })}
@@ -327,7 +410,7 @@ export default function MemberAdmin() {
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <PortalSelect width={150} value={edit.teamCustom ? "__custom" : edit.team}
                   onChange={(next) => next === "__custom" ? setEdit({ ...edit, teamCustom: true }) : setEdit({ ...edit, team: next, teamCustom: false })}
-                  options={[...(TEAM_OPTIONS[edit.dept] || [""]).map((team) => ({ value: team, label: team || "(없음)" })), { value: "__custom", label: "직접 입력…" }]} />
+                  options={[...teamsFor(edit.dept).map((team) => ({ value: team, label: teamLabel(edit.dept, team) })), { value: "__custom", label: "직접 입력…" }]} />
                 {edit.teamCustom && (
                   <input autoFocus value={edit.team} onChange={(e) => setEdit({ ...edit, team: e.target.value })} placeholder="예: A·B"
                     className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
