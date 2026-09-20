@@ -65,7 +65,10 @@ function bookOf(rows: MemberRow[]): Book {
   const next = emptyBook();
   for (const row of rows.filter((item) => item.active)) {
     // 겸직 표기("A·B")는 양쪽 팀 모두에 올린다 — 버리면 그 사람 배정 건이 어느 팀 보고에도 안 잡힌다
-    for (const part of row.team.split(/[·/,]/).map((t) => t.trim())) {
+    // IT파트는 부서 자체가 IT — 팀 칸이 비어도 IT 명단(서비스접수 원격 처리자)에 올린다(2026-09-20 조직도)
+    const parts = row.team.split(/[·/,]/).map((t) => t.trim());
+    if (row.dept === "IT파트" && !parts.includes("IT")) parts.push("IT");
+    for (const part of parts) {
       // CSS(운영지원) 인원 = E지역 담당 — E 명단에 올린다. 일정리스트 E 배정·A~D 지원 배정이 여기서 나온다(2026-09-18)
       const team = (part === "CSS" ? "E" : part) as AuthorTeam;
       if (!AUTHOR_TEAMS.includes(team)) continue;
@@ -206,15 +209,18 @@ export type TeamGroups = {
 };
 export const CS_DEPT = "CS팀";
 export const DEFAULT_TEAM_GROUPS: TeamGroups = {
-  depts: ["임원", CS_DEPT, "영업팀", "CSS·운영지원"],
+  // 2026-09-20 조직도: 임원 / CS팀 / 영업팀 / IT파트 / 경영지원파트 / CSS·운영지원파트(운영지원·CSS)
+  depts: ["임원", CS_DEPT, "영업팀", "IT파트", "경영지원파트", "CSS/운영지원파트"],
   teams: {
     "임원": [""],
     [CS_DEPT]: ["팀장", "A", "B", "C", "D", "E", "A·B"],
-    "영업팀": ["", "전략영업", "IT"],
-    "CSS·운영지원": ["", "운영지원", "CSS", "경영지원", "지원(비정규)"],
+    "영업팀": ["", "전략영업"],
+    "IT파트": [""],
+    "경영지원파트": ["", "비정규직"],
+    "CSS/운영지원파트": ["", "운영지원", "운영지원(비정규)", "CSS"],
   },
   labels: { E: "CSS팀" },
-  hidden: [],
+  hidden: [`${CS_DEPT}|E`], // E지역 담당은 CSS/운영지원파트 › CSS — CS팀 아래 E는 비어 있어 숨김(인원이 생기면 자동으로 보임)
 };
 const GROUPS_KEY = "TEAM_GROUPS";
 const GROUPS_MIRROR = "firstoa.teamGroups.v1";
