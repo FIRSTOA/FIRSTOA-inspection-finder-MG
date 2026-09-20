@@ -1,4 +1,4 @@
-import { AUTHOR_BOOK, AUTHOR_TEAMS, type AuthorTeam } from "./authors";
+import { AUTHOR_TEAMS, currentBook, type AuthorTeam } from "./authors";
 import { md5 } from "./md5";
 import { insertRow, selectAllRowsFast, updateRows } from "./supabase";
 
@@ -71,14 +71,16 @@ export function logisticsKindForEvent(event: ActivityEvent): LogisticsKind {
 }
 
 function normalizeTeam(value: string): string {
-  const match = String(value || "").toUpperCase().match(/(?:수도권|지역|팀)?\s*([ABCD])(?:팀)?/);
+  const match = String(value || "").toUpperCase().match(/(?:수도권|지역|팀)?\s*([ABCDE])(?:팀)?/); // E(지방·CSS팀)도 팀이다(2026-09-20)
   return match?.[1] || "";
 }
 
+// 작성자 → 팀: 관리 탭 인원 명단(cs_members, DB)이 기준 — 예전엔 코드에 박힌 시드만 봐서 새 인원·팀 이동이 반영되지 않았다(2026-09-20)
 export function teamForAuthor(author: string): string {
   const clean = author.trim();
+  const book = currentBook();
   for (const team of AUTHOR_TEAMS) {
-    if (AUTHOR_BOOK[team].includes(clean)) return team === "팀장" ? "팀장" : team;
+    if ((book[team] || []).includes(clean)) return team === "팀장" ? "팀장" : team;
   }
   return "미지정";
 }

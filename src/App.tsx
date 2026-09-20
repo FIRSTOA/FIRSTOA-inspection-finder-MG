@@ -5995,11 +5995,14 @@ export default function App() {
   const members = useMembers();
   const myMember = members.find((member) => member.active && member.name === author);
   // 좌하단·우상단 프로필: "CS팀 C · 프로" 처럼 부서·팀·호칭까지
+  // 좌하단·우상단 프로필의 팀 표기는 관리 탭 인원 명단(cs_members) 그대로 — CS 글자는 등록부 표시명(C팀·CSS팀), 겸임(A·B)은 그대로(2026-09-20)
   const authorTeamLabel = myMember
-    ? `${myMember.dept}${myMember.team && myMember.team !== "팀장" ? ` ${myMember.team}` : ""} · ${displayTitle(myMember)}`
+    ? (myMember.dept === CS_DEPT
+      ? (myMember.team === "팀장" || !myMember.team ? `CS팀 · ${displayTitle(myMember)}` : `${myMember.team.length === 1 ? teamLabel(myMember.team) : myMember.team} · ${displayTitle(myMember)}`)
+      : `${myMember.dept}${myMember.team ? ` ${myMember.team}` : ""} · ${displayTitle(myMember)}`)
     : (() => {
         const team = AUTHOR_TEAMS.find((name) => authorBook[name]?.includes(author));
-        return team ? (team === "팀장" ? "CS팀 · 팀장" : team === "E" ? "CSS팀 · 프로" : `CS팀 ${team} · 프로`) : (EXTERNAL_AUTHORS.includes(author) ? "외부 이관" : "CS팀");
+        return team ? (team === "팀장" ? "CS팀 · 팀장" : `${teamLabel(team)} · 프로`) : (EXTERNAL_AUTHORS.includes(author) ? "외부 이관" : author ? "명단에 없음 — 관리 탭 인원에서 추가" : "");
       })();
   const authorTitleSuffix = myMember ? ` ${displayTitle(myMember)}` : "";
 

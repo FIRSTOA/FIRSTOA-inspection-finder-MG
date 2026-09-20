@@ -139,7 +139,13 @@ export function useMembers(): MemberRow[] {
   return rows;
 }
 
-/** 퇴사 처리 — 행을 지우지 않는다 (과거 기록에 남은 작성자명이 살아 있어야 한다) */
+/** 명단에서 삭제 — 행을 지운다(2026-09-20 결정: 퇴사 처리 대신 삭제로 관리). 과거 기록은 이름 문자열로 남아 있어 집계는 안 깨진다 */
+export async function deleteMember(id: string) {
+  await deleteRows("cs_members", `id=eq.${encodeURIComponent(id)}`);
+  await fetchMembers();
+}
+
+/** (예전) 퇴사 처리 — 남아 있는 퇴사자 행 복구용으로만 유지 */
 export async function retireMember(id: string, leftOn?: string) {
   await updateRows("cs_members", `id=eq.${id}`, { active: false, left_on: leftOn || new Date().toISOString().slice(0, 10), updated_at: new Date().toISOString() });
   await fetchMembers();
