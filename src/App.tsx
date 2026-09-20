@@ -3175,7 +3175,7 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
     return [...listed, ...found.filter((t) => !listed.includes(t))]
       .filter((t) => !reg.hidden.includes(`${dept}|${t}`) || active.some((m) => m.dept === dept && inTeam(m, t)));
   }, [reg, dept, active]);
-  const subLabel = (d: string, t: string) => (t === "" ? "팀 미지정" : d === CS_DEPT ? teamLabel(t) : t);
+  const subLabel = (d: string, t: string) => (t === "" ? "부서 직속" : d === CS_DEPT ? teamLabel(t) : t); // 팀 칸이 빈 사람은 부서에 바로 속한다(IT파트 등)
   const rows = useMemo<PickerRow[]>(() => {
     if (dept === EXTERNAL_GROUP) return EXTERNAL_AUTHORS.map((name) => ({ name }));
     const list = active.filter((m) => m.dept === dept && (team === "__all" || inTeam(m, team)));
@@ -3294,7 +3294,7 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
         {dept !== EXTERNAL_GROUP && (
           <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5">
             <button type="button" onClick={() => { setTeam("__all"); setGroupEdit(null); }} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${team === "__all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>전체</button>
-            {teams.map((t) => (
+            {teams.filter((t) => t !== "" || teams.length > 1).map((t) => ( // 팀이 하나도 없는 부서(IT파트)는 "전체"만 — "부서 직속" 칩이 곧 전체라 소음
               <button key={t || "_none"} type="button" onClick={() => { setTeam(t); setGroupEdit(null); setMoving(null); }}
                 className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${team === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
                 {subLabel(dept, t)}<span className="ml-1 opacity-60">{teamCount(t)}</span>

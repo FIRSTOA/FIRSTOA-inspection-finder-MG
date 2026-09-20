@@ -23,13 +23,14 @@ const TITLE_TONE: Record<string, string> = {
 };
 
 /** 리더 판정: 팀장·겸임(A·B)·팀 없는 직책자 — 팀 구분행보다 위에 따로 묶는다 */
+// 팀장·파트장(또는 겸임)만 따로 묶는다 — 부파트장은 자기 팀 안에 있어야 한다(2026-09-20: IT파트 김정식이 "팀장·파트장"에 섞여 보이던 것)
 function isLeaderRow(row: MemberRow) {
   if (row.dept === "임원") return true;
-  return row.team === "팀장" || row.team.includes("·") || (!row.team && !!row.title);
+  return row.team === "팀장" || row.team.includes("·") || (!row.team && (row.title === "팀장" || row.title === "파트장"));
 }
 
 function teamLabel(dept: string, team: string) {
-  if (!team) return "팀 미지정";
+  if (!team) return "부서 직속"; // 팀 칸이 빈 사람 = 부서에 바로 속함(IT파트처럼 팀이 없는 부서는 구분행 자체를 안 그린다)
   return dept === CS_DEPT && team.length === 1 ? csTeamLabel(team) : team; // CS 글자는 등록부 표시명(E → CSS팀)
 }
 
@@ -134,11 +135,18 @@ export default function MemberAdmin() {
       let list = active.filter((row) => row.dept === dept);
       if (query) list = list.filter((row) => row.name.includes(query) || row.team.includes(query) || teamLabel(dept, row.team).includes(query));
       if (!list.length) continue;
+      const sections: Section[] = [];
+      const byRank = (a: MemberRow, b: MemberRow) => rank(a) - rank(b) || a.sort - b.sort || a.name.localeCompare(b.name);
+      // 팀(소그룹)이 없는 부서(IT파트·임원)는 구분행 없이 한 덩어리 — 직책 순으로만 정렬한다
+      if (!list.some((row) => row.team)) {
+        sections.push({ key: "_all", label: "", rows: [...list].sort(byRank) });
+        out.push({ dept, count: list.length, sections });
+        continue;
+      }
       const leaders = list.filter(isLeaderRow).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
       const rest = list.filter((row) => !isLeaderRow(row));
       const teamNames = [...new Set(rest.map((row) => row.team))]
         .sort((a, b) => (a === "" ? 1 : 0) - (b === "" ? 1 : 0) || a.localeCompare(b));
-      const sections: Section[] = [];
       // 임원은 구분행 없이 부서행 바로 아래 — 2명뿐이라 소제목이 소음이다
       if (leaders.length && dept !== "임원") sections.push({ key: "_lead", label: "팀장 · 파트장", rows: leaders });
       else if (leaders.length) sections.push({ key: "_lead", label: "", rows: leaders });
