@@ -58,7 +58,7 @@ import { prepareImageForUpload } from "./imageUpload";
 import { buildRecords } from "./inspectParser";
 import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes";
 import { nextBusinessDay } from "./planDate";
-import { AUTHOR_TEAMS, CS_DEPT, EXTERNAL_AUTHORS, addMember, displayTitle, renameDeptGroup, renameTeamGroup, retireMember, saveTeamGroups, teamLabel, updateMember, useAuthorBook, useMembers, useTeamGroups } from "./authors";
+import { AUTHOR_TEAMS, CS_DEPT, EXTERNAL_AUTHORS, addMember, deleteMember, displayTitle, renameDeptGroup, renameTeamGroup, saveTeamGroups, teamLabel, updateMember, useAuthorBook, useMembers, useTeamGroups } from "./authors";
 import { buildActionBlock } from "./actionBlock";
 import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
 import type { AuthorTeam, MemberRow } from "./authors";
@@ -3210,8 +3210,8 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
   };
   const remove = async (row: PickerRow) => {
     if (!row.member) return;
-    if (!await askConfirm(`${row.name}을(를) 명단에서 내릴까요?\n(퇴사 처리 — 과거 기록의 이름은 남습니다)`)) return;
-    void retireMember(row.member.id).catch((e) => notify(`삭제 실패: ${(e as Error).message}`, "error"));
+    if (!await askConfirm(`${row.name}을(를) 명단에서 삭제할까요?\n(되돌릴 수 없습니다 — 과거 기록의 이름은 그대로 남습니다)`)) return;
+    void deleteMember(row.member.id).then(() => notify(`${row.name} 삭제됨`, "success")).catch((e) => notify(`삭제 실패: ${(e as Error).message}`, "error"));
   };
   const move = async (row: PickerRow, target: string) => {
     setMoving(null);

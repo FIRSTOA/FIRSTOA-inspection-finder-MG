@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
-import { CS_DEPT, addMember, displayTitle, fetchMembers, restoreMember, retireMember, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
+import { CS_DEPT, addMember, deleteMember, displayTitle, fetchMembers, restoreMember, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
 
@@ -11,7 +11,8 @@ import PortalSelect from "./PortalSelect";
  * [다크 툴바: 검색 + 부서 필터] 아래 테이블. 전체 보기에선 부서 구분행 → 팀 구분행의
  * 2단으로 나뉘고, 부서를 고르면 팀 구분행만 남는다 (CS팀 A/B/C/D가 바로 나뉘어 보이게).
  * CS팀의 팀장/A~D 값은 작성자 명단·일정 팀 필터가 그대로 쓰므로 바꾸면 즉시 반영된다.
- * 퇴사는 행을 지우지 않고 재직 여부만 내린다 — 과거 기록의 이름이 살아 있어야 집계가 안 깨진다.
+ * 2026-09-20: 입사일·근속·퇴사 처리 대신 '수정일'과 '삭제'로 관리한다(사용자 결정). 삭제해도 과거 기록의 이름은 문자열로 남는다.
+ * 예전 퇴사 처리로 남은 행이 있으면 아래 '퇴사자' 묶음에서 복구하거나 삭제한다.
  */
 // 부서·팀 목록은 공용 등록부(app_config TEAM_GROUPS, authors.ts)에서 온다 — 사용자 선택 창에서 만든 그룹·소그룹이 여기도 그대로 보인다(2026-09-18)
 const TITLES = ["", "팀장", "파트장", "부파트장"];
@@ -32,16 +33,10 @@ function teamLabel(dept: string, team: string) {
   return dept === CS_DEPT && team.length === 1 ? csTeamLabel(team) : team; // CS 글자는 등록부 표시명(E → CSS팀)
 }
 
-/** 입사일 → "N년 M개월" (미래·파싱 불가면 빈값) */
-function tenure(joined: string | null | undefined, today: Date): string {
-  if (!joined) return "";
-  const start = new Date(joined);
-  if (Number.isNaN(start.getTime())) return "";
-  let months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
-  if (today.getDate() < start.getDate()) months -= 1;
-  if (months < 0) return "";
-  const years = Math.floor(months / 12);
-  return years > 0 ? `${years}년 ${months % 12}개월` : `${months % 12}개월`;
+/** 수정일 표기 — updated_at이 없으면 입사일(초기 시드) */
+function modifiedLabel(row: MemberRow): string {
+  const iso = row.updated_at || row.joined_on || "";
+  return iso ? String(iso).slice(0, 10) : "—";
 }
 
 type Section = { key: string; label: string; rows: MemberRow[] };
@@ -58,11 +53,10 @@ export default function MemberAdmin() {
   const DEPTS = groupsReg.depts;
   const TEAM_OPTIONS = groupsReg.teams;
   const [search, setSearch] = useState("");
-  const [draft, setDraft] = useState({ name: "", dept: "CS팀" as string, team: "A", title: "", joined: new Date().toISOString().slice(0, 10) });
+  const [draft, setDraft] = useState({ name: "", dept: "CS팀" as string, team: "A", title: "" });
   const [adding, setAdding] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [edit, setEdit] = useState<EditState | null>(null);
-  const today = useMemo(() => new Date(), []);
 
   const load = async () => {
     setLoading(true);
@@ -109,13 +103,13 @@ export default function MemberAdmin() {
       out.push({ dept, count: list.length, sections });
     }
     return out;
-  }, [active, deptFilter, search]);
+  }, [active, deptFilter, search, DEPTS]);
 
   const submit = async () => {
     if (!draft.name.trim() || adding) return;
     setAdding(true);
     try {
-      await addMember(draft.team, draft.name, draft.joined, draft.dept, draft.title);
+      await addMember(draft.team, draft.name, undefined, draft.dept, draft.title);
       setDraft({ ...draft, name: "" });
       setAddOpen(false);
       await load();
@@ -157,8 +151,7 @@ export default function MemberAdmin() {
         {row.team ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{teamLabel(row.dept, row.team)}</span> : <span className="text-xs text-slate-300">—</span>}
       </td>
       <td className="whitespace-nowrap px-4 py-2">{titleChip(row)}</td>
-      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-500">{row.joined_on || "—"}</td>
-      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-400">{tenure(row.joined_on, today)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-500">{modifiedLabel(row)}</td>
       <td className="px-4 py-2">
         <span className="flex items-center justify-end gap-1">
           <button type="button" title="정보 수정" disabled={busyId === row.id}
@@ -167,8 +160,8 @@ export default function MemberAdmin() {
             <Pencil size={13} />
           </button>
           <button type="button" disabled={busyId === row.id}
-            onClick={async () => { if (await askConfirm(`${row.name} 님을 퇴사 처리할까요?\n\n명단에서만 빠지고 과거 기록은 그대로 남습니다.`)) void act(row.id, () => retireMember(row.id)); }}
-            className="whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">퇴사</button>
+            onClick={async () => { if (await askConfirm(`${row.name} 님을 명단에서 삭제할까요?\n\n되돌릴 수 없습니다. 과거 기록의 이름은 그대로 남습니다.`)) void act(row.id, () => deleteMember(row.id)); }}
+            className="whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">삭제</button>
         </span>
       </td>
     </tr>
@@ -176,7 +169,7 @@ export default function MemberAdmin() {
 
   const divider = (label: string, count: number, strong = false) => (
     <tr>
-      <td colSpan={7} className={strong
+      <td colSpan={6} className={strong
         ? "border-y border-slate-200 bg-slate-100/90 px-4 py-1.5 text-xs font-black text-slate-700"
         : "border-b border-slate-100 bg-slate-50/70 px-4 py-1 text-[11px] font-black tracking-wide text-slate-500"}>
         {label} <span className="ml-1 text-[10px] font-bold tabular-nums text-slate-400">{count}명</span>
@@ -190,11 +183,11 @@ export default function MemberAdmin() {
         <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
           <div>
             <h3 className="text-base font-black text-white lg:text-lg">인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·퇴사가 나타납니다. 직책이 없으면 "프로".</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·삭제가 나타납니다. 직책이 없으면 "프로".</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-300">재직 {active.length}명</span>
-            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-white/10">퇴사 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
+            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-white/10">예전 퇴사 처리 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
             <button type="button" onClick={() => { const dept = deptFilter === "전체" ? "CS팀" : deptFilter; setDraft({ ...draft, dept, team: TEAM_OPTIONS[dept]?.[0] ?? "" }); setAddOpen(true); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
               <UserPlus size={15} />인원 추가
@@ -233,8 +226,7 @@ export default function MemberAdmin() {
                   <th className="px-4 py-2.5">부서</th>
                   <th className="px-4 py-2.5">팀/파트</th>
                   <th className="px-4 py-2.5">직책</th>
-                  <th className="px-4 py-2.5">입사일</th>
-                  <th className="px-4 py-2.5">근속</th>
+                  <th className="px-4 py-2.5">수정일</th>
                   <th className="px-4 py-2.5 text-right">관리</th>
                 </tr>
               </thead>
@@ -251,7 +243,7 @@ export default function MemberAdmin() {
                   </Fragment>
                 ))}
                 {!grouped.length && (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-xs font-bold text-slate-300">
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-xs font-bold text-slate-300">
                     {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다` : "인원 없음 — 우측 상단 \"인원 추가\"로 등록하세요"}
                   </td></tr>
                 )}
@@ -265,7 +257,7 @@ export default function MemberAdmin() {
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
             <h3 className="text-base font-black text-slate-950">퇴사자</h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">과거 기록 보존을 위해 명단에만 빠져 있습니다. 재입사 시 복구하세요.</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">예전 방식(퇴사 처리)으로 빠진 행입니다. 다시 쓰면 복구, 필요 없으면 삭제하세요.</p>
           </div>
           <div className="divide-y divide-slate-100">
             {left.map((row) => (
@@ -278,6 +270,8 @@ export default function MemberAdmin() {
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
                   <Undo2 size={13} />복구
                 </button>
+                <button type="button" disabled={busyId === row.id} onClick={async () => { if (await askConfirm(`${row.name} 님을 완전히 삭제할까요?`)) void act(row.id, () => deleteMember(row.id)); }}
+                  className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-[11px] font-black text-rose-600 transition hover:bg-rose-100 disabled:opacity-40">삭제</button>
               </div>
             ))}
           </div>
@@ -310,10 +304,6 @@ export default function MemberAdmin() {
                 <span className="mt-1 block"><PortalSelect width={170} value={draft.title} onChange={(next) => setDraft({ ...draft, title: next })}
                   options={TITLES.map((title) => ({ value: title, label: title || "프로 (기본)" }))} /></span>
               </div>
-              <label className="text-xs font-bold text-slate-500">입사일
-                <input type="date" value={draft.joined} onChange={(e) => setDraft({ ...draft, joined: e.target.value })} onClick={(e) => e.currentTarget.showPicker?.()}
-                  className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              </label>
             </div>
           </div>
         </FormModal>

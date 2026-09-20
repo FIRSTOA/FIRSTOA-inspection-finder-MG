@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { insertRow, selectRows, updateRows } from "./supabase";
+import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 
 // 작성자 명단 — 원본은 Supabase cs_members 테이블이다.
 // 예전에는 브라우저 localStorage에 두어 신입·퇴사 반영이 그 PC에서만 보였다.
@@ -44,6 +44,7 @@ export type MemberRow = {
   left_on: string | null;
   note: string;
   sort: number;
+  updated_at?: string | null; // 마지막 수정 시각 — 관리 탭 '수정일'
 };
 
 /** 호칭: 직책이 없으면 전부 "프로", 임원은 "임원" */
@@ -121,6 +122,9 @@ export async function updateMember(id: string, patch: Partial<Pick<MemberRow, "n
   await updateRows("cs_members", `id=eq.${id}`, { ...patch, updated_at: new Date().toISOString() });
   await fetchMembers();
 }
+
+/** 지금 명단(DB에서 읽은 것, 못 읽었으면 시드) — 작성자 → 팀 판정은 반드시 이걸 쓴다(관리 탭 인원 명단 기준) */
+export function currentBook(): Record<AuthorTeam, string[]> { return cache || AUTHOR_BOOK; }
 
 /** 전 인원(회사 전체) 행 — 부서 요청 요청자 선택·프로필 표시용 */
 export function useMembers(): MemberRow[] {
