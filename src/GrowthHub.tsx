@@ -556,7 +556,27 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       const answers = data.answers as GoldenCard["answers"] | undefined;
       if (!answers) throw new Error("AI 응답에 answers가 없습니다.");
       setCard({ ...card, author: person, year, quarter, answers });
-      setMessage(`골든미팅카드를 AI로 변환했습니다. 사용 모델: ${data.model || "기본 모델"}`);
+      // 진도율 자동 산정(2026-09-21) — AI가 계획 빈도 대비 기록된 실행을 비교해 낸 값. 직접 넣은 값(0이 아닌 값)은 덮지 않는다
+      type ProgressItem = { n: number; p: number; why?: string };
+      const suggested = data.progress as { goals?: ProgressItem[]; missions?: ProgressItem[] } | undefined;
+      let filled = 0;
+      if (suggested) {
+        const nextGoals: LevelGoal[] = plan.goals.map((g) => ({ ...g }));
+        const apply = (list: LevelGoal[], items?: ProgressItem[]) => {
+          for (const item of items || []) {
+            const target = list[Number(item.n) - 1];
+            const slot = target ? nextGoals.find((g) => g.id === target.id) : undefined;
+            const p = Math.max(0, Math.min(150, Math.round(Number(item.p) || 0)));
+            if (!slot || slot.progress || p <= 0) continue;
+            slot.progress = p;
+            filled += 1;
+          }
+        };
+        apply(regularGoals, suggested.goals);
+        apply(missionGoals, suggested.missions);
+        if (filled) setPlan({ ...plan, author: person, year, quarter, goals: nextGoals }); // 자동 저장이 이어서 계획표에 남긴다
+      }
+      setMessage(`골든미팅카드를 AI로 변환했습니다.${filled ? ` 진도율 ${filled}개를 월별 실행·주간 기록 근거로 자동 산정해 채웠습니다(직접 넣은 값은 유지).` : ""} 사용 모델: ${data.model || "기본 모델"}`);
     } catch (e) {
       setMessage((e as Error).message || "골든미팅카드 AI 변환에 실패했습니다.");
     } finally {

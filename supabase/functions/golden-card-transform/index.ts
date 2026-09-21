@@ -29,12 +29,19 @@ function buildInstruction(quarterLabel: string) {
     "weeklyRecordsText(주간 성장노트·배운 점·아이디어·특이사항)는 q3(학습·지식)과 q2(기여)의 핵심 근거다. 어느 주에 무엇을 배웠고 어떤 아이디어를 냈는지 구체적으로 반영하되, 기록에 없는 내용은 만들지 않는다.",
     "",
     "[출력 구조 - 절대 규칙]",
-    "질문 4개 × 카테고리 6개 = 총 24칸을 JSON으로만 출력해줘. 설명·코드블록·마크다운·주석·추가 문장 금지.",
-    '최상위 키는 반드시 "q1", "q2", "q3", "q4" 네 개만 사용한다.',
+    "질문 4개 × 카테고리 6개 = 총 24칸과 목표별 진도율(progress)을 JSON으로만 출력해줘. 설명·코드블록·마크다운·주석·추가 문장 금지.",
+    '최상위 키는 "q1", "q2", "q3", "q4" 네 개와 "progress" 하나만 사용한다.',
     '카테고리 키는 반드시 "매출", "효율", "비용", "자기", "소통", "AI" 여섯 개만 사용한다.',
     '형식은 반드시 아래와 같아야 한다.',
     '{"q1":{"매출":"","효율":"","비용":"","자기":"","소통":"","AI":""},"q2":{"매출":"","효율":"","비용":"","자기":"","소통":"","AI":""},"q3":{"매출":"","효율":"","비용":"","자기":"","소통":"","AI":""},"q4":{"매출":"","효율":"","비용":"","자기":"","소통":"","AI":""}}',
     '해당 칸에 근거 자료가 없으면 반드시 빈 문자열("")로 둔다. "기록 보완 필요" 같은 대체 문구도 쓰지 않는다.',
+    "",
+    "[진도율(progress) 산정 - 추가 출력]",
+    '최상위 "progress" 키의 형식: {"goals":[{"n":1,"p":67,"why":"월1회 계획, 3개월 중 2개월 기록"}],"missions":[{"n":1,"p":50,"why":"..."}]}',
+    "n = resultText(goals)·missionText(missions)의 항목 번호. p = 0~150 정수(%). why = 30자 이내 근거 한 줄.",
+    "산정 규칙: 목표 문구에 적힌 계획 빈도(월 1회 이상·주 1회·주 2회·매번·일 1회 등)와 분기 3개월 동안 실제로 기록된 실행(각 월 칸의 내용, weeklyRecordsText의 관련 기록)을 비교해 비율로 낸다.",
+    "예: 월 1회 계획에 3개월 중 2개월 실행 기록 → 67. 주 1회 계획(분기 약 12회)에 8회 기록 → 67. 수치 목표(100% 계약갱신 등)는 기록된 달성률을 그대로 쓴다.",
+    "월 칸이 비어 있고 주간 기록에도 관련 내용이 없으면 0. 초과 달성은 최대 150까지. 항목마다 반드시 하나씩 낸다(빠뜨리지 않는다).",
     "",
     "[질문 정의]",
     "q1 = 지난기간 나의 성과는?",
@@ -98,6 +105,22 @@ function normalizeAnswers(raw: unknown): Record<string, Record<string, string>> 
   }
 
   return normalized;
+}
+
+// 목표별 진도율 제안 — 앱은 직접 입력된 값이 없는 목표만 이 값으로 채운다(2026-09-21 "진도율도 알아서 계산해줘야지")
+type ProgressItem = { n: number; p: number; why: string };
+function normalizeProgress(raw: unknown): { goals: ProgressItem[]; missions: ProgressItem[] } {
+  const src = raw && typeof raw === "object" ? (raw as { progress?: unknown }).progress : null;
+  const pick = (list: unknown): ProgressItem[] => Array.isArray(list)
+    ? list.map((item) => {
+      const row = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+      const n = Math.round(Number(row.n ?? row.index ?? 0));
+      const p = Math.max(0, Math.min(150, Math.round(Number(row.p ?? row.progress ?? 0) || 0)));
+      return { n, p, why: String(row.why ?? row.reason ?? "").slice(0, 80) };
+    }).filter((item) => item.n > 0)
+    : [];
+  const obj = (src && typeof src === "object" ? src : {}) as Record<string, unknown>;
+  return { goals: pick(obj.goals), missions: pick(obj.missions) };
 }
 
 Deno.serve(async (req) => {
@@ -175,7 +198,7 @@ Deno.serve(async (req) => {
       data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") ||
       "";
     const parsed = JSON.parse(outputText || "{}");
-    return new Response(JSON.stringify({ answers: normalizeAnswers(parsed), model }), {
+    return new Response(JSON.stringify({ answers: normalizeAnswers(parsed), progress: normalizeProgress(parsed), model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
