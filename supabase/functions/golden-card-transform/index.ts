@@ -38,10 +38,11 @@ function buildInstruction(quarterLabel: string) {
     "",
     "[진도율(progress) 산정 - 추가 출력]",
     '최상위 "progress" 키의 형식: {"goals":[{"n":1,"p":67,"why":"월1회 계획, 3개월 중 2개월 기록"}],"missions":[{"n":1,"p":50,"why":"..."}]}',
-    "n = resultText(goals)·missionText(missions)의 항목 번호. p = 0~150 정수(%). why = 30자 이내 근거 한 줄.",
+    "n = resultText(goals)·missionText(missions)의 항목 번호. p = 0 이상 정수(%) — 상한 없음. why = 30자 이내 근거 한 줄.",
     "산정 규칙: 목표 문구에 적힌 계획 빈도(월 1회 이상·주 1회·주 2회·매번·일 1회 등)와 분기 3개월 동안 실제로 기록된 실행(각 월 칸의 내용, weeklyRecordsText의 관련 기록)을 비교해 비율로 낸다.",
     "예: 월 1회 계획에 3개월 중 2개월 실행 기록 → 67. 주 1회 계획(분기 약 12회)에 8회 기록 → 67. 수치 목표(100% 계약갱신 등)는 기록된 달성률을 그대로 쓴다.",
-    "월 칸이 비어 있고 주간 기록에도 관련 내용이 없으면 0. 초과 달성은 최대 150까지. 항목마다 반드시 하나씩 낸다(빠뜨리지 않는다).",
+    "월 칸이 비어 있고 주간 기록에도 관련 내용이 없으면 0. 초과 달성은 실제 비율 그대로 쓴다(예: 주 3회 계획=분기 36회에 1,250회 기록 → 3472). 항목마다 반드시 하나씩 낸다(빠뜨리지 않는다).",
+    "resultText의 '진도율:미입력(산정 필요)'은 앱에 값이 없다는 뜻이다. q1 등 답변 문장에 진도율을 쓸 때는 네가 progress로 산정한 값을 쓰고, '결과표 진도율 0%'처럼 미입력 값을 문장에 옮기지 않는다.",
     "",
     "[질문 정의]",
     "q1 = 지난기간 나의 성과는?",
@@ -115,7 +116,7 @@ function normalizeProgress(raw: unknown): { goals: ProgressItem[]; missions: Pro
     ? list.map((item) => {
       const row = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
       const n = Math.round(Number(row.n ?? row.index ?? 0));
-      const p = Math.max(0, Math.min(150, Math.round(Number(row.p ?? row.progress ?? 0) || 0)));
+      const p = Math.max(0, Math.min(9999, Math.round(Number(row.p ?? row.progress ?? 0) || 0)));
       return { n, p, why: String(row.why ?? row.reason ?? "").slice(0, 80) };
     }).filter((item) => item.n > 0)
     : [];

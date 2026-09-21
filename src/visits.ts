@@ -186,6 +186,7 @@ export type LevelGoal = {
   month2: string;
   month3: string;
   progress: number;
+  progressAuto?: boolean; // AI가 산정해 채운 값 — 다음 변환 때 덮어쓸 수 있다. 직접 입력하면 false
   resultMerged?: boolean;
   color?: string; // (구버전) 전체 글자색
   titleHtml?: string; // 목표 서식(부분 색상) HTML
