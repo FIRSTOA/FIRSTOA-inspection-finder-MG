@@ -484,19 +484,19 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
   }).filter(Boolean).join("\n\n");
 
   const buildGoldenPayload = (exampleCard?: GoldenCard, exampleMeta?: { year: number; quarter: number }, weeklyRecordsText = "") => {
+    // 셀 합침(resultMerged) 목표는 분기 3개월 기록을 한 칸에 쓴 것 — 월 3줄로 보내면 AI가 "1/3개월 33%"로 깎는다(2026-09-21)
+    const monthLines = (goal: LevelGoal) => goal.resultMerged
+      ? [`${(quarter - 1) * 3 + 1}~${(quarter - 1) * 3 + 3}월 통합 기록: ${goal.month1 || "-"}`]
+      : [goal.month1, goal.month2, goal.month3].map((v, i) => `${(quarter - 1) * 3 + 1 + i}월: ${v || "-"}`);
     const planText = regularGoals.map((goal, i) => [
       `${i + 1}. [${goal.category}] ${goal.title || "(목표 미입력)"}`,
       `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress && !goal.progressAuto ? `${goal.progress}%` : "미입력(산정 필요)"}`,
-      `${(quarter - 1) * 3 + 1}월: ${goal.month1 || "-"}`,
-      `${(quarter - 1) * 3 + 2}월: ${goal.month2 || "-"}`,
-      `${(quarter - 1) * 3 + 3}월: ${goal.month3 || "-"}`,
+      ...monthLines(goal),
     ].join("\n")).join("\n\n");
     const missionText = missionGoals.map((goal, i) => [
       `${i + 1}. ${goal.title || "(미션 미입력)"}`,
       `등급:${goal.grade || "-"} 현재:${goal.currentLevel || "-"} 목표:${goal.targetLevel || "-"} 진도율:${goal.progress && !goal.progressAuto ? `${goal.progress}%` : "미입력(산정 필요)"}`,
-      `${(quarter - 1) * 3 + 1}월: ${goal.month1 || "-"}`,
-      `${(quarter - 1) * 3 + 2}월: ${goal.month2 || "-"}`,
-      `${(quarter - 1) * 3 + 3}월: ${goal.month3 || "-"}`,
+      ...monthLines(goal),
     ].join("\n")).join("\n\n");
     return {
       year,

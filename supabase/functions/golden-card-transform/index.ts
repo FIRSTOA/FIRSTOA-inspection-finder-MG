@@ -40,7 +40,9 @@ function buildInstruction(quarterLabel: string) {
     '최상위 "progress" 키의 형식: {"goals":[{"n":1,"p":67,"why":"월1회 계획, 3개월 중 2개월 기록"}],"missions":[{"n":1,"p":50,"why":"..."}]}',
     "n = resultText(goals)·missionText(missions)의 항목 번호. p = 0 이상 정수(%) — 상한 없음. why = 30자 이내 근거 한 줄.",
     "산정 규칙: 목표 문구에 적힌 계획 빈도(월 1회 이상·주 1회·주 2회·매번·일 1회 등)와 분기 3개월 동안 실제로 기록된 실행(각 월 칸의 내용, weeklyRecordsText의 관련 기록)을 비교해 비율로 낸다.",
-    "예: 월 1회 계획에 3개월 중 2개월 실행 기록 → 67. 주 1회 계획(분기 약 12회)에 8회 기록 → 67. 수치 목표(100% 계약갱신 등)는 기록된 달성률을 그대로 쓴다.",
+    "계획 빈도의 분기 총량: 월 1회→3회, 월 2회→6회, 주 1회→12회, 주 2회→24회, 주 3회→36회, 일 1회→약 60회(영업일), 매번→기록된 건수 대비 누락 여부.",
+    "예: 월 1회 계획에 실행 2회 기록 → 67. 주 1회 계획(12회)에 8회 기록 → 67. 수치 목표(100% 계약갱신 등)는 기록된 달성률을 그대로 쓴다.",
+    "'N~M월 통합 기록'으로 적힌 목표는 분기 3개월 전체를 한 칸에 쓴 것이다 — 기록이 한 칸에만 있다고 '1/3개월, 33%'처럼 월 수 비율로 깎지 않는다. 기록된 횟수·건수를 분기 총량과 비교하고, 횟수가 없으면 내용으로 실행 정도를 추정한다.",
     "월 칸이 비어 있고 주간 기록에도 관련 내용이 없으면 0. 초과 달성은 실제 비율 그대로 쓴다(예: 주 3회 계획=분기 36회에 1,250회 기록 → 3472). 항목마다 반드시 하나씩 낸다(빠뜨리지 않는다).",
     "resultText의 '진도율:미입력(산정 필요)'은 앱에 값이 없다는 뜻이다. q1 등 답변 문장에 진도율을 쓸 때는 네가 progress로 산정한 값을 쓰고, '결과표 진도율 0%'처럼 미입력 값을 문장에 옮기지 않는다.",
     "",
@@ -56,12 +58,14 @@ function buildInstruction(quarterLabel: string) {
     '3. 미달성은 숨기지 말고 "10/12회, 83%"처럼 정확히 쓰고 개선방향을 함께 쓴다.',
     '4. 초과달성은 "52/12건, 433%"처럼 분자/분모와 퍼센트를 함께 쓴다.',
     "5. 진행률 %, 수치화된 횟수, 건수, 완료 여부가 있는 항목은 문장 안에 반드시 포함한다.",
+    "6. 계획표·미션표의 항목 번호는 참조용일 뿐이다 — 어느 칸에서도 그 번호를 문장 앞에 쓰지 않는다.",
+    "7. 문장 끝에 (등급 C, 현재 1/목표 2) 같은 등급·현재레벨·목표레벨 괄호 표기를 붙이지 않는다 — 카드에는 성과 내용만 쓴다.",
     "",
     "[문체 규칙]",
     '1. 문체는 "~했습니다/완료했습니다/기여했습니다/깨달았습니다/향상시켰습니다"를 기본으로 한다.',
     "2. 성실하고 진정성 있게 쓰되 과장하지 않는다.",
     "3. 평가자가 근거를 바로 확인할 수 있게 짧고 명확하게 쓴다.",
-    '4. q1 성과: 항목 번호를 사용한다. 예: "1. ...했습니다."',
+    '4. q1 성과: 각 칸 안에서 1, 2, 3… 순서대로 새로 번호를 매긴다. 계획표의 목표 번호(4., 7., 11. 등)를 그대로 옮기지 않는다. 예: "1. ...했습니다."',
     '5. q2 기여: "[○○을 하며 기여한 점]" 대괄호 제목 + 겸손한 "~에 기여했습니다" 문장으로 쓴다.',
     '6. q3 학습: 각 항목은 "✅[○○을 통해 배운점]" 형식 + 성찰형 문장으로 쓴다.',
     "7. q4 지원 요청: 짧고 부담없이, 성장·회사기여 관점으로 쓴다.",
@@ -88,6 +92,16 @@ function buildInstruction(quarterLabel: string) {
   ].join("\n");
 }
 
+// 칸 안의 "4. …", "7. …"처럼 계획표 목표 번호가 그대로 넘어오면 1, 2, 3…으로 다시 매기고,
+// "(등급 C, 현재 1/목표 2)" 같은 등급·레벨 괄호 꼬리는 지운다(2026-09-21 요청). 번호 줄이 아니면 번호는 손대지 않는다.
+function renumber(raw: string): string {
+  const text = String(raw || "").replace(/\s*\((?:등급|현재|목표)[^()\n]*\)\s*(?=\n|$)/g, "");
+  let counter = 0;
+  const lines = text.split("\n");
+  if (!lines.some((line) => /^\s*\d+\s*[.)]\s+/.test(line))) return text;
+  return lines.map((line) => line.replace(/^(\s*)\d+\s*[.)]\s+/, (_m, indent: string) => `${indent}${++counter}. `)).join("\n");
+}
+
 function normalizeAnswers(raw: unknown): Record<string, Record<string, string>> {
   const source = raw && typeof raw === "object" && "answers" in raw ? (raw as { answers?: unknown }).answers : raw;
   const current = source && typeof source === "object" ? source as Record<string, unknown> : {};
@@ -101,7 +115,7 @@ function normalizeAnswers(raw: unknown): Record<string, Record<string, string>> 
     for (const cKey of compactCategories) {
       const appCategory = categoryMap[cKey];
       const value = compactRow?.[cKey] ?? appRow?.[appCategory] ?? appRow?.[cKey] ?? "";
-      normalized[appQuestion][appCategory] = typeof value === "string" ? value : String(value || "");
+      normalized[appQuestion][appCategory] = renumber(typeof value === "string" ? value : String(value || ""));
     }
   }
 
