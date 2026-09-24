@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { JUDGMENT_INFO, OKR_JUDGMENTS, type OkrJudgment } from "./okr";
+import { dirFromKey, moveCellFocus } from "./cellNav";
 
 export default function JudgmentPicker({ value, onChange, suggested }: { value: OkrJudgment | ""; onChange: (next: string) => void; suggested?: OkrJudgment | "" }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -27,8 +28,14 @@ export default function JudgmentPicker({ value, onChange, suggested }: { value: 
   }, [spot]);
   const pick = (next: string) => { onChange(next); setSpot(null); };
   return <>
-    <button ref={triggerRef} type="button" onClick={() => (spot ? setSpot(null) : place())}
-      className={`flex h-full min-h-[2.75rem] w-full items-start justify-between gap-1 px-2 py-1.5 text-left text-[12px] font-bold outline-none ${value ? "" : "text-slate-400"}`}>
+    <button ref={triggerRef} type="button" data-cell onClick={() => (spot ? setSpot(null) : place())}
+      onKeyDown={(e) => {
+        const dir = dirFromKey(e.key);
+        if (dir && !spot && triggerRef.current) { e.preventDefault(); moveCellFocus(triggerRef.current, dir); return; }
+        if (e.key === "Tab" && triggerRef.current) { e.preventDefault(); setSpot(null); moveCellFocus(triggerRef.current, e.shiftKey ? "left" : "right"); return; }
+        if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onChange(""); setSpot(null); }
+      }}
+      className={`flex h-full min-h-[2.75rem] w-full items-start justify-between gap-1 px-2 py-1.5 text-left text-[12px] font-bold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${value ? "" : "text-slate-400"}`}>
       <span className="flex items-center gap-1.5">{value && <span className={`h-2 w-2 shrink-0 rounded-full ${JUDGMENT_INFO[value].dot}`} />}{value || "선택"}</span>
       <svg width="12" height="12" viewBox="0 0 20 20" fill="none" className={`mt-0.5 shrink-0 ${value ? "opacity-50" : "text-slate-400"}`}><path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </button>

@@ -483,12 +483,18 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
     {/* 사람 박스 */}
     <div className="flex flex-wrap items-stretch gap-2 border-b border-slate-200 bg-slate-50 p-3">
       <PersonBox label="파트 종합" sub="통합집계에 반영" rows={rowsOf(partReport)} total={goals.length} selected={!member} onClick={() => onMember("")} />
+      <div role="button" tabIndex={0} onClick={() => onMember("__sum__")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMember("__sum__"); } }} className={`w-[104px] shrink-0 cursor-pointer rounded-lg border p-2.5 text-left transition ${member === "__sum__" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-800 hover:border-slate-400"}`}>
+        <div className="text-[13px] font-black">팀원 집계</div>
+        <div className="h-4 text-[10px] font-semibold text-slate-400">{members.length}명 · 조치 필요 인원</div>
+        <div className="mt-1 h-1" />
+      </div>
       <span className="mx-0.5 hidden w-px self-stretch bg-slate-200 sm:block" />
       {memberNames.map((name) => <PersonBox key={name} label={name} sub={name === author ? "나" : ""} rows={rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
       <button type="button" onClick={addOtherName} className="w-[64px] shrink-0 rounded-lg border border-dashed border-slate-300 text-[11px] font-bold text-slate-400 hover:bg-white">＋ 이름</button>
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
       {editable && custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{teamName(team)} 고유 목표 사용 중 · 공통으로 되돌리기</button>}
     </div>
+    {member === "__sum__" ? <TeamSummary team={team} goals={goals} members={members} partReport={partReport} onMember={onMember} /> : <>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
     {!member && <div className="grid grid-cols-2 border-b border-slate-200 text-[12px] lg:grid-cols-4">
       {([["leader", "파트장(부파트장)", "text"], ["author", "작성자", "text"], ["submitted", "제출일", "date"], ["headcount", "파트 인원수", "text"]] as Array<[keyof OkrReport["header"], string, string]>).map(([key, label, type], i) => <label key={key} className={`flex items-center gap-2 px-3 py-1.5 ${i < 3 ? "lg:border-r lg:border-slate-200" : ""} ${i % 2 === 0 ? "border-r border-slate-200" : ""}`}>
@@ -556,7 +562,50 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
         </tbody>
       </table>
     </div>
+    </>}
   </section>;
+}
+
+// ── 팀원 집계: 통합집계와 같은 모양으로, 목표별 팀원 판정 · 조치 필요 인원(미흡·미착수) · 파트 종합판정 ──
+function TeamSummary({ team, goals, members, partReport, onMember }: { team: OkrTeam; goals: OkrGoal[]; members: OkrReport[]; partReport: OkrReport; onMember: (m: string) => void }) {
+  const runs = pillarRuns(goals);
+  const names = members.map((m) => m.member);
+  const heads = ["병목", "목표", ...names, "조치 필요 인원", "파트 종합"];
+  const col = useColWidths(`okr_cols_teamsum_${team}_${names.length}`, [58, 280, ...names.map(() => 96), 150, 104]);
+  const stats = members.map((m) => { const rows = goals.map((g) => resultRowFor(m, g.no)); return { name: m.member, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows) }; });
+  return <div className="space-y-3 p-3">
+    {stats.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {stats.map((st) => <button key={st.name} type="button" onClick={() => onMember(st.name)} className="rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400">
+        <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">{st.name}</div><div className="text-[11px] font-bold tabular-nums text-slate-400">{st.judged >= goals.length && goals.length ? "작성 완료" : `판정 ${st.judged}/${goals.length}`}</div></div>
+        <div className="mt-1 flex items-end justify-between"><div className="text-2xl font-black tabular-nums text-slate-950">{st.rate === null ? "—" : `${st.rate}%`}<span className="ml-1 text-xs font-semibold text-slate-400">달성</span></div><div className="text-[11px] font-bold">{st.alerts > 0 ? <span className="text-rose-600">미흡·미착수 {st.alerts}</span> : <span className="text-slate-300">미흡 없음</span>}</div></div>
+      </button>)}
+    </div>}
+    <div className="overflow-x-auto">
+      <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+        <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
+        <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${TH_READ} ${i >= 2 && i < 2 + names.length ? "text-center" : ""} ${i === heads.length - 1 ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
+        <tbody>
+          {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
+            <PillarBar idx={run.idx} colSpan={heads.length} editable={false} onPillar={() => undefined} onAdd={() => undefined} />
+            {run.goals.map((goal) => {
+              const alertNames = members.filter((m) => isAlert(resultRowFor(m, goal.no).judgment)).map((m) => m.member);
+              const part = resultRowFor(partReport, goal.no);
+              const suggested = worstOfJudgments(members.map((m) => resultRowFor(m, goal.no).judgment));
+              return <tr key={goal.no}>
+                <td className={`${TD_READ} text-[11px] font-bold text-slate-500 ${alertNames.length ? "border-l-4 border-l-orange-500" : ""}`}>{shortBottleneck(goals, goal.no)}</td>
+                <td className={`${TD_READ} whitespace-pre-wrap font-semibold leading-snug text-slate-800`}>{goal.objective}</td>
+                {members.map((m) => <td key={m.member} className={`${TD} px-1 py-1.5 text-center`}><button type="button" onClick={() => onMember(m.member)} title={`${m.member} 기록 보기`}><JudgmentBadge value={resultRowFor(m, goal.no).judgment} /></button></td>)}
+                <td className={`${TD_READ} text-[11px] leading-snug`}>{alertNames.length ? <span className="font-black text-rose-600">{alertNames.join(", ")}</span> : <span className="text-slate-300">—</span>}</td>
+                <td className={`${TD} px-1 py-1.5 text-center`}><JudgmentBadge value={part.judgment} />{!normalizeJudgment(part.judgment) && suggested && <div className="mt-0.5 text-[10px] font-bold text-slate-400">제안 {suggested}</div>}</td>
+              </tr>;
+            })}
+          </FragmentRows>)}
+          {goals.length === 0 && <tr><td colSpan={heads.length} className="border border-slate-200 p-8 text-center text-sm font-bold text-slate-400">목표가 없습니다</td></tr>}
+        </tbody>
+      </table>
+    </div>
+    {!members.length && <div className="text-center text-[12px] font-semibold text-slate-400">아직 팀원 기록이 없습니다 — 팀원이 자기 박스에서 적으면 여기 모입니다</div>}
+  </div>;
 }
 
 // tbody 안에서 여러 행을 묶는 용도

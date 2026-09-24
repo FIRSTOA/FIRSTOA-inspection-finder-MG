@@ -4,8 +4,10 @@
 //  - 글자색 검정·빨강·파랑: 편집 중엔 드래그한 부분만, 선택 상태에선 칸 전체.
 //  - 평문(text)은 항상 같이 내보내서 AI·합치기·검색이 그대로 평문을 쓰고, 색이 들어간 경우에만 html을 함께 저장한다. 변환 규칙은 richText.ts.
 //  - readOnly면 그냥 글로 보여준다(팀원 칸의 목표·달성기준).
+//  - 키보드로 칸 옮기기: 선택 상태에서 화살표·Tab, 편집 중엔 Tab(오른쪽)·Shift+Tab(왼쪽)·Ctrl+Enter(아래). Enter는 줄바꿈(여러 줄 적는 칸이라 엑셀의 Alt+Enter 대신).
 import { useEffect, useRef, useState } from "react";
 import { isMobileDevice } from "./navApp";
+import { dirFromKey, moveCellFocus, type CellDir } from "./cellNav";
 import { RICH_COLORS, richToText, sanitizeRich, textToHtml, type RichColorKey } from "./richText";
 
 type Mode = "idle" | "selected" | "editing";
@@ -77,14 +79,21 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     lastRef.current = next;
     onChange?.(plain, key === "black" || !plain ? undefined : next);
   };
+  const move = (dir: CellDir) => { const w = wrapRef.current; if (w) moveCellFocus(w, dir); };
+  // 편집을 끝내고 옆 칸으로 — Tab / Shift+Tab / Ctrl+Enter
+  const finishAndMove = (dir: CellDir) => { emit(); ref.current?.blur(); setMode("idle"); window.setTimeout(() => { const w = wrapRef.current; if (w && !moveCellFocus(w, dir)) { w.focus(); setMode("selected"); } }, 0); };
   const onWrapKeyDown = (e: React.KeyboardEvent) => {
     if (mode !== "selected") return;
+    const dir = dirFromKey(e.key);
+    if (dir) { e.preventDefault(); move(dir); return; }
+    if (e.key === "Tab") { e.preventDefault(); move(e.shiftKey ? "left" : "right"); return; }
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); clearAll(); return; }
     if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); startEdit(); return; }
     if (e.key === "Escape") { e.preventDefault(); setMode("idle"); wrapRef.current?.blur(); return; }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); startEdit(true, e.key); }
   };
-  return <div ref={wrapRef} tabIndex={0} role="gridcell"
+  return <div ref={wrapRef} tabIndex={0} role="gridcell" data-cell
+    onFocus={(e) => { if (e.target === wrapRef.current && mode === "idle") setMode("selected"); }}
     onClick={() => { if (mode !== "idle") return; if (isMobileDevice) startEdit(); else { setMode("selected"); wrapRef.current?.focus(); } }}
     onDoubleClick={() => { if (mode !== "editing") startEdit(); }}
     onKeyDown={onWrapKeyDown}
@@ -96,7 +105,11 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder}
       onInput={emit}
       onBlur={() => { emit(); setMode("idle"); }}
-      onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); ref.current?.blur(); setMode("selected"); wrapRef.current?.focus(); } }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") { e.preventDefault(); ref.current?.blur(); setMode("selected"); wrapRef.current?.focus(); return; }
+        if (e.key === "Tab") { e.preventDefault(); finishAndMove(e.shiftKey ? "left" : "right"); return; }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finishAndMove("down"); }
+      }}
       onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, t); }}
       style={{ minHeight }}
       className={`block h-full w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" ? "pr-16" : ""} ${className}`} />
