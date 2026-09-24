@@ -5564,6 +5564,35 @@ export default function App() {
   };
 
   const addInspectionDevice = (info: DeviceInfo) => {
+    // 접수 원문 변환(AS 탭, blank-report)은 '목록 항목 하나 = 보고서 하나' 구조라 기기를 덧붙일 자리가 없었다.
+    // 기기를 추가한 뒤에도 미리보기엔 안 나타나고 선택칸에 (미상)만 떴다(2026-09-24 케이티투). 이때는 지금 양식을
+    // 점검 탭 구조(한 양식 안에 기기 여러 대)로 옮긴 뒤 붙인다 — 구분(AS)·업체·키맨·1번 기기 값은 그대로 간다.
+    if (mode === "blank-report") {
+      const fullText = buildResultText().replace(/^(\s*)(\d+)\s+\.(?=\s|$)/gm, "$1$2.");
+      const parts = inspectionDeviceParts(fullText);
+      if (parts.devices.length) {
+        const forms = parseItemDataFromText(fullText, parts.devices.length);
+        const nextIndex = parts.devices.length;
+        const rebuilt = rebuildInspectionDevices(parts.header, [...parts.devices, [`${nextIndex + 1}.`, ...NEW_DEVICE_LINES]], parts.footer);
+        const typeLine = fullText.match(/^구분\s*[:：]\s*(.*)$/m)?.[1] || "";
+        const types = /A\s*\/?\s*S/i.test(typeLine) ? ["AS"] : /점\s*검/.test(typeLine) ? ["점검"] : (reportTypes.length ? reportTypes : ["AS"]);
+        modeStateRef.current[mode] = { inputText, textOutput, listOutput, itemForms, sharedForm, selectedItem, editedBlocks, airForm, reportTypes, reportTypeOther };
+        delete modeStateRef.current["inspection"];
+        photos.forEach((photo) => { if (photo.id) void photoStorePut("inspection", photo.id, photo.file); }); // 사진은 탭을 따라간다
+        setMode("inspection");
+        setTextOutput(rebuilt);
+        setListOutput([]);
+        setItemForms([...(forms.length ? forms : [{ ...EMPTY_ITEM_FORM }]), { ...EMPTY_ITEM_FORM, ...info, location: cleanDeviceLocation(info.location, nextIndex + 1) }]);
+        setSharedForm((current) => ({ ...current, ...parseSharedDataFromText(fullText), author }));
+        setSelectedItem(nextIndex);
+        setEditedBlocks({});
+        setReportTypes(types);
+        skipAutoRef.current = true;
+        setInputText(rebuilt);
+        showToast(`${nextIndex + 1}번 기기를 추가했어요 — 기기 여러 대를 다루려고 점검 탭 구조로 옮겼습니다(구분·내용은 그대로)`, "success");
+        return;
+      }
+    }
     const parts = inspectionDeviceParts(buildResultText());
     if (!parts.devices.length) {
       const firstForm = { ...EMPTY_ITEM_FORM, ...info, location: cleanDeviceLocation(info.location, 1) };
