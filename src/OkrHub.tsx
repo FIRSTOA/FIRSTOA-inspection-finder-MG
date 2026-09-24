@@ -60,6 +60,29 @@ const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
 const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
 const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-800";
 const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
+const INLINE_SELECT = "!rounded-md !border-0 !bg-transparent !px-1.5 !py-0.5 !text-[12px] !font-bold !text-slate-200 hover:!bg-white/10"; // 제목 블록 안의 글자 드롭다운
+
+// 열 너비 — 머리 칸 오른쪽 가장자리를 끌어 조절(엑셀처럼, 2026-09-24). 이 브라우저에 기억(localStorage), 가장자리를 두 번 누르면 기본값.
+function useColWidths(storageKey: string, defaults: number[]) {
+  const [widths, setWidths] = useState<number[]>(() => {
+    try { const saved = JSON.parse(localStorage.getItem(storageKey) || "null"); if (Array.isArray(saved) && saved.length === defaults.length) return saved.map((n) => Math.max(40, Number(n) || 0)); } catch { /* 무시 */ }
+    return defaults;
+  });
+  const persist = (next: number[]) => { try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* 무시 */ } };
+  const startDrag = (index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const start = widths[index];
+    let latest = widths;
+    const onMove = (ev: MouseEvent) => { const next = [...latest]; next[index] = Math.max(40, start + ev.clientX - startX); latest = next; setWidths(next); };
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); persist(latest); };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+  const resetCol = (index: number) => { const next = [...widths]; next[index] = defaults[index]; setWidths(next); persist(next); };
+  return { widths, total: widths.reduce((a, b) => a + b, 0), startDrag, resetCol };
+}
+const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
 
 // Pillar 행 머리 — 표 위 가로 막대. 고칠 수 있는 화면(파트 종합·통합집계)에서는 여기서 Pillar를 바꾸고 병목을 추가한다.
 function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: number; colSpan: number; editable: boolean; onPillar: (i: number) => void; onAdd: () => void }) {
@@ -364,20 +387,7 @@ export default function OkrHub({ author }: { author: string }) {
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
 
   return <div className="space-y-4 pb-16">
-    <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-        <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonth(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-        <div className="grid flex-1 grid-cols-6 gap-1 rounded-full bg-white/10 p-1 sm:grid-cols-12">
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <button key={m} type="button" onClick={() => openMonth(year, m)} className={`relative rounded-full px-1 py-1.5 text-xs font-bold transition sm:text-sm ${month === m ? "bg-white text-slate-950" : monthsWithData.has(m) ? "text-slate-200 hover:bg-white/10" : "text-slate-500 hover:bg-white/10"}`}>{m}월{monthsWithData.has(m) && month !== m && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-white/70" />}</button>)}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-        {saveStatus === "saving" && <span className="rounded-full bg-white/10 px-3 py-1.5">저장 중…</span>}
-        {saveStatus === "error" && <span className="rounded-full bg-rose-500/20 px-3 py-1.5 text-rose-200">저장 실패</span>}
-        {cycle && <span className="rounded-full bg-white/10 px-3 py-1.5 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>}
-      </div>
-    </section>
-
+    {(!cycle || tableMissing) && !loading && <div className="rounded-xl bg-[#1E252F] px-5 py-4 text-sm font-black text-white">OKR · {year}년 {month}월</div>}
     {tableMissing && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><b>OKR 표가 아직 없습니다.</b> Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>(표 만들기)을 한 번 실행한 뒤 이 화면을 다시 열어 주세요.</div>}
     {needsUpgrade && !tableMissing && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>OKR 표를 한 번 더 올려야 합니다.</b> 팀원별 기록 칸(member)이 없는 예전 표라 저장이 안 됩니다. Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>을 다시 실행하면(기존 내용은 그대로) 바로 됩니다.</div>}
     {message && !tableMissing && <div className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white">{message}</div>}
@@ -385,9 +395,21 @@ export default function OkrHub({ author }: { author: string }) {
     {cycle && !tableMissing && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[#1E252F] px-5 py-4">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">Monthly OKR · {cycleLabel(cycle)}</div>
-          <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
-          {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{commonGoals.some((g) => g.objective) ? "아직 기록이 없는 달 — 지난달 목표를 그대로 가져왔습니다" : "아직 목표가 없는 달 — 표에서 바로 적어 주세요"}</p>}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="-ml-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
+                <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(v) => openMonth(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
+                <span className="px-1 text-slate-500">·</span><span className="px-1 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
+                {saveStatus === "saving" && <span className="ml-2 text-slate-400">저장 중…</span>}
+                {saveStatus === "error" && <span className="ml-2 text-rose-300">저장 실패</span>}
+              </div>
+              <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
+              {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{commonGoals.some((g) => g.objective) ? "아직 기록이 없는 달 — 지난달 목표를 그대로 가져왔습니다" : "아직 목표가 없는 달 — 표에서 바로 적어 주세요"}</p>}
+            </div>
+            <div className="grid w-full grid-cols-6 gap-1 rounded-full bg-white/10 p-1 sm:grid-cols-12 lg:w-[560px] lg:shrink-0">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <button key={m} type="button" onClick={() => openMonth(year, m)} className={`relative rounded-full px-1 py-1.5 text-xs font-bold transition sm:text-sm ${month === m ? "bg-white text-slate-950" : monthsWithData.has(m) ? "text-slate-200 hover:bg-white/10" : "text-slate-500 hover:bg-white/10"}`}>{m}월{monthsWithData.has(m) && month !== m && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-white/70" />}</button>)}
+            </div>
+          </div>
         </div>
         <div className="flex gap-1 overflow-x-auto px-3 pt-2">
           {tabs.map(([key, label]) => {
@@ -436,7 +458,6 @@ const COLS: Array<[string, number, "read" | "write"]> = [
   ["병목", 58, "read"], ["목표", 220, "read"], ["달성기준", 250, "read"],
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
-const TABLE_MIN = COLS.reduce((n, [, w]) => n + w, 0);
 
 function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onResetGoals, onMerge, onAiMerge, onAiFormat, onGoal, onPillar, onInsert, onRemove }: {
   team: OkrTeam; cycle: OkrCycle; goals: OkrGoal[]; custom: boolean; reports: OkrReport[]; member: string; onMember: (m: string) => void; onRemoveMember: (name: string) => void; roster: string[]; author: string; aiBusy: string;
@@ -454,6 +475,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
     if (name && name.trim()) onMember(name.trim());
   };
   const rowsOf = (r: OkrReport | undefined) => goals.map((g) => resultRowFor(r, g.no));
+  const col = useColWidths("okr_cols_team", COLS.map(([, w]) => w));
   const rich = (row: OkrResultRow, field: RichField, no: number, placeholder: string, extra = "") => <RichCell text={row[field]} html={row.html?.[field]} placeholder={placeholder} className={extra} minRows={3} onChange={(t, h) => onResult(no, { [field]: t, html: withHtml(row, field, h) })} />;
   const goalCell = (goal: OkrGoal, field: "objective" | "criteria", placeholder: string, extra = "") => <RichCell text={goal[field]} html={goal.html?.[field]} placeholder={placeholder} className={extra} minRows={2} readOnly={!editable} onChange={(t, h) => onGoal(goal.no, { [field]: t, html: goalHtml(goal, field, h) })} />;
 
@@ -476,10 +498,10 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
     </div>}
 
     <div className="overflow-x-auto">
-      <table className="border-collapse text-left text-[12px]" style={{ minWidth: TABLE_MIN, width: "100%" }}>
-        <colgroup>{COLS.map(([label, w]) => <col key={label} style={{ width: w }} />)}</colgroup>
+      <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+        <colgroup>{COLS.map(([label], i) => <col key={label} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="sticky top-0 z-10 text-[11px] font-bold">
-          <tr>{COLS.map(([label, , mode]) => <th key={label} className={mode === "write" ? TH_WRITE : TH_READ}>{label}</th>)}</tr>
+          <tr>{COLS.map(([label, , mode], i) => <th key={label} className={`relative ${mode === "write" ? TH_WRITE : TH_READ}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>
         </thead>
         <tbody>
           {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
@@ -557,6 +579,8 @@ function SummaryView({ cycle, cycles, reports, aiBusy, customTeams, onFeedback, 
   });
   const otherMonths = cycles.filter((c) => c.kind === "month" && c.id !== cycle.id && c.goals.some((g) => g.objective.trim()));
   const SUMMARY_COLS = 4 + OKR_TEAMS.length; // 병목 · 목표 · 파트별 · 조치 · 피드백
+  const col = useColWidths("okr_cols_summary", [58, 300, ...OKR_TEAMS.map(() => 84), 130, 360]);
+  const heads = ["병목", "목표 (공통)", ...OKR_TEAMS.map(teamName), "조치 필요 파트", "미흡항목 피드백 & 다음 달 개선 방향"];
   return <div className="space-y-3">
     <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {perTeam.map(({ team, rep, total, judged, alerts, rate, members }) => <div key={team} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -572,9 +596,9 @@ function SummaryView({ cycle, cycles, reports, aiBusy, customTeams, onFeedback, 
         {otherMonths.length > 0 && <PortalSelect width={200} value="" onChange={(v) => v && onCopyGoals(v)} options={[{ value: "", label: "다른 달 목표 가져오기…" }, ...otherMonths.map((c) => ({ value: c.id, label: `${cycleLabel(c)} (${c.goals.length}개)` }))]} />}
       </div>}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
-          <colgroup><col style={{ width: 58 }} /><col style={{ width: 300 }} />{OKR_TEAMS.map((t) => <col key={t} style={{ width: 84 }} />)}<col style={{ width: 130 }} /><col /></colgroup>
-          <thead className="text-[11px] font-bold"><tr><th className={TH_READ}>병목</th><th className={TH_READ}>목표 (공통)</th>{OKR_TEAMS.map((t) => <th key={t} className={`${TH_READ} text-center`}>{teamName(t)}</th>)}<th className={TH_READ}>조치 필요 파트</th><th className={TH_WRITE}>미흡항목 피드백 & 다음 달 개선 방향</th></tr></thead>
+        <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+          <colgroup>{heads.map((h, i) => <col key={h} style={{ width: col.widths[i] }} />)}</colgroup>
+          <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={h} className={`relative ${i === heads.length - 1 ? TH_WRITE : TH_READ} ${i >= 2 && i < 2 + OKR_TEAMS.length ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
           <tbody>
             {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
               <PillarBar idx={run.idx} colSpan={SUMMARY_COLS} editable onPillar={(i) => onPillar(run.goals.map((g) => g.no), i)} onAdd={() => onInsert(run.goals[run.goals.length - 1].no, run.goals[0].pillar)} />

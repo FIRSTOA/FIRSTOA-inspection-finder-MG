@@ -56,6 +56,8 @@ const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
 const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400";
 const CELL_AREA = "block w-full bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none placeholder:text-slate-300";
 const BAR = "border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
+// 제목 블록 안의 조회 조건 — 상자 없는 글자 드롭다운(따로 있던 필터 바를 제목 블록에 합침, 2026-09-24)
+const INLINE_SELECT = "!rounded-md !border-0 !bg-transparent !px-1.5 !py-0.5 !text-[12px] !font-bold !text-slate-200 hover:!bg-white/10";
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
   const endDate = new Date(`${r.start}T12:00:00+09:00`);
@@ -351,26 +353,24 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-4 pb-16">
-    <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
-      <div className="flex flex-wrap items-center gap-2">
-        {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]" />}
-        {period !== "day" && <PortalSelect tone="dark" width={130} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
-        {(period === "week" || period === "month") && <>
-          <PortalSelect tone="dark" width={120} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />
-          {period === "week" && <PortalSelect tone="dark" width={220} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
-        </>}
-        {period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "border border-white/15 text-slate-300 hover:bg-white/10"}`}>{q}분기</button>)}</div>}
-        <PortalSelect tone="dark" width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
-        <div className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold tabular-nums text-slate-300">{range.start} ~ {range.end}</div>
-      </div>
-    </section>
     {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">{subject} · <span className="tabular-nums">{range.start} ~ {range.end}</span></div>
-        <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
-        <p className="mt-1 text-[11px] font-semibold text-slate-400">FIELD 기록을 기준으로 자동 집계됩니다.</p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="-ml-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
+              {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md bg-transparent px-1.5 py-0.5 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
+              {period !== "day" && <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
+              {(period === "week" || period === "month") && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />}
+              {period === "week" && <PortalSelect tone="dark" className={INLINE_SELECT} width={200} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
+              {period === "quarter" && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(quarter)} onChange={(next) => setQuarter(Number(next))} options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))} />}
+              <span className="px-1 text-slate-500">·</span>
+              <PortalSelect tone="dark" className={INLINE_SELECT} width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
+            </div>
+            <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
+          </div>
+          <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto lg:shrink-0">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">
         {[['방문 거래처', `${sum.visits}곳`], ['기계 대수', `${sum.machines}대`], ['외근 시간', hm(sum.fieldMinutes)], ['내근 시간', hm(insideMinutes)]].map(([l, v]) => <div key={l} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}</div></div>)}
@@ -383,8 +383,8 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
     {!loading && <>
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 760 }}>
-        <thead><tr><th className={`${TH} w-16 text-slate-800`}>외근</th><th className={`${TH} text-slate-800`}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={`${TH} text-slate-800`}>{WORK_LABELS[k]}</th>)}</tr></thead>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
+        <thead><tr><th className={`${TH} w-16 whitespace-nowrap text-slate-800`}>외근</th><th className={`${TH} whitespace-nowrap text-slate-800`}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={`${TH} whitespace-nowrap text-slate-800`}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
           <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
             {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>

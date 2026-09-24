@@ -694,7 +694,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     <div className="space-y-5 pb-16">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 다크 헤더 — 설명 + 조회 조건(연도/분기/직원)을 한 줄에 모은다 */}
-        <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3 bg-[#1E252F] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-base font-black text-white lg:text-lg">골든미팅카드</h2>
           </div>
