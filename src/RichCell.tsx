@@ -21,8 +21,8 @@ function placeCaretEnd(el: HTMLElement) {
   sel?.addRange(range);
 }
 
-export default function RichCell({ text, html, onChange, placeholder = "", className = "", minRows = 2, readOnly = false }: {
-  text: string; html?: string; onChange?: (text: string, html: string | undefined) => void; placeholder?: string; className?: string; minRows?: number; readOnly?: boolean;
+export default function RichCell({ text, html, onChange, placeholder = "", className = "", minRows = 2, readOnly = false, colors = true }: {
+  text: string; html?: string; onChange?: (text: string, html: string | undefined) => void; placeholder?: string; className?: string; minRows?: number; readOnly?: boolean; colors?: boolean; // colors=false: 평문 칸(색 저장 자리가 없는 곳)
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -99,7 +99,7 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     onKeyDown={onWrapKeyDown}
     onBlur={(e) => { if (mode === "selected" && !wrapRef.current?.contains(e.relatedTarget as Node | null)) setMode("idle"); }}
     className={`relative h-full min-h-full cursor-cell outline-none ${mode === "selected" ? "ring-2 ring-inset ring-blue-500" : ""}`} style={{ minHeight }}>
-    {mode !== "idle" && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
+    {mode !== "idle" && colors && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}
     <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder}
@@ -112,6 +112,6 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
       }}
       onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, t); }}
       style={{ minHeight }}
-      className={`block h-full w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" ? "pr-16" : ""} ${className}`} />
+      className={`block h-full w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" && colors ? "pr-16" : ""} ${className}`} />
   </div>;
 }

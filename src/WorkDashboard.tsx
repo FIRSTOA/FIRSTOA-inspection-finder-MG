@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PortalSelect from "./PortalSelect";
+import RichCell from "./RichCell";
+import { inputCellKeyDown } from "./cellNav";
 import {
   EMPTY_WEEKLY_NOTE, OFFICE_LABELS, WORK_LABELS, emptyOfficeValues, getOfficeLogs, getVisits,
   getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
@@ -53,7 +55,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
 const TD_LABEL = "border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500";
 const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
-const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400";
+const TD_WRITE = "border border-slate-200 h-px p-0 align-top bg-[#FFFBEB] focus-within:bg-white";
 const CELL_AREA = "block w-full bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none placeholder:text-slate-300";
 const BAR = "border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
 // 제목 블록 안의 조회 조건 — 상자 없는 글자 드롭다운(따로 있던 필터 바를 제목 블록에 합침, 2026-09-24)
@@ -84,25 +86,6 @@ function weeksInMonth(year: number, month: number) {
     out.push({ ...wr, label: `${out.length + 1}주` });
   }
   return out;
-}
-
-function AutoGrowTextarea({ value, onChange, className = "", rows = 1 }: { value: string; onChange: (value: string) => void; className?: string; rows?: number }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-  return (
-    <textarea
-      ref={ref}
-      rows={rows}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`resize-none overflow-hidden ${className}`}
-    />
-  );
 }
 
 function transformGrowthNote(text: string) {
@@ -226,12 +209,12 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
         const inputClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-slate-400";
         return (
           <div key={index} className="grid gap-1 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px]">
-            <input value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
-            <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
-            <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
-            <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
-            <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
-            <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
+            <input data-cell onKeyDown={inputCellKeyDown} value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
             <button type="button" onClick={remove} className="text-sm font-black text-slate-300 hover:text-rose-500">×</button>
           </div>
         );
@@ -390,7 +373,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
             {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
           {period === "week" && <>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
-              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-base font-bold tabular-nums`} /></td>)}</tr>
+              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input data-cell onKeyDown={inputCellKeyDown} type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-base font-bold tabular-nums`} /></td>)}</tr>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
               {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target;
                 return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className={`text-base font-black leading-tight ${actual >= target ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</div><div className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
@@ -445,16 +428,16 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
             {note.bottlenecks.map((item, i) => (
               <tr key={i}>
                 <td className={TD_LABEL}>병목 {i + 1}</td>
-                <td className={TD_WRITE}><AutoGrowTextarea value={item.title} onChange={(value) => onBottleneckChange(i, "title", value)} rows={2} className={`${CELL_AREA} font-semibold`} /></td>
-                <td className={TD_WRITE}><AutoGrowTextarea value={item.cause} onChange={(value) => onBottleneckChange(i, "cause", value)} rows={2} className={CELL_AREA} /></td>
-                <td className={TD_WRITE}><AutoGrowTextarea value={item.solution} onChange={(value) => onBottleneckChange(i, "solution", value)} rows={2} className={CELL_AREA} /></td>
+                <td className={TD_WRITE}><RichCell colors={false} text={item.title} onChange={(value) => onBottleneckChange(i, "title", value)} minRows={2} className="font-semibold" /></td>
+                <td className={TD_WRITE}><RichCell colors={false} text={item.cause} onChange={(value) => onBottleneckChange(i, "cause", value)} minRows={2} /></td>
+                <td className={TD_WRITE}><RichCell colors={false} text={item.solution} onChange={(value) => onBottleneckChange(i, "solution", value)} minRows={2} /></td>
               </tr>
             ))}
             {bar("주간 목표")}
             <tr><th className={TH} />{goalCols.map(([key, label]) => <th key={key} className={TH}>{label}</th>)}</tr>
             <tr>
               <td className={TD_LABEL}>내용</td>
-              {goalCols.map(([key]) => <td key={key} className={TD_WRITE}><AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={3} className={CELL_AREA} /></td>)}
+              {goalCols.map(([key]) => <td key={key} className={TD_WRITE}><RichCell colors={false} text={String(note[key])} onChange={(value) => onNoteChange(key, value)} minRows={3} /></td>)}
             </tr>
             {bar("성장 기록")}
             {weeklyCards.map((item) => (
@@ -469,7 +452,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
                 <td colSpan={3} className={TD_WRITE}>
                   {item.key === "learning"
                     ? <LearningRowsEditor value={String(note.learning)} onChange={(value) => onNoteChange("learning", value)} />
-                    : <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={2} className={CELL_AREA} />}
+                    : <RichCell colors={false} text={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} minRows={2} />}
                 </td>
               </tr>
             ))}

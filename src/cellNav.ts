@@ -34,3 +34,18 @@ export function moveCellFocus(from: HTMLElement, dir: CellDir): boolean {
 export function dirFromKey(key: string): CellDir | null {
   return key === "ArrowUp" ? "up" : key === "ArrowDown" ? "down" : key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : null;
 }
+
+// 일반 input·select 칸 — Tab은 옆 칸, 위/아래 화살표는 위아래 칸, 좌/우는 글자 끝에 닿았을 때만 옆 칸(select는 위/아래가 값 바꾸기라 Tab·좌우만)
+export function inputCellKeyDown(e: { key: string; shiftKey: boolean; currentTarget: HTMLElement; preventDefault: () => void }) {
+  const el = e.currentTarget;
+  if (e.key === "Tab") { if (moveCellFocus(el, e.shiftKey ? "left" : "right")) e.preventDefault(); return; }
+  const dir = dirFromKey(e.key);
+  if (!dir) return;
+  if (el instanceof HTMLSelectElement && (dir === "up" || dir === "down")) return;
+  if (el instanceof HTMLInputElement && el.type !== "number" && (dir === "left" || dir === "right")) {
+    const start = el.selectionStart ?? 0, end = el.selectionEnd ?? 0;
+    if (dir === "left" && !(start === 0 && end === 0)) return;
+    if (dir === "right" && !(start === el.value.length && end === el.value.length)) return;
+  }
+  if (moveCellFocus(el, dir)) e.preventDefault();
+}

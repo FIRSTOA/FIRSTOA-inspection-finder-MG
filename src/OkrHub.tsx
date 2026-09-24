@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
 import JudgmentPicker from "./JudgmentPicker";
+import { createPortal } from "react-dom";
 import { askConfirm } from "./confirmModal";
 import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
@@ -60,7 +61,6 @@ const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
 const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
 const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-800";
 const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
-const INLINE_SELECT = "!rounded-md !border-0 !bg-transparent !px-1.5 !py-0.5 !text-[12px] !font-bold !text-slate-200 hover:!bg-white/10"; // 제목 블록 안의 글자 드롭다운
 
 // 열 너비 — 머리 칸 오른쪽 가장자리를 끌어 조절(엑셀처럼, 2026-09-24). 이 브라우저에 기억(localStorage), 가장자리를 두 번 누르면 기본값.
 function useColWidths(storageKey: string, defaults: number[]) {
@@ -83,6 +83,35 @@ function useColWidths(storageKey: string, defaults: number[]) {
   return { widths, total: widths.reduce((a, b) => a + b, 0), startDrag, resetCol };
 }
 const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
+
+// 월 고르기 — 현재 달만 보이는 버튼, 누르면 분기별로 1·2·3월 / 4·5·6월… 묶인 작은 판이 뜬다(1~12월 나열 대신, 2026-09-24 사용자 제안). 기록 있는 달엔 점.
+function MonthPicker({ value, marks, onChange }: { value: number; marks: Set<number>; onChange: (m: number) => void }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
+  const place = () => { const box = triggerRef.current?.getBoundingClientRect(); if (!box) return; setSpot({ top: box.bottom + 6, left: Math.min(Math.max(8, box.right - 280), window.innerWidth - 288) }); };
+  useEffect(() => {
+    if (!spot) return;
+    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (!triggerRef.current?.contains(t) && !panelRef.current?.contains(t)) setSpot(null); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); setSpot(null); } };
+    document.addEventListener("mousedown", onDown); document.addEventListener("keydown", onKey); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [spot]);
+  return <>
+    <button ref={triggerRef} type="button" onClick={() => (spot ? setSpot(null) : place())} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/20">
+      {value}월<svg width="14" height="14" viewBox="0 0 20 20" fill="none" className={`text-slate-400 transition ${spot ? "rotate-180" : ""}`}><path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>
+    {spot && createPortal(
+      <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, width: 280, zIndex: 4000 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
+        {[1, 2, 3, 4].map((q) => <div key={q} className="flex items-center gap-1 py-0.5">
+          <span className="w-12 shrink-0 pl-1 text-[11px] font-bold text-slate-400">{q}분기</span>
+          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-[12px] font-bold transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"}`}>{m}월{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
+        </div>)}
+      </div>,
+      document.body,
+    )}
+  </>;
+}
 
 // Pillar 행 머리 — 표 위 가로 막대. 고칠 수 있는 화면(파트 종합·통합집계)에서는 여기서 Pillar를 바꾸고 병목을 추가한다.
 function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: number; colSpan: number; editable: boolean; onPillar: (i: number) => void; onAdd: () => void }) {
@@ -395,19 +424,17 @@ export default function OkrHub({ author }: { author: string }) {
     {cycle && !tableMissing && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[#1E252F] px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <div className="-ml-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
-                <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(v) => openMonth(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-                <span className="px-1 text-slate-500">·</span><span className="px-1 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
-                {saveStatus === "saving" && <span className="ml-2 text-slate-400">저장 중…</span>}
-                {saveStatus === "error" && <span className="ml-2 text-rose-300">저장 실패</span>}
-              </div>
-              <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
+              <h2 className="text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
               {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{commonGoals.some((g) => g.objective) ? "아직 기록이 없는 달 — 지난달 목표를 그대로 가져왔습니다" : "아직 목표가 없는 달 — 표에서 바로 적어 주세요"}</p>}
             </div>
-            <div className="grid w-full grid-cols-6 gap-1 rounded-full bg-white/10 p-1 sm:grid-cols-12 lg:w-[560px] lg:shrink-0">
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <button key={m} type="button" onClick={() => openMonth(year, m)} className={`relative rounded-full px-1 py-1.5 text-xs font-bold transition sm:text-sm ${month === m ? "bg-white text-slate-950" : monthsWithData.has(m) ? "text-slate-200 hover:bg-white/10" : "text-slate-500 hover:bg-white/10"}`}>{m}월{monthsWithData.has(m) && month !== m && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-white/70" />}</button>)}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
+              <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonth(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
+              <MonthPicker value={month} marks={monthsWithData} onChange={(m) => openMonth(year, m)} />
+              <span className="rounded-full bg-white/10 px-3 py-1.5 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
+              {saveStatus === "saving" && <span className="text-slate-400">저장 중…</span>}
+              {saveStatus === "error" && <span className="text-rose-300">저장 실패</span>}
             </div>
           </div>
         </div>
