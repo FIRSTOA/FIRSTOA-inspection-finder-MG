@@ -1157,11 +1157,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 간단처리도 방문일지에 남긴다 — 방문이면 AS 1건·방문 1건, 전화·원격이면 방문 아님(visited=false)으로 기록만(2026-09-24)
     if (mode && author) {
       const vendor = fieldTicketVendor(ticket.vendor).vendor || ticket.vendor;
-      void saveVisit({
+      // 같은 날 같은 업체를 FIELD로 이미 보냈으면(방문일지가 있으면) 또 세지 않는다 — 방문 1·AS 1은 한 번만
+      void selectRows<{ id: string }>("visit_logs", `select=id&author=eq.${encodeURIComponent(author)}&vendor=eq.${encodeURIComponent(vendor)}&work_date=eq.${getTodayYmd()}&limit=1`)
+        .catch(() => [] as Array<{ id: string }>)
+        .then((dup) => dup.length ? undefined : saveVisit({
         visited: mode === "visit", vendor, author, workDate: getTodayYmd(), arrivalTime: "", machineCount: 1, grade: ticket.grade || "",
         contractEnded: false, workKinds: ["as"], minutes: {}, salesIt: "", salesCopier: "", commute: "",
         note: `일정리스트 완료(${mode === "visit" ? "방문" : "전화·원격"})${reason.trim() ? ` — ${reason.trim()}` : ""}`,
-      }, `as-ticket:${ticket.id}`).catch(() => undefined);
+      }, `as-ticket:${ticket.id}`))
+        .catch(() => undefined);
     }
     // 상태 저장을 먼저 — 카톡·네이버 왕복을 기다리는 사이 모바일이 카톡으로 전환되면 fetch가 끊겨
     // "네이버 기록 실패"만 뜨고 완료 저장이 영영 안 되던 실사고(2026-08-25). 기록은 뒤에서 이어 남긴다.
