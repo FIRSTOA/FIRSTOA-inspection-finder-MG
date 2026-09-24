@@ -6,7 +6,7 @@
 // 표 생성·초기 데이터: supabase/okr.sql (사용자가 SQL Editor에서 실행).
 import { deleteRows, selectRows, upsertRow } from "./supabase";
 
-export const OKR_TEAMS = ["A", "B", "C", "D", "E"] as const;
+export const OKR_TEAMS = ["A", "B", "C", "D"] as const; // CSS팀(E)은 OKR 대상이 아니다(2026-09-24)
 export type OkrTeam = (typeof OKR_TEAMS)[number];
 
 export const OKR_JUDGMENTS = ["완료", "부분달성", "미흡", "미착수", "해당없음"] as const;
