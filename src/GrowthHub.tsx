@@ -1,3 +1,4 @@
+import { askConfirm } from "./confirmModal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import PortalSelect from "./PortalSelect";
@@ -264,7 +265,7 @@ function buildLearningGatherText(rows: WeeklyNoteRow[]) {
 export default function GrowthHub({ author, onOpenWeek }: { author: string; onOpenWeek?: (weekStart: string) => void }) {
   const { book } = useAuthorBook();
   const now = new Date();
-  const [tab, setTab] = useState<Tab>("records");
+  const [tab, setTab] = useState<Tab>("golden"); // 2026-09-24: 화면 이름이 골든미팅카드 — 첫 탭도 골든미팅카드
   const [year, setYear] = useState(now.getFullYear());
   const [quarter, setQuarter] = useState(Math.floor(now.getMonth() / 3) + 1);
   const [recordPeriod, setRecordPeriod] = useState<RecordPeriod>("quarter");
@@ -585,6 +586,49 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     }
   };
 
+  // 분기결과표 AI 수치 정리(2026-09-24) — 대략 적어 둔 결과를 목표별로 [성과] 수치(건수·시간·달성률·월별·평균) 중심으로 다시 쓴다.
+  // 원문 설명은 살리고 아래에 [성과]를 붙인다. 월 3칸에 나눠 적은 목표는 셀을 합쳐 한 칸으로 정리한다.
+  const [quantifyBusy, setQuantifyBusy] = useState(false);
+  const quantifyResults = async () => {
+    if (!person) { setMessage("작성자를 먼저 선택하세요."); return; }
+    const items = regularGoals.map((g, i) => ({
+      n: i + 1, id: g.id, title: g.title,
+      text: g.resultMerged ? String(g.month1 || "") : [g.month1, g.month2, g.month3].map((v, k) => (String(v || "").trim() ? `${(quarter - 1) * 3 + 1 + k}월: ${v}` : "")).filter(Boolean).join("\n"),
+    })).filter((x) => x.text.trim());
+    if (!items.length) { setMessage("정리할 결과 내용이 없습니다 — 분기결과표 칸에 먼저 대략 적어 주세요."); return; }
+    if (!await askConfirm(`${items.length}개 목표의 결과 내용을 AI가 수치 중심([성과])으로 다시 씁니다.\n원문 설명은 남기고, 월 3칸에 나눠 적은 목표는 한 칸으로 합칩니다. 계속할까요?`)) return;
+    setQuantifyBusy(true);
+    setMessage("");
+    try {
+      const weeklyRecordsText = await collectQuarterWeeklyText();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/quarter-result-quantify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+        body: JSON.stringify({ year, quarter, author: person, goals: items.map(({ n, title, text }) => ({ n, title, text })), weeklyRecordsText }),
+      });
+      if (!res.ok) throw new Error(`AI 수치 정리 실패(${res.status})`);
+      const data = await res.json() as { goals?: Array<{ n: number; text: string }>; model?: string; error?: string };
+      if (data.error) throw new Error(data.error);
+      const nextGoals: LevelGoal[] = plan.goals.map((g) => ({ ...g }));
+      let applied = 0;
+      for (const out of data.goals || []) {
+        const item = items.find((x) => x.n === out.n);
+        const slot = item ? nextGoals.find((g) => g.id === item.id) : undefined;
+        const text = String(out.text || "").trim();
+        if (!slot || !text) continue;
+        const html = text.split("\n").map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br>");
+        slot.resultMerged = true;
+        slot.month1 = text;
+        slot.month1Html = html;
+        applied += 1;
+      }
+      if (applied) setPlan({ ...plan, author: person, year, quarter, goals: nextGoals });
+      setMessage(`AI 수치 정리 완료 — ${applied}개 목표를 [성과] 수치 중심으로 다시 썼습니다. 사용 모델: ${data.model || "기본"}`);
+    } catch (e) {
+      setMessage((e as Error).message || "AI 수치 정리에 실패했습니다.");
+    } finally { setQuantifyBusy(false); }
+  };
+
   const addGoal = (kind: "regular" | "mission" = "regular") => {
     const g: LevelGoal = {
       id: crypto.randomUUID(),
@@ -639,7 +683,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         {/* 다크 헤더 — 설명 + 조회 조건(연도/분기/직원)을 한 줄에 모은다 */}
         <div className="flex flex-col gap-3 bg-[#151A23] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h2 className="text-base font-black text-white lg:text-lg">성장기록</h2>
+            <h2 className="text-base font-black text-white lg:text-lg">골든미팅카드</h2>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">주간현황판 기록을 모아 계획표·결과표·미션결과표·골든미팅카드로 잇습니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -656,7 +700,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           </div>
         </div>
         <div className="flex overflow-x-auto border-b border-slate-200">
-          {([["records", "성장기록 모아보기"], ["plan", "계획표"], ["result", "분기결과표"], ["mission", "미션결과표"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
+          {([["plan", "계획표"], ["result", "분기결과표"], ["mission", "미션결과표"], ["golden", "골든미팅카드"]] as [Tab, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
               className={`relative shrink-0 whitespace-nowrap px-4 py-3 text-[13px] font-black transition sm:px-5 sm:text-sm ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}
@@ -939,9 +983,12 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
             <div>
               <h3 className="text-base font-black text-slate-950 lg:text-lg">{year}년 {quarter}분기 결과표</h3>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">목표별 월간 결과를 기록합니다. 수치와 진행률 %는 반드시 남기세요.</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">목표별 결과를 대략 적어 두고 [AI 수치 정리]를 누르면 건수·시간·달성률·월별·평균 중심의 [성과]로 다시 정리됩니다.</p>
             </div>
-            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">{statusText[planAutoSaveStatus]}</div>
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={!person || quantifyBusy} onClick={() => void quantifyResults()} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(124,58,237,0.3)] transition hover:bg-violet-700 disabled:opacity-40">{quantifyBusy ? "AI 정리 중…" : "🧮 AI 수치 정리"}</button>
+              <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">{statusText[planAutoSaveStatus]}</div>
+            </div>
           </div>
           <div className="p-5">
           <div className="space-y-4 md:hidden">

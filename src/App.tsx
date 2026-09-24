@@ -5975,7 +5975,7 @@ export default function App() {
     // 사용설명서와 같은 묶음 — 매일 쓰는 5개(홈·FIELD·서비스접수·일정리스트·캘린더)는 그룹 없이 위에, 나머지는 접히는 그룹으로
     { title: "현장·동선", items: [["walkingMap", "워킨맵"], ["autoSchedule", "자동 일정"], ["recontract", "재계약 준비"], ["foodMap", "맛동여지도"]] },
     { title: "소식·학습", items: [["inbox", "공지·요청"], ["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
-    { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "성장기록"]] },
+    { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "골든미팅카드"]] },
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
