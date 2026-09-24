@@ -13,6 +13,7 @@ export function isDividerLine(line: string): boolean {
 
 const DEVICE_FIELD_RE = /^\s*(모델명|시리얼넘버|자산기번|내용|처리내용|매수|토너잔량|폐통|여분|한틴이카유무|주차비지원유무|특이사항)\s*:/;
 const DEVICE_ID_FILLED_RE = /^\s*(모델명|시리얼넘버|자산기번)\s*:\s*\S/;
+const QUANTITY_FIELD_RE = /^\s*(매수|토너잔량|폐통|여분)\s*:/;
 const NOTE_KEYWORD_RE = /(통합|여분|토너|드럼|폐통|공용)\s*보관|보관\s*(위치|장소|함|중)|비고|메모|참고|캐비넷|케비넷|캐비닛|창고/;
 // "450 토너 K 6 C 8 M 10 Y 7 폐 5", "5700 토너 3 드럼 3" — 기종별 재고를 줄줄이 적은 모양(기본값 "K- C-"는 숫자가 없어 안 걸린다)
 const INVENTORY_RE = /토너\s*(?:[KCMY]\s*)?\d|드럼\s*\d|폐(?:통)?\s*\d|K\s*\d+\s*,?\s*C\s*\d+/i;
@@ -23,6 +24,8 @@ const INVENTORY_RE = /토너\s*(?:[KCMY]\s*)?\d|드럼\s*\d|폐(?:통)?\s*\d|K\s
  *     — "12.토너 통합보관(C0003 좌측 캐비넷…)" + 기종별 수량 (2026-09-16 아시아프라퍼티)
  *  ② 기기 칸은 있지만 모델명·시리얼넘버·자산기번이 전부 비어 있고, 창고·보관 낱말이나 재고 줄이 있으면 메모
  *     — "13. 14층 창고" + 처리내용에 "450 토너 K 6 C 8 …" (2026-09-16 휴스틸). 식별칸이 하나라도 차 있으면 기기.
+ *     단, 토너잔량·여분·폐통·매수 칸의 숫자("K33 C33", "폐1")는 정상 기기 값이라 재고로 보지 않는다
+ *     — 모델명을 아직 안 적은 새 기기가 토너값 때문에 메모로 밀려 "(미상)"이 되던 실사고(2026-09-24 케이티투).
  * 예전엔 둘 다 기기로 세어 빈 양식으로 바꾸고 처리내용·아래 줄을 버렸다.
  */
 export function isSpareNoteBlock(lines: string[]): boolean {
@@ -32,7 +35,9 @@ export function isSpareNoteBlock(lines: string[]): boolean {
   const hasDeviceField = body.some((line) => DEVICE_FIELD_RE.test(line));
   if (!hasDeviceField) return NOTE_KEYWORD_RE.test(text);
   if (body.some((line) => DEVICE_ID_FILLED_RE.test(line))) return false;
-  return NOTE_KEYWORD_RE.test(text) || INVENTORY_RE.test(text);
+  // 표준 수량 칸은 빼고 본다 — 위치·내용·처리내용·특이사항 같은 자유 칸에 재고를 줄줄이 적은 것만 메모다
+  const freeText = body.filter((line) => !QUANTITY_FIELD_RE.test(line)).join("\n");
+  return NOTE_KEYWORD_RE.test(freeText) || INVENTORY_RE.test(freeText);
 }
 
 /** 번호 줄(start)부터 다음 구분선·※ 전까지의 블록 */

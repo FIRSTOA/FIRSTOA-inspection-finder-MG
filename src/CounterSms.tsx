@@ -80,6 +80,12 @@ export default function CounterSms({ author }: { author: string }) {
   const [batch, setBatch] = useState<BatchRow | null>(null);
   const [batchTargets, setBatchTargets] = useState<TargetRow[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+  // 문자앱에 갔다 돌아오거나 다른 기기에서 표시한 뒤 이 화면으로 오면 최신 표시를 다시 읽는다
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === "visible" && team) void loadBatch(team); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, [team]); // eslint-disable-line react-hooks/exhaustive-deps -- loadBatch는 팀만 보고 서버를 읽는다
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadRaw, setUploadRaw] = useState("");
   const [uploadBlocks, setUploadBlocks] = useState<ParsedBlock[] | null>(null);
@@ -163,14 +169,25 @@ export default function CounterSms({ author }: { author: string }) {
 
   // 전송 표시 — sms: 링크는 실제 발송 여부를 알려주지 않으므로 "문자앱을 연 순간"을 전송으로 기록한다.
   // 잘못 눌렀으면 카드의 [전송 취소]로 되돌린다. 기록은 팀 전체에 공유돼 이중 발송을 막는다.
+  // 저장은 3번까지 다시 시도하고, 끝내 실패하면 화면의 ✓를 되돌리고 알린다 — 예전엔 실패를 삼켜서 화면엔 ✓, 서버엔 없음이 됐고
+  // 다음에 열면 "보낸 게 초기화됐다"로 보였다(2026-09-24 심태현). 문자앱으로 넘어가는 순간 모바일 fetch가 끊기기 쉽다.
+  const persistSent = async (row: TargetRow, patch: { sent_at: string | null; sent_by: string | null; sent_phone: string | null }, label: string) => {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try { await updateRows("counter_sms_targets", `id=eq.${encodeURIComponent(row.id)}`, patch); return true; }
+      catch { if (attempt < 3) await new Promise((r) => setTimeout(r, 1200 * attempt)); }
+    }
+    setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, sent_at: row.sent_at, sent_by: row.sent_by, sent_phone: row.sent_phone } : t)));
+    setNotice(`${label} 기록 저장 실패 — 전파를 확인하고 ${row.vendor} 카드의 표시를 다시 눌러 주세요 (팀원에게는 아직 반영되지 않았습니다)`);
+    return false;
+  };
   const markSent = (row: TargetRow, phone: string) => {
     const patch = { sent_at: new Date().toISOString(), sent_by: author || "미지정", sent_phone: phone };
     setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t)));
-    void updateRows("counter_sms_targets", `id=eq.${encodeURIComponent(row.id)}`, patch).catch(() => undefined);
+    void persistSent(row, patch, "전송");
   };
   const unmarkSent = (row: TargetRow) => {
     setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, sent_at: null, sent_by: null, sent_phone: null } : t)));
-    void updateRows("counter_sms_targets", `id=eq.${encodeURIComponent(row.id)}`, { sent_at: null, sent_by: null, sent_phone: null }).catch(() => undefined);
+    void persistSent(row, { sent_at: null, sent_by: null, sent_phone: null }, "전송 취소");
   };
 
   // 마감 목록 올리기 — 붙여넣기 → 변환 미리보기(수정 가능) → 팀에 등록
