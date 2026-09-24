@@ -15,15 +15,18 @@ import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supa
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
-import { contactChoices, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
+import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
-type BatchRow = { id: string; team: string; title: string; raw: string; created_by: string; created_at: string };
+type BatchLogEntry = { at: string; by: string; added: number; skipped: string[] };
+type BatchRow = { id: string; team: string; title: string; raw: string; created_by: string; created_at: string; log?: BatchLogEntry[] | null };
 type TargetRow = {
   id: string; batch_id: string; team: string; vendor: string; grade_group: "s_group" | "v_group";
   phones: string[]; labels: Record<string, string>; machines: string[]; vendor_names: string[];
   sent_at: string | null; sent_by: string | null; sent_phone: string | null;
+  // 2026-09-24 추가 컬럼(supabase/counter-sms-done.sql) — 표가 아직 옛 모양이면 undefined
+  done_at?: string | null; done_by?: string | null; added_at?: string | null; added_by?: string | null;
 };
 
 const TEAMS = ["A", "B", "C", "D", "E"] as const;
@@ -90,6 +93,12 @@ export default function CounterSms({ author }: { author: string }) {
   const [uploadRaw, setUploadRaw] = useState("");
   const [uploadBlocks, setUploadBlocks] = useState<ParsedBlock[] | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadMode, setUploadMode] = useState<"merge" | "replace">("merge"); // 기본은 기존 목록에 없는 업체만 추가 — 전송·완료 표시가 날아가지 않게
+  // 완료·추가 이력 컬럼이 있는지(supabase/counter-sms-done.sql 실행 여부) — 없으면 그 기능만 안내하고 나머지는 예전처럼
+  const [extended, setExtended] = useState<boolean | null>(null);
+  useEffect(() => {
+    selectRows("counter_sms_targets", "select=done_at,added_at&limit=1").then(() => setExtended(true)).catch(() => setExtended(false));
+  }, []);
 
   const loadBatch = useCallback(async (t: string) => {
     if (!t) return;
@@ -171,23 +180,36 @@ export default function CounterSms({ author }: { author: string }) {
   // 잘못 눌렀으면 카드의 [전송 취소]로 되돌린다. 기록은 팀 전체에 공유돼 이중 발송을 막는다.
   // 저장은 3번까지 다시 시도하고, 끝내 실패하면 화면의 ✓를 되돌리고 알린다 — 예전엔 실패를 삼켜서 화면엔 ✓, 서버엔 없음이 됐고
   // 다음에 열면 "보낸 게 초기화됐다"로 보였다(2026-09-24 심태현). 문자앱으로 넘어가는 순간 모바일 fetch가 끊기기 쉽다.
-  const persistSent = async (row: TargetRow, patch: { sent_at: string | null; sent_by: string | null; sent_phone: string | null }, label: string) => {
+  const persistPatch = async (row: TargetRow, patch: Partial<TargetRow>, label: string) => {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try { await updateRows("counter_sms_targets", `id=eq.${encodeURIComponent(row.id)}`, patch); return true; }
       catch { if (attempt < 3) await new Promise((r) => setTimeout(r, 1200 * attempt)); }
     }
-    setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, sent_at: row.sent_at, sent_by: row.sent_by, sent_phone: row.sent_phone } : t)));
+    const revert = Object.fromEntries(Object.keys(patch).map((k) => [k, row[k as keyof TargetRow]]));
+    setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...revert } : t)));
     setNotice(`${label} 기록 저장 실패 — 전파를 확인하고 ${row.vendor} 카드의 표시를 다시 눌러 주세요 (팀원에게는 아직 반영되지 않았습니다)`);
     return false;
   };
   const markSent = (row: TargetRow, phone: string) => {
     const patch = { sent_at: new Date().toISOString(), sent_by: author || "미지정", sent_phone: phone };
     setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t)));
-    void persistSent(row, patch, "전송");
+    void persistPatch(row, patch, "전송");
   };
   const unmarkSent = (row: TargetRow) => {
     setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, sent_at: null, sent_by: null, sent_phone: null } : t)));
-    void persistSent(row, { sent_at: null, sent_by: null, sent_phone: null }, "전송 취소");
+    void persistPatch(row, { sent_at: null, sent_by: null, sent_phone: null }, "전송 취소");
+  };
+  // 완료 = 문자를 보낸 뒤 마감(카운터 회신·처리)까지 끝난 상태 — 보냄(✓)과 색이 다르다(2026-09-24 "보냈는지 끝났는지 헷갈린다")
+  const markDone = (row: TargetRow) => {
+    if (!extended) { setNotice("완료 표시를 쓰려면 Supabase SQL Editor에서 supabase/counter-sms-done.sql을 한 번 실행해 주세요."); return; }
+    const patch = { done_at: new Date().toISOString(), done_by: author || "미지정" };
+    setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t)));
+    void persistPatch(row, patch, "완료");
+  };
+  const unmarkDone = (row: TargetRow) => {
+    const patch = { done_at: null, done_by: null };
+    setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t)));
+    void persistPatch(row, patch, "완료 취소");
   };
 
   // 마감 목록 올리기 — 붙여넣기 → 변환 미리보기(수정 가능) → 팀에 등록
@@ -205,6 +227,35 @@ export default function CounterSms({ author }: { author: string }) {
   const publishBatch = async () => {
     if (!uploadBlocks?.length) return;
     const merged = mergeTargets(uploadBlocks);
+    // 기존 목록에 추가(기본): 이미 있는 업체는 건너뛰고 전송·완료 표시를 그대로 둔다. 언제 누가 몇 곳 추가했고 무엇이 중복이었는지 목록 머리에 남긴다(2026-09-24)
+    if (uploadMode === "merge" && batch && batch.team === team) {
+      const existing = new Set(batchTargets.map((t) => contactVendorKey(t.vendor)));
+      const fresh = merged.filter((t) => !existing.has(contactVendorKey(t.vendor)));
+      const dupes = merged.filter((t) => existing.has(contactVendorKey(t.vendor)));
+      if (!await askConfirm(`${team}팀 기존 목록에 추가할까요?\n\n새로 추가 ${fresh.length}곳${dupes.length ? `\n이미 있어 건너뜀 ${dupes.length}곳: ${dupes.slice(0, 5).map((t) => t.vendor).join(", ")}${dupes.length > 5 ? " 외" : ""}` : ""}\n\n기존 업체의 전송·완료 표시는 그대로 둡니다.`)) return;
+      setBusy(true);
+      try {
+        const stamp = new Date().toISOString();
+        for (let i = 0; i < fresh.length; i += 1) {
+          const t = fresh[i];
+          await insertRow("counter_sms_targets", {
+            id: `${batch.id}-a${Date.now().toString(36)}-${String(i).padStart(3, "0")}`, batch_id: batch.id, team,
+            vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels, machines: t.machines, vendor_names: t.vendorNames,
+            ...(extended ? { added_at: stamp, added_by: author || "미지정" } : {}),
+          });
+        }
+        if (extended) {
+          const entry: BatchLogEntry = { at: stamp, by: author || "미지정", added: fresh.length, skipped: dupes.map((t) => t.vendor) };
+          await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: [...(batch.log || []), entry] }).catch(() => undefined);
+        }
+        setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
+        setNotice(`${team}팀 목록에 ${fresh.length}곳을 추가했습니다${dupes.length ? ` · 이미 있어 건너뜀 ${dupes.length}곳(${dupes.map((t) => t.vendor).join(", ")})` : ""}.`);
+        await loadBatch(team);
+      } catch (e) {
+        setNotice(`추가 실패: ${(e as Error).message}`);
+      } finally { setBusy(false); }
+      return;
+    }
     if (!await askConfirm(`${team}팀에 마감 목록을 등록할까요?
 
 업체 ${merged.length}곳 (기존 목록을 대체하는 게 아니라 최신 목록으로 올라갑니다)
@@ -221,6 +272,7 @@ export default function CounterSms({ author }: { author: string }) {
           id: `${id}-${String(i).padStart(3, "0")}`, batch_id: id, team,
           vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels,
           machines: t.machines, vendor_names: t.vendorNames,
+          ...(extended ? { added_at: new Date().toISOString(), added_by: author || "미지정" } : {}),
         });
       }
       setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
@@ -339,9 +391,12 @@ export default function CounterSms({ author }: { author: string }) {
           )}
           {!batchLoading && batch && (() => {
             const sentCount = batchTargets.filter((t) => t.sent_at).length;
+            const doneCount = batchTargets.filter((t) => t.done_at).length;
+            const stage = (t: TargetRow) => (t.done_at ? 2 : t.sent_at ? 1 : 0); // 안 보낸 것 → 보냄 → 완료 순
+            const addedTag = (t: TargetRow) => (t.added_at && batch && new Date(t.added_at).getTime() - new Date(batch.created_at).getTime() > 5 * 60_000 ? `＋${Number(t.added_at.slice(5, 7))}/${Number(t.added_at.slice(8, 10))}` : "");
             const shownRows = batchTargets
               .filter((t) => t.grade_group === gradeTab)
-              .sort((a, b) => Number(!!a.sent_at) - Number(!!b.sent_at));   // 안 보낸 것 먼저
+              .sort((a, b) => stage(a) - stage(b));
             return (
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
@@ -352,7 +407,15 @@ export default function CounterSms({ author }: { author: string }) {
                         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${batchTargets.length ? Math.round((sentCount / batchTargets.length) * 100) : 0}%` }} />
                       </div>
                       <span className="text-[11px] font-black tabular-nums text-emerald-600">{sentCount}/{batchTargets.length} 전송</span>
+                      <span className="text-[11px] font-black tabular-nums text-indigo-600">· 완료 {doneCount}</span>
                     </div>
+                    {(batch.log || []).length > 0 && (
+                      <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
+                        {(batch.log || []).slice(-3).reverse().map((entry, i) => (
+                          <div key={`${entry.at}-${i}`}>＋ {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.added}곳 추가{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button type="button" onClick={() => void loadBatch(team)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500">새로고침</button>
                   <button type="button" onClick={() => void removeBatch()} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">목록 삭제</button>
@@ -365,23 +428,34 @@ export default function CounterSms({ author }: { author: string }) {
                 </div>
                 <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
                   {shownRows.map((row) => (
-                    <div key={row.id} className={`relative rounded-lg border px-3 py-2.5 transition ${row.sent_at ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+                    <div key={row.id} className={`relative rounded-lg border px-3 py-2.5 transition ${row.done_at ? "border-indigo-300 bg-indigo-50/70" : row.sent_at ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
                       <button type="button" onClick={() => openSendRow(row)} className="block w-full text-left">
                         <div className="flex items-center gap-1.5">
                           <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
                           {ruleBadges(row.vendor, row.phones)}
-                          {row.sent_at && <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓</span>}
+                          {addedTag(row) && <span title={`${row.added_at?.slice(0, 16).replace("T", " ")} ${row.added_by || ""} 추가`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">{addedTag(row)}</span>}
+                          {row.done_at
+                            ? <span className="shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓✓ 완료</span>
+                            : row.sent_at && <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓ 보냄</span>}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
                           {row.machines.length}대 · {row.phones.length ? row.phones.map(formatPhone).join(", ") : "번호 없음"}
                         </div>
-                        {row.sent_at
+                        {row.done_at
+                          ? <div className="mt-0.5 truncate text-[10px] font-black text-indigo-700">완료 {row.done_by} · {row.done_at.slice(5, 16).replace("T", " ")}{row.sent_at ? ` · 보냄 ${row.sent_at.slice(5, 10)}` : ""}</div>
+                          : row.sent_at
                           ? <div className="mt-0.5 truncate text-[10px] font-black text-emerald-700">{row.sent_by} · {row.sent_at.slice(5, 16).replace("T", " ")}{row.sent_phone ? ` · ${formatPhone(row.sent_phone)}` : ""}</div>
                           : row.vendor_names.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {row.vendor_names.length}곳 통합</div>}
                       </button>
                       {row.sent_at && (
-                        <button type="button" onClick={() => unmarkSent(row)}
-                          className="absolute right-2 top-2 rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
+                        <span className="absolute right-2 top-2 flex gap-1">
+                          {row.done_at
+                            ? <button type="button" onClick={() => unmarkDone(row)} className="rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-indigo-600">완료 취소</button>
+                            : <>
+                              <button type="button" onClick={() => markDone(row)} title="마감(카운터 회신·처리)까지 끝났으면 완료" className="rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white">완료</button>
+                              <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
+                            </>}
+                        </span>
                       )}
                     </div>
                   ))}
@@ -564,11 +638,18 @@ export default function CounterSms({ author }: { author: string }) {
                 </div>
               )}
             </div>
+            {batch && batch.team === team && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-500">
+                <span>올리는 방식</span>
+                <button type="button" onClick={() => setUploadMode("merge")} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "merge" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>기존 목록에 추가 (전송·완료 표시 유지, 중복은 건너뜀)</button>
+                <button type="button" onClick={() => setUploadMode("replace")} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "replace" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>새 목록으로 교체</button>
+              </div>
+            )}
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
               <button type="button" onClick={uploadConvert} className="rounded-full border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700">🔍 변환 미리보기</button>
               <button type="button" disabled={busy || !uploadBlocks?.length} onClick={() => void publishBatch()}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">
-                {busy ? "등록 중…" : `${team}팀에 등록 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳)`}
+                {busy ? "등록 중…" : uploadMode === "merge" && batch && batch.team === team ? `${team}팀 목록에 추가 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳 검사)` : `${team}팀에 등록 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳)`}
               </button>
             </div>
           </div>
