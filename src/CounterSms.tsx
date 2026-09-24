@@ -343,7 +343,7 @@ export default function CounterSms({ author }: { author: string }) {
           {TEAMS.map((t) => (
             <button key={t} type="button" onClick={() => setTeam(t)}
               className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${team === t ? "bg-white text-slate-950" : "bg-white/10 text-slate-300 hover:bg-white/20"}`}>
-              {t}팀{t === myTeam ? " ★" : ""}
+              {t}팀
             </button>
           ))}
           {tab === "settings" && (
