@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   achievementRate, actionMembers, actionTeams, cycleLabel, emptyReport, gradeFromPercent, judgmentCounts, monthCycleId, okrWeeksInMonth, okrWorkWeek,
-  memberReports, mergeMemberActuals, renumberGoals, splitPillar, weekCycleId, worstJudgment, worstOfJudgments, type OkrReport,
+  bottleneckLabel, defaultGoalTemplate, memberReports, mergeMemberActuals, needsReasonPlan, pillarIndex, pillarLabel, renumberGoals, sortGoalsByPillar, splitPillar, weekCycleId, worstJudgment, worstOfJudgments, type OkrReport,
 } from "../src/okr";
 
 describe("OKR 종합판정 제안(worstJudgment) — 실제결과 글에서 가장 나쁜 등급 하나", () => {
@@ -94,5 +94,37 @@ describe("OKR 기간·목표 도우미", () => {
   it("목표 삭제 후 번호를 1부터 다시 매긴다", () => {
     const goals = renumberGoals([{ no: 1, pillar: "", bottleneck: "", objective: "a", criteria: "" }, { no: 3, pillar: "", bottleneck: "", objective: "c", criteria: "" }]);
     expect(goals.map((g) => g.no)).toEqual([1, 2]);
+  });
+});
+
+describe("OKR Pillar 3종 · 병목현상 번호", () => {
+  it("저장된 Pillar 글을 3개 중 하나로 알아본다(번호 우선, 없으면 낱말)", () => {
+    expect(pillarIndex("Pillar 1.\nAI · 효율성 · 비용절감")).toBe(0);
+    expect(pillarIndex("매출증대·안정")).toBe(1);
+    expect(pillarIndex("Pillar 3.\n나의 성장 · 소통")).toBe(2);
+    expect(pillarIndex("")).toBe(-1);
+    expect(pillarLabel("Pillar 2.\n매출증대 · 안정")).toBe("매출증대 · 안정");
+  });
+  it("병목현상 번호는 같은 Pillar 안에서 몇 번째인지", () => {
+    const goals = defaultGoalTemplate();
+    expect(goals).toHaveLength(9);
+    expect(bottleneckLabel(goals, 1)).toBe("병목현상 1");
+    expect(bottleneckLabel(goals, 5)).toBe("병목현상 2"); // Pillar 2의 두 번째
+    expect(bottleneckLabel(goals, 9)).toBe("병목현상 3");
+  });
+  it("Pillar 순 정렬 — 미정은 맨 뒤, 번호 다시 매김", () => {
+    const sorted = sortGoalsByPillar([
+      { no: 1, pillar: "Pillar 3.\n나의 성장 · 소통", bottleneck: "", objective: "c", criteria: "" },
+      { no: 2, pillar: "", bottleneck: "", objective: "x", criteria: "" },
+      { no: 3, pillar: "Pillar 1.\nAI", bottleneck: "", objective: "a", criteria: "" },
+    ]);
+    expect(sorted.map((g) => `${g.no}${g.objective}`)).toEqual(["1a", "2c", "3x"]);
+  });
+  it("완료·해당없음이 아니면 사유·개선계획 필수", () => {
+    expect(needsReasonPlan("부분달성")).toBe(true);
+    expect(needsReasonPlan("미착수")).toBe(true);
+    expect(needsReasonPlan("완료")).toBe(false);
+    expect(needsReasonPlan("해당없음")).toBe(false);
+    expect(needsReasonPlan("")).toBe(false);
   });
 });

@@ -4,7 +4,7 @@
 //  - okr_reports: 기간 × 파트 × 사람 하나. member=''가 파트 종합(통합집계가 읽는 행), member='이름'이 팀원 개인 기록.
 //    파트 결과는 팀원 기록을 파트장이 모아 쓴다(2026-09-24 사용자: "A~D는 각 팀원 내용을 합친 통계이므로 팀원 그룹도 있어야").
 // 표 생성·초기 데이터: supabase/okr.sql (사용자가 SQL Editor에서 실행).
-import { deleteRows, selectRows, upsertRow } from "./supabase";
+import { deleteRows, invokeEdgeFunction, selectRows, upsertRow } from "./supabase";
 
 export const OKR_TEAMS = ["A", "B", "C", "D"] as const; // CSS팀(E)은 OKR 대상이 아니다(2026-09-24)
 export type OkrTeam = (typeof OKR_TEAMS)[number];
@@ -20,6 +20,21 @@ export const JUDGMENT_INFO: Record<OkrJudgment, { rank: number; when: string; th
   미흡: { rank: 2, when: "1~79% 많이 부족", then: "숫자 + 사유 + 개선계획", tone: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" },
   미착수: { rank: 3, when: "0% 시작도 못 함", then: "왜 시작 못 했는지(사유)", tone: "bg-rose-100 text-rose-800 border-rose-200", dot: "bg-rose-500" },
 };
+
+// Pillar는 정해진 3개(2026-09-24 사용자) — 각 Pillar 아래 병목현상 1·2·3 → 목표 9개
+export const OKR_PILLARS = [
+  { label: "AI · 효율성 · 비용절감", full: "Pillar 1.\nAI · 효율성 · 비용절감", keywords: /AI|효율|비용/i },
+  { label: "매출증대 · 안정", full: "Pillar 2.\n매출증대 · 안정", keywords: /매출|안정/ },
+  { label: "나의 성장 · 소통", full: "Pillar 3.\n나의 성장 · 소통", keywords: /성장|소통|자기/ },
+] as const;
+// 저장된 Pillar 글("Pillar 1.\nAI · 효율성 · 비용절감" / "매출증대·안정" 등)이 3개 중 어느 것인지. 모르면 -1
+export function pillarIndex(pillar: string): number {
+  const text = String(pillar || "");
+  const num = text.match(/Pillar\s*([123])/i);
+  if (num) return Number(num[1]) - 1;
+  return OKR_PILLARS.findIndex((p) => p.keywords.test(text));
+}
+export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); return i >= 0 ? OKR_PILLARS[i].label : String(pillar || "").replace(/^Pillar\s*\d+\.?\s*/i, "").trim(); };
 
 export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string };
 export type OkrFeedback = { action?: string; memo: string };
@@ -199,6 +214,27 @@ export function defaultCycleTitle(c: Pick<OkrCycle, "kind" | "year" | "month" | 
 export function renumberGoals(goals: OkrGoal[]): OkrGoal[] {
   return goals.map((g, i) => ({ ...g, no: i + 1 }));
 }
+// Pillar 1→2→3 순으로 정렬(같은 Pillar 안에서는 원래 순서 유지, Pillar 미정은 맨 뒤) 후 번호 다시 매김
+export function sortGoalsByPillar(goals: OkrGoal[]): OkrGoal[] {
+  const rank = (g: OkrGoal) => { const i = pillarIndex(g.pillar); return i < 0 ? 99 : i; };
+  return renumberGoals([...goals].sort((a, b) => rank(a) - rank(b)));
+}
+// 병목현상 번호 — 같은 Pillar 안에서 몇 번째 목표인지(엑셀의 '병목현상 1·2·3')
+export function bottleneckLabel(goals: OkrGoal[], no: number): string {
+  const goal = goals.find((g) => g.no === no);
+  if (!goal) return "";
+  const idx = pillarIndex(goal.pillar);
+  const siblings = goals.filter((g) => pillarIndex(g.pillar) === idx).sort((a, b) => a.no - b.no);
+  const pos = siblings.findIndex((g) => g.no === no);
+  return `병목현상 ${pos + 1}`;
+}
+// 빈 달의 기본 틀 — Pillar 3개 × 병목현상 3개
+export function defaultGoalTemplate(): OkrGoal[] {
+  return renumberGoals(OKR_PILLARS.flatMap((p, pi) => [1, 2, 3].map((n) => ({ no: pi * 3 + n, pillar: p.full, bottleneck: `병목현상 ${n}`, objective: "", criteria: "" }))));
+}
+// 완료·해당없음이 아니면 사유와 개선계획을 둘 다 적어야 한다(2026-09-24 사용자). 해당없음은 근거자료에 '대상 0건'.
+export const needsReasonPlan = (judgment: string) => { const j = normalizeJudgment(judgment); return !!j && j !== "완료" && j !== "해당없음"; };
+export const isAlert = (judgment: string) => { const j = normalizeJudgment(judgment); return j === "미흡" || j === "미착수"; };
 
 // ── Supabase ──
 type CycleRow = Partial<OkrCycle> & { id: string };
@@ -259,6 +295,12 @@ export async function saveOkrReport(report: OkrReport, by: string): Promise<void
     updated_at: new Date().toISOString(), updated_by: by || null,
   }, "cycle_id,team,member");
 }
+// AI 보조(엣지 함수 okr-assist) — format: 메모를 양식(항목 : n건 중 m건 (x%, 등급))으로 · merge: 팀원 기록을 파트 종합으로 · feedback: 팀장 피드백 초안
+export type OkrAssistResult = { actual?: string; judgment?: string; reason?: string; plan?: string; evidence?: string; memo?: string; model?: string };
+export async function okrAssist(body: Record<string, unknown>): Promise<OkrAssistResult> {
+  return invokeEdgeFunction<OkrAssistResult>("okr-assist", body, 90_000);
+}
+
 export async function deleteOkrCycle(cycleId: string): Promise<void> {
   await deleteRows("okr_reports", `cycle_id=eq.${encodeURIComponent(cycleId)}`);
   await deleteRows("okr_cycles", `id=eq.${encodeURIComponent(cycleId)}`);
