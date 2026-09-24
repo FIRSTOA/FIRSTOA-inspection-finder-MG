@@ -22,6 +22,7 @@ import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 import TeamCalendar from "./TeamCalendar";
 import { regionLetter } from "./region";
+import { saveVisit } from "./visits";
 import type { ManualScheduleEntry } from "./manualSchedule";
 
 type Team = "A" | "B" | "C" | "D" | "E" | "기타"; // 기타 = 팀 시간대 밖(11시 등)의 네이버 수입 일정
@@ -1149,10 +1150,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 완료 사유 입력 모달 대상 (완료 취소는 사유 없이 즉시)
   const [doneTicket, setDoneTicket] = useState<AsTicket | null>(null);
   const openDone = (ticket: AsTicket) => { if (ticket.status === "완료") toggleDone(ticket); else setDoneTicket(ticket); };
-  const applyDone = async (reason: string) => {
+  const applyDone = async (reason: string, mode?: "visit" | "phone") => {
     const ticket = doneTicket;
     setDoneTicket(null);
     if (!ticket) return;
+    // 간단처리도 방문일지에 남긴다 — 방문이면 AS 1건·방문 1건, 전화·원격이면 방문 아님(visited=false)으로 기록만(2026-09-24)
+    if (mode && author) {
+      const vendor = fieldTicketVendor(ticket.vendor).vendor || ticket.vendor;
+      void saveVisit({
+        visited: mode === "visit", vendor, author, workDate: getTodayYmd(), arrivalTime: "", machineCount: 1, grade: ticket.grade || "",
+        contractEnded: false, workKinds: ["as"], minutes: {}, salesIt: "", salesCopier: "", commute: "",
+        note: `일정리스트 완료(${mode === "visit" ? "방문" : "전화·원격"})${reason.trim() ? ` — ${reason.trim()}` : ""}`,
+      }, `as-ticket:${ticket.id}`).catch(() => undefined);
+    }
     // 상태 저장을 먼저 — 카톡·네이버 왕복을 기다리는 사이 모바일이 카톡으로 전환되면 fetch가 끊겨
     // "네이버 기록 실패"만 뜨고 완료 저장이 영영 안 되던 실사고(2026-08-25). 기록은 뒤에서 이어 남긴다.
     const block = buildActionBlock(ticket, reason);
@@ -2305,7 +2315,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         </div>
       )}
       {deferTicket && <DeferModal ticket={deferTicket} customDate={customDate} onCustomDate={setCustomDate} onClose={() => setDeferId("")} onApply={applyDefer} />}
-      {doneTicket && <DoneReasonModal ticket={doneTicket} onClose={() => setDoneTicket(null)} onApply={(reason) => void applyDone(reason)} />}
+      {doneTicket && <DoneReasonModal ticket={doneTicket} onClose={() => setDoneTicket(null)} onApply={(reason, mode) => void applyDone(reason, mode)} />}
       {naverDayDate && (() => {
         const rows = mergedDayRows(naverDayDate);
         return (
@@ -2542,8 +2552,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
 
 // 완료 사유 입력 — 적으면 팀 AS방 카톡 + 네이버 일정 내용에 남고, 비우면 조용히 완료만
-function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClose: () => void; onApply: (reason: string) => void }) {
+function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClose: () => void; onApply: (reason: string, mode?: "visit" | "phone") => void }) {
   const [reason, setReason] = useState("");
+  // 방문해서 처리했는지, 전화·원격으로 끝냈는지 — 주간현황판·일일방문일지의 AS·방문 건수가 여기서 갈린다(2026-09-24)
+  const [mode, setMode] = useState<"visit" | "phone">("visit");
   const isDelivery = ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류";
   return (
     <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
@@ -2553,6 +2565,18 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
         {isDelivery
           ? <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">물류(납품·철수·교체) 일정은 <b>일정리스트에서만 완료</b>됩니다.<br />카톡도, 네이버 캘린더도 건드리지 않습니다 — 물류방 보고는 FIELD 물류 양식 [보내기]가 이미 했습니다.</div>
           : !!ticket.naverUid && <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정에 완료 체크됩니다. {ticket.team}팀 완료 캘린더로 이동합니다.</div>}
+        {!isDelivery && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setMode("visit")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "visit" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+              <span className="block text-sm font-black text-slate-900">🚗 방문 처리</span>
+              <span className="block text-[10px] font-bold text-slate-500">현장에 가서 끝냄 — 방문 1건·AS 1건으로 집계</span>
+            </button>
+            <button type="button" onClick={() => setMode("phone")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "phone" ? "border-amber-500 bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+              <span className="block text-sm font-black text-slate-900">📞 전화·원격 처리</span>
+              <span className="block text-[10px] font-bold text-slate-500">안 가고 끝냄 — 기록만 남고 방문·AS 건수엔 안 들어감</span>
+            </button>
+          </div>
+        )}
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
           placeholder={isDelivery
             ? "처리 내용 (선택) — 일정리스트 기록에만 남습니다. 비워도 완료됩니다"
@@ -2560,7 +2584,7 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
           className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
         <div className="mt-3 flex gap-2">
           <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">취소</button>
-          <button type="button" disabled={!isDelivery && !reason.trim()} onClick={() => onApply(reason)} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">완료</button>
+          <button type="button" disabled={!isDelivery && !reason.trim()} onClick={() => onApply(reason, isDelivery ? undefined : mode)} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">완료</button>
         </div>
       </div>
     </div>
