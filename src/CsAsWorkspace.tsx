@@ -2573,9 +2573,11 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setMode("visit")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "visit" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
               <span className="block text-sm font-black text-slate-900">🚗 방문 처리</span>
+              <span className="block text-[10px] font-bold text-slate-500">방문해서 처리한 건 — 방문 거래처 1·AS 1건으로 집계</span>
             </button>
             <button type="button" onClick={() => setMode("phone")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "phone" ? "border-amber-500 bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
               <span className="block text-sm font-black text-slate-900">📞 전화·원격 처리</span>
+              <span className="block text-[10px] font-bold text-slate-500">전화·원격으로 처리한 건 — 기록만 남고 집계에는 안 들어감</span>
             </button>
           </div>
         )}
