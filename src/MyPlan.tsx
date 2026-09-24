@@ -474,7 +474,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
                 })()}
                 <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
-                {memos.has(t.id) && <span className="mt-0.5 block whitespace-pre-wrap break-words rounded bg-amber-50 px-1.5 py-1 text-[11px] font-bold leading-4 text-amber-800">📝 {memos.get(t.id)}</span>}
+                {/* 메모는 일정 밑에서 바로 적는다 — 상세를 열어야 했던 불편(2026-09-24). 저장은 버튼(모바일 blur 불안정) */}
+                <InlineMemo key={`${t.id}|${memos.get(t.id) || ""}`} ticketId={t.id} value={memos.get(t.id) || ""} onSave={saveMemo} />
                 {onRemove && (
                   // 잘못 들어온 일정·빼고 싶은 일정을 동선에서 바로 정리 (일정리스트까지 가지 않게)
                   <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(t); }}
@@ -747,6 +748,22 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         );
       })()}
     </div>
+  );
+}
+
+/** 목록용 한 줄 메모 — 적기 시작하면 [저장]이 나타난다. 상세 팝업의 MemoBox와 같은 plan_memos에 저장 */
+function InlineMemo({ ticketId, value, onSave }: { ticketId: string; value: string; onSave: (id: string, memo: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // 저장된 값이 바뀌면 부모가 key로 다시 마운트한다(effect 안 setState 대신)
+  useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [draft]);
+  const dirty = draft !== value;
+  return (
+    <span className="mt-1 flex items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder="📝 메모 — 잊으면 안 되는 것"
+        className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11.5px] font-bold leading-4 outline-none transition placeholder:font-semibold placeholder:text-slate-300 ${draft.trim() ? "border-amber-200 bg-amber-50 text-amber-900" : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50"}`} />
+      {dirty && <button type="button" onClick={() => onSave(ticketId, draft)} className="shrink-0 rounded bg-amber-500 px-2 py-1 text-[10.5px] font-black text-white hover:bg-amber-600">저장</button>}
+    </span>
   );
 }
 

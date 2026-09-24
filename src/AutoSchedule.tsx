@@ -22,6 +22,7 @@ import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { usageSpareAdvice } from "./spareAdvice";
 import CandidateMap, { type CandidatePoint } from "./CandidateMap";
+import PortalSelect from "./PortalSelect";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = {
@@ -357,10 +358,9 @@ export default function AutoSchedule({ author }: { author: string }) {
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">② 추천 조건</div>
-            <div className="mt-2 flex gap-1 rounded-full bg-slate-100 p-1">
-              {[currentQuarter, currentQuarter === 4 ? 1 : currentQuarter + 1].map((q) => (
-                <button key={q} type="button" onClick={() => setQuarter(q)} className={`${chip} flex-1 ${quarter === q ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>{q}분기 워킨맵{q !== currentQuarter ? " (미리)" : ""}</button>
-              ))}
+            {/* 분기는 1~4 드롭다운 — 현재 분기 워킨맵을 다 돌고 나면 다음 분기를 고른다(2026-09-24: 3분기 끝났는데 계속 보이던 것) */}
+            <div className="mt-2">
+              <PortalSelect width={220} value={String(quarter)} onChange={(v) => setQuarter(Number(v))} options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기 워킨맵${q === currentQuarter ? " (현재)" : q === (currentQuarter === 4 ? 1 : currentQuarter + 1) ? " (다음)" : ""}` }))} />
             </div>
             <div className="mt-3 text-[11px] font-black text-slate-500">등급 (중복 선택)</div>
             <div className="mt-1 flex flex-wrap gap-1.5">
