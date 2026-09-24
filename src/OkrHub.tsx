@@ -186,6 +186,27 @@ export default function OkrHub({ author }: { author: string }) {
     updateCycle({ goals: src.goals.map((g) => ({ ...g })) });
     setMessage(`${cycleLabel(src)} 목표 ${src.goals.length}개를 가져왔어요 (자동 저장)`);
   };
+  // 엑셀 워크북 데이터(8월 A~D 결과·피드백, 9월 목표, 9월 2주차 C) — 없는 기간·파트만 넣는다. 데이터는 동적 import라 평소 번들엔 안 실린다.
+  const [seeding, setSeeding] = useState(false);
+  const importSeed = async () => {
+    const ok = await askConfirm("엑셀 'CS팀 8월 OKR 통합피드백' 데이터를 넣을까요?\n8월(A~D파트 결과·팀장 피드백) · 9월 목표 · 9월 2주차 C파트 결과가 들어갑니다. 이미 있는 기간·파트는 건너뜁니다.", { okLabel: "불러오기" });
+    if (!ok) return;
+    setSeeding(true);
+    try {
+      const { OKR_SEED_CYCLES, OKR_SEED_REPORTS } = await import("./okrSeed");
+      const existing = new Set(cycles.map((c) => c.id));
+      let added = 0;
+      for (const c of OKR_SEED_CYCLES) { if (existing.has(c.id)) continue; await saveOkrCycle(c, author); added += 1; }
+      const have = new Set<string>();
+      for (const id of OKR_SEED_CYCLES.map((c) => c.id)) { if (existing.has(id)) (await getOkrReports(id)).forEach((r) => have.add(`${r.cycle_id}|${r.team}`)); }
+      let addedReports = 0;
+      for (const r of OKR_SEED_REPORTS) { if (have.has(`${r.cycle_id}|${r.team}`)) continue; await saveOkrReport(r, author); addedReports += 1; }
+      await reloadCycles("2026-08");
+      setTab("all");
+      setMessage(`엑셀 데이터를 넣었어요 — 기간 ${added}개 · 파트 결과 ${addedReports}개${added + addedReports === 0 ? " (이미 다 있어서 새로 넣은 건 없음)" : ""}`);
+    } catch (e) { setMessage((e as Error).message); }
+    finally { setSeeding(false); }
+  };
   const removeCycle = async () => {
     if (!cycle) return;
     const filled = reports.filter((r) => r.rows.some((x) => x.actual || x.judgment)).length;
@@ -213,7 +234,7 @@ export default function OkrHub({ author }: { author: string }) {
       </div>
     </section>
 
-    {tableMissing && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><b>OKR 표가 아직 없습니다.</b> Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>을 한 번 실행하면 8월 OKR(A~D파트 결과·팀장 피드백)과 9월 목표가 함께 들어옵니다.</div>}
+    {tableMissing && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><b>OKR 표가 아직 없습니다.</b> Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>(표 만들기)을 한 번 실행한 뒤 이 화면을 다시 열면, 8월 OKR 데이터를 버튼 한 번으로 넣을 수 있습니다.</div>}
     {message && !tableMissing && <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600"><span>{message}</span><button type="button" onClick={() => setMessage("")} className="text-slate-400 hover:text-slate-700">닫기</button></div>}
     {guideOpen && <GuidePanel />}
 
@@ -240,6 +261,7 @@ export default function OkrHub({ author }: { author: string }) {
           <span>✎ 목표 편집 중 — 흰 칸(Pillar·병목·목표·달성기준)을 고칩니다. 파트가 쓰는 칸은 그대로 있어요.</span>
           <button type="button" onClick={addGoal} className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-black text-amber-800 hover:bg-amber-100">＋ 목표 추가</button>
           {cycles.filter((c) => c.id !== cycle.id).length > 0 && <PortalSelect width={220} value="" onChange={(v) => v && importGoalsFrom(v)} options={[{ value: "", label: "다른 기간에서 목표 가져오기…" }, ...cycles.filter((c) => c.id !== cycle.id).map((c) => ({ value: c.id, label: `${cycleLabel(c)} (${c.goals.length}개)`, group: c.kind === "month" ? "월간" : "주간" }))]} />}
+          <button type="button" disabled={seeding} onClick={importSeed} className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-black text-amber-800 hover:bg-amber-100 disabled:opacity-50">{seeding ? "넣는 중…" : "📥 엑셀 데이터 불러오기"}</button>
           <button type="button" onClick={removeCycle} className="ml-auto rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50">이 기간 삭제</button>
         </div>}
       </section>
@@ -250,7 +272,11 @@ export default function OkrHub({ author }: { author: string }) {
           : <TeamView team={tab} cycle={cycle} report={reportOf(tab)} editGoals={editGoals} onHeader={(patch) => patchReport(tab, (r) => ({ ...r, header: { ...r.header, ...patch } }))} onResult={(no, patch) => updateResult(tab, no, patch)} onGoal={updateGoal} onRemoveGoal={removeGoal} />}
     </>}
 
-    {!cycle && !loading && !tableMissing && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">OKR 기간이 없습니다. 위 [＋ 새 기간]으로 이번 달 OKR을 만들어 주세요.</div>}
+    {!cycle && !loading && !tableMissing && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center">
+      <div className="text-sm font-bold text-slate-500">아직 OKR 기간이 없습니다.</div>
+      <button type="button" disabled={seeding} onClick={importSeed} className="mt-4 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50">{seeding ? "넣는 중…" : "📥 엑셀 데이터 불러오기 — 8월 OKR(A~D 결과·피드백) · 9월 목표"}</button>
+      <div className="mt-3 text-xs font-semibold text-slate-400">또는 위 [＋ 새 기간]으로 빈 기간을 만들어 직접 입력</div>
+    </div>}
 
     {newOpen && <NewCycleModal cycles={cycles} today={today} onClose={() => setNewOpen(false)} onCreate={async (draft) => {
       if (cycles.some((c) => c.id === draft.id)) { setMessage(`${cycleLabel(draft)} 기간은 이미 있어요 — 위 목록에서 고르세요.`); setNewOpen(false); setCycleId(draft.id); return; }
