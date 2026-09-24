@@ -16,6 +16,7 @@ import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
 import JudgmentPicker from "./JudgmentPicker";
 import { createPortal } from "react-dom";
+import { tableCellClick } from "./cellNav";
 import { askConfirm } from "./confirmModal";
 import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
@@ -55,7 +56,7 @@ const goalHtml = (g: OkrGoal, field: "objective" | "criteria", html: string | un
 
 const TD = "border border-slate-200 align-top";
 const TD_READ = `${TD} px-2 py-1.5`;
-const TD_CELL = `${TD} h-px p-0`; // h-px: 안의 셀(RichCell)이 칸 높이를 꽉 채우게(어디를 눌러도 반응)
+const TD_CELL = `${TD} p-0`; // 빈 곳 클릭은 표의 onClick(tableCellClick)이 안쪽 칸으로 넘긴다
 const TD_EDIT = `${TD_CELL} focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400`;
 const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
 const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
@@ -103,9 +104,9 @@ function MonthPicker({ value, marks, onChange }: { value: number; marks: Set<num
     </button>
     {spot && createPortal(
       <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, width: 280, zIndex: 4000 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
-        {[1, 2, 3, 4].map((q) => <div key={q} className="flex items-center gap-1 py-0.5">
-          <span className="w-12 shrink-0 pl-1 text-[11px] font-bold text-slate-400">{q}분기</span>
-          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-[12px] font-bold transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"}`}>{m}월{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
+        {[1, 2, 3, 4].map((q) => <div key={q} className="flex items-center gap-2 border-b border-slate-100 py-1 last:border-0">
+          <span className="w-11 shrink-0 border-r border-slate-300 pr-2 text-right text-[11px] font-black text-slate-500">{q}분기</span>
+          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-center text-[13px] font-bold tabular-nums transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"}`}>{m}{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
         </div>)}
       </div>,
       document.body,
@@ -303,7 +304,12 @@ export default function OkrHub({ author }: { author: string }) {
     };
     return {
       onGoal: (no, patch) => write(current.map((g) => (g.no === no ? { ...g, ...patch } : g))),
-      onPillar: (nos, idx) => write(current.map((g) => (nos.includes(g.no) ? { ...g, pillar: idx >= 0 ? OKR_PILLARS[idx].full : "" } : g))),
+      onPillar: (nos, idx) => { void (async () => {
+        const from = pillarIndex(current.find((g) => nos.includes(g.no))?.pillar || "");
+        if (from === idx) return;
+        const ok = await askConfirm(`${from >= 0 ? `Pillar ${from + 1} · ${OKR_PILLARS[from].label}` : "Pillar 미정"} 묶음의 병목 ${nos.length}개를 ${idx >= 0 ? `Pillar ${idx + 1} · ${OKR_PILLARS[idx].label}` : "Pillar 미정"}으로 옮길까요?`, { okLabel: "옮기기" });
+        if (ok) write(current.map((g) => (nos.includes(g.no) ? { ...g, pillar: idx >= 0 ? OKR_PILLARS[idx].full : "" } : g)));
+      })(); },
       onInsert: (afterNo, pillarFull) => {
         const at = current.findIndex((g) => g.no === afterNo);
         reorder([...current.slice(0, at + 1), { ...emptyGoal(0), pillar: pillarFull }, ...current.slice(at + 1)], new Map(current.map((g) => [g.no, g.no <= afterNo ? g.no : g.no + 1])));
@@ -521,7 +527,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
       {editable && custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{teamName(team)} 고유 목표 사용 중 · 공통으로 되돌리기</button>}
     </div>
-    {member === "__sum__" ? <TeamSummary team={team} goals={goals} members={members} partReport={partReport} onMember={onMember} /> : <>
+    {member === "__sum__" ? <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} /> : <>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
     {!member && <div className="grid grid-cols-2 border-b border-slate-200 text-[12px] lg:grid-cols-4">
       {([["leader", "파트장(부파트장)", "text"], ["author", "작성자", "text"], ["submitted", "제출일", "date"], ["headcount", "파트 인원수", "text"]] as Array<[keyof OkrReport["header"], string, string]>).map(([key, label, type], i) => <label key={key} className={`flex items-center gap-2 px-3 py-1.5 ${i < 3 ? "lg:border-r lg:border-slate-200" : ""} ${i % 2 === 0 ? "border-r border-slate-200" : ""}`}>
@@ -531,7 +537,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
     </div>}
 
     <div className="overflow-x-auto">
-      <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
         <colgroup>{COLS.map(([label], i) => <col key={label} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="sticky top-0 z-10 text-[11px] font-bold">
           <tr>{COLS.map(([label, , mode], i) => <th key={label} className={`relative ${mode === "write" ? TH_WRITE : TH_READ}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>
@@ -565,7 +571,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
                       </>}
                     </div>
                   </td>
-                  <td className={`${TD} h-px p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
+                  <td className={`${TD} p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
                     <JudgmentPicker value={j} suggested={row.actual.trim() ? suggested : ""} onChange={(v) => onResult(goal.no, { judgment: v })} />
                     {suggested && suggested !== j && row.actual.trim() && <button type="button" onClick={() => onResult(goal.no, { judgment: suggested })} className="block w-full px-2 pb-1 text-left text-[10px] font-bold text-slate-500 hover:underline">→ {suggested}로</button>}
                   </td>
@@ -594,9 +600,10 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
 }
 
 // ── 팀원 집계: 통합집계와 같은 모양으로, 목표별 팀원 판정 · 조치 필요 인원(미흡·미착수) · 파트 종합판정 ──
-function TeamSummary({ team, goals, members, partReport, onMember }: { team: OkrTeam; goals: OkrGoal[]; members: OkrReport[]; partReport: OkrReport; onMember: (m: string) => void }) {
+function TeamSummary({ team, goals, names, reports, partReport, onMember }: { team: OkrTeam; goals: OkrGoal[]; names: string[]; reports: OkrReport[]; partReport: OkrReport; onMember: (m: string) => void }) {
   const runs = pillarRuns(goals);
-  const names = members.map((m) => m.member);
+  // 명단의 팀원 전부(기록이 없어도) — 기록은 있으면 그 사람 행, 없으면 빈 행
+  const members = names.map((n) => findReport(reports, team, n) || emptyReport(partReport.cycle_id, team, n));
   const heads = ["병목", "목표", ...names, "조치 필요 인원", "파트 종합"];
   const col = useColWidths(`okr_cols_teamsum_${team}_${names.length}`, [58, 280, ...names.map(() => 96), 150, 104]);
   const stats = members.map((m) => { const rows = goals.map((g) => resultRowFor(m, g.no)); return { name: m.member, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows) }; });
@@ -608,7 +615,7 @@ function TeamSummary({ team, goals, members, partReport, onMember }: { team: Okr
       </button>)}
     </div>}
     <div className="overflow-x-auto">
-      <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
         <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${TH_READ} ${i >= 2 && i < 2 + names.length ? "text-center" : ""} ${i === heads.length - 1 ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
         <tbody>
@@ -631,7 +638,7 @@ function TeamSummary({ team, goals, members, partReport, onMember }: { team: Okr
         </tbody>
       </table>
     </div>
-    {!members.length && <div className="text-center text-[12px] font-semibold text-slate-400">아직 팀원 기록이 없습니다 — 팀원이 자기 박스에서 적으면 여기 모입니다</div>}
+    {!members.length && <div className="text-center text-[12px] font-semibold text-slate-400">관리 › 인원 명단에 이 파트 인원을 넣으면 여기 열이 생깁니다</div>}
   </div>;
 }
 
@@ -672,7 +679,7 @@ function SummaryView({ cycle, cycles, reports, aiBusy, customTeams, onFeedback, 
         {otherMonths.length > 0 && <PortalSelect width={200} value="" onChange={(v) => v && onCopyGoals(v)} options={[{ value: "", label: "다른 달 목표 가져오기…" }, ...otherMonths.map((c) => ({ value: c.id, label: `${cycleLabel(c)} (${c.goals.length}개)` }))]} />}
       </div>}
       <div className="overflow-x-auto">
-        <table className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+        <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
           <colgroup>{heads.map((h, i) => <col key={h} style={{ width: col.widths[i] }} />)}</colgroup>
           <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={h} className={`relative ${i === heads.length - 1 ? TH_WRITE : TH_READ} ${i >= 2 && i < 2 + OKR_TEAMS.length ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
           <tbody>

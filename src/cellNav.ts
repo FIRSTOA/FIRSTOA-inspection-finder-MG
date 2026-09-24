@@ -49,3 +49,14 @@ export function inputCellKeyDown(e: { key: string; shiftKey: boolean; currentTar
   }
   if (moveCellFocus(el, dir)) e.preventDefault();
 }
+
+// 표 어디를 눌러도 그 칸의 입력칸이 반응 — td 자체(빈 곳)를 눌렀을 때 안쪽 [data-cell]로 포커스(버튼이면 열기).
+// h-px(칸 높이 100%) 꼼수는 표가 감싸는 상자보다 몇 px 커져 안쪽 세로 스크롤바가 생기던 원인이라 쓰지 않는다(2026-09-24).
+export function tableCellClick(e: { target: EventTarget | null }) {
+  const t = e.target as HTMLElement | null;
+  if (!t || t.tagName !== "TD") return;
+  const el = t.querySelector<HTMLElement>("[data-cell]");
+  if (!el) return;
+  el.focus();
+  if (el instanceof HTMLButtonElement) el.click();
+}

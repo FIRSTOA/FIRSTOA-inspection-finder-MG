@@ -38,7 +38,7 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   const minHeight = `${minRows * 1.25 + 0.75}rem`;
 
   if (readOnly) {
-    return <div className={`h-full min-h-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 ${className}`} style={{ minHeight }} dangerouslySetInnerHTML={{ __html: wanted || `<span class="text-slate-300">${placeholder}</span>` }} />;
+    return <div className={`whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 ${className}`} style={{ minHeight }} dangerouslySetInnerHTML={{ __html: wanted || `<span class="text-slate-300">${placeholder}</span>` }} />;
   }
 
   const emit = () => {
@@ -98,7 +98,7 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     onDoubleClick={() => { if (mode !== "editing") startEdit(); }}
     onKeyDown={onWrapKeyDown}
     onBlur={(e) => { if (mode === "selected" && !wrapRef.current?.contains(e.relatedTarget as Node | null)) setMode("idle"); }}
-    className={`relative h-full min-h-full cursor-cell outline-none ${mode === "selected" ? "ring-2 ring-inset ring-blue-500" : ""}`} style={{ minHeight }}>
+    className={`relative cursor-cell outline-none ${mode === "selected" ? "ring-2 ring-inset ring-blue-500" : ""}`} style={{ minHeight }}>
     {mode !== "idle" && colors && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}
@@ -112,6 +112,6 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
       }}
       onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, t); }}
       style={{ minHeight }}
-      className={`block h-full w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" && colors ? "pr-16" : ""} ${className}`} />
+      className={`block w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" && colors ? "pr-16" : ""} ${className}`} />
   </div>;
 }

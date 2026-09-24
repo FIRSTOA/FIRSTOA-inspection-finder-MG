@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
-import { inputCellKeyDown } from "./cellNav";
+import { inputCellKeyDown, tableCellClick } from "./cellNav";
 import {
   EMPTY_WEEKLY_NOTE, OFFICE_LABELS, WORK_LABELS, emptyOfficeValues, getOfficeLogs, getVisits,
   getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
@@ -55,7 +55,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
 const TD_LABEL = "border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500";
 const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
-const TD_WRITE = "border border-slate-200 h-px p-0 align-top bg-[#FFFBEB] focus-within:bg-white";
+const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white";
 const CELL_AREA = "block w-full bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none placeholder:text-slate-300";
 const BAR = "border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
 // 제목 블록 안의 조회 조건 — 상자 없는 글자 드롭다운(따로 있던 필터 바를 제목 블록에 합침, 2026-09-24)
@@ -420,7 +420,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
   return (
     <section className="order-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <fieldset disabled={readOnly} className="contents">
-        <div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 720 }}>
+        <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 720 }}>
           <colgroup><col style={{ width: 150 }} /><col /><col /><col /></colgroup>
           <tbody>
             {bar("이번 주 병목현상", status)}

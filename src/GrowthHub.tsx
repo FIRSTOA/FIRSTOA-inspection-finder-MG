@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
-import { inputCellKeyDown } from "./cellNav";
+import { inputCellKeyDown, tableCellClick } from "./cellNav";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import {
   GOLDEN_CATEGORIES,
@@ -85,7 +85,7 @@ const PLAN_CATEGORIES = ["AI", "자기개발", "매출증대", "매출안정", "
 const GRADE_OPTIONS = ["A", "B", "C", "D"] as const;
 // 격자 시트 — OKR 탭과 같은 모양(2026-09-24: 카드·둥근 입력칸 대신 엑셀 셀)
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
-const TD_CELL = "border border-slate-200 h-px p-0 align-top";
+const TD_CELL = "border border-slate-200 p-0 align-top";
 const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
 const CELL_INPUT = "w-full bg-transparent px-2 py-1.5 text-[12px] font-semibold text-slate-800 outline-none";
 const BAR = "flex items-center justify-between border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
@@ -769,7 +769,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 {!rows.length && <div className="p-10 text-center text-sm text-slate-400">선택한 기록이 없습니다.</div>}
               </div>
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[980px] text-left">
+                <table onClick={tableCellClick} className="w-full min-w-[980px] text-left">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-xs font-black text-slate-500">주차</th>
@@ -809,7 +809,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder={"엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)"} className="w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               {pasteGrid.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-left text-xs">
+                  <table onClick={tableCellClick} className="w-full text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50">
                         {pasteRoles.map((role, index) => (
@@ -877,7 +877,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 <span>기본업무 (우선순위순)</span>
                 <span className="text-[11px] font-bold tabular-nums text-slate-400">{regularGoals.length}건</span>
               </div>
-              <table className="w-full table-fixed border-collapse text-left">
+              <table onClick={tableCellClick} className="w-full table-fixed border-collapse text-left">
                 <colgroup><col className="w-28" /><col className="w-20" /><col /><col className="w-20" /><col className="w-20" /><col className="w-28" /><col className="w-24" /><col className="w-20" /><col className="w-12" /></colgroup>
                 <thead>
                   <tr>
@@ -908,7 +908,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                 <span>미션업무</span>
                 <span className="text-[11px] font-bold tabular-nums text-slate-400">{missionGoals.length}건</span>
               </div>
-              <table className="w-full table-fixed border-collapse text-left">
+              <table onClick={tableCellClick} className="w-full table-fixed border-collapse text-left">
                 <colgroup><col /><col className="w-20" /><col className="w-28" /><col className="w-24" /><col className="w-20" /><col className="w-12" /></colgroup>
                 <thead>
                   <tr>
@@ -963,7 +963,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             {!regularGoals.length && <div className="p-10 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</div>}
           </div>
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[1100px] table-fixed border-collapse text-left text-[12px]">
+            <table onClick={tableCellClick} className="w-full min-w-[1100px] table-fixed border-collapse text-left text-[12px]">
               <colgroup><col className="w-24" /><col className="w-[17%]" /><col className="w-16" /><col className="w-16" /><col className="w-16" /><col className="w-20" /><col className="w-20" /><col /><col /><col /></colgroup>
               <thead>
                 <tr>
@@ -1013,7 +1013,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             <button disabled={!person} onClick={() => addGoal("mission")} className="rounded-full bg-amber-500 px-4 py-2 text-sm font-black text-white transition hover:bg-amber-600 disabled:opacity-40">+ 미션 추가</button>
           </div>
           <div className="p-3">
-          <div className="overflow-x-auto"><table className="w-full table-fixed border-collapse text-left text-[12px]" style={{ minWidth: 1100 }}>
+          <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full table-fixed border-collapse text-left text-[12px]" style={{ minWidth: 1100 }}>
             <colgroup><col className="w-10" /><col className="w-[22%]" /><col className="w-14" /><col className="w-16" /><col className="w-16" /><col className="w-16" /><col /><col /><col /><col className="w-14" /></colgroup>
             <thead><tr>{["#", "미션", "등급", "현재", "목표", "진도%", `${(quarter - 1) * 3 + 1}월`, `${(quarter - 1) * 3 + 2}월`, `${(quarter - 1) * 3 + 3}월`, ""].map((h, i) => <th key={i} className={TH}>{h}</th>)}</tr></thead>
             <tbody>
@@ -1063,8 +1063,8 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           </div>
           <div className="p-3">
             <h4 className="text-[15px] font-black text-slate-900 lg:text-lg">{GOLDEN_QUESTIONS[question]}</h4>
-            <table className="mt-3 w-full border-collapse text-left text-[12px]"><colgroup><col style={{ width: 130 }} /><col /></colgroup>
-              <tbody>{GOLDEN_CATEGORIES.map((cat) => <tr key={cat}><td className="border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500">{cat}</td><td className="h-px border border-slate-200 bg-[#FFFBEB] p-0 align-top focus-within:bg-white"><RichCell colors={false} text={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(v) => setAnswer(GOLDEN_QUESTIONS[question], cat, v)} minRows={3} /></td></tr>)}</tbody>
+            <table onClick={tableCellClick} className="mt-3 w-full border-collapse text-left text-[12px]"><colgroup><col style={{ width: 130 }} /><col /></colgroup>
+              <tbody>{GOLDEN_CATEGORIES.map((cat) => <tr key={cat}><td className="border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500">{cat}</td><td className="border border-slate-200 bg-[#FFFBEB] p-0 align-top focus-within:bg-white"><RichCell colors={false} text={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(v) => setAnswer(GOLDEN_QUESTIONS[question], cat, v)} minRows={3} /></td></tr>)}</tbody>
             </table>
           </div>
           {person && (

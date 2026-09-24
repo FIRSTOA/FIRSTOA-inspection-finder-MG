@@ -35,7 +35,7 @@ export default function JudgmentPicker({ value, onChange, suggested }: { value: 
         if (e.key === "Tab" && triggerRef.current) { e.preventDefault(); setSpot(null); moveCellFocus(triggerRef.current, e.shiftKey ? "left" : "right"); return; }
         if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onChange(""); setSpot(null); }
       }}
-      className={`flex h-full min-h-[2.75rem] w-full items-start justify-between gap-1 px-2 py-1.5 text-left text-[12px] font-bold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${value ? "" : "text-slate-400"}`}>
+      className={`flex min-h-[2.75rem] w-full items-start justify-between gap-1 px-2 py-1.5 text-left text-[12px] font-bold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${value ? "" : "text-slate-400"}`}>
       <span className="flex items-center gap-1.5">{value && <span className={`h-2 w-2 shrink-0 rounded-full ${JUDGMENT_INFO[value].dot}`} />}{value || "선택"}</span>
       <svg width="12" height="12" viewBox="0 0 20 20" fill="none" className={`mt-0.5 shrink-0 ${value ? "opacity-50" : "text-slate-400"}`}><path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </button>
