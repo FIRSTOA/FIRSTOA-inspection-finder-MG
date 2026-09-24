@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
-import { MessageSquare, RotateCcw, Save, Settings2, Trash2, Upload, X } from "lucide-react";
+import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-react";
 import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
@@ -37,8 +37,6 @@ export default function CounterSms({ author }: { author: string }) {
   const [profiles, setProfiles] = useState<SettingsRow[]>([]);
   const [region, setRegion] = useState(() => localStorage.getItem(REGION_KEY) || DEFAULT_REGIONS[0]);
   const [tab, setTab] = useState<"main" | "settings">("main");
-  const [raw, setRaw] = useState("");
-  const [blocks, setBlocks] = useState<ParsedBlock[] | null>(null);
   const [gradeTab, setGradeTab] = useState<"s_group" | "v_group">("s_group");
   const [sendTarget, setSendTarget] = useState<{ target: MergedTarget; message: string; row?: TargetRow } | null>(null);
   const [pickedPhone, setPickedPhone] = useState("");
@@ -140,27 +138,6 @@ export default function CounterSms({ author }: { author: string }) {
     };
   }, [profiles, region]);
 
-  const machineKeys = useMemo(() => Object.keys(active.machines), [active.machines]);
-
-  const convert = () => {
-    if (!raw.trim()) { setNotice("카톡 내용을 붙여넣어 주세요."); return; }
-    const parsed = parseBlocks(raw, machineKeys);
-    setBlocks(parsed);
-    setNotice(parsed.length ? `${parsed.length}개 블록을 인식했습니다.` : "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요.");
-  };
-  const resetAll = () => { setRaw(""); setBlocks(null); setNotice(""); };
-
-  const patchBlock = (index: number, patch: Partial<ParsedBlock>) =>
-    setBlocks((cur) => (cur ? cur.map((b) => (b.index === index ? { ...b, ...patch } : b)) : cur));
-
-  const targets = useMemo(() => (blocks ? mergeTargets(blocks) : []), [blocks]);
-  const shown = targets.filter((t) => t.gradeGroup === gradeTab);
-
-  const openSend = (target: MergedTarget) => {
-    const message = buildMessage(target.machines, active.machines, active.templates, target.gradeGroup, target.vendor);
-    setPickedPhone(pickDefaultPhone(contactChoices(target.phones, target.labels, rulesForVendor(contactRules, target.vendor))));
-    setSendTarget({ target, message });
-  };
 
   // 팀 목록의 행 → 전송 모달 (문구는 그 팀의 지역 세트로)
   const openSendRow = (row: TargetRow) => {
@@ -465,77 +442,6 @@ export default function CounterSms({ author }: { author: string }) {
             );
           })()}
 
-          {/* 개인용 직접 변환 — 공유 목록에 없는 걸 급히 보낼 때만 */}
-          <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <summary className="cursor-pointer px-4 py-3 text-[12px] font-black text-slate-500">✂️ 직접 붙여넣어 변환 (개인용) — 공유 목록에 없는 건을 급히 보낼 때</summary>
-            <div className="border-t border-slate-100 p-4">
-            <div className="mb-2 text-[11px] font-bold text-slate-400">현재 <b className="text-slate-600">{active.region}</b> 문구 세트로 변환됩니다</div>
-            <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={8} placeholder="카톡 마감 목록 붙여넣기 (예: 11110, 5N주식회사 무암 … 010-0000-0000 홍길동 과장 …)"
-              className="w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-[12px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-            <div className="mt-2 flex flex-wrap gap-2">
-              <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none">
-                {profiles.map((p) => <option key={p.region} value={p.region}>📍 {p.region}</option>)}
-              </select>
-              <button type="button" onClick={convert} className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">🔍 마감 문자 변환</button>
-              <button type="button" onClick={resetAll} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50"><Trash2 size={14} />초기화</button>
-            </div>
-            </div>
-          </details>
-
-          {blocks && (
-            <>
-              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex gap-1 border-b border-slate-100 bg-slate-50/70 px-3 pt-2">
-                  {([["s_group", `🟢 S·NN·N급 ${targets.filter((t) => t.gradeGroup === "s_group").length}`], ["v_group", `💎 V·SS급 ${targets.filter((t) => t.gradeGroup === "v_group").length}`]] as const).map(([key, label]) => (
-                    <button key={key} type="button" onClick={() => setGradeTab(key)}
-                      className={`rounded-t-lg px-4 py-2 text-xs font-black transition ${gradeTab === key ? "border-b-2 border-blue-600 bg-white text-blue-700" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>
-                  ))}
-                </div>
-                <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {shown.map((t) => (
-                    <button key={t.key} type="button" onClick={() => openSend(t)}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40">
-                      <div className="flex items-center gap-1"><span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{t.gradeGroup === "v_group" ? "💎" : "✉️"} {t.vendor}</span>{ruleBadges(t.vendor, t.phones)}</div>
-                      <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
-                        {t.machines.length}대 · {t.phones.length ? t.phones.map(formatPhone).join(", ") : "번호 없음"}
-                      </div>
-                      {t.vendorNames.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {t.vendorNames.length}곳 통합</div>}
-                    </button>
-                  ))}
-                  {!shown.length && <div className="col-span-full py-8 text-center text-xs font-bold text-slate-400">이 등급군에 인식된 업체가 없습니다.</div>}
-                </div>
-              </section>
-              <details className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <summary className="cursor-pointer border-b border-slate-100 bg-slate-50/70 px-4 py-2.5 text-[11px] font-black text-slate-500">
-                  🔧 인식 결과 수정 ({blocks.length}건) — 업체명·기종·번호가 틀렸을 때만 열면 됩니다
-                </summary>
-                <div className="max-h-[40vh] divide-y divide-slate-100 overflow-y-auto">
-                  {blocks.map((b) => (
-                    <div key={b.index} className="grid gap-2 px-4 py-3 md:grid-cols-[1.4fr_1fr_1fr]">
-                      <label className="text-[10px] font-black text-slate-400">업체명(등급)
-                        <input value={b.vendor} onChange={(e) => patchBlock(b.index, { vendor: e.target.value })} className={`mt-1 ${field}`} />
-                      </label>
-                      <label className="text-[10px] font-black text-slate-400">기종
-                        <select value={b.machine} onChange={(e) => patchBlock(b.index, { machine: e.target.value })} className={`mt-1 ${field}`}>
-                          {machineKeys.map((k) => <option key={k}>{k}</option>)}
-                        </select>
-                      </label>
-                      <label className="text-[10px] font-black text-slate-400">연락처 (쉼표로 여러 개)
-                        <input value={b.contacts.map((c) => c.phone).join(", ")}
-                          onChange={(e) => {
-                            const phones = e.target.value.split(/[\s,]+/).map((p) => p.replace(/[^0-9]/g, "")).filter(Boolean);
-                            const labels = Object.fromEntries(b.contacts.map((c) => [c.phone, c.label]));
-                            patchBlock(b.index, { contacts: phones.map((p) => ({ phone: p, label: labels[p] || "" })) });
-                          }} className={`mt-1 ${field}`} />
-                        {b.contacts.some((c) => c.label) && <span className="mt-1 block truncate text-[10px] font-bold text-emerald-600">👤 {b.contacts.filter((c) => c.label).map((c) => `${c.label}(${formatPhone(c.phone)})`).join(" · ")}</span>}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </details>
-
-            </>
-          )}
         </>
       ) : (
         <>
