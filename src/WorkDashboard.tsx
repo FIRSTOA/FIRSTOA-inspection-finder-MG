@@ -384,16 +384,16 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
 
     {!loading && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 760 }}>
-        <thead><tr><th className={`${TH} w-16`}>외근</th><th className={TH}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH}>{WORK_LABELS[k]}</th>)}</tr></thead>
+        <thead><tr><th className={`${TH} w-16 text-slate-800`}>외근</th><th className={`${TH} text-slate-800`}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={`${TH} text-slate-800`}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
-          <tr><td className={TD_LABEL}>실적</td><td className={`${TD_READ} font-black tabular-nums text-slate-900`}>{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span><span className="ml-2 text-[11px] font-semibold text-slate-400">기기 {sum.machines}대</span></td>
-            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><span className="font-black text-slate-900">{sum.count[k]}</span><span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span>{sum.minutes[k] > 0 && <div className="text-[10px] font-semibold text-slate-400">{hm(sum.minutes[k])}</div>}</td>)}</tr>
+          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
+            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
           {period === "week" && <>
-            <tr><td className={TD_LABEL}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
-              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} tabular-nums`} /></td>)}</tr>
-            <tr><td className={TD_LABEL}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
+            <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
+              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-base font-bold tabular-nums`} /></td>)}</tr>
+            <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
               {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target;
-                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><span className={`font-black ${actual >= target ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</span><span className={`ml-1 text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}` : gap}</span></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
+                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className={`text-base font-black leading-tight ${actual >= target ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</div><div className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
           </>}
         </tbody>
       </table></div></section>
