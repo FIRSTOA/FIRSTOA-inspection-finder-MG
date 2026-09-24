@@ -234,7 +234,10 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
   );
 }
 
-export default function WorkDashboard({ kind, author, focusDate }: { kind: "daily" | "weekly"; author: string; focusDate?: string | null }) {
+// 주간현황판 한 화면 — 예전엔 '일일방문일지'(일/주/월/분기/연 조회)와 '주간현황판'(주간 목표·성장 기록 입력)이 따로였다.
+// 일일방문일지는 쓰는 게 없고 조회만 하는 탭이라 여기로 합쳤다(2026-09-24): 기간 탭에서 주간을 고르면 주간 목표·성장 기록도 같이 뜨고,
+// 월간·분기·연간은 같은 집계를 기간만 넓혀 보여 준다. 기본은 이번 주.
+export default function WorkDashboard({ author, focusDate }: { author: string; focusDate?: string | null }) {
   const today = kstDate();
   // 열람 대상 — 기본은 나, 다른 직원을 고르면 그 사람 기록을 읽기 전용으로 본다
   const { book } = useAuthorBook();
@@ -248,20 +251,17 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
   ], [book, author]);
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
-  const [period, setPeriod] = useState<Period>("day");
+  const [period, setPeriod] = useState<Period>("week");
   const [selectedDay, setSelectedDay] = useState(today);
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
-  // 성장기록 모아보기에서 특정 주차로 진입할 때 해당 주로 이동
+  // 골든미팅카드에서 특정 주차로 진입할 때 해당 주로 이동
   useEffect(() => {
-    if (focusDate) { setSelectedDay(focusDate); setYear(Number(focusDate.slice(0, 4))); setMonth(Number(focusDate.slice(5, 7))); }
+    if (focusDate) { setPeriod("week"); setSelectedDay(focusDate); setYear(Number(focusDate.slice(0, 4))); setMonth(Number(focusDate.slice(5, 7))); }
   }, [focusDate]);
   const editWeek = useMemo(() => workWeekRange(selectedDay), [selectedDay]);
-  const range = useMemo(() => {
-    if (kind === "weekly") return editWeek;
-    return periodRange(period, year, month, quarter, selectedDay);
-  }, [kind, period, year, month, quarter, selectedDay, editWeek, today]);
+  const range = useMemo(() => periodRange(period, year, month, quarter, selectedDay), [period, year, month, quarter, selectedDay]);
   const monthWeeks = useMemo(() => weeksInMonth(year, month), [year, month]);
   const selectedWeekLabel = monthWeeks.find((w) => w.start === editWeek.start)?.label || `${Math.ceil(Number(editWeek.start.slice(8, 10)) / 7)}주차`;
   const [rows, setRows] = useState<VisitRow[]>([]);
@@ -280,13 +280,13 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
     Promise.all([
       getVisits(subject, range.start, range.end),
       getOfficeLogs(subject, range.start, range.end),
-      kind === "weekly" ? getWeeklyNote(subject, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
+      period === "week" ? getWeeklyNote(subject, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
     ])
       .then(([visits, offices, weekly]) => { if (!alive) return; if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); setRows(visits); setOfficeLogs(offices); setNote(weekly); setAutoSaveStatus("idle"); setOffice(offices.find((o) => o.workDate === selectedDay) || { workDate: selectedDay, author, returnTime: "", values: emptyOfficeValues() }); })
       .catch((e) => { if (alive) setError((e as Error).message); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [subject, kind, range.start, range.end, editWeek.start, selectedDay]);
+  }, [subject, period, range.start, range.end, editWeek.start, selectedDay]);
 
   // 디바운스 대기 중인 주간노트를 기억해, 주차 전환/화면 이탈 시 유실 없이 즉시 저장(flush)한다.
   const pendingWeeklyRef = useRef<{ weekStart: string; note: WeeklyNote } | null>(null);
@@ -301,7 +301,7 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
   useEffect(() => () => flushWeeklySave(), []); // 언마운트 시 flush
 
   const scheduleWeeklySave = (nextNote: WeeklyNote) => {
-    if (kind !== "weekly" || loading || readOnly) return;
+    if (period !== "week" || loading || readOnly) return;
     if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
     pendingWeeklyRef.current = { weekStart: editWeek.start, note: nextNote };
     setAutoSaveStatus("saving");
@@ -339,21 +339,21 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
   };
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { if (readOnly) return; setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
-  const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${selectedWeekLabel} 주간 업무 현황` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
+  const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${month}월 ${selectedWeekLabel} 주간 현황판` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
   const periodTabs = ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
   return <div className="space-y-4 pb-16">
     <section className="flex flex-col gap-3 rounded-xl bg-[#151A23] p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      {kind === "daily" && <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>}
+      <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
       <div className="flex flex-wrap items-center gap-2">
-        {kind === "daily" && period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]" />}
-        {(kind === "weekly" || period === "week" || period === "month" || period === "quarter" || period === "year") && <PortalSelect tone="dark" width={130} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (kind === "weekly" || period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
-        {(kind === "weekly" || period === "week" || period === "month") && <>
-          <PortalSelect tone="dark" width={120} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (kind === "weekly" || period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />
-          {(kind === "weekly" || period === "week") && <PortalSelect tone="dark" width={220} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
+        {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-blue-400 [color-scheme:dark]" />}
+        {period !== "day" && <PortalSelect tone="dark" width={130} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
+        {(period === "week" || period === "month") && <>
+          <PortalSelect tone="dark" width={120} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />
+          {period === "week" && <PortalSelect tone="dark" width={220} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
         </>}
-        {kind === "daily" && period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "border border-white/15 text-slate-300 hover:bg-white/10"}`}>{q}분기</button>)}</div>}
+        {period === "quarter" && <div className="flex gap-1">{[1,2,3,4].map((q) => <button key={q} onClick={() => setQuarter(q)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${quarter === q ? "bg-white text-slate-950" : "border border-white/15 text-slate-300 hover:bg-white/10"}`}>{q}분기</button>)}</div>}
         <PortalSelect tone="dark" width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
         <div className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold tabular-nums text-slate-300">{range.start} ~ {range.end}</div>
       </div>
@@ -362,13 +362,13 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
         <div className="text-[11px] font-bold uppercase tracking-wide text-blue-400">{subject} · <span className="tabular-nums">{range.start} ~ {range.end}</span></div>
-        <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{kind === "daily" ? periodTitle : "주간 현황판"}</h2>
+        <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
         <p className="mt-1 text-[11px] font-semibold text-slate-400">FIELD 기록을 기준으로 자동 집계됩니다.</p>
       </div>
       <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">
         {[['방문 거래처', `${sum.visits}곳`], ['기계 대수', `${sum.machines}대`], ['외근 시간', hm(sum.fieldMinutes)], ['내근 시간', hm(insideMinutes)]].map(([l, v]) => <div key={l} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}</div></div>)}
       </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-100 px-6 py-3 text-xs font-semibold text-slate-500 lg:px-8"><span>총 활동시간 <b className="ml-1 text-slate-950">{hm(sum.fieldMinutes + insideMinutes)}</b></span>{kind === "daily" && period === "day" && <><span>마감 <b className="ml-1 text-slate-950">{commute || "미선택"}</b></span><span>복귀시간 <b className="ml-1 text-slate-950">{office.returnTime || "미입력"}</b></span></>}</div>
+      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-100 px-6 py-3 text-xs font-semibold text-slate-500 lg:px-8"><span>총 활동시간 <b className="ml-1 text-slate-950">{hm(sum.fieldMinutes + insideMinutes)}</b></span>{period === "day" && <><span>마감 <b className="ml-1 text-slate-950">{commute || "미선택"}</b></span><span>복귀시간 <b className="ml-1 text-slate-950">{office.returnTime || "미입력"}</b></span></>}</div>
     </section>
 
     {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
@@ -383,11 +383,11 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
           const actual = sum.count[k];
           const percent = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
           const gap = actual - target;
-          return <div key={k} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{actual}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div><div className="text-xs font-bold text-slate-500">{hm(sum.minutes[k])}</div></div>{kind === "weekly" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-500">목표</span><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-xs font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
+          return <div key={k} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{actual}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div><div className="text-xs font-bold text-slate-500">{hm(sum.minutes[k])}</div></div>{period === "week" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-500">목표</span><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-xs font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
         })}
       </div></section>
 
-      {kind === "daily" && period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
+      {period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
         <div className="space-y-6">
           <section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="text-base font-black text-slate-950 lg:text-lg">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
@@ -398,9 +398,13 @@ export default function WorkDashboard({ kind, author, focusDate }: { kind: "dail
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] font-bold text-slate-400">수량/건<input type="number" min="0" disabled={readOnly} value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label><label className="text-[10px] font-bold text-slate-400">시간(분)<input type="number" min="0" disabled={readOnly} value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>)}</div>
           <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg font-black tabular-nums text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office" || readOnly} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{readOnly ? "읽기 전용" : saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
-      </div></div> : kind === "daily" ? <div className="space-y-6"><PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} /><HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div> : <div className="flex flex-col gap-6">
+      </div></div> : period === "week" ? <div className="space-y-6">
         <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} readOnly={readOnly} />
-        <div className="order-2"><HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} /></div>
+        <PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
+        <HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
+      </div> : <div className="space-y-6">
+        <PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
+        <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div>}
     </>}
   </div>;

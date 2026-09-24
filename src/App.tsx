@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
-import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, NotebookPen, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
+import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
@@ -23,6 +23,7 @@ import StockBoard from "./StockBoard";
 import InboxHub from "./InboxHub";
 import { useInboxBadge } from "./useInboxBadge";
 import GrowthHub from "./GrowthHub";
+import OkrHub from "./OkrHub";
 import WalkingMap from "./WalkingMap";
 import FoodMap from "./FoodMap";
 import HelpCenter from "./HelpCenter";
@@ -4826,7 +4827,7 @@ export default function App() {
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
-  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "foodMap" | "help" | "asReception" | "serviceReception" | "reading" | "daily" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
+  const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "foodMap" | "help" | "asReception" | "serviceReception" | "reading" | "okr" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -5996,7 +5997,7 @@ export default function App() {
   const SCREEN_ICON: Record<string, typeof HomeIcon> = {
     home: HomeIcon, serviceReception: ClipboardList, asReception: ListChecks, calendar: CalendarDays,
     walkingMap: MapIcon, autoSchedule: Wand2, foodMap: Utensils, help: BookOpen, field: FileText, stock: Boxes, deptRequests: Inbox, copierNotes: Printer,
-    itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, daily: NotebookPen,
+    itHistory: MonitorSmartphone, selfdev: GraduationCap, weekly: CalendarRange, okr: Target,
     growth: TrendingUp, happycall: PhoneCall, promoSend: Megaphone, counterSms: MessageSquare,
     operations: Settings2, lookup: Database, inbox: Inbox,
   };
@@ -6004,7 +6005,7 @@ export default function App() {
     // 사용설명서와 같은 묶음 — 매일 쓰는 5개(홈·FIELD·서비스접수·일정리스트·캘린더)는 그룹 없이 위에, 나머지는 접히는 그룹으로
     { title: "현장·동선", items: [["walkingMap", "워킨맵"], ["autoSchedule", "자동 일정"], ["recontract", "재계약 준비"], ["foodMap", "맛동여지도"]] },
     { title: "소식·학습", items: [["inbox", "공지·요청"], ["copierNotes", "복합기 학습·처리이력"], ["itHistory", "IT 학습·처리이력"], ["selfdev", "자기개발/지식공유"]] },
-    { title: "기록·성과", items: [["weekly", "주간현황판"], ["daily", "일일방문일지"], ["growth", "골든미팅카드"]] },
+    { title: "기록·성과", items: [["weekly", "주간현황판"], ["okr", "OKR"], ["growth", "골든미팅카드"]] },
     { title: "고객·홍보", items: [["customerReport", "고객 리포트"], ["happycall", "해피콜"], ["promoSend", "홍보물 발송·인쇄"], ["counterSms", "카운터 문자전송"]] },
   ] as { title: string; items: [typeof screen, string][] }[];
   const homeItem = ["home", "홈"] as [typeof screen, string];
@@ -6262,8 +6263,8 @@ export default function App() {
         {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
         {screen === "operations" && <AdminHub author={author} />}
         {screen === "lookup" && <LookupHub author={author} />}
-        {screen === "daily" && <WorkDashboard kind="daily" author={author} />}
-        {screen === "weekly" && <WorkDashboard kind="weekly" author={author} focusDate={weeklyFocus} />}
+        {screen === "weekly" && <WorkDashboard author={author} focusDate={weeklyFocus} />}
+        {screen === "okr" && <OkrHub author={author} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "help" && <HelpCenter />}

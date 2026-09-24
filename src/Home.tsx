@@ -44,7 +44,7 @@ import { getTeamVisits, kstDate, weekRange } from "./visits";
 
 type Screen =
   | "field" | "calendar" | "walkingMap" | "asReception" | "serviceReception" | "happycall" | "promoSend"
-  | "daily" | "weekly" | "growth" | "itHistory" | "counterSms" | "selfdev" | "copierNotes" | "operations";
+  | "okr" | "weekly" | "growth" | "itHistory" | "counterSms" | "selfdev" | "copierNotes" | "operations";
 
 type Module = { key: Screen; title: string; desc: string; icon: LucideIcon; hue: string };
 
@@ -71,9 +71,9 @@ const moduleGroups: Array<{ title: string; blurb: string; items: Module[] }> = [
   {
     title: "기록·성과", blurb: "쓴 만큼 저절로 집계된다",
     items: [
-      { key: "daily", title: "일일방문일지", desc: "FIELD 기록이 그대로 일지로 — 재작성 0", icon: BarChart3, hue: "from-cyan-500/25 to-cyan-500/0 text-cyan-300" },
-      { key: "weekly", title: "주간현황판", desc: "목표·병목·실적 자동 집계", icon: Target, hue: "from-indigo-500/25 to-indigo-500/0 text-indigo-300" },
-      { key: "growth", title: "성장기록", desc: "분기 결과·미션·골든미팅카드", icon: Sparkles, hue: "from-fuchsia-500/25 to-fuchsia-500/0 text-fuchsia-300" },
+      { key: "weekly", title: "주간현황판", desc: "일·주·월·분기·연 실적 자동 집계, 주간 목표·병목", icon: BarChart3, hue: "from-indigo-500/25 to-indigo-500/0 text-indigo-300" },
+      { key: "okr", title: "OKR", desc: "월별 목표·달성기준, 파트별 실행결과·종합판정", icon: Target, hue: "from-cyan-500/25 to-cyan-500/0 text-cyan-300" },
+      { key: "growth", title: "골든미팅카드", desc: "분기 결과표·미션·골든미팅카드", icon: Sparkles, hue: "from-fuchsia-500/25 to-fuchsia-500/0 text-fuchsia-300" },
       { key: "operations", title: "업무관리", desc: "팀 운영 현황·담당자/주소 변경이력", icon: UsersRound, hue: "from-slate-400/25 to-slate-400/0 text-slate-200" },
       { key: "happycall", title: "해피콜", desc: "방문 후 문자·예약 발송", icon: PhoneCall, hue: "from-rose-500/25 to-rose-500/0 text-rose-300" },
       { key: "promoSend", title: "홍보물 발송·인쇄", desc: "홍보자료 문자·메일·인쇄", icon: Megaphone, hue: "from-amber-500/25 to-amber-500/0 text-amber-300" },

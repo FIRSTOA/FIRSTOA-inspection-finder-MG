@@ -2558,7 +2558,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 // 완료 사유 입력 — 적으면 팀 AS방 카톡 + 네이버 일정 내용에 남고, 비우면 조용히 완료만
 function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClose: () => void; onApply: (reason: string, mode?: "visit" | "phone") => void }) {
   const [reason, setReason] = useState("");
-  // 방문해서 처리했는지, 전화·원격으로 끝냈는지 — 주간현황판·일일방문일지의 AS·방문 건수가 여기서 갈린다(2026-09-24)
+  // 방문해서 처리했는지, 전화·원격으로 끝냈는지 — 주간현황판의 AS·방문 건수가 여기서 갈린다(2026-09-24)
   const [mode, setMode] = useState<"visit" | "phone">("visit");
   const isDelivery = ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류";
   return (
