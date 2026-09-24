@@ -14,11 +14,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
+import JudgmentPicker from "./JudgmentPicker";
 import { askConfirm } from "./confirmModal";
 import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
 import {
-  JUDGMENT_INFO, OKR_JUDGMENTS, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, bottleneckLabel, cycleLabel, defaultCycleTitle,
+  JUDGMENT_INFO, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, bottleneckLabel, cycleLabel, defaultCycleTitle,
   defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrReports, isAlert, listOkrCycles, memberReports,
   mergeMemberActuals, monthCycleId, needsReasonPlan, normalizeJudgment, okrAssist, pillarIndex, pillarLabel, probeOkrSchema, remapFeedback, remapReports,
   renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, worstJudgment, worstOfJudgments,
@@ -496,10 +497,10 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
               return <FragmentRows key={goal.no}>
                 <tr>
                   <BottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} editable={editable} onRemove={onRemove} />
-                  <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "objective", editable ? "목표 — 이 달에 이만큼은 하자" : "", "font-semibold text-slate-900")}</td>
-                  <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "criteria", editable ? "• 항목: 1건 이상  [건수형]\n• 이행률: 100%" : "")}</td>
+                  <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "objective", "", "font-semibold text-slate-900")}</td>
+                  <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "criteria", "")}</td>
                   <td className={TD_WRITE}>
-                    {rich(row, "actual", goal.no, "한 일을 대충 적고 ✨정리 — 예) 계약서 8건 중 5건 확인, 3건은 카톡만")}
+                    {rich(row, "actual", goal.no, "")}
                     <div className="flex flex-wrap gap-x-3 px-2 pb-1 text-[10px] font-bold">
                       <button type="button" disabled={!!aiBusy} onClick={() => onAiFormat(goal.no)} className={LINK}>{aiBusy === fmtKey ? "정리 중…" : "✨ 정리"}</button>
                       {!member && members.length > 0 && <button type="button" onClick={() => setOpenMembers((cur) => ({ ...cur, [goal.no]: !open }))} className={LINK}>{open ? "팀원 기록 닫기" : `팀원 기록 ${memberEntries.length}`}</button>}
@@ -509,16 +510,13 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
                       </>}
                     </div>
                   </td>
-                  <td className={`${TD} p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
-                    <select value={j} onChange={(e) => onResult(goal.no, { judgment: e.target.value })} className="w-full bg-transparent px-1.5 py-1.5 text-[12px] font-bold outline-none">
-                      <option value="">선택</option>
-                      {OKR_JUDGMENTS.map((g) => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    {suggested && suggested !== j && row.actual.trim() && <button type="button" onClick={() => onResult(goal.no, { judgment: suggested })} className="block w-full px-1.5 pb-1 text-left text-[10px] font-bold text-slate-600 hover:underline">→ {suggested}로</button>}
+                  <td className={`${TD} h-px p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
+                    <JudgmentPicker value={j} suggested={row.actual.trim() ? suggested : ""} onChange={(v) => onResult(goal.no, { judgment: v })} />
+                    {suggested && suggested !== j && row.actual.trim() && <button type="button" onClick={() => onResult(goal.no, { judgment: suggested })} className="block w-full px-2 pb-1 text-left text-[10px] font-bold text-slate-500 hover:underline">→ {suggested}로</button>}
                   </td>
-                  <td className={`${TD_WRITE} ${mustExplain && !row.reason.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "reason", goal.no, mustExplain ? "필수 — ○○○ 때문에 ○건을 못 했습니다" : "", mustExplain && !row.reason.trim() ? "empty:before:!text-rose-400" : "")}</td>
-                  <td className={`${TD_WRITE} ${mustExplain && !row.plan.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "plan", goal.no, mustExplain ? "필수 — 다음 달부터 ○○○ 하겠습니다" : "", mustExplain && !row.plan.trim() ? "empty:before:!text-rose-400" : "")}</td>
-                  <td className={TD_WRITE}>{rich(row, "evidence", goal.no, j === "해당없음" ? "대상 0건" : "항목 이름 : 실제 내용")}</td>
+                  <td className={`${TD_WRITE} ${mustExplain && !row.reason.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "reason", goal.no, "")}</td>
+                  <td className={`${TD_WRITE} ${mustExplain && !row.plan.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "plan", goal.no, "")}</td>
+                  <td className={TD_WRITE}>{rich(row, "evidence", goal.no, "")}</td>
                 </tr>
                 {open && <tr className="bg-slate-50">
                   <td colSpan={COLS.length} className={`${TD} px-3 py-2`}>
@@ -587,11 +585,11 @@ function SummaryView({ cycle, cycles, reports, aiBusy, customTeams, onFeedback, 
                 const fbKey = `fb|${goal.no}`;
                 return <tr key={goal.no}>
                   <BottleneckCell goals={goals} goal={goal} alert={actions.length > 0} alertTone="border-l-orange-500" editable onRemove={onRemove} />
-                  <td className={TD_EDIT}><RichCell text={goal.objective} html={goal.html?.objective} minRows={2} placeholder="목표 — 이 달에 이만큼은 하자" className="font-semibold text-slate-800" onChange={(t, h) => onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) })} /></td>
+                  <td className={TD_EDIT}><RichCell text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-slate-800" onChange={(t, h) => onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) })} /></td>
                   {OKR_TEAMS.map((t) => <td key={t} className={`${TD} px-1 py-1.5 text-center`}><JudgmentBadge value={resultRowFor(partRows.find((r) => r.team === t), goal.no).judgment} /></td>)}
                   <td className={`${TD_READ} text-[11px] leading-snug`}>{actions.length ? actions.map((t) => <div key={t}><span className="font-black text-rose-600">{t}파트</span>{who[t]?.length ? <span className="text-slate-500"> · {who[t].join(", ")}</span> : null}</div>) : <span className="text-slate-300">—</span>}</td>
                   <td className={TD_WRITE}>
-                    <RichCell text={fb?.memo || ""} html={fb?.memoHtml} minRows={2} placeholder={actions.length ? "1. 대상: …  2. 피드백: …  3. 다음 달 개선 방향: …" : ""} onChange={(t, h) => onFeedback(goal.no, t, h)} />
+                    <RichCell text={fb?.memo || ""} html={fb?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} />
                     <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === fbKey ? "초안 쓰는 중…" : "✨ 초안"}</button></div>
                   </td>
                 </tr>;
