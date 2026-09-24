@@ -49,6 +49,13 @@ type LearningRow = { date: string; brand: string; model: string; lesson: string;
 const emptyLearningRow = (): LearningRow => ({ date: "", brand: "", model: "", lesson: "", duration: "", educator: "" });
 const GROWTH_NOTE_TEMPLATE = "상황:\n문제점:\n개선해야 할 점:\n실행:";
 const pad = (n: number) => String(n).padStart(2, "0");
+// 격자 시트 — OKR 탭과 같은 모양(2026-09-24: 카드 대신 엑셀 셀). 색은 노란 입력칸에만.
+const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
+const TD_LABEL = "border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500";
+const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
+const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400";
+const CELL_AREA = "block w-full bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none placeholder:text-slate-300";
+const BAR = "border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
   const endDate = new Date(`${r.start}T12:00:00+09:00`);
@@ -204,8 +211,8 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
     onChange(nextValue);
   };
   return (
-    <div className="mt-4 space-y-2">
-      <div className="hidden grid-cols-[70px_80px_90px_1fr_70px_80px_32px] gap-2 px-1 text-[11px] font-black text-slate-400 lg:grid">
+    <div className="space-y-1 p-1.5">
+      <div className="hidden grid-cols-[70px_80px_90px_1fr_70px_80px_32px] gap-1 px-1 text-[10px] font-bold text-slate-400 lg:grid">
         <span>M/DD</span><span>브랜드</span><span>기종</span><span>배운점</span><span>교육자</span><span>소요시간</span><span />
       </div>
       {rows.map((row, index) => {
@@ -214,20 +221,20 @@ function LearningRowsEditor({ value, onChange }: { value: string; onChange: (val
           const next = rows.filter((_, i) => i !== index);
           commitRows(next.length ? next : [emptyLearningRow()]);
         };
-        const inputClass = "rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:bg-white";
+        const inputClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-slate-400";
         return (
-          <div key={index} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50/60 p-2 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px] lg:border-0 lg:bg-transparent lg:p-0">
+          <div key={index} className="grid gap-1 lg:grid-cols-[70px_80px_90px_1fr_70px_80px_32px]">
             <input value={row.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
             <input value={row.brand} onChange={(e) => update("brand", e.target.value)} className={inputClass} />
             <input value={row.model} onChange={(e) => update("model", e.target.value)} className={inputClass} />
             <input value={row.lesson} onChange={(e) => update("lesson", e.target.value)} className={inputClass} />
             <input value={row.educator} onChange={(e) => update("educator", e.target.value)} className={inputClass} />
             <input value={row.duration} onChange={(e) => update("duration", e.target.value)} className={inputClass} />
-            <button type="button" onClick={remove} className="rounded-lg text-sm font-black text-slate-300 hover:bg-rose-50 hover:text-rose-500">×</button>
+            <button type="button" onClick={remove} className="text-sm font-black text-slate-300 hover:text-rose-500">×</button>
           </div>
         );
       })}
-      <button type="button" onClick={() => commitRows([...rows, emptyLearningRow()])} className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-100">
+      <button type="button" onClick={() => commitRows([...rows, emptyLearningRow()])} className="px-1 text-[11px] font-bold text-slate-500 hover:text-slate-900 hover:underline">
         행 추가
       </button>
     </div>
@@ -376,16 +383,20 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
     {!loading && <>
-      <section><div className="mb-3 flex items-end justify-between"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">외근</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">방문·현장 업무 건수와 소요시간</p></div></div><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="inline-flex rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">🏢 방문 거래처</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{sum.visits}<span className="ml-1 text-xs font-semibold text-slate-400">곳</span></div><div className="text-xs font-bold text-slate-500">기기 {sum.machines}대</div></div></div>
-        {KINDS.map((k) => {
-          const target = Number(note.goals[k] || 0);
-          const actual = sum.count[k];
-          const percent = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
-          const gap = actual - target;
-          return <div key={k} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tones[k]}`}>{icons[k]} {WORK_LABELS[k]}</div><div className="mt-4 flex items-end justify-between"><div className="text-2xl font-black text-slate-950">{actual}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div><div className="text-xs font-bold text-slate-500">{hm(sum.minutes[k])}</div></div>{period === "week" && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3"><div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-500">목표</span><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-xs font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${target > 0 && actual >= target ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${target > 0 ? percent : 0}%` }} /></div><div className="flex items-center justify-between text-[11px] font-bold"><span className={target ? "text-slate-500" : "text-slate-300"}>{target ? `달성률 ${percent}%` : "목표 미입력"}</span>{target > 0 && <span className={gap >= 0 ? "text-emerald-600" : "text-rose-600"}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span>}</div></div>}</div>;
-        })}
-      </div></section>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 760 }}>
+        <thead><tr><th className={`${TH} w-16`}>외근</th><th className={TH}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH}>{WORK_LABELS[k]}</th>)}</tr></thead>
+        <tbody>
+          <tr><td className={TD_LABEL}>실적</td><td className={`${TD_READ} font-black tabular-nums text-slate-900`}>{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span><span className="ml-2 text-[11px] font-semibold text-slate-400">기기 {sum.machines}대</span></td>
+            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><span className="font-black text-slate-900">{sum.count[k]}</span><span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span>{sum.minutes[k] > 0 && <div className="text-[10px] font-semibold text-slate-400">{hm(sum.minutes[k])}</div>}</td>)}</tr>
+          {period === "week" && <>
+            <tr><td className={TD_LABEL}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
+              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} tabular-nums`} /></td>)}</tr>
+            <tr><td className={TD_LABEL}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
+              {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target;
+                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><span className={`font-black ${actual >= target ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</span><span className={`ml-1 text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}` : gap}</span></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
+          </>}
+        </tbody>
+      </table></div></section>
 
       {period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
         <div className="space-y-6">
@@ -411,7 +422,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
 }
 
 function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus, readOnly = false }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved"; readOnly?: boolean }) {
-  const goalCards = ([["thisWeekGoal", "이번 주 목표", "이번 주 집중할 결과"], ["thisWeekResult", "결과·미진행 사유", "실행 결과와 밀린 이유"], ["nextWeekGoal", "다음 주 목표", "다음 실행으로 넘길 항목"]] as [WeeklyTextKey, string, string][]);
+  const goalCols = ([["thisWeekGoal", "이번 주 목표"], ["thisWeekResult", "결과·미진행 사유"], ["nextWeekGoal", "다음 주 목표"]] as [WeeklyTextKey, string][]);
   const [aiBusy, setAiBusy] = useState(false);
   const runGrowthAiTransform = async () => {
     setAiBusy(true);
@@ -421,74 +432,49 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
       setAiBusy(false);
     }
   };
+  const status = readOnly ? "읽기 전용" : autoSaveStatus === "saving" ? "저장 중…" : autoSaveStatus === "saved" ? "저장됨" : "";
+  const bar = (label: string, right?: string) => <tr><td colSpan={4} className={BAR}><div className="flex items-center justify-between"><span>{label}</span>{right && <span className="text-[11px] font-bold text-slate-400">{right}</span>}</div></td></tr>;
   return (
-    <section className="order-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
-        <div>
-          <h3 className="text-base font-black text-slate-950 lg:text-lg">주간 목표·성장 기록</h3>
-          <p className="mt-0.5 text-xs font-semibold text-slate-400">목표는 요약 카드로, 성장기록은 항목별로 나누어 확인합니다.</p>
-        </div>
-        <div className={`rounded-full px-3 py-1.5 text-[11px] font-black ${readOnly ? "bg-amber-50 text-amber-700" : autoSaveStatus === "saving" ? "bg-blue-50 text-blue-700" : autoSaveStatus === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-          {readOnly ? "읽기 전용" : autoSaveStatus === "saving" ? "자동 저장중" : autoSaveStatus === "saved" ? "자동 저장됨" : "자동 저장"}
-        </div>
-      </div>
+    <section className="order-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <fieldset disabled={readOnly} className="contents">
-      <div className="border-b border-slate-200 bg-rose-50/40 p-4">
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <div className="text-xs font-black uppercase tracking-wide text-rose-600">Bottleneck</div>
-            <h4 className="mt-1 text-base font-black text-slate-950">이번 주 병목현상 3가지</h4>
-          </div>
-          <div className="text-xs font-semibold text-slate-400">병목현상 / 원인 / 해결방안</div>
-        </div>
-        <div className="grid gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-          {note.bottlenecks.map((item, i) => (
-            <div key={i} className="rounded-lg border border-rose-100 bg-white p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-black text-rose-700">병목 {i + 1}</span>
-                <span className={`h-2 w-2 rounded-full ${item.title.trim() || item.cause.trim() || item.solution.trim() ? "bg-rose-500" : "bg-slate-300"}`} />
-              </div>
-              <label className="block text-xs font-black text-slate-500">병목현상<input value={item.title} onChange={(e) => onBottleneckChange(i, "title", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-300" /></label>
-              <label className="mt-3 block text-xs font-black text-slate-500">원인<AutoGrowTextarea value={item.cause} onChange={(value) => onBottleneckChange(i, "cause", value)} rows={1} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
-              <label className="mt-3 block text-xs font-black text-slate-500">해결방안<AutoGrowTextarea value={item.solution} onChange={(value) => onBottleneckChange(i, "solution", value)} rows={1} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-rose-300" /></label>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid gap-3 bg-slate-50 p-4 lg:grid-cols-3">
-        {goalCards.map(([key, label, desc]) => (
-          <div key={key} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-            <div><div className="text-sm font-black text-slate-900">{label}</div><div className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</div></div>
-            <AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={1} className="mt-4 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-3 border-t border-slate-200 p-4 lg:grid-cols-2">
-        {weeklyCards.map((item) => {
-          return (
-            <div key={item.key} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${item.tone}`}>{item.icon} {item.label}</div>
-                {item.key === "growth" && (
-                  <div className="flex gap-1">
-                    <button type="button" onClick={() => onNoteChange("growth", GROWTH_NOTE_TEMPLATE)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-600 transition hover:bg-slate-50">
-                      틀 추가
-                    </button>
-                    <button type="button" onClick={runGrowthAiTransform} disabled={aiBusy} className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-50" title="API를 호출해 상황, 문제점, 개선해야 할 점, 실행으로 변환">
-                      {aiBusy ? "변환중" : "✨ AI변환"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              {item.key === "learning" ? (
-                <LearningRowsEditor value={String(note.learning)} onChange={(value) => onNoteChange("learning", value)} />
-              ) : (
-                <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={1} className="mt-4 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white" />
-              )}
-            </div>
-          );
-        })}
-      </div>
+        <div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 720 }}>
+          <colgroup><col style={{ width: 150 }} /><col /><col /><col /></colgroup>
+          <tbody>
+            {bar("이번 주 병목현상", status)}
+            <tr><th className={TH} /><th className={TH}>병목현상</th><th className={TH}>원인</th><th className={TH}>해결방안</th></tr>
+            {note.bottlenecks.map((item, i) => (
+              <tr key={i}>
+                <td className={TD_LABEL}>병목 {i + 1}</td>
+                <td className={TD_WRITE}><AutoGrowTextarea value={item.title} onChange={(value) => onBottleneckChange(i, "title", value)} rows={2} className={`${CELL_AREA} font-semibold`} /></td>
+                <td className={TD_WRITE}><AutoGrowTextarea value={item.cause} onChange={(value) => onBottleneckChange(i, "cause", value)} rows={2} className={CELL_AREA} /></td>
+                <td className={TD_WRITE}><AutoGrowTextarea value={item.solution} onChange={(value) => onBottleneckChange(i, "solution", value)} rows={2} className={CELL_AREA} /></td>
+              </tr>
+            ))}
+            {bar("주간 목표")}
+            <tr><th className={TH} />{goalCols.map(([key, label]) => <th key={key} className={TH}>{label}</th>)}</tr>
+            <tr>
+              <td className={TD_LABEL}>내용</td>
+              {goalCols.map(([key]) => <td key={key} className={TD_WRITE}><AutoGrowTextarea value={String(note[key])} onChange={(value) => onNoteChange(key, value)} rows={3} className={CELL_AREA} /></td>)}
+            </tr>
+            {bar("성장 기록")}
+            {weeklyCards.map((item) => (
+              <tr key={item.key}>
+                <td className={TD_LABEL}>
+                  {item.label}
+                  {item.key === "growth" && <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] font-bold">
+                    <button type="button" onClick={() => onNoteChange("growth", GROWTH_NOTE_TEMPLATE)} className="text-slate-500 hover:text-slate-900 hover:underline">틀 넣기</button>
+                    <button type="button" onClick={runGrowthAiTransform} disabled={aiBusy} className="text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40" title="상황·문제점·개선해야 할 점·실행으로 정리">{aiBusy ? "정리 중…" : "✨ 정리"}</button>
+                  </div>}
+                </td>
+                <td colSpan={3} className={TD_WRITE}>
+                  {item.key === "learning"
+                    ? <LearningRowsEditor value={String(note.learning)} onChange={(value) => onNoteChange("learning", value)} />
+                    : <AutoGrowTextarea value={String(note[item.key])} onChange={(value) => onNoteChange(item.key, value)} rows={2} className={CELL_AREA} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
       </fieldset>
     </section>
   );
