@@ -37,7 +37,9 @@ export function pillarIndex(pillar: string): number {
 export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); return i >= 0 ? OKR_PILLARS[i].label : String(pillar || "").replace(/^Pillar\s*\d+\.?\s*/i, "").trim(); };
 
 export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string };
-export type OkrFeedback = { action?: string; memo: string };
+// 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
+export type RichField = "actual" | "reason" | "plan" | "evidence";
+export type OkrFeedback = { action?: string; memo: string; memoHtml?: string };
 export type OkrCycle = {
   id: string;
   kind: "month" | "week";
@@ -53,7 +55,7 @@ export type OkrCycle = {
   updated_at?: string;
   updated_by?: string | null;
 };
-export type OkrResultRow = { no: number; actual: string; judgment: string; reason: string; plan: string; evidence: string };
+export type OkrResultRow = { no: number; actual: string; judgment: string; reason: string; plan: string; evidence: string; html?: Partial<Record<RichField, string>> };
 export type OkrHeader = { leader: string; author: string; headcount: string; submitted: string };
 export type OkrReport = {
   cycle_id: string;
@@ -228,6 +230,13 @@ export function bottleneckLabel(goals: OkrGoal[], no: number): string {
   const pos = siblings.findIndex((g) => g.no === no);
   return `병목현상 ${pos + 1}`;
 }
+// 목표 순서가 바뀌었을 때(삽입·삭제·정렬) 옛 번호 → 새 번호 표. 결과 행과 피드백 키를 같이 옮길 때 쓴다.
+export function remapReports(reports: OkrReport[], remap: Map<number, number>): OkrReport[] {
+  return reports.map((r) => ({ ...r, rows: r.rows.filter((x) => remap.has(x.no)).map((x) => ({ ...x, no: remap.get(x.no) as number })).sort((a, b) => a.no - b.no) }));
+}
+export function remapFeedback(feedback: Record<string, OkrFeedback>, remap: Map<number, number>): Record<string, OkrFeedback> {
+  return Object.fromEntries(Object.entries(feedback).filter(([k]) => remap.has(Number(k))).map(([k, v]) => [String(remap.get(Number(k))), v]));
+}
 // 빈 달의 기본 틀 — Pillar 3개 × 병목현상 3개
 export function defaultGoalTemplate(): OkrGoal[] {
   return renumberGoals(OKR_PILLARS.flatMap((p, pi) => [1, 2, 3].map((n) => ({ no: pi * 3 + n, pillar: p.full, bottleneck: `병목현상 ${n}`, objective: "", criteria: "" }))));
@@ -262,7 +271,7 @@ function toReport(r: Partial<OkrReport> & { cycle_id: string; team: string }): O
     team: r.team,
     member: String(r.member || ""),
     header: { leader: String(header.leader || ""), author: String(header.author || ""), headcount: String(header.headcount || ""), submitted: String(header.submitted || "") },
-    rows: Array.isArray(r.rows) ? r.rows.map((x) => ({ no: Number(x.no) || 0, actual: String(x.actual || ""), judgment: String(x.judgment || ""), reason: String(x.reason || ""), plan: String(x.plan || ""), evidence: String(x.evidence || "") })).filter((x) => x.no > 0) : [],
+    rows: Array.isArray(r.rows) ? r.rows.map((x) => ({ no: Number(x.no) || 0, actual: String(x.actual || ""), judgment: String(x.judgment || ""), reason: String(x.reason || ""), plan: String(x.plan || ""), evidence: String(x.evidence || ""), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) })).filter((x) => x.no > 0) : [],
     updated_at: r.updated_at,
     updated_by: r.updated_by ?? null,
   };
@@ -299,6 +308,11 @@ export async function saveOkrReport(report: OkrReport, by: string): Promise<void
 export type OkrAssistResult = { actual?: string; judgment?: string; reason?: string; plan?: string; evidence?: string; memo?: string; model?: string };
 export async function okrAssist(body: Record<string, unknown>): Promise<OkrAssistResult> {
   return invokeEdgeFunction<OkrAssistResult>("okr-assist", body, 90_000);
+}
+
+// 팀원 한 사람의 이 달 기록 삭제(박스 ×). 명단에 있는 사람은 박스는 남고 기록만 지워진다.
+export async function deleteOkrReport(cycleId: string, team: string, member: string): Promise<void> {
+  await deleteRows("okr_reports", `cycle_id=eq.${encodeURIComponent(cycleId)}&team=eq.${encodeURIComponent(team)}&member=eq.${encodeURIComponent(member)}`);
 }
 
 export async function deleteOkrCycle(cycleId: string): Promise<void> {
