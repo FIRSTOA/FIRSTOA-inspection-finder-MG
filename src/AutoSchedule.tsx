@@ -235,12 +235,20 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (!chosenGroups.length) return;
     setLoading(true);
     try {
+      // 그 달에 이미 열려 있는 점검 일정이 있는 업체는 건너뛴다 — 같은 업체가 3번 잡혀 완료 때 '3건 처리'로 뜨던 것(2026-09-24 제이엘케이)
+      const monthStart = `${date.slice(0, 7)}-01`;
+      const monthEnd = `${date.slice(0, 7)}-31`;
+      const openRows = await selectRows<{ vendor: string; date: string }>("as_tickets", `select=vendor,date&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&status=neq.${encodeURIComponent("완료")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as Array<{ vendor: string; date: string }>);
+      const openByKey = new Map(openRows.map((t) => [vendorMatchKey(fieldTicketVendor(t.vendor).vendor || t.vendor), t.date]));
+      const skipped: string[] = [];
       for (const group of chosenGroups) {
         // 같은 회사 기기 여러 대 = 방문 1건 — 일정 1개로 등록하고 기기 목록은 메모에 (FIELD 점검 양식이 여러 대를 지원한다)
         const first = group.members[0];
         const eq = parseEquipComment(first.comment);
         const multi = group.members.length > 1;
         const vendorName = multi ? group.rep : (first.vendor || first.place_name);
+        const dupDate = openByKey.get(vendorMatchKey(vendorName));
+        if (dupDate) { skipped.push(`${vendorName}(${dupDate.slice(5)})`); continue; }
         const machineNote = multi
           ? `워킨맵 등록 ${group.members.length}곳 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
           : "";
@@ -256,7 +264,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         }, "id");
       }
       setPicked(new Set());
-      setNotice(`${chosenGroups.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.`);
+      setNotice(`${chosenGroups.length - skipped.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${skipped.length ? ` · 이미 이달 점검 일정에 있어 건너뜀 ${skipped.length}곳: ${skipped.join(", ")}` : ""}`);
       void loadTickets();
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);

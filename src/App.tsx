@@ -5871,7 +5871,8 @@ export default function App() {
         });
         if (row["repeatMonthly"]) await spawnMonthlyCloneIfMissing(row).catch(() => {});
       }
-      if (matched.length) showToast(`캘린더 매월점검 ${matched.length}건 완료 처리 + 양식 기록`, "success");
+      // 자동일정·워킨맵에서 넣은 정기점검도 유형이 '매월점검'이라 같이 잡힌다 — 같은 업체가 여러 번 잡혀 있으면 한꺼번에 닫힌다(2026-09-24 제이엘케이 3건)
+      if (matched.length) showToast(`내 일정의 점검 일정 ${matched.length}건 완료 처리(자동일정·워킨맵에서 넣은 정기점검 포함) + 양식 기록`, "success");
     } catch {
       // 캘린더 자동 완료 실패는 전송 결과에 영향 없음
     }

@@ -11,7 +11,7 @@ import { isPersonChange } from "./keyman";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
-import { normalizeId as normalizeIdKey, vendorMatchKey, vendorTokensContained } from "./ids";
+import { fieldTicketVendor, normalizeId as normalizeIdKey, vendorMatchKey, vendorTokensContained } from "./ids";
 // 등급·계약종료월·라벨 뜻은 재계약 준비 탭과 공유한다 (규칙이 어긋나면 방문 대상이 화면마다 달라진다)
 import { RENEWAL_LABEL_DESC, contractEnd, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
@@ -2071,6 +2071,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     try {
       const vendor = workinVendorName(planTarget.name) || planTarget.name;
       const renewal = planTarget.kind === "renewal";
+      // 같은 달에 이미 열려 있는 같은 유형 일정이 있으면 중복 등록하지 않는다(2026-09-24 — 한 업체가 3번 잡혀 완료 때 3건이 닫히던 것)
+      const monthStart = `${planDate.slice(0, 7)}-01`;
+      const monthEnd = `${planDate.slice(0, 7)}-31`;
+      const openRows = await selectRows<{ vendor: string; date: string }>("as_tickets", `select=vendor,date&status=neq.${encodeURIComponent("완료")}&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent(renewal ? "AS" : "매월점검")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as Array<{ vendor: string; date: string }>);
+      const key = vendorMatchKey(vendor);
+      const dup = key.length >= 3 ? openRows.find((t) => vendorMatchKey(fieldTicketVendor(t.vendor).vendor || t.vendor) === key) : undefined;
+      if (dup) { notify(`${vendor} — 이미 ${dup.date} 일정에 있어 다시 넣지 않았습니다`, "info"); setPlanTarget(null); return; }
       await upsertRows("as_tickets", [{
         id: `wk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         team: planTarget.team, date: planDate, time: "", // 시간 미정 — 내 일정에서 동선 순서로 잡는다
