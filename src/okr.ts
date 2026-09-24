@@ -65,6 +65,8 @@ export type OkrReport = {
   rows: OkrResultRow[];
   // 파트 고유 목표(파트 종합 행에만). 비어 있으면 달의 공통 목표(okr_cycles.goals)를 그대로 쓴다. header jsonb 안에 goals로 저장(표 변경 없이).
   goals?: OkrGoal[];
+  // 파트장 피드백(팀원 집계의 '미흡항목 피드백 & 다음 달 개선 방향') — 목표 번호별. header jsonb 안에 feedback으로 저장.
+  feedback?: Record<string, OkrFeedback>;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -234,7 +236,7 @@ export function bottleneckLabel(goals: OkrGoal[], no: number): string {
 }
 // 목표 순서가 바뀌었을 때(삽입·삭제·정렬) 옛 번호 → 새 번호 표. 결과 행과 피드백 키를 같이 옮길 때 쓴다.
 export function remapReports(reports: OkrReport[], remap: Map<number, number>, only: (r: OkrReport) => boolean = () => true): OkrReport[] {
-  return reports.map((r) => (only(r) ? { ...r, rows: r.rows.filter((x) => remap.has(x.no)).map((x) => ({ ...x, no: remap.get(x.no) as number })).sort((a, b) => a.no - b.no) } : r));
+  return reports.map((r) => (only(r) ? { ...r, rows: r.rows.filter((x) => remap.has(x.no)).map((x) => ({ ...x, no: remap.get(x.no) as number })).sort((a, b) => a.no - b.no), ...(r.feedback ? { feedback: remapFeedback(r.feedback, remap) } : {}) } : r));
 }
 export function remapFeedback(feedback: Record<string, OkrFeedback>, remap: Map<number, number>): Record<string, OkrFeedback> {
   return Object.fromEntries(Object.entries(feedback).filter(([k]) => remap.has(Number(k))).map(([k, v]) => [String(remap.get(Number(k))), v]));
@@ -277,6 +279,7 @@ function toReport(r: Partial<OkrReport> & { cycle_id: string; team: string }): O
     member: String(r.member || ""),
     header: { leader: String(header.leader || ""), author: String(header.author || ""), headcount: String(header.headcount || ""), submitted: String(header.submitted || "") },
     goals: Array.isArray((header as unknown as { goals?: unknown }).goals) ? normalizeGoals((header as unknown as { goals: unknown[] }).goals) : undefined,
+    feedback: (() => { const f = (header as unknown as { feedback?: unknown }).feedback; return f && typeof f === "object" && !Array.isArray(f) ? (f as Record<string, OkrFeedback>) : undefined; })(),
     rows: Array.isArray(r.rows) ? r.rows.map((x) => ({ no: Number(x.no) || 0, actual: String(x.actual || ""), judgment: String(x.judgment || ""), reason: String(x.reason || ""), plan: String(x.plan || ""), evidence: String(x.evidence || ""), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) })).filter((x) => x.no > 0) : [],
     updated_at: r.updated_at,
     updated_by: r.updated_by ?? null,
@@ -306,7 +309,7 @@ export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
 }
 export async function saveOkrReport(report: OkrReport, by: string): Promise<void> {
   await upsertRow("okr_reports", {
-    cycle_id: report.cycle_id, team: report.team, member: report.member || "", header: report.goals?.length ? { ...report.header, goals: report.goals } : report.header, rows: report.rows,
+    cycle_id: report.cycle_id, team: report.team, member: report.member || "", header: { ...report.header, ...(report.goals?.length ? { goals: report.goals } : {}), ...(report.feedback && Object.keys(report.feedback).length ? { feedback: report.feedback } : {}) }, rows: report.rows,
     updated_at: new Date().toISOString(), updated_by: by || null,
   }, "cycle_id,team,member");
 }

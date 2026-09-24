@@ -334,6 +334,24 @@ export default function OkrHub({ author }: { author: string }) {
   const goalPayload = (g: OkrGoal) => ({ no: g.no, pillar: pillarLabel(g.pillar), objective: g.objective, criteria: g.criteria });
   const goalNameIn = (goals: OkrGoal[], no: number) => { const g = goals.find((x) => x.no === no); return g ? `${pillarLabel(g.pillar)} ${shortBottleneck(goals, no)}` : `${no}번`; };
 
+  const setTeamFeedback = (team: OkrTeam, no: number, memo: string, memoHtml?: string) => patchReport(team, "", (r) => ({ ...r, feedback: { ...(r.feedback || {}), [String(no)]: { ...(r.feedback?.[String(no)] || { memo: "" }), memo, memoHtml } } }));
+  // ✨ 팀원 결과 → 파트장 피드백 초안(통합집계의 초안과 같은 틀, 대상이 파트가 아니라 팀원)
+  const aiTeamFeedback = async (team: OkrTeam, no: number) => {
+    const goals = teamGoalsOf(team);
+    const goal = goals.find((g) => g.no === no); if (!goal) return;
+    const rows = memberReports(reports, team).map((m) => ({ team: m.member, ...resultRowFor(m, no) })).filter((t) => t.actual.trim() || t.judgment);
+    if (!rows.length) { setMessage(`${goalNameIn(goals, no)}에 팀원 결과가 아직 없어요.`); return; }
+    const existing = partOf(team)?.feedback?.[String(no)]?.memo || "";
+    if (existing.trim() && !(await askConfirm(`${goalNameIn(goals, no)} 피드백 칸에 이미 글이 있어요. 초안으로 바꿀까요?`, { okLabel: "바꾸기" }))) return;
+    const key = `tfb|${team}|${no}`;
+    setAiBusy(key);
+    try {
+      const res = await okrAssist({ mode: "feedback", month: monthLabel, goal: goalPayload(goal), teams: rows.map(({ team: name, actual, judgment, reason, plan, evidence }) => ({ team: name, actual, judgment, reason, plan, evidence })) });
+      if (res.memo) { setTeamFeedback(team, no, res.memo, undefined); setMessage("피드백 초안을 넣었어요 — 파트장 말로 다듬어 주세요"); }
+    } catch (e) { setMessage(`초안 실패: ${(e as Error).message}`); }
+    finally { setAiBusy(""); }
+  };
+
   // 팀원 기록 삭제(박스 ×) — 명단에 있는 사람은 박스는 남고 이 달 기록만 지워진다
   const removeMember = async (team: OkrTeam, name: string) => {
     const rec = findReport(reports, team, name);
@@ -466,12 +484,13 @@ export default function OkrHub({ author }: { author: string }) {
               onHeader={(patch) => patchReport(tab, "", (r) => ({ ...r, header: { ...r.header, ...patch } }))}
               onResult={(no, patch) => updateResult(tab, member, no, patch)}
               onResetGoals={() => { void (async () => { if (await askConfirm(`${teamName(tab)} 고유 목표를 지우고 달의 공통 목표를 다시 따를까요?`, { okLabel: "공통으로" })) patchReport(tab, "", (r) => ({ ...r, goals: undefined })); })(); }}
-              onMerge={(no) => void mergeMembers(tab, no)} onAiMerge={(no) => void aiMerge(tab, no)} onAiFormat={(no) => void aiFormat(tab, member, no)} {...goalOpsFor(tab)} />}
+              onMerge={(no) => void mergeMembers(tab, no)} onAiMerge={(no) => void aiMerge(tab, no)} onAiFormat={(no) => void aiFormat(tab, member, no)}
+              onTeamFeedback={(no, memo, memoHtml) => setTeamFeedback(tab, no, memo, memoHtml)} onAiTeamFeedback={(no) => void aiTeamFeedback(tab, no)} {...goalOpsFor(tab)} />}
     </>}
   </div>;
 }
 
-const repSig = (r: OkrReport) => JSON.stringify({ header: r.header, rows: r.rows, goals: r.goals });
+const repSig = (r: OkrReport) => JSON.stringify({ header: r.header, rows: r.rows, goals: r.goals, feedback: r.feedback });
 
 // ── 사람 박스(파트 종합 / 팀원) — 이름 · 판정 n/9 · 미흡 수. 팀원 박스는 고른 상태에서 ×로 기록 삭제 ──
 function PersonBox({ label, sub, rows, total, selected, onClick, onRemove }: { label: string; sub?: string; rows: OkrResultRow[]; total: number; selected: boolean; onClick: () => void; onRemove?: () => void }) {
@@ -492,9 +511,10 @@ const COLS: Array<[string, number, "read" | "write"]> = [
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
 
-function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onResetGoals, onMerge, onAiMerge, onAiFormat, onGoal, onPillar, onInsert, onRemove }: {
+function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onResetGoals, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onGoal, onPillar, onInsert, onRemove }: {
   team: OkrTeam; cycle: OkrCycle; goals: OkrGoal[]; custom: boolean; reports: OkrReport[]; member: string; onMember: (m: string) => void; onRemoveMember: (name: string) => void; roster: string[]; author: string; aiBusy: string;
   onHeader: (patch: Partial<OkrReport["header"]>) => void; onResult: (no: number, patch: Partial<OkrResultRow>) => void; onResetGoals: () => void; onMerge: (no: number) => void; onAiMerge: (no: number) => void; onAiFormat: (no: number) => void;
+  onTeamFeedback: (no: number, memo: string, memoHtml?: string) => void; onAiTeamFeedback: (no: number) => void;
 } & GoalOps) {
   const partReport = findReport(reports, team, "") || emptyReport(cycle.id, team, "");
   const members = memberReports(reports, team);
@@ -527,7 +547,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
       {editable && custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{teamName(team)} 고유 목표 사용 중 · 공통으로 되돌리기</button>}
     </div>
-    {member === "__sum__" ? <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} /> : <>
+    {member === "__sum__" ? <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} aiBusy={aiBusy} onFeedback={onTeamFeedback} onAiFeedback={onAiTeamFeedback} /> : <>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
     {!member && <div className="grid grid-cols-2 border-b border-slate-200 text-[12px] lg:grid-cols-4">
       {([["leader", "파트장(부파트장)", "text"], ["author", "작성자", "text"], ["submitted", "제출일", "date"], ["headcount", "파트 인원수", "text"]] as Array<[keyof OkrReport["header"], string, string]>).map(([key, label, type], i) => <label key={key} className={`flex items-center gap-2 px-3 py-1.5 ${i < 3 ? "lg:border-r lg:border-slate-200" : ""} ${i % 2 === 0 ? "border-r border-slate-200" : ""}`}>
@@ -600,12 +620,12 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
 }
 
 // ── 팀원 집계: 통합집계와 같은 모양으로, 목표별 팀원 판정 · 조치 필요 인원(미흡·미착수) · 파트 종합판정 ──
-function TeamSummary({ team, goals, names, reports, partReport, onMember }: { team: OkrTeam; goals: OkrGoal[]; names: string[]; reports: OkrReport[]; partReport: OkrReport; onMember: (m: string) => void }) {
+function TeamSummary({ team, goals, names, reports, partReport, onMember, aiBusy, onFeedback, onAiFeedback }: { team: OkrTeam; goals: OkrGoal[]; names: string[]; reports: OkrReport[]; partReport: OkrReport; onMember: (m: string) => void; aiBusy: string; onFeedback: (no: number, memo: string, memoHtml?: string) => void; onAiFeedback: (no: number) => void }) {
   const runs = pillarRuns(goals);
   // 명단의 팀원 전부(기록이 없어도) — 기록은 있으면 그 사람 행, 없으면 빈 행
   const members = names.map((n) => findReport(reports, team, n) || emptyReport(partReport.cycle_id, team, n));
-  const heads = ["병목", "목표", ...names, "조치 필요 인원", "파트 종합"];
-  const col = useColWidths(`okr_cols_teamsum_${team}_${names.length}`, [58, 280, ...names.map(() => 96), 150, 104]);
+  const heads = ["병목", "목표", ...names, "조치 필요 인원", "파트 종합", "미흡항목 피드백 & 다음 달 개선 방향"];
+  const col = useColWidths(`okr_cols_teamsum2_${team}_${names.length}`, [58, 260, ...names.map(() => 96), 140, 100, 340]);
   const stats = members.map((m) => { const rows = goals.map((g) => resultRowFor(m, g.no)); return { name: m.member, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows) }; });
   return <div className="space-y-3 p-3">
     {stats.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -617,7 +637,7 @@ function TeamSummary({ team, goals, names, reports, partReport, onMember }: { te
     <div className="overflow-x-auto">
       <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
         <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
-        <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${TH_READ} ${i >= 2 && i < 2 + names.length ? "text-center" : ""} ${i === heads.length - 1 ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
+        <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${i === heads.length - 1 ? TH_WRITE : TH_READ} ${i >= 2 && i < 2 + names.length ? "text-center" : ""} ${i === heads.length - 2 ? "text-center" : ""}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
         <tbody>
           {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
             <PillarBar idx={run.idx} colSpan={heads.length} editable={false} onPillar={() => undefined} onAdd={() => undefined} />
@@ -631,6 +651,10 @@ function TeamSummary({ team, goals, names, reports, partReport, onMember }: { te
                 {members.map((m) => <td key={m.member} className={`${TD} px-1 py-1.5 text-center`}><button type="button" onClick={() => onMember(m.member)} title={`${m.member} 기록 보기`}><JudgmentBadge value={resultRowFor(m, goal.no).judgment} /></button></td>)}
                 <td className={`${TD_READ} text-[11px] leading-snug`}>{alertNames.length ? <span className="font-black text-rose-600">{alertNames.join(", ")}</span> : <span className="text-slate-300">—</span>}</td>
                 <td className={`${TD} px-1 py-1.5 text-center`}><JudgmentBadge value={part.judgment} />{!normalizeJudgment(part.judgment) && suggested && <div className="mt-0.5 text-[10px] font-bold text-slate-400">제안 {suggested}</div>}</td>
+                <td className={TD_WRITE}>
+                  <RichCell text={partReport.feedback?.[String(goal.no)]?.memo || ""} html={partReport.feedback?.[String(goal.no)]?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} />
+                  <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === `tfb|${team}|${goal.no}` ? "초안 쓰는 중…" : "✨ 초안"}</button></div>
+                </td>
               </tr>;
             })}
           </FragmentRows>)}
