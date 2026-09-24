@@ -51,6 +51,13 @@ function parseClipboardGrid(text: string): string[][] {
 const EDIT_COLORS: Array<[string, string]> = [["#0f172a", "기본"], ["#dc2626", "빨강"], ["#2563eb", "파랑"], ["#059669", "초록"], ["#d97706", "주황"], ["#7c3aed", "보라"]];
 
 // 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
+// 골든미팅카드 답변 칸 — 글 길이에 맞춰 높이가 늘어나는 셀(고정 줄 수면 아래 글이 숨는다, 2026-09-24)
+function AutoGrowArea({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [value]);
+  return <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="block w-full resize-none overflow-hidden bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none" />;
+}
+
 function RichGoalEditor({ initialHtml, onChange, className, minHeight = 56 }: { initialHtml: string; onChange: (html: string, text: string) => void; className?: string; minHeight?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   // 최초 1회만 내용 주입 — 매 렌더마다 innerHTML을 다시 쓰면 타이핑할 때 커서가 처음으로 튄다
@@ -1105,7 +1112,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="p-3">
             <h4 className="text-[15px] font-black text-slate-900 lg:text-lg">{GOLDEN_QUESTIONS[question]}</h4>
             <table className="mt-3 w-full border-collapse text-left text-[12px]"><colgroup><col style={{ width: 130 }} /><col /></colgroup>
-              <tbody>{GOLDEN_CATEGORIES.map((cat) => <tr key={cat}><td className="border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500">{cat}</td><td className="border border-slate-200 bg-[#FFFBEB] p-0 align-top focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400"><textarea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(e) => setAnswer(GOLDEN_QUESTIONS[question], cat, e.target.value)} rows={4} className="block w-full resize-y bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none" /></td></tr>)}</tbody>
+              <tbody>{GOLDEN_CATEGORIES.map((cat) => <tr key={cat}><td className="border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500">{cat}</td><td className="border border-slate-200 bg-[#FFFBEB] p-0 align-top focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400"><AutoGrowArea value={answer(GOLDEN_QUESTIONS[question], cat)} onChange={(v) => setAnswer(GOLDEN_QUESTIONS[question], cat, v)} /></td></tr>)}</tbody>
             </table>
           </div>
           {person && (
