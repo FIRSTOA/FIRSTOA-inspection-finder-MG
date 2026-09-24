@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  achievementRate, actionTeams, cycleLabel, emptyReport, gradeFromPercent, judgmentCounts, monthCycleId, okrWeeksInMonth, okrWorkWeek,
-  renumberGoals, splitPillar, weekCycleId, worstJudgment, type OkrReport,
+  achievementRate, actionMembers, actionTeams, cycleLabel, emptyReport, gradeFromPercent, judgmentCounts, monthCycleId, okrWeeksInMonth, okrWorkWeek,
+  memberReports, mergeMemberActuals, renumberGoals, splitPillar, weekCycleId, worstJudgment, worstOfJudgments, type OkrReport,
 } from "../src/okr";
 
 describe("OKR 종합판정 제안(worstJudgment) — 실제결과 글에서 가장 나쁜 등급 하나", () => {
@@ -45,6 +45,30 @@ describe("OKR 통합집계", () => {
     expect(achievementRate(reports[1].rows)).toBe(67);
     expect(achievementRate(reports[2].rows)).toBe(50);
     expect(achievementRate([])).toBeNull();
+  });
+});
+
+describe("OKR 팀원 기록 → 파트 종합", () => {
+  const mk = (team: string, member: string, actual: string, judgment: string): OkrReport => ({ ...emptyReport("2026-09", team, member), rows: [{ no: 1, actual, judgment, reason: "", plan: "", evidence: "" }] });
+  const reports = [mk("C", "", "", ""), mk("C", "이홍진", "블로그 답글 : 5개 (100%, 완료)", "완료"), mk("C", "이민구", "블로그 답글 : 2개\n댓글 1개 (40%, 미흡)", "미흡"), mk("C", "한OO", "", ""), mk("A", "김정민", "…", "완료")];
+  it("팀원 기록은 파트 종합 행을 빼고 그 파트 것만, 이름순", () => {
+    expect(memberReports(reports, "C").map((r) => r.member)).toEqual(["이민구", "이홍진", "한OO"]);
+  });
+  it("실제결과를 '• 이름: 내용'으로 합치고 여러 줄은 이름 아래 들여쓴다(빈 기록은 뺌)", () => {
+    expect(mergeMemberActuals(memberReports(reports, "C"), 1)).toBe("• 이민구:\n  블로그 답글 : 2개\n  댓글 1개 (40%, 미흡)\n• 이홍진: 블로그 답글 : 5개 (100%, 완료)");
+    expect(mergeMemberActuals(memberReports(reports, "C"), 2)).toBe("");
+  });
+  it("파트 종합판정 제안 = 팀원 판정 중 가장 나쁜 것", () => {
+    expect(worstOfJudgments(["완료", "미흡", ""])).toBe("미흡");
+    expect(worstOfJudgments(["해당없음", ""])).toBe("해당없음");
+    expect(worstOfJudgments(["", ""])).toBe("");
+  });
+  it("통합집계 조치 필요 파트는 파트 종합 행만 본다(팀원 개인 미흡은 안 올라감)", () => {
+    expect(actionTeams(reports, 1)).toEqual([]);
+  });
+  it("조치 필요 파트 옆에 그 파트에서 미흡·미착수인 팀원 이름을 붙인다", () => {
+    const withPart = [{ ...mk("C", "", "…", "미흡") }, ...reports.slice(1), mk("B", "", "…", "미착수"), mk("B", "권태혁", "…", "미착수"), mk("B", "박OO", "…", "완료")];
+    expect(actionMembers(withPart, 1)).toEqual({ B: ["권태혁"], C: ["이민구"] });
   });
 });
 

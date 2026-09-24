@@ -1,7 +1,8 @@
 // OKR — 월별 목표(Pillar·병목·목표·달성기준)와 파트별 실행결과(실제결과·종합판정·사유·개선계획·근거자료)
 // 엑셀 "CS팀_8월_OKR_실행결과" 워크북(작성가이드 / 통합집계 / A~D파트 시트)을 그대로 옮긴 구조다(2026-09-24).
 //  - okr_cycles : 기간 하나(월간 또는 주간). 목표 9개와 팀장 피드백을 들고 있다. 주간 기간은 그 달의 목표를 복사해 쓴다.
-//  - okr_reports: 기간 × 파트 하나. 머리(파트장·작성자·인원수·제출일)와 목표별 결과 행.
+//  - okr_reports: 기간 × 파트 × 사람 하나. member=''가 파트 종합(통합집계가 읽는 행), member='이름'이 팀원 개인 기록.
+//    파트 결과는 팀원 기록을 파트장이 모아 쓴다(2026-09-24 사용자: "A~D는 각 팀원 내용을 합친 통계이므로 팀원 그룹도 있어야").
 // 표 생성·초기 데이터: supabase/okr.sql (사용자가 SQL Editor에서 실행).
 import { deleteRows, selectRows, upsertRow } from "./supabase";
 
@@ -42,6 +43,7 @@ export type OkrHeader = { leader: string; author: string; headcount: string; sub
 export type OkrReport = {
   cycle_id: string;
   team: string;
+  member: string; // '' = 파트 종합, 그 외 = 팀원 이름
   header: OkrHeader;
   rows: OkrResultRow[];
   updated_at?: string;
@@ -51,7 +53,28 @@ export type OkrReport = {
 export const emptyGoal = (no: number): OkrGoal => ({ no, pillar: "", bottleneck: "", objective: "", criteria: "" });
 export const emptyResultRow = (no: number): OkrResultRow => ({ no, actual: "", judgment: "", reason: "", plan: "", evidence: "" });
 export const emptyHeader = (): OkrHeader => ({ leader: "", author: "", headcount: "", submitted: "" });
-export const emptyReport = (cycleId: string, team: string): OkrReport => ({ cycle_id: cycleId, team, header: emptyHeader(), rows: [] });
+export const emptyReport = (cycleId: string, team: string, member = ""): OkrReport => ({ cycle_id: cycleId, team, member, header: emptyHeader(), rows: [] });
+export const reportKey = (r: Pick<OkrReport, "team" | "member">) => `${r.team}|${r.member || ""}`;
+export const findReport = (reports: OkrReport[], team: string, member = "") => reports.find((r) => r.team === team && (r.member || "") === member);
+// 파트의 팀원 기록(파트 종합 행 제외), 이름순
+export const memberReports = (reports: OkrReport[], team: string) => reports.filter((r) => r.team === team && r.member).sort((a, b) => a.member.localeCompare(b.member, "ko"));
+
+// 팀원들이 적은 실제결과를 파트 종합 칸에 넣을 글로 — "• 이름: 내용"(여러 줄이면 이름 아래 들여쓰기)
+export function mergeMemberActuals(members: OkrReport[], no: number): string {
+  return members
+    .map((m) => ({ name: m.member, row: resultRowFor(m, no) }))
+    .filter((x) => x.row.actual.trim())
+    .map((x) => { const lines = x.row.actual.trim().split(/\r?\n/); return lines.length === 1 ? `• ${x.name}: ${lines[0]}` : `• ${x.name}:\n${lines.map((l) => `  ${l}`).join("\n")}`; })
+    .join("\n");
+}
+// 팀원 판정 중 가장 나쁜 것 — 파트 종합판정 제안용
+export function worstOfJudgments(words: string[]): OkrJudgment | "" {
+  const js = words.map(normalizeJudgment).filter(Boolean) as OkrJudgment[];
+  if (!js.length) return "";
+  const graded = js.filter((j) => j !== "해당없음");
+  if (!graded.length) return "해당없음";
+  return graded.reduce((worst, j) => (JUDGMENT_INFO[j].rank > JUDGMENT_INFO[worst].rank ? j : worst), graded[0]);
+}
 
 // "Pillar 1.\nAI · 효율성 · 비용절감" → { num: "Pillar 1", name: "AI · 효율성 · 비용절감" }
 export function splitPillar(pillar: string): { num: string; name: string } {
@@ -101,12 +124,24 @@ export function worstJudgment(actual: string): OkrJudgment | "" {
   return graded.reduce((worst, j) => (JUDGMENT_INFO[j].rank > JUDGMENT_INFO[worst].rank ? j : worst), graded[0]);
 }
 
-// 통합집계 '조치 필요 파트' — 미흡·미착수인 파트만(부분달성은 사유만 받고 조치 대상엔 안 넣는다: 8월 통합집계 기준)
+// 통합집계 '조치 필요 파트' — 미흡·미착수인 파트만(부분달성은 사유만 받고 조치 대상엔 안 넣는다: 8월 통합집계 기준). 파트 종합 행만 본다.
 export function actionTeams(reports: OkrReport[], no: number): string[] {
   return reports
+    .filter((r) => !r.member)
     .filter((r) => { const j = normalizeJudgment(resultRowFor(r, no).judgment); return j === "미흡" || j === "미착수"; })
     .map((r) => r.team)
     .sort();
+}
+
+// 조치 필요 파트별로, 그 파트 팀원 중 자기 기록이 미흡·미착수인 사람 — "B · 권태혁"처럼 누구 건지 바로 보이게(2026-09-24 요청)
+export function actionMembers(reports: OkrReport[], no: number): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const team of actionTeams(reports, no)) {
+    out[team] = memberReports(reports, team)
+      .filter((m) => { const j = normalizeJudgment(resultRowFor(m, no).judgment); return j === "미흡" || j === "미착수"; })
+      .map((m) => m.member);
+  }
+  return out;
 }
 
 export function judgmentCounts(rows: OkrResultRow[]): Record<OkrJudgment, number> {
@@ -189,6 +224,7 @@ function toReport(r: Partial<OkrReport> & { cycle_id: string; team: string }): O
   return {
     cycle_id: r.cycle_id,
     team: r.team,
+    member: String(r.member || ""),
     header: { leader: String(header.leader || ""), author: String(header.author || ""), headcount: String(header.headcount || ""), submitted: String(header.submitted || "") },
     rows: Array.isArray(r.rows) ? r.rows.map((x) => ({ no: Number(x.no) || 0, actual: String(x.actual || ""), judgment: String(x.judgment || ""), reason: String(x.reason || ""), plan: String(x.plan || ""), evidence: String(x.evidence || "") })).filter((x) => x.no > 0) : [],
     updated_at: r.updated_at,
@@ -196,12 +232,18 @@ function toReport(r: Partial<OkrReport> & { cycle_id: string; team: string }): O
   };
 }
 
+// 표가 최신인지(okr_reports.member 열이 있는지) — 없으면 400(column does not exist). 표 자체가 없으면 404지만 그건 listOkrCycles가 알린다.
+export async function probeOkrSchema(): Promise<boolean> {
+  try { await selectRows("okr_reports", "select=member&limit=1"); return true; }
+  catch (e) { return !/\(400\)/.test((e as Error).message); }
+}
+
 export async function listOkrCycles(): Promise<OkrCycle[]> {
   const rows = await selectRows<CycleRow>("okr_cycles", "select=*&order=start_date.desc,kind.asc&limit=300");
   return rows.map(toCycle);
 }
 export async function getOkrReports(cycleId: string): Promise<OkrReport[]> {
-  const rows = await selectRows<OkrReport>("okr_reports", `select=*&cycle_id=eq.${encodeURIComponent(cycleId)}&order=team.asc`);
+  const rows = await selectRows<OkrReport>("okr_reports", `select=*&cycle_id=eq.${encodeURIComponent(cycleId)}&order=team.asc,member.asc`);
   return rows.map(toReport);
 }
 export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
@@ -213,9 +255,9 @@ export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
 }
 export async function saveOkrReport(report: OkrReport, by: string): Promise<void> {
   await upsertRow("okr_reports", {
-    cycle_id: report.cycle_id, team: report.team, header: report.header, rows: report.rows,
+    cycle_id: report.cycle_id, team: report.team, member: report.member || "", header: report.header, rows: report.rows,
     updated_at: new Date().toISOString(), updated_by: by || null,
-  }, "cycle_id,team");
+  }, "cycle_id,team,member");
 }
 export async function deleteOkrCycle(cycleId: string): Promise<void> {
   await deleteRows("okr_reports", `cycle_id=eq.${encodeURIComponent(cycleId)}`);

@@ -265,6 +265,7 @@ export const OKR_SEED_REPORTS: OkrReport[] = [
  {
   "cycle_id": "2026-08",
   "team": "A",
+  "member": "",
   "header": {
    "leader": "박옥주",
    "author": "김정민, 박옥주",
@@ -349,6 +350,7 @@ export const OKR_SEED_REPORTS: OkrReport[] = [
  {
   "cycle_id": "2026-08",
   "team": "B",
+  "member": "",
   "header": {
    "leader": "박옥주",
    "author": "권태혁, 박옥주",
@@ -433,6 +435,7 @@ export const OKR_SEED_REPORTS: OkrReport[] = [
  {
   "cycle_id": "2026-08",
   "team": "C",
+  "member": "",
   "header": {
    "leader": "이홍진",
    "author": "이홍진",
@@ -517,6 +520,7 @@ export const OKR_SEED_REPORTS: OkrReport[] = [
  {
   "cycle_id": "2026-08",
   "team": "D",
+  "member": "",
   "header": {
    "leader": "양승원",
    "author": "양승원",
@@ -601,6 +605,7 @@ export const OKR_SEED_REPORTS: OkrReport[] = [
  {
   "cycle_id": "2026-09-W2",
   "team": "C",
+  "member": "",
   "header": {
    "leader": "",
    "author": "",
