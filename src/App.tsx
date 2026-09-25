@@ -3277,9 +3277,12 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
   return (
     <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
       <div className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" style={{ maxHeight: "86vh" }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-700">사용자(작성자) 선택 <span className="ml-1 text-[11px] font-bold text-slate-400">— 이 기기에서 계속 이 이름으로 작성됩니다 · 관리 탭 인원 명단과 같은 명단</span></span>
-          <button type="button" onClick={onClose} className="rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
+        <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-700">사용자(작성자) 선택</div>
+            <div className="mt-0.5 text-[11px] font-bold leading-snug text-slate-400">이 기기에서 계속 이 이름으로 작성됩니다 · 관리 탭 인원 명단과 같은 명단</div>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
         </div>
         {/* 1단: 그룹(부서) */}
         <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
