@@ -356,14 +356,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
           </div>
         </div>
       </div>
-    </section>
-
-    {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
-    {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}<br /><span className="text-xs">업데이트된 supabase/visits.sql을 다시 실행했는지 확인해 주세요.</span></div>}
-    {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
-
-    {!loading && <>
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
+      {!loading && <div className="overflow-x-auto border-t border-slate-200"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
         <thead><tr><th className={`${TH_DARK} w-16`}>외근</th><th className={TH_DARK}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH_DARK}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
           <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-2xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
@@ -380,7 +373,14 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
             {period === "day" && <><span>마감 <b className="ml-1 text-slate-900">{commute || "미선택"}</b></span><span>복귀 <b className="ml-1 text-slate-900">{office.returnTime || "미입력"}</b></span></>}
           </span></td></tr>
         </tbody>
-      </table></div></section>
+      </table></div>}
+    </section>
+
+    {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
+    {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}<br /><span className="text-xs">업데이트된 supabase/visits.sql을 다시 실행했는지 확인해 주세요.</span></div>}
+    {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
+
+    {!loading && <>
 
       {period === "day" ? <div className="space-y-6"><div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(420px,1fr)]">
         <div className="space-y-6">

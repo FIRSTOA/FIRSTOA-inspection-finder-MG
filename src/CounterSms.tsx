@@ -318,7 +318,7 @@ export default function CounterSms({ author }: { author: string }) {
   const field = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3 overflow-x-hidden">
       <section className="overflow-hidden rounded-xl bg-[#1E252F] shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
@@ -378,7 +378,7 @@ export default function CounterSms({ author }: { author: string }) {
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-black text-slate-900">{batch.title} <span className="font-bold text-slate-400">· {batch.created_by} · {batch.created_at.slice(5, 16).replace("T", " ")}</span></div>
+                    <div className="break-words text-[13px] font-black text-slate-900">{batch.title} <span className="font-bold text-slate-400">· {batch.created_by} · {batch.created_at.slice(5, 16).replace("T", " ")}</span></div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 sm:w-40">
                         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${batchTargets.length ? Math.round((sentCount / batchTargets.length) * 100) : 0}%` }} />
@@ -405,10 +405,10 @@ export default function CounterSms({ author }: { author: string }) {
                 </div>
                 <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
                   {shownRows.map((row) => (
-                    <div key={row.id} className={`relative rounded-lg border px-3 py-2.5 transition ${row.done_at ? "border-indigo-300 bg-indigo-50/70" : row.sent_at ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+                    <div key={row.id} className={`relative min-w-0 overflow-hidden rounded-lg border px-3 py-2.5 transition ${row.done_at ? "border-indigo-300 bg-indigo-50/70" : row.sent_at ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
                       <button type="button" onClick={() => openSendRow(row)} className="block w-full text-left">
-                        <div className="flex items-center gap-1.5">
-                          <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="min-w-0 flex-1 basis-[60%] truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
                           {ruleBadges(row.vendor, row.phones)}
                           {addedTag(row) && <span title={`${row.added_at?.slice(0, 16).replace("T", " ")} ${row.added_by || ""} 추가`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">{addedTag(row)}</span>}
                           {row.done_at

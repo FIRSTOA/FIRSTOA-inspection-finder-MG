@@ -25,7 +25,7 @@ export default function PortalSelect({
   disabled?: boolean;
   direction?: "auto" | "down"; // down = 항상 상자 바로 아래로 (모달 안에서 위로 튀는 것 방지)
 }) {
-  const [spot, setSpot] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [spot, setSpot] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +38,9 @@ export default function PortalSelect({
     const maxHeight = Math.min(420, Math.max(140, openUp ? above : below));
     const panelWidth = Math.max(width, box.width);
     setSpot({
-      top: openUp ? box.top - 8 - maxHeight : box.bottom + 8,
+      // 위로 열 때는 아래 끝을 트리거에 붙인다 — top으로 잡으면 목록이 짧을 때 트리거와 멀리 떨어져 떴다(2026-09-26 자동일정 분기)
+      top: openUp ? undefined : box.bottom + 8,
+      bottom: openUp ? window.innerHeight - box.top + 8 : undefined,
       left: Math.min(Math.max(8, box.left), Math.max(8, window.innerWidth - panelWidth - 8)),
       maxHeight,
     });
@@ -89,7 +91,7 @@ export default function PortalSelect({
         <ChevronDown size={14} className={`shrink-0 ${tone === "dark" ? "text-slate-400" : "text-slate-400"} transition ${spot ? "rotate-180" : ""}`} />
       </button>
       {spot && createPortal(
-        <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, minWidth: width, maxHeight: spot.maxHeight }}
+        <div ref={panelRef} style={{ position: "fixed", top: spot.top, bottom: spot.bottom, left: spot.left, minWidth: width, maxHeight: spot.maxHeight }}
           className="z-[4000] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
           <div className="min-h-0 flex-1 overflow-y-auto">
             {groups.map(([group, items]) => (

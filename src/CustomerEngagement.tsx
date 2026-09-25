@@ -347,14 +347,14 @@ function MaterialPreview({ material, compact = false }: { material: PromoMateria
   </div>;
 }
 
-// 홍보물을 MMS용 JPG(≤200KB, 긴 변 1200px)로 — 이미지는 그대로 줄이고, PDF는 1쪽을 그려서. 실패하면 null(문자만 간다)
+// 홍보물을 MMS용 JPG로 — 솔라피 한도(200KB, 1500×1440) 안에서 되도록 크게. 화질을 먼저 낮추고 그래도 크면 크기를 줄인다. PDF는 1쪽을 그려서. 실패하면 null(문자만 간다)
 async function materialToMmsJpeg(material: PromoMaterial): Promise<string | null> {
   try {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     let width = 0, height = 0;
-    const paint = (w: number, h: number, draw: (c: CanvasRenderingContext2D) => void) => { canvas.width = w; canvas.height = h; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); draw(ctx); };
+    const paint = (w: number, h: number, draw: (c: CanvasRenderingContext2D) => void) => { canvas.width = w; canvas.height = h; ctx.imageSmoothingQuality = "high"; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); draw(ctx); };
     let source: ImageBitmap | HTMLCanvasElement;
     if (material.file_type.startsWith("image/")) {
       const blob = await (await fetch(material.file_url)).blob();
@@ -368,7 +368,7 @@ async function materialToMmsJpeg(material: PromoMaterial): Promise<string | null
       const doc = await pdfjs.getDocument({ url: material.file_url }).promise;
       const page = await doc.getPage(1);
       const base = page.getViewport({ scale: 1 });
-      const scale = 1200 / Math.max(base.width, base.height);
+      const scale = (base.height > base.width ? 1440 : 1500) / Math.max(base.width, base.height); // 솔라피 MMS 최대 크기
       const viewport = page.getViewport({ scale });
       const pc = document.createElement("canvas");
       pc.width = viewport.width; pc.height = viewport.height;
@@ -376,11 +376,11 @@ async function materialToMmsJpeg(material: PromoMaterial): Promise<string | null
       source = pc; width = pc.width; height = pc.height;
     }
     // 200KB 아래로 — 화질을 낮추고, 그래도 크면 크기를 줄인다
-    let dim = Math.min(1200, Math.max(width, height));
+    let dim = Math.min(height > width ? 1440 : 1500, Math.max(width, height));
     for (let round = 0; round < 6; round++) {
       const ratio = dim / Math.max(width, height);
       const w = Math.max(1, Math.round(width * ratio)), h = Math.max(1, Math.round(height * ratio));
-      for (const q of [0.85, 0.75, 0.65, 0.55]) {
+      for (const q of [0.92, 0.86, 0.8, 0.72, 0.64, 0.56]) {
         paint(w, h, (c) => c.drawImage(source, 0, 0, w, h));
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", q));
         if (blob && blob.size <= 200 * 1024) {
@@ -410,6 +410,8 @@ export function PromoWorkspace({ author }: { author: string }) {
     if (!selected) return;
     const targets = contacts.filter((contact) => contact.selected && (channel === "sms" ? validPhone(contact.phone) : validEmail(contact.email)));
     if (!targets.length) return setNotice(channel === "sms" ? "발송할 휴대전화 번호를 확인해 주세요." : "발송할 이메일 주소를 확인해 주세요.");
+    // 보낸 줄도 몰랐다는 말이 있어 확인을 받는다(2026-09-26)
+    if (!await askConfirm(`${targets.length}명에게 ${channel === "sms" ? "사진 문자(MMS)" : "메일"}를 보낼까요?\n${selected.title}\n${targets.map((t) => t.name || (channel === "sms" ? t.phone : t.email)).join(", ")}`, { okLabel: "보내기" })) return;
     try {
       let imageBase64 = "";
       if (channel === "sms") { setNotice("사진을 문자용으로 줄이는 중…"); imageBase64 = (await materialToMmsJpeg(selected)) || ""; }
@@ -419,28 +421,6 @@ export function PromoWorkspace({ author }: { author: string }) {
       }
       setNotice(`${targets.length}명에게 ${channel === "sms" ? (imageBase64 ? "사진 문자(MMS)" : "문자(사진 준비 실패 — 링크로)") : "메일"}를 발송했습니다.`);
     } catch (error) { setNotice(`발송 실패: ${(error as Error).message}`); }
-  };
-  // 이미지 자체를 첨부해 보내기 — 문자(MMS)·카카오톡에 링크가 아니라 사진이 바로 뜬다. 휴대폰의 공유창을 연다(2026-09-24 요청)
-  const shareImage = async () => {
-    if (!selected) return;
-    const first = contacts.find((contact) => contact.selected) || contacts[0];
-    const text = first ? applyTokens(message, promoTokens(first)) : message;
-    try {
-      const res = await fetch(selected.file_url);
-      if (!res.ok) throw new Error(`파일을 읽지 못했습니다(${res.status})`);
-      const blob = await res.blob();
-      const ext = selected.file_type.includes("pdf") ? "pdf" : (selected.file_type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-      const file = new File([blob], `${selected.title}.${ext}`, { type: blob.type || selected.file_type });
-      const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
-      if (typeof nav.share !== "function" || !nav.canShare?.({ files: [file] })) {
-        setNotice("이 기기·브라우저는 파일 첨부 공유를 지원하지 않습니다 — 휴대폰(크롬·사파리)에서 누르면 문자(MMS)·카카오톡에 사진이 그대로 첨부됩니다. PC에서는 [파일 저장] 후 첨부해 주세요.");
-        return;
-      }
-      await nav.share({ files: [file], text, title: selected.title });
-      setNotice("공유창에서 메시지(MMS)·카카오톡을 고르면 사진이 그대로 첨부됩니다.");
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") setNotice(`공유 실패: ${(error as Error).message}`);
-    }
   };
   const detail = selected ? <div className="flex min-h-0 flex-col">
     <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black text-blue-600">{selected.category}</div><div className="mt-1 text-lg font-black">{selected.title}</div></div><button onClick={() => void removeMaterial()} className="rounded-full border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">삭제</button></div>
@@ -462,7 +442,7 @@ export function PromoWorkspace({ author }: { author: string }) {
     <div className="mt-1 text-[10px] font-bold text-slate-400">이 칸만 고치면 현재 발송에만 적용됩니다. 전체 문구를 바꾸려면 공용 수정 버튼을 누르세요.</div>
     {(() => { const first = contacts.find((contact) => contact.selected); if (!first || !message.trim()) return null; return <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/40 px-3.5 py-2.5"><div className="text-[10px] font-black tracking-wide text-blue-600">발송 미리보기 · {first.name || "고객"}</div><p className="mt-1 whitespace-pre-wrap break-all text-[13px] font-semibold leading-6 text-slate-700">{applyTokens(message, promoTokens(first))}</p></div>; })()}
     {notice && <div className="mt-3 rounded-lg bg-slate-100 p-3 text-xs font-bold text-slate-600">{notice}</div>}
-    <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:grid-cols-5 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} title="사진을 붙여(MMS) 보냅니다" className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2.5 text-sm font-black text-white">문자 발송 (사진)</button><button onClick={() => void send("email")} className="rounded-full border border-blue-200 bg-white px-3 py-2.5 text-sm font-black text-blue-700 transition hover:bg-blue-50">메일 발송</button><button type="button" onClick={() => void shareImage()} title="휴대폰 공유창을 열어 카카오톡 등에 사진을 첨부합니다" className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">카톡 공유</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">미리보기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">파일 저장</a></div>
+    <div className="sticky bottom-0 -mx-4 mt-4 grid grid-cols-2 gap-2 border-t bg-white/95 p-3 backdrop-blur xl:static xl:mx-0 xl:grid-cols-4 xl:p-0 xl:pt-4"><button onClick={() => void send("sms")} title="사진을 붙여(MMS) 보냅니다" className="rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 px-3 py-2.5 text-sm font-black text-white">문자 발송 (사진)</button><button onClick={() => void send("email")} className="rounded-full border border-blue-200 bg-white px-3 py-2.5 text-sm font-black text-blue-700 transition hover:bg-blue-50">메일 발송</button><button type="button" onClick={() => window.open(selected.file_url, "_blank", "noopener,noreferrer")} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">미리보기</button><a href={downloadUrl(selected.file_url, selected.title)} className="rounded-full border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-black text-slate-600 transition hover:bg-slate-50">파일 저장</a></div>
   </div> : <div className="flex min-h-[400px] items-center justify-center text-sm font-semibold text-slate-400">홍보물을 선택하세요.</div>;
   return <div className="space-y-4"><section className="flex items-center justify-between gap-3 overflow-hidden rounded-xl bg-[#1E252F] px-5 py-4 shadow-sm"><div><h2 className="text-base font-black text-white lg:text-lg">홍보물 센터</h2><p className="mt-0.5 hidden text-[11px] font-semibold text-slate-400 sm:block">방문 업체를 불러오거나 직접 입력해 문자·메일·인쇄합니다.</p></div><button onClick={() => setUploadOpen(true)} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-4 py-2.5 text-sm font-black text-white">+ 자료 등록</button></section><div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(470px,.9fr)]"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap items-center gap-1.5 bg-[#151A23] px-4 py-2.5">
       <label className="mr-0.5 flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 transition focus-within:bg-white/[0.14]"><span className="text-xs text-slate-500">🔍</span><input value={materialQuery} onChange={(event) => setMaterialQuery(event.target.value)} placeholder="자료 검색" className="w-16 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500 sm:w-24" /></label>
