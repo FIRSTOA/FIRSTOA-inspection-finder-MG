@@ -17,6 +17,7 @@ import {
   type LevelGoal,
   type QuarterlyPlan,
   type WeeklyNoteRow,
+  kstDate,
 } from "./visits";
 
 type Tab = "records" | "plan" | "result" | "mission" | "golden";
@@ -52,6 +53,26 @@ function parseClipboardGrid(text: string): string[][] {
 
 
 // 부분 색칠 가능한 목표 에디터 (uncontrolled contentEditable — 타이핑 중 리렌더로 커서가 튀지 않게)
+// 처음 쓰는 분기 안내 — 어디부터 채우면 되는지 순서(2026-09-26 사용자: "처음 쓰는 사람은 어떻게 해?")
+function FirstSteps({ quarter, step, onTab, onWeek }: { quarter: number; step: number; onTab: (t: Tab) => void; onWeek: () => void }) {
+  const steps: Array<[string, string, (() => void) | null, string]> = [
+    ["계획표", "기본업무·미션 목표를 넣습니다. 엑셀에 있으면 [엑셀 붙여넣기]로 한 번에.", () => onTab("plan"), "계획표로"],
+    ["주간현황판", "매주 병목·목표·성장 기록을 적습니다. 방문·AS 건수는 FIELD 기록에서 자동으로 옵니다.", onWeek, "이번 주 기록으로"],
+    ["분기결과표", "목표별 결과를 대략 적고 [AI 수치 정리]를 누르면 건수·시간·달성률로 정리됩니다.", () => onTab("result"), "분기결과표로"],
+    ["골든미팅카드", `[${quarter}분기 AI변환]으로 8문항 초안을 만든 뒤 내 말로 다듬습니다.`, () => onTab("golden"), "카드로"],
+  ];
+  return <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-4">
+    <div className="text-sm font-black text-slate-900">처음 쓰는 분기라면 이 순서로</div>
+    <ol className="mt-2 space-y-1.5">
+      {steps.map(([title, desc, go, label], i) => <li key={title} className={`flex items-start gap-2 text-[12px] ${i + 1 === step ? "text-slate-900" : "text-slate-500"}`}>
+        <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${i + 1 === step ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600"}`}>{i + 1}</span>
+        <span className="min-w-0 flex-1"><b>{title}</b> — {desc}</span>
+        {go && <button type="button" onClick={go} className="shrink-0 text-[11px] font-bold text-blue-600 hover:underline">{label} →</button>}
+      </li>)}
+    </ol>
+  </div>;
+}
+
 const recordTypes = [
   ["growth", "성장노트"],
   ["learning", "배운 점"],
@@ -504,6 +525,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       setMessage("작성자를 먼저 선택하세요.");
       return;
     }
+    if (!regularGoals.length && !missionGoals.length && !notes.length) {
+      setMessage(`${year}년 ${quarter}분기에 정리할 자료가 없습니다 — 계획표에 목표를 넣고 주간현황판에 기록한 뒤 눌러 주세요. (아래 '처음 쓰는 분기라면' 순서)`);
+      return;
+    }
     setGoldenBusy(true);
     setMessage("");
     try {
@@ -867,6 +892,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           </div>
           <div className="p-3">
           {!person && <div className="py-10 text-center text-sm font-bold text-amber-600">작성자 직원을 선택하세요.</div>}
+          {person && !regularGoals.length && !missionGoals.length && <FirstSteps quarter={quarter} step={1} onTab={setTab} onWeek={() => onOpenWeek?.(kstDate())} />}
           <div className="space-y-4 md:hidden">
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-xl border border-blue-100 bg-blue-50/40 p-4">
               <div className="flex items-center justify-between"><b className="text-sm text-blue-800">기본업무 {index + 1}</b><button onClick={() => setPlan({ ...plan, goals: plan.goals.filter((item) => item.id !== goal.id) })} className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-rose-500 transition hover:bg-rose-50">×</button></div>
@@ -1065,10 +1091,11 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             <div>
               <h3 className="text-base font-black text-slate-950 lg:text-lg">{year}년 {quarter}분기 골든미팅카드</h3>
             </div>
-            <button type="button" onClick={runGoldenAi} disabled={goldenBusy} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
-              {goldenBusy ? "AI 변환 중…" : "최신분기 AI변환"}
+            <button type="button" onClick={runGoldenAi} disabled={goldenBusy} title="고른 분기의 계획표·분기결과표·미션결과표와 주간현황판 기록으로 카드를 씁니다. 지난 분기 카드는 문체 예시로만 참고합니다." className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+              {goldenBusy ? "AI 변환 중…" : `${quarter}분기 AI변환`}
             </button>
           </div>
+          {person && !regularGoals.length && !missionGoals.length && !notes.length && <div className="p-3"><FirstSteps quarter={quarter} step={4} onTab={setTab} onWeek={() => onOpenWeek?.(kstDate())} /></div>}
           {/* 질문 8개는 화면의 탭 역할 — 눌린 것만 진하게, 나머지는 조용히 */}
           <div className="grid grid-cols-2 gap-1.5 border-b border-slate-100 p-3 lg:grid-cols-4 2xl:grid-cols-8">
             {GOLDEN_QUESTIONS.map((q, i) => <button key={q} onClick={() => setQuestion(i)} className={`rounded-lg px-3 py-2.5 text-xs font-black leading-tight transition ${question === i ? "bg-slate-900 text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700"}`}>{q}</button>)}
