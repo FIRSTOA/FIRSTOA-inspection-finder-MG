@@ -53,6 +53,7 @@ const GROWTH_NOTE_TEMPLATE = "상황:\n문제점:\n개선해야 할 점:\n실행
 const pad = (n: number) => String(n).padStart(2, "0");
 // 격자 시트 — OKR 탭과 같은 모양(2026-09-24: 카드 대신 엑셀 셀). 색은 노란 입력칸에만.
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
+const TH_DARK = "whitespace-nowrap border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-black text-white";
 const TD_LABEL = "border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500";
 const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
 const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white";
@@ -340,8 +341,10 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="-ml-1.5 flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
+          <h2 className="min-w-0 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
+            <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
+            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300 lg:justify-end">
               {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md bg-transparent px-1.5 py-0.5 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
               {period !== "day" && <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
               {(period === "week" || period === "month") && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />}
@@ -350,15 +353,9 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
               <span className="px-1 text-slate-500">·</span>
               <PortalSelect tone="dark" className={INLINE_SELECT} width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
             </div>
-            <h2 className="mt-1 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
           </div>
-          <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto lg:shrink-0">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">
-        {[['방문 거래처', `${sum.visits}곳`], ['기계 대수', `${sum.machines}대`], ['외근 시간', hm(sum.fieldMinutes)], ['내근 시간', hm(insideMinutes)]].map(([l, v]) => <div key={l} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}</div></div>)}
-      </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-100 px-6 py-3 text-xs font-semibold text-slate-500 lg:px-8"><span>총 활동시간 <b className="ml-1 text-slate-950">{hm(sum.fieldMinutes + insideMinutes)}</b></span>{period === "day" && <><span>마감 <b className="ml-1 text-slate-950">{commute || "미선택"}</b></span><span>복귀시간 <b className="ml-1 text-slate-950">{office.returnTime || "미입력"}</b></span></>}</div>
     </section>
 
     {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
@@ -366,18 +363,22 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
     {!loading && <>
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
-        <thead><tr><th className={`${TH} w-16 whitespace-nowrap text-slate-800`}>외근</th><th className={`${TH} whitespace-nowrap text-slate-800`}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={`${TH} whitespace-nowrap text-slate-800`}>{WORK_LABELS[k]}</th>)}</tr></thead>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
+        <thead><tr><th className={`${TH_DARK} w-16`}>외근</th><th className={TH_DARK}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH_DARK}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
-          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
-            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
+          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-2xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
+            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-2xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
           {period === "week" && <>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
-              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input data-cell onKeyDown={inputCellKeyDown} type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-base font-bold tabular-nums`} /></td>)}</tr>
+              {KINDS.map((k) => <td key={k} className={TD_WRITE}><input data-cell onKeyDown={inputCellKeyDown} type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-lg font-black tabular-nums`} /></td>)}</tr>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
-              {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target;
-                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className={`text-base font-black leading-tight ${actual >= target ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</div><div className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
+              {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target; const met = target > 0 && actual >= target;
+                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className="flex items-baseline justify-between gap-1"><span className={`text-lg font-black leading-tight ${met ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</span><span className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span></div><div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${met ? "bg-emerald-500" : "bg-slate-800"}`} style={{ width: `${Math.min(100, percent)}%` }} /></div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
           </>}
+          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>시간</td><td colSpan={KINDS.length + 1} className={`${TD_READ} text-[12px] font-semibold text-slate-500`}><span className="inline-flex flex-wrap gap-x-5 gap-y-1">
+            <span>외근 <b className="ml-1 text-slate-900">{hm(sum.fieldMinutes)}</b></span><span>내근 <b className="ml-1 text-slate-900">{hm(insideMinutes)}</b></span><span>합계 <b className="ml-1 text-slate-900">{hm(sum.fieldMinutes + insideMinutes)}</b></span>
+            {period === "day" && <><span>마감 <b className="ml-1 text-slate-900">{commute || "미선택"}</b></span><span>복귀 <b className="ml-1 text-slate-900">{office.returnTime || "미입력"}</b></span></>}
+          </span></td></tr>
         </tbody>
       </table></div></section>
 
