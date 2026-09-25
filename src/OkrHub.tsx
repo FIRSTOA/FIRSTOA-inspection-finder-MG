@@ -62,6 +62,8 @@ const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
 const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
 const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-800";
 const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
+// AI·모아 넣기 버튼(✨정리·✨합치기·그대로 모아 넣기·✨초안·팀원 기록 보기)은 사용자가 써 본 뒤 다시 정하기로 해 잠시 숨김(2026-09-26). 코드는 그대로.
+const SHOW_OKR_TOOLS = false;
 
 // 열 너비 — 머리 칸 오른쪽 가장자리를 끌어 조절(엑셀처럼, 2026-09-24). 이 브라우저에 기억(localStorage), 가장자리를 두 번 누르면 기본값.
 function useColWidths(storageKey: string, defaults: number[]) {
@@ -582,14 +584,14 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
                   <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "criteria", "")}</td>
                   <td className={TD_WRITE}>
                     {rich(row, "actual", goal.no, "")}
-                    <div className="flex flex-wrap gap-x-3 px-2 pb-1 text-[10px] font-bold">
+                    {SHOW_OKR_TOOLS && <div className="flex flex-wrap gap-x-3 px-2 pb-1 text-[10px] font-bold">
                       <button type="button" disabled={!!aiBusy} onClick={() => onAiFormat(goal.no)} className={LINK}>{aiBusy === fmtKey ? "정리 중…" : "✨ 정리"}</button>
                       {!member && members.length > 0 && <button type="button" onClick={() => setOpenMembers((cur) => ({ ...cur, [goal.no]: !open }))} className={LINK}>{open ? "팀원 기록 닫기" : `팀원 기록 ${memberEntries.length}`}</button>}
                       {!member && memberEntries.length > 0 && <>
                         <button type="button" disabled={!!aiBusy} onClick={() => onAiMerge(goal.no)} className={LINK}>{aiBusy === mrgKey ? "합치는 중…" : "✨ 합치기"}</button>
                         <button type="button" onClick={() => onMerge(goal.no)} className={LINK}>그대로 모아 넣기</button>
                       </>}
-                    </div>
+                    </div>}
                   </td>
                   <td className={`${TD} p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
                     <JudgmentPicker value={j} suggested={row.actual.trim() ? suggested : ""} onChange={(v) => onResult(goal.no, { judgment: v })} />
@@ -653,7 +655,7 @@ function TeamSummary({ team, goals, names, reports, partReport, onMember, aiBusy
                 <td className={`${TD} px-1 py-1.5 text-center`}><JudgmentBadge value={part.judgment} />{!normalizeJudgment(part.judgment) && suggested && <div className="mt-0.5 text-[10px] font-bold text-slate-400">제안 {suggested}</div>}</td>
                 <td className={TD_WRITE}>
                   <RichCell text={partReport.feedback?.[String(goal.no)]?.memo || ""} html={partReport.feedback?.[String(goal.no)]?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} />
-                  <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === `tfb|${team}|${goal.no}` ? "초안 쓰는 중…" : "✨ 초안"}</button></div>
+                  {SHOW_OKR_TOOLS && <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === `tfb|${team}|${goal.no}` ? "초안 쓰는 중…" : "✨ 초안"}</button></div>}
                 </td>
               </tr>;
             })}
@@ -721,7 +723,7 @@ function SummaryView({ cycle, cycles, reports, aiBusy, customTeams, onFeedback, 
                   <td className={`${TD_READ} text-[11px] leading-snug`}>{actions.length ? actions.map((t) => <div key={t}><span className="font-black text-rose-600">{t}파트</span>{who[t]?.length ? <span className="text-slate-500"> · {who[t].join(", ")}</span> : null}</div>) : <span className="text-slate-300">—</span>}</td>
                   <td className={TD_WRITE}>
                     <RichCell text={fb?.memo || ""} html={fb?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} />
-                    <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === fbKey ? "초안 쓰는 중…" : "✨ 초안"}</button></div>
+                    {SHOW_OKR_TOOLS && <div className="px-2 pb-1 text-[10px] font-bold"><button type="button" disabled={!!aiBusy} onClick={() => onAiFeedback(goal.no)} className={LINK}>{aiBusy === fbKey ? "초안 쓰는 중…" : "✨ 초안"}</button></div>}
                   </td>
                 </tr>;
               })}

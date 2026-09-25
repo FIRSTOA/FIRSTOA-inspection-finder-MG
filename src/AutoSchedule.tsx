@@ -37,6 +37,15 @@ type Place = {
 };
 
 const TEAMS = ["A", "B", "C", "D", "E"] as const;
+
+// 선택 스케줄 — 후보에서 체크한 곳(place)과 직접 추가한 곳(manual). 등록 전까지 이 브라우저에 날짜별로 남는다(2026-09-26: 다른 탭 갔다 오면 사라져 다시 골라야 했다).
+type SavedPick =
+  | { kind: "place"; date: string; team: string; key: string; rep: string; place: Place; memo: string }
+  | { kind: "manual"; date: string; team: string; id: string; vendor: string; address: string; memo: string };
+const picksKey = (author: string) => `cs_autoplan_picks_${author}`;
+function loadPicks(author: string): SavedPick[] {
+  try { const raw = JSON.parse(localStorage.getItem(picksKey(author)) || "[]"); return Array.isArray(raw) ? raw as SavedPick[] : []; } catch { return []; }
+}
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
 
 export default function AutoSchedule({ author }: { author: string }) {
@@ -64,7 +73,10 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (!r.code) { setHistVendor(fallback); return; }
     void vendorNameByCode(r.code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
   };
-  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [saved, setSaved] = useState<SavedPick[]>(() => loadPicks(author));
+  useEffect(() => { try { localStorage.setItem(picksKey(author), JSON.stringify(saved)); } catch { /* 무시 */ } }, [saved, author]);
+  const todayPicks = useMemo(() => saved.filter((x) => x.date === date), [saved, date]);
+  const picked = useMemo(() => new Set(todayPicks.flatMap((x) => (x.kind === "place" ? [x.place.id] : []))), [todayPicks]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -182,8 +194,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         const pinned = await pinnedAnchorRow(anchorGeo.placeId, anchorGeo.lat, anchorGeo.lng);
         if (pinned) { merged = [pinned.row, ...merged]; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
       }
-      setRows(merged);
-      setPicked(new Set());
+      setRows(merged); // 선택 스케줄은 검색을 다시 해도 남긴다(2026-09-26)
       setNotice(`${merged.length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}`);
       void getVendorFlagsBatch(merged.map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
     } catch (e) {
@@ -192,7 +203,15 @@ export default function AutoSchedule({ author }: { author: string }) {
   };
 
   const toggleGrade = (g: string) => setGrades((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]));
-  const toggle = (id: number) => setPicked((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  // 체크 = 선택 스케줄에 넣기 / 해제 = 빼기 (검색 결과가 바뀌어도 선택은 남는다)
+  const addPlaces = (items: Array<{ key: string; rep: string; place: Place }>) => setSaved((cur) => [...cur, ...items.filter((it) => !cur.some((x) => x.kind === "place" && x.date === date && x.place.id === it.place.id)).map((it) => ({ kind: "place" as const, date, team, key: it.key, rep: it.rep, place: it.place, memo: "" }))]);
+  const removePlaces = (ids: number[]) => setSaved((cur) => cur.filter((x) => !(x.kind === "place" && x.date === date && ids.includes(x.place.id))));
+  const toggle = (id: number) => {
+    if (picked.has(id)) { removePlaces([id]); return; }
+    const group = groups.find((g) => g.members.some((m) => m.id === id));
+    const place = group?.members.find((m) => m.id === id);
+    if (group && place) addPlaces([{ key: group.key, rep: group.rep, place }]);
+  };
 
   // 같은 코드(사업자)의 지점들 = 같은 회사의 기기들 — 방문 1건으로 묶는다 (빅오션 3층/2층/지하1층 → 카드 1장)
   type Group = { key: string; rep: string; members: Place[] };
@@ -219,12 +238,19 @@ export default function AutoSchedule({ author }: { author: string }) {
     const tail = name.startsWith(group.rep) ? name.slice(group.rep.length).replace(/^[\s\-·,]+/, "").trim() : "";
     return tail || parseEquipComment(member.comment).model || `기기 ${group.members.indexOf(member) + 1}`;
   };
-  const toggleGroup = (group: Group) => setPicked((cur) => {
-    const next = new Set(cur);
-    const allOn = group.members.every((m) => next.has(m.id));
-    group.members.forEach((m) => { if (allOn) next.delete(m.id); else next.add(m.id); });
-    return next;
-  });
+  const toggleGroup = (group: Group) => {
+    const allOn = group.members.every((m) => picked.has(m.id));
+    if (allOn) removePlaces(group.members.map((m) => m.id));
+    else addPlaces(group.members.map((m) => ({ key: group.key, rep: group.rep, place: m })));
+  };
+  const setPickMemo = (pick: SavedPick, memo: string) => setSaved((cur) => cur.map((x) => (x === pick ? { ...x, memo } : x)));
+  const removePick = (pick: SavedPick) => setSaved((cur) => cur.filter((x) => x !== pick));
+  const [manualDraft, setManualDraft] = useState<{ vendor: string; address: string } | null>(null);
+  const addManual = () => {
+    if (!manualDraft || !manualDraft.vendor.trim()) return;
+    setSaved((cur) => [...cur, { kind: "manual", date, team, id: `m-${Date.now()}`, vendor: manualDraft.vendor.trim(), address: manualDraft.address.trim(), memo: "" }]);
+    setManualDraft(null);
+  };
 
 
   const [registerConfirm, setRegisterConfirm] = useState(false);
@@ -232,9 +258,17 @@ export default function AutoSchedule({ author }: { author: string }) {
   useEffect(() => { setCandLimit(12); }, [kind, team, rows.length]);
   const register = async () => {
     setRegisterConfirm(false);
-    const chosenGroups = groups.map((group) => ({ ...group, members: group.members.filter((m) => picked.has(m.id)) })).filter((group) => group.members.length);
-    if (!chosenGroups.length) return;
+    const placePicks = todayPicks.filter((x): x is Extract<SavedPick, { kind: "place" }> => x.kind === "place");
+    const manualPicks = todayPicks.filter((x): x is Extract<SavedPick, { kind: "manual" }> => x.kind === "manual");
+    const chosenGroups: Array<Group & { memo: string }> = [];
+    for (const pick of placePicks) {
+      const g = chosenGroups.find((x) => x.key === pick.key);
+      if (g) { g.members.push(pick.place); if (pick.memo.trim()) g.memo = `${g.memo}${g.memo ? "\n" : ""}${pick.memo.trim()}`; }
+      else chosenGroups.push({ key: pick.key, rep: pick.rep, members: [pick.place], memo: pick.memo.trim() });
+    }
+    if (!chosenGroups.length && !manualPicks.length) return;
     setLoading(true);
+    const saveMemo = async (ticketId: string, memo: string) => { if (memo.trim()) await upsertRow("plan_memos", { author, ticket_id: ticketId, memo: memo.trim(), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined); };
     try {
       // 그 달에 이미 열려 있는 점검 일정이 있는 업체는 건너뛴다 — 같은 업체가 3번 잡혀 완료 때 '3건 처리'로 뜨던 것(2026-09-24 제이엘케이)
       const monthStart = `${date.slice(0, 7)}-01`;
@@ -255,17 +289,28 @@ export default function AutoSchedule({ author }: { author: string }) {
           : "";
         const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
         const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
+        const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         await upsertRow("as_tickets", {
-          id: `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          id: ticketId,
           team, date, time: "", vendor: vendorName, contact: "", address: first.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
           model: eq.model, serial: eq.serial, asset: "", grade: first.grade, keyman: "",
           issue: `${kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${lastDate || "기록 없음"}${minDaysSince < 9999 ? ` · ${minDaysSince}일 경과` : ""})`}${multi ? ` · 기기 ${group.members.length}대` : ""}`,
           note: machineNote, assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
           receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${vendorName}`, source: "autoplan",
         }, "id");
+        await saveMemo(ticketId, group.memo);
       }
-      setPicked(new Set());
-      setNotice(`${chosenGroups.length - skipped.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${skipped.length ? ` · 이미 이달 점검 일정에 있어 건너뜀 ${skipped.length}곳: ${skipped.join(", ")}` : ""}`);
+      // 직접 추가한 일정 — 워킨맵에 없는 곳(마감 방문 등). 내 일정에서 '직접 등록'으로 보인다
+      for (const m of manualPicks) {
+        const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        await upsertRow("as_tickets", {
+          id: ticketId, team, date, time: "", vendor: m.vendor, contact: "", address: m.address, department: "", model: "", serial: "", asset: "", grade: "", keyman: "",
+          issue: "직접 추가 · 자동일정", note: "", assignee: author, status: "배정", scheduleType: "매월점검", receptionId: "", calendarTitle: `방문 ${m.vendor}`, source: "manual",
+        }, "id");
+        await saveMemo(ticketId, m.memo);
+      }
+      setSaved((cur) => cur.filter((x) => x.date !== date));
+      setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${skipped.length ? ` · 이미 이달 점검 일정에 있어 건너뜀 ${skipped.length}곳: ${skipped.join(", ")}` : ""}`);
       void loadTickets();
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);
@@ -356,6 +401,40 @@ export default function AutoSchedule({ author }: { author: string }) {
             {anchorLabel && <div className={`mt-1 text-[10px] font-black ${anchorGeo ? "text-emerald-600" : "text-amber-600"}`}>{anchorGeo ? `📍 ${anchorGeo.name.slice(0, 20)} 좌표로 거리 계산` : "좌표 미확인 — 경과일 순 정렬"}</div>}
           </div>
 
+          <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-black text-slate-900">선택 스케줄 <span className="text-slate-400">{todayPicks.length}건</span></div>
+              <button type="button" disabled={loading || !todayPicks.length} onClick={() => setRegisterConfirm(true)} className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1 text-[11px] font-black text-white transition hover:bg-blue-700 disabled:opacity-40"><CalendarPlus size={12} />일정 등록</button>
+            </div>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">후보에서 체크한 곳이 여기 남습니다({date}). 등록 전까지 이 기기에 보관.</p>
+            <div className="mt-2 space-y-1.5">
+              {todayPicks.map((pick, i) => {
+                const name = pick.kind === "place" ? (pick.place.vendor || pick.place.place_name) : pick.vendor;
+                const addr = pick.kind === "place" ? pick.place.addr : pick.address;
+                return <div key={pick.kind === "place" ? `p${pick.place.id}` : pick.id} className="rounded-lg border border-slate-200 px-2.5 py-2">
+                  <div className="flex items-start gap-1.5">
+                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[9px] font-black text-white">{i + 1}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1"><span className="min-w-0 truncate text-[12.5px] font-black text-slate-900">{name}</span>{pick.kind === "place" && pick.place.grade && <span className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-black text-slate-500">{pick.place.grade}</span>}{pick.kind === "manual" && <span className="shrink-0 rounded bg-amber-50 px-1 text-[9px] font-black text-amber-700">직접</span>}</span>
+                      <span className="block truncate text-[10.5px] font-semibold text-slate-400">{addr || "주소 없음"}{pick.kind === "place" && pick.place.distance_km != null ? ` · ${pick.place.distance_km < 1 ? `${Math.round(pick.place.distance_km * 1000)}m` : `${pick.place.distance_km}km`}` : ""}</span>
+                    </span>
+                    <button type="button" onClick={() => removePick(pick)} className="shrink-0 text-slate-300 hover:text-rose-600">×</button>
+                  </div>
+                  <textarea value={pick.memo} onChange={(e) => setPickMemo(pick, e.target.value)} rows={1} placeholder="메모 — 등록하면 내 일정 메모로"
+                    className="mt-1 block w-full resize-none rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-300 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50" />
+                </div>;
+              })}
+              {!todayPicks.length && <div className="rounded-lg border border-dashed border-slate-200 py-4 text-center text-[11px] font-bold text-slate-400">아직 고른 곳이 없습니다 — 오른쪽 후보를 체크하세요</div>}
+            </div>
+            {manualDraft
+              ? <div className="mt-2 space-y-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2">
+                <input autoFocus value={manualDraft.vendor} onChange={(e) => setManualDraft({ ...manualDraft, vendor: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") addManual(); }} placeholder="업체명" className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-[12px] font-bold outline-none focus:border-amber-400" />
+                <input value={manualDraft.address} onChange={(e) => setManualDraft({ ...manualDraft, address: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") addManual(); }} placeholder="주소(선택)" className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-[12px] font-semibold outline-none focus:border-amber-400" />
+                <div className="flex gap-1"><button type="button" onClick={addManual} disabled={!manualDraft.vendor.trim()} className="flex-1 rounded bg-amber-600 py-1.5 text-[11px] font-black text-white disabled:opacity-40">추가</button><button type="button" onClick={() => setManualDraft(null)} className="rounded border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500">취소</button></div>
+              </div>
+              : <button type="button" onClick={() => setManualDraft({ vendor: "", address: "" })} className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-1.5 text-[11px] font-black text-slate-500 transition hover:bg-slate-50">＋ 직접 추가 (워킨맵에 없는 곳)</button>}
+          </div>
+
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">② 추천 조건</div>
             {/* 분기는 1~4 드롭다운 — 현재 분기 워킨맵을 다 돌고 나면 다음 분기를 고른다(2026-09-24: 3분기 끝났는데 계속 보이던 것) */}
@@ -386,9 +465,9 @@ export default function AutoSchedule({ author }: { author: string }) {
               <div className="text-sm font-black text-slate-900">③ {kind === "renewal" ? "재계약" : "점검"} 후보 <span className="text-slate-400">{rows.length}곳</span></div>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-400">가까운 순 · 선택 {picked.size}곳</p>
             </div>
-            <button type="button" disabled={loading || !picked.size} onClick={() => setRegisterConfirm(true)}
+            <button type="button" disabled={loading || !todayPicks.length} onClick={() => setRegisterConfirm(true)}
               className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-40">
-              <CalendarPlus size={14} />선택 {groups.filter((g) => g.members.some((m) => picked.has(m.id))).length}곳 일정 등록
+              <CalendarPlus size={14} />선택 {todayPicks.length}건 일정 등록
             </button>
           </div>
           {/* 미니 지도 — 추가하기 전에 어디쯤인지 보이게(내 일정에 가서 확인하던 불편). 표시 중인 후보(더 보기 범위)만 그린다 */}
@@ -510,13 +589,19 @@ export default function AutoSchedule({ author }: { author: string }) {
       </div>
       <UnifiedHistory vendor={histVendor} accent="#2563eb" open={!!histVendor} onClose={() => setHistVendor("")} onError={(msg) => setNotice(msg)} />
       {registerConfirm && (() => {
-        const chosen = groups.map((group: Group) => ({ ...group, members: group.members.filter((m: Place) => picked.has(m.id)) })).filter((group: Group) => group.members.length);
+        const chosen: Group[] = [];
+        for (const pick of todayPicks) {
+          if (pick.kind !== "place") continue;
+          const g = chosen.find((x) => x.key === pick.key);
+          if (g) g.members.push(pick.place); else chosen.push({ key: pick.key, rep: pick.rep, members: [pick.place] });
+        }
+        const manual = todayPicks.filter((x): x is Extract<SavedPick, { kind: "manual" }> => x.kind === "manual");
         return (
           <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setRegisterConfirm(false)}>
             <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="bg-[#1E252F] px-5 py-4">
                 <div className="text-[11px] font-black text-slate-400">{date} · {team}팀 · {kind === "renewal" ? "재계약" : "점검"}</div>
-                <div className="mt-0.5 text-[15px] font-black text-white">{chosen.length}곳 일정 등록</div>
+                <div className="mt-0.5 text-[15px] font-black text-white">{chosen.length + manual.length}곳 일정 등록</div>
               </div>
               <div className="max-h-[38vh] space-y-1 overflow-y-auto px-5 py-3">
                 {chosen.map((group: Group) => (
@@ -527,8 +612,9 @@ export default function AutoSchedule({ author }: { author: string }) {
                     {group.members[0].distance_km != null && <span className="shrink-0 text-[10px] font-black text-slate-400">{group.members[0].distance_km < 1 ? `${Math.round(group.members[0].distance_km * 1000)}m` : `${group.members[0].distance_km}km`}</span>}
                   </div>
                 ))}
+                {manual.map((m) => <div key={m.id} className="flex items-center gap-2 text-[12px] font-bold text-slate-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" /><span className="truncate">{m.vendor}</span><span className="shrink-0 rounded bg-amber-50 px-1.5 text-[10px] font-black text-amber-700">직접</span></div>)}
               </div>
-              <div className="px-5 pb-2 text-[11px] font-bold text-slate-400">✅ {author}에게 배정되어 일정리스트의 [내 일정]에 바로 나타납니다.</div>
+              <div className="px-5 pb-2 text-[11px] font-bold text-slate-400">✅ {author}에게 배정되어 일정리스트의 [내 일정]에 바로 나타납니다. 메모는 내 일정 메모로 들어갑니다.</div>
               <div className="flex gap-2 px-4 pb-4">
                 <button type="button" onClick={() => setRegisterConfirm(false)} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
                 <button type="button" onClick={() => void register()} className="flex-[2] rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">등록</button>
