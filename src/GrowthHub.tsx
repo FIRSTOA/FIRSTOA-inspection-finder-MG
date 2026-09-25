@@ -103,6 +103,40 @@ const statusText: Record<AutoSaveStatus, string> = {
   error: "자동저장 실패",
 };
 const PLAN_CATEGORIES = ["AI", "자기개발", "매출증대", "매출안정", "효율성", "비용절감", "소통", "기타"] as const;
+
+// 엑셀 붙여넣기 — 시트를 통째로 복사해도 되게 제목·머리글·빈 줄을 빼고 목표 행(구분 또는 등급 + 긴 글)만 남긴다(2026-09-26: 전체를 붙이면 오류가 났다)
+const PASTE_HEADER_WORD = /^(구\s*분|업무\s*등급|목\s*표|현재\s*레벨|목표\s*레벨|요청\s*예산(\s*\(분기\))?|예산\s*반영|진도율|기본업무.*|미션업무|작성자.*|근속연수|\d[년차-]*|.*레벨업\s*계획.*)$/;
+function filterGoalRows(grid: string[][]): string[][] {
+  const cats = new Set<string>([...PLAN_CATEGORIES, "미션"]);
+  const grades = new Set<string>(["A", "B", "C", "D"]);
+  return grid.filter((cells) => {
+    const vals = cells.map((v) => v.replace(/\s+/g, " ").trim());
+    const filled = vals.filter(Boolean);
+    if (!filled.length) return false;
+    if (filled.every((v) => PASTE_HEADER_WORD.test(v))) return false;
+    const hasCat = vals.some((v) => cats.has(v));
+    const hasGrade = vals.some((v) => grades.has(v));
+    const hasLong = vals.some((v) => v.length >= 6 && !PASTE_HEADER_WORD.test(v));
+    return (hasCat || hasGrade) && hasLong;
+  });
+}
+
+// 붙여넣기 안내 그림 — 엑셀에서 어느 범위를 끌어 복사하는지(구분 ~ 진도율, 목표 행 전체)
+function PasteGuideSheet() {
+  const head = ["구분", "업무등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "진도율"];
+  const rows = [["AI", "C", "1. 비용절감/효율개선 아이디어 …", "1", "2", "", "", "0%"], ["자기개발", "C", "2. IT 기술력 레벨3 …", "2", "3", "", "", "0%"], ["매출증대", "C", "4. IT 확장성 파악 …", "1", "2", "", "", "0%"]];
+  const cell = (i: number, j: number) => `border px-2 py-1 whitespace-nowrap bg-blue-50 text-slate-800 ${j === 0 ? "border-l-2 border-l-blue-500" : "border-l-blue-200"} ${j === head.length - 1 ? "border-r-2 border-r-blue-500" : "border-r-blue-200"} ${i === 0 ? "border-t-2 border-t-blue-500" : "border-t-blue-200"} ${i === rows.length - 1 ? "border-b-2 border-b-blue-500" : "border-b-blue-200"}`;
+  return <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2">
+    <table className="border-collapse text-[10.5px]">
+      <tbody>
+        <tr><td colSpan={head.length} className="border border-slate-200 px-2 py-1 font-bold text-slate-400">□ 26년 3Q 레벨업계획 <span className="ml-2 font-semibold">← 제목·머리글 줄은 빼도 되고, 같이 복사돼도 자동으로 걸러냅니다</span></td></tr>
+        <tr>{head.map((h) => <td key={h} className="border border-slate-200 bg-slate-100 px-2 py-1 text-center font-bold text-slate-500">{h}</td>)}</tr>
+        {rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className={cell(i, j)}>{c || <span className="text-slate-300">&nbsp;</span>}</td>)}</tr>)}
+      </tbody>
+    </table>
+    <div className="mt-1.5 text-[11px] font-bold text-blue-700">파란 테두리 안(첫 목표의 구분 칸 → 마지막 목표의 진도율 칸)을 드래그해서 복사하세요.</div>
+  </div>;
+}
 const GRADE_OPTIONS = ["A", "B", "C", "D"] as const;
 // 격자 시트 — OKR 탭과 같은 모양(2026-09-24: 카드·둥근 입력칸 대신 엑셀 셀)
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
@@ -373,11 +407,12 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     : <>{goal.title || fallback}</>;
 
   // 엑셀/시트에서 복사한 범위(탭 구분)를 붙여넣어 목표로 일괄 추가
-  const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "1개월차", "2개월차", "3개월차"] as const;
+  const PASTE_ROLES = ["무시", "구분", "등급", "목표", "현재레벨", "목표레벨", "요청예산", "예산반영", "진도율", "1개월차", "2개월차", "3개월차"] as const;
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteRoles, setPasteRoles] = useState<string[]>([]);
-  const pasteGrid = useMemo(() => parseClipboardGrid(pasteText), [pasteText]);
+  const pasteRaw = useMemo(() => parseClipboardGrid(pasteText), [pasteText]);
+  const pasteGrid = useMemo(() => filterGoalRows(pasteRaw), [pasteRaw]);
   useEffect(() => {
     // 컬럼 역할 자동 추정: 구분 값이면 '구분', 등급이면 '등급', 가장 긴 텍스트 열은 '목표'
     const cols = Math.max(0, ...pasteGrid.map((cells) => cells.length));
@@ -403,6 +438,10 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
       }
       if (numericAfter[0] !== undefined && roles[numericAfter[0]] === "무시") roles[numericAfter[0]] = "현재레벨";
       if (numericAfter[1] !== undefined && roles[numericAfter[1]] === "무시") roles[numericAfter[1]] = "목표레벨";
+      for (let c = goalCol + 1; c < cols; c++) {
+        const values = pasteGrid.map((cells) => (cells[c] || "").trim()).filter(Boolean);
+        if (roles[c] === "무시" && values.length && values.every((v) => /^\d{1,4}(\.\d+)?%$/.test(v))) { roles[c] = "진도율"; break; }
+      }
     }
     setPasteRoles(roles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -425,7 +464,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         id: crypto.randomUUID(), category, grade: at("등급"), title,
         currentLevel: at("현재레벨"), targetLevel: at("목표레벨"), budget: at("요청예산"), reflectedBudget: at("예산반영"),
         month1: at("1개월차"), month2: at("2개월차"), month3: at("3개월차"),
-        progress: 0, resultMerged: false,
+        progress: Number(at("진도율").replace(/[^\d.]/g, "")) || 0, resultMerged: false,
       });
     }
     if (!imported.length) { setMessage("가져올 목표를 찾지 못했습니다. 열 역할을 확인해 주세요."); return; }
@@ -842,8 +881,17 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
               <button type="button" onClick={() => setPasteOpen(false)} className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-              <p className="text-xs font-semibold leading-5 text-slate-500">엑셀/시트에서 목표 범위를 복사해 아래에 붙여넣으세요. 열 역할은 자동 추정되며 직접 바꿀 수 있습니다.</p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <div className="text-[12px] font-black text-slate-800">엑셀에서 이렇게 복사하세요</div>
+                <ol className="mt-1 space-y-0.5 text-[11.5px] font-semibold leading-5 text-slate-600">
+                  <li>① 레벨업 계획 시트에서 <b>첫 목표 행의 구분 칸</b>(예: AI)부터 <b>마지막 목표 행의 진도율 칸</b>까지 드래그합니다. 미션업무 쪽 열은 빼고 복사하세요.</li>
+                  <li>② Ctrl+C 로 복사한 뒤 아래 칸을 누르고 Ctrl+V</li>
+                  <li>③ 열 역할(구분 · 등급 · 목표 · 현재레벨 · 목표레벨 · 진도율)이 맞는지 보고 [기본업무로 추가]</li>
+                </ol>
+                <PasteGuideSheet />
+              </div>
               <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder={"엑셀에서 복사한 내용을 여기에 붙여넣기 (Ctrl+V)"} className="w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-xs leading-5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              {pasteText.trim() && !pasteGrid.length && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] font-bold text-amber-800">목표 행을 찾지 못했습니다 — 구분(AI·자기개발…)이나 등급(A~D) 칸과 목표 글이 한 줄에 같이 오도록, 위 그림의 파란 범위를 복사해 주세요.</div>}
               {pasteGrid.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table onClick={tableCellClick} className="w-full text-left text-xs">
@@ -866,7 +914,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                       ))}
                     </tbody>
                   </table>
-                  {pasteGrid.length > 5 && <div className="px-2 py-1.5 text-[10px] font-bold text-slate-400">외 {pasteGrid.length - 5}행 — 총 {pasteGrid.length}행 가져옵니다</div>}
+                  <div className="px-2 py-1.5 text-[10px] font-bold text-slate-400">{pasteGrid.length > 5 ? `외 ${pasteGrid.length - 5}행 — ` : ""}목표 {pasteGrid.length}행 가져옵니다{pasteRaw.length > pasteGrid.length ? ` (제목·머리글·빈 줄 ${pasteRaw.length - pasteGrid.length}행은 뺐습니다)` : ""}</div>
                 </div>
               )}
             </div>
