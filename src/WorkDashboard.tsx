@@ -339,11 +339,12 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   return <div className="space-y-4 pb-16">
     {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="bg-[#1E252F] px-5 py-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
-            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
+      <div className="bg-[#1E252F] px-5 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <h2 className="min-w-0 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
+            <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
+            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300 lg:justify-end">
               {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md bg-transparent px-1.5 py-0.5 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
               {period !== "day" && <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
               {(period === "week" || period === "month") && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />}
@@ -353,7 +354,6 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
               <PortalSelect tone="dark" className={INLINE_SELECT} width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
             </div>
           </div>
-          <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto lg:shrink-0">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
         </div>
       </div>
       {!loading && <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
