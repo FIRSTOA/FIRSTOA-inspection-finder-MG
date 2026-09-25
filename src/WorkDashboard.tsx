@@ -53,7 +53,7 @@ const GROWTH_NOTE_TEMPLATE = "상황:\n문제점:\n개선해야 할 점:\n실행
 const pad = (n: number) => String(n).padStart(2, "0");
 // 격자 시트 — OKR 탭과 같은 모양(2026-09-24: 카드 대신 엑셀 셀). 색은 노란 입력칸에만.
 const TH = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-600";
-const TH_DARK = "whitespace-nowrap border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-black text-white";
+const TH_DARK = "whitespace-nowrap border border-slate-200 bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-700"; // 카드 머리가 이미 짙어서 표 머리는 밝게
 const TD_LABEL = "border border-slate-200 bg-slate-50 px-2 py-1.5 align-top text-[11px] font-bold text-slate-500";
 const TD_READ = "border border-slate-200 px-2 py-1.5 align-top";
 const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-within:bg-white";
@@ -339,12 +339,11 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   return <div className="space-y-4 pb-16">
     {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="bg-[#1E252F] px-5 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <h2 className="min-w-0 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
-          <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
-            <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
-            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300 lg:justify-end">
+      <div className="bg-[#1E252F] px-5 py-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
+            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300">
               {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md bg-transparent px-1.5 py-0.5 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
               {period !== "day" && <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
               {(period === "week" || period === "month") && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />}
@@ -354,9 +353,10 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
               <PortalSelect tone="dark" className={INLINE_SELECT} width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
             </div>
           </div>
+          <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto lg:shrink-0">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
         </div>
       </div>
-      {!loading && <div className="overflow-x-auto border-t border-slate-200"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
+      {!loading && <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
         <thead><tr><th className={`${TH_DARK} w-16`}>외근</th><th className={TH_DARK}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH_DARK}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
           <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-2xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>

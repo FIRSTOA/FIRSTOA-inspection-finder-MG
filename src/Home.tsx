@@ -281,7 +281,7 @@ function Metric({ label, value, sub, icon: Icon, accent = "text-blue-300", loadi
 function Bars({ daily }: { daily: Telemetry["daily"] }) {
   const max = Math.max(1, ...daily.map((d) => d.inspections + d.as));
   return (
-    <div className="flex h-[76px] items-end gap-1.5">
+    <div className="flex items-end gap-1.5">
       {daily.map((d, i) => {
         const total = d.inspections + d.as, h = Math.max(total ? 6 : 2, Math.round((total / max) * 60)), ih = total ? Math.round((d.inspections / total) * h) : 0;
         return (
@@ -389,7 +389,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                 <span>최근 7일 기록 추이</span>
                 <span className="flex items-center gap-3 normal-case tracking-normal"><span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-blue-400" />점검</span><span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-violet-400" />AS</span></span>
               </div>
-              <div className="mt-3">{data ? <Bars daily={data.daily} /> : <div className="h-[76px] animate-pulse rounded bg-white/[0.05]" />}</div>
+              <div className="mt-3">{data ? <Bars daily={data.daily} /> : <div className="h-[96px] animate-pulse rounded bg-white/[0.05]" />}</div>
             </div>
             <div className={`p-4 ${card}`}>
               <div className={`flex items-center justify-between ${eyebrow}`}><span>이번 주 지역별 기록</span><span className="normal-case tracking-normal text-slate-500">점검+AS</span></div>
