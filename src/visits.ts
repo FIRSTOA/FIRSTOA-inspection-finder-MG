@@ -193,6 +193,8 @@ export type LevelGoal = {
   month1Html?: string; // 월별 결과 서식(부분 색상) HTML — 순수 텍스트는 month1~3에 병행 저장
   month2Html?: string;
   month3Html?: string;
+  // [AI 수치 정리] 직전 원본 — 정리 결과와 나란히 비교하고 되돌릴 수 있게(2026-09-26). 정리할 때마다 그 직전 값으로 갱신.
+  aiBefore?: { month1: string; month2: string; month3: string; month1Html?: string; month2Html?: string; month3Html?: string; resultMerged?: boolean; at: string; model?: string };
 };
 export type QuarterlyPlan = { author: string; year: number; quarter: number; goals: LevelGoal[] };
 export async function getQuarterlyPlan(author: string, year: number, quarter: number): Promise<QuarterlyPlan> {

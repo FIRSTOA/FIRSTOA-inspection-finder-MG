@@ -582,6 +582,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         const text = String(out.text || "").trim();
         if (!slot || !text) continue;
         const html = text.split("\n").map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br>");
+        slot.aiBefore = { month1: slot.month1, month2: slot.month2, month3: slot.month3, month1Html: slot.month1Html, month2Html: slot.month2Html, month3Html: slot.month3Html, resultMerged: slot.resultMerged, at: new Date().toISOString(), model: data.model };
         slot.resultMerged = true;
         slot.month1 = text;
         slot.month1Html = html;
@@ -592,6 +593,17 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
     } catch (e) {
       setMessage((e as Error).message || "AI 수치 정리에 실패했습니다.");
     } finally { setQuantifyBusy(false); }
+  };
+
+  // [AI 수치 정리] 원본과 비교 / 되돌리기
+  const [compareId, setCompareId] = useState("");
+  const compareGoal = plan.goals.find((g) => g.id === compareId);
+  const beforeText = (g: LevelGoal) => { const b = g.aiBefore; if (!b) return ""; return b.resultMerged ? String(b.month1 || "") : [b.month1, b.month2, b.month3].map((v, k) => (String(v || "").trim() ? `${(quarter - 1) * 3 + 1 + k}월: ${v}` : "")).filter(Boolean).join("\n\n"); };
+  const restoreBefore = (g: LevelGoal) => {
+    const b = g.aiBefore; if (!b) return;
+    setGoal(g.id, { month1: b.month1, month2: b.month2, month3: b.month3, month1Html: b.month1Html, month2Html: b.month2Html, month3Html: b.month3Html, resultMerged: b.resultMerged, aiBefore: undefined });
+    setCompareId("");
+    setMessage("AI 정리 전 원본으로 되돌렸습니다.");
   };
 
   const addGoal = (kind: "regular" | "mission" = "regular") => {
@@ -957,7 +969,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
             {regularGoals.map((goal, index) => <article key={goal.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black text-blue-600">{goal.category} · {goal.grade || "-"}</div><div className="mt-1 whitespace-pre-wrap text-sm font-black leading-6 text-slate-900">{goalTitleView(goal, `목표 ${index + 1}`)}</div></div><span className="shrink-0 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-black tabular-nums text-white">{goal.progress || 0}%</span></div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-white p-2 text-slate-500">현재 <b className="float-right text-slate-800">{goal.currentLevel || "-"}</b></div><div className="rounded-lg bg-white p-2 text-slate-500">목표 <b className="float-right text-slate-800">{goal.targetLevel || "-"}</b></div></div>
-              <div className="mt-3 flex justify-end"><button type="button" onClick={() => setGoal(goal.id, { resultMerged: !goal.resultMerged })} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-500">{goal.resultMerged ? "월별 나누기" : "분기 통합"}</button></div>
+              <div className="mt-3 flex justify-end gap-2">{goal.aiBefore && <button type="button" onClick={() => setCompareId(goal.id)} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-black text-violet-700">원본 비교</button>}<button type="button" onClick={() => setGoal(goal.id, { resultMerged: !goal.resultMerged })} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-500">{goal.resultMerged ? "월별 나누기" : "분기 통합"}</button></div>
               {goal.resultMerged ? <div className="mt-2"><RichCell key={`${goal.id}-merged-m`} text={String(goal[`month${1}`] || "")} html={goal[`month${1}Html`] || undefined} onChange={(text, html) => setGoalMonth(goal.id, 1, html || "", text)} minRows={6} /></div> : <div className="mt-2 space-y-2">{([1, 2, 3] as const).map((m) => <div key={m} className="text-[11px] font-black text-slate-500">{(quarter - 1) * 3 + m}월<div className="mt-1"><RichCell key={`${goal.id}-m${m}-m`} text={String(goal[`month${m}`] || "")} html={goal[`month${m}Html`] || undefined} onChange={(text, html) => setGoalMonth(goal.id, m, html || "", text)} minRows={4} /></div></div>)}</div>}
             </article>)}
             {!regularGoals.length && <div className="p-10 text-center text-sm text-slate-400">계획표에서 목표를 먼저 추가하세요.</div>}
@@ -986,7 +998,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
                     <td className={`${TD_READ} tabular-nums text-slate-600`}>{g.currentLevel || "-"}</td>
                     <td className={`${TD_READ} tabular-nums text-slate-600`}>{g.targetLevel || "-"}</td>
                     <td className={`${TD_READ} font-black tabular-nums text-slate-800`}>{g.progress || 0}%</td>
-                    <td className={`${TD_READ} text-center`}><button type="button" onClick={() => setGoal(g.id, { resultMerged: !g.resultMerged })} className="whitespace-nowrap text-[11px] font-bold text-slate-500 hover:text-slate-900 hover:underline">{g.resultMerged ? "나누기" : "합치기"}</button></td>
+                    <td className={`${TD_READ} text-center`}>{g.aiBefore && <button type="button" onClick={() => setCompareId(g.id)} className="mb-1 block w-full whitespace-nowrap text-[11px] font-bold text-violet-700 hover:underline">원본 비교</button>}<button type="button" onClick={() => setGoal(g.id, { resultMerged: !g.resultMerged })} className="whitespace-nowrap text-[11px] font-bold text-slate-500 hover:text-slate-900 hover:underline">{g.resultMerged ? "나누기" : "합치기"}</button></td>
                     {g.resultMerged ? (
                       <td colSpan={3} className={TD_CELL}>
                         <div><RichCell key={`${g.id}-merged`} text={String(g[`month${1}`] || "")} html={g[`month${1}Html`] || undefined} onChange={(text, html) => setGoalMonth(g.id, 1, html || "", text)} minRows={6} /></div>
@@ -1076,6 +1088,27 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         </section>
       )}
 
+      {compareGoal && compareGoal.aiBefore && (
+        <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-6" onMouseDown={() => setCompareId("")}>
+          <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:max-w-5xl sm:rounded-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <div className="truncate text-base font-black text-slate-950">AI 수치 정리 — 원본과 비교</div>
+                <div className="mt-0.5 text-xs font-semibold text-slate-400">{compareGoal.title || "목표"} · 정리 {compareGoal.aiBefore.at.slice(0, 16).replace("T", " ")}{compareGoal.aiBefore.model ? ` · 모델 ${compareGoal.aiBefore.model}` : ""}</div>
+              </div>
+              <button type="button" onClick={() => setCompareId("")} className="shrink-0 rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">닫기</button>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto md:grid-cols-2">
+              <div className="border-b border-slate-100 p-5 md:border-b-0 md:border-r"><div className="mb-2 text-[11px] font-black text-slate-400">원본 (정리 전)</div><pre className="whitespace-pre-wrap font-sans text-[13px] leading-6 text-slate-700">{beforeText(compareGoal) || "(비어 있음)"}</pre></div>
+              <div className="bg-violet-50/30 p-5"><div className="mb-2 text-[11px] font-black text-violet-600">AI 정리 (현재)</div><pre className="whitespace-pre-wrap font-sans text-[13px] leading-6 text-slate-800">{String(compareGoal.month1 || "")}</pre></div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4">
+              <button type="button" onClick={() => restoreBefore(compareGoal)} className="rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-black text-rose-600 transition hover:bg-rose-50">원본으로 되돌리기</button>
+              <button type="button" onClick={() => setCompareId("")} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
       {gatherResult && (
         <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-6">
           <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:max-w-4xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
