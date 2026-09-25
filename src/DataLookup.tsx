@@ -195,7 +195,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             if (!items.length) return null;
             return (
               <div key={group} className="flex flex-wrap items-center gap-1.5">
-                <span className="w-20 shrink-0 text-[10px] font-black tracking-wide text-slate-400">{group}</span>
+                <span className="w-full shrink-0 text-[10px] font-black tracking-wide text-slate-400 sm:w-20">{group}</span>
                 {items.map((item) => (
                   <button key={item.key} type="button" onClick={() => setCategoryKey(item.key)}
                     className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${item.key === categoryKey ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
@@ -233,7 +233,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {!category.custom && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="space-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">기간</span>
+            <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">기간</span>
             {PERIODS.map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label.replace("최근 ", "")}</button>
@@ -243,7 +243,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               <button key={value} type="button" onClick={() => setSortDir(value)} title={`${category.orderField} 기준`}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${sortDir === value ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</button>
             ))}
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
               <button type="button" onClick={exportCsv} disabled={!rows.length}
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
                 <Download size={13} />CSV
@@ -252,7 +252,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           </div>
           {category.chipFilter && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">유형</span>
+              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">유형</span>
               <button type="button" onClick={() => setChip("")}
                 className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${chip === "" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>전체</button>
               {category.chipFilter.options.map(([value, label]) => (
@@ -263,7 +263,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           )}
           {category.teamField && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">팀</span>
+              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">팀</span>
               {["전체", "A", "B", "C", "D", "E"].map((value) => (
                 <button key={value} type="button" onClick={() => setTeam(value)}
                   className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>

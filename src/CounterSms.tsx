@@ -379,8 +379,8 @@ export default function CounterSms({ author }: { author: string }) {
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-black text-slate-900">{batch.title} <span className="font-bold text-slate-400">· {batch.created_by} · {batch.created_at.slice(5, 16).replace("T", " ")}</span></div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-slate-200">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 sm:w-40">
                         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${batchTargets.length ? Math.round((sentCount / batchTargets.length) * 100) : 0}%` }} />
                       </div>
                       <span className="text-[11px] font-black tabular-nums text-emerald-600">{sentCount}/{batchTargets.length} 전송</span>
@@ -425,7 +425,7 @@ export default function CounterSms({ author }: { author: string }) {
                           : row.vendor_names.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {row.vendor_names.length}곳 통합</div>}
                       </button>
                       {row.sent_at && (
-                        <span className="absolute right-2 top-2 flex gap-1">
+                        <span className="mt-1.5 flex justify-end gap-1">
                           {row.done_at
                             ? <button type="button" onClick={() => unmarkDone(row)} className="rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-indigo-600">완료 취소</button>
                             : <>
@@ -514,7 +514,7 @@ export default function CounterSms({ author }: { author: string }) {
                     className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${team === t ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{t}팀</button>
                 ))}
                 <input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder={`제목 (비우면 "${new Date().getMonth() + 1}월 마감")`}
-                  className="min-w-[160px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
+                  className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500 sm:w-auto sm:min-w-[160px]" />
               </div>
               <textarea value={uploadRaw} onChange={(e) => setUploadRaw(e.target.value)} rows={8}
                 placeholder="카톡 마감 목록을 그대로 붙여넣으세요"
@@ -744,7 +744,7 @@ function ContactRulesBook({ rules, onClose, onRemove, busy }: {
           <button type="button" onClick={() => setKind("block")} className={chip(kind === "block", "bg-rose-600 text-white")}>🚫 보내지 말 것 {blockCount}</button>
           <button type="button" onClick={() => setKind("prefer")} className={chip(kind === "prefer", "bg-amber-500 text-white")}>⭐ 새 담당 {preferCount}</button>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="업체 · 이름 · 번호 · 사유 · 기록자 검색"
-            className="min-w-[180px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500" />
+            className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500 sm:w-auto sm:min-w-[180px]" />
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
           {!rules.length && <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-xs font-bold text-slate-400">아직 기록이 없습니다 — 전송 모달의 수신 연락처에서 🚫 / ⭐ 를 누르면 여기에 쌓입니다.</div>}

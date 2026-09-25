@@ -1,5 +1,5 @@
 // ---- 솔라피(SOLAPI) 문자 발송 — Secrets: SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER ----
-async function solapiSend(to: string, text: string): Promise<void> {
+async function solapiAuth(): Promise<{ headers: Record<string, string>; sender: string }> {
   const apiKey = Deno.env.get("SOLAPI_API_KEY") || "";
   const apiSecret = Deno.env.get("SOLAPI_API_SECRET") || "";
   const sender = (Deno.env.get("SOLAPI_SENDER") || "").replace(/[^\d]/g, "");
@@ -10,13 +10,24 @@ async function solapiSend(to: string, text: string): Promise<void> {
   const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(date + salt));
   const signature = [...new Uint8Array(sigBuf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return { headers: { Authorization: `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`, "Content-Type": "application/json" }, sender };
+}
+// 사진(MMS) 첨부 — 솔라피 저장소에 JPG(≤200KB, base64)를 올리고 fileId를 받는다. 홍보물 문자에 사진이 그대로 가게(2026-09-26 요청)
+async function solapiUploadImage(base64: string): Promise<string> {
+  const { headers } = await solapiAuth();
+  const res = await fetch("https://api.solapi.com/storage/v1/files", { method: "POST", headers, body: JSON.stringify({ file: base64, type: "MMS", name: "promo.jpg" }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.fileId) throw new Error(`솔라피 사진 업로드 실패(${res.status}): ${JSON.stringify(data).slice(0, 200)}`);
+  return String(data.fileId);
+}
+async function solapiSend(to: string, text: string, opts: { imageId?: string; subject?: string } = {}): Promise<void> {
+  const { headers, sender } = await solapiAuth();
+  const message: Record<string, unknown> = { to, from: sender, text };
+  if (opts.imageId) { message.type = "MMS"; message.imageId = opts.imageId; message.subject = (opts.subject || "안내").slice(0, 40); }
   const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
     method: "POST",
-    headers: {
-      Authorization: `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ messages: [{ to, from: sender, text }] }), // 90바이트 초과 시 LMS 자동 전환(autoTypeDetect 기본)
+    headers,
+    body: JSON.stringify({ messages: [message] }), // 사진 없으면 90바이트 초과 시 LMS 자동 전환(autoTypeDetect 기본)
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`솔라피 발송 실패(${res.status}): ${JSON.stringify(data).slice(0, 200)}`);
@@ -96,8 +107,11 @@ Deno.serve(async (req) => {
     if (!validTarget || !text) return Response.json({ error: "수신처 또는 메시지가 올바르지 않습니다." }, { status: 400, headers: corsHeaders });
 
     if (channel === "sms") {
-      await solapiSend(to, text); // 실패 시 throw → 아래 catch가 오류로 응답
-      return Response.json({ ok: true, provider: "solapi" }, { headers: corsHeaders });
+      // imageBase64(JPG, ≤200KB)가 오면 MMS로 — 사진이 문자에 바로 뜬다
+      const imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64.replace(/^data:image\/\w+;base64,/, "") : "";
+      const imageId = imageBase64 ? await solapiUploadImage(imageBase64) : "";
+      await solapiSend(to, text, imageId ? { imageId, subject: String(body.subject || "") } : {}); // 실패 시 throw → 아래 catch가 오류로 응답
+      return Response.json({ ok: true, provider: "solapi", mms: !!imageId }, { headers: corsHeaders });
     }
     const response = await fetch(webhookUrl, {
       method: "POST",
