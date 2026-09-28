@@ -786,6 +786,20 @@ async function resolveRoomsFor(kind: SendKind, region: string, hasAS: boolean): 
   return [room];
 }
 
+// 여러 방에 같은 글을 쌓고, 이미 게시 대기 중이던 방은 따로 알려준다(봇 수면 중 재전송 → 카톡 중복 게시 방지, 2026-09-28)
+async function queueRooms(rooms: string[], text: string): Promise<{ queued: string[]; pending: string[] }> {
+  const queued: string[] = [];
+  const pending: string[] = [];
+  for (const room of rooms) ((await enqueueOutbox(room, text)) === "pending" ? pending : queued).push(room);
+  return { queued, pending };
+}
+function queueNote(q: { queued: string[]; pending: string[] }): string {
+  const parts: string[] = [];
+  if (q.queued.length) parts.push(`게시 대기: ${q.queued.join(", ")}`);
+  if (q.pending.length) parts.push(`${q.pending.join(", ")}엔 같은 글이 이미 게시 대기 중이라 다시 올리지 않았어요 — 카톡봇이 깨어나면 한 번만 올라갑니다`);
+  return parts.join(" · ");
+}
+
 /**
  * 전송 전 방 매핑 점검 — 고른 방 중 하나라도 매핑이 없으면 "반쪽 전송"이 되므로 아예 시작하지 않는다.
  * 실사고(2026-08-26): 지방(E) 양식은 `점검|E` 매핑이 없어 점검방만 실패하고 AS방만 전송돼, 사용자가 다시 보내야 했다.
@@ -907,8 +921,7 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
         // 자가·부품 신청은 구분이 점검·AS가 아니어도(여분·마감·세팅 등) 신청방 게시는 되어야 한다
         // — 점검/AS 기록 저장만 건너뛴다
         const rooms = await resolveRoomsFor(kind, built.region, false);
-        for (const room of rooms) await enqueueOutbox(room, sendText);
-        return { ok: true, message: `${kind} 요청 게시 대기: ${rooms.join(", ")}` };
+        return { ok: true, message: `${kind} 요청 ${queueNote(await queueRooms(rooms, sendText))}` };
       }
       return { ok: false, error: `구분에 점검/AS가 없어 저장 대상이 아닙니다. (mode=${payload.mode || "?"})` };
     }
@@ -928,10 +941,9 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     // 중복(재전송)이어도 카톡은 항상 게시한다 — 1차 시도가 저장 후 카톡 적재에서 실패하면
     // 재전송이 유일한 복구 수단인데, 예전엔 dup이면 건너뛰어 카톡이 영구 누락됐다.
     // (전송 버튼은 sending 가드로 이중클릭이 막혀 있어 의도적 재전송만 이 경로를 탄다.)
+    // 다만 같은 글이 아직 게시 대기 중(봇 수면)이면 enqueueOutbox가 다시 쌓지 않고 "pending"을 돌려준다.
     const rooms = destination ? await resolveForcedRoom(destination, built.region) : await resolveRoomsFor(kind, built.region, built.hasAS);
-    for (const room of rooms) await enqueueOutbox(room, sendText);
-
-    const dest = rooms.length ? `게시 대기: ${rooms.join(", ")}` : "";
+    const dest = rooms.length ? queueNote(await queueRooms(rooms, sendText)) : "";
     return {
       ok: true,
       message: isExtra
@@ -972,10 +984,10 @@ export async function sendLogisticsForm(form: LogisticsFormState, author: string
     if (!testMode) {
       const map = await getRoomMap(); room = map["물류|*"] || map["납품|*"] || FIXED_ROOM.logistics;
     }
-    // 사용자가 명시적으로 전송했으므로 중복 저장이어도 알림은 보낸다.
-    await enqueueOutbox(room, text);
+    // 사용자가 명시적으로 전송했으므로 중복 저장이어도 알림은 보낸다(같은 글이 아직 대기 중이면 큐가 알아서 한 번만).
+    const queued = await queueRooms([room], text);
     // testMode를 반환해야 호출부(App)의 "!res.testMode" 방문집계 게이트가 동작한다(예전엔 undefined라 항상 통과).
-    return { ok: true, message: `${result === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${room}`, testMode };
+    return { ok: true, message: `${result === "new" ? "저장 완료" : "기존 기록 확인"} — ${queueNote(queued)}`, testMode };
   } catch (e) { return { ok: false, error: (e as Error).message || "네트워크 오류" }; }
 }
 
@@ -1039,8 +1051,7 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
       if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
       return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
     }
-    for (const room of rooms) await enqueueOutbox(room, text);
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — 게시 대기: ${rooms.join(", ")}` };
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — ${queueNote(await queueRooms(rooms, text))}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }

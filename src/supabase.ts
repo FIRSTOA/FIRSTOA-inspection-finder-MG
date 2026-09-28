@@ -329,7 +329,17 @@ export async function getAlbum(id: string): Promise<{ vendor: string; urls: stri
   return rows[0];
 }
 
-export async function enqueueOutbox(room: string, text: string): Promise<void> {
+// 같은 방에 같은 글이 아직 게시 대기 중이면 다시 쌓지 않는다(2026-09-28) — 봇이 잠든 사이 여러 번 누르면 깨어난 뒤 같은 글이 줄줄이 올라갔다.
+// 봇은 보낸 행만 지우므로(gas-and-bot/supabase-outbox-poller.js: 전송 성공분만 DELETE) 남아 있는 행 = 아직 안 나간 글이다.
+export async function enqueueOutbox(room: string, text: string): Promise<"queued" | "pending"> {
+  try {
+    const since = new Date(Date.now() - 6 * 3600_000).toISOString();
+    const dupRes = await fetch(`${REST}/outbox?select=text&room=eq.${encodeURIComponent(room)}&created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=50`, { headers: BASE_HEADERS });
+    if (dupRes.ok) {
+      const rows = await dupRes.json().catch(() => []);
+      if (Array.isArray(rows) && rows.some((r) => String((r as { text?: string }).text || "") === text)) return "pending";
+    }
+  } catch { /* 조회가 안 되면 예전처럼 그냥 쌓는다 */ }
   const res = await fetch(`${REST}/outbox`, {
     method: "POST",
     headers: { ...BASE_HEADERS, Prefer: "return=minimal" },
@@ -339,6 +349,7 @@ export async function enqueueOutbox(room: string, text: string): Promise<void> {
     const t = await res.text().catch(() => "");
     throw new Error(`발신큐 적재 실패(${res.status}): ${t.slice(0, 120)}`);
   }
+  return "queued";
 }
 
 export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint" | "praise" | "reception_copier" | "reception_copier_new" | "reception_remote";

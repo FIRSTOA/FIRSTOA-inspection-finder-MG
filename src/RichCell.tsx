@@ -98,7 +98,8 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     onDoubleClick={() => { if (mode !== "editing") startEdit(); }}
     onKeyDown={onWrapKeyDown}
     onBlur={(e) => { if (mode === "selected" && !wrapRef.current?.contains(e.relatedTarget as Node | null)) setMode("idle"); }}
-    className={`relative cursor-cell outline-none ${mode === "selected" ? "ring-2 ring-inset ring-blue-500" : ""}`} style={{ minHeight }}>
+    data-selected={mode === "selected" ? "" : undefined} // 선택 테두리는 index.css가 칸(td) 전체에 그린다 — 안쪽 상자에 그리면 글 높이만큼만 보였다
+    className="relative cursor-cell outline-none" style={{ minHeight }}>
     {mode !== "idle" && colors && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}

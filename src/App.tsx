@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
+import { parseQuickVendorInput } from "./quickInput";
 import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
 import VendorSearch from "./VendorSearch";
 import AirSearch from "./AirSearch";
@@ -4457,6 +4458,23 @@ export default function App() {
 
   const runTransform = (text: string, m: Mode) => {
     let nextItemForms: PerItemForm[] = [{ ...EMPTY_ITEM_FORM }];
+    // 짧은 수기 입력("오버홀 테스트업체") — 구분·업체명만 채운 빈 양식을 만든다(2026-09-28). 라벨 없는 줄은 점검 탭이 버리고
+    // AS 탭은 등급 접두어가 없으면 업체명을 못 뽑아, 부품신청만 보내려 해도 "업체명을 읽지 못했습니다"에 막혔다.
+    const quick = (m === "inspection" || m === "blank-report") ? parseQuickVendorInput(text) : null;
+    if (quick) {
+      const body = formatPrinterReport({ type: quick.kind, level: quick.kind === "점검" ? "1" : "", grade: "", company: quick.vendor, department: "", region: "", keyman: "", model: "", serial: "", assetNumber: "", content: "", processContent: "" });
+      if (m === "inspection") { setTextOutput(body); setListOutput([]); }
+      else { setListOutput([{ content: body }]); setTextOutput(""); }
+      const parsed = parseItemDataFromText(body, 1);
+      setItemForms(parsed.length ? parsed : [{ ...EMPTY_ITEM_FORM }]);
+      setSelectedItem(0);
+      setEditedBlocks({});
+      // 구분 선택도 맞춘다 — 점검·AS·마감·여분·세팅은 그대로, 오버홀처럼 목록에 없는 말은 기타(직접입력)
+      const known = ["점검", "AS", "마감", "여분", "세팅"];
+      setReportTypes(known.includes(quick.kind) ? [quick.kind] : ["기타"]);
+      setReportTypeOther(known.includes(quick.kind) ? "" : quick.kind);
+      return;
+    }
     if (m === "inspection") {
       const out = transformInspectionText(text);
       setTextOutput(out);
@@ -4826,7 +4844,10 @@ export default function App() {
     showToast(result.message, result.ok ? "success" : "error");
   };
 
-  const [sending, setSending] = useState(false);
+  const [sending, setSendingState] = useState(false);
+  // 연타 방지 — state만으로는 두 번째 클릭이 첫 setSending(true)가 화면에 반영되기 전에 들어와 두 번 전송됐다(같은 초에 방문 2건, 2026-09-28)
+  const sendingRef = useRef(false);
+  const setSending = (v: boolean) => { sendingRef.current = v; setSendingState(v); };
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
@@ -4850,11 +4871,17 @@ export default function App() {
     const text = buildResultText();
     if (!text) { showToast("보낼 내용이 없어요", "error"); return; }
     const isInspection = mode === "inspection" || reportTypes.includes("점검");
+    const self = sectionFilled(text, "※자가신청※");
+    const parts = sectionFilled(text, "※부품신청※");
+    // 구분이 오버홀처럼 직접 입력한 말뿐이고 자가·부품 칸이 차 있으면 신청방만 미리 고른다 — 점검방까지 같이 보내려다
+    // 업체명·지역 검사에 걸려 부품 신청도 못 보냈다(2026-09-28)
+    const mainKnown = reportTypes.some((v) => ["점검", "AS", "마감", "여분", "세팅"].includes(v));
+    const requestOnly = !mainKnown && reportTypes.includes("기타") && Boolean(reportTypeOther.trim()) && (self || parts);
     setSendPicker({
-      inspection: isInspection,
-      as: !isInspection,
-      self: sectionFilled(text, "※자가신청※"),
-      parts: sectionFilled(text, "※부품신청※"),
+      inspection: requestOnly ? false : isInspection,
+      as: requestOnly ? false : !isInspection,
+      self,
+      parts,
     });
   };
   const runSendPicker = async () => {
@@ -5362,7 +5389,7 @@ export default function App() {
       setPhotoPrompt({ kind, destination });
       return false;
     }
-    if (sending) return false;
+    if (sending || sendingRef.current) return false;
     setSending(true);
     showToast(kind === "normal" ? "보내는 중…" : `${kind} 요청 보내는 중…`);
     try {

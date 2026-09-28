@@ -47,10 +47,28 @@ export function weekRange(date = kstDate()): { start: string; end: string } {
   return { start, end: kstDate(d) };
 }
 
+// 재전송 원문에서 사진 앨범 링크 꼬리를 뗀다 — 다시 보낼 때마다 앨범이 새로 만들어져 원문 md5가 달라졌다(2026-09-17 메탈로드 3건)
+export function visitCoreText(sourceText: string): string {
+  return String(sourceText || "").replace(/\n*📷[^\n]*\n+https?:\/\/\S+/g, "").trim();
+}
+export function sameWorkKinds(a: string[], b: string[]): boolean {
+  const norm = (list: string[]) => Array.from(new Set((list || []).map((k) => String(k).trim()).filter(Boolean))).sort().join(",");
+  return norm(a) === norm(b);
+}
+const VISIT_DUP_WINDOW_MS = 30 * 60_000;
+
 export async function saveVisit(draft: VisitDraft, sourceText: string): Promise<"new" | "dup"> {
   if (!draft.vendor.trim() || !draft.author.trim()) return "dup";
   const minutes = Object.fromEntries(Object.entries(draft.minutes).map(([k, v]) => [k, Math.max(0, Number(v) || 0)]));
-  const dup = md5([draft.workDate, draft.author, draft.vendor, sourceText].join("|"));
+  // 중복 방지(2026-09-28): 봇이 잠들어 카톡이 안 올라오면 직원들이 같은 건을 몇 번씩 보낸다 — 그때마다 방문 수치가 올라갔다.
+  // ① 키는 앨범 링크를 뗀 원문으로  ② 같은 날·같은 사람·같은 업체·같은 작업 종류가 30분 안에 이미 있으면 새로 넣지 않는다(글을 조금 고쳐 보내도)
+  const dup = md5([draft.workDate, draft.author, draft.vendor, visitCoreText(sourceText)].join("|"));
+  try {
+    const since = new Date(Date.now() - VISIT_DUP_WINDOW_MS).toISOString();
+    const recent = await selectRows<{ id: string; work_kinds?: string[] }>("visit_logs",
+      `select=id,work_kinds&work_date=eq.${draft.workDate}&author=eq.${encodeURIComponent(draft.author)}&vendor=eq.${encodeURIComponent(draft.vendor.trim())}&status=neq.cancelled&created_at=gte.${encodeURIComponent(since)}&limit=20`);
+    if (recent.some((r) => sameWorkKinds(r.work_kinds || [], draft.workKinds))) return "dup";
+  } catch { /* 조회가 안 되면 예전처럼 md5 키로만 막는다 */ }
   const row: Record<string, unknown> = {
     work_date: draft.workDate, author: draft.author, vendor: draft.vendor.trim(), visited: draft.visited,
     arrival_time: draft.arrivalTime || null, machine_count: Math.max(0, Number(draft.machineCount) || 0),
