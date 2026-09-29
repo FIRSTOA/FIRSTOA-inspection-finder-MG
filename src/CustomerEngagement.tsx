@@ -4,7 +4,7 @@ import { getTeamVisits, kstDate, WORK_LABELS, type VisitRow } from "./visits";
 import { insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
 import FormModal from "./FormModal";
 
-type Contact = { id: string; name: string; phone: string; email: string; selected: boolean };
+type Contact = { id: string; name: string; phone: string; email: string; selected: boolean; vendor?: string };
 type HappycallStatus = "pending" | "scheduled" | "sent" | "failed" | "skip" | "cancelled";
 type HappycallRecord = { visit_id: string; author: string; recipient: string; keyman: string; message: string; recipients?: Contact[]; job_ids?: string[]; scheduled_at?: string; status: HappycallStatus; sent_at?: string; error?: string };
 type MessageTemplate = { id: string; context: "happycall" | "promotion" | "quarter_notice"; title: string; body: string; active: boolean; created_by: string };
@@ -402,16 +402,33 @@ async function materialToMmsJpeg(material: PromoMaterial): Promise<string | null
 }
 
 export function PromoWorkspace({ author }: { author: string }) {
-  const [materials, setMaterials] = useState<PromoMaterial[]>([]); const [visits, setVisits] = useState<VisitRow[]>([]); const [selectedId, setSelectedId] = useState(""); const [sourceVisitId, setSourceVisitId] = useState(""); const [visitPickerOpen, setVisitPickerOpen] = useState(false);
+  const [materials, setMaterials] = useState<PromoMaterial[]>([]); const [visits, setVisits] = useState<VisitRow[]>([]); const [selectedId, setSelectedId] = useState(""); const [pickedVisitIds, setPickedVisitIds] = useState<string[]>([]); const [visitMine, setVisitMine] = useState(true); const [visitKind, setVisitKind] = useState<"all" | "inspection" | "as">("all"); const [visitQuery, setVisitQuery] = useState(""); const [visitDays, setVisitDays] = useState<30 | 90>(30);
   const [contacts, setContacts] = useState<Contact[]>([newContact()]); const [message, setMessage] = useState(""); const [category, setCategory] = useState("전체"); const [materialQuery, setMaterialQuery] = useState(""); const [uploadOpen, setUploadOpen] = useState(false);
   const [title, setTitle] = useState(""); const [uploadCategory, setUploadCategory] = useState(promoCategories[0]); const [description, setDescription] = useState(""); const [file, setFile] = useState<File | null>(null); const [uploading, setUploading] = useState(false); const [notice, setNotice] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
   const reload = () => selectRows<PromoMaterial>("promo_materials", "select=*&active=eq.true&order=created_at.desc").then(setMaterials).catch((error) => setNotice((error as Error).message));
-  useEffect(() => { void reload(); void getTeamVisits(dateBefore(30), kstDate()).then((rows) => setVisits(rows.filter((visit) => visit.visited).reverse())); }, []);
-  const visible = materials.filter((item) => (category === "전체" || item.category === category) && (!materialQuery.trim() || item.title.includes(materialQuery.trim()) || item.description.includes(materialQuery.trim()))); const selected = materials.find((item) => item.id === selectedId); const sourceVisit = visits.find((visit) => visit.id === sourceVisitId);
-  const chooseVisit = (id: string) => { setSourceVisitId(id); setVisitPickerOpen(false); const visit = visits.find((item) => item.id === id); if (!visit) { setContacts([newContact()]); return; } const found = extractVisitContacts(visit.sourceText || visit.note); setContacts(found.length ? found : [newContact()]); setNotice(found.length ? `${visit.vendor} 고객 ${found.length}명을 불러왔습니다.` : "연락처를 찾지 못했습니다. 직접 입력해 주세요."); };
+  useEffect(() => { void reload(); }, []);
+  useEffect(() => { void getTeamVisits(dateBefore(visitDays), kstDate()).then((rows) => setVisits(rows.filter((visit) => visit.visited).reverse())); }, [visitDays]);
+  const visible = materials.filter((item) => (category === "전체" || item.category === category) && (!materialQuery.trim() || item.title.includes(materialQuery.trim()) || item.description.includes(materialQuery.trim()))); const selected = materials.find((item) => item.id === selectedId);
+  // 방문 목록: 내가 간 곳(기본)·점검/AS·검색. 고른 방문들의 키맨 연락처를 모아 아래 연락처 칸에 넣는다(번호 중복 제거, 손으로 넣은 것은 유지)
+  const contactsOfVisit = (visit: VisitRow): Contact[] => extractVisitContacts(visit.sourceText || visit.note).map((contact) => ({ ...contact, vendor: visit.vendor }));
+  const contactCount = useMemo(() => new Map(visits.map((visit) => [visit.id, extractVisitContacts(visit.sourceText || visit.note).length])), [visits]);
+  const visitList = visits.filter((visit) => (!visitMine || visit.author === author) && (visitKind === "all" || visit.workKinds.includes(visitKind)) && (!visitQuery.trim() || visit.vendor.includes(visitQuery.trim())));
+  const pickedVisits = visits.filter((visit) => pickedVisitIds.includes(visit.id));
+  const togglePickVisit = (id: string) => {
+    const next = pickedVisitIds.includes(id) ? pickedVisitIds.filter((item) => item !== id) : [...pickedVisitIds, id];
+    setPickedVisitIds(next);
+    const manual = contacts.filter((contact) => !contact.vendor && (contact.name || contact.phone || contact.email));
+    const seen = new Set<string>(); const found: Contact[] = [];
+    for (const visit of visits.filter((item) => next.includes(item.id))) for (const contact of contactsOfVisit(visit)) { const key = contact.phone || contact.email || contact.name; if (!key || seen.has(key)) continue; seen.add(key); found.push(contact); }
+    const merged = [...found, ...manual];
+    setContacts(merged.length ? merged : [newContact()]);
+    const visit = visits.find((item) => item.id === id);
+    if (visit && next.includes(id)) setNotice(contactCount.get(id) ? `${visit.vendor} 연락처 ${contactCount.get(id)}건을 넣었습니다. 모두 ${found.length}명.` : `${visit.vendor}: 양식에 연락처가 없어 직접 넣어야 합니다.`);
+  };
+  const pill = (on: boolean, onClick: () => void, label: string) => <button type="button" onClick={onClick} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${on ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500 hover:text-slate-900"}`}>{label}</button>;
   const upload = async () => { if (!file || !title.trim()) return; if (!/^(image\/|application\/pdf)/.test(file.type)) return setNotice("이미지 또는 PDF만 등록할 수 있습니다."); setUploading(true); try { const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_"); const url = await uploadPublicFile("promo-materials", `${new Date().getFullYear()}/${crypto.randomUUID()}-${safe}`, file, file.type); await insertRow("promo_materials", { title: title.trim(), category: uploadCategory, description: description.trim(), file_url: url, file_type: file.type, active: true, created_by: author, _dupKey: crypto.randomUUID() }); setUploadOpen(false); setTitle(""); setDescription(""); setFile(null); await reload(); } catch (error) { setNotice((error as Error).message); } finally { setUploading(false); } };
   const removeMaterial = async () => { if (!selected || !await askConfirm(`${selected.title} 게시물을 삭제할까요?`)) return; await updateRows("promo_materials", `id=eq.${encodeURIComponent(selected.id)}`, { active: false }); setSelectedId(""); await reload(); };
-  const promoTokens = (_contact: Contact) => ({ 고객명: "고객", 업체명: sourceVisit?.vendor || "", 담당자: author, 자료명: selected?.title || "", 자료설명: selected?.description || "", 자료링크: selected?.file_url || "" });
+  const promoTokens = (contact: Contact) => ({ 고객명: contact.name || "고객", 업체명: contact.vendor || pickedVisits[0]?.vendor || "", 담당자: author, 자료명: selected?.title || "", 자료설명: selected?.description || "", 자료링크: selected?.file_url || "" });
   // 문자는 사진을 붙여(MMS) 보낸다 — 이미지·PDF 1쪽을 200KB JPG로 줄여 솔라피에 올린 뒤 발송. 준비가 안 되면 링크 문자로 간다(2026-09-26 요청)
   const send = async (channel: "sms" | "email") => {
     if (!selected) return;
@@ -433,15 +450,23 @@ export function PromoWorkspace({ author }: { author: string }) {
     <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black text-blue-600">{selected.category}</div><div className="mt-1 text-lg font-black">{selected.title}</div></div><button onClick={() => void removeMaterial()} className="rounded-full border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">삭제</button></div>
     <div className="mt-3 max-h-[480px] overflow-y-auto rounded-lg border bg-slate-100"><MaterialPreview material={selected} /></div>
     <div className="mt-4 text-xs font-black text-slate-500">
-      최근 방문 업체
-      <button type="button" onClick={() => setVisitPickerOpen((current) => !current)} className="mt-1 flex w-full items-center justify-between gap-3 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-800">
-        <span className="min-w-0 truncate">{sourceVisit ? `${sourceVisit.workDate} · ${sourceVisit.vendor} · ${visitType(sourceVisit)}` : "직접 입력"}</span>
-        <span className="shrink-0 text-slate-400">{visitPickerOpen ? "▲" : "▼"}</span>
-      </button>
-      {visitPickerOpen && <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-        <button type="button" onClick={() => chooseVisit("")} className={`block w-full rounded px-3 py-2.5 text-left text-sm font-bold ${!sourceVisitId ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>직접 입력</button>
-        {visits.map((visit) => <button type="button" key={visit.id} onClick={() => chooseVisit(visit.id)} className={`block w-full rounded px-3 py-2.5 text-left ${sourceVisitId === visit.id ? "bg-blue-50" : "hover:bg-slate-50"}`}><span className="block truncate text-sm font-black text-slate-900">{visit.vendor}</span><span className="mt-0.5 block text-[11px] font-bold text-slate-500">{visit.workDate} · {visitType(visit)}</span></button>)}
-      </div>}
+      <div className="flex flex-wrap items-center justify-between gap-2"><span>최근 방문 업체 <span className="font-semibold text-slate-400">· 고른 곳의 키맨 연락처가 아래에 모입니다</span></span>{pickedVisitIds.length > 0 && <button type="button" onClick={() => { setPickedVisitIds([]); setContacts([newContact()]); }} className="text-[11px] font-bold text-blue-700 hover:underline">{pickedVisitIds.length}곳 선택 · 모두 해제</button>}</div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {pill(visitMine, () => setVisitMine(true), "내 방문")}{pill(!visitMine, () => setVisitMine(false), "전체")}
+        <span className="mx-0.5 h-3.5 w-px bg-slate-200" />
+        {pill(visitKind === "all", () => setVisitKind("all"), "점검+AS")}{pill(visitKind === "inspection", () => setVisitKind("inspection"), "점검")}{pill(visitKind === "as", () => setVisitKind("as"), "AS")}
+        <span className="mx-0.5 h-3.5 w-px bg-slate-200" />
+        {pill(visitDays === 30, () => setVisitDays(30), "30일")}{pill(visitDays === 90, () => setVisitDays(90), "90일")}
+        <input value={visitQuery} onChange={(event) => setVisitQuery(event.target.value)} placeholder="업체 검색" className="ml-auto w-28 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold outline-none focus:border-slate-400" />
+      </div>
+      <div className="mt-2 max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+        {!visitList.length && <div className="px-3 py-6 text-center text-[11px] font-semibold text-slate-400">조건에 맞는 방문이 없습니다. 아래 연락처 칸에 직접 넣어도 됩니다.</div>}
+        {visitList.map((visit) => { const on = pickedVisitIds.includes(visit.id); const n = contactCount.get(visit.id) || 0; return <button type="button" key={visit.id} onClick={() => togglePickVisit(visit.id)} className={`grid w-full grid-cols-[18px_1fr_auto] items-center gap-2.5 px-3 py-2 text-left ${on ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+          <span className={`grid h-[18px] w-[18px] place-items-center rounded border text-[11px] font-black ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span>
+          <span className="min-w-0"><span className="block truncate text-[13px] font-black text-slate-900">{visit.vendor}</span><span className="block text-[11px] font-bold text-slate-500">{visit.workDate} · {visitType(visit)}{!visitMine && visit.author ? ` · ${visit.author}` : ""}</span></span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${n ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{n ? `연락처 ${n}` : "연락처 없음"}</span>
+        </button>; })}
+      </div>
     </div>
     <div className="mt-3"><ContactsEditor contacts={contacts} onChange={setContacts} email /></div>
     <div className="mt-4"><TemplateBar context="promotion" author={author} body={message} onApply={setMessage} preferredTitle="자료 안내형" applyRevision={selected.id} /></div>
