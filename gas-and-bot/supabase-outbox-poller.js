@@ -1,25 +1,25 @@
 /**
- * 메신저봇R(릴리즈 41) "점검AS" - Supabase outbox 폴링 → 지역별 방에 자동 게시.
+ * 메신저봇R "점검AS" - Supabase outbox 폴링 → 지역별 방에 자동 게시.
  * ★ 이 파일이 봇 폰 실물과 같은 기준본 — 통짜 붙여넣기로 교체한다.
  *
  *  흐름:
- *   - pull  : GET  /rest/v1/outbox?select=id,room,text&order=created_at.asc
+ *   - pull  : GET  /rest/v1/outbox?select=id,room,text,created_at&order=created_at.asc
  *   - send  : bot.send(room, text) → 실패 시 세션답장 폴백(방별 최근 수신 메시지 reply)
  *   - ack   : DELETE /rest/v1/outbox?id=in.(...)  ← 전송 성공분만 삭제(무유실)
  *   - "봇테스트" 수신 시 "봇 살아있음 OK" 응답(상시 헬스체크)
  *
- *  2026-09-10 갱신:
- *   ① sentIds — 보냈는데 삭제(ack)만 실패한 메시지 기억 → 재발송 방지(포스터 2번 발송 수리)
- *   ② reportSeen — 방에 사람 메시지가 오면 room_activity에 보고(30분에 1번) →
- *      심박 크론이 "20시간 조용한 방"에만 봇 줄을 보냄 = 활발한 방엔 아침 봇 메시지 없음
- *  2026-09-29 갱신(크래시 → 봇 저절로 꺼짐 수리):
- *   ③ 폴링은 inspPoller 스레드 한 곳에서만. 메시지 수신(onMessage)이 pollOnce를 직접 부르던 것을 없애고
+ *  2026-09-29 (크래시 → 봇 저절로 꺼짐 수리):
+ *   ① 폴링은 inspPoller 스레드 한 곳에서만. 메시지 수신(onMessage)이 pollOnce를 직접 부르던 것을 없애고
  *      깨우기 신호(wakePoll)만 준다 — 두 스레드가 동시에 JS를 돌리면 GraalJS 내부 오류
  *      (ArrayIndexOutOfBoundsException: join 스택 pop index=-1)로 CrashLog가 뜨고 봇이 꺼졌다.
- *   ④ 스레드 사이 JS 실행을 자물쇠(ReentrantLock)로 줄 세운다. HTTP 통신(자바)은 자물쇠 밖에서.
- *   ⑤ 배열 join 대신 문자열 더하기 — join이 그 내부 오류의 진원지였다.
- *   ⑥ 세션 없는 방(재컴파일 뒤 그 방에서 받은 메시지 0건)은 10분에 1번만 재시도·로그 —
+ *   ② 스레드 사이 JS 실행을 자물쇠(ReentrantLock)로 줄 세운다. HTTP 통신(자바 Jsoup)은 자물쇠 밖에서.
+ *   ③ 배열 join 대신 문자열 더하기 — join이 그 내부 오류의 진원지였다.
+ *   ④ 세션 없는 방(재컴파일 뒤 그 방에서 받은 메시지 0건)은 10분에 1번만 재시도·로그 —
  *      같은 [전송실패] 토스트가 7초마다 뜨던 것. 그 방에서 메시지가 오면 바로 다시 보낸다.
+ *   ⑤ 12시간 지난 심박("🤖 … 카톡봇 대기 중")은 보내지 않고 지운다.
+ *   ⑥ sentIds — 보냈는데 삭제(ack)만 실패한 글 기억 → 두 번 올라가지 않게.
+ *   ⑦ 방 활동 보고(room_activity, 30분에 1번) — 심박 크론이 조용한 방에만 봇 줄을 보내게. 폴링 스레드가 보낸다.
+ *   WakeLock 코드는 폰에서 검증된 그대로(App.getContext → xfl → Api 순, "power", 1=PARTIAL_WAKE_LOCK).
  */
 
 // ===================== 설정 =====================
@@ -34,13 +34,15 @@ const bot = BotManager.getCurrentBot();
 var wakePoll = false;
 var lastPull = 0;
 var sessions = {};   // 방별 최근 메시지 세션 — bot.send 실패 시 이걸로 답장
-var sentIds = {};    // 보냈는데 삭제만 실패한 메시지 기억 — 재발송 방지
+var sentIds = {};    // 보냈는데 삭제만 실패한 글 기억 — 재발송 방지
 var sentOrder = [];
+var _seenQueue = {}; // 메시지가 온 방 — 폴링 스레드가 room_activity에 보고
 var _seenAt = {};    // 방별 활동 보고 스로틀 (30분)
 var _failedAt = {};  // 방(공백 제거)별 마지막 전송 실패 시각 — 세션 없는 방은 RETRY_MS마다 1번만
 var _polling = false;
 var _lock = new java.util.concurrent.locks.ReentrantLock(); // 스레드 사이 JS 실행 줄 세우기
 
+function nowMs() { return java.lang.System.currentTimeMillis(); }
 function roomKey(room) { return String(room || "").replace(/\s+/g, ""); }
 function joinStr(arr, sep) { var s = ""; for (var i = 0; i < arr.length; i++) s += (i ? sep : "") + arr[i]; return s; }
 function withLock(fn) {
@@ -53,27 +55,27 @@ var _wakeLock = null;
 function acquireWakeLock() {
   if (_wakeLock !== null) { try { if (_wakeLock.isHeld()) return; } catch (e) {} }
   var ctx = null;
-  try { ctx = com.xfl.msgbot.application.MainApplication.Companion.getContext(); } catch (e) {}
+  try { ctx = App.getContext(); } catch (e) {}                                              // 메신저봇R
+  if (!ctx) { try { ctx = com.xfl.msgbot.application.MainApplication.Companion.getContext(); } catch (e) {} } // 구앱(xfl)
   if (!ctx) { try { ctx = Api.getContext(); } catch (e) {} }
   if (!ctx) { Log.i("[WakeLock] 컨텍스트 못 얻음 → 화면 켜두기 필요"); return; }
   try {
-    var pm = ctx.getSystemService(android.content.Context.POWER_SERVICE);
-    _wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "firstoa:poller");
+    var pm = ctx.getSystemService("power");          // Context.POWER_SERVICE = "power"
+    _wakeLock = pm.newWakeLock(1, "firstoa:poller"); // 1 = PARTIAL_WAKE_LOCK
     _wakeLock.setReferenceCounted(false);
     _wakeLock.acquire();
     Log.i("[WakeLock] 획득 — CPU 유지");
   } catch (e) { Log.e("[WakeLock] 실패: " + e); }
 }
 
-// 방 활동 보고 — 사람 메시지가 있는 방은 심박(아침 봇 줄) 대상에서 빠진다.
-// 방마다 30분에 1번만 보내므로 트래픽·배터리 부담 없음. 실패해도 무시(심박이 예전처럼 돌 뿐).
+// 방 활동 보고 — 사람 메시지가 있는 방은 심박(아침 봇 줄) 대상에서 빠진다. 방마다 30분에 1번. 실패해도 무시.
 function reportSeen(room) {
   try {
     if (!room) return;
     var key = String(room);
-    var nowMs = java.lang.System.currentTimeMillis();
-    if (_seenAt[key] && nowMs - _seenAt[key] < 30 * 60 * 1000) return;
-    _seenAt[key] = nowMs;
+    var t = nowMs();
+    if (_seenAt[key] && t - _seenAt[key] < 30 * 60 * 1000) return;
+    _seenAt[key] = t;
     org.jsoup.Jsoup.connect(REST + "/room_activity")
       .header("apikey", SUPABASE_ANON)
       .header("Authorization", "Bearer " + SUPABASE_ANON)
@@ -85,19 +87,23 @@ function reportSeen(room) {
       .execute();
   } catch (e) {}
 }
+function flushSeen() { // 폴링 스레드에서 — 알림 스레드(onMessage)는 통신을 하지 않는다
+  var rooms = withLock(function () { var out = []; for (var k in _seenQueue) out.push(k); _seenQueue = {}; return out; }) || [];
+  for (var i = 0; i < rooms.length; i++) { try { reportSeen(rooms[i]); } catch (e) {} }
+}
 
 function onMessage(msg) {
   var room = String(msg.room);
   withLock(function () {
     Log.i("[방인식] '" + room + "' (" + room.length + "자)");
     sessions[room] = msg;
+    _seenQueue[room] = true;
     if (_failedAt[roomKey(room)]) delete _failedAt[roomKey(room)]; // 이 방 세션이 생겼다 — 밀린 글 바로 시도
     if (msg.content == "봇테스트") {
       try { Log.i("[에코] " + msg.reply("봇 살아있음 OK")); } catch (e) { Log.e("[에코실패] " + e); }
     }
   });
   wakePoll = true; // 폴링 스레드를 깨운다 — 여기서 pollOnce를 직접 부르지 않는다(스레드 충돌 방지)
-  try { reportSeen(room); } catch (e) {}
 }
 bot.addListener(Event.MESSAGE, onMessage);
 
@@ -132,7 +138,7 @@ function pollOnce() {
   if (_polling) return; // 겹침 방지
   _polling = true;
   try {
-    lastPull = java.lang.System.currentTimeMillis();
+    lastPull = nowMs();
     var body;
     try { body = httpGet("/outbox?select=id,room,text,created_at&order=created_at.asc"); }
     catch (e) { Log.e("[폴링] 서버 접속 실패: " + e); return; }
@@ -141,15 +147,16 @@ function pollOnce() {
       try { items = JSON.parse(body); } catch (e) { Log.e("[폴링] 응답 해석 실패: " + e); return []; }
       if (!items || !items.length) return [];
       var done = [];
-      var nowMs = java.lang.System.currentTimeMillis();
+      var t = nowMs();
       for (var i = 0; i < items.length; i++) {
         var it = items[i];
         if (sentIds[it.id]) { done.push(it.id); continue; } // 이미 보낸 것 — 삭제만 다시
-        // 하루 지난 심박("🤖 … 카톡봇 대기 중")은 보낼 의미가 없다 — 보내지 않고 지운다(세션 없는 방에 며칠씩 쌓여 실패 로그만 냈다)
-        var ageMs = nowMs - (Date.parse(String(it.created_at || "")) || nowMs);
+        // 12시간 지난 심박은 보낼 의미가 없다 — 보내지 않고 지운다(세션 없는 방에 며칠씩 쌓여 실패 로그만 냈다)
+        var created = Date.parse(String(it.created_at || "").replace(/(\.\d{3})\d+/, "$1"));
+        var ageMs = created ? t - created : 0;
         if (/^🤖/.test(String(it.text || "")) && ageMs > 12 * 60 * 60 * 1000) { done.push(it.id); Log.i("[심박 폐기] " + it.room); continue; }
         var rk = roomKey(it.room);
-        if (_failedAt[rk] && nowMs - _failedAt[rk] < RETRY_MS) continue; // 세션 없는 방 — 10분 뒤에(또는 그 방 메시지가 오면) 다시
+        if (_failedAt[rk] && t - _failedAt[rk] < RETRY_MS) continue; // 세션 없는 방 — 10분 뒤에(또는 그 방 메시지가 오면) 다시
         var r = false;
         try { r = bot.send(it.room, it.text); } catch (e) { Log.e("[전송오류] " + e); }
         if (r !== true) {
@@ -165,7 +172,7 @@ function pollOnce() {
           delete _failedAt[rk];
           done.push(it.id); Log.i("[게시] " + it.room);
         } else {
-          _failedAt[rk] = nowMs;
+          _failedAt[rk] = t;
           var names = ""; var n = 0;
           for (var k in sessions) names += (n++ ? ", " : "") + "'" + k + "'";
           Log.e("[전송실패] '" + it.room + "' — 재컴파일 뒤 이 방에서 받은 메시지가 없어 못 보냄. 그 방에 누가 글을 쓰면 바로 보냅니다(10분마다도 재시도). 보유 세션: " + (names || "없음"));
@@ -191,6 +198,7 @@ function startPolling() {
     while (true) {
       try { acquireWakeLock(); } catch (e) {}
       try { pollOnce(); } catch (e) { try { Log.e("[폴링 오류] " + e); } catch (e2) {} }
+      try { flushSeen(); } catch (e) {}
       var waited = 0;
       while (waited < POLL_INTERVAL) {
         if (wakePoll) { wakePoll = false; break; }
