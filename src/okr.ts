@@ -296,9 +296,54 @@ export async function listOkrCycles(): Promise<OkrCycle[]> {
   const rows = await selectRows<CycleRow>("okr_cycles", "select=*&order=start_date.desc,kind.asc&limit=300");
   return rows.map(toCycle);
 }
-export async function getOkrReports(cycleId: string): Promise<OkrReport[]> {
-  const rows = await selectRows<OkrReport>("okr_reports", `select=*&cycle_id=eq.${encodeURIComponent(cycleId)}&order=team.asc,member.asc`);
+export async function getOkrCycle(id: string): Promise<OkrCycle | null> {
+  const rows = await selectRows<CycleRow>("okr_cycles", `select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
+  return rows.length ? toCycle(rows[0]) : null;
+}
+// member를 주면 그 사람(''=파트 종합 행들)만
+export async function getOkrReports(cycleId: string, member?: string): Promise<OkrReport[]> {
+  const who = member === undefined ? "" : `&member=eq.${encodeURIComponent(member)}`;
+  const rows = await selectRows<OkrReport>("okr_reports", `select=*&cycle_id=eq.${encodeURIComponent(cycleId)}${who}&order=team.asc,member.asc`);
   return rows.map(toReport);
+}
+export async function getOkrReport(cycleId: string, team: string, member: string): Promise<OkrReport | null> {
+  const rows = await selectRows<OkrReport>("okr_reports", `select=*&cycle_id=eq.${encodeURIComponent(cycleId)}&team=eq.${encodeURIComponent(team)}&member=eq.${encodeURIComponent(member || "")}&limit=1`);
+  return rows.length ? toReport(rows[0]) : null;
+}
+
+// ── 3자 병합(2026-09-29): base = 마지막으로 서버와 맞춘 값, local = 내 화면, server = 지금 서버.
+// 여러 사람이 같은 달·주차를 동시에 적는다(팀원은 자기 행, 파트장은 종합·목표). 통째로 덮어쓰면 남이 적은 칸이 사라지므로
+// 내가 base에서 고친 칸만 내 것으로 쓰고, 안 고친 칸은 서버 것을 따른다.
+const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+export function mergeGoals(base: OkrGoal[], local: OkrGoal[], server: OkrGoal[]): OkrGoal[] {
+  if (same(local, base)) return server;
+  if (same(server, base)) return local;
+  const nos = (gs: OkrGoal[]) => gs.map((g) => g.no).join(",");
+  if (nos(local) !== nos(base) || nos(server) !== nos(base)) return local; // 번호 구조가 어긋나면(삽입·삭제) 합칠 수 없다 — 내 것
+  return local.map((g, i) => (same(g, base[i]) ? server[i] : g));
+}
+export function mergeFeedback(base: Record<string, OkrFeedback>, local: Record<string, OkrFeedback>, server: Record<string, OkrFeedback>): Record<string, OkrFeedback> {
+  const out: Record<string, OkrFeedback> = {};
+  for (const k of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(server)])) {
+    const v = same(local[k], base[k]) ? server[k] : local[k];
+    if (v) out[k] = v;
+  }
+  return out;
+}
+export function mergeCycle(base: OkrCycle, local: OkrCycle, server: OkrCycle): OkrCycle {
+  return { ...local, title: local.title !== base.title ? local.title : server.title, goals: mergeGoals(base.goals, local.goals, server.goals), feedback: mergeFeedback(base.feedback || {}, local.feedback || {}, server.feedback || {}) };
+}
+export function mergeReport(base: OkrReport, local: OkrReport, server: OkrReport): OkrReport {
+  const header = { ...local.header };
+  for (const k of Object.keys(header) as (keyof OkrHeader)[]) if (local.header[k] === base.header[k]) header[k] = server.header[k];
+  const nos = [...new Set([...base.rows, ...local.rows, ...server.rows].map((r) => r.no))].sort((a, b) => a - b);
+  const rows = nos.map((no) => {
+    const l = local.rows.find((r) => r.no === no); const b = base.rows.find((r) => r.no === no); const sv = server.rows.find((r) => r.no === no);
+    return same(l, b) ? sv || l : l;
+  }).filter((r): r is OkrResultRow => !!r);
+  const goals = same(local.goals, base.goals) ? server.goals : local.goals;
+  const feedback = mergeFeedback(base.feedback || {}, local.feedback || {}, server.feedback || {});
+  return { ...local, header, rows, goals: goals?.length ? goals : undefined, feedback: Object.keys(feedback).length ? feedback : undefined };
 }
 export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
   await upsertRow("okr_cycles", {

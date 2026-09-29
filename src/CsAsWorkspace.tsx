@@ -1261,12 +1261,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const mine = todays.filter((ticket) => assigneeOf(ticket) === name);
       if (mine.length) {
         if (groups.length) groups.push("");   // 이름 사이 빈 줄 — 카톡에서 사람별로 끊어 읽힌다
-        groups.push(`#${name}`, ...mine.map(lineOf));
+        groups.push(`#${name}`, ...mine.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
       }
     }
     if (unassigned.length) {
       if (groups.length) groups.push("");
-      groups.push("#미배정", ...unassigned.map(lineOf));
+      groups.push("#미배정", ...unassigned.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
     }
     if (day === "next") {
       // 익일스케줄 보고 — 내일 일정만, 미배정 포함 전부. 퇴근 전에 보내는 별도 보고(2026-08-28 요청)
@@ -1362,7 +1362,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           const mine = pending.filter((entry) => entry.name === name);
           if (mine.length) {
             if (groups.length) groups.push("");   // 이름 사이 빈 줄
-            groups.push(`#${name}`, ...mine.map(() => `•${res.lines[index++]}`));
+            groups.push(`#${name}`, ...mine.flatMap((entry) => (day === "next" ? [`•${res.lines[index++]}`, ...reportDetailOf(entry.ticket)] : [`•${res.lines[index++]}`])));
           }
         }
         const tomorrowLines = [
@@ -1455,6 +1455,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     push("키맨", field(/키맨성함\/번호[\t ]*([^\t\n]*)/).replace(PHONE_RE, "").replace(/[()]/g, ""), field(/키맨성함\/번호[\t ]*([^\t\n]*)/));
     push("일반전화", "", field(/일반전화[\t ]*([^\t\n]*)/));
     return out;
+  };
+  // 익일 스케줄 보고 — 각 건 아래 연락처·주소 줄(2026-09-29 요청). 전화는 접수자→키맨 순 최대 2개(번호가 없으면 접수자 글 그대로), 주소는 원문
+  const reportDetailOf = (t: AsTicket): string[] => {
+    const phones = phonesOf(t).slice(0, 2).map((p) => `${p.name ? `${p.name} ` : ""}${p.number}`).join(" / ");
+    const contact = phones || String(t.contact || "").replace(/\s+/g, " ").trim().slice(0, 30);
+    const addr = String(t.address || "").replace(/\s+/g, " ").trim();
+    return [contact ? `  ☎ ${contact}` : "", addr ? `  📍 ${addr}` : ""].filter(Boolean);
   };
 
   /** 통화 버튼 — 번호가 하나면 바로 연결, 접수자·키맨이 둘 다 있으면 골라 걸도록 (잘못된 상대에게 걸리지 않게) */

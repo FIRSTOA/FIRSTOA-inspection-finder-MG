@@ -31,10 +31,13 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   const wanted = html || textToHtml(text);
   useEffect(() => {
     const el = ref.current;
-    if (!el || wanted === lastRef.current) return;
+    // 읽기전용(팀원 칸)으로 그리는 동안엔 편집 상자가 없다 — 파트 종합으로 돌아와 상자가 새로 생기면 글이 같아도 다시 그린다
+    // (같은 글이라 건너뛰어서 목표·달성기준 칸이 빈 채로 보였다, 2026-09-29)
+    if (!el) { lastRef.current = null; return; }
+    if (wanted === lastRef.current) return;
     el.innerHTML = wanted;
     lastRef.current = wanted;
-  }, [wanted]);
+  }, [wanted, readOnly]);
   const minHeight = `${minRows * 1.25 + 0.75}rem`;
 
   if (readOnly) {
