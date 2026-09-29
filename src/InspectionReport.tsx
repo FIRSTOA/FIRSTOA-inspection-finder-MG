@@ -118,14 +118,15 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
         const content = kind === "as" ? (contents[d.index] ?? d.content) : "";
         const verdict = lows.length ? "토너 교체 필요" : wasteLow(d.waste) ? "폐토너통 교체 예정" : kind === "as" ? "처리 완료" : "이상 없음";
         const alert = lows.length > 0 || wasteLow(d.waste);
-        return <div key={d.index} className="grid gap-5">
-          <div style={{ borderBottom: `1px solid ${line}` }} className="grid grid-cols-[1fr_auto] items-center gap-3 pb-4 pt-4">
+        return <div key={d.index} style={multi ? { border: `2px solid ${line}`, borderRadius: 18, overflow: "hidden", marginTop: 6 } : undefined} className={multi ? "grid gap-5 pb-5" : "grid gap-5"}>
+          <div style={multi ? { background: panel, borderBottom: `1px solid ${line}` } : { borderBottom: `1px solid ${line}` }} className={multi ? "grid grid-cols-[1fr_auto] items-center gap-3 px-5 py-3.5" : "grid grid-cols-[1fr_auto] items-center gap-3 pb-4 pt-4"}>
             <div>
-              <div className="text-[22px] font-bold tracking-tight">{multi && <span style={{ background: accentSoft, color: accent }} className="mr-2 rounded-full px-2.5 py-0.5 align-middle text-[12px] font-black">{d.index}호기</span>}{d.model || "복합기"}</div>
+              <div className="text-[22px] font-bold tracking-tight">{multi && <span style={{ background: "#1e252f", color: "#fff" }} className="mr-2.5 rounded-full px-3 py-0.5 align-middle text-[12px] font-black">{d.index}호기</span>}{d.model || "복합기"}</div>
               <div style={{ color: ink2 }} className="mt-1 flex flex-wrap gap-x-3.5 text-[13px]">{d.asset && <span>관리번호 {d.asset}</span>}{d.serial && <span>S/N {d.serial}</span>}</div>
             </div>
             <div style={{ color: ink3 }} className="text-right text-[12px]">{kind === "as" ? "처리 결과" : "점검 결과"}<b style={{ color: alert ? warn : ink }} className="block text-[18px] font-bold">{verdict}</b></div>
           </div>
+          <div className={multi ? "grid gap-5 px-5" : "grid gap-5"}>
           {kind === "as" && content && <div className="grid gap-2.5">
             <H>접수 내용</H>
             <div style={{ background: panel, color: ink }} className="whitespace-pre-wrap rounded-[14px] px-4 py-3.5 text-[14px] leading-relaxed">{content}</div>
@@ -171,6 +172,7 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
             <H>오늘 조치</H>
             <ul className="m-0 grid list-none gap-2 p-0">{acts.map((a, i) => <Check key={i}>{a}</Check>)}{d.note && <Check warnMark>확인 사항: {d.note}</Check>}</ul>
           </div>}
+          </div>
         </div>;
       })}
       {footer}
