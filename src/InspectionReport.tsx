@@ -74,7 +74,7 @@ async function renderCard(node: HTMLElement): Promise<{ mms: string; full: Blob 
 }
 
 // ── 리포트 카드(고객이 받는 그림 그대로). 색은 이미지라 고정값 ──
-function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents, cardRef }: { kind: Kind; data: ReportData; prev: ReportData | null; prevDate: string; date: string; author: string; notes: Texts; contents: Texts; cardRef: React.RefObject<HTMLDivElement | null> }) {
+function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents, kakaoUrl, cardRef }: { kind: Kind; data: ReportData; prev: ReportData | null; prevDate: string; date: string; author: string; notes: Texts; contents: Texts; kakaoUrl: string; cardRef: React.RefObject<HTMLDivElement | null> }) {
   const month = Number(date.slice(5, 7));
   const multi = data.devices.length >= 2; // 여러 대도 1대와 같은 구성으로 세로로 쌓는다(사용자 선택). 문자 그림이 작아지는 건 원본 크기 링크로 보완
   const ink = "#1c2230", ink2 = "#4a5567", ink3 = "#8a93a3", line = "#e3e7ee", panel = "#f4f6f9", accent = "#1f9d8a", accentSoft = "#e2f4f0", warn = "#d98a1a", warnSoft = "#fbf0dc";
@@ -89,8 +89,8 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
         : <div><div style={{ color: accent }} className="text-[11px] font-black uppercase tracking-[.12em]">다음 정기점검</div><div style={{ color: ink }} className="mt-1 text-[14px] font-bold leading-relaxed">방문 전에 미리 연락드리고 찾아뵙겠습니다. 토너·여분은 그때 다시 확인해 채워 드립니다.</div></div>}
     </div>
     <div style={{ background: "#1e252f", color: "#fff" }} className="grid grid-cols-[1fr_auto] items-center gap-5 rounded-[14px] px-5 py-4">
-      <div><div style={{ color: "#aeb8c8" }} className="text-[11px] font-black uppercase tracking-[.12em]">언제든 연락 주세요</div><div className="mt-1 text-[14px] font-bold leading-relaxed">기기가 불편하거나 토너·소모품이 필요하실 때<br />전화 한 통이면 담당자가 바로 찾아뵙겠습니다.</div></div>
-      <div className="text-right"><div style={{ color: "#8fd8cb" }} className="text-[11px] font-black tracking-wide">퍼스트전산 대표번호</div><div className="text-[28px] font-black leading-tight tracking-tight">{COMPANY_PHONE}</div></div>
+      <div><div style={{ color: "#aeb8c8" }} className="text-[11px] font-black uppercase tracking-[.12em]">언제든 연락 주세요</div><div className="mt-1 text-[14px] font-bold leading-relaxed">기기가 불편하거나 토너·소모품이 필요하실 때<br />카카오톡 채널이나 대표번호로 연락 주시면 신속히 처리해 드리겠습니다.</div></div>
+      <div className="text-right"><div style={{ color: "#8fd8cb" }} className="text-[11px] font-black tracking-wide">퍼스트전산 대표번호</div><div className="text-[28px] font-black leading-tight tracking-tight">{COMPANY_PHONE}</div>{kakaoUrl && <div style={{ color: "#c9d1dd" }} className="mt-1 text-[12px] font-bold">카카오톡 채널 {kakaoUrl.replace(/^https?:\/\//, "")}</div>}</div>
     </div>
   </div>;
   return <div ref={cardRef} style={{ width: 720, background: "#fff", color: ink, fontVariantNumeric: "tabular-nums" }} className="overflow-hidden rounded-[22px] shadow-[0_18px_50px_rgba(20,28,40,.18)]">
@@ -372,7 +372,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
             </div>)}
           </div>
           {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 문자 그림은 작게 보입니다(원본 크기 링크가 함께 갑니다)" : ""}</div>}
-          <div className="overflow-x-auto bg-slate-100 p-4"><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} cardRef={cardRef} /></div>
+          <div className="overflow-x-auto bg-slate-100 p-4"><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} kakaoUrl={kakaoUrl} cardRef={cardRef} /></div>
         </>}
       </section>
     </div>
