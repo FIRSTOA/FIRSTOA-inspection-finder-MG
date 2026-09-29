@@ -18,6 +18,7 @@ const SIDO = ["서울", "부산", "대구", "인천", "광주", "대전", "울�
 function tidy(raw: string): string {
   return String(raw || "")
     .replace(/_x000d_|\r|\n|\t/g, " ")
+    .replace(/\s*(?:ㄴ|※|＊|\*)\s*.*$/, "") // "ㄴ주소 특이사항 : 탑차 주차 불가능" 같은 꼬리 메모(2026-09-29)
     .replace(/[()［］\[\]]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -47,7 +48,8 @@ function roadOnly(value: string): string {
   const cut = value
     .replace(/\s*(?:지하|B)\s*\d+\s*(?:층|F)(?:\s.*)?$/i, "")
     .replace(/\s*\d+\s*(?:층|호)(?:\s.*)?$/, "");
-  const road = cut.match(/^(.*?(?:로|길)\s*\d+(?:-\d+)?)/);
+  // "서초대로77길 17"을 첫 "로"에서 잘라 "서초대로 77"(다른 건물)로 찾던 버그(2026-09-29) — 로N길·번길까지 도로명으로 본다
+  const road = cut.match(/^(.*?(?:로|길)(?:\d+번?길)?\s*\d+(?:-\d+)?)(?=\s|,|$)/);
   if (road) return road[1].trim();
   const jibun = cut.match(/^(.*?(?:동|리|가)\s*\d+(?:-\d+)?)/);
   return jibun ? jibun[1].trim() : cut.trim();

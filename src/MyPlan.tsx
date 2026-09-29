@@ -19,6 +19,7 @@ import { notify } from "./toast";
 import { parseManualSchedules, type ManualScheduleEntry } from "./manualSchedule";
 import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
+import { addressCore, mapQuery } from "./address";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 
 export type MyPlanTicket = {
@@ -163,7 +164,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         const address = t.address?.trim() || await leaseAddressOf(t.vendor);
         if (stop) return;
         if (!address) { setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); continue; }
-        const hit = await geocodeKR(address);
+        const hit = await geocodeKR(addressCore(address)); // 층·건물·메모를 뗀 핵심 주소로(2026-09-29: 통째로 보내면 엉뚱한 곳)
         if (stop) return;
         if (hit) setGeoFallback((cur) => new Map(cur).set(t.id, { lat: hit.lat, lng: hit.lng }));
         else setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); // 재시도 방지 표식
@@ -454,7 +455,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         {ordered.map((t, i) => {
           const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
-          const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(t.address || t.vendor);
+          const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(mapQuery(t.address, t.vendor));
           const f = flags.get(t.vendor.trim());
           return (
             <div key={t.id} onClick={() => focusTicket(t.id)} className={`relative flex flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
@@ -502,9 +503,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700 transition hover:bg-purple-100">내일로 →</button>
                 )}
                 {/* 길찾기 — 팀마다 쓰는 지도가 다르다(네이버 사용자 다수). 일정리스트 상세의 N/K/T와 같은 구성 */}
-                <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(t.address || t.vendor)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#03C75A] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">N</a>
+                <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#03C75A] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">N</a>
                 <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">K</a>
-                <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(t.address || t.vendor)} className="flex-1 rounded-lg bg-[#2C5FD8] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">T</a>
+                <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className="flex-1 rounded-lg bg-[#2C5FD8] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">T</a>
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                   {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
@@ -681,13 +682,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
               </div>
               <div className="flex shrink-0 gap-1.5 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
                 {phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="flex-1 rounded-full border border-slate-300 bg-white py-2.5 text-center text-sm font-black text-slate-700">📞</a>}
-                <a href={g ? naverMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(detail.address || detail.vendor)}
+                <a href={g ? naverMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(detail.address, detail.vendor))}
                   {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })}
                   className="flex-[2] rounded-full bg-[#03C75A] py-2.5 text-center text-sm font-black text-white">네이버</a>
-                <a href={g ? kakaoMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(detail.address || detail.vendor)}
+                <a href={g ? kakaoMapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(mapQuery(detail.address, detail.vendor))}
                   {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })}
                   className="flex-[2] rounded-full bg-[#FEE500] py-2.5 text-center text-sm font-black text-slate-900">카카오</a>
-                <a href={g ? tmapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(detail.address || detail.vendor)}
+                <a href={g ? tmapRouteLink(detail.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(detail.address, detail.vendor))}
                   className="flex-[2] rounded-full bg-[#2C5FD8] py-2.5 text-center text-sm font-black text-white">티맵</a>
               </div>
             </div>

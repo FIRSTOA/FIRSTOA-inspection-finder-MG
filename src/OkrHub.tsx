@@ -25,7 +25,7 @@ import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
 import {
   JUDGMENT_INFO, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, bottleneckLabel, cycleLabel, defaultCycleTitle,
-  defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, isAlert, listOkrCycles, memberReports,
+  currentWeekOf, defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, hasResultRows, isAlert, listOkrCycles, listOkrResultIndex, memberReports,
   mergeCycle, mergeMemberActuals, mergeReport, monthCycleId, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth, pillarIndex, pillarLabel, probeOkrSchema, remapFeedback, remapReports,
   renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, weekCycleId, worstJudgment, worstOfJudgments,
   type OkrCycle, type OkrGoal, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
@@ -92,7 +92,7 @@ function useColWidths(storageKey: string, defaults: number[]) {
 const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
 
 // 월 고르기 — 현재 달만 보이는 버튼, 누르면 분기별로 1·2·3월 / 4·5·6월… 묶인 작은 판이 뜬다(1~12월 나열 대신, 2026-09-24 사용자 제안). 기록 있는 달엔 점.
-function MonthPicker({ value, marks, onChange }: { value: number; marks: Set<number>; onChange: (m: number) => void }) {
+function MonthPicker({ value, marks, current, onChange }: { value: number; marks: Set<number>; current?: number; onChange: (m: number) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
@@ -112,7 +112,7 @@ function MonthPicker({ value, marks, onChange }: { value: number; marks: Set<num
       <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, width: 280, zIndex: 4000 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
         {[1, 2, 3, 4].map((q) => <div key={q} className="flex items-center gap-2 border-b border-slate-100 py-1 last:border-0">
           <span className="w-11 shrink-0 border-r border-slate-300 pr-2 text-right text-[11px] font-black text-slate-500">{q}분기</span>
-          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-center text-[13px] font-bold tabular-nums transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"}`}>{m}{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
+          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" title={m === current ? "이번 달" : marks.has(m) ? "기록 있음" : undefined} onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-center text-[13px] font-bold tabular-nums transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"} ${m === current && m !== value ? "ring-1 ring-inset ring-emerald-500" : ""}`}>{m}{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
         </div>)}
       </div>,
       document.body,
@@ -165,6 +165,8 @@ export default function OkrHub({ author }: { author: string }) {
   const { book } = useAuthorBook();
   const myTeam = useMemo(() => { const t = teamForAuthor(author); return (OKR_TEAMS as readonly string[]).includes(t) ? (t as OkrTeam) : null; }, [author]);
   const [cycles, setCycles] = useState<OkrCycle[]>([]);
+  const [resultIds, setResultIds] = useState<Set<string>>(new Set()); // 결과가 적힌 달·주차 id
+  const thisWeek = useMemo(() => currentWeekOf(today), [today]);
   const [year, setYear] = useState(Number(today.slice(0, 4)));
   const [month, setMonth] = useState(Number(today.slice(5, 7)));
   const [weekNo, setWeekNo] = useState<number | null>(null); // null = 월 전체, n = n주차 — 주차마다 결과를 따로 적는다(2026-09-29 요청)
@@ -269,9 +271,16 @@ export default function OkrHub({ author }: { author: string }) {
       finally { if (token === openTokenRef.current) setLoading(false); }
     })();
   };
+  // 달을 고르면 어느 주차를 열지 — 이번 달이면 이번 주, 아니면 결과가 있는 마지막 주차, 없으면 달 단위 옛 기록이 있을 때만 그것, 아니면 1주차
+  const openMonthDefault = (y: number, m: number, ids: Set<string> = resultIds) => {
+    if (thisWeek.year === y && thisWeek.month === m) { openCycle(y, m, thisWeek.weekNo); return; }
+    const withData = okrWeeksInMonth(y, m).filter((w) => ids.has(weekCycleId(y, m, w.weekNo)));
+    if (withData.length) { openCycle(y, m, withData[withData.length - 1].weekNo); return; }
+    openCycle(y, m, ids.has(monthCycleId(y, m)) ? null : 1);
+  };
   useEffect(() => {
-    listOkrCycles()
-      .then((list) => { setCycles(list); cyclesRef.current = list; setTableMissing(false); openCycle(Number(today.slice(0, 4)), Number(today.slice(5, 7)), null); })
+    Promise.all([listOkrCycles(), listOkrResultIndex().catch(() => new Set<string>())])
+      .then(([list, ids]) => { setCycles(list); cyclesRef.current = list; setResultIds(ids); setTableMissing(false); openMonthDefault(thisWeek.year, thisWeek.month, ids); })
       .catch((e) => { const msg = (e as Error).message || ""; if (/okr_cycles|relation|404|schema cache/i.test(msg)) setTableMissing(true); setMessage(msg); setLoading(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 처음 한 번
 
@@ -315,6 +324,7 @@ export default function OkrHub({ author }: { author: string }) {
     await saveOkrReport(merged, author);
     reportBaseRef.current[key] = merged;
     saveSeqRef.current += 1;
+    if (hasResultRows(merged.rows)) setResultIds((cur) => (cur.has(merged.cycle_id) ? cur : new Set(cur).add(merged.cycle_id)));
     if (merged !== local) applyReport(merged, local);
   };
   // 자동 저장(0.7초 디바운스) — 바뀐 달·주차·기록만. 아직 서버에 없는 달·주차(초안)는 기록보다 먼저 만든다.
@@ -561,9 +571,9 @@ export default function OkrHub({ author }: { author: string }) {
     finally { setAiBusy(""); }
   };
 
-  const monthsWithData = useMemo(() => new Set(cycles.filter((c) => c.kind === "month" && c.year === year).map((c) => c.month)), [cycles, year]);
-  const weeksWithData = useMemo(() => new Set(cycles.filter((c) => c.kind === "week" && c.year === year && c.month === month).map((c) => c.week_no || 0)), [cycles, year, month]);
+  const monthsWithData = useMemo(() => { const out = new Set<number>(); for (const id of resultIds) { const m = id.match(/^(\d{4})-(\d{2})/); if (m && Number(m[1]) === year) out.add(Number(m[2])); } return out; }, [resultIds, year]);
   const weeks = useMemo(() => okrWeeksInMonth(year, month), [year, month]);
+  const showMonthTab = weekNo === null || resultIds.has(monthCycleId(year, month)); // '월 종합'은 주차로 나누기 전 달 단위 옛 기록이 있을 때만
   const years = useMemo(() => { const ys = new Set<number>([Number(today.slice(0, 4)), Number(today.slice(0, 4)) - 1, ...cycles.map((c) => c.year)]); return [...ys].sort((a, b) => b - a); }, [cycles, today]);
   const tabs: Array<[Tab, string]> = [["all", "통합집계"], ...OKR_TEAMS.map((t) => [t, teamName(t)] as [Tab, string])];
   const isDraft = !!cycle && !cycles.some((c) => c.id === cycle.id); // 아직 DB에 없는 달·주차(초안)
@@ -585,13 +595,18 @@ export default function OkrHub({ author }: { author: string }) {
               {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{weekNo ? "아직 기록이 없는 주차 — 목표·달성기준은 달 것을 그대로 씁니다. 적는 순간 저장됩니다" : commonGoals.some((g) => g.objective) ? "아직 기록이 없는 달 — 지난달 목표를 그대로 가져왔습니다" : "아직 목표가 없는 달 — 표에서 바로 적어 주세요"}</p>}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
-              <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openCycle(Number(v), month, null)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-              <MonthPicker value={month} marks={monthsWithData} onChange={(m) => openCycle(year, m, null)} />
+              <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonthDefault(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
+              <MonthPicker value={month} marks={monthsWithData} current={thisWeek.year === year ? thisWeek.month : undefined} onChange={(m) => openMonthDefault(year, m)} />
               <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
-                <button type="button" onClick={() => openCycle(year, month, null)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold transition ${!weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>월</button>
-                {weeks.map((w) => <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>
-                  {w.weekNo}주{weeksWithData.has(w.weekNo) && weekNo !== w.weekNo && <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-emerald-400" />}
-                </button>)}
+                {showMonthTab && <button type="button" title="주차로 나누기 전 달 단위로 적은 옛 기록" onClick={() => openCycle(year, month, null)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold transition ${!weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>월 종합</button>}
+                {weeks.map((w) => {
+                  const isNow = thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo;
+                  const has = resultIds.has(weekCycleId(year, month, w.weekNo));
+                  const edge = w.start.slice(0, 7) !== `${year}-${pad(month)}` ? " · 지난달 마지막 주와 같은 기간" : w.end.slice(0, 7) !== `${year}-${pad(month)}` ? " · 다음달 1주와 같은 기간" : "";
+                  return <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}${has ? " · 기록 있음" : ""}${edge}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : isNow ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`}>
+                    {w.weekNo}주{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}{has && weekNo !== w.weekNo && <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-emerald-400" />}
+                  </button>;
+                })}
               </div>
               <span className="rounded-full bg-white/10 px-3 py-1.5 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
               {saveStatus === "saving" && <span className="text-slate-400">저장 중…</span>}
@@ -674,9 +689,9 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
     {/* 사람 박스 */}
     <div className="flex flex-wrap items-stretch gap-2 border-b border-slate-200 bg-slate-50 p-3">
       <PersonBox label="파트 종합" sub="통합집계에 반영" rows={rowsOf(partReport)} total={goals.length} selected={!member} onClick={() => onMember("")} />
-      <div role="button" tabIndex={0} onClick={() => onMember("__sum__")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMember("__sum__"); } }} className={`w-[104px] shrink-0 cursor-pointer rounded-lg border p-2.5 text-left transition ${member === "__sum__" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-800 hover:border-slate-400"}`}>
+      <div role="button" tabIndex={0} onClick={() => onMember("__sum__")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMember("__sum__"); } }} className={`w-[136px] shrink-0 cursor-pointer rounded-lg border p-2.5 text-left transition ${member === "__sum__" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-800 hover:border-slate-400"}`}>
         <div className="text-[13px] font-black">팀원 집계</div>
-        <div className="h-4 text-[10px] font-semibold text-slate-400">{members.length}명 · 조치 필요 인원</div>
+        <div className="h-4 whitespace-nowrap text-[10px] font-semibold text-slate-400">{members.length}명 · 조치 필요 인원</div>
         <div className="mt-1 h-1" />
       </div>
       <span className="mx-0.5 hidden w-px self-stretch bg-slate-200 sm:block" />

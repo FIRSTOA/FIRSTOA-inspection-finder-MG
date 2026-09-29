@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  achievementRate, actionMembers, actionTeams, cycleLabel, emptyReport, gradeFromPercent, judgmentCounts, monthCycleId, okrWeeksInMonth, okrWorkWeek,
+  achievementRate, actionMembers, actionTeams, currentWeekOf, cycleLabel, emptyReport, gradeFromPercent, judgmentCounts, monthCycleId, okrWeeksInMonth, okrWorkWeek,
   bottleneckLabel, defaultGoalTemplate, memberReports, mergeMemberActuals, needsReasonPlan, pillarIndex, pillarLabel, renumberGoals, sortGoalsByPillar, splitPillar, weekCycleId, worstJudgment, worstOfJudgments, type OkrReport,
 } from "../src/okr";
 
@@ -84,6 +84,11 @@ describe("OKR 기간·목표 도우미", () => {
     expect(weeks[0]).toEqual({ weekNo: 1, start: "2026-08-31", end: "2026-09-04" });
     expect(weeks[1]).toEqual({ weekNo: 2, start: "2026-09-07", end: "2026-09-11" });
     expect(weeks.length).toBe(5);
+  });
+  it("오늘이 든 주차 — 오늘 날짜의 달 기준", () => {
+    expect(currentWeekOf("2026-09-29")).toEqual({ year: 2026, month: 9, weekNo: 5 });
+    expect(currentWeekOf("2026-10-01")).toEqual({ year: 2026, month: 10, weekNo: 1 });
+    expect(currentWeekOf("2026-09-01")).toEqual({ year: 2026, month: 9, weekNo: 1 });
   });
   it("기간 id와 이름", () => {
     expect(monthCycleId(2026, 8)).toBe("2026-08");

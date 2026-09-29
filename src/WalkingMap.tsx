@@ -19,6 +19,7 @@ import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./placesSync";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
+import { mapQuery } from "./address";
 
 type MapLabel = {
   code: string;
@@ -438,10 +439,10 @@ function NavLinks({ place, large }: { place: MapPlace; large?: boolean }) {
   const hasCoord = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && place.latitude !== 0 && place.longitude !== 0;
   if (!address && !hasCoord) return null;
   const name = encodeURIComponent((place.name || address).slice(0, 30));
-  const naver = naverMapLink(address || place.name);
+  const naver = naverMapLink(mapQuery(address, place.name));
   const kakao = hasCoord
     ? kakaoMapRouteLink((place.name || address).slice(0, 30), place.latitude, place.longitude)
-    : kakaoMapSearchLink(address);
+    : kakaoMapSearchLink(mapQuery(address, place.name));
   const tmap = hasCoord ? `tmap://route?goalname=${name}&goalx=${place.longitude}&goaly=${place.latitude}` : "";
   const cls = large ? "rounded-lg px-2.5 py-1.5 text-xs font-black" : "rounded px-1.5 py-0.5 text-[10px] font-black";
   return (

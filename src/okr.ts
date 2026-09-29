@@ -208,6 +208,24 @@ export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: nu
 
 export const monthCycleId = (year: number, month: number) => `${year}-${pad(month)}`;
 export const weekCycleId = (year: number, month: number, weekNo: number) => `${year}-${pad(month)}-W${weekNo}`;
+// 오늘이 든 주차 — 오늘 날짜의 달 기준(9/29 → 9월 5주차). 달 경계에 걸친 주는 두 달에 다 보이지만 기록은 달마다 따로다.
+export function currentWeekOf(date: string): { year: number; month: number; weekNo: number } {
+  const y = Number(date.slice(0, 4)); const m = Number(date.slice(5, 7));
+  const { start } = okrWorkWeek(date);
+  const wk = okrWeeksInMonth(y, m).find((w) => w.start === start);
+  return { year: y, month: m, weekNo: wk ? wk.weekNo : 1 };
+}
+// 결과(실제결과·판정)가 적힌 기록이 있는 달·주차 id — 달력의 점과 '월 종합' 버튼 표시용(2026-09-29: 빈 초안까지 표시돼 헷갈렸다)
+export async function listOkrResultIndex(): Promise<Set<string>> {
+  const rows = await selectRows<{ cycle_id: string; rows: unknown }>("okr_reports", "select=cycle_id,rows&limit=2000");
+  const out = new Set<string>();
+  for (const r of rows) {
+    const list = Array.isArray(r.rows) ? (r.rows as Array<{ actual?: string; judgment?: string }>) : [];
+    if (list.some((x) => String(x.actual || "").trim() || String(x.judgment || "").trim())) out.add(r.cycle_id);
+  }
+  return out;
+}
+export const hasResultRows = (rows: OkrResultRow[]) => rows.some((x) => x.actual.trim() || x.judgment.trim());
 
 export function cycleLabel(c: Pick<OkrCycle, "kind" | "year" | "month" | "week_no">): string {
   return c.kind === "week" ? `${c.year}년 ${c.month}월 ${c.week_no}주차` : `${c.year}년 ${c.month}월`;

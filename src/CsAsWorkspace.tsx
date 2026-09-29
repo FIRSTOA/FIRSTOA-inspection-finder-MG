@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
+import { mapQuery } from "./address";
 import PortalSelect from "./PortalSelect";
 import { nextBusinessDay } from "./planDate";
 import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatus, type ServiceReceptionRow, sendReceptionCopierCompleteJob } from "./api";
@@ -293,7 +294,7 @@ function shortAddress(address: string) {
 }
 function AddrNav({ address }: { address: string }) {
   if (!address.trim()) return null;
-  const target = address.trim();
+  const target = mapQuery(address, address.trim()); // 층·건물·메모를 뗀 핵심 주소만 — 통째로 넘기면 지도가 엉뚱한 곳을 찍었다(2026-09-29 윔의원)
   const q = encodeURIComponent(target);
   const linkClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-black";
   return (
@@ -1442,13 +1443,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       // 양식 라벨이 값에 섞여 오는 건이 있다("★키맨성함/번호 정수호주") — 라벨·기호를 걷어낸 이름만 남긴다
       const clean = name
         .replace(PHONE_RE, "")
-        .replace(/★|키맨성함\/?번호|키맨|접수자성함|접수자연락처|일반전화|[()]/g, "")
+        .replace(/★|키맨성함\/?번호|키맨|접수자성함|접수자연락처|접수자|일반전화|[()]/g, "")
         .replace(/\s+/g, " ")
         .trim();
       out.push({ label, name: clean.slice(0, 14), number });
     };
-    push("접수자", "", t.contact || "");
-    push("키맨", (t.keyman || "").replace(PHONE_RE, ""), t.keyman || "");
+    push("접수자", t.contact || "", t.contact || "");
+    // 키맨 칸은 여러 줄("일반전화 T: 02-…" / "★키맨성함/번호 010-… 홍길동 팀장") — 줄마다 따로, 일반전화는 이름 없이
+    for (const line of String(t.keyman || "").split(/\n/)) {
+      if (!PHONE_RE.test(line)) continue;
+      push(/일반전화|대표번호|\bT\s*:/i.test(line) ? "일반전화" : "키맨", line.replace(/\bT\s*:/i, ""), line);
+    }
     const raw = String(t.note || "").replace(/_x000d_/g, " ");
     const field = (label: RegExp) => (raw.match(label) || [])[1] || "";
     push("접수자", field(/접수자성함[\t ]*([^\t\n]*)/), field(/접수자연락처[\t ]*([^\t\n]*)/));
@@ -1456,12 +1461,26 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     push("일반전화", "", field(/일반전화[\t ]*([^\t\n]*)/));
     return out;
   };
-  // 익일 스케줄 보고 — 각 건 아래 연락처·주소 줄(2026-09-29 요청). 전화는 접수자→키맨 순 최대 2개(번호가 없으면 접수자 글 그대로), 주소는 원문
+  // 익일 스케줄 보고 — 각 건 아래 연락처·주소 줄(2026-09-29 요청). 접수 원문에 있는 것만 나온다:
+  // AS 접수의 접수자·키맨·일반전화, 물류(납품·철수·교체) 접수문의 "성함 : / 연락처 : / 주소 : " 줄. 없으면 줄이 안 생긴다.
   const reportDetailOf = (t: AsTicket): string[] => {
-    const phones = phonesOf(t).slice(0, 2).map((p) => `${p.name ? `${p.name} ` : ""}${p.number}`).join(" / ");
-    const contact = phones || String(t.contact || "").replace(/\s+/g, " ").trim().slice(0, 30);
-    const addr = String(t.address || "").replace(/\s+/g, " ").trim();
-    return [contact ? `  ☎ ${contact}` : "", addr ? `  📍 ${addr}` : ""].filter(Boolean);
+    const lines: string[] = [];
+    const seen = new Set<string>();
+    const addPhone = (label: string, name: string, number: string) => {
+      const digits = number.replace(/[^0-9]/g, "");
+      if (!digits || seen.has(digits)) return;
+      seen.add(digits);
+      lines.push(`  ${label}: ${[name.trim(), number].filter(Boolean).join(" ")}`);
+    };
+    for (const p of phonesOf(t)) addPhone(p.label, p.name, p.number);
+    const note = String(t.note || "").replace(/_x000d_/g, " ");
+    const field = (re: RegExp) => ((note.match(re) || [])[1] || "").replace(/\s+/g, " ").trim();
+    const phone = field(/연락처\s*[:：]\s*([^\n]+)/);
+    if (phone) addPhone("담당자", field(/성함\s*[:：]\s*([^\n]+)/), (phone.match(PHONE_RE) || [phone])[0]);
+    if (!lines.length && t.contact?.trim()) lines.push(`  접수자: ${t.contact.replace(/\s+/g, " ").trim().slice(0, 30)}`);
+    const addr = String(t.address || "").replace(/\s+/g, " ").trim() || field(/주소[^:：\n]*[:：]\s*([^\n]+)/);
+    if (addr) lines.push(`  📍 ${addr}`);
+    return lines;
   };
 
   /** 통화 버튼 — 번호가 하나면 바로 연결, 접수자·키맨이 둘 다 있으면 골라 걸도록 (잘못된 상대에게 걸리지 않게) */
