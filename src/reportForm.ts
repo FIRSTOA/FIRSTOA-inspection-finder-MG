@@ -1,4 +1,4 @@
-// 점검 리포트 재료(reportForm) — 정기점검 양식 원문(jeomgeom._원문)을 고객에게 보여 줄 값으로 바꾼다(2026-09-30).
+// 점검 리포트 재료(reportForm) — 점검·AS 양식 원문(jeomgeom/as_records._원문)을 고객에게 보여 줄 값으로 바꾼다(2026-09-30).
 // 양식은 FIELD 점검 탭이 만든 고정 형식이라 라벨 줄을 그대로 읽는다. 내부용 항목(레벨·등급·한틴이카·주차비·부품/자가신청)은 읽지 않는다.
 export type TonerKey = "K" | "C" | "M" | "Y";
 export type ReportDevice = {
@@ -10,9 +10,10 @@ export type ReportDevice = {
   color: number | null;  // 컬러 누적
   total: number | null;
   toner: Record<TonerKey, number | null>; // 잔량 %
-  waste: number | null;  // 폐토너통 찬 정도 %
+  waste: number | null;  // 폐토너통 남은 여유 %(양식의 '폐통' 값)
   spare: Record<TonerKey | "W", number | null>; // 사무실 보관 여분(W=폐토너통)
   spareNote: string;     // 여분 보관 위치 등 덧붙인 줄
+  content: string;       // 내용(AS 접수 내용)
   work: string;          // 처리내용
   note: string;          // 특이사항
 };
@@ -27,9 +28,9 @@ export type ReportData = {
   arrival: string;
 };
 
-// 기준(2026-09-30 CS팀): 토너는 잔량 25% 이하면 교체, 폐토너통은 여유 25% 이하(75% 이상 참)면 교체 예정
+// 기준(2026-09-30 CS팀): 토너 잔량 25% 이하면 교체, 폐토너통도 여유 25% 이하면 교체 예정(양식의 폐통 %는 남은 여유)
 export const TONER_LOW = 25;
-export const WASTE_FULL = 75;
+export const WASTE_LOW = 25;
 
 const DIVIDER = /^[ \t]*[ㅡ\-=─_]{5,}[ \t]*$/;
 const LABELS = ["작성자", "구분", "레벨", "등급", "업체명", "부서명", "지역", "키맨/접수자", "모델명", "시리얼넘버", "자산기번", "내용", "처리내용", "매수", "토너잔량", "폐통", "여분", "한틴이카유무", "주차비지원유무", "특이사항", "도착 시간", "소요 시간"];
@@ -69,7 +70,43 @@ function parseDevice(block: string[], index: number): ReportDevice | null {
   const spare = { K: null, C: null, M: null, Y: null, W: null } as Record<TonerKey | "W", number | null>;
   for (const k of ["K", "C", "M", "Y"] as TonerKey[]) { const m = spareText.match(new RegExp("(?:^|[\\s,/])" + k + "\\s*[-:=]?\\s*(\\d+)", "i")); if (m) spare[k] = Number(m[1]); }
   const w = spareText.match(/폐\s*(?:통|토너)?\s*[-:=]?\s*(\d+)/); if (w) spare.W = Number(w[1]);
-  return { index, model, serial, asset, mono, color, total, toner, waste, spare, spareNote: spareLines.slice(1).join(" ").trim(), work: field(block, "처리내용", true), note: field(block, "특이사항", true) };
+  return { index, model, serial, asset, mono, color, total, toner, waste, spare, spareNote: spareLines.slice(1).join(" ").trim(), content: field(block, "내용", true), work: field(block, "처리내용", true), note: field(block, "특이사항", true) };
+}
+
+// 키맨 칸은 자유 서식이다: "010-… 위지혜 팀장", "이은선 차장님 5층에 계심", "김수경차장님 본사총괄 02-561-6512 임미애 담당자님 010-5245-4254".
+// 리포트(MMS)는 휴대폰으로만 가므로 ① 첫 휴대폰(01X) 번호를 받는 번호로 ② 그 번호 바로 옆에 적힌 사람을 키맨 이름으로(직함까지만, 위치 메모 제외).
+const MOBILE_RE = /01\d[- .]?\d{3,4}[- .]?\d{4}/;
+const ROLE_WORD = "(?:팀장|차장|부장|과장|대리|사원|실장|소장|원장|이사|대표|사장|주임|매니저|선생님|간호사|총무|담당자|교수|박사|프로|기사)";
+const PURE_ROLE = new RegExp(`^${ROLE_WORD}(?:님)?$`);
+const ENDS_ROLE = new RegExp(`(?:${ROLE_WORD}(?:님)?|님)$`);
+const tokensOf = (segment: string) => segment.replace(/[()/,·]/g, " ").split(/\s+/).filter((t) => t && !/^\d[\d-]*$/.test(t) && !/^T:?$/i.test(t));
+// 직함이 붙은 사람("위지혜 팀장", "김수경차장님")만 — 없으면 빈 값(호출부가 다른 조각으로 넘어간다)
+function personIn(segment: string, nearEnd: boolean): string {
+  const tokens = tokensOf(segment);
+  const hits = tokens.map((t, i) => (ENDS_ROLE.test(t) ? i : -1)).filter((i) => i >= 0);
+  if (!hits.length) return "";
+  const i = nearEnd ? hits[hits.length - 1] : hits[0];
+  const group = PURE_ROLE.test(tokens[i]) && i > 0 ? [tokens[i - 1], tokens[i]] : [tokens[i]];
+  return group.join(" ");
+}
+const firstWords = (segment: string) => tokensOf(segment).slice(0, 2).join(" ");
+export function keymanMobile(raw: string): string {
+  return (String(raw || "").match(MOBILE_RE) || [""])[0].replace(/[^\d]/g, "");
+}
+export function keymanDisplayName(raw: string): string {
+  const text = String(raw || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+  const m = text.match(MOBILE_RE);
+  let name = "";
+  if (m && m.index != null) {
+    const after = text.slice(m.index + m[0].length).split(PHONE_RE)[0]; // 번호 뒤 ~ 다음 번호 전
+    const before = text.slice(0, m.index).split(PHONE_RE).pop() || "";    // 직전 번호 뒤 ~ 이 번호 전
+    // 직함 있는 사람 우선(번호 뒤 → 번호 앞), 없으면 번호 앞 낱말("김담당 010-…") → 번호 뒤 낱말
+    name = personIn(after, false) || personIn(before, true) || firstWords(before) || firstWords(after);
+  } else {
+    const plain = text.replace(PHONE_RE, " ");
+    name = personIn(plain, false) || firstWords(plain);
+  }
+  return name.replace(/님$/, "").trim();
 }
 
 export function parseInspectionForm(raw: string): ReportData {
@@ -78,8 +115,8 @@ export function parseInspectionForm(raw: string): ReportData {
   const firstDivider = lines.findIndex((l) => DIVIDER.test(l));
   const header = firstDivider >= 0 ? lines.slice(0, firstDivider) : lines;
   const keyman = field(header, "키맨/접수자", true).replace(/\n/g, " ");
-  const phone = (keyman.match(PHONE_RE) || [""])[0].replace(/[^\d]/g, "");
-  const keymanName = keyman.replace(PHONE_RE, "").replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  const phone = keymanMobile(keyman);
+  const keymanName = keymanDisplayName(keyman);
   // 기기 블록: 첫 구분선 ~ ※부품신청※ 사이를 구분선으로 나눈다
   const partsAt = lines.findIndex((l) => /※\s*부품신청\s*※/.test(l));
   const body = firstDivider >= 0 ? lines.slice(firstDivider + 1, partsAt > firstDivider ? partsAt : undefined) : [];
@@ -103,4 +140,4 @@ export function matchPrevious(device: ReportDevice, prev: ReportData | null): Re
 export const delta = (now: number | null, before: number | null): number | null => (now == null || before == null || now < before ? null : now - before);
 export const fmt = (n: number | null) => (n == null ? "-" : n.toLocaleString("ko-KR"));
 export const tonerLow = (v: number | null) => v != null && v <= TONER_LOW;
-export const wasteFull = (v: number | null) => v != null && v >= WASTE_FULL;
+export const wasteLow = (v: number | null) => v != null && v <= WASTE_LOW;

@@ -222,18 +222,19 @@ export function TemplateBar({ context, author, body, onApply, preferredTitle = "
 export function HappyCallWorkspace({ author, switcher }: { author: string; switcher?: import("react").ReactNode }) {
   const [visits, setVisits] = useState<VisitRow[]>([]); const [records, setRecords] = useState<HappycallRecord[]>([]);
   const [selectedId, setSelectedId] = useState(""); const [contacts, setContacts] = useState<Contact[]>([]); const [message, setMessage] = useState("");
+  const [mineOnly, setMineOnly] = useState(true); // 내가 간 방문만(기본) — 팀 전체 목록은 [전체]로(2026-09-30 요청)
   const [filter, setFilter] = useState<"pending" | "scheduled" | "cancelled" | "sent" | "all">("pending"); const [kindFilter, setKindFilter] = useState<"inspection" | "as">("inspection"); const [scheduleAt, setScheduleAt] = useState(defaultScheduleTime); const [loading, setLoading] = useState(true); const [sending, setSending] = useState(false); const [notice, setNotice] = useState("");
   useEffect(() => { let active = true; setLoading(true); const history = selectRows<HappycallRecord>("happycall_messages", "select=*&order=created_at.desc").catch(() => [] as HappycallRecord[]); Promise.all([getTeamVisits(dateBefore(happycallDays - 1), kstDate()), history]).then(([visitRows, recordRows]) => { if (!active) return; setVisits(visitRows.filter((visit) => visit.visited && (visit.workKinds.includes("inspection") || visit.workKinds.includes("as"))).reverse()); setRecords(recordRows); }).catch((error) => active && setNotice((error as Error).message)).finally(() => active && setLoading(false)); return () => { active = false; }; }, []);
   const recordMap = useMemo(() => new Map(records.map((record) => [record.visit_id, record])), [records]);
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { pending: 0, scheduled: 0, cancelled: 0, sent: 0 };
-    visits.filter((visit) => visit.workKinds.includes(kindFilter)).forEach((visit) => {
+    visits.filter((visit) => visit.workKinds.includes(kindFilter) && (!mineOnly || visit.author === author)).forEach((visit) => {
       const status = recordMap.get(visit.id)?.status || "pending";
       if (counts[status] !== undefined) counts[status] += 1;
     });
     return counts;
-  }, [visits, kindFilter, recordMap]);
-  const rows = visits.filter((visit) => visit.workKinds.includes(kindFilter) && (filter === "all" || (recordMap.get(visit.id)?.status || "pending") === filter)); const selected = visits.find((visit) => visit.id === selectedId); const selectedRecord = selected ? recordMap.get(selected.id) : undefined;
+  }, [visits, kindFilter, recordMap, mineOnly, author]);
+  const rows = visits.filter((visit) => visit.workKinds.includes(kindFilter) && (!mineOnly || visit.author === author) && (filter === "all" || (recordMap.get(visit.id)?.status || "pending") === filter)); const selected = visits.find((visit) => visit.id === selectedId); const selectedRecord = selected ? recordMap.get(selected.id) : undefined;
   const choose = (visit: VisitRow) => { const record = recordMap.get(visit.id); const found = record?.recipients?.length ? record.recipients.map((item) => ({ ...item, id: item.id || crypto.randomUUID() })) : extractVisitContacts(visit.sourceText || visit.note); setSelectedId(visit.id); setContacts(found.length ? found : [newContact()]); setMessage(record?.message || ""); setScheduleAt(record?.scheduled_at ? new Date(new Date(record.scheduled_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : defaultScheduleTime()); setNotice(found.length ? `${found.length}명의 고객 정보를 불러왔습니다.` : "원문에서 연락처를 찾지 못했습니다. 직접 입력해 주세요."); };
   const saveRecord = async (status: HappycallStatus, error = "", extras: Partial<HappycallRecord> = {}) => { if (!selected) return; const first = contacts[0] || newContact(); const row = { visit_id: selected.id, author, recipient: first.phone, keyman: first.name, message, recipients: contacts, status, sent_at: status === "sent" ? new Date().toISOString() : null, error, ...extras }; await upsertRow("happycall_messages", row, "visit_id"); setRecords((current) => [row as HappycallRecord, ...current.filter((item) => item.visit_id !== selected.id)]); };
   const tokenValues = (_contact: Contact) => ({ 고객명: "고객", 업체명: selected?.vendor || "", 담당자: selected?.author || "", 업무: selected ? visitType(selected) : "", 방문일: selected ? prettyDate(selected.workDate) : "" });
@@ -270,6 +271,12 @@ export function HappyCallWorkspace({ author, switcher }: { author: string; switc
           {([["inspection", "점검"], ["as", "AS"]] as const).map(([key, label]) => (
             <button key={key} onClick={() => { setKindFilter(key); setSelectedId(""); }}
               className={`rounded-full px-4 py-1.5 text-xs font-black transition ${kindFilter === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>
+          ))}
+        </div>
+        <div className="flex rounded-full bg-white/[0.07] p-1">
+          {([[true, "내 방문"], [false, "전체"]] as const).map(([on, label]) => (
+            <button key={label} onClick={() => { setMineOnly(on); setSelectedId(""); }}
+              className={`rounded-full px-4 py-1.5 text-xs font-black transition ${mineOnly === on ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>
           ))}
         </div>
         <div className="flex flex-wrap gap-1">
