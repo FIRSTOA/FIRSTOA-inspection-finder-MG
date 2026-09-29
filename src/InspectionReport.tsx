@@ -248,7 +248,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
     if (!(await deliver(to, false))) return;
     const now = new Date().toISOString();
     const sid = sourceIdOf(kind, selected.id);
-    await insertRow("message_jobs", { source_type: "inspection_report", source_id: sid, channel: "sms", recipient: to, message: smsText(false), payload: { type: "inspection_report", kind, vendor: data.vendor, author, date: selected.작성일, keyman: data.keymanName }, status: "sent", scheduled_at: now, sent_at: now, created_by: author }).catch(() => undefined);
+    await insertRow("message_jobs", { id: crypto.randomUUID(), source_type: "inspection_report", source_id: sid, channel: "sms", recipient: to, message: smsText(false), payload: { type: "inspection_report", kind, vendor: data.vendor, author, date: selected.작성일, keyman: data.keymanName }, status: "sent", scheduled_at: now, sent_at: now, created_by: author }).catch(() => undefined);
     setSent((cur) => new Map(cur).set(sid, now));
     notify(`${data.vendor}에 리포트를 보냈습니다`, "success");
   };
