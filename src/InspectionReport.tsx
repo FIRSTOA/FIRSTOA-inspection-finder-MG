@@ -6,7 +6,7 @@
  *    정기점검만 적힌 건은 "정기점검 완료 · 이상 없음"이 기본. 현장 사진 줄은 넣지 않는다(사진을 보내 달라 할 수 있어서).
  *  - 이미지: 카드 DOM을 html2canvas-pro로 굽고 JPG ≤200KB·긴 변 1440 안으로 줄여 customer-message-send(솔라피 MMS)로 보낸다.
  *    원본 크기 PNG는 storage(reports)에 올려 문자에 "크게 보기" 링크로 — 기기가 여러 대면 MMS 그림이 작아지므로.
- *  - 기기 2대 이상이면 압축 배치(한 대당 세 줄: 사용량 / 토너 미니 막대 / 여분·조치)를 두 열 가로형 카드(1000px)에 — 세로로만 길어지면 MMS 그림이 작아진다.
+ *  - 기기 2대 이상도 1대와 같은 구성을 세로로 쌓는다(두 열 압축 배치는 어색해 뺌, 2026-09-30). 문자 그림이 작아지는 건 원본 크기 링크로 보완.
  *  - 업체명·키맨 이름·조치 문구는 양식에서 채워 두고 보내기 전에 고칠 수 있다.
  *  - 기록: message_jobs(source_type=inspection_report, status=sent) — 목록에 '발송됨' 표시, 같은 건 재발송은 확인창. AS는 source_id를 "as:<id>"로.
  *  - 테스트 발송: 직원 번호로 같은 이미지를 보내 본다([테스트]) — 기록하지 않고, 업무시간 확인도 건너뛴다.
@@ -76,7 +76,7 @@ async function renderCard(node: HTMLElement): Promise<{ mms: string; full: Blob 
 // ── 리포트 카드(고객이 받는 그림 그대로). 색은 이미지라 고정값 ──
 function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents, cardRef }: { kind: Kind; data: ReportData; prev: ReportData | null; prevDate: string; date: string; author: string; notes: Texts; contents: Texts; cardRef: React.RefObject<HTMLDivElement | null> }) {
   const month = Number(date.slice(5, 7));
-  const compact = data.devices.length >= 2; // 여러 대면 한 대당 세 줄로 — 카드가 길어지면 MMS 그림이 작아진다
+  const multi = data.devices.length >= 2; // 여러 대도 1대와 같은 구성으로 세로로 쌓는다(사용자 선택). 문자 그림이 작아지는 건 원본 크기 링크로 보완
   const ink = "#1c2230", ink2 = "#4a5567", ink3 = "#8a93a3", line = "#e3e7ee", panel = "#f4f6f9", accent = "#1f9d8a", accentSoft = "#e2f4f0", warn = "#d98a1a", warnSoft = "#fbf0dc";
   const H = ({ children, tag, warnTag }: { children: ReactNode; tag?: string; warnTag?: boolean }) => <div className="flex items-baseline justify-between gap-3"><div style={{ color: ink3 }} className="text-[12px] font-black uppercase tracking-[.12em]">{children}</div>{tag && <span style={{ background: warnTag ? warnSoft : accentSoft, color: warnTag ? warn : accent }} className="rounded-full px-2.5 py-1 text-[12px] font-bold">{tag}</span>}</div>;
   const Check = ({ children, warnMark }: { children: ReactNode; warnMark?: boolean }) => <li className="grid grid-cols-[22px_1fr] gap-2.5 text-[14px] leading-relaxed"><span style={{ background: warnMark ? warnSoft : accentSoft, color: warnMark ? warn : accent, width: 20, height: 20, marginTop: 2 }} className="grid place-items-center rounded-full text-[12px] font-black">{warnMark ? "!" : "✓"}</span><span>{children}</span></li>;
@@ -89,11 +89,11 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
         : <div><div style={{ color: accent }} className="text-[11px] font-black uppercase tracking-[.12em]">다음 정기점검</div><div style={{ color: ink }} className="mt-1 text-[14px] font-bold leading-relaxed">방문 전에 미리 연락드리고 찾아뵙겠습니다. 토너·여분은 그때 다시 확인해 채워 드립니다.</div></div>}
     </div>
     <div style={{ background: "#1e252f", color: "#fff" }} className="grid grid-cols-[1fr_auto] items-center gap-5 rounded-[14px] px-5 py-4">
-      <div><div style={{ color: "#aeb8c8" }} className="text-[11px] font-black uppercase tracking-[.12em]">고장 · 토너 · 소모품 요청</div><div className="mt-1 text-[14px] font-bold leading-relaxed">전화 한 통이면 담당자가 바로 처리해 드립니다.</div></div>
+      <div><div style={{ color: "#aeb8c8" }} className="text-[11px] font-black uppercase tracking-[.12em]">언제든 연락 주세요</div><div className="mt-1 text-[14px] font-bold leading-relaxed">기기가 불편하거나 토너·소모품이 필요하실 때<br />전화 한 통이면 담당자가 바로 찾아뵙겠습니다.</div></div>
       <div className="text-right"><div style={{ color: "#8fd8cb" }} className="text-[11px] font-black tracking-wide">퍼스트전산 대표번호</div><div className="text-[28px] font-black leading-tight tracking-tight">{COMPANY_PHONE}</div></div>
     </div>
   </div>;
-  return <div ref={cardRef} style={{ width: compact ? 1000 : 720, background: "#fff", color: ink, fontVariantNumeric: "tabular-nums" }} className="overflow-hidden rounded-[22px] shadow-[0_18px_50px_rgba(20,28,40,.18)]">
+  return <div ref={cardRef} style={{ width: 720, background: "#fff", color: ink, fontVariantNumeric: "tabular-nums" }} className="overflow-hidden rounded-[22px] shadow-[0_18px_50px_rgba(20,28,40,.18)]">
     <div style={{ background: "#1e252f", color: "#fff" }} className="relative px-7 pb-6 pt-7">
       <div style={{ position: "absolute", right: -40, top: -60, width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(closest-side, rgba(31,157,138,.35), rgba(31,157,138,0))" }} />
       <div className="relative flex items-center justify-between gap-3">
@@ -105,11 +105,10 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
         <span>방문 <b className="text-white">{koreanDate(date)}{data.arrival ? ` ${data.arrival}` : ""}</b></span>
         <span>담당 <b className="text-white">{author}</b></span>
         {data.keymanName && <span>키맨 <b className="text-white">{data.keymanName}님</b></span>}
-        {compact && <span>기기 <b className="text-white">{data.devices.length}대</b></span>}
+        {multi && <span>기기 <b className="text-white">{data.devices.length}대</b></span>}
       </div>
     </div>
     <div className="grid gap-5 px-7 pb-7 pt-1">
-      <div className={compact ? "grid grid-cols-2 gap-x-8" : "grid gap-5"}>
       {data.devices.map((d) => {
         const p = kind === "inspection" ? matchPrevious(d, prev) : null;
         const dm = p ? delta(d.mono, p.mono) : null, dc = p ? delta(d.color, p.color) : null;
@@ -119,32 +118,10 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
         const content = kind === "as" ? (contents[d.index] ?? d.content) : "";
         const verdict = lows.length ? "토너 교체 필요" : wasteLow(d.waste) ? "폐토너통 교체 예정" : kind === "as" ? "처리 완료" : "이상 없음";
         const alert = lows.length > 0 || wasteLow(d.waste);
-        if (compact) {
-          return <div key={d.index} style={{ borderBottom: `1px solid ${line}` }} className="grid gap-2.5 pb-4 pt-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="text-[17px] font-bold tracking-tight"><span style={{ color: ink3 }} className="mr-2 text-[12px] font-black">{d.index}호기</span>{d.model || "복합기"}<span style={{ color: ink2 }} className="ml-2 text-[12px] font-medium">{[d.asset && `관리번호 ${d.asset}`, d.serial && `S/N ${d.serial}`].filter(Boolean).join(" · ")}</span></div>
-              <div style={{ background: alert ? warnSoft : accentSoft, color: alert ? warn : accent }} className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold">{verdict}</div>
-            </div>
-            {(d.mono != null || d.color != null) && <div style={{ color: ink2 }} className="flex flex-wrap gap-x-5 text-[13px]">
-              {d.mono != null && <span>흑백 <b style={{ color: ink }} className="text-[15px]">{fmt(d.mono)}</b>매{dm != null && <span style={{ color: accent }} className="ml-1 font-bold">+{fmt(dm)}</span>}</span>}
-              {d.color != null && <span>컬러 <b style={{ color: ink }} className="text-[15px]">{fmt(d.color)}</b>매{dc != null && <span style={{ color: accent }} className="ml-1 font-bold">+{fmt(dc)}</span>}</span>}
-              {p && (dm != null || dc != null) && <span style={{ color: ink3 }} className="text-[12px]">지난 점검({shortDate(prevDate)}) 대비</span>}
-            </div>}
-            {hasToner && <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-              {TONER.map(([k, name, color]) => { const v = d.toner[k]; return v == null ? null : <span key={k} className="inline-flex items-center gap-1.5 text-[12px] font-bold"><Dot color={color} size={10} />{name}<span style={{ background: panel, width: 64, height: 8, borderRadius: 999, overflow: "hidden", display: "inline-block" }}><b style={{ display: "block", height: "100%", width: `${v}%`, background: color, borderRadius: 999 }} /></span><span style={{ color: tonerLow(v) ? warn : ink }}>{v}%</span></span>; })}
-              {d.waste != null && <span style={{ color: wasteLow(d.waste) ? warn : ink2 }} className="text-[12px] font-bold">폐토너통 여유 {d.waste}%{wasteLow(d.waste) ? " · 교체 예정" : ""}</span>}
-            </div>}
-            <div style={{ color: ink2 }} className="grid gap-1 text-[13px] leading-relaxed">
-              {Object.values(d.spare).some((v) => v != null) && <div>여분 · {[...TONER.map(([k, name]) => (d.spare[k] != null ? `${name} ${d.spare[k]}` : "")), d.spare.W != null ? `폐토너통 ${d.spare.W}` : ""].filter(Boolean).join(", ")}{d.spareNote ? ` (${d.spareNote})` : ""}</div>}
-              {content && <div>접수 · {content.replace(/\n+/g, " ")}</div>}
-              <div style={{ color: ink }}>{kind === "as" ? "처리" : "조치"} · {acts.join(" / ")}{d.note ? ` · 확인 사항: ${d.note}` : ""}</div>
-            </div>
-          </div>;
-        }
         return <div key={d.index} className="grid gap-5">
           <div style={{ borderBottom: `1px solid ${line}` }} className="grid grid-cols-[1fr_auto] items-center gap-3 pb-4 pt-4">
             <div>
-              <div className="text-[22px] font-bold tracking-tight">{d.model || "복합기"}</div>
+              <div className="text-[22px] font-bold tracking-tight">{multi && <span style={{ background: accentSoft, color: accent }} className="mr-2 rounded-full px-2.5 py-0.5 align-middle text-[12px] font-black">{d.index}호기</span>}{d.model || "복합기"}</div>
               <div style={{ color: ink2 }} className="mt-1 flex flex-wrap gap-x-3.5 text-[13px]">{d.asset && <span>관리번호 {d.asset}</span>}{d.serial && <span>S/N {d.serial}</span>}</div>
             </div>
             <div style={{ color: ink3 }} className="text-right text-[12px]">{kind === "as" ? "처리 결과" : "점검 결과"}<b style={{ color: alert ? warn : ink }} className="block text-[18px] font-bold">{verdict}</b></div>
@@ -196,7 +173,6 @@ function ReportCard({ kind, data, prev, prevDate, date, author, notes, contents,
           </div>}
         </div>;
       })}
-      </div>
       {footer}
     </div>
   </div>;
@@ -395,7 +371,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
               <label className="grid gap-1 text-[11px] font-bold text-slate-500">{kind === "as" ? "처리 내용 (한 줄에 하나)" : "오늘 조치 (한 줄에 하나)"}<textarea rows={3} value={notes[d.index] ?? defaultNote(kind, d)} onChange={(e) => setNotes((cur) => ({ ...cur, [d.index]: e.target.value }))} className={TA} /></label>
             </div>)}
           </div>
-          {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 압축 배치로 그립니다(문자에 원본 크기 링크가 함께 갑니다)" : ""}</div>}
+          {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 문자 그림은 작게 보입니다(원본 크기 링크가 함께 갑니다)" : ""}</div>}
           <div className="overflow-x-auto bg-slate-100 p-4"><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} cardRef={cardRef} /></div>
         </>}
       </section>
