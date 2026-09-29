@@ -141,14 +141,17 @@ function ReportCard({ kind, data, prev, prevDate, date, author, cardRef }: { kin
           </div>}
         </div>;
       })}
-      <div style={{ borderTop: `1px solid ${line}` }} className="grid grid-cols-[1fr_auto] items-center gap-4 pt-4">
-        <div>
+      <div className="grid gap-3 pt-1">
+        <div style={{ background: accentSoft }} className="grid grid-cols-[6px_1fr] gap-3.5 rounded-[14px] px-4 py-3.5">
+          <div style={{ background: accent, borderRadius: 999 }} />
           {kind === "as"
-            ? <div style={{ color: ink2 }} className="text-[13px]"><b style={{ color: ink }} className="mb-0.5 block text-[15px] font-black">처리 후 확인</b>같은 증상이 다시 나타나면 바로 연락 주세요.</div>
-            : <div style={{ color: ink2 }} className="text-[13px]"><b style={{ color: ink }} className="mb-0.5 block text-[15px] font-black">다음 정기점검</b>방문 전에 미리 연락드리고 찾아뵙습니다.</div>}
-          <div style={{ color: ink3 }} className="mt-2.5 text-[12px] leading-relaxed">기기 문제나 소모품 요청은 전화 한 통이면 됩니다.</div>
+            ? <div><div style={{ color: accent }} className="text-[11px] font-black uppercase tracking-[.12em]">처리 후 확인</div><div style={{ color: ink }} className="mt-1 text-[14px] font-bold leading-relaxed">처리 후 같은 증상이 다시 나타나면 바로 말씀해 주세요. 우선으로 다시 살펴보겠습니다.</div></div>
+            : <div><div style={{ color: accent }} className="text-[11px] font-black uppercase tracking-[.12em]">다음 정기점검</div><div style={{ color: ink }} className="mt-1 text-[14px] font-bold leading-relaxed">방문 전에 미리 연락드리고 찾아뵙겠습니다. 토너·여분은 그때 다시 확인해 채워 드립니다.</div></div>}
         </div>
-        <div className="text-right"><div style={{ color: ink3 }} className="text-[11px] font-bold uppercase tracking-[.12em]">퍼스트전산 대표번호</div><div style={{ color: ink }} className="mt-0.5 text-[20px] font-bold tracking-tight">{COMPANY_PHONE}</div></div>
+        <div style={{ background: "#1e252f", color: "#fff" }} className="grid grid-cols-[1fr_auto] items-center gap-5 rounded-[14px] px-5 py-4">
+          <div><div style={{ color: "#aeb8c8" }} className="text-[11px] font-black uppercase tracking-[.12em]">고장 · 토너 · 소모품 요청</div><div className="mt-1 text-[14px] font-bold leading-relaxed">전화 한 통이면 담당자가 바로 처리해 드립니다.</div></div>
+          <div className="text-right"><div style={{ color: "#8fd8cb" }} className="text-[11px] font-black tracking-wide">퍼스트전산 대표번호</div><div className="text-[28px] font-black leading-tight tracking-tight">{COMPANY_PHONE}</div></div>
+        </div>
       </div>
     </div>
   </div>;
@@ -165,6 +168,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   const [sent, setSent] = useState<Map<string, string>>(new Map());
   const [prev, setPrev] = useState<{ data: ReportData; date: string } | null>(null);
   const [phone, setPhone] = useState("");
+  const [keymanName, setKeymanName] = useState(""); // 리포트에 찍히는 키맨 이름 — 양식이 이상하면 여기서 고쳐 보낸다
   const [testPhone, setTestPhone] = useState(() => { try { return localStorage.getItem(TEST_PHONE_KEY) || ""; } catch { return ""; } });
   const [busy, setBusy] = useState("");
   const [preview, setPreview] = useState<{ src: string; kb: number } | null>(null);
@@ -190,13 +194,15 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
 
   const filtered = useMemo(() => { const k = q.trim().toLowerCase(); return k ? rows.filter((r) => `${r.업체명} ${r.모델명} ${r.작성자}`.toLowerCase().includes(k)) : rows; }, [rows, q]);
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
-  const data = useMemo(() => (selected ? parseInspectionForm(selected._원문) : null), [selected]);
+  const parsed = useMemo(() => (selected ? parseInspectionForm(selected._원문) : null), [selected]);
+  const data = useMemo(() => (parsed ? { ...parsed, keymanName: keymanName.trim() } : null), [parsed, keymanName]);
   const sentAt = selected ? sent.get(sourceIdOf(kind, selected.id)) : undefined;
 
   // 선택한 건이 바뀌면: 받는 번호, 직전 점검(같은 업체·이전 날짜 — 점검만)
   useEffect(() => {
-    if (!selected || !data) { setPrev(null); return; }
-    setPhone(data.keymanPhone);
+    if (!selected || !parsed) { setPrev(null); return; }
+    setPhone(parsed.keymanPhone);
+    setKeymanName(parsed.keymanName);
     if (kind !== "inspection") { setPrev(null); return; }
     let live = true;
     const vendor = selected._업체명 || selected.업체명;
@@ -204,7 +210,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
       .then((r) => { if (live) setPrev(r[0] ? { data: parseInspectionForm(r[0]._원문), date: r[0].작성일 } : null); })
       .catch(() => { if (live) setPrev(null); });
     return () => { live = false; };
-  }, [selected, data, kind]);
+  }, [selected, parsed, kind]);
 
   const makeImage = async (): Promise<string | null> => {
     const node = cardRef.current; if (!node) return null;
@@ -301,7 +307,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
         {!selected || !data ? <div className="px-4 py-16 text-center text-[13px] font-semibold text-slate-400">왼쪽에서 간 곳을 고르면 리포트가 여기 만들어집니다</div> : <>
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
             <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">받는 번호<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="키맨 휴대폰" className="w-40 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold tabular-nums outline-none focus:border-slate-400" /></label>
-            {data.keymanName && <span className="text-[12px] font-semibold text-slate-400">{data.keymanName}</span>}
+            <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">키맨 이름<input value={keymanName} onChange={(e) => setKeymanName(e.target.value)} placeholder="예: 위지혜 팀장" className="w-36 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-slate-400" /></label>
             {!data.keymanPhone && <span className="text-[11px] font-bold text-rose-600">양식에 휴대폰 번호가 없어 직접 넣어야 합니다</span>}
             <div className="ml-auto flex flex-wrap gap-2">
               <button type="button" disabled={!!busy} onClick={() => void showPreview()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-[12px] font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"><ImageIcon size={14} />이미지 미리보기</button>
