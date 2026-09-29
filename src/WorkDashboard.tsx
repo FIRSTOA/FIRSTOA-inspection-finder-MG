@@ -60,7 +60,7 @@ const TD_WRITE = "border border-slate-200 p-0 align-top bg-[#FFFBEB] focus-withi
 const CELL_AREA = "block w-full bg-transparent px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none placeholder:text-slate-300";
 const BAR = "border border-slate-800 bg-slate-800 px-3 py-1.5 text-[12px] font-black text-white";
 // 제목 블록 안의 조회 조건 — 상자 없는 글자 드롭다운(따로 있던 필터 바를 제목 블록에 합침, 2026-09-24)
-const INLINE_SELECT = "!rounded-md !border-0 !bg-transparent !px-1.5 !py-0.5 !text-[12px] !font-bold !text-slate-200 hover:!bg-white/10";
+const INLINE_SELECT = "!rounded-full !border-0 !bg-transparent !px-2.5 !py-1 !text-[12px] !font-bold !text-slate-200 hover:!bg-white/10";
 function workWeekRange(date = kstDate()): { start: string; end: string } {
   const r = weekRange(date);
   const endDate = new Date(`${r.start}T12:00:00+09:00`);
@@ -332,7 +332,10 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   };
   const setOfficeValue = (k: OfficeKind, field: "count" | "minutes", value: number) => setOffice({ ...office, values: { ...office.values, [k]: { ...office.values[k], [field]: Math.max(0, value || 0) } } });
   const saveOffice = async () => { if (readOnly) return; setSaving("office"); setSaved(""); try { const next = { ...office, author, workDate: selectedDay }; await saveOfficeLog(next); setOfficeLogs([next]); setSaved("내근업무 저장 완료"); } catch (e) { setError((e as Error).message); } finally { setSaving(""); } };
-  const periodTitle = period === "day" ? "일일 업무 현황" : period === "week" ? `${month}월 ${selectedWeekLabel} 주간 현황판` : period === "month" ? `${year}년 ${month}월 업무 현황` : period === "quarter" ? `${year}년 ${quarter}분기 업무 현황` : `${year}년 연간 업무 현황`;
+  const dayLabel = (d: string) => { const dt = new Date(`${d}T12:00:00+09:00`); return `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일 (${["일", "월", "화", "수", "목", "금", "토"][dt.getUTCDay()]})`; };
+  const periodEyebrow = period === "day" ? "일일 업무 현황" : period === "week" ? "주간 현황판" : period === "month" ? "월간 업무 현황" : period === "quarter" ? "분기 업무 현황" : "연간 업무 현황";
+  const periodHeadline = period === "day" ? dayLabel(selectedDay) : period === "week" ? `${month}월 ${selectedWeekLabel}` : period === "month" ? `${year}년 ${month}월` : period === "quarter" ? `${year}년 ${quarter}분기` : `${year}년`;
+  const periodRangeText = period === "week" ? `${shortDate(editWeek.start)} ~ ${shortDate(editWeek.end)}` : "";
   const periodTabs = ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
@@ -340,17 +343,25 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <h2 className="min-w-0 text-lg font-black tracking-tight text-white lg:text-xl">{periodTitle}</h2>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] font-black uppercase tracking-[.14em] text-slate-400">{periodEyebrow}</div>
+            <h2 className="mt-0.5 text-2xl font-black tracking-tight text-white">{periodHeadline}</h2>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] font-semibold text-slate-400">
+              {periodRangeText && <span className="tabular-nums text-slate-300">{periodRangeText}</span>}
+              <span>{subject}{readOnly ? " · 읽기 전용" : ""}</span>
+              {!loading && <span className="tabular-nums">방문 <b className="text-slate-200">{sum.visits}</b>곳 · 점검 <b className="text-slate-200">{sum.count.inspection}</b>건 · AS <b className="text-slate-200">{sum.count.as}</b>건 · 외근 <b className="text-slate-200">{hm(sum.fieldMinutes)}</b></span>}
+            </div>
+          </div>
           <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
             <div className="grid w-full grid-cols-5 gap-1 rounded-full bg-white/10 p-1 lg:w-auto">{periodTabs.map(([p, label]) => <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-1 py-1.5 text-xs font-bold transition sm:px-4 sm:text-sm ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>)}</div>
-            <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-[12px] font-bold text-slate-300 lg:justify-end">
-              {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-md bg-transparent px-1.5 py-0.5 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
+            <div className="flex flex-wrap items-center gap-0.5 rounded-full bg-white/10 p-1 text-[12px] font-bold text-slate-300 lg:justify-end">
+              {period === "day" && <input type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setYear(Number(e.target.value.slice(0, 4))); setMonth(Number(e.target.value.slice(5, 7))); setQuarter(Math.ceil(Number(e.target.value.slice(5, 7)) / 3)); }} className="rounded-full bg-transparent px-2.5 py-1 text-[12px] font-bold text-slate-200 outline-none hover:bg-white/10 [color-scheme:dark]" />}
               {period !== "day" && <PortalSelect tone="dark" className={INLINE_SELECT} width={110} value={String(year)} onChange={(next) => { const y = Number(next); setYear(y); if (period === "week") setSelectedDay(weeksInMonth(y, month)[0]?.start || selectedDay); }} options={Array.from({ length: 6 }, (_, i) => currentYear - 4 + i).map((y) => ({ value: String(y), label: `${y}년` }))} />}
               {(period === "week" || period === "month") && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(month)} onChange={(next) => { const m = Number(next); setMonth(m); if (period === "week") setSelectedDay(weeksInMonth(year, m)[0]?.start || selectedDay); }} options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({ value: String(m), label: `${m}월` }))} />}
               {period === "week" && <PortalSelect tone="dark" className={INLINE_SELECT} width={200} value={editWeek.start} onChange={setSelectedDay} options={monthWeeks.map((w) => ({ value: w.start, label: `${w.label} ${shortDate(w.start)}~${shortDate(w.end)}` }))} />}
               {period === "quarter" && <PortalSelect tone="dark" className={INLINE_SELECT} width={100} value={String(quarter)} onChange={(next) => setQuarter(Number(next))} options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))} />}
-              <span className="px-1 text-slate-500">·</span>
+              <span className="mx-1 h-4 w-px bg-white/20" />
               <PortalSelect tone="dark" className={INLINE_SELECT} width={165} value={viewAs} onChange={setViewAs} options={viewerOptions} />
             </div>
           </div>
