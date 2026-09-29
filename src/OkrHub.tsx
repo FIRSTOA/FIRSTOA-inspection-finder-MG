@@ -92,7 +92,7 @@ function useColWidths(storageKey: string, defaults: number[]) {
 const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
 
 // 월 고르기 — 현재 달만 보이는 버튼, 누르면 분기별로 1·2·3월 / 4·5·6월… 묶인 작은 판이 뜬다(1~12월 나열 대신, 2026-09-24 사용자 제안). 기록 있는 달엔 점.
-function MonthPicker({ value, marks, current, onChange }: { value: number; marks: Set<number>; current?: number; onChange: (m: number) => void }) {
+function MonthPicker({ value, current, onChange }: { value: number; current?: number; onChange: (m: number) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
@@ -112,7 +112,7 @@ function MonthPicker({ value, marks, current, onChange }: { value: number; marks
       <div ref={panelRef} style={{ position: "fixed", top: spot.top, left: spot.left, width: 280, zIndex: 4000 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
         {[1, 2, 3, 4].map((q) => <div key={q} className="flex items-center gap-2 border-b border-slate-100 py-1 last:border-0">
           <span className="w-11 shrink-0 border-r border-slate-300 pr-2 text-right text-[11px] font-black text-slate-500">{q}분기</span>
-          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" title={m === current ? "이번 달" : marks.has(m) ? "기록 있음" : undefined} onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-center text-[13px] font-bold tabular-nums transition ${m === value ? "bg-slate-900 text-white" : marks.has(m) ? "text-slate-800 hover:bg-slate-100" : "text-slate-400 hover:bg-slate-100"} ${m === current && m !== value ? "ring-1 ring-inset ring-emerald-500" : ""}`}>{m}{marks.has(m) && m !== value && <span className="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-slate-500" />}</button>; })}
+          {[1, 2, 3].map((i) => { const m = (q - 1) * 3 + i; return <button key={m} type="button" title={m === current ? "이번 달" : undefined} onClick={() => { onChange(m); setSpot(null); }} className={`relative flex-1 rounded-md px-2 py-1.5 text-center text-[13px] font-bold tabular-nums transition ${m === value ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"} ${m === current && m !== value ? "ring-1 ring-inset ring-emerald-500" : ""}`}>{m}</button>; })}
         </div>)}
       </div>,
       document.body,
@@ -571,7 +571,6 @@ export default function OkrHub({ author }: { author: string }) {
     finally { setAiBusy(""); }
   };
 
-  const monthsWithData = useMemo(() => { const out = new Set<number>(); for (const id of resultIds) { const m = id.match(/^(\d{4})-(\d{2})/); if (m && Number(m[1]) === year) out.add(Number(m[2])); } return out; }, [resultIds, year]);
   const weeks = useMemo(() => okrWeeksInMonth(year, month), [year, month]);
   const showMonthTab = weekNo === null || resultIds.has(monthCycleId(year, month)); // '월 종합'은 주차로 나누기 전 달 단위 옛 기록이 있을 때만
   const years = useMemo(() => { const ys = new Set<number>([Number(today.slice(0, 4)), Number(today.slice(0, 4)) - 1, ...cycles.map((c) => c.year)]); return [...ys].sort((a, b) => b - a); }, [cycles, today]);
@@ -596,15 +595,14 @@ export default function OkrHub({ author }: { author: string }) {
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
               <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonthDefault(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-              <MonthPicker value={month} marks={monthsWithData} current={thisWeek.year === year ? thisWeek.month : undefined} onChange={(m) => openMonthDefault(year, m)} />
+              <MonthPicker value={month} current={thisWeek.year === year ? thisWeek.month : undefined} onChange={(m) => openMonthDefault(year, m)} />
               <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
                 {showMonthTab && <button type="button" title="주차로 나누기 전 달 단위로 적은 옛 기록" onClick={() => openCycle(year, month, null)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold transition ${!weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>월 종합</button>}
                 {weeks.map((w) => {
                   const isNow = thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo;
-                  const has = resultIds.has(weekCycleId(year, month, w.weekNo));
                   const edge = w.start.slice(0, 7) !== `${year}-${pad(month)}` ? " · 지난달 마지막 주와 같은 기간" : w.end.slice(0, 7) !== `${year}-${pad(month)}` ? " · 다음달 1주와 같은 기간" : "";
-                  return <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}${has ? " · 기록 있음" : ""}${edge}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : isNow ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`}>
-                    {w.weekNo}주{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}{has && weekNo !== w.weekNo && <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-emerald-400" />}
+                  return <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}${edge}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : isNow ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`}>
+                    {w.weekNo}주{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}
                   </button>;
                 })}
               </div>
