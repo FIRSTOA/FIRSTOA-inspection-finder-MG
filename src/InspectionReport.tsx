@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FlaskConical, Image as ImageIcon, RefreshCw, Send } from "lucide-react";
-import { insertRow, invokeEdgeFunction, selectRows } from "./supabase";
+import { getConfig, insertRow, invokeEdgeFunction, selectRows } from "./supabase";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { kstDate } from "./visits";
@@ -22,6 +22,7 @@ type FormRow = { id: number; 작성일: string; 작성자: string; 구분: strin
 const enc = encodeURIComponent;
 const COLS = "id,작성일,작성자,구분,업체명,_업체명,모델명,자산기번,_원문,created_at";
 const COMPANY_PHONE = "1522-1093"; // 퍼스트전산 대표번호 — 리포트 하단 연락처
+const KAKAO_CHANNEL_URL = ""; // 카카오톡 채널 링크 — 관리 설정(app_config) KAKAO_CHANNEL_URL이 있으면 그것을 우선. 비어 있으면 문자에서 그 줄을 뺀다
 const TEST_PHONE_KEY = "report_test_phone";
 const TONER: Array<[TonerKey, string, string]> = [["K", "검정", "#2a2a2e"], ["C", "파랑", "#0e9ad0"], ["M", "빨강", "#d8368a"], ["Y", "노랑", "#efb400"]];
 const kstHour = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", hour12: false }).format(new Date()));
@@ -169,6 +170,8 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   const [prev, setPrev] = useState<{ data: ReportData; date: string } | null>(null);
   const [phone, setPhone] = useState("");
   const [keymanName, setKeymanName] = useState(""); // 리포트에 찍히는 키맨 이름 — 양식이 이상하면 여기서 고쳐 보낸다
+  const [kakaoUrl, setKakaoUrl] = useState(KAKAO_CHANNEL_URL);
+  useEffect(() => { getConfig().then((cfg) => { if (cfg.KAKAO_CHANNEL_URL) setKakaoUrl(cfg.KAKAO_CHANNEL_URL.trim()); }).catch(() => undefined); }, []);
   const [testPhone, setTestPhone] = useState(() => { try { return localStorage.getItem(TEST_PHONE_KEY) || ""; } catch { return ""; } });
   const [busy, setBusy] = useState("");
   const [preview, setPreview] = useState<{ src: string; kb: number } | null>(null);
@@ -228,7 +231,9 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
     if (!selected || !data) return "";
     const month = Number(selected.작성일.slice(5, 7));
     const head = kind === "as" ? `${data.vendor} AS 처리 리포트를 보내드립니다.\n접수하신 내용과 처리 결과를 사진으로 정리했습니다.` : `${data.vendor} ${month}월 정기점검 리포트를 보내드립니다.\n오늘 확인한 사용량·토너 잔량·여분과 다음 안내를 사진으로 정리했습니다.`;
-    return `${test ? "[테스트] " : ""}[퍼스트전산] ${head}\n퍼스트전산 CS팀 · 대표번호 ${COMPANY_PHONE}`;
+    // 끝맺음(2026-09-30 확정): 담당 이름 · 대표번호 · 카카오톡 채널 링크
+    const tail = [`퍼스트전산 CS팀 ${selected.작성자 || author}`, `대표번호 ${COMPANY_PHONE}`, kakaoUrl].filter(Boolean).join("\n");
+    return `${test ? "[테스트] " : ""}[퍼스트전산] ${head}\n\n${tail}`;
   };
   const deliver = async (to: string, test: boolean) => {
     if (!selected || !data) return false;
