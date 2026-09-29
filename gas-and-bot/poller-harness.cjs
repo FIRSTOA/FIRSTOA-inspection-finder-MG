@@ -1,4 +1,4 @@
-// 실행: node gas-and-bot/poller-harness.js gas-and-bot/supabase-outbox-poller.js  (봇 스크립트를 고치면 폰에 올리기 전에 한 번 돌린다)
+// 실행: node gas-and-bot/poller-harness.cjs gas-and-bot/supabase-outbox-poller.js  (봇 스크립트를 고치면 폰에 올리기 전에 한 번 돌린다)
 // 메신저봇R 환경 흉내 — 봇 스크립트의 JS 논리만 Node에서 실제로 돌려 본다(자바·Jsoup·BotManager는 가짜).
 const fs = require("fs");
 const vm = require("vm");
