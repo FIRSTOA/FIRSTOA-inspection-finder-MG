@@ -13,6 +13,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { HappyCallWorkspace, TemplateBar } from "./CustomerEngagement";
+import InspectionReportBoard from "./InspectionReport";
 import { notify } from "./toast";
 
 type Place = { id: number; name: string; phone: string; team: string; label: string };
@@ -262,12 +263,13 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
 // 해피콜(방문 후) + 분기점검 안내(방문 전) — 둘 다 "고객에게 대표번호 문자"라 한 탭에서 모드로 오간다.
 // 전환 알약은 각 화면 다크 헤더 안에 심고, 두 화면이 같은 2열 틀을 쓰므로 전환 시 레이아웃이 안 튄다.
 export default function CustomerCallHub({ author }: { author: string }) {
-  const [tab, setTab] = useState<"happycall" | "quarter">("happycall");
+  const [tab, setTab] = useState<"happycall" | "quarter" | "report">("happycall"); // report: 점검 리포트(2026-09-30) — 방문 후 고객에게 보내는 리포트 이미지
   const switcher = (
     <div className="flex shrink-0 gap-1 rounded-full bg-white/10 p-1">
       <button type="button" onClick={() => setTab("happycall")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "happycall" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>해피콜</button>
       <button type="button" onClick={() => setTab("quarter")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "quarter" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>분기점검 안내</button>
+      <button type="button" onClick={() => setTab("report")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "report" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>점검 리포트</button>
     </div>
   );
-  return tab === "happycall" ? <HappyCallWorkspace author={author} switcher={switcher} /> : <QuarterNoticeBoard author={author} switcher={switcher} />;
+  return tab === "happycall" ? <HappyCallWorkspace author={author} switcher={switcher} /> : tab === "report" ? <InspectionReportBoard author={author} switcher={switcher} /> : <QuarterNoticeBoard author={author} switcher={switcher} />;
 }
