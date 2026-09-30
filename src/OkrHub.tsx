@@ -397,9 +397,9 @@ export default function OkrHub({ author }: { author: string }) {
   const goalReportOf = (team: string, who: string) => (goalSrc ? findReport(goalSrc.parts, team, who) : findReport(reports, team, who));
   const goalPartOf = (team: string) => goalReportOf(team, "");
   const hasCustom = (team: string) => !!goalPartOf(team)?.goals?.length;
-  const hasOwnGoals = (team: string, who: string) => !!goalReportOf(team, who)?.goals?.length;
   // 목표·달성기준은 사람마다 따로 적을 수 있다(2026-09-30 사용자): 팀원 것 → 없으면 파트 종합 것 → 없으면 달의 공통.
   // 각자 자기 기록(header.goals)에 저장되고, 남의 박스를 열면 그 사람이 적은 것이 그대로 보인다(15초 동기화).
+  // 되돌리기 단추는 없다(2026-09-30 사용자): 팀원은 자기 이름 탭, 부파트장은 파트 종합, 팀장은 통합집계를 각자 알아서 고친다.
   const teamGoalsOf = (team: OkrTeam): OkrGoal[] => { const own = goalPartOf(team)?.goals; return own?.length ? own : commonGoals; };
   const personGoalsOf = (team: OkrTeam, who: string): OkrGoal[] => { if (!who || who === "__sum__") return teamGoalsOf(team); const own = goalReportOf(team, who)?.goals; return own?.length ? own : teamGoalsOf(team); };
   const updateCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
@@ -639,10 +639,9 @@ export default function OkrHub({ author }: { author: string }) {
       {loading ? <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">불러오는 중…</div>
         : tab === "all"
           ? <SummaryView cycle={cycle} goals={commonGoals} goalsOf={teamGoalsOf} goalCycleId={goalCycle.id} cycles={cycles} reports={reports} aiBusy={aiBusy} customTeams={OKR_TEAMS.filter(hasCustom)} onFeedback={setFeedback} onAiFeedback={(no) => void aiFeedback(no)} onCopyGoals={copyGoalsFrom} onTemplate={() => updateGoalCycle({ goals: defaultGoalTemplate() })} {...goalOpsFor("common")} />
-          : <TeamView team={tab} cycle={cycle} goals={personGoalsOf(tab, member)} custom={hasOwnGoals(tab, member)} reports={reports} member={member} onMember={setMember} onRemoveMember={(name) => void removeMember(tab, name)} roster={rosterOf(tab)} author={author} aiBusy={aiBusy}
+          : <TeamView team={tab} cycle={cycle} goals={personGoalsOf(tab, member)} reports={reports} member={member} onMember={setMember} onRemoveMember={(name) => void removeMember(tab, name)} roster={rosterOf(tab)} author={author} aiBusy={aiBusy}
               onHeader={(patch) => patchReport(tab, "", (r) => ({ ...r, header: { ...r.header, ...patch } }))}
               onResult={(no, patch) => updateResult(tab, member, no, patch)}
-              onResetGoals={() => { void (async () => { if (await askConfirm(member ? `${member}의 목표·달성기준을 지우고 파트 종합 것을 다시 따를까요?` : `${teamName(tab)} 목표·달성기준을 지우고 달의 공통을 다시 따를까요?`, { okLabel: "되돌리기" })) patchGoalReport(tab, member, (r) => ({ ...r, goals: undefined })); })(); }}
               onMerge={(no) => void mergeMembers(tab, no)} onAiMerge={(no) => void aiMerge(tab, no)} onAiFormat={(no) => void aiFormat(tab, member, no)}
               onTeamFeedback={(no, memo, memoHtml) => setTeamFeedback(tab, no, memo, memoHtml)} onAiTeamFeedback={(no) => void aiTeamFeedback(tab, no)} {...goalOpsFor(tab, member)} />}
     </>}
@@ -670,9 +669,9 @@ const COLS: Array<[string, number, "read" | "write"]> = [
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
 
-function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onResetGoals, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onGoal, onPillar, onInsert, onRemove }: {
-  team: OkrTeam; cycle: OkrCycle; goals: OkrGoal[]; custom: boolean; reports: OkrReport[]; member: string; onMember: (m: string) => void; onRemoveMember: (name: string) => void; roster: string[]; author: string; aiBusy: string;
-  onHeader: (patch: Partial<OkrReport["header"]>) => void; onResult: (no: number, patch: Partial<OkrResultRow>) => void; onResetGoals: () => void; onMerge: (no: number) => void; onAiMerge: (no: number) => void; onAiFormat: (no: number) => void;
+function TeamView({ team, cycle, goals, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onGoal, onPillar, onInsert, onRemove }: {
+  team: OkrTeam; cycle: OkrCycle; goals: OkrGoal[]; reports: OkrReport[]; member: string; onMember: (m: string) => void; onRemoveMember: (name: string) => void; roster: string[]; author: string; aiBusy: string;
+  onHeader: (patch: Partial<OkrReport["header"]>) => void; onResult: (no: number, patch: Partial<OkrResultRow>) => void; onMerge: (no: number) => void; onAiMerge: (no: number) => void; onAiFormat: (no: number) => void;
   onTeamFeedback: (no: number, memo: string, memoHtml?: string) => void; onAiTeamFeedback: (no: number) => void;
 } & GoalOps) {
   const partReport = findReport(reports, team, "") || emptyReport(cycle.id, team, "");
@@ -704,7 +703,6 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
       {memberNames.map((name) => <PersonBox key={name} label={name} sub={name === author ? "나" : ""} rows={rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
       <button type="button" onClick={addOtherName} className="w-[64px] shrink-0 rounded-lg border border-dashed border-slate-300 text-[11px] font-bold text-slate-400 hover:bg-white">＋ 이름</button>
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
-      {custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{member ? `${member} 개인 목표·달성기준 사용 중 · 파트 것으로 되돌리기` : `${teamName(team)} 목표·달성기준 사용 중 · 공통으로 되돌리기`}</button>}
     </div>
     {member === "__sum__" ? <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} aiBusy={aiBusy} onFeedback={onTeamFeedback} onAiFeedback={onAiTeamFeedback} /> : <>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
