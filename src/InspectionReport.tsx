@@ -201,6 +201,18 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   const [busy, setBusy] = useState("");
   const [preview, setPreview] = useState<{ src: string; kb: number } | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // 폰(lg 미만): 목록과 리포트를 한 화면에 못 두니 목록 → 리포트 두 단계로. 카드(720px)는 화면 폭에 맞춰 축소해 보여 주고, 이미지를 구울 때만 원래 크기로 되돌린다
+  const [mobileView, setMobileView] = useState<"list" | "report">("list");
+  const zoomRef = useRef<HTMLDivElement | null>(null);
+  const previewBoxRef = useRef<HTMLDivElement | null>(null);
+  const [previewWidth, setPreviewWidth] = useState(0);
+  useEffect(() => {
+    const el = previewBoxRef.current; if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => { for (const e of entries) setPreviewWidth(e.contentRect.width); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps -- 리포트 칸이 생길 때 다시 잰다
+  const previewZoom = previewWidth > 0 ? Math.min(1, previewWidth / 720) : 1;
   const table = kind === "as" ? "as_records" : "jeomgeom";
 
   const load = async () => {
@@ -246,9 +258,11 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   const makeImage = async (): Promise<{ mms: string; full: Blob } | null> => {
     const node = cardRef.current; if (!node) return null;
     setBusy("이미지 만드는 중…");
+    const wrap = zoomRef.current; const zoomBefore = wrap?.style.zoom || "";
+    if (wrap) wrap.style.zoom = "1"; // 폰에서 축소해 보여 주던 카드를 잠깐 원래 크기로 — 축소된 채 구우면 작은 그림이 된다
     try { return await renderCard(node); }
     catch (e) { notify(`이미지 생성 실패: ${(e as Error).message}`, "error"); return null; }
-    finally { setBusy(""); }
+    finally { if (wrap) wrap.style.zoom = zoomBefore; setBusy(""); }
   };
   const showPreview = async () => {
     const img = await makeImage();
@@ -315,7 +329,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   const kindLabel = kind === "as" ? "AS" : "점검";
   return <div className="space-y-4">
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+      <div className="flex flex-col gap-3 bg-[#1E252F] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div className="min-w-0"><div className="text-[11px] font-black text-slate-400">방문 후 · 고객 전달</div><div className="text-lg font-black text-white">점검 리포트</div><div className="mt-0.5 text-[12px] font-semibold text-slate-400">점검·AS 양식이 그대로 고객용 리포트 이미지가 됩니다. 간 곳을 고르고, 고객에게 보이는 문구를 확인한 뒤 [리포트 발송]</div></div>
         {switcher}
       </div>
@@ -334,11 +348,11 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
     </section>
 
     <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className={`${selected && mobileView === "report" ? "hidden lg:block " : ""}overflow-hidden rounded-xl border border-slate-200 bg-white`}>
         <div className="border-b border-slate-100 px-4 py-2.5 text-[11px] font-black text-slate-400">{kindLabel} {filtered.length}건{loading ? " · 불러오는 중…" : ""}</div>
-        <div className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
+        <div className="divide-y divide-slate-100 lg:max-h-[70vh] lg:overflow-y-auto">
           {!loading && !filtered.length && <div className="px-4 py-10 text-center text-[12px] font-semibold text-slate-400">기간 안에 {kindLabel} 기록이 없습니다</div>}
-          {filtered.map((r) => { const on = r.id === selectedId; const s = sent.get(sourceIdOf(kind, r.id)); return <button key={r.id} type="button" onClick={() => setSelectedId(r.id)} className={`block w-full px-4 py-2.5 text-left transition ${on ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}>
+          {filtered.map((r) => { const on = r.id === selectedId; const s = sent.get(sourceIdOf(kind, r.id)); return <button key={r.id} type="button" onClick={() => { setSelectedId(r.id); setMobileView("report"); }} className={`block w-full px-4 py-2.5 text-left transition ${on ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}>
             <div className="flex items-center justify-between gap-2"><span className={`text-[11px] font-bold tabular-nums ${on ? "text-slate-300" : "text-slate-400"}`}>{r.작성일}{!mine && r.작성자 ? ` · ${r.작성자}` : ""}</span>{s && <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${on ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"}`}>발송됨 {shortDate(s.slice(0, 10))}</span>}</div>
             <div className="mt-0.5 truncate text-[13px] font-black">{r.업체명}</div>
             <div className={`truncate text-[11px] font-semibold ${on ? "text-slate-300" : "text-slate-500"}`}>{r.모델명 || "기종 미기재"}{r.자산기번 ? ` · ${r.자산기번}` : ""}</div>
@@ -346,11 +360,12 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
         </div>
       </section>
 
-      <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className={`${!selected || mobileView === "list" ? "hidden lg:block " : ""}min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white`}>
         {!selected || !data ? <div className="px-4 py-16 text-center text-[13px] font-semibold text-slate-400">왼쪽에서 간 곳을 고르면 리포트가 여기 만들어집니다</div> : <>
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 lg:hidden"><button type="button" onClick={() => setMobileView("list")} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-black text-slate-700">← 목록</button><div className="min-w-0 truncate text-[12px] font-bold text-slate-600">{selected.업체명} · {selected.작성일}</div></div>
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
             <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">받는 번호<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="키맨 휴대폰" className="w-40 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold tabular-nums outline-none focus:border-slate-400" /></label>
-            <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">업체명<input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="리포트에 찍히는 업체명" className="w-52 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-slate-400" /></label>
+            <label className="flex w-full items-center gap-2 text-[12px] font-bold text-slate-600 sm:w-auto">업체명<input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="리포트에 찍히는 업체명" className="min-w-0 flex-1 rounded-full sm:w-52 sm:flex-none border border-slate-200 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-slate-400" /></label>
             <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">키맨 이름<input value={keymanName} onChange={(e) => setKeymanName(e.target.value)} placeholder="예: 위지혜 팀장" className="w-36 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-slate-400" /></label>
             {!data.keymanPhone && <span className="text-[11px] font-bold text-rose-600">양식에 휴대폰 번호가 없어 직접 넣어야 합니다</span>}
             <div className="ml-auto flex flex-wrap gap-2">
@@ -374,7 +389,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
             </div>)}
           </div>
           {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 문자 그림은 작게 보입니다(원본 크기 링크가 함께 갑니다)" : ""}</div>}
-          <div className="overflow-x-auto bg-slate-100 p-4"><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} kakaoUrl={kakaoUrl} cardRef={cardRef} /></div>
+          <div ref={previewBoxRef} className="overflow-hidden bg-slate-100 p-3 sm:p-4"><div ref={zoomRef} style={{ zoom: previewZoom, width: 720 }}><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} kakaoUrl={kakaoUrl} cardRef={cardRef} /></div></div>
         </>}
       </section>
     </div>

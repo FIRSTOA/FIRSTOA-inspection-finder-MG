@@ -259,7 +259,7 @@ export function HappyCallWorkspace({ author, switcher }: { author: string; switc
   </div> : <div className="flex min-h-[430px] items-center justify-center text-center text-sm font-semibold text-slate-400">방문 건을 선택하세요.</div>;
   return <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(430px,.95fr)]">
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+      <div className="flex flex-col gap-3 bg-[#1E252F] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div>
           <h2 className="text-base font-black text-white lg:text-lg">해피콜</h2>
           <p className="mt-0.5 text-[11px] font-semibold text-slate-400">최근 7일 점검·AS 방문 고객에게 만족 확인 문자를 보냅니다.</p>

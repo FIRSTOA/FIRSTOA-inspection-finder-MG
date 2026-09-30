@@ -152,7 +152,7 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(430px,.95fr)]">
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+        <div className="flex flex-col gap-3 bg-[#1E252F] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
           <div>
             <h2 className="text-base font-black text-white lg:text-lg">분기점검 안내</h2>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-400">{quarterNum}분기 워킨맵(분기점검) 대상에게 방문 전 인사 문자 — 대표번호로 발송됩니다.</p>
@@ -265,10 +265,10 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
 export default function CustomerCallHub({ author }: { author: string }) {
   const [tab, setTab] = useState<"happycall" | "quarter" | "report">("happycall"); // report: 점검 리포트(2026-09-30) — 방문 후 고객에게 보내는 리포트 이미지
   const switcher = (
-    <div className="flex shrink-0 gap-1 rounded-full bg-white/10 p-1">
-      <button type="button" onClick={() => setTab("happycall")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "happycall" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>해피콜</button>
-      <button type="button" onClick={() => setTab("quarter")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "quarter" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>분기점검 안내</button>
-      <button type="button" onClick={() => setTab("report")} className={`rounded-full px-4 py-1.5 text-xs font-black transition ${tab === "report" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>점검 리포트</button>
+    <div className="grid w-full grid-cols-3 gap-1 rounded-full bg-white/10 p-1 sm:flex sm:w-auto sm:shrink-0">
+      <button type="button" onClick={() => setTab("happycall")} className={`whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-black transition sm:px-4 ${tab === "happycall" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>해피콜</button>
+      <button type="button" onClick={() => setTab("quarter")} className={`whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-black transition sm:px-4 ${tab === "quarter" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>분기점검 안내</button>
+      <button type="button" onClick={() => setTab("report")} className={`whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-black transition sm:px-4 ${tab === "report" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>점검 리포트</button>
     </div>
   );
   return tab === "happycall" ? <HappyCallWorkspace author={author} switcher={switcher} /> : tab === "report" ? <InspectionReportBoard author={author} switcher={switcher} /> : <QuarterNoticeBoard author={author} switcher={switcher} />;
