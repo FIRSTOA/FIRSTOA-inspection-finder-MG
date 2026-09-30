@@ -69,6 +69,11 @@ function parseDevice(block: string[], index: number): ReportDevice | null {
   const spareText = spareLines[0] || "";
   const spare = { K: null, C: null, M: null, Y: null, W: null } as Record<TonerKey | "W", number | null>;
   for (const k of ["K", "C", "M", "Y"] as TonerKey[]) { const m = spareText.match(new RegExp("(?:^|[\\s,/])" + k + "\\s*[-:=]?\\s*(\\d+)", "i")); if (m) spare[k] = Number(m[1]); }
+  // "토너 2set 폐-2" / "2세트" / "각 2개" — 색별 숫자가 없으면 세트 수를 네 색에 똑같이(2026-09-30 제이앤노무법인)
+  if (["K", "C", "M", "Y"].every((k) => spare[k as TonerKey] == null)) {
+    const set = spareText.match(/(\d+)\s*(?:set|세트|셋트|셋|조)\b/i) || spareText.match(/각\s*(\d+)/);
+    if (set) for (const k of ["K", "C", "M", "Y"] as TonerKey[]) spare[k] = Number(set[1]);
+  }
   const w = spareText.match(/폐\s*(?:통|토너)?\s*[-:=]?\s*(\d+)/); if (w) spare.W = Number(w[1]);
   return { index, model, serial, asset, mono, color, total, toner, waste, spare, spareNote: spareLines.slice(1).join(" ").trim(), content: field(block, "내용", true), work: field(block, "처리내용", true), note: field(block, "특이사항", true) };
 }

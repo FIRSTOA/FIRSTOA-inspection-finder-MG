@@ -2,8 +2,9 @@
 // 엑셀 "CS팀_8월_OKR_실행결과" 워크북을 웹으로 옮겼다. 다른 탭과 같은 짙은 상단 바에 연도 + 1~12월만 두고, 달을 고르면 그 달 OKR이 열린다
 // (없으면 지난달 목표를 복사한 초안 — 무언가 적는 순간 저장).
 //  - 구조: Pillar 3개(AI·효율성·비용절감 / 매출증대·안정 / 나의 성장·소통) × 병목 1·2·3 = 목표 9개.
-//  - 목표·달성기준은 두 층: 달의 공통 목표(통합집계에서 팀장이 고침) ← 파트 고유 목표(파트 종합에서 고침, 처음 고칠 때 공통을 복사).
-//    파트 고유 목표가 없으면 공통을 그대로 따른다. 팀원 칸에서는 읽기만 — 파트 종합·팀원은 같은 목표를 본다(2026-09-24 사용자).
+//  - 목표(objective)·Pillar·병목은 전사 고정 — 통합집계에서만 고치고 파트·팀원 화면에는 파란 칸으로 읽기만(2026-09-30 팀장).
+//    달성기준만 파트마다 다를 수 있다: 파트 종합에서 고치면 그 파트의 header.goals에 저장되고(처음 고칠 때 공통을 복사), 읽을 때 목표는 공통을 우선한다.
+//    팀원 칸에서는 둘 다 읽기만 — 파트 종합·팀원은 같은 달성기준을 본다.
 //  - 파트 탭(A~D) = 엑셀 시트 한 장. Pillar는 표 위 가로 막대(행 머리), 그 아래 병목 1·2·3 행. 셀은 엑셀처럼: 한 번 눌러 선택 → Del 삭제 → 더블클릭·Enter·타이핑으로 편집.
 //    노란 칸(실제결과·사유·개선계획·근거자료)과 목표·달성기준은 글자색 검정·빨강·파랑을 바꿔 적을 수 있다(RichCell).
 //    완료·해당없음이 아니면 사유·개선계획이 필수(빈 칸이 붉게), 미흡·미착수 행은 왼쪽 띠.
@@ -63,6 +64,8 @@ const TD_READ = `${TD} px-2 py-1.5`;
 const TD_CELL = `${TD} p-0`; // 빈 곳 클릭은 표의 onClick(tableCellClick)이 안쪽 칸으로 넘긴다
 const TD_EDIT = `${TD_CELL} focus-within:ring-2 focus-within:ring-inset focus-within:ring-slate-400`;
 const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
+const TD_FIXED = `${TD_CELL} bg-sky-50`; // 고정 목표(전사 공통) — 파트·팀원 화면에서 읽기만, 색으로 구분(2026-09-30 팀장)
+const TD_FIXED_EDIT = `${TD_FIXED} focus-within:ring-2 focus-within:ring-inset focus-within:ring-sky-400`;
 const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
 const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-800";
 const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
@@ -393,8 +396,12 @@ export default function OkrHub({ author }: { author: string }) {
   const partOf = (team: OkrTeam) => findReport(reports, team, "");
   const goalPartOf = (team: string) => (goalSrc ? findReport(goalSrc.parts, team, "") : findReport(reports, team, ""));
   const hasCustom = (team: string) => !!goalPartOf(team)?.goals?.length;
-  // 파트가 보는 목표 — 고유 목표가 있으면 그것, 없으면 달의 공통 목표
-  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => { const own = goalPartOf(team)?.goals; return own?.length ? own : commonGoals; };
+  // 파트가 보는 목표 — 목표(objective)·Pillar·병목은 항상 달의 공통(고정), 달성기준만 파트 고유 값이 있으면 그것(2026-09-30 팀장: 목표는 전사 고정, 달성기준은 파트마다 다를 수 있다)
+  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => {
+    const own = goalPartOf(team)?.goals;
+    if (!own?.length) return commonGoals;
+    return commonGoals.map((g) => { const mine = own.find((o) => o.no === g.no); return mine ? { ...g, criteria: mine.criteria, html: { ...(g.html || {}), criteria: mine.html?.criteria } } : g; });
+  };
   const updateCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
   // 목표 쪽 편집은 달에 — 주차를 열어 두었으면 goalSrc(달)로 간다
   const updateGoalCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); if (goalSrc) setGoalSrc((cur) => (cur ? { ...cur, cycle: { ...cur.cycle, ...patch } } : cur)); else setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
@@ -658,7 +665,7 @@ function PersonBox({ label, sub, rows, total, selected, onClick, onRemove }: { l
 
 // ── 파트 시트: Pillar 막대 + 병목 1·2·3 행, 열 머리는 엑셀과 같게(No·Pillar 열은 막대로 대신), 격자 셀 ──
 const COLS: Array<[string, number, "read" | "write"]> = [
-  ["병목", 58, "read"], ["목표", 220, "read"], ["달성기준", 250, "read"],
+  ["병목", 58, "read"], ["목표 (고정)", 220, "read"], ["달성기준 (파트)", 250, "read"],
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
 
@@ -671,7 +678,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
   const members = memberReports(reports, team);
   const memberNames = useMemo(() => { const seen = new Set<string>(); return [...roster, ...members.map((m) => m.member)].filter((n) => n && !seen.has(n) && seen.add(n)); }, [roster, members]);
   const current = member ? (findReport(reports, team, member) || emptyReport(cycle.id, team, member)) : partReport;
-  const editable = !member; // 목표·달성기준·Pillar는 파트 종합에서만 고친다
+  const editable = !member; // 달성기준은 파트 종합에서만 고친다. 목표·Pillar·병목은 전사 고정(통합집계에서만)
   const [openMembers, setOpenMembers] = useState<Record<number, boolean>>({});
   const runs = pillarRuns(goals);
   const addOtherName = () => {
@@ -681,7 +688,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
   const rowsOf = (r: OkrReport | undefined) => goals.map((g) => resultRowFor(r, g.no));
   const col = useColWidths("okr_cols_team", COLS.map(([, w]) => w));
   const rich = (row: OkrResultRow, field: RichField, no: number, placeholder: string, extra = "") => <RichCell text={row[field]} html={row.html?.[field]} placeholder={placeholder} className={extra} minRows={3} onChange={(t, h) => onResult(no, { [field]: t, html: withHtml(row, field, h) })} />;
-  const goalCell = (goal: OkrGoal, field: "objective" | "criteria", placeholder: string, extra = "") => <RichCell text={goal[field]} html={goal.html?.[field]} placeholder={placeholder} className={extra} minRows={2} readOnly={!editable} onChange={(t, h) => onGoal(goal.no, { [field]: t, html: goalHtml(goal, field, h) })} />;
+  const goalCell = (goal: OkrGoal, field: "objective" | "criteria", placeholder: string, extra = "") => <RichCell text={goal[field]} html={goal.html?.[field]} placeholder={placeholder} className={extra} minRows={2} readOnly={field === "objective" || !editable} onChange={(t, h) => onGoal(goal.no, { [field]: t, html: goalHtml(goal, field, h) })} />;
 
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     {/* 사람 박스 */}
@@ -696,7 +703,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
       {memberNames.map((name) => <PersonBox key={name} label={name} sub={name === author ? "나" : ""} rows={rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
       <button type="button" onClick={addOtherName} className="w-[64px] shrink-0 rounded-lg border border-dashed border-slate-300 text-[11px] font-bold text-slate-400 hover:bg-white">＋ 이름</button>
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
-      {editable && custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{teamName(team)} 고유 목표 사용 중 · 공통으로 되돌리기</button>}
+      {editable && custom && <button type="button" onClick={onResetGoals} className="ml-auto self-center text-[11px] font-bold text-slate-400 hover:text-slate-700 hover:underline">{teamName(team)} 달성기준 사용 중 · 공통 달성기준으로 되돌리기</button>}
     </div>
     {member === "__sum__" ? <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} aiBusy={aiBusy} onFeedback={onTeamFeedback} onAiFeedback={onAiTeamFeedback} /> : <>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
@@ -715,7 +722,7 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
         </thead>
         <tbody>
           {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
-            <PillarBar idx={run.idx} colSpan={COLS.length} editable={editable} onPillar={(i) => onPillar(run.goals.map((g) => g.no), i)} onAdd={() => onInsert(run.goals[run.goals.length - 1].no, run.goals[0].pillar)} />
+            <PillarBar idx={run.idx} colSpan={COLS.length} editable={false} onPillar={(i) => onPillar(run.goals.map((g) => g.no), i)} onAdd={() => onInsert(run.goals[run.goals.length - 1].no, run.goals[0].pillar)} />
             {run.goals.map((goal) => {
               const row = resultRowFor(current, goal.no);
               const j = normalizeJudgment(row.judgment);
@@ -728,8 +735,8 @@ function TeamView({ team, cycle, goals, custom, reports, member, onMember, onRem
               const mrgKey = `mrg|${team}|${goal.no}`;
               return <FragmentRows key={`${cycle.id}|${member}|${goal.no}`}>
                 <tr>
-                  <BottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} editable={editable} onRemove={onRemove} />
-                  <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "objective", "", "font-semibold text-slate-900")}</td>
+                  <BottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} editable={false} onRemove={onRemove} />
+                  <td className={TD_FIXED}>{goalCell(goal, "objective", "", "font-semibold text-sky-950")}</td>
                   <td className={editable ? TD_EDIT : TD_CELL}>{goalCell(goal, "criteria", "")}</td>
                   <td className={TD_WRITE}>
                     {rich(row, "actual", goal.no, "")}
@@ -837,7 +844,7 @@ function SummaryView({ cycle, goals, goalsOf, goalCycleId, cycles, reports, aiBu
   const otherMonths = cycles.filter((c) => c.kind === "month" && c.id !== goalCycleId && c.goals.some((g) => g.objective.trim()));
   const SUMMARY_COLS = 4 + OKR_TEAMS.length; // 병목 · 목표 · 파트별 · 조치 · 피드백
   const col = useColWidths("okr_cols_summary", [58, 300, ...OKR_TEAMS.map(() => 84), 130, 360]);
-  const heads = ["병목", "목표 (공통)", ...OKR_TEAMS.map(teamName), "조치 필요 파트", "미흡항목 피드백 & 다음 달 개선 방향"];
+  const heads = ["병목", "목표 (고정 · 여기서만 수정)", ...OKR_TEAMS.map(teamName), "조치 필요 파트", "미흡항목 피드백 & 다음 달 개선 방향"];
   return <div className="space-y-3">
     <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {perTeam.map(({ team, rep, total, judged, alerts, rate, members }) => <div key={team} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -866,7 +873,7 @@ function SummaryView({ cycle, goals, goalsOf, goalCycleId, cycles, reports, aiBu
                 const fbKey = `fb|${goal.no}`;
                 return <tr key={goal.no}>
                   <BottleneckCell goals={goals} goal={goal} alert={actions.length > 0} alertTone="border-l-orange-500" editable onRemove={onRemove} />
-                  <td className={TD_EDIT}><RichCell text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-slate-800" onChange={(t, h) => onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) })} /></td>
+                  <td className={TD_FIXED_EDIT}><RichCell text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-sky-950" onChange={(t, h) => onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) })} /></td>
                   {OKR_TEAMS.map((t) => <td key={t} className={`${TD} px-1 py-1.5 text-center`}><JudgmentBadge value={resultRowFor(partRows.find((r) => r.team === t), goal.no).judgment} /></td>)}
                   <td className={`${TD_READ} text-[11px] leading-snug`}>{actions.length ? actions.map((t) => <div key={t}><span className="font-black text-rose-600">{t}파트</span>{who[t]?.length ? <span className="text-slate-500"> · {who[t].join(", ")}</span> : null}</div>) : <span className="text-slate-300">—</span>}</td>
                   <td className={TD_WRITE}>
