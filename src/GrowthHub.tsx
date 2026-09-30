@@ -607,7 +607,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         apply(missionGoals, suggested.missions);
         if (filled) setPlan({ ...plan, author: person, year, quarter, goals: nextGoals }); // 자동 저장이 이어서 계획표에 남긴다
       }
-      setMessage(`골든미팅카드를 AI로 변환했습니다.${filled ? ` 진도율 ${filled}개를 월별 실행·주간 기록 근거로 자동 산정해 채웠습니다(직접 넣은 값은 유지).` : ""} 사용 모델: ${data.model || "기본 모델"}`);
+      setMessage(`골든미팅카드를 AI로 변환했습니다.${filled ? ` 진도율 ${filled}개를 월별 실행·주간 기록 근거로 자동 산정해 채웠습니다(직접 넣은 값은 유지).` : ""} 사용 모델: ${data.model || "기본 모델"} · 초안입니다 — 반드시 검토하고 내 말로 고쳐 주세요.`);
     } catch (e) {
       setMessage((e as Error).message || "골든미팅카드 AI 변환에 실패했습니다.");
     } finally {
@@ -653,7 +653,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
         applied += 1;
       }
       if (applied) setPlan({ ...plan, author: person, year, quarter, goals: nextGoals });
-      setMessage(`AI 수치 정리 완료 — ${applied}개 목표를 [성과] 수치 중심으로 다시 썼습니다. 사용 모델: ${data.model || "기본"}`);
+      setMessage(`AI 수치 정리 완료 — ${applied}개 목표를 [성과] 수치 중심으로 다시 썼습니다. 사용 모델: ${data.model || "기본"} · 정리된 수치를 반드시 검토하고 실제와 다르면 직접 고쳐 주세요.`);
     } catch (e) {
       setMessage((e as Error).message || "AI 수치 정리에 실패했습니다.");
     } finally { setQuantifyBusy(false); }
@@ -1032,6 +1032,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
             <div>
               <h3 className="text-base font-black text-slate-950 lg:text-lg">{year}년 {quarter}분기 결과표</h3>
+              <div className="mt-1 text-[11px] font-bold text-amber-700">✍️ AI 수치 정리는 초안입니다. 반드시 내용을 검토하고, 실제와 다르면 직접 고쳐 내 것으로 만드세요.</div>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" disabled={!person || quantifyBusy} onClick={() => void quantifyResults()} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(124,58,237,0.3)] transition hover:bg-violet-700 disabled:opacity-40">{quantifyBusy ? "AI 정리 중…" : "🧮 AI 수치 정리"}</button>
@@ -1138,6 +1139,7 @@ export default function GrowthHub({ author, onOpenWeek }: { author: string; onOp
           <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-base font-black text-slate-950 lg:text-lg">{year}년 {quarter}분기 골든미팅카드</h3>
+              <div className="mt-1 text-[11px] font-bold text-amber-700">✍️ AI 변환은 초안일 뿐입니다. 반드시 내용을 검토하고 내 경험·내 말로 고쳐서 제출하세요.</div>
             </div>
             <button type="button" onClick={runGoldenAi} disabled={goldenBusy} title="고른 분기의 계획표·분기결과표·미션결과표와 주간현황판 기록으로 카드를 씁니다. 지난 분기 카드는 문체 예시로만 참고합니다." className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
               {goldenBusy ? "AI 변환 중…" : `${quarter}분기 AI변환`}
