@@ -211,7 +211,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
     const ro = new ResizeObserver((entries) => { for (const e of entries) setPreviewWidth(e.contentRect.width); });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps -- 리포트 칸이 생길 때 다시 잰다
+  }, [selectedId]); // 리포트 칸이 생길 때 다시 잰다
   const previewZoom = previewWidth > 0 ? Math.min(1, previewWidth / 720) : 1;
   const table = kind === "as" ? "as_records" : "jeomgeom";
 
@@ -379,8 +379,11 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
             <button type="button" disabled={!!busy} onClick={() => void sendTest()} className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-50">이 번호로 테스트 발송</button>
             <span className="text-[11px] font-semibold text-amber-700">고객에게 가지 않고, 기록에도 남지 않습니다. 문자 앞에 [테스트]가 붙습니다.</span>
           </div>
-          {/* 고객용 문구 — 양식의 처리내용은 CS끼리 쓰는 메모라 그대로 못 보낸다. 미리 채워 두고 여기서 고친다 */}
-          <div className="grid gap-2 border-b border-slate-100 px-4 py-3">
+          {/* 고객용 문구 — 양식의 처리내용은 CS끼리 쓰는 메모라 그대로 못 보낸다. 미리 채워 두고 여기서 고친다.
+              넓은 화면(2xl)에서는 카드 왼쪽·문구 편집 오른쪽으로 나란히 — 카드 옆이 비지 않고 고치면서 바로 본다. 폰·보통 PC에서는 위아래 그대로 */}
+          <div className="2xl:grid 2xl:grid-cols-[752px_minmax(0,1fr)]">
+          <div className="2xl:col-start-2 2xl:row-start-1 2xl:border-l 2xl:border-slate-100">
+          <div className="grid gap-2 border-b border-slate-100 px-4 py-3 2xl:border-b-0">
             <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-[12px] font-black text-slate-700">고객에게 보이는 문구</div><div className="text-[11px] font-semibold text-slate-400">양식의 {kind === "as" ? "접수·처리 내용" : "처리내용"}을 그대로 넣어 두었습니다. 내부 메모는 지우거나 고객 말로 고친 뒤 보내세요.</div></div>
             {data.devices.map((d) => <div key={d.index} className="grid gap-1.5 rounded-lg border border-slate-200 p-2.5">
               <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-black text-slate-800">{d.model || "복합기"}{data.devices.length > 1 ? ` · ${d.index}호기` : ""}</span><button type="button" onClick={() => setNotes((cur) => ({ ...cur, [d.index]: SIMPLE_NOTE[kind] }))} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900">{kind === "as" ? "처리 완료로만" : "정기점검 완료로만"}</button></div>
@@ -388,8 +391,10 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
               <label className="grid gap-1 text-[11px] font-bold text-slate-500">{kind === "as" ? "처리 내용 (한 줄에 하나)" : "오늘 조치 (한 줄에 하나)"}<textarea rows={3} value={notes[d.index] ?? defaultNote(kind, d)} onChange={(e) => setNotes((cur) => ({ ...cur, [d.index]: e.target.value }))} className={TA} /></label>
             </div>)}
           </div>
-          {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 문자 그림은 작게 보입니다(원본 크기 링크가 함께 갑니다)" : ""}</div>}
-          <div ref={previewBoxRef} className="overflow-hidden bg-slate-100 p-3 sm:p-4"><div ref={zoomRef} style={{ zoom: previewZoom, width: 720 }}><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} kakaoUrl={kakaoUrl} cardRef={cardRef} /></div></div>
+          {prev && <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 2xl:border-b-0 2xl:border-t text-[11px] font-semibold text-slate-500">직전 점검 {prev.date} 기록과 비교해 사용량 증가분을 넣었습니다{data.devices.length > 1 ? " · 기기가 여러 대라 문자 그림은 작게 보입니다(원본 크기 링크가 함께 갑니다)" : ""}</div>}
+          </div>
+          <div ref={previewBoxRef} className="overflow-hidden bg-slate-100 p-3 sm:p-4 2xl:col-start-1 2xl:row-start-1"><div ref={zoomRef} className="mx-auto" style={{ zoom: previewZoom, width: 720 }}><ReportCard kind={kind} data={data} prev={prev?.data || null} prevDate={prev?.date || ""} date={selected.작성일} author={selected.작성자 || author} notes={notes} contents={contents} kakaoUrl={kakaoUrl} cardRef={cardRef} /></div></div>
+          </div>
         </>}
       </section>
     </div>
