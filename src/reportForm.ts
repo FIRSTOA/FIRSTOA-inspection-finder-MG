@@ -71,7 +71,7 @@ function parseDevice(block: string[], index: number): ReportDevice | null {
   for (const k of ["K", "C", "M", "Y"] as TonerKey[]) { const m = spareText.match(new RegExp("(?:^|[\\s,/])" + k + "\\s*[-:=]?\\s*(\\d+)", "i")); if (m) spare[k] = Number(m[1]); }
   // "토너 2set 폐-2" / "2세트" / "각 2개" — 색별 숫자가 없으면 세트 수를 네 색에 똑같이(2026-09-30 제이앤노무법인)
   if (["K", "C", "M", "Y"].every((k) => spare[k as TonerKey] == null)) {
-    const set = spareText.match(/(\d+)\s*(?:set|세트|셋트|셋|조)\b/i) || spareText.match(/각\s*(\d+)/);
+    const set = spareText.match(/(\d+)\s*(?:set|세트|셋트|셋|조)(?![a-z가-힣])/i) || spareText.match(/각\s*(\d+)/); // \b는 한글 뒤에서 안 잡힌다(JS 정규식은 한글을 단어 문자로 안 본다)
     if (set) for (const k of ["K", "C", "M", "Y"] as TonerKey[]) spare[k] = Number(set[1]);
   }
   const w = spareText.match(/폐\s*(?:통|토너)?\s*[-:=]?\s*(\d+)/); if (w) spare.W = Number(w[1]);

@@ -89,7 +89,7 @@ describe("점검 리포트 — 양식 원문 읽기", () => {
   it("여분 '토너 2set 폐-2'는 네 색 모두 2, 폐토너통 2 (제이앤노무법인)", () => {
     const d = parseInspectionForm("업체명: 제이앤노무법인\nㅡㅡㅡㅡㅡ\n1.\n모델명: A\n여분: 토너 2set 폐-2\n한틴이카유무: 한공\nㅡㅡㅡㅡㅡ\n※부품신청※\n물품명:").devices[0];
     expect(d.spare).toEqual({ K: 2, C: 2, M: 2, Y: 2, W: 2 });
-    expect(parseInspectionForm("업체명: x\nㅡㅡㅡ\n1.\n모델명: A\n여분: 1세트, 폐통 1\nㅡㅡㅡ\n※부품신청※").devices[0].spare).toEqual({ K: 1, C: 1, M: 1, Y: 1, W: 1 });
+    expect(parseInspectionForm("업체명: x\nㅡㅡㅡㅡㅡ\n1.\n모델명: A\n여분: 1세트, 폐통 1\nㅡㅡㅡㅡㅡ\n※부품신청※").devices[0].spare).toEqual({ K: 1, C: 1, M: 1, Y: 1, W: 1 });
   });
   it("기기 여러 대·토너 표기 변형", () => {
     const two = parseInspectionForm("업체명: 테스트\n키맨/접수자: 홍길동 010-1111-2222\nㅡㅡㅡㅡㅡ\n1.\n모델명: A\n자산기번: X1\n매수:흑100 컬200 큰컬- 합300\n토너잔량: K-20 C:30 M 40 Y50\n폐통: 80%\n여분: K1 C0 M0 Y0 폐1\nㅡㅡㅡㅡㅡ\n2.\n모델명: B\n시리얼넘버: S2\n매수:흑1 컬- 큰컬- 합1\n토너잔량:K90\nㅡㅡㅡㅡㅡ\n※부품신청※\n물품명:");
