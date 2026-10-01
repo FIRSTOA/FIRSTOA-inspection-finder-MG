@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import PortalSelect from "./PortalSelect";
+import { notify } from "./toast";
 import RichCell from "./RichCell";
 import { inputCellKeyDown, tableCellClick } from "./cellNav";
 import {
   EMPTY_WEEKLY_NOTE, OFFICE_LABELS, WORK_LABELS, emptyOfficeValues, getOfficeLogs, getVisits,
-  getWeeklyNote, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
-  type BottleneckItem, type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WorkKind,
+  getWeeklyNote, getWeeklyNotes, kstDate, saveOfficeLog, saveWeeklyNote, weekRange,
+  type BottleneckItem, type OfficeKind, type OfficeLog, type VisitRow, type WeeklyNote, type WeeklyNoteRow, type WorkKind,
 } from "./visits";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
@@ -249,6 +251,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [quarter, setQuarter] = useState(Math.ceil(currentMonth / 3));
+  const [gatherOpen, setGatherOpen] = useState(false); // 분기 기록 모아보기(2026-10-01)
   // 골든미팅카드에서 특정 주차로 진입할 때 해당 주로 이동
   useEffect(() => {
     if (focusDate) { setPeriod("week"); setSelectedDay(focusDate); setYear(Number(focusDate.slice(0, 4))); setMonth(Number(focusDate.slice(5, 7))); }
@@ -405,7 +408,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
           <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">내근 총시간</span><b className="text-lg font-black tabular-nums text-slate-900">{hm(OFFICE_KINDS.reduce((n, k) => n + office.values[k].minutes, 0))}</b></div><button onClick={saveOffice} disabled={saving === "office" || readOnly} className="mt-3 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 py-3 text-sm font-bold text-white disabled:opacity-50">{readOnly ? "읽기 전용" : saving === "office" ? "저장 중…" : "내근 업무 저장"}</button>
         </section>
       </div></div> : period === "week" ? <div className="space-y-6">
-        <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} readOnly={readOnly} />
+        <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} readOnly={readOnly} onGather={() => setGatherOpen(true)} />
         <PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
         <HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div> : <div className="space-y-6">
@@ -413,10 +416,81 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
         <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div>}
     </>}
+    {gatherOpen && <GatherModal subject={subject} year={year} quarter={period === "quarter" ? quarter : Math.ceil(month / 3)} onClose={() => setGatherOpen(false)} />}
   </div>;
 }
 
-function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus, readOnly = false }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved"; readOnly?: boolean }) {
+// 분기 기록 모아보기(2026-10-01 요청) — 매주 적은 배운 점·성장노트 등을 분기(또는 한 해) 단위로 모아 보고 목록으로 복사한다(분기 정리·골든미팅 준비용)
+const GATHER_KEYS: Array<[WeeklyTextKey, string]> = [["learning", "배운 점"], ["growth", "성장노트"], ["challenge", "새로운 도전·아이디어"], ["request", "지원·요청·건의사항"], ["special", "특이사항"], ["praise", "칭찬"], ["thisWeekResult", "결과·미진행 사유"]];
+function learningLines(value: string): string[] {
+  return parseLearningRows(value).filter((r) => r.lesson.trim() || r.model.trim())
+    .map((r) => [r.date, [r.brand, r.model].filter(Boolean).join(" "), r.lesson.trim(), r.educator && `(${r.educator}${r.duration ? ` · ${r.duration}` : ""})`].filter(Boolean).join(" "));
+}
+function GatherModal({ subject, year: y0, quarter: q0, onClose }: { subject: string; year: number; quarter: number; onClose: () => void }) {
+  const [key, setKey] = useState<WeeklyTextKey>("learning");
+  const [year, setYear] = useState(y0);
+  const [quarter, setQuarter] = useState(q0); // 0 = 한 해 전체
+  const loadKey = `${subject}|${year}|${quarter}`;
+  const [loaded, setLoaded] = useState<{ key: string; rows: WeeklyNoteRow[] } | null>(null);
+  const rows = loaded && loaded.key === loadKey ? loaded.rows : null; // 기간·사람이 바뀌면 다시 불러올 때까지 '불러오는 중'
+  useEffect(() => {
+    let alive = true;
+    const start = quarter ? `${year}-${pad((quarter - 1) * 3 + 1)}-01` : `${year}-01-01`;
+    const endM = quarter ? quarter * 3 : 12;
+    const end = `${year}-${pad(endM)}-${pad(new Date(year, endM, 0).getDate())}`;
+    getWeeklyNotes(start, end)
+      .then((all) => { if (alive) setLoaded({ key: loadKey, rows: all.filter((r) => r.author === subject).sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1)) }); })
+      .catch(() => { if (alive) setLoaded({ key: loadKey, rows: [] }); });
+    return () => { alive = false; };
+  }, [subject, year, quarter, loadKey]);
+  const label = GATHER_KEYS.find(([k]) => k === key)?.[1] || "";
+  const items = (rows || []).map((r) => {
+    const text = String(r[key] || "");
+    const lines = key === "learning" ? learningLines(text) : text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const m = Number(r.weekStart.slice(5, 7));
+    const wk = weeksInMonth(Number(r.weekStart.slice(0, 4)), m).find((w) => w.start === r.weekStart);
+    const wr = workWeekRange(r.weekStart);
+    return { weekStart: r.weekStart, head: `${m}월 ${wk?.label || ""} (${shortDate(wr.start)}~${shortDate(wr.end)})`, lines };
+  }).filter((x) => x.lines.length);
+  const total = items.reduce((n, x) => n + x.lines.length, 0);
+  const asText = (withHead: boolean) => items.map((x) => (withHead ? `■ ${x.head}\n` : "") + x.lines.map((l) => `- ${l}`).join("\n")).join(withHead ? "\n\n" : "\n");
+  const copy = async (withHead: boolean) => {
+    try { await navigator.clipboard.writeText(asText(withHead)); notify(`${label} ${total}줄을 복사했습니다`, "success"); }
+    catch { notify("복사에 실패했습니다 — 글을 드래그해 복사해 주세요", "error"); }
+  };
+  return createPortal(<div className="fixed inset-0 z-[5000] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-6" onClick={onClose}>
+    <div onClick={(e) => e.stopPropagation()} className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+      <div className="flex flex-col gap-3 bg-[#1E252F] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0"><div className="text-[11px] font-black uppercase tracking-[.14em] text-slate-400">주간현황판 · 모아보기</div><h3 className="text-lg font-black text-white">{subject} · {quarter ? `${year}년 ${quarter}분기` : `${year}년 전체`} {label}</h3></div>
+        <button type="button" onClick={onClose} className="self-end rounded-full bg-white/10 px-3 py-1.5 text-xs font-black text-white hover:bg-white/20 sm:self-auto">닫기</button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+        <div className="flex flex-wrap gap-1">{GATHER_KEYS.map(([k, l]) => <button key={k} type="button" onClick={() => setKey(k)} className={`rounded-full px-3 py-1 text-[12px] font-black transition ${key === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{l}</button>)}</div>
+        <div className="ml-auto flex items-center gap-1">
+          <PortalSelect width={90} value={String(year)} onChange={(v) => setYear(Number(v))} options={[y0, y0 - 1].map((y) => ({ value: String(y), label: `${y}년` }))} />
+          <PortalSelect width={110} value={String(quarter)} onChange={(v) => setQuarter(Number(v))} options={[{ value: "0", label: "한 해 전체" }, ...[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))]} />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {rows === null ? <div className="py-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>
+          : !items.length ? <div className="py-10 text-center text-sm font-bold text-slate-400">이 기간에 적은 {label}이 없습니다</div>
+          : items.map((x) => <div key={x.weekStart} className="mb-4 last:mb-0">
+            <div className="mb-1 text-[12px] font-black text-slate-500">■ {x.head}</div>
+            <ul className="space-y-0.5 text-[13px] leading-relaxed text-slate-800">{x.lines.map((l, i) => <li key={i} className="flex gap-2"><span className="text-slate-300">-</span><span className="whitespace-pre-wrap">{l}</span></li>)}</ul>
+          </div>)}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+        <span className="text-[12px] font-bold text-slate-500">{items.length}주 · {total}줄</span>
+        <div className="flex gap-2">
+          <button type="button" disabled={!total} onClick={() => void copy(false)} className="rounded-full border border-slate-300 bg-white px-3.5 py-2 text-[12px] font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40">목록만 복사</button>
+          <button type="button" disabled={!total} onClick={() => void copy(true)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">주차별로 복사</button>
+        </div>
+      </div>
+    </div>
+  </div>, document.body);
+}
+
+function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveStatus, readOnly = false, onGather }: { note: WeeklyNote; onNoteChange: <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => void; onBottleneckChange: (index: number, field: keyof BottleneckItem, value: string) => void; autoSaveStatus: "idle" | "saving" | "saved"; readOnly?: boolean; onGather?: () => void }) {
   const goalCols = ([["thisWeekGoal", "이번 주 목표"], ["thisWeekResult", "결과·미진행 사유"], ["nextWeekGoal", "다음 주 목표"]] as [WeeklyTextKey, string][]);
   const [aiBusy, setAiBusy] = useState(false);
   const runGrowthAiTransform = async () => {
@@ -431,6 +505,11 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
   const bar = (label: string, right?: string) => <tr><td colSpan={4} className={BAR}><div className="flex items-center justify-between"><span>{label}</span>{right && <span className="text-[11px] font-bold text-slate-400">{right}</span>}</div></td></tr>;
   return (
     <section className="order-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* 모아보기는 읽기 전용(남의 기록)에서도 되게 fieldset 밖에 */}
+      {onGather && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5">
+        <span className="text-[11px] font-bold text-slate-500">매주 적은 배운 점·성장노트는 분기 단위로 모아 보고 목록으로 복사할 수 있어요</span>
+        <button type="button" onClick={onGather} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">📚 이번 분기 모아보기</button>
+      </div>}
       <fieldset disabled={readOnly} className="contents">
         <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 720 }}>
           <colgroup><col style={{ width: 150 }} /><col /><col /><col /></colgroup>

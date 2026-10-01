@@ -3,8 +3,16 @@
 export type CellDir = "up" | "down" | "left" | "right";
 
 export function moveCellFocus(from: HTMLElement, dir: CellDir): boolean {
+  const best = nextCell(from, dir);
+  if (!best) return false;
+  best.focus();
+  best.scrollIntoView({ block: "nearest", inline: "nearest" });
+  return true;
+}
+// 방향의 다음 칸(포커스는 옮기지 않는다) — Shift+화살표로 범위를 넓힐 때(cellRange)도 쓴다
+export function nextCell(from: HTMLElement, dir: CellDir): HTMLElement | null {
   const table = from.closest("table");
-  if (!table) return false;
+  if (!table) return null;
   const cur = from.getBoundingClientRect();
   const cx = (cur.left + cur.right) / 2;
   const cy = (cur.top + cur.bottom) / 2;
@@ -25,10 +33,7 @@ export function moveCellFocus(from: HTMLElement, dir: CellDir): boolean {
     const score = dir === "left" || dir === "right" ? Math.abs(rx - cx) + Math.abs(ry - cy) * 0.1 : Math.abs(ry - cy) + Math.abs(rx - cx) * 0.1;
     if (score < bestScore) { bestScore = score; best = el; }
   }
-  if (!best) return false;
-  best.focus();
-  best.scrollIntoView({ block: "nearest", inline: "nearest" });
-  return true;
+  return best;
 }
 
 export function dirFromKey(key: string): CellDir | null {

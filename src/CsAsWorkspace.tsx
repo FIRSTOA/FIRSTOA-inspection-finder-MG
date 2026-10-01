@@ -66,6 +66,17 @@ const teams: Team[] = ["A", "B", "C", "D"]; // 필터·배정 명단용 기본 4
 // 캘린더 표시 유형 — AS 계열은 날짜가 아니라 처리 여부로 구분한다 (금일·익일·예정 어디든 미처리는 미처리)
 const displayFilters = ["익일통합as", "AS[완료]", "납품철수교체휴가교육", "매월점검"] as const;
 type DisplayFilter = typeof displayFilters[number];
+// 점검 캘린더 유형("매월점검"으로 저장)의 실제 의미 — 워킨맵·자동일정의 분기점검은 "분기점검"으로(2026-10-01: 내 일정에 "매월"로 보여 헷갈렸다).
+// 저장 유형은 그대로 둔다(FIELD 전송 시 자동 완료 등이 이 유형으로 찾는다). 매월 반복 건만 "매월점검".
+function inspectionTypeLabel(t: { scheduleType: string; issue?: string; source?: string; repeatMonthly?: boolean }): string {
+  if (t.scheduleType !== "매월점검") return t.scheduleType;
+  if (t.repeatMonthly) return "매월점검";
+  const head = String(t.issue || "").split(/\s*[·(]/)[0].trim();
+  if (/^(분기점검|매월점검)/.test(head)) return head.slice(0, 4);
+  if (t.source === "manual") return head || "직접 등록";
+  if (t.source === "workin" || t.source === "autoplan") return "분기점검";
+  return "점검";
+}
 function displayTypeOf(t: { scheduleType: string; status: string }): DisplayFilter {
   if (t.scheduleType === "AS" || t.scheduleType === "익일AS") return t.status === "완료" ? "AS[완료]" : "익일통합as";
   if (t.scheduleType === "물류" || t.scheduleType === "휴가" || t.scheduleType === "납품철수교체휴가교육") return "납품철수교체휴가교육";
@@ -1751,7 +1762,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
                         <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`block w-full rounded-lg px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {ticket.scheduleType}</span></div>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {inspectionTypeLabel(ticket)}</span></div>
                           {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
                         </button>
                       ))}
@@ -1939,7 +1950,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
                   {/* PC 표와 같은 구분 칩 — 모바일에서도 익일as(연두)/납품(로즈)/점검(호박)이 한눈에 갈리게 */}
                   <span className={`rounded px-1.5 py-0.5 ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                    {ticket.source === "it" ? "IT" : ticket.source === "cs-transfer" ? "CS이관" : ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? "점검" : "납품"}
+                    {ticket.source === "it" ? "IT" : ticket.source === "cs-transfer" ? "CS이관" : ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? inspectionTypeLabel(ticket) : "납품"}
                   </span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
                   <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
@@ -2063,7 +2074,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           ...rows.map((ticket) => ({ date: ticket.date, cat: CAT_ORDER[displayTypeOf(ticket)] ?? 9, gu: guOf(ticket.address || "") || "￿", title: displayTitleOf(ticket), node: (
                           <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className="h-11 cursor-pointer border-b border-blue-100 bg-blue-50/60 last:border-0 hover:bg-blue-50">
                             <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{ticket.team === "기타" ? "기타" : `${ticket.team}팀`}</td>
-                            <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, true)}`}>{shortCat(displayTypeOf(ticket))}</span></td>
+                            <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, true)}`}>{ticket.scheduleType === "매월점검" ? inspectionTypeLabel(ticket) : shortCat(displayTypeOf(ticket))}</span></td>
                             <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                             {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</td>}
                             <td className="w-[54%] px-3 py-1.5 text-sm font-black text-slate-500 line-through"><div className="max-w-[420px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div></td>

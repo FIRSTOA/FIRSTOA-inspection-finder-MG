@@ -63,7 +63,8 @@ export type OkrReport = {
   member: string; // '' = 파트 종합, 그 외 = 팀원 이름
   header: OkrHeader;
   rows: OkrResultRow[];
-  // 파트 고유 목표(파트 종합 행에만). 비어 있으면 달의 공통 목표(okr_cycles.goals)를 그대로 쓴다. header jsonb 안에 goals로 저장(표 변경 없이).
+  // 달성기준 덮어쓰기 칸(2026-10-01): 고친 번호(no)의 칸만 — 파트 종합 행이면 그 파트 팀원 모두의 기본, 팀원 행이면 그 사람만.
+  // 목표(objective)·Pillar·병목은 달의 공통(okr_cycles.goals) 하나라 여기 든 objective는 무시된다. header jsonb 안에 goals로 저장(표 변경 없이).
   goals?: OkrGoal[];
   // 파트장 피드백(팀원 집계의 '미흡항목 피드백 & 다음 달 개선 방향') — 목표 번호별. header jsonb 안에 feedback으로 저장.
   feedback?: Record<string, OkrFeedback>;
@@ -192,7 +193,14 @@ export function okrWorkWeek(date: string): { start: string; end: string } {
   return { start: kst(monday), end: kst(friday) };
 }
 
-// 어느 달의 몇 주차인지 — 주간현황판(weeksInMonth)과 같은 셈: 그 달 1일이 든 주가 1주차
+const addDays = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00+09:00`); d.setUTCDate(d.getUTCDate() + n); return kst(d); };
+// 한 주(월~금)가 속한 달 — 수요일(다섯 날의 가운데, 즉 사흘 이상이 든 달)이 기준. 한 주는 한 달에만 속한다.
+// 2026-10-01: 9/28~10/2가 9월 5주차와 10월 1주차로 두 번 보여 따로 적혔다. 8/31~9/4는 그대로 9월 1주차라 옛 번호가 바뀌지 않는다.
+export function weekMonthOf(weekStart: string): { year: number; month: number } {
+  const wed = addDays(weekStart, 2);
+  return { year: Number(wed.slice(0, 4)), month: Number(wed.slice(5, 7)) };
+}
+// 어느 달의 몇 주차인지 — 그 달에 속한(수요일이 든) 주를 앞에서부터 1·2·3…
 export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: number; start: string; end: string }> {
   const lastDay = new Date(year, month, 0).getDate();
   const seen = new Set<string>();
@@ -201,6 +209,8 @@ export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: nu
     const w = okrWorkWeek(`${year}-${pad(month)}-${pad(day)}`);
     if (seen.has(w.start)) continue;
     seen.add(w.start);
+    const wm = weekMonthOf(w.start);
+    if (wm.year !== year || wm.month !== month) continue;
     out.push({ weekNo: out.length + 1, ...w });
   }
   return out;
@@ -208,10 +218,10 @@ export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: nu
 
 export const monthCycleId = (year: number, month: number) => `${year}-${pad(month)}`;
 export const weekCycleId = (year: number, month: number, weekNo: number) => `${year}-${pad(month)}-W${weekNo}`;
-// 오늘이 든 주차 — 오늘 날짜의 달 기준(9/29 → 9월 5주차). 달 경계에 걸친 주는 두 달에 다 보이지만 기록은 달마다 따로다.
+// 오늘이 든 주차 — 그 주가 속한 달 기준(10/1 목요일 → 9월 5주차 9/28~10/2, 10월 1주차는 10/5부터).
 export function currentWeekOf(date: string): { year: number; month: number; weekNo: number } {
-  const y = Number(date.slice(0, 4)); const m = Number(date.slice(5, 7));
   const { start } = okrWorkWeek(date);
+  const { year: y, month: m } = weekMonthOf(start);
   const wk = okrWeeksInMonth(y, m).find((w) => w.start === start);
   return { year: y, month: m, weekNo: wk ? wk.weekNo : 1 };
 }
@@ -254,7 +264,36 @@ export function bottleneckLabel(goals: OkrGoal[], no: number): string {
 }
 // 목표 순서가 바뀌었을 때(삽입·삭제·정렬) 옛 번호 → 새 번호 표. 결과 행과 피드백 키를 같이 옮길 때 쓴다.
 export function remapReports(reports: OkrReport[], remap: Map<number, number>, only: (r: OkrReport) => boolean = () => true): OkrReport[] {
-  return reports.map((r) => (only(r) ? { ...r, rows: r.rows.filter((x) => remap.has(x.no)).map((x) => ({ ...x, no: remap.get(x.no) as number })).sort((a, b) => a.no - b.no), ...(r.feedback ? { feedback: remapFeedback(r.feedback, remap) } : {}) } : r));
+  return reports.map((r) => (only(r) ? {
+    ...r,
+    rows: r.rows.filter((x) => remap.has(x.no)).map((x) => ({ ...x, no: remap.get(x.no) as number })).sort((a, b) => a.no - b.no),
+    ...(r.feedback ? { feedback: remapFeedback(r.feedback, remap) } : {}),
+    ...(r.goals?.length ? { goals: r.goals.filter((g) => remap.has(g.no)).map((g) => ({ ...g, no: remap.get(g.no) as number })).sort((a, b) => a.no - b.no) } : {}), // 달성기준 덮어쓰기 칸도 같은 번호를 따라간다
+  } : r));
+}
+// ── 달성기준 덧씌우기(2026-10-01 사용자): 목표·Pillar·병목은 통합집계의 공통 하나, 달성기준만 파트 종합 → 개인 순으로 덮어쓴다.
+// over에는 고친 번호의 칸만 들어 있다 — 안 고친 번호는 위 단계 것이 그대로 흐른다(파트장이 나중에 고쳐도 팀원에게 보인다).
+export function overlayCriteria(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
+  if (!over?.length) return base;
+  return base.map((g) => {
+    const o = over.find((x) => x.no === g.no);
+    if (!o) return g;
+    const html: NonNullable<OkrGoal["html"]> = { ...(g.html || {}) };
+    delete html.criteria;
+    if (o.html?.criteria) html.criteria = o.html.criteria;
+    return { ...g, criteria: o.criteria, html: Object.keys(html).length ? html : undefined };
+  });
+}
+// 전주 달성기준 가져오기: 전주에 그 칸에 보이던 기준 중 지금 기본(한 단계 위)과 다른 번호만 — 같은 건 위 단계 것이 계속 흐르게. 빈 것은 제외.
+export function criteriaToCarry(prevEffective: OkrGoal[], currentBase: OkrGoal[]): OkrGoal[] {
+  return prevEffective
+    .filter((p) => { const b = currentBase.find((g) => g.no === p.no); return !!b && p.criteria.trim() !== "" && p.criteria !== b.criteria; })
+    .map((p) => ({ ...p, html: p.html?.criteria ? { criteria: p.html.criteria } : undefined }));
+}
+// 덮어쓰기 칸 목록에 넣기 — 같은 번호는 바꾸고 번호순으로
+export function putCriteria(list: OkrGoal[] | undefined, entries: OkrGoal[]): OkrGoal[] {
+  const kept = (list || []).filter((x) => !entries.some((e) => e.no === x.no));
+  return [...kept, ...entries].sort((a, b) => a.no - b.no);
 }
 export function remapFeedback(feedback: Record<string, OkrFeedback>, remap: Map<number, number>): Record<string, OkrFeedback> {
   return Object.fromEntries(Object.entries(feedback).filter(([k]) => remap.has(Number(k))).map(([k, v]) => [String(remap.get(Number(k))), v]));

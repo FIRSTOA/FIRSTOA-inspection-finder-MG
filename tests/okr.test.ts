@@ -85,9 +85,9 @@ describe("OKR 기간·목표 도우미", () => {
     expect(weeks[1]).toEqual({ weekNo: 2, start: "2026-09-07", end: "2026-09-11" });
     expect(weeks.length).toBe(5);
   });
-  it("오늘이 든 주차 — 오늘 날짜의 달 기준", () => {
+  it("오늘이 든 주차 — 그 주가 속한 달 기준(2026-10-01: 한 주는 한 달에만)", () => {
     expect(currentWeekOf("2026-09-29")).toEqual({ year: 2026, month: 9, weekNo: 5 });
-    expect(currentWeekOf("2026-10-01")).toEqual({ year: 2026, month: 10, weekNo: 1 });
+    expect(currentWeekOf("2026-10-01")).toEqual({ year: 2026, month: 9, weekNo: 5 }); // 9/28~10/2 주는 9월 — 10월 1주차는 10/5부터
     expect(currentWeekOf("2026-09-01")).toEqual({ year: 2026, month: 9, weekNo: 1 });
   });
   it("기간 id와 이름", () => {

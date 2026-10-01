@@ -2084,7 +2084,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         team: planTarget.team, date: planDate, time: "", // 시간 미정 — 내 일정에서 동선 순서로 잡는다
         vendor, contact: planTarget.phone || "", address: planTarget.address || "", department: planTarget.addressDetail || "",
         model: "", serial: "", asset: "", grade: "", keyman: "",
-        issue: renewal ? "재계약 방문 (워킨맵에서 등록)" : "정기점검 (워킨맵에서 등록)",
+        issue: renewal ? "재계약 방문 (워킨맵에서 등록)" : `${planTarget.kind === "monthly" ? "매월점검" : "분기점검"} (워킨맵에서 등록)`, // 일정 화면이 이 머리말로 분기/매월을 가른다(2026-10-01)
         note: planTarget.comment ? planTarget.comment.slice(0, 300) : "",
         assignee: userKey, status: "배정", scheduleType: renewal ? "AS" : "매월점검",
         receptionId: "", calendarTitle: `${renewal ? "재계약" : "점검"} ${vendor}`, source: "workin",
@@ -2699,9 +2699,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   )}
                 </span>
               </button>
-              {/* 버튼은 오른쪽 끝에 세로 한 열(28px) — 가로를 아껴 업체명·배지가 넓게 쓰인다(2026-08-28 요청). 위에서부터 설정 · 내 일정 · 인사 */}
+              {/* 버튼은 오른쪽 끝 두 열(28px×2) — 윗줄 빠른 색칠(G5 완료·G12 이관, 2026-10-01: 기존 워킨맵과 동기화가 안 돼 손으로 칠할 때 톱니→수정이 번거로웠다), 아랫줄 설정 · 내 일정, 그 아래 인사 */}
               {!editMode && (
-                <span className="flex shrink-0 flex-col items-center gap-1">
+                <span className="grid shrink-0 grid-cols-2 gap-1">
+                  {(["G5", "G12"] as const).map((code) => { const m = labelMeta(code); const on = place.label === code; return <button key={code} type="button" disabled={on}
+                    title={on ? `지금 ${m.name}(${code})` : `${m.name}(${code})으로 바로 표시${labelDesc(code, place.kind) ? ` — ${labelDesc(code, place.kind)}` : ""}`} aria-label={`${m.name}으로 표시`}
+                    onClick={() => setPlaceLabel(place.id, code)}
+                    className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black text-white shadow-sm transition ${on ? "border-slate-900 opacity-100" : "border-white hover:scale-110 lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: m.color }}>{code === "G5" ? "완" : "이"}</button>; })}
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>

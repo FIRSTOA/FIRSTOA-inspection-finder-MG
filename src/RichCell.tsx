@@ -5,9 +5,11 @@
 //  - 평문(text)은 항상 같이 내보내서 AI·합치기·검색이 그대로 평문을 쓰고, 색이 들어간 경우에만 html을 함께 저장한다. 변환 규칙은 richText.ts.
 //  - readOnly면 그냥 글로 보여준다(팀원 칸의 목표·달성기준).
 //  - 키보드로 칸 옮기기: 선택 상태에서 화살표·Tab, 편집 중엔 Tab(오른쪽)·Shift+Tab(왼쪽)·Ctrl+Enter(아래). Enter는 줄바꿈(여러 줄 적는 칸이라 엑셀의 Alt+Enter 대신).
+//  - 여러 칸(2026-10-01): Shift+클릭·Shift+화살표·드래그로 범위, Ctrl+C/X/V·Delete가 범위 전체에 — 엑셀과 서로 붙여넣기 된다(cellRange.ts).
 import { useEffect, useRef, useState } from "react";
 import { isMobileDevice } from "./navApp";
-import { dirFromKey, moveCellFocus, type CellDir } from "./cellNav";
+import { dirFromKey, moveCellFocus, nextCell, type CellDir } from "./cellNav";
+import { beginDrag, clearCells, clearRange, copyText, dragOver, extendTo, hasRange, inRange, pasteText, rangeAnchor, rangeFocus, setAnchor } from "./cellRange";
 import { RICH_COLORS, richToText, sanitizeRich, textToHtml, type RichColorKey } from "./richText";
 
 type Mode = "idle" | "selected" | "editing";
@@ -38,6 +40,22 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     el.innerHTML = wanted;
     lastRef.current = wanted;
   }, [wanted, readOnly]);
+  // 다른 칸에서 붙여넣기·지우기로 넘어온 글(cell-set, cellRange.ts) — 평문으로 넣고 저장
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; });
+  useEffect(() => {
+    const w = wrapRef.current;
+    if (!w) return;
+    const h = (ev: Event) => {
+      const t = String((ev as CustomEvent<string>).detail ?? "");
+      const el = ref.current; if (!el) return;
+      const next = textToHtml(t);
+      el.innerHTML = next; lastRef.current = next;
+      onChangeRef.current?.(t, undefined);
+    };
+    w.addEventListener("cell-set", h);
+    return () => w.removeEventListener("cell-set", h);
+  }, [readOnly]);
   const minHeight = `${minRows * 1.25 + 0.75}rem`;
 
   if (readOnly) {
@@ -54,6 +72,7 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   };
   // 편집 시작 — 렌더가 contentEditable을 켠 뒤 포커스. replace면 내용을 비우고 firstKey부터 적는다(엑셀: 선택 상태에서 타이핑)
   const startEdit = (replace = false, firstKey = "") => {
+    clearRange();
     setMode("editing");
     window.setTimeout(() => {
       const el = ref.current;
@@ -87,26 +106,36 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   const finishAndMove = (dir: CellDir) => { emit(); ref.current?.blur(); setMode("idle"); window.setTimeout(() => { const w = wrapRef.current; if (w && !moveCellFocus(w, dir)) { w.focus(); setMode("selected"); } }, 0); };
   const onWrapKeyDown = (e: React.KeyboardEvent) => {
     if (mode !== "selected") return;
+    const w = wrapRef.current;
     const dir = dirFromKey(e.key);
-    if (dir) { e.preventDefault(); move(dir); return; }
-    if (e.key === "Tab") { e.preventDefault(); move(e.shiftKey ? "left" : "right"); return; }
-    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); clearAll(); return; }
+    if (dir) {
+      e.preventDefault();
+      if (e.shiftKey && w) { const nx = nextCell(rangeFocus() || w, dir); if (nx) { if (!rangeAnchor()) setAnchor(w); extendTo(nx); nx.scrollIntoView({ block: "nearest", inline: "nearest" }); } return; } // 범위 넓히기 — 포커스는 그대로
+      clearRange(); move(dir); return;
+    }
+    if (e.key === "Tab") { e.preventDefault(); clearRange(); move(e.shiftKey ? "left" : "right"); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (w && hasRange() && inRange(w)) clearCells(w); else clearAll(); return; }
     if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); startEdit(); return; }
-    if (e.key === "Escape") { e.preventDefault(); setMode("idle"); wrapRef.current?.blur(); return; }
+    if (e.key === "Escape") { e.preventDefault(); clearRange(); setMode("idle"); wrapRef.current?.blur(); return; }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); startEdit(true, e.key); }
   };
   return <div ref={wrapRef} tabIndex={0} role="gridcell" data-cell
-    onFocus={(e) => { if (e.target === wrapRef.current && mode === "idle") setMode("selected"); }}
+    onFocus={(e) => { if (e.target === wrapRef.current && mode === "idle") setMode("selected"); if (e.target === wrapRef.current && !hasRange()) setAnchor(e.target as HTMLElement); }}
+    onMouseDown={(e) => { const w = wrapRef.current; if (!w || mode === "editing" || isMobileDevice) return; if (e.shiftKey && rangeAnchor()) { e.preventDefault(); extendTo(w); w.focus(); } else beginDrag(w); }}
+    onMouseEnter={() => { const w = wrapRef.current; if (w && mode !== "editing") dragOver(w); }}
     onClick={() => { if (mode !== "idle") return; if (isMobileDevice) startEdit(); else { setMode("selected"); wrapRef.current?.focus(); } }}
     onDoubleClick={() => { if (mode !== "editing") startEdit(); }}
     onKeyDown={onWrapKeyDown}
+    onCopy={(e) => { const w = wrapRef.current; if (!w || mode !== "selected") return; e.preventDefault(); e.clipboardData.setData("text/plain", copyText(w)); }}
+    onCut={(e) => { const w = wrapRef.current; if (!w || mode !== "selected") return; e.preventDefault(); e.clipboardData.setData("text/plain", copyText(w)); clearCells(w); }}
+    onPaste={(e) => { const w = wrapRef.current; if (!w || mode !== "selected") return; e.preventDefault(); pasteText(w, e.clipboardData.getData("text/plain")); }}
     onBlur={(e) => { if (mode === "selected" && !wrapRef.current?.contains(e.relatedTarget as Node | null)) setMode("idle"); }}
     data-selected={mode === "selected" ? "" : undefined} // 선택 테두리는 index.css가 칸(td) 전체에 그린다 — 안쪽 상자에 그리면 글 높이만큼만 보였다
     className="relative cursor-cell outline-none" style={{ minHeight }}>
     {mode !== "idle" && colors && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}
-    <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder}
+    <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder} data-cell-text
       onInput={emit}
       onBlur={() => { emit(); setMode("idle"); }}
       onKeyDown={(e) => {
