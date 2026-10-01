@@ -193,14 +193,12 @@ export function okrWorkWeek(date: string): { start: string; end: string } {
   return { start: kst(monday), end: kst(friday) };
 }
 
-const addDays = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00+09:00`); d.setUTCDate(d.getUTCDate() + n); return kst(d); };
-// 한 주(월~금)가 속한 달 — 수요일(다섯 날의 가운데, 즉 사흘 이상이 든 달)이 기준. 한 주는 한 달에만 속한다.
-// 2026-10-01: 9/28~10/2가 9월 5주차와 10월 1주차로 두 번 보여 따로 적혔다. 8/31~9/4는 그대로 9월 1주차라 옛 번호가 바뀌지 않는다.
+// 한 주(월~금)가 속한 달 — 그 주가 시작하는 월요일이 든 달(2026-10-01 사용자 최종). 한 주는 한 달에만 속한다.
+// 9/28~10/2는 9월 4주차 하나뿐이고 10월 1주차는 10/5부터, 8/31~9/4는 8월 5주차다(옛 셈법의 9월 1주차 → 서버 기록은 2026-10-01에 옮겼다).
 export function weekMonthOf(weekStart: string): { year: number; month: number } {
-  const wed = addDays(weekStart, 2);
-  return { year: Number(wed.slice(0, 4)), month: Number(wed.slice(5, 7)) };
+  return { year: Number(weekStart.slice(0, 4)), month: Number(weekStart.slice(5, 7)) };
 }
-// 어느 달의 몇 주차인지 — 그 달에 속한(수요일이 든) 주를 앞에서부터 1·2·3…
+// 어느 달의 몇 주차인지 — 그 달에 시작하는 주를 앞에서부터 1·2·3…
 export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: number; start: string; end: string }> {
   const lastDay = new Date(year, month, 0).getDate();
   const seen = new Set<string>();
@@ -218,7 +216,7 @@ export function okrWeeksInMonth(year: number, month: number): Array<{ weekNo: nu
 
 export const monthCycleId = (year: number, month: number) => `${year}-${pad(month)}`;
 export const weekCycleId = (year: number, month: number, weekNo: number) => `${year}-${pad(month)}-W${weekNo}`;
-// 오늘이 든 주차 — 그 주가 속한 달 기준(10/1 목요일 → 9월 5주차 9/28~10/2, 10월 1주차는 10/5부터).
+// 오늘이 든 주차 — 그 주가 시작한 달 기준(10/1 목요일 → 9월 4주차 9/28~10/2, 10월 1주차는 10/5부터).
 export function currentWeekOf(date: string): { year: number; month: number; weekNo: number } {
   const { start } = okrWorkWeek(date);
   const { year: y, month: m } = weekMonthOf(start);

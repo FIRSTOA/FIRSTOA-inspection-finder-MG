@@ -77,18 +77,18 @@ describe("OKR 기간·목표 도우미", () => {
     expect(splitPillar("Pillar 1.\nAI · 효율성 · 비용절감")).toEqual({ num: "Pillar 1", name: "AI · 효율성 · 비용절감" });
     expect(splitPillar("매출")).toEqual({ num: "", name: "매출" });
   });
-  it("근무 주(월~금)와 그 달의 주차 — 9월 1일이 든 주가 1주차, 9/7~9/11이 2주차", () => {
+  it("근무 주(월~금)와 그 달의 주차 — 9월에 시작하는 첫 주 9/7~9/11이 1주차(2026-10-01 월요일 기준)", () => {
     expect(okrWorkWeek("2026-09-09")).toEqual({ start: "2026-09-07", end: "2026-09-11" });
     expect(okrWorkWeek("2026-09-13")).toEqual({ start: "2026-09-07", end: "2026-09-11" }); // 일요일은 지난 주
     const weeks = okrWeeksInMonth(2026, 9);
-    expect(weeks[0]).toEqual({ weekNo: 1, start: "2026-08-31", end: "2026-09-04" });
-    expect(weeks[1]).toEqual({ weekNo: 2, start: "2026-09-07", end: "2026-09-11" });
-    expect(weeks.length).toBe(5);
+    expect(weeks[0]).toEqual({ weekNo: 1, start: "2026-09-07", end: "2026-09-11" });
+    expect(weeks[3]).toEqual({ weekNo: 4, start: "2026-09-28", end: "2026-10-02" });
+    expect(weeks.length).toBe(4);
   });
-  it("오늘이 든 주차 — 그 주가 속한 달 기준(2026-10-01: 한 주는 한 달에만)", () => {
-    expect(currentWeekOf("2026-09-29")).toEqual({ year: 2026, month: 9, weekNo: 5 });
-    expect(currentWeekOf("2026-10-01")).toEqual({ year: 2026, month: 9, weekNo: 5 }); // 9/28~10/2 주는 9월 — 10월 1주차는 10/5부터
-    expect(currentWeekOf("2026-09-01")).toEqual({ year: 2026, month: 9, weekNo: 1 });
+  it("오늘이 든 주차 — 그 주가 시작한 달 기준(2026-10-01: 한 주는 한 달에만)", () => {
+    expect(currentWeekOf("2026-09-29")).toEqual({ year: 2026, month: 9, weekNo: 4 });
+    expect(currentWeekOf("2026-10-01")).toEqual({ year: 2026, month: 9, weekNo: 4 }); // 9/28~10/2 주는 9월 — 10월 1주차는 10/5부터
+    expect(currentWeekOf("2026-09-01")).toEqual({ year: 2026, month: 8, weekNo: 5 }); // 8/31 시작 주는 8월
   });
   it("기간 id와 이름", () => {
     expect(monthCycleId(2026, 8)).toBe("2026-08");

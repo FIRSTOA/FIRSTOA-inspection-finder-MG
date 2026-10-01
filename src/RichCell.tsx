@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isMobileDevice } from "./navApp";
 import { dirFromKey, moveCellFocus, nextCell, type CellDir } from "./cellNav";
-import { beginDrag, clearCells, clearRange, copyText, dragOver, extendTo, hasRange, inRange, pasteText, rangeAnchor, rangeFocus, setAnchor } from "./cellRange";
+import { beginDrag, clearCells, clearRange, copyText, dragOver, extendTo, hasRange, pasteText, rangeAnchor, rangeFocus, redo, rememberCells, setAnchor, undo } from "./cellRange";
 import { RICH_COLORS, richToText, sanitizeRich, textToHtml, type RichColorKey } from "./richText";
 
 type Mode = "idle" | "selected" | "editing";
@@ -73,6 +73,7 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   // 편집 시작 — 렌더가 contentEditable을 켠 뒤 포커스. replace면 내용을 비우고 firstKey부터 적는다(엑셀: 선택 상태에서 타이핑)
   const startEdit = (replace = false, firstKey = "") => {
     clearRange();
+    if (replace && wrapRef.current) rememberCells([wrapRef.current]); // 선택 상태에서 타이핑해 덮어쓴 글도 Ctrl+Z로
     setMode("editing");
     window.setTimeout(() => {
       const el = ref.current;
@@ -114,7 +115,9 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
       clearRange(); move(dir); return;
     }
     if (e.key === "Tab") { e.preventDefault(); clearRange(); move(e.shiftKey ? "left" : "right"); return; }
-    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (w && hasRange() && inRange(w)) clearCells(w); else clearAll(); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (w) clearCells(w); else clearAll(); return; } // 범위면 범위 전체, 아니면 이 칸 — 둘 다 Ctrl+Z 가능
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
     if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); startEdit(); return; }
     if (e.key === "Escape") { e.preventDefault(); clearRange(); setMode("idle"); wrapRef.current?.blur(); return; }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); startEdit(true, e.key); }

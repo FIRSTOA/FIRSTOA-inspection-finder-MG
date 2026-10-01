@@ -416,7 +416,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
         <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div>}
     </>}
-    {gatherOpen && <GatherModal subject={subject} year={year} quarter={period === "quarter" ? quarter : Math.ceil(month / 3)} onClose={() => setGatherOpen(false)} />}
+    {gatherOpen && <GatherModal subject={subject} year={period === "week" ? Number(editWeek.start.slice(0, 4)) : year} quarter={period === "quarter" ? quarter : period === "week" ? Math.ceil(Number(editWeek.start.slice(5, 7)) / 3) : Math.ceil(month / 3)} onClose={() => setGatherOpen(false)} />}
   </div>;
 }
 
@@ -458,7 +458,7 @@ function GatherModal({ subject, year: y0, quarter: q0, onClose }: { subject: str
     try { await navigator.clipboard.writeText(asText(withHead)); notify(`${label} ${total}줄을 복사했습니다`, "success"); }
     catch { notify("복사에 실패했습니다 — 글을 드래그해 복사해 주세요", "error"); }
   };
-  return createPortal(<div className="fixed inset-0 z-[5000] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-6" onClick={onClose}>
+  return createPortal(<div className="fixed inset-0 z-[3900] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-6" onClick={onClose}>
     <div onClick={(e) => e.stopPropagation()} className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
       <div className="flex flex-col gap-3 bg-[#1E252F] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0"><div className="text-[11px] font-black uppercase tracking-[.14em] text-slate-400">주간현황판 · 모아보기</div><h3 className="text-lg font-black text-white">{subject} · {quarter ? `${year}년 ${quarter}분기` : `${year}년 전체`} {label}</h3></div>

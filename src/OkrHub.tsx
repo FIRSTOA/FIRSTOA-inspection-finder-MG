@@ -27,7 +27,7 @@ import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
 import {
   JUDGMENT_INFO, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, bottleneckLabel, cycleLabel, defaultCycleTitle,
-  criteriaToCarry, currentWeekOf, defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, hasResultRows, isAlert, listOkrCycles, listOkrResultIndex, memberReports,
+  currentWeekOf, defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, hasResultRows, isAlert, listOkrCycles, listOkrResultIndex, memberReports,
   mergeCycle, mergeMemberActuals, mergeReport, monthCycleId, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth, overlayCriteria, pillarIndex, pillarLabel, probeOkrSchema, putCriteria, remapFeedback, remapReports,
   renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, weekCycleId, worstJudgment, worstOfJudgments,
   type OkrCycle, type OkrGoal, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
@@ -72,6 +72,7 @@ const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-80
 const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
 // AI·모아 넣기 버튼(✨정리·✨합치기·그대로 모아 넣기·✨초안·팀원 기록 보기)은 사용자가 써 본 뒤 다시 정하기로 해 잠시 숨김(2026-09-26). 코드는 그대로.
 const SHOW_OKR_TOOLS = false;
+const MONTH_VIEW_UNTIL = "2026-09"; // 달 단위로 적던 마지막 달 — 그 뒤는 주차 기록만 있어 '월 종합' 탭을 보이지 않는다(2026-10-01)
 
 // 열 너비 — 머리 칸 오른쪽 가장자리를 끌어 조절(엑셀처럼, 2026-09-24). 이 브라우저에 기억(localStorage), 가장자리를 두 번 누르면 기본값.
 function useColWidths(storageKey: string, defaults: number[]) {
@@ -280,7 +281,7 @@ export default function OkrHub({ author }: { author: string }) {
     if (thisWeek.year === y && thisWeek.month === m) { openCycle(y, m, thisWeek.weekNo); return; }
     const withData = okrWeeksInMonth(y, m).filter((w) => ids.has(weekCycleId(y, m, w.weekNo)));
     if (withData.length) { openCycle(y, m, withData[withData.length - 1].weekNo); return; }
-    openCycle(y, m, ids.has(monthCycleId(y, m)) ? null : 1);
+    openCycle(y, m, ids.has(monthCycleId(y, m)) && monthCycleId(y, m) <= MONTH_VIEW_UNTIL ? null : 1);
   };
   useEffect(() => {
     Promise.all([listOkrCycles(), listOkrResultIndex().catch(() => new Set<string>())])
@@ -419,7 +420,7 @@ export default function OkrHub({ author }: { author: string }) {
     return ws.length ? weekCycleId(pm.y, pm.m, ws[ws.length - 1].weekNo) : null;
   })();
   const prevCycleLabel = prevCycleId ? (prevCycleId.includes("-W") ? `${Number(prevCycleId.slice(5, 7))}월 ${prevCycleId.split("W")[1]}주차` : `${Number(prevCycleId.slice(5, 7))}월`) : "";
-  // 전주 달성기준 불러오기(2026-10-01): 전주에 이 칸(파트 종합이면 파트, 팀원이면 그 사람)에 보이던 달성기준 중 지금 기본과 다른 것만 가져온다.
+  // 전주 달성기준 불러오기(2026-10-01): 전주에 이 칸(파트 종합이면 파트, 팀원이면 그 사람)에 보이던 달성기준을 그대로 전부 가져온다(빈 칸만 제외).
   const loadPrevCriteria = async (team: OkrTeam, who: string) => {
     if (!prevCycleId || !goalCycle) return;
     const scope = who && who !== "__sum__" ? who : "";
@@ -428,12 +429,12 @@ export default function OkrHub({ author }: { author: string }) {
       const [prevRows, prevMonth] = await Promise.all([getOkrReports(prevCycleId), prevMonthId === goalCycle.id ? Promise.resolve(goalCycle) : getOkrCycle(prevMonthId)]);
       const prevTeam = overlayCriteria(prevMonth?.goals || [], findReport(prevRows, team, "")?.goals);
       const prevEffective = scope ? overlayCriteria(prevTeam, findReport(prevRows, team, scope)?.goals) : prevTeam;
-      const entries = criteriaToCarry(prevEffective, scope ? teamGoalsOf(team) : commonGoals);
-      if (!entries.length) { setMessage(`${prevCycleLabel}에 적힌 달성기준이 없거나 지금 것과 같아요`); return; }
+      const entries = prevEffective.filter((g) => g.criteria.trim()).map((g) => ({ ...g, html: g.html?.criteria ? { criteria: g.html.criteria } : undefined }));
+      if (!entries.length) { setMessage(`${prevCycleLabel}에 적힌 달성기준이 없어요`); return; }
       const mine = findReport(reports, team, scope)?.goals?.length || 0;
-      if (mine && !(await askConfirm(`${prevCycleLabel} 달성기준 ${entries.length}개를 가져옵니다. 이 주차에 이미 고친 달성기준 ${mine}개 중 같은 번호는 덮어씁니다.`, { okLabel: "가져오기" }))) return;
+      if (mine && !(await askConfirm(`이 주차의 달성기준을 ${prevCycleLabel} 것(${entries.length}개)으로 바꿉니다. 결과·판정은 그대로 둡니다.`, { okLabel: "가져오기" }))) return;
       patchReport(team, scope, (r) => ({ ...r, goals: putCriteria(r.goals, entries) }));
-      setMessage(`${prevCycleLabel} 달성기준 ${entries.length}개를 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
+      setMessage(`${prevCycleLabel} 달성기준 ${entries.length}개를 그대로 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
     } catch (e) { setMessage(`불러오기 실패: ${(e as Error).message}`); }
   };
   const updateResult = (team: string, who: string, no: number, patch: Partial<OkrResultRow>) => patchReport(team, who, (r) => {
@@ -602,7 +603,7 @@ export default function OkrHub({ author }: { author: string }) {
   };
 
   const weeks = useMemo(() => okrWeeksInMonth(year, month), [year, month]);
-  const showMonthTab = weekNo === null || resultIds.has(monthCycleId(year, month)); // '월 종합'은 주차로 나누기 전 달 단위 옛 기록이 있을 때만
+  const showMonthTab = monthCycleId(year, month) <= MONTH_VIEW_UNTIL && (weekNo === null || resultIds.has(monthCycleId(year, month))); // '월 종합'은 주차로 나누기 전(9월까지) 달 단위 옛 기록이 있을 때만
   const years = useMemo(() => { const ys = new Set<number>([Number(today.slice(0, 4)), Number(today.slice(0, 4)) - 1, ...cycles.map((c) => c.year)]); return [...ys].sort((a, b) => b - a); }, [cycles, today]);
   const tabs: Array<[Tab, string]> = [["all", "통합집계"], ...OKR_TEAMS.map((t) => [t, teamName(t)] as [Tab, string])];
   const isDraft = !!cycle && !cycles.some((c) => c.id === cycle.id); // 아직 DB에 없는 달·주차(초안)

@@ -3,6 +3,8 @@
 //  - Ctrl+C: 범위(없으면 그 칸)를 탭·줄바꿈 글(TSV)로 — 줄바꿈·탭·따옴표가 든 칸은 엑셀처럼 "…"로 감싼다. 엑셀·구글시트에 그대로 붙는다.
 //  - Ctrl+V: 고른 칸부터 오른쪽·아래로 채운다(엑셀에서 복사한 여러 칸도). 글은 각 칸에 'cell-set' 이벤트로 넘긴다(RichCell이 받아 저장).
 //  - Ctrl+X·Delete: 범위를 비운다. 범위 표시는 [data-range] 속성 → index.css가 칸(td) 배경을 칠한다.
+//  - Ctrl+Z / Ctrl+Y(Ctrl+Shift+Z): 붙여넣기·지우기·잘라내기·덮어쓰며 타이핑으로 바뀐 칸들을 묶음째 되돌리고 다시 실행한다(최근 50묶음).
+//    칸 안에서 글자를 고치는 중의 Ctrl+Z는 브라우저 자체 되돌리기다.
 type Pos = { table: HTMLTableElement; row: number; col: number };
 
 let anchorEl: HTMLElement | null = null;
@@ -94,24 +96,36 @@ export function copyText(from: HTMLElement): string {
   return toTsv(rows.map((r) => r.map(cellText)));
 }
 export function setCellText(el: HTMLElement, text: string) { el.dispatchEvent(new CustomEvent<string>("cell-set", { detail: text })); }
+type Snap = Array<{ el: HTMLElement; text: string }>;
+const undoStack: Snap[] = [];
+const redoStack: Snap[] = [];
+const snapshot = (cells: HTMLElement[]): Snap => cells.map((el) => ({ el, text: cellText(el) }));
+// 바꾸기 직전에 부른다 — 이 칸들의 지금 글을 한 묶음으로 기억
+export function rememberCells(cells: HTMLElement[]) { if (!cells.length) return; undoStack.push(snapshot(cells)); if (undoStack.length > 50) undoStack.shift(); redoStack.length = 0; }
+function restore(snap: Snap): number { let n = 0; for (const { el, text } of snap) if (el.isConnected) { setCellText(el, text); n++; } return n; }
+export function undo(): number { const snap = undoStack.pop(); if (!snap) return 0; redoStack.push(snapshot(snap.map((x) => x.el))); return restore(snap); }
+export function redo(): number { const snap = redoStack.pop(); if (!snap) return 0; undoStack.push(snapshot(snap.map((x) => x.el))); return restore(snap); }
 // 붙여넣기 — from 칸(범위가 있으면 그 왼쪽 위)부터 오른쪽·아래로. 표 밖으로 넘치는 건 버린다. 채운 칸 수를 돌려준다.
 export function pasteText(from: HTMLElement, text: string): number {
   const data = parseTsv(text);
   if (!data.length) return 0;
   const ranged = inRange(from) && anchorEl && focusEl ? rangeCells(anchorEl, focusEl) : null;
+  const writes: Array<[HTMLElement, string]> = [];
   // 한 칸짜리 글을 여러 칸 범위에 붙이면 범위 전체를 그 글로(엑셀과 같다)
-  if (ranged && data.length === 1 && data[0].length === 1) { let n = 0; for (const row of ranged) for (const el of row) { setCellText(el, data[0][0]); n++; } return n; }
-  const start = ranged ? ranged[0][0] : from;
-  const pos = cellPos(start);
-  if (!pos) { setCellText(from, data.map((r) => r.join("\t")).join("\n")); return 1; }
-  const grid = cellGrid(pos.table);
-  let n = 0;
-  data.forEach((r, i) => r.forEach((v, j) => { const el = grid[pos.row + i]?.[pos.col + j]; if (el) { setCellText(el, v); n++; } }));
-  return n;
+  if (ranged && data.length === 1 && data[0].length === 1) { for (const row of ranged) for (const el of row) writes.push([el, data[0][0]]); }
+  else {
+    const start = ranged ? ranged[0][0] : from;
+    const pos = cellPos(start);
+    if (!pos) writes.push([from, data.map((r) => r.join("\t")).join("\n")]);
+    else { const grid = cellGrid(pos.table); data.forEach((r, i) => r.forEach((v, j) => { const el = grid[pos.row + i]?.[pos.col + j]; if (el) writes.push([el, v]); })); }
+  }
+  rememberCells(writes.map(([el]) => el));
+  for (const [el, v] of writes) setCellText(el, v);
+  return writes.length;
 }
 export function clearCells(from: HTMLElement): number {
-  const rows = inRange(from) && anchorEl && focusEl ? rangeCells(anchorEl, focusEl) : [[from]];
-  let n = 0;
-  for (const r of rows) for (const el of r) { setCellText(el, ""); n++; }
-  return n;
+  const cells = (inRange(from) && anchorEl && focusEl ? rangeCells(anchorEl, focusEl) : [[from]]).flat();
+  rememberCells(cells);
+  for (const el of cells) setCellText(el, "");
+  return cells.length;
 }

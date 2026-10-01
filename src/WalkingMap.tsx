@@ -201,6 +201,8 @@ const initialPlaces: MapPlace[] = [
 function labelMeta(code: string) {
   return mapLabels.find((item) => item.code === code) || mapLabels[mapLabels.length - 1];
 }
+// 목록 행의 빠른 색칠 단추(G5 점검 완료 · G12 이관) — 행마다 다시 계산하지 않게 미리 뽑아 둔다
+const QUICK_LABELS = ["G5", "G12"].map((code) => labelMeta(code));
 
 function isCompleted(place: MapPlace) {
   return place.label === "G5" || place.label === "G12";
@@ -2702,10 +2704,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               {/* 버튼은 오른쪽 끝 두 열(28px×2) — 윗줄 빠른 색칠(G5 완료·G12 이관, 2026-10-01: 기존 워킨맵과 동기화가 안 돼 손으로 칠할 때 톱니→수정이 번거로웠다), 아랫줄 설정 · 내 일정, 그 아래 인사 */}
               {!editMode && (
                 <span className="grid shrink-0 grid-cols-2 gap-1">
-                  {(["G5", "G12"] as const).map((code) => { const m = labelMeta(code); const on = place.label === code; return <button key={code} type="button" disabled={on}
-                    title={on ? `지금 ${m.name}(${code})` : `${m.name}(${code})으로 바로 표시${labelDesc(code, place.kind) ? ` — ${labelDesc(code, place.kind)}` : ""}`} aria-label={`${m.name}으로 표시`}
+                  {QUICK_LABELS.map(({ code, name, color }) => { const on = place.label === code; return <button key={code} type="button" disabled={on}
+                    title={on ? `지금 ${name}(${code})` : `${name}(${code})으로 바로 표시`} aria-label={`${name}으로 표시`}
                     onClick={() => setPlaceLabel(place.id, code)}
-                    className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black text-white shadow-sm transition ${on ? "border-slate-900 opacity-100" : "border-white hover:scale-110 lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: m.color }}>{code === "G5" ? "완" : "이"}</button>; })}
+                    className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[9px] font-black tracking-tight text-white ${on ? "border-slate-900" : "border-white lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: color }}>{code}</button>; })}
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
