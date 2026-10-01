@@ -59,8 +59,9 @@ export async function prepareImageForUpload(file: File, maxDim = 1600, opts: Pre
   if (!decoded) return original;   // 디코딩 불가 — 원본 그대로 (형식 표기는 정확히)
 
   const { source, width, height } = decoded;
-  // 작은 원본은 손대지 않는다 — 폰이 이미 압축한 사진을 다시 압축하면 글자가 뭉개진다
-  if (opts.keepOriginalUnderBytes && file.size <= opts.keepOriginalUnderBytes && Math.max(width, height) <= maxDim && /^image\/(jpeg|webp|png)$/i.test(file.type)) {
+  // 작은 원본은 손대지 않는다 — 폰이 이미 압축한 사진을 다시 압축하면 글자가 뭉개진다.
+  // 긴 변이 maxDim보다 커도 용량이 기준 아래면 그대로 둔다(2026-10-02: 4000px 폰 사진 3MB를 3000px로 줄여 봐야 화질만 잃는다)
+  if (opts.keepOriginalUnderBytes && file.size <= opts.keepOriginalUnderBytes && /^image\/(jpeg|webp|png)$/i.test(file.type)) {
     if (typeof (source as ImageBitmap).close === "function") (source as ImageBitmap).close();
     return original;
   }
