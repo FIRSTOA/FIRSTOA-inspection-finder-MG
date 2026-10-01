@@ -293,6 +293,20 @@ export function putCriteria(list: OkrGoal[] | undefined, entries: OkrGoal[]): Ok
   const kept = (list || []).filter((x) => !entries.some((e) => e.no === x.no));
   return [...kept, ...entries].sort((a, b) => a.no - b.no);
 }
+// 같은 사람의 결과 행 둘을 번호별로 합친다(주차 번호 정리로 두 기간 행이 하나가 될 때, 2026-10-01):
+// 한쪽이 비면 채워진 쪽, 둘 다 있으면 keep을 두고 incoming의 글을 뒤에 덧붙인다(판정은 keep 것, 비어 있을 때만 incoming). 색(html)은 버린다.
+export function mergeResultRows(keep: OkrResultRow[], incoming: OkrResultRow[]): OkrResultRow[] {
+  const filled = (r: OkrResultRow | undefined) => !!r && (r.actual.trim() !== "" || r.judgment.trim() !== "");
+  const nos = [...new Set([...keep, ...incoming].map((r) => r.no))].sort((a, b) => a - b);
+  return nos.map((no) => {
+    const a = keep.find((r) => r.no === no); const b = incoming.find((r) => r.no === no);
+    if (!b) return a as OkrResultRow;
+    if (!a || !filled(a)) return b;
+    if (!filled(b)) return a;
+    const join = (x: string, y: string) => (y.trim() && y.trim() !== x.trim() ? (x.trim() ? `${x.trimEnd()}\n${y.trim()}` : y.trim()) : x);
+    return { no, actual: join(a.actual, b.actual), reason: join(a.reason, b.reason), plan: join(a.plan, b.plan), evidence: join(a.evidence, b.evidence), judgment: a.judgment.trim() ? a.judgment : b.judgment };
+  });
+}
 export function remapFeedback(feedback: Record<string, OkrFeedback>, remap: Map<number, number>): Record<string, OkrFeedback> {
   return Object.fromEntries(Object.entries(feedback).filter(([k]) => remap.has(Number(k))).map(([k, v]) => [String(remap.get(Number(k))), v]));
 }

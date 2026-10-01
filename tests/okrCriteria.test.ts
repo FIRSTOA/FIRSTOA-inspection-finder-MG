@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { criteriaToCarry, emptyReport, overlayCriteria, putCriteria, remapReports, type OkrGoal } from "../src/okr";
+import { criteriaToCarry, emptyReport, mergeResultRows, overlayCriteria, putCriteria, remapReports, type OkrGoal, type OkrResultRow } from "../src/okr";
+
+const row = (no: number, actual: string, judgment = ""): OkrResultRow => ({ no, actual, judgment, reason: "", plan: "", evidence: "" });
+describe("주차 번호 정리 — 같은 사람 행 둘 합치기", () => {
+  it("비면 채워진 쪽, 둘 다 있으면 먼저 것 뒤에 덧붙이고 판정은 먼저 것", () => {
+    const keep = [row(1, "계약서 5건", "부분달성"), row(5, "교육 2회", "완료"), row(8, "", "")];
+    const incoming = [row(1, "추가 2건", "완료"), row(6, "미수 3건", "미흡"), row(8, "점검 10곳", "완료")];
+    const out = mergeResultRows(keep, incoming);
+    expect(out.map((r) => r.no)).toEqual([1, 5, 6, 8]);
+    expect(out[0]).toMatchObject({ actual: "계약서 5건\n추가 2건", judgment: "부분달성" });
+    expect(out[1]).toMatchObject({ actual: "교육 2회", judgment: "완료" });
+    expect(out[2]).toMatchObject({ actual: "미수 3건", judgment: "미흡" });
+    expect(out[3]).toMatchObject({ actual: "점검 10곳", judgment: "완료" });
+  });
+  it("같은 글이면 두 번 붙이지 않는다", () => {
+    expect(mergeResultRows([row(2, "같은 글", "완료")], [row(2, "같은 글", "미흡")])[0]).toMatchObject({ actual: "같은 글", judgment: "완료" });
+  });
+});
 
 const g = (no: number, objective: string, criteria: string): OkrGoal => ({ no, pillar: "Pillar 1.\nAI", bottleneck: "", objective, criteria });
 const common = [g(1, "A", "a0"), g(2, "B", "b0"), g(3, "C", "c0")];

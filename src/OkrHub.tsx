@@ -27,8 +27,8 @@ import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
 import {
   JUDGMENT_INFO, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, bottleneckLabel, cycleLabel, defaultCycleTitle,
-  currentWeekOf, defaultGoalTemplate, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, hasResultRows, isAlert, listOkrCycles, listOkrResultIndex, memberReports,
-  mergeCycle, mergeMemberActuals, mergeReport, monthCycleId, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth, overlayCriteria, pillarIndex, pillarLabel, probeOkrSchema, putCriteria, remapFeedback, remapReports,
+  currentWeekOf, defaultGoalTemplate, deleteOkrCycle, deleteOkrReport, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, hasResultRows, isAlert, listOkrCycles, listOkrResultIndex, memberReports,
+  mergeCycle, mergeMemberActuals, mergeReport, mergeResultRows, monthCycleId, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth, overlayCriteria, pillarIndex, pillarLabel, probeOkrSchema, putCriteria, remapFeedback, remapReports,
   renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, weekCycleId, worstJudgment, worstOfJudgments,
   type OkrCycle, type OkrGoal, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
 } from "./okr";
@@ -175,7 +175,6 @@ export default function OkrHub({ author }: { author: string }) {
   const [year, setYear] = useState(Number(today.slice(0, 4)));
   const [month, setMonth] = useState(Number(today.slice(5, 7)));
   const [weekNo, setWeekNo] = useState<number | null>(null); // null = 월 전체, n = n주차 — 주차마다 결과를 따로 적는다(2026-09-29 요청)
-  const cycleId = weekNo ? weekCycleId(year, month, weekNo) : monthCycleId(year, month);
   const [cycle, setCycle] = useState<OkrCycle | null>(null);
   const [reports, setReports] = useState<OkrReport[]>([]);
   // 주차를 열었을 때 목표의 출처 — 달(공통 목표·Pillar·병목). 달성기준 덮어쓰기는 열린 주차의 기록(reports)에 있다.
@@ -197,6 +196,17 @@ export default function OkrHub({ author }: { author: string }) {
   const loadedCycleRef = useRef("");
   const cyclesRef = useRef<OkrCycle[]>([]);
   useEffect(() => { cyclesRef.current = cycles; }, [cycles]);
+  // 주차의 저장 id — 같은 기간(시작 월요일)의 행이 서버에 이미 있으면 그 id를 그대로 쓴다(2026-10-01: 주차 셈법이 "월요일이 든 달"로 바뀌어
+  // 9/28~10/2가 '9월 5주차'(2026-09-W5)에서 '9월 4주차'가 됐지만, 서버 기록은 옮기지 않고 날짜로 찾아 그대로 쓴다 — SQL 없이 기록이 그대로 보인다).
+  // 같은 기간 행이 둘이면 결과가 적힌 쪽, 없으면 옛 id 쪽을 고른다. 없으면 새 셈법 id.
+  const weekIdFor = (y: number, m: number, w: number, list: OkrCycle[] = cyclesRef.current, ids: Set<string> = resultIds): string => {
+    const fresh = weekCycleId(y, m, w);
+    const wk = okrWeeksInMonth(y, m).find((x) => x.weekNo === w);
+    const same = wk ? list.filter((c) => c.kind === "week" && c.start_date === wk.start) : [];
+    if (!same.length) return fresh;
+    return (same.find((c) => ids.has(c.id)) || same.find((c) => c.id !== fresh) || same[0]).id;
+  };
+  const cycleId = cycle?.id || (weekNo ? weekIdFor(year, month, weekNo, cycles) : monthCycleId(year, month));
   const stateRef = useRef({ cycle, reports, goalSrc });
   useEffect(() => { stateRef.current = { cycle, reports, goalSrc }; }, [cycle, reports, goalSrc]);
   const saveSeqRef = useRef(0); // 저장이 끝날 때마다 +1 — 그 전에 시작한 동기화 읽기는 버린다(옛 값으로 되돌아가지 않게)
@@ -244,7 +254,7 @@ export default function OkrHub({ author }: { author: string }) {
   const openCycle = (y: number, m: number, w: number | null) => {
     void flushPending();
     setYear(y); setMonth(m); setWeekNo(w);
-    const id = w ? weekCycleId(y, m, w) : monthCycleId(y, m);
+    const id = w ? weekIdFor(y, m, w) : monthCycleId(y, m);
     const mid = monthCycleId(y, m);
     const token = ++openTokenRef.current;
     setLoading(true);
@@ -254,9 +264,11 @@ export default function OkrHub({ author }: { author: string }) {
         if (token !== openTokenRef.current) return;
         const list = cyclesRef.current;
         let c = found || (w ? weekDraft(y, m, w) : monthDraft(y, m, list));
-        if (found && w) { // 옛 셈법(달 경계 주가 두 달에 속함)으로 만든 주차 행은 날짜를 새 셈법에 맞춘다(2026-10-01)
+        if (found && w) { // 옛 셈법으로 만든 주차 행(id·제목은 그대로)의 달·주차·날짜 표기를 새 셈법에 맞춘다 — 저장은 자동 저장이 한다(2026-10-01)
           const fresh = weekDraft(y, m, w);
-          if (found.start_date !== fresh.start_date || found.end_date !== fresh.end_date) { c = { ...found, start_date: fresh.start_date, end_date: fresh.end_date }; void saveOkrCycle(c, author).catch(() => undefined); }
+          if (found.start_date !== fresh.start_date || found.end_date !== fresh.end_date || found.year !== y || found.month !== m || found.week_no !== w) {
+            c = { ...found, year: y, month: m, week_no: w, start_date: fresh.start_date, end_date: fresh.end_date, title: found.title === defaultCycleTitle(found) || !found.title ? fresh.title : found.title };
+          }
         }
         cycleBaseRef.current = { [c.id]: c };
         reportBaseRef.current = Object.fromEntries(rows.map((r) => [rkey(r), r]));
@@ -279,7 +291,7 @@ export default function OkrHub({ author }: { author: string }) {
   // 달을 고르면 어느 주차를 열지 — 이번 달이면 이번 주, 아니면 결과가 있는 마지막 주차, 없으면 달 단위 옛 기록이 있을 때만 그것, 아니면 1주차
   const openMonthDefault = (y: number, m: number, ids: Set<string> = resultIds) => {
     if (thisWeek.year === y && thisWeek.month === m) { openCycle(y, m, thisWeek.weekNo); return; }
-    const withData = okrWeeksInMonth(y, m).filter((w) => ids.has(weekCycleId(y, m, w.weekNo)));
+    const withData = okrWeeksInMonth(y, m).filter((w) => ids.has(weekIdFor(y, m, w.weekNo, cyclesRef.current, ids)));
     if (withData.length) { openCycle(y, m, withData[withData.length - 1].weekNo); return; }
     openCycle(y, m, ids.has(monthCycleId(y, m)) && monthCycleId(y, m) <= MONTH_VIEW_UNTIL ? null : 1);
   };
@@ -415,9 +427,9 @@ export default function OkrHub({ author }: { author: string }) {
   const prevCycleId = ((): string | null => {
     const pm = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
     if (!weekNo) return monthCycleId(pm.y, pm.m);
-    if (weekNo > 1) return weekCycleId(year, month, weekNo - 1);
+    if (weekNo > 1) return weekIdFor(year, month, weekNo - 1, cycles);
     const ws = okrWeeksInMonth(pm.y, pm.m);
-    return ws.length ? weekCycleId(pm.y, pm.m, ws[ws.length - 1].weekNo) : null;
+    return ws.length ? weekIdFor(pm.y, pm.m, ws[ws.length - 1].weekNo, cycles) : null;
   })();
   const prevCycleLabel = prevCycleId ? (prevCycleId.includes("-W") ? `${Number(prevCycleId.slice(5, 7))}월 ${prevCycleId.split("W")[1]}주차` : `${Number(prevCycleId.slice(5, 7))}월`) : "";
   // 전주 달성기준 불러오기(2026-10-01): 전주에 이 칸(파트 종합이면 파트, 팀원이면 그 사람)에 보이던 달성기준을 그대로 전부 가져온다(빈 칸만 제외).
@@ -538,6 +550,53 @@ export default function OkrHub({ author }: { author: string }) {
     } catch (e) { setMessage((e as Error).message); }
   };
 
+  // 주차 번호 정리(2026-10-01, 한 번만): 주차 셈법이 "월요일이 든 달"로 바뀌기 전 번호로 저장된 행을 새 번호로 옮긴다.
+  // 사용자가 단추를 눌러 자기 브라우저에서 실행한다(DB 콘솔·SQL 없이). 같은 사람 행이 양쪽에 있으면 번호별로 합친다(mergeResultRows).
+  //   2026-09-W1(원래 8/31 주, 빈 행) → 2026-08-W5 · 2026-09-W2(9/7 주 시드) → 2026-09-W1 · 2026-09-W5(9/28 주, 이번 주) → 2026-09-W4
+  // pending: 아직 안 옮겼는지 — 옛 '9월 2주차' 행이 있으면 1·2번, 옛 '9월 5주차' 행이 있으면 3번. 다 옮기면 단추가 사라지고 다시 눌러도 아무것도 안 한다.
+  const STALE_WEEK_MOVES: Array<{ from: string; to: string; y: number; m: number; w: number; pending: (list: OkrCycle[]) => boolean }> = [
+    { from: "2026-09-W1", to: "2026-08-W5", y: 2026, m: 8, w: 5, pending: (list) => list.some((c) => c.id === "2026-09-W2") },
+    { from: "2026-09-W2", to: "2026-09-W1", y: 2026, m: 9, w: 1, pending: (list) => list.some((c) => c.id === "2026-09-W2") },
+    { from: "2026-09-W5", to: "2026-09-W4", y: 2026, m: 9, w: 4, pending: (list) => list.some((c) => c.id === "2026-09-W5") },
+  ];
+  const needsWeekCleanup = STALE_WEEK_MOVES.some((mv) => mv.pending(cycles));
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const cleanupStaleWeeks = async () => {
+    const ok = await askConfirm("주차 번호를 새 기준(월요일이 든 달)에 맞춰 옮깁니다.\n· 9/28~10/2 기록(옛 '9월 5주차') → 9월 4주차 (오늘 새로 적힌 9월 4주차 내용과 번호별로 합쳐집니다)\n· 9/7 주 기록(옛 '9월 2주차') → 9월 1주차\n· 8/31 주 빈 행 → 8월 5주차\n모든 사람의 기록이 함께 옮겨지며, 되돌릴 수 없습니다.", { okLabel: "옮기기" });
+    if (!ok) return;
+    setCleanupBusy(true); setLoading(true);
+    const done: string[] = [];
+    try {
+      await flushPending();
+      const now = await listOkrCycles();
+      for (const mv of STALE_WEEK_MOVES) {
+        if (!mv.pending(now)) continue;
+        const from = await getOkrCycle(mv.from); if (!from) continue;
+        const wk = okrWeeksInMonth(mv.y, mv.m).find((x) => x.weekNo === mv.w); if (!wk) continue;
+        const target = (await getOkrCycle(mv.to)) || { ...from, id: mv.to, year: mv.y, month: mv.m, week_no: mv.w, start_date: wk.start, end_date: wk.end, parent_id: monthCycleId(mv.y, mv.m), title: defaultCycleTitle({ kind: "week", year: mv.y, month: mv.m, week_no: mv.w }) };
+        if (!(await getOkrCycle(monthCycleId(mv.y, mv.m)))) await saveOkrCycle(monthDraft(mv.y, mv.m, cyclesRef.current), author);
+        await saveOkrCycle({ ...target, year: mv.y, month: mv.m, week_no: mv.w, start_date: wk.start, end_date: wk.end }, author);
+        const [fromRows, toRows] = await Promise.all([getOkrReports(mv.from), getOkrReports(mv.to)]);
+        for (const r of fromRows) {
+          const dup = toRows.find((x) => x.team === r.team && (x.member || "") === (r.member || ""));
+          const moved: OkrReport = dup
+            ? { ...dup, rows: mergeResultRows(dup.rows, r.rows), goals: dup.goals?.length ? dup.goals : r.goals, feedback: { ...(r.feedback || {}), ...(dup.feedback || {}) } }
+            : { ...r, cycle_id: mv.to };
+          await saveOkrReport(moved, author);
+          await deleteOkrReport(mv.from, r.team, r.member || "");
+        }
+        await deleteOkrCycle(mv.from);
+        done.push(`${mv.from} → ${mv.to}`);
+      }
+      const [list, ids] = await Promise.all([listOkrCycles(), listOkrResultIndex().catch(() => new Set<string>())]);
+      setCycles(list); cyclesRef.current = list; setResultIds(ids);
+      saveSeqRef.current += 1;
+      setMessage(done.length ? `주차 기록을 옮겼어요: ${done.join(", ")}` : "옮길 옛 주차 기록이 없어요");
+      openCycle(year, month, weekNo);
+    } catch (e) { setLoading(false); setMessage(`주차 정리 실패: ${(e as Error).message}${done.length ? ` (완료: ${done.join(", ")})` : ""}`); }
+    finally { setCleanupBusy(false); }
+  };
+
   // 팀원들이 적은 실제결과를 파트 종합 칸으로 — 비어 있으면 넣고, 있으면 뒤에 덧붙인다. 종합판정이 비어 있으면 팀원 판정 중 가장 나쁜 것을 넣는다.
   const mergeMembers = async (team: OkrTeam, no: number) => {
     const goals = teamGoalsOf(team);
@@ -641,6 +700,7 @@ export default function OkrHub({ author }: { author: string }) {
               {saveStatus === "saving" && <span className="text-slate-400">저장 중…</span>}
               {saveStatus === "error" && <span className="text-rose-300">저장 실패</span>}
               {saveStatus !== "saving" && syncedAt && <span className="text-[11px] font-semibold text-slate-500" title="15초마다, 창을 다시 볼 때 다른 사람이 적은 내용을 가져옵니다">동기화 {syncedAt}</span>}
+              {needsWeekCleanup && <button type="button" disabled={cleanupBusy} onClick={() => void cleanupStaleWeeks()} title="주차 셈법이 바뀌기 전 번호로 저장된 기록(9/28 주 = 옛 9월 5주차 등)을 새 번호로 옮깁니다. 한 번만 누르면 됩니다." className="rounded-full bg-amber-400 px-3 py-1.5 text-[11px] font-black text-slate-950 shadow transition hover:bg-amber-300 disabled:opacity-50">{cleanupBusy ? "옮기는 중…" : "⚠ 주차 기록 정리"}</button>}
             </div>
           </div>
         </div>
