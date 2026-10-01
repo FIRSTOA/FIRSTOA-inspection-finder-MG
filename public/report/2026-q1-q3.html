@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FIELD 1~3분기 리포트</title>
+<!--
+  FIELD 2026 1~3분기 성과 리포트 — B안(다크 발표형) 단독 실행 파일
+  · 더블클릭하면 브라우저에서 열린다(외부 의존 없음, 글꼴만 Google Fonts).
+  · 데이터는 이 파일 안에 전부 있다: 월별 커밋, 시간대·요일 분포, 일자별 작업 로그(DAYLOG), 효율 수치.
+  · 디자인 토큰은 <style> 맨 위 :root(색·글꼴). 구조는 .wrap 안의 nav → header.hero → section#s1~#s5 → .foot.
+  · 그래프(월별 막대·24시간 시계 고리·작업 달력 히트맵·요일 막대)는 맨 아래 <script>가 SVG/DOM으로 그린다.
+  · 함께 둔 FIELD_리포트_디자인_브리프.md 에 구성·수치 출처·수정 포인트가 있다.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
+<style>
+  /* 디자인 토큰 — 어두운 남색 한 판 위의 유리 카드. 금색 = 지표·AI, 파랑 = 데이터, 초록 = 개선. 글자 3단계(흰/연회색/회청). */
+  :root {
+    --bg: #0a1020; --bg-2: #0f1830; --card: rgba(255,255,255,0.045); --card-2: rgba(255,255,255,0.07); --stroke: rgba(255,255,255,0.10); --stroke-2: rgba(255,255,255,0.16);
+    --ink: #f4f6fb; --ink-2: #c3cce0; --muted: #8290ad; --blue: #6d93ff; --blue-2: #8fadff; --blue-deep: #2b4fd6; --blue-soft: rgba(109,147,255,0.14);
+    --gold: #e6bd4f; --gold-soft: rgba(230,189,79,0.14); --good: #62d48a; --good-soft: rgba(98,212,138,0.14); --grey: #3a4766;
+    --series-1: #3987e5; --series-2: #d95926; --h1: #1a2e5c; --h2: #22447a; --h3: #2f5ea6; --h4: #4f7fd0; --h5: #9ab8f0;
+    --sans: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; --num: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+    background-image: radial-gradient(110% 70% at 85% -10%, #1a2a5a 0%, rgba(26,42,90,0) 60%), radial-gradient(80% 60% at -10% 20%, #12204a 0%, rgba(18,32,74,0) 55%); background-attachment: fixed; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-block: 18px 80px; padding-inline: 16px; display: grid; gap: 18px; }
+  h1, h2, h3, p { margin: 0; }
+  .num { font-family: var(--num); font-weight: 700; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .k { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .mu { color: var(--muted); }
+  .gold { color: var(--gold); }
+
+  /* 상단 바 */
+  .nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 14px; border: 1px solid var(--stroke); border-radius: 14px; background: var(--card); backdrop-filter: blur(8px); }
+  .nav .brand { font-family: var(--num); font-weight: 700; letter-spacing: 0.04em; font-size: 13px; } .nav .brand b { color: var(--gold); }
+  .nav .links { display: flex; flex-wrap: wrap; gap: 4px; }
+  .nav a { font-size: 12px; font-weight: 600; color: var(--ink-2); text-decoration: none; padding: 5px 10px; border-radius: 999px; }
+  .nav a:hover, .nav a:focus-visible { background: var(--card-2); color: var(--ink); outline: none; }
+
+  /* 히어로 */
+  .hero { padding: 34px 34px 30px; border: 1px solid var(--stroke); border-radius: 22px; background: linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: end; position: relative; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), var(--stroke) calc(100% - 1px)) 0 0 / 120px 100%, linear-gradient(180deg, transparent 0, transparent calc(100% - 1px), var(--stroke) calc(100% - 1px)) 0 0 / 100% 120px; opacity: 0.35; pointer-events: none; mask-image: radial-gradient(80% 80% at 70% 30%, #000 20%, transparent 75%); }
+  .hero > * { position: relative; }
+  .hero h1 { font-size: clamp(30px, 4.8vw, 50px); font-weight: 900; letter-spacing: -0.035em; line-height: 1.08; }
+  .hero h1 b { color: var(--gold); }
+  .hero .sub { color: var(--ink-2); font-size: 15px; margin-top: 14px; max-width: 52ch; }
+  .hero .rule { width: 48px; height: 3px; background: var(--gold); border-radius: 2px; margin: 14px 0 20px; }
+  .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi { border: 1px solid var(--stroke); border-radius: 14px; padding: 14px 16px; background: rgba(10,16,32,0.35); min-width: 0; }
+  .kpi .num { font-size: clamp(26px, 3vw, 34px); } .kpi .l { font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+
+  /* 섹션 */
+  section { border: 1px solid var(--stroke); border-radius: 20px; background: var(--card); padding: 24px 26px; display: grid; gap: 18px; }
+  .sh { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--stroke); padding-bottom: 12px; }
+  .sh .no { font-family: var(--num); font-weight: 700; font-size: 13px; color: var(--gold); letter-spacing: 0.08em; }
+  .sh h2 { font-size: 21px; font-weight: 900; letter-spacing: -0.02em; }
+  .sh p { font-size: 12.5px; color: var(--muted); text-align: right; }
+
+  /* 01 계단 */
+  .stairs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: end; }
+  .step { display: grid; gap: 10px; min-width: 0; }
+  .blk { border-radius: 16px; color: #fff; padding: 18px 20px; display: grid; align-content: end; gap: 4px; position: relative; overflow: hidden; border: 1px solid var(--stroke-2); }
+  .blk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); }
+  .blk .num { font-size: clamp(36px, 5vw, 62px); } .blk .cap { font-size: 12px; opacity: 0.8; } .blk .nm { font-size: 18px; font-weight: 900; letter-spacing: -0.02em; margin-top: 6px; }
+  .s1 .blk { height: 150px; background: linear-gradient(170deg, #34405e, #232d47); } .s1 .blk .num { color: #a9b4cf; font-size: clamp(30px, 3.6vw, 44px); }
+  .s2 .blk { height: 204px; background: linear-gradient(170deg, #4f7dff, #2f55d6); }
+  .s3 .blk { height: 300px; background: linear-gradient(170deg, #6d93ff 0%, #2b4fd6 55%, #1a2f8f 100%); }
+  .s3 .blk::after { content: "+193%"; position: absolute; right: 16px; top: 14px; font-family: var(--num); font-weight: 700; font-size: 13px; background: var(--gold); color: #1a1405; padding: 4px 10px; border-radius: 999px; }
+  .when { font-size: 12px; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--blue-soft); color: var(--blue-2); white-space: nowrap; border: 1px solid rgba(109,147,255,0.25); }
+  .chip.g { background: var(--card-2); color: var(--ink-2); border-color: var(--stroke); }
+  .chip.ai { background: var(--gold-soft); color: var(--gold); border-color: rgba(230,189,79,0.3); }
+
+  /* 02 */
+  .vs { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1.25fr); gap: 12px; }
+  .col { border: 1px solid var(--stroke); border-radius: 16px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; background: rgba(10,16,32,0.3); }
+  .col.hot { border-color: rgba(109,147,255,0.6); box-shadow: 0 0 0 1px rgba(109,147,255,0.35) inset, 0 20px 50px rgba(43,79,214,0.18); }
+  .col .t { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .col .t b { font-size: 16px; font-weight: 900; } .col .t span { font-size: 12px; color: var(--muted); }
+  .col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  .col li { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: baseline; font-size: 13.5px; padding-bottom: 7px; border-bottom: 1px solid var(--stroke); }
+  .col li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .col li .m { color: var(--good); font-weight: 900; } .col li .ai { color: var(--gold); font-weight: 900; } .col li b { font-weight: 700; color: var(--ink); } .col li small { color: var(--muted); font-size: 11.5px; font-family: var(--num); white-space: nowrap; }
+  .arrow { display: grid; place-items: center; color: var(--gold); font-size: 26px; font-weight: 900; }
+  .aisum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .aisum div { background: var(--gold-soft); border: 1px solid rgba(230,189,79,0.25); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+  .aisum .num { font-size: 28px; color: var(--gold); } .aisum .l { font-size: 12px; color: var(--ink-2); }
+
+  /* 03 효율 — 개선 전/후 두 줄 */
+  .eff { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .e { border: 1px solid var(--stroke); border-radius: 16px; padding: 16px 18px 14px; display: grid; gap: 10px; min-width: 0; position: relative; background: rgba(10,16,32,0.3); }
+  .e .badge { position: absolute; right: 14px; top: 14px; background: var(--good-soft); color: var(--good); font-family: var(--num); font-weight: 700; font-size: 13px; padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(98,212,138,0.3); }
+  .e .ttl { font-size: 14.5px; font-weight: 900; color: var(--ink); padding-right: 74px; letter-spacing: -0.01em; }
+  .e .row { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; }
+  .e .lb { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+  .e .trk { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .e .trk i { display: block; height: 100%; border-radius: 4px; background: var(--grey); }
+  .e .row.after .trk i { background: linear-gradient(90deg, var(--blue-deep), var(--blue-2)); }
+  .e .v { font-family: var(--num); font-weight: 600; font-size: 13px; color: var(--muted); white-space: nowrap; text-decoration: line-through; text-decoration-thickness: 1.5px; }
+  .e .row.after .v { font-weight: 700; font-size: 17px; color: var(--ink); text-decoration: none; }
+  .e .row.after .lb { color: var(--blue-2); }
+  .e .src { font-size: 11px; color: var(--muted); }
+  .e.team { border-style: dashed; }
+
+  /* 04 투입 */
+  .tkpi { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .tkpi > div { border: 1px solid var(--stroke); border-radius: 14px; padding: 14px 14px 12px; min-width: 0; background: rgba(10,16,32,0.3); }
+  .tkpi .num { font-size: 30px; } .tkpi .num small { font-size: 13px; font-weight: 700; margin-left: 2px; color: var(--ink-2); letter-spacing: 0; }
+  .tkpi .l { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; } .tkpi .l b { color: var(--ink); }
+  .tgrid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; }
+  .tcard { border: 1px solid var(--stroke); border-radius: 14px; padding: 14px 16px 12px; min-width: 0; display: grid; gap: 8px; align-content: start; background: rgba(10,16,32,0.3); }
+  .tt { font-size: 13px; font-weight: 700; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; } .tt span { font-weight: 500; color: var(--muted); font-size: 12px; } .tt b { color: var(--ink); }
+  .clock svg { width: 100%; height: auto; display: block; } .clock text { font-family: var(--num); font-size: 11px; fill: var(--muted); font-weight: 600; } .clock text.c { font-size: 24px; fill: var(--gold); font-weight: 700; } .clock text.cl { font-family: var(--sans); font-size: 10.5px; fill: var(--muted); font-weight: 500; }
+  .heat { overflow-x: auto; } .heat svg { display: block; min-width: 560px; width: 100%; height: auto; } .heat text { font-family: var(--sans); font-size: 10px; fill: var(--muted); font-weight: 600; }
+  .hlgd { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); justify-content: flex-end; } .hlgd i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .wdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; height: 86px; align-items: end; margin-bottom: 30px; }
+  .wb { position: relative; height: 100%; display: flex; align-items: flex-end; } .wb i { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--grey); } .wb.we i { background: linear-gradient(180deg, var(--blue-2), var(--blue-deep)); }
+  .wb b { position: absolute; left: 0; right: 0; bottom: -17px; text-align: center; font-size: 11px; color: var(--ink-2); } .wb small { position: absolute; left: 0; right: 0; bottom: -30px; text-align: center; font-size: 10px; color: var(--muted); font-family: var(--num); }
+  .two { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .chart { position: relative; } .chart svg { width: 100%; height: auto; display: block; }
+  .chart text { font-family: var(--sans); font-size: 11px; fill: var(--muted); } .chart text.lab { fill: var(--ink-2); font-weight: 700; }
+  .chart .tip { position: absolute; pointer-events: none; background: #f4f6fb; color: #0a1020; font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); opacity: 0; transition: opacity .12s; }
+  .chart .tip.on { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--stroke); } th { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: 0.06em; } td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; } td b { font-family: var(--num); font-weight: 700; }
+  .tbl-wrap { overflow-x: auto; }
+  .logs { display: grid; gap: 6px; } details.dl { border: 1px solid var(--stroke); border-radius: 12px; padding: 10px 14px; background: rgba(10,16,32,0.3); } details.dl summary { font-size: 13px; cursor: pointer; font-weight: 700; color: var(--ink-2); }
+  table.log { font-size: 12.5px; margin-top: 8px; } table.log td, table.log th { padding: 6px 8px; } table.log tr.we td { background: var(--blue-soft); }
+  table.log .sp { font-family: var(--num); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; } table.log .tp { color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note { font-size: 12px; color: var(--muted); }
+
+  /* 05 구성 */
+  .sys { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+  .sy { border: 1px solid var(--stroke); border-radius: 12px; padding: 12px 8px 10px; text-align: center; min-width: 0; background: rgba(10,16,32,0.3); }
+  .sy .num { font-size: 22px; } .sy .l { font-size: 10.5px; color: var(--muted); margin-top: 6px; line-height: 1.3; }
+  .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; color: var(--muted); font-size: 12px; padding: 4px 8px 0; border-top: 1px solid var(--stroke); padding-top: 14px; }
+
+  @media (max-width: 960px) { .hero { grid-template-columns: 1fr; } .tgrid { grid-template-columns: 1fr; } .tkpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } .eff { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sys { grid-template-columns: repeat(4, minmax(0, 1fr)); } .two { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .hero { padding: 22px 18px; } section { padding: 18px 16px; } .sh { grid-template-columns: 36px 1fr; } .sh p { grid-column: 1 / -1; text-align: left; } .stairs { grid-template-columns: 1fr; } .s1 .blk, .s2 .blk, .s3 .blk { height: auto; min-height: 112px; } .vs { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); } .aisum, .eff { grid-template-columns: 1fr; } .tkpi, .sys { grid-template-columns: repeat(2, minmax(0, 1fr)); } table.log .tp { max-width: 160px; } }
+  @media (prefers-reduced-motion: reduce) { .chart .tip { transition: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="목차">
+    <div class="brand"><b>FIELD</b> · 2026 Q1–Q3 REPORT</div>
+    <div class="links"><a href="#s1">세 분기</a><a href="#s2">3분기 추가</a><a href="#s3">효율</a><a href="#s4">투입 시간</a><a href="#s5">구성</a></div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <div class="k">퍼스트전산 CS팀 · 현장업무 자동화 FIELD</div>
+      <div class="rule"></div>
+      <h1>2분기까지는 여기,<br><b>3분기엔 더 멀리</b></h1>
+      <p class="sub">손으로 치던 점검 보고가 아홉 달 만에 접수·일정·현장·보고·고객 문자가 이어지는 팀 운영 포털이 되었습니다. 금색 ✦ 표시가 AI 기능입니다.</p>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="num">1,345</div><div class="l">코드 변경 · 4~9월</div></div>
+      <div class="kpi"><div class="num">292<span style="font-size:15px;font-weight:600;color:var(--ink-2)">h</span></div><div class="l">추정 투입 시간 · 작업일 82일</div></div>
+      <div class="kpi"><div class="num">67<span style="font-size:15px;font-weight:600;color:var(--ink-2)">%</span></div><div class="l">근무 외 시간(18~09시) 작업</div></div>
+      <div class="kpi"><div class="num gold">4 → 10</div><div class="l">AI 기능 · 2분기 → 3분기</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <div class="sh"><div class="no">01</div><h2>세 분기, 한눈에</h2><p>막대 높이 = 코드 변경 횟수</p></div>
+    <div class="stairs">
+      <div class="step s1">
+        <div class="blk"><div class="num">0</div><div class="cap">코드 변경</div><div class="nm">노코드 운영</div></div>
+        <div class="when"><span>1분기 · 1~3월</span><span>작업일 0</span></div>
+        <div class="chips"><span class="chip g">Make 자동화</span><span class="chip g">카톡 브리핑</span><span class="chip g">수기 보고 2회</span><span class="chip g">시트 5개 조회</span></div>
+      </div>
+      <div class="step s2">
+        <div class="blk"><div class="num">342</div><div class="cap">코드 변경 · 저장소 4개</div><div class="nm">FIELD 탄생</div></div>
+        <div class="when"><span>2분기 · 4~6월</span><span>81일 · 작업일 28 · 79h</span></div>
+        <div class="chips"><span class="chip">점검 변환기</span><span class="chip">거래처 조회</span><span class="chip ai">✦ 카톡 AI 분류</span><span class="chip">통합 DB</span><span class="chip ai">✦ 사진→양식</span><span class="chip">카톡방 자동 게시</span><span class="chip">Supabase 75,500행</span></div>
+      </div>
+      <div class="step s3">
+        <div class="blk"><div class="num">1,003</div><div class="cap">코드 변경 · AI 공동 77%</div><div class="nm">팀 운영 포털</div></div>
+        <div class="when"><span>3분기 · 7~9월</span><span>92일 · 작업일 54 · 214h</span></div>
+        <div class="chips"><span class="chip">워킨맵</span><span class="chip">서비스접수</span><span class="chip">일정·네이버 양방향</span><span class="chip ai">✦ 보고 AI 다듬기</span><span class="chip ai">✦ OKR AI</span><span class="chip ai">✦ 족보 12,580건</span><span class="chip">문자·MMS</span><span class="chip">자동 작업 10개</span><span class="chip">테스트 325</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s2">
+    <div class="sh"><div class="no">02</div><h2>2분기까지 → 3분기에 더한 것</h2><p><span style="color:var(--good);font-weight:900">✓</span> 기능 · <span class="gold" style="font-weight:900">✦</span> AI 기능</p></div>
+    <div class="vs">
+      <div class="col"><div class="t"><b>2분기까지</b><span>개인 도구 → 팀 입력창</span></div>
+        <ul>
+          <li><span class="m">✓</span><b>점검 원문 → 양식 변환</b><small>4/4</small></li>
+          <li><span class="m">✓</span><b>거래처 9가지 기록 조회</b><small>4/26</small></li>
+          <li><span class="ai">✦</span><b>카톡 대화 AI 분류·적재</b><small>5/25</small></li>
+          <li><span class="ai">✦</span><b>골든미팅카드 AI 초안</b><small>5월</small></li>
+          <li><span class="ai">✦</span><b>사진 → 양식 (Vision)</b><small>6/9</small></li>
+          <li><span class="ai">✦</span><b>녹음 → 4종 양식 (Whisper)</b><small>6/9</small></li>
+          <li><span class="m">✓</span><b>보내기 한 번 = 시트 + 카톡방</b><small>6/18</small></li>
+          <li><span class="m">✓</span><b>Supabase 전환 · 표 13개</b><small>6/20</small></li>
+        </ul></div>
+      <div class="arrow">→</div>
+      <div class="col hot"><div class="t"><b>3분기에 더한 것</b><span>접수부터 고객 문자까지</span></div>
+        <ul>
+          <li><span class="ai">✦</span><b>성장노트·골든카드 AI 변환 (서버 함수)</b><small>7월</small></li>
+          <li><span class="ai">✦</span><b>처리이력 12,580건 AI 정제 → 족보</b><small>8/17</small></li>
+          <li><span class="ai">✦</span><b>중간보고·익일스케줄 AI 다듬기</b><small>8/25</small></li>
+          <li><span class="ai">✦</span><b>분기결과표 AI 수치 정리</b><small>9/24</small></li>
+          <li><span class="ai">✦</span><b>OKR AI 보조 (정리·합치기·피드백)</b><small>9월</small></li>
+          <li><span class="ai">✦</span><b>가이드 자동 태그 · 플레이북 초안</b><small>8월</small></li>
+          <li><span class="m">✓</span><b>워킨맵 · 자동 일정 · 내 일정</b><small>7~8월</small></li>
+          <li><span class="m">✓</span><b>서비스접수 · 네이버 캘린더 양방향</b><small>7~8월</small></li>
+          <li><span class="m">✓</span><b>문자·MMS 직접 발송 · 점검 리포트</b><small>8~9월</small></li>
+          <li><span class="m">✓</span><b>서버 자동 작업 10개 · 카톡봇 심박</b><small>8~9월</small></li>
+          <li><span class="m">✓</span><b>자동 테스트 325 · 설명서 21편</b><small>8월</small></li>
+          <li><span class="m">✓</span><b>OKR · 인원 · 공지 허브</b><small>8~9월</small></li>
+        </ul></div>
+    </div>
+    <div class="aisum">
+      <div><div class="num">4 → 10</div><div class="l">AI 기능 수 (2분기 → 3분기)</div></div>
+      <div><div class="num">7</div><div class="l">3분기에 새로 만든 AI 서버 함수</div></div>
+      <div><div class="num">77<span style="font-size:16px">%</span></div><div class="l">3분기 코드 변경 중 AI 공동 작성</div></div>
+    </div>
+  </section>
+
+  <section id="s3">
+    <div class="sh"><div class="no">03</div><h2>얼마나 빨라졌나</h2><p>개선 전 → 개선 후 · 점선 테두리는 팀 자체 보고치</p></div>
+    <div class="eff">
+      <div class="e"><span class="badge">▼68%</span><div class="ttl">접수 시트 기입</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">10초 이상</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:32%"></i></div><span class="v">3.2초</span></div><div class="src">8/14 실측</div></div>
+      <div class="e"><span class="badge">▼99%</span><div class="ttl">분기점검 안내 100곳</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">6단계 × 100통</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:1%"></i></div><span class="v">3번 누르기</span></div><div class="src">사용설명서 · 해피콜</div></div>
+      <div class="e"><span class="badge">▼100%</span><div class="ttl">주간 실적 보고</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">주당 20~30분</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:0%"></i></div><span class="v">자동 집계</span></div><div class="src">사용설명서 · 주간현황판</div></div>
+      <div class="e"><span class="badge">▼80%</span><div class="ttl">골든미팅카드 초안</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">1~2시간</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:20%"></i></div><span class="v">검토 20분</span></div><div class="src">사용설명서 · 성장기록</div></div>
+      <div class="e"><span class="badge">▼71%</span><div class="ttl">워킨맵 지도 끌기(폰)</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">11.2초</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:29%"></i></div><span class="v">3.2초</span></div><div class="src">8/18 · CPU 4배 감속</div></div>
+      <div class="e team"><span class="badge">▼76%</span><div class="ttl">AS·점검 보고 작성 (C파트)</div><div class="row"><span class="lb">개선 전</span><div class="trk"><i style="width:100%"></i></div><span class="v">건당 25분</span></div><div class="row after"><span class="lb">개선 후</span><div class="trk"><i style="width:24%"></i></div><span class="v">6분 · 월 20시간 절감</span></div><div class="src">8월 OKR 자체 보고</div></div>
+    </div>
+  </section>
+
+  <section id="s4">
+    <div class="sh"><div class="no">04</div><h2>언제, 얼마나 일했나</h2><p>커밋 시각 기준 추정 · 2026-04-04 ~ 09-30</p></div>
+    <div class="tkpi">
+      <div><div class="num">292<small>시간</small></div><div class="l">추정 작업 시간</div></div>
+      <div><div class="num">82<small>일</small></div><div class="l">작업일 · 그중 주말 <b>23일</b></div></div>
+      <div><div class="num">67<small>%</small></div><div class="l">근무 외 시간(18~09시) 커밋</div></div>
+      <div><div class="num">38<small>%</small></div><div class="l">주말 커밋 비율</div></div>
+      <div><div class="num">14.2<small>시간</small></div><div class="l">가장 긴 날 · 08/17</div></div>
+    </div>
+    <div class="tgrid">
+      <div class="tcard clock"><div class="tt">하루 중 언제 <span>바깥 = 많음 · 연한 색 = 근무 시간</span></div><svg id="clock" viewBox="-14 -6 328 312" role="img" aria-label="시간대별 커밋 분포"></svg></div>
+      <div class="tcard"><div class="tt">작업 달력 <span>칸 색 = 그날 추정 시간 · 아래 두 줄이 토·일</span></div><div class="heat"><svg id="heat" role="img" aria-label="날짜별 작업 시간 히트맵"></svg></div><div class="hlgd">적음 <i style="background:var(--h1)"></i><i style="background:var(--h2)"></i><i style="background:var(--h3)"></i><i style="background:var(--h4)"></i><i style="background:var(--h5)"></i> 많음</div>
+        <div class="tt" style="margin-top:6px">요일별 커밋 <span>토요일이 가장 많음</span></div><div class="wdays" id="wdays"></div></div>
+    </div>
+    <div class="two">
+      <div class="tcard"><div class="tt">월별 코드 변경 <span class="legend"><span><i style="background:var(--series-1)"></i>AI 공동 작성</span><span><i style="background:var(--series-2)"></i>그 외</span></span></div>
+        <div class="chart" id="chart"><svg viewBox="0 0 720 262" role="img" aria-label="2026년 월별 커밋 수. 1~3월 0, 4월 30, 5월 167, 6월 145, 7월 362, 8월 497, 9월 144."></svg><div class="tip" id="tip"></div></div></div>
+      <div class="tcard"><div class="tt">월별 투입</div><div class="tbl-wrap"><table><thead><tr><th>월</th><th class="r">작업일 (주말)</th><th class="r">커밋</th><th class="r">추정 시간</th><th class="r">20~05시</th></tr></thead><tbody><tr><td>4월</td><td class="r">5 <span class="mu">(2)</span></td><td class="r">30</td><td class="r"><b>9</b>h</td><td class="r">73%</td></tr><tr><td>5월</td><td class="r">9 <span class="mu">(5)</span></td><td class="r">167</td><td class="r"><b>30</b>h</td><td class="r">23%</td></tr><tr><td>6월</td><td class="r">14 <span class="mu">(3)</span></td><td class="r">145</td><td class="r"><b>40</b>h</td><td class="r">66%</td></tr><tr><td>7월</td><td class="r">17 <span class="mu">(5)</span></td><td class="r">362</td><td class="r"><b>79</b>h</td><td class="r">65%</td></tr><tr><td>8월</td><td class="r">20 <span class="mu">(5)</span></td><td class="r">497</td><td class="r"><b>104</b>h</td><td class="r">60%</td></tr><tr><td>9월</td><td class="r">17 <span class="mu">(3)</span></td><td class="r">144</td><td class="r"><b>31</b>h</td><td class="r">60%</td></tr></tbody></table></div></div>
+    </div>
+    <div class="logs"><details class="dl"><summary>4월 · 작업일 5일(주말 2) · 30건 · 약 9시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class="we"><td>04/04 <span class="mu">토</span></td><td class="sp">22:49~23:42</td><td class="r"><b>0.9</b>h</td><td class="r">3</td><td class="tp">first deploy fixed</td></tr><tr class=""><td>04/23 <span class="mu">목</span></td><td class="sp">22:34~23:04</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">Update App.tsx</td></tr><tr class="we"><td>04/26 <span class="mu">일</span></td><td class="sp">01:06~01:58 · 08:48~10:15</td><td class="r"><b>2.3</b>h</td><td class="r">13</td><td class="tp">Initial commit</td></tr><tr class=""><td>04/27 <span class="mu">월</span></td><td class="sp">21:14~23:17</td><td class="r"><b>2.0</b>h</td><td class="r">6</td><td class="tp">Update index.html</td></tr><tr class=""><td>04/28 <span class="mu">화</span></td><td class="sp">23:45~01:58 · 07:36~08:43</td><td class="r"><b>3.3</b>h</td><td class="r">7</td><td class="tp">Update index.html</td></tr></tbody></table></div></details><details class="dl"><summary>5월 · 작업일 9일(주말 5) · 167건 · 약 30시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class=""><td>05/01 <span class="mu">금</span></td><td class="sp">01:16~01:57</td><td class="r"><b>0.7</b>h</td><td class="r">2</td><td class="tp">Update index.html</td></tr><tr class="we"><td>05/16 <span class="mu">토</span></td><td class="sp">14:19~15:39</td><td class="r"><b>1.3</b>h</td><td class="r">3</td><td class="tp">관리자: 파싱 결과를 GAS로 직접 업로드하는 버튼 추가</td></tr><tr class="we"><td>05/17 <span class="mu">일</span></td><td class="sp">23:39~01:20</td><td class="r"><b>1.7</b>h</td><td class="r">5</td><td class="tp">Update index.html</td></tr><tr class="we"><td>05/23 <span class="mu">토</span></td><td class="sp">14:21~14:51</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">Update GAS_GET_URL and modify LONG_TEXT_FIELDS</td></tr><tr class=""><td>05/25 <span class="mu">월</span></td><td class="sp">01:00~01:33 · 06:03~08:17 · 12:41~17:27</td><td class="r"><b>7.6</b>h</td><td class="r">37</td><td class="tp">Initial commit</td></tr><tr class=""><td>05/26 <span class="mu">화</span></td><td class="sp">15:10~15:57</td><td class="r"><b>0.8</b>h</td><td class="r">3</td><td class="tp">재계약방 초과료/분기마감 보고 규칙 사전필터 (AI 전 제거)</td></tr><tr class=""><td>05/29 <span class="mu">금</span></td><td class="sp">10:21~20:11 · 12:58~16:41</td><td class="r"><b>4.6</b>h</td><td class="r">16</td><td class="tp">대시보드 편집 기능·기기 간 동기화·가독성 개선</td></tr><tr class="we"><td>05/30 <span class="mu">토</span></td><td class="sp">01:12~01:42 · 01:17~17:46 · 11:00~11:31 · 16:45~17:48</td><td class="r"><b>9.5</b>h</td><td class="r">85</td><td class="tp">로그인 crypt 함수 오류 수정 (search_path) (#6)</td></tr><tr class="we"><td>05/31 <span class="mu">일</span></td><td class="sp">01:32~02:49 · 01:49~11:19 · 15:35~17:01</td><td class="r"><b>3.2</b>h</td><td class="r">15</td><td class="tp">분기목표 박스 숨김 + 결과표 목표편집·행추가·삭제 (#32)</td></tr></tbody></table></div></details><details class="dl"><summary>6월 · 작업일 14일(주말 3) · 145건 · 약 40시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class=""><td>06/01 <span class="mu">월</span></td><td class="sp">20:23~23:58</td><td class="r"><b>3.6</b>h</td><td class="r">12</td><td class="tp">팀별 공유 스코프와 분기목표 표시 버그 수정</td></tr><tr class=""><td>06/02 <span class="mu">화</span></td><td class="sp">23:35~04:46</td><td class="r"><b>5.2</b>h</td><td class="r">16</td><td class="tp">Add files via upload</td></tr><tr class=""><td>06/05 <span class="mu">금</span></td><td class="sp">01:05~02:25</td><td class="r"><b>1.3</b>h</td><td class="r">3</td><td class="tp">점검 카테고리 추가 (세 탭 + 마스터 점검탭 양식적재)</td></tr><tr class="we"><td>06/06 <span class="mu">토</span></td><td class="sp">11:50~19:22</td><td class="r"><b>7.5</b>h</td><td class="r">18</td><td class="tp">캘린더 검색·재계약 분기자동감지·개인색상·할일체크 버그수정</td></tr><tr class=""><td>06/08 <span class="mu">월</span></td><td class="sp">23:49~00:54 · 03:41~04:37</td><td class="r"><b>2.0</b>h</td><td class="r">7</td><td class="tp">검색 카테고리 9개 통합탭 기준으로 변경</td></tr><tr class=""><td>06/09 <span class="mu">화</span></td><td class="sp">23:43~00:13 · 19:28~20:59</td><td class="r"><b>2.0</b>h</td><td class="r">11</td><td class="tp">녹음 변환 비서 독립 GAS 웹앱 초기 버전</td></tr><tr class=""><td>06/11 <span class="mu">목</span></td><td class="sp">03:28~03:58</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">검색 속도 개선: 최소 2글자+디바운스 300ms</td></tr><tr class=""><td>06/17 <span class="mu">수</span></td><td class="sp">21:12~22:27</td><td class="r"><b>1.2</b>h</td><td class="r">3</td><td class="tp">결과표 연동 버튼에 시트 연동 안내 추가 (누구나 따라하도록)</td></tr><tr class=""><td>06/18 <span class="mu">목</span></td><td class="sp">19:29~21:14 · 22:49~23:19</td><td class="r"><b>2.2</b>h</td><td class="r">8</td><td class="tp">웹앱 보내기 수신: 점검 양식 시트 적재 + 카톡 게시 큐</td></tr><tr class=""><td>06/19 <span class="mu">금</span></td><td class="sp">00:59~01:29</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">보내기: Supabase 직접 저장으로 전환 (GAS 제거 1단계)</td></tr><tr class="we"><td>06/20 <span class="mu">토</span></td><td class="sp">09:58~10:57 · 13:56~17:16</td><td class="r"><b>4.3</b>h</td><td class="r">10</td><td class="tp">배치 점검/AS 적재를 Supabase로 이중화 (시트+Supabase)</td></tr><tr class="we"><td>06/21 <span class="mu">일</span></td><td class="sp">09:43~12:34</td><td class="r"><b>2.9</b>h</td><td class="r">19</td><td class="tp">검색 인덱스(_idx_*) 은퇴: retireSearchIndex() 추가 + 6시 인</td></tr><tr class=""><td>06/22 <span class="mu">월</span></td><td class="sp">01:40~04:56</td><td class="r"><b>3.3</b>h</td><td class="r">19</td><td class="tp">디자인 통일 패스: 헤더/탭/카드 그라데이션·과한그림자 제거 → 플랫 세그먼트 탭, 미</td></tr><tr class=""><td>06/23 <span class="mu">화</span></td><td class="sp">23:34~02:41</td><td class="r"><b>3.1</b>h</td><td class="r">17</td><td class="tp">사진첨부를 초기화/복사와 한 줄로(초기화·복사·사진). 썸네일은 첨부 시에만 표시 → </td></tr></tbody></table></div></details><details class="dl"><summary>7월 · 작업일 17일(주말 5) · 362건 · 약 79시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class="we"><td>07/12 <span class="mu">일</span></td><td class="sp">20:40~23:46</td><td class="r"><b>3.1</b>h</td><td class="r">15</td><td class="tp">feat: add daily work and weekly dashboard</td></tr><tr class=""><td>07/13 <span class="mu">월</span></td><td class="sp">23:54~00:53</td><td class="r"><b>1.0</b>h</td><td class="r">4</td><td class="tp">add inspection device management controls</td></tr><tr class=""><td>07/17 <span class="mu">금</span></td><td class="sp">10:27~20:12 · 22:28~22:58</td><td class="r"><b>10.3</b>h</td><td class="r">63</td><td class="tp">기기 선택 모바일 드래그 정렬 개선</td></tr><tr class="we"><td>07/18 <span class="mu">토</span></td><td class="sp">01:05~01:35 · 10:29~11:45 · 13:46~14:16</td><td class="r"><b>2.3</b>h</td><td class="r">7</td><td class="tp">AS접수 캘린더 워킨맵 상호작용 보완</td></tr><tr class="we"><td>07/19 <span class="mu">일</span></td><td class="sp">09:08~11:46 · 13:43~14:29</td><td class="r"><b>3.4</b>h</td><td class="r">14</td><td class="tp">캘린더 필터 구조와 모바일 전용 화면 개선</td></tr><tr class=""><td>07/20 <span class="mu">월</span></td><td class="sp">23:44~02:25</td><td class="r"><b>2.7</b>h</td><td class="r">12</td><td class="tp">워킨맵 월점검 진행률과 일정리스트 개선</td></tr><tr class=""><td>07/21 <span class="mu">화</span></td><td class="sp">23:10~23:51</td><td class="r"><b>0.7</b>h</td><td class="r">2</td><td class="tp">FIELD 편집 동기화 및 홈 화면 개편</td></tr><tr class=""><td>07/22 <span class="mu">수</span></td><td class="sp">23:30~04:55</td><td class="r"><b>5.4</b>h</td><td class="r">24</td><td class="tp">워킨맵 공용 동기화와 FIELD 전송 분리</td></tr><tr class=""><td>07/23 <span class="mu">목</span></td><td class="sp">23:15~23:45</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">미리보기 편집과 전송 구분 보존</td></tr><tr class=""><td>07/24 <span class="mu">금</span></td><td class="sp">23:32~02:15 · 19:08~23:56</td><td class="r"><b>7.5</b>h</td><td class="r">32</td><td class="tp">분기점검 알림과 키맨 불러오기 개선</td></tr><tr class="we"><td>07/25 <span class="mu">토</span></td><td class="sp">23:39~05:34 · 11:16~17:17</td><td class="r"><b>11.9</b>h</td><td class="r">58</td><td class="tp">사진 원본 저장 경로 복원 및 앨범 분류 보완</td></tr><tr class="we"><td>07/26 <span class="mu">일</span></td><td class="sp">00:30~03:32 · 08:35~13:13</td><td class="r"><b>7.7</b>h</td><td class="r">23</td><td class="tp">집계 1,000행 절단 수정 + 페이지네이션 안정 정렬</td></tr><tr class=""><td>07/27 <span class="mu">월</span></td><td class="sp">23:47~04:34 · 19:42~22:36</td><td class="r"><b>7.7</b>h</td><td class="r">45</td><td class="tp">임대리스트 → Supabase vendor_info 주간 동기화 추가</td></tr><tr class=""><td>07/28 <span class="mu">화</span></td><td class="sp">23:33~02:35</td><td class="r"><b>3.0</b>h</td><td class="r">7</td><td class="tp">Supabase 서울 리전 이전 — 서버 주소·키 전환 (kkdiihazgzesbqxj</td></tr><tr class=""><td>07/29 <span class="mu">수</span></td><td class="sp">20:25~23:59</td><td class="r"><b>3.6</b>h</td><td class="r">9</td><td class="tp">모바일 미수현황 정리·초과 상세 라벨·재고 새기기/리퍼 분리·FIELD 사진 전이 방지</td></tr><tr class=""><td>07/30 <span class="mu">목</span></td><td class="sp">00:24~03:30 · 19:36~20:27</td><td class="r"><b>4.0</b>h</td><td class="r">23</td><td class="tp">서비스접수 작업대 UI 개선</td></tr><tr class=""><td>07/31 <span class="mu">금</span></td><td class="sp">19:11~23:55</td><td class="r"><b>4.7</b>h</td><td class="r">23</td><td class="tp">모바일 사진 업로드 실패 수정 + 점검·미양식 외 탭도 새로고침에 작성분 유지</td></tr></tbody></table></div></details><details class="dl"><summary>8월 · 작업일 20일(주말 5) · 497건 · 약 104시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class="we"><td>08/01 <span class="mu">토</span></td><td class="sp">23:36~01:20 · 08:26~18:31</td><td class="r"><b>11.8</b>h</td><td class="r">74</td><td class="tp">요청목록 색 정리 + 캘린더·재고·거래처선택 다듬기</td></tr><tr class="we"><td>08/02 <span class="mu">일</span></td><td class="sp">00:16~00:46 · 11:03~18:20 · 22:12~23:51</td><td class="r"><b>9.4</b>h</td><td class="r">42</td><td class="tp">BD 갱신 잡은 처리완료 열만 쓰도록 봉인 — 접수시간·날짜가 완료 시각으로 덮이던 사</td></tr><tr class=""><td>08/03 <span class="mu">월</span></td><td class="sp">23:42~00:13</td><td class="r"><b>0.5</b>h</td><td class="r">2</td><td class="tp">필드탭 [네이버] 정리 버튼 임시 숨김 — 완료 표시 이슈 해결 후 FIELD_NAVE</td></tr><tr class=""><td>08/04 <span class="mu">화</span></td><td class="sp">20:51~23:56</td><td class="r"><b>3.1</b>h</td><td class="r">20</td><td class="tp">홍보물·해피콜 미리보기 넘침 수정 + 칭찬 시트 빈 행 건너뛰고 이어붙이기</td></tr><tr class=""><td>08/05 <span class="mu">수</span></td><td class="sp">23:36~02:24 · 22:27~23:20</td><td class="r"><b>3.7</b>h</td><td class="r">17</td><td class="tp">익일 모달: 사유 칸을 맨 위로 + '사유 입력 시 날짜 버튼 활성화' 안내 — 잠금 </td></tr><tr class=""><td>08/07 <span class="mu">금</span></td><td class="sp">07:53~08:42</td><td class="r"><b>0.8</b>h</td><td class="r">5</td><td class="tp">지역 판정 파서 일치 + 사진 업로드 재시도 + 카운터문자 결과 우선 표시</td></tr><tr class=""><td>08/13 <span class="mu">목</span></td><td class="sp">20:58~23:54</td><td class="r"><b>2.9</b>h</td><td class="r">12</td><td class="tp">[upgrade] 토스트 하단·터치 닫기 + 지역/업체명 항목별 검증 (컨펌 전 미리보</td></tr><tr class=""><td>08/14 <span class="mu">금</span></td><td class="sp">23:41~05:15 · 07:09~08:35 · 21:31~22:44</td><td class="r"><b>8.2</b>h</td><td class="r">46</td><td class="tp">시트 기입 엔진 — 구글 시트 API 직행 (GAS 자동 폴백, 10초+ → 1~3초)</td></tr><tr class="we"><td>08/15 <span class="mu">토</span></td><td class="sp">23:46~00:16 · 11:04~19:32 · 21:38~22:34</td><td class="r"><b>9.9</b>h</td><td class="r">48</td><td class="tp">캘린더 분류 개편 + 네이버 일정 드래그·완료 처리</td></tr><tr class="we"><td>08/16 <span class="mu">일</span></td><td class="sp">09:02~09:32 · 21:43~23:48</td><td class="r"><b>2.6</b>h</td><td class="r">11</td><td class="tp">사람 이름 검색 근절 + '넓게 보기' 버튼</td></tr><tr class=""><td>08/17 <span class="mu">월</span></td><td class="sp">23:32~01:02 · 09:25~17:21 · 19:04~23:51</td><td class="r"><b>14.2</b>h</td><td class="r">60</td><td class="tp">홍보물 PDF 미리보기 수리 — pdfjs 직접 렌더링으로 교체</td></tr><tr class=""><td>08/18 <span class="mu">화</span></td><td class="sp">23:31~01:11 · 21:46~23:54</td><td class="r"><b>3.8</b>h</td><td class="r">19</td><td class="tp">족보 검수를 분산형으로 — 혼자 100장 검토 대신 쓰는 사람이 한 번 탭</td></tr><tr class=""><td>08/19 <span class="mu">수</span></td><td class="sp">00:13~03:37 · 21:44~22:26</td><td class="r"><b>4.1</b>h</td><td class="r">9</td><td class="tp">일정리스트 필터 두 줄 + 예정도 사람 박스 구조로 통일, 워킨맵 컨트롤 헤더 이동, </td></tr><tr class=""><td>08/24 <span class="mu">월</span></td><td class="sp">19:39~23:57</td><td class="r"><b>4.3</b>h</td><td class="r">18</td><td class="tp">완료·연기 양식 공유 + 접수 양식 표기 수리</td></tr><tr class=""><td>08/25 <span class="mu">화</span></td><td class="sp">23:42~03:04 · 19:41~23:47</td><td class="r"><b>7.5</b>h</td><td class="r">52</td><td class="tp">이카운트 분석 — 기간 창(전체/2년/1년/6개월) + 다크톤 + 한 장 복사</td></tr><tr class=""><td>08/26 <span class="mu">수</span></td><td class="sp">03:08~04:35 · 21:35~23:43</td><td class="r"><b>3.6</b>h</td><td class="r">22</td><td class="tp">사용설명서 15편 등록(홈·서비스접수·캘린더·워킨맵·자동일정·맛동여지도·FIELD·공지</td></tr><tr class=""><td>08/27 <span class="mu">목</span></td><td class="sp">00:07~02:39 · 07:46~08:16 · 19:32~20:30</td><td class="r"><b>4.0</b>h</td><td class="r">9</td><td class="tp">수집 안정화: 시트 셀 한도 진단·빈격자 정리(604만 셀 회수)·보조탭 열 축소 · </td></tr><tr class=""><td>08/28 <span class="mu">금</span></td><td class="sp">00:13~01:50 · 18:36~23:12</td><td class="r"><b>6.2</b>h</td><td class="r">17</td><td class="tp">키맨 변경을 어디서든 보이게 — 업체 플래그 배치에 담당자·키맨 변경 추가(칩 한 줄로</td></tr><tr class="we"><td>08/30 <span class="mu">일</span></td><td class="sp">21:56~23:46</td><td class="r"><b>1.8</b>h</td><td class="r">12</td><td class="tp">사진 한 장 + 링크로 완전 자동 발송 — 월요일 8시 서버 크론</td></tr><tr class=""><td>08/31 <span class="mu">월</span></td><td class="sp">19:38~20:39</td><td class="r"><b>1.0</b>h</td><td class="r">2</td><td class="tp">내 일정 [내일로 →] + 워킨맵 등록에 오늘/내일 칩</td></tr></tbody></table></div></details><details class="dl"><summary>9월 · 작업일 17일(주말 3) · 144건 · 약 31시간</summary><div class="tbl-wrap"><table class="log"><thead><tr><th>날짜</th><th>작업 시간대</th><th class="r">시간</th><th class="r">커밋</th><th>그날 첫 작업</th></tr></thead><tbody><tr class=""><td>09/02 <span class="mu">수</span></td><td class="sp">23:34~00:43</td><td class="r"><b>1.2</b>h</td><td class="r">4</td><td class="tp">포스터 이름 추출 수리 — 직급이 앞에 와도 이름을 찾고, 지역번호(02·031)도 전</td></tr><tr class=""><td>09/07 <span class="mu">월</span></td><td class="sp">19:14~20:08</td><td class="r"><b>0.9</b>h</td><td class="r">6</td><td class="tp">FIELD 변환 버그 2건 수리 — 등급 글자가 업체명에 붙던 것 + 지역 원클릭 채움</td></tr><tr class=""><td>09/08 <span class="mu">화</span></td><td class="sp">19:21~19:51</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">담당자변경 시트 pull — 작성 중인 행 보류 + 공유 문구 개선</td></tr><tr class=""><td>09/09 <span class="mu">수</span></td><td class="sp">21:37~22:59</td><td class="r"><b>1.4</b>h</td><td class="r">2</td><td class="tp">담당자변경 이중 공유 수리 — 공백 하나가 dupKey를 어긋내던 것 + 조회탭 전 칸</td></tr><tr class=""><td>09/10 <span class="mu">목</span></td><td class="sp">21:04~22:26</td><td class="r"><b>1.4</b>h</td><td class="r">7</td><td class="tp">워킨맵 흰 화면 수리 — 공용 목록 미러가 localStorage 5MB 한도를 넘던 </td></tr><tr class="we"><td>09/12 <span class="mu">토</span></td><td class="sp">12:26~15:04</td><td class="r"><b>2.6</b>h</td><td class="r">15</td><td class="tp">워킨맵 모바일 렉 수리 + 지도 화면 하단 띠에 '내 일정에 넣기' 버튼</td></tr><tr class=""><td>09/15 <span class="mu">화</span></td><td class="sp">23:16~23:46</td><td class="r"><b>0.5</b>h</td><td class="r">4</td><td class="tp">내 일정 [＋ 직접 추가] — 스케줄 원문을 붙여 넣어 워킨맵에 없는 일정(분기마감 방</td></tr><tr class=""><td>09/16 <span class="mu">수</span></td><td class="sp">23:48~00:53</td><td class="r"><b>1.1</b>h</td><td class="r">11</td><td class="tp">마감 문자 — 호칭을 인사말의 {업체명} 자리표시자로: 설정에서 직접 옮기고 지울 수 </td></tr><tr class=""><td>09/17 <span class="mu">목</span></td><td class="sp">20:00~22:20</td><td class="r"><b>2.3</b>h</td><td class="r">11</td><td class="tp">IT 접수 분리 — 서비스접수 IT 건은 IT 캘린더(관리 탭 네이버 캘린더 IT 칸)</td></tr><tr class=""><td>09/18 <span class="mu">금</span></td><td class="sp">19:44~22:36</td><td class="r"><b>2.9</b>h</td><td class="r">10</td><td class="tp">조회 탭 미수 CS체크 목록 — 불러오는 중에는 팀 건수를 0이 아니라 '…'로, 표가</td></tr><tr class="we"><td>09/20 <span class="mu">일</span></td><td class="sp">18:35~19:20 · 20:57~21:27</td><td class="r"><b>1.2</b>h</td><td class="r">5</td><td class="tp">작성자의 팀 판정을 관리 탭 인원 명단(DB) 기준으로 — 코드에 박힌 시드 명단만 보</td></tr><tr class=""><td>09/21 <span class="mu">월</span></td><td class="sp">11:15~12:06</td><td class="r"><b>0.9</b>h</td><td class="r">3</td><td class="tp">골든미팅카드 AI 변환 — 목표별 진도율도 자동 산정: 계획 빈도(월 1회·주 1회 등</td></tr><tr class=""><td>09/24 <span class="mu">목</span></td><td class="sp">13:07~18:05 · 21:57~23:01</td><td class="r"><b>6.0</b>h</td><td class="r">28</td><td class="tp">FIELD 기기 추가 — 모델명·시리얼을 아직 안 적은 새 기기가 토너잔량·여분 숫자 </td></tr><tr class="we"><td>09/26 <span class="mu">토</span></td><td class="sp">06:44~08:10</td><td class="r"><b>1.4</b>h</td><td class="r">10</td><td class="tp">홍보물 문자 발송을 사진 첨부(MMS)로 — 이미지·PDF 1쪽을 200KB JPG로 </td></tr><tr class=""><td>09/28 <span class="mu">월</span></td><td class="sp">20:39~21:09</td><td class="r"><b>0.5</b>h</td><td class="r">1</td><td class="tp">방문 중복 방지(재전송·연타·봇 수면 중 카톡 중복 게시) + FIELD "오버홀 업체</td></tr><tr class=""><td>09/29 <span class="mu">화</span></td><td class="sp">21:04~22:39</td><td class="r"><b>1.6</b>h</td><td class="r">7</td><td class="tp">OKR 주차별 기록(월|1~5주) + 서버 기준 열기·15초 동기화·3자 병합(남이 적</td></tr><tr class=""><td>09/30 <span class="mu">수</span></td><td class="sp">02:44~04:45 · 21:02~23:20</td><td class="r"><b>4.3</b>h</td><td class="r">19</td><td class="tp">해피콜 탭에 [점검 리포트] 모드 — 점검 양식을 고객용 리포트 이미지로 만들어 키맨에</td></tr></tbody></table></div></details></div>
+    <p class="note">세션 = 같은 날 커밋을 2시간 이내 간격으로 묶은 것. 시간대는 첫 커밋 30분 전부터 마지막 커밋까지. 커밋 없이 한 설계·회의·검토 시간은 포함되지 않아 실제보다 적게 잡힌 값입니다.</p>
+  </section>
+
+  <section id="s5">
+    <div class="sh"><div class="no">05</div><h2>화면 뒤에서 도는 것</h2><p>2026-10-01 저장소 집계</p></div>
+    <div class="sys">
+      <div class="sy"><div class="num">63</div><div class="l">화면</div></div>
+      <div class="sy"><div class="num">46,645</div><div class="l">줄 · 코드</div></div>
+      <div class="sy"><div class="num">58</div><div class="l">데이터 표</div></div>
+      <div class="sy"><div class="num">20</div><div class="l">서버 함수</div></div>
+      <div class="sy"><div class="num">10</div><div class="l">자동 작업(크론)</div></div>
+      <div class="sy"><div class="num">325</div><div class="l">자동 테스트</div></div>
+      <div class="sy"><div class="num">21</div><div class="l">사용설명서</div></div>
+      <div class="sy"><div class="num">6</div><div class="l">외부 연동</div></div>
+    </div>
+  </section>
+
+  <div class="foot"><span>근거: 업무 저장소 6곳 커밋 1,345건(중복·개인 앱 제외) · 사용설명서 21편 · 8월 OKR 결과표</span><span>1분기는 이 PC에 코드 산출물 없음 · 2026-10-02 집계</span></div>
+</div>
+
+<script>
+(function () {
+  var ns = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) { var e = document.createElementNS(ns, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+  var DAYLOG = [{"d": "2026-04-04", "h": 0.9, "c": 3, "s": "22:49~23:42"}, {"d": "2026-04-23", "h": 0.5, "c": 1, "s": "22:34~23:04"}, {"d": "2026-04-26", "h": 2.3, "c": 13, "s": "01:06~01:58 · 08:48~10:15"}, {"d": "2026-04-27", "h": 2.0, "c": 6, "s": "21:14~23:17"}, {"d": "2026-04-28", "h": 3.3, "c": 7, "s": "23:45~01:58 · 07:36~08:43"}, {"d": "2026-05-01", "h": 0.7, "c": 2, "s": "01:16~01:57"}, {"d": "2026-05-16", "h": 1.3, "c": 3, "s": "14:19~15:39"}, {"d": "2026-05-17", "h": 1.7, "c": 5, "s": "23:39~01:20"}, {"d": "2026-05-23", "h": 0.5, "c": 1, "s": "14:21~14:51"}, {"d": "2026-05-25", "h": 7.6, "c": 37, "s": "01:00~01:33 · 06:03~08:17 · 12:41~17:27"}, {"d": "2026-05-26", "h": 0.8, "c": 3, "s": "15:10~15:57"}, {"d": "2026-05-29", "h": 4.6, "c": 16, "s": "10:21~20:11 · 12:58~16:41"}, {"d": "2026-05-30", "h": 9.5, "c": 85, "s": "01:12~01:42 · 01:17~17:46 · 11:00~11:31 · 16:45~17:48"}, {"d": "2026-05-31", "h": 3.2, "c": 15, "s": "01:32~02:49 · 01:49~11:19 · 15:35~17:01"}, {"d": "2026-06-01", "h": 3.6, "c": 12, "s": "20:23~23:58"}, {"d": "2026-06-02", "h": 5.2, "c": 16, "s": "23:35~04:46"}, {"d": "2026-06-05", "h": 1.3, "c": 3, "s": "01:05~02:25"}, {"d": "2026-06-06", "h": 7.5, "c": 18, "s": "11:50~19:22"}, {"d": "2026-06-08", "h": 2.0, "c": 7, "s": "23:49~00:54 · 03:41~04:37"}, {"d": "2026-06-09", "h": 2.0, "c": 11, "s": "23:43~00:13 · 19:28~20:59"}, {"d": "2026-06-11", "h": 0.5, "c": 1, "s": "03:28~03:58"}, {"d": "2026-06-17", "h": 1.2, "c": 3, "s": "21:12~22:27"}, {"d": "2026-06-18", "h": 2.2, "c": 8, "s": "19:29~21:14 · 22:49~23:19"}, {"d": "2026-06-19", "h": 0.5, "c": 1, "s": "00:59~01:29"}, {"d": "2026-06-20", "h": 4.3, "c": 10, "s": "09:58~10:57 · 13:56~17:16"}, {"d": "2026-06-21", "h": 2.9, "c": 19, "s": "09:43~12:34"}, {"d": "2026-06-22", "h": 3.3, "c": 19, "s": "01:40~04:56"}, {"d": "2026-06-23", "h": 3.1, "c": 17, "s": "23:34~02:41"}, {"d": "2026-07-12", "h": 3.1, "c": 15, "s": "20:40~23:46"}, {"d": "2026-07-13", "h": 1.0, "c": 4, "s": "23:54~00:53"}, {"d": "2026-07-17", "h": 10.3, "c": 63, "s": "10:27~20:12 · 22:28~22:58"}, {"d": "2026-07-18", "h": 2.3, "c": 7, "s": "01:05~01:35 · 10:29~11:45 · 13:46~14:16"}, {"d": "2026-07-19", "h": 3.4, "c": 14, "s": "09:08~11:46 · 13:43~14:29"}, {"d": "2026-07-20", "h": 2.7, "c": 12, "s": "23:44~02:25"}, {"d": "2026-07-21", "h": 0.7, "c": 2, "s": "23:10~23:51"}, {"d": "2026-07-22", "h": 5.4, "c": 24, "s": "23:30~04:55"}, {"d": "2026-07-23", "h": 0.5, "c": 1, "s": "23:15~23:45"}, {"d": "2026-07-24", "h": 7.5, "c": 32, "s": "23:32~02:15 · 19:08~23:56"}, {"d": "2026-07-25", "h": 11.9, "c": 58, "s": "23:39~05:34 · 11:16~17:17"}, {"d": "2026-07-26", "h": 7.7, "c": 23, "s": "00:30~03:32 · 08:35~13:13"}, {"d": "2026-07-27", "h": 7.7, "c": 45, "s": "23:47~04:34 · 19:42~22:36"}, {"d": "2026-07-28", "h": 3.0, "c": 7, "s": "23:33~02:35"}, {"d": "2026-07-29", "h": 3.6, "c": 9, "s": "20:25~23:59"}, {"d": "2026-07-30", "h": 4.0, "c": 23, "s": "00:24~03:30 · 19:36~20:27"}, {"d": "2026-07-31", "h": 4.7, "c": 23, "s": "19:11~23:55"}, {"d": "2026-08-01", "h": 11.8, "c": 74, "s": "23:36~01:20 · 08:26~18:31"}, {"d": "2026-08-02", "h": 9.4, "c": 42, "s": "00:16~00:46 · 11:03~18:20 · 22:12~23:51"}, {"d": "2026-08-03", "h": 0.5, "c": 2, "s": "23:42~00:13"}, {"d": "2026-08-04", "h": 3.1, "c": 20, "s": "20:51~23:56"}, {"d": "2026-08-05", "h": 3.7, "c": 17, "s": "23:36~02:24 · 22:27~23:20"}, {"d": "2026-08-07", "h": 0.8, "c": 5, "s": "07:53~08:42"}, {"d": "2026-08-13", "h": 2.9, "c": 12, "s": "20:58~23:54"}, {"d": "2026-08-14", "h": 8.2, "c": 46, "s": "23:41~05:15 · 07:09~08:35 · 21:31~22:44"}, {"d": "2026-08-15", "h": 9.9, "c": 48, "s": "23:46~00:16 · 11:04~19:32 · 21:38~22:34"}, {"d": "2026-08-16", "h": 2.6, "c": 11, "s": "09:02~09:32 · 21:43~23:48"}, {"d": "2026-08-17", "h": 14.2, "c": 60, "s": "23:32~01:02 · 09:25~17:21 · 19:04~23:51"}, {"d": "2026-08-18", "h": 3.8, "c": 19, "s": "23:31~01:11 · 21:46~23:54"}, {"d": "2026-08-19", "h": 4.1, "c": 9, "s": "00:13~03:37 · 21:44~22:26"}, {"d": "2026-08-24", "h": 4.3, "c": 18, "s": "19:39~23:57"}, {"d": "2026-08-25", "h": 7.5, "c": 52, "s": "23:42~03:04 · 19:41~23:47"}, {"d": "2026-08-26", "h": 3.6, "c": 22, "s": "03:08~04:35 · 21:35~23:43"}, {"d": "2026-08-27", "h": 4.0, "c": 9, "s": "00:07~02:39 · 07:46~08:16 · 19:32~20:30"}, {"d": "2026-08-28", "h": 6.2, "c": 17, "s": "00:13~01:50 · 18:36~23:12"}, {"d": "2026-08-30", "h": 1.8, "c": 12, "s": "21:56~23:46"}, {"d": "2026-08-31", "h": 1.0, "c": 2, "s": "19:38~20:39"}, {"d": "2026-09-02", "h": 1.2, "c": 4, "s": "23:34~00:43"}, {"d": "2026-09-07", "h": 0.9, "c": 6, "s": "19:14~20:08"}, {"d": "2026-09-08", "h": 0.5, "c": 1, "s": "19:21~19:51"}, {"d": "2026-09-09", "h": 1.4, "c": 2, "s": "21:37~22:59"}, {"d": "2026-09-10", "h": 1.4, "c": 7, "s": "21:04~22:26"}, {"d": "2026-09-12", "h": 2.6, "c": 15, "s": "12:26~15:04"}, {"d": "2026-09-15", "h": 0.5, "c": 4, "s": "23:16~23:46"}, {"d": "2026-09-16", "h": 1.1, "c": 11, "s": "23:48~00:53"}, {"d": "2026-09-17", "h": 2.3, "c": 11, "s": "20:00~22:20"}, {"d": "2026-09-18", "h": 2.9, "c": 10, "s": "19:44~22:36"}, {"d": "2026-09-20", "h": 1.2, "c": 5, "s": "18:35~19:20 · 20:57~21:27"}, {"d": "2026-09-21", "h": 0.9, "c": 3, "s": "11:15~12:06"}, {"d": "2026-09-24", "h": 6.0, "c": 28, "s": "13:07~18:05 · 21:57~23:01"}, {"d": "2026-09-26", "h": 1.4, "c": 10, "s": "06:44~08:10"}, {"d": "2026-09-28", "h": 0.5, "c": 1, "s": "20:39~21:09"}, {"d": "2026-09-29", "h": 1.6, "c": 7, "s": "21:04~22:39"}, {"d": "2026-09-30", "h": 4.3, "c": 19, "s": "02:44~04:45 · 21:02~23:20"}], HOURS = [104, 107, 93, 56, 59, 21, 6, 27, 25, 18, 29, 58, 38, 66, 71, 54, 58, 50, 23, 26, 59, 80, 110, 107], WD = [234, 166, 120, 101, 218, 332, 174];
+  (function () { /* 월별 */
+    var data = [{ m: "1월", total: 0, ai: 0 }, { m: "2월", total: 0, ai: 0 }, { m: "3월", total: 0, ai: 0 }, { m: "4월", total: 30, ai: 0 }, { m: "5월", total: 167, ai: 155 }, { m: "6월", total: 145, ai: 87, approx: true }, { m: "7월", total: 362, ai: 169 }, { m: "8월", total: 497, ai: 475 }, { m: "9월", total: 144, ai: 131 }];
+    var svg = document.querySelector("#chart svg"), tip = document.getElementById("tip");
+    var W = 720, H = 262, padL = 44, padR = 16, padT = 24, padB = 52, plotW = W - padL - padR, plotH = H - padT - padB, maxV = 500, band = plotW / data.length, barW = 24, gap = 2;
+    var y = function (v) { return padT + plotH - (v / maxV) * plotH; };
+    [0, 100, 200, 300, 400, 500].forEach(function (t) { svg.appendChild(el("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: t === 0 ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)", "stroke-width": 1, "shape-rendering": "crispEdges" })); svg.appendChild(el("text", { x: padL - 8, y: y(t) + 4, "text-anchor": "end" }, t.toLocaleString())); });
+    function roundTop(x, top, bottom, w, r) { r = Math.min(r, (bottom - top) / 2, w / 2); return "M" + x + " " + bottom + " V" + (top + r) + " Q" + x + " " + top + " " + (x + r) + " " + top + " H" + (x + w - r) + " Q" + (x + w) + " " + top + " " + (x + w) + " " + (top + r) + " V" + bottom + " Z"; }
+    data.forEach(function (d, i) {
+      var cx = padL + band * i + band / 2, x = cx - barW / 2, other = d.total - d.ai, yBase = y(0), yAi = y(d.ai), yTop = y(d.total), g = el("g", {});
+      if (d.ai > 0) { if (other > 0) g.appendChild(el("rect", { x: x, y: yAi + gap, width: barW, height: Math.max(0, yBase - yAi - gap), fill: "var(--series-1)" })); else g.appendChild(el("path", { d: roundTop(x, yAi, yBase, barW, 4), fill: "var(--series-1)" })); }
+      if (other > 0) g.appendChild(el("path", { d: roundTop(x, yTop, d.ai > 0 ? yAi : yBase, barW, 4), fill: "var(--series-2)" }));
+      svg.appendChild(el("text", { x: cx, y: H - padB + 18, "text-anchor": "middle" }, d.m));
+      if (d.m === "8월" || d.m === "4월") svg.appendChild(el("text", { class: "lab", x: cx, y: yTop - 7, "text-anchor": "middle" }, d.total.toLocaleString()));
+      var hit = el("rect", { x: padL + band * i, y: padT, width: band, height: plotH, fill: "transparent" });
+      function show() { var pct = d.total ? Math.round(d.ai / d.total * 100) : 0; tip.innerHTML = "<b>" + d.m + "</b> · " + d.total + "건 · AI " + (d.approx ? "약 " : "") + d.ai + "건 (" + (d.total ? pct + "%" : "–") + ")"; var sx = svg.getBoundingClientRect().width / W; tip.style.left = (cx * sx) + "px"; tip.style.top = ((d.total ? yTop : yBase) * sx) + "px"; tip.classList.add("on"); }
+      hit.addEventListener("mouseenter", show); hit.addEventListener("mousemove", show); hit.addEventListener("mouseleave", function () { tip.classList.remove("on"); });
+      g.insertBefore(hit, g.firstChild); svg.appendChild(g);
+    });
+    [["1분기", 0, 3], ["2분기", 3, 6], ["3분기", 6, 9]].forEach(function (q) { var x0 = padL + band * q[1], x1 = padL + band * q[2]; svg.appendChild(el("text", { x: (x0 + x1) / 2, y: H - 6, "text-anchor": "middle", class: "lab" }, q[0])); if (q[1] > 0) svg.appendChild(el("line", { x1: x0, x2: x0, y1: padT - 2, y2: H - 2, stroke: "rgba(255,255,255,0.1)", "stroke-width": 1 })); });
+  })();
+  (function () { /* 시계 고리 */
+    var svg = document.getElementById("clock"), cx = 150, cy = 150, r0 = 62, rMax = 130, mx = Math.max.apply(null, HOURS);
+    svg.appendChild(el("circle", { cx: cx, cy: cy, r: r0 - 4, fill: "none", stroke: "rgba(255,255,255,0.12)", "stroke-width": 1 }));
+    for (var h = 0; h < 24; h++) {
+      var a0 = (h / 24) * Math.PI * 2 - Math.PI / 2, a1 = ((h + 1) / 24) * Math.PI * 2 - Math.PI / 2 - 0.02, r1 = r0 + (HOURS[h] / mx) * (rMax - r0);
+      var p = function (r, a) { return (cx + r * Math.cos(a)).toFixed(1) + " " + (cy + r * Math.sin(a)).toFixed(1); };
+      var d = "M" + p(r0, a0) + " L" + p(r1, a0) + " A" + r1 + " " + r1 + " 0 0 1 " + p(r1, a1) + " L" + p(r0, a1) + " A" + r0 + " " + r0 + " 0 0 0 " + p(r0, a0) + " Z";
+      var seg = el("path", { d: d, fill: (h >= 9 && h < 18) ? "var(--h2)" : "var(--blue)" }); seg.appendChild(el("title", {}, h + "시 · " + HOURS[h] + "건")); svg.appendChild(seg);
+    }
+    [[0, "0시"], [6, "6시"], [12, "12시"], [18, "18시"]].forEach(function (t) { var a = (t[0] / 24) * Math.PI * 2 - Math.PI / 2; svg.appendChild(el("text", { x: cx + 143 * Math.cos(a), y: cy + 143 * Math.sin(a) + 4, "text-anchor": "middle" }, t[1])); });
+    var peak = HOURS.indexOf(mx); svg.appendChild(el("text", { x: cx, y: cy - 2, "text-anchor": "middle", class: "c" }, peak + "시")); svg.appendChild(el("text", { x: cx, y: cy + 16, "text-anchor": "middle", class: "cl" }, "가장 많이 일한 시각"));
+  })();
+  (function () { /* 달력 */
+    var svg = document.getElementById("heat"), map = {}; DAYLOG.forEach(function (d) { map[d.d] = d; });
+    var start = new Date(Date.UTC(2026, 2, 30)), weeks = 27, cell = 16, gap = 3, left = 26, top = 18;
+    svg.setAttribute("viewBox", "0 0 " + (left + weeks * (cell + gap)) + " " + (top + 7 * (cell + gap) + 4));
+    var ramp = ["var(--h1)", "var(--h2)", "var(--h3)", "var(--h4)", "var(--h5)"];
+    ["월", "", "수", "", "금", "토", "일"].forEach(function (l, i) { if (l) svg.appendChild(el("text", { x: 0, y: top + i * (cell + gap) + 12 }, l)); });
+    var lastM = -1;
+    for (var w = 0; w < weeks; w++) for (var i = 0; i < 7; i++) {
+      var dt = new Date(start.getTime() + (w * 7 + i) * 86400000); if (dt > new Date(Date.UTC(2026, 8, 30))) continue;
+      var key = dt.toISOString().slice(0, 10), d = map[key], m = dt.getUTCMonth();
+      if (i === 0 && m !== lastM) { svg.appendChild(el("text", { x: left + w * (cell + gap), y: 11 }, (m + 1) + "월")); lastM = m; }
+      var rc = el("rect", { x: left + w * (cell + gap), y: top + i * (cell + gap), width: cell, height: cell, rx: 3, fill: d ? ramp[Math.min(4, Math.floor(d.h / 2.5))] : "rgba(255,255,255,0.06)" });
+      rc.appendChild(el("title", {}, key.slice(5).replace("-", "/") + " (" + "월화수목금토일"[i] + ") " + (d ? d.h + "시간 · 커밋 " + d.c + "건 · " + d.s : "작업 없음"))); svg.appendChild(rc);
+    }
+  })();
+  (function () { /* 요일 */ var box = document.getElementById("wdays"), mx = Math.max.apply(null, WD); "월화수목금토일".split("").forEach(function (n, i) { var d = document.createElement("div"); d.className = "wb" + (i >= 5 ? " we" : ""); d.innerHTML = '<i style="height:' + Math.max(2, Math.round(WD[i] / mx * 100)) + '%"></i><b>' + n + '</b><small>' + WD[i] + '</small>'; box.appendChild(d); }); })();
+})();
+</script>
+</body>
+</html>
