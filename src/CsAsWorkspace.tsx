@@ -1957,7 +1957,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}
                 </div>
                 {/* 제목은 원문 그대로 한 줄 — 넘치면 글자를 줄이고, 그래도 넘치면 천천히 흘려 끝까지 보인다(행 높이 고정) */}
-                <FitTitle text={displayTitleOf(ticket)} base={14} min={11} className={`mt-1.5 font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} />
+                <FitTitle text={displayTitleOf(ticket)} base={14} className={`mt-1.5 font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} />
                 {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
                 <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
                 <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
@@ -2032,7 +2032,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><FitTitle text={displayTitleOf(ticket)} base={14} min={12} className="max-w-[560px] flex-1" />{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><FitTitle text={displayTitleOf(ticket)} base={14} className="max-w-[560px] flex-1" />{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
                   </td>
                   <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ticket.issue || ""}>{ticket.issue || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
