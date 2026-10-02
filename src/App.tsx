@@ -16,7 +16,8 @@ import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
 import { ToastHost, notify } from "./toast";
-import { clearSsoSession, getSsoSession, ssoRequiredCached, startGroupwareLogin } from "./sso";
+import { clearSsoSession, getSsoSession, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
+import { extractVendorFromText, pickLabelValue } from "./vendorLine";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
 import SelfDevHub from "./SelfDev";
@@ -3163,6 +3164,7 @@ type PickerRow = { name: string; member?: MemberRow };
 function SsoRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [session, setSession] = useState(() => getSsoSession());
   if (!session) {
+    if (!ssoLoginVisible()) return null; // 검증 전엔 숨김 — ?sso=test 기기 또는 잠금이 켜진 뒤에만
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-blue-50/70 px-4 py-2">
         <div className="min-w-0 text-[11px] font-bold leading-snug text-slate-600">그룹웨어 계정으로 로그인하면 작성자가 자동으로 맞춰집니다 <span className="font-semibold text-slate-400">· 비밀번호는 그룹웨어 화면에서만 입력</span></div>
@@ -3997,11 +3999,6 @@ function sectionFilled(text: string, header: "※자가신청※" | "※부품�
 }
 
 // 미양식탭에서 AS 접수내용을 변환하면 출력에 업체명 줄이 정규화되어 들어가므로 이를 통합이력 검색에 쓴다.
-function extractVendorFromText(text: string): string {
-  const m = text.match(/^\s*업체명\s*[:：]\s*(.+)$/m);
-  return m ? m[1].trim() : "";
-}
-
 // 키맨/접수자 문자열 → [{label, name, phone}].
 // 이름과 번호의 줄이 갈라지거나 한 줄에 여러 명이 붙은 경우도 전화번호를 기준으로 짝지어 준다.
 const PHONE_PATTERN = "(?:01[016789][\\s-]?\\d{3,4}[\\s-]?\\d{4}|\\d{2,4}-\\d{3,4}-\\d{4})";
@@ -4664,10 +4661,9 @@ export default function App() {
       ? s.textOutput
       : (s.listOutput || []).map((i: ResultItem) => i.content).join("\n");
     if (!text.trim()) return null;
-    const pick = (re: RegExp) => { const m = text.match(re); return m ? m[1].trim() : ""; };
-    const company = pick(/업체명\s*[:：]\s*(.+)/);
-    const region = pick(/지역\s*[:：]\s*(.+)/);
-    const grade = pick(/등급\s*[:：]\s*(.+)/);
+    const company = pickLabelValue(text, "업체명");
+    const region = pickLabelValue(text, "지역");
+    const grade = pickLabelValue(text, "등급");
     const keymanRaw = extractKeymanRaw(text);
     return { grade, company, region, keymen: parseKeymen_(keymanRaw), author };
   };
@@ -5014,9 +5010,11 @@ export default function App() {
     }
     const hasInspection = reportTypes.includes("점검");
     const hasAs = reportTypes.includes("AS");
-    if (hasInspection && hasAs) return { category: "점검·AS", sourceType: "inspection_as", vendor: currentVendor, region: "" };
-    if (hasAs || mode === "blank-report") return { category: "AS", sourceType: "as", vendor: currentVendor, region: "" };
-    return { category: "점검", sourceType: "inspection", vendor: currentVendor, region: "" };
+    // 앨범 업체명은 '보내는 그 양식'의 업체명 줄에서 — currentVendor는 처음 변환 때 값이라 나중에 고친 업체명을 못 따라갔다(2026-10-02)
+    const finalVendor = extractVendorFromText(buildResultText()) || currentVendor;
+    if (hasInspection && hasAs) return { category: "점검·AS", sourceType: "inspection_as", vendor: finalVendor, region: "" };
+    if (hasAs || mode === "blank-report") return { category: "AS", sourceType: "as", vendor: finalVendor, region: "" };
+    return { category: "점검", sourceType: "inspection", vendor: finalVendor, region: "" };
   };
 
   // 첨부 사진 병렬 업로드(동시 4개) → 업무 메타데이터가 있는 앨범 1건 생성 → 모아보기 링크 반환.
@@ -5030,8 +5028,11 @@ export default function App() {
     if (cachedAlbumLink) return cachedAlbumLink;
     const now = new Date();
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    // 앞선 시도에서 올라간 주소를 이어받되, 빈 칸(실패분)은 ""로 채운 '구멍 없는' 배열로 만든다.
+    //  (2026-10-02) 예전엔 new Array(n)의 구멍이 그대로 남아 — map()이 구멍을 건너뛰어 — 재시도 때 업로드를 통째로 건너뛰고
+    //  구멍이 null로 앨범에 저장됐다(이호준 프로 앨범의 70%가 빈 사진). 이제 빈 칸이 하나라도 있으면 그 칸만 다시 올린다.
     const existingUrls = photoUploadUrlsRef.current;
-    const urls: string[] = existingUrls && existingUrls.length === photos.length ? existingUrls : new Array(photos.length);
+    const urls: string[] = Array.from({ length: photos.length }, (_, i) => (existingUrls && existingUrls.length === photos.length ? existingUrls[i] || "" : ""));
     let nextIdx = 0, done = 0;
     const worker = async () => {
       while (nextIdx < photos.length) {
@@ -5047,21 +5048,27 @@ export default function App() {
         } else {
           // 모바일(HEIC·고화소)에서도 실패하지 않게: 축소 실패 시 원본을 실제 형식으로 올린다
           const prepared = await prepareImageForUpload(f, 1600);
-          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType);
+          // 축소가 안 돼 원본(수 MB)이 올라가는 경우 60초로는 현장 LTE에서 모자라다 — 크기만큼 시간을 늘린다(1MB당 10초, 최대 3분)
+          const budget = Math.min(180_000, 60_000 + Math.round(prepared.blob.size / 1048576) * 10_000);
+          urls[i] = await uploadPhoto(`${ymd}/${crypto.randomUUID()}.${prepared.ext}`, prepared.blob, prepared.contentType, budget);
         }
         done++;
         showToast(`첨부 ${done}/${photos.length} 올리는 중…`);
       }
     };
-    if (!existingUrls || existingUrls.length !== photos.length) {
+    if (urls.some((u) => !u)) {
       // 모바일 회선에서 동시 4개는 끊김의 원인 — 2개로 낮춰 안정성을 택한다
       const concurrency = Math.min(/Android|iPhone|iPad/i.test(navigator.userAgent) ? 2 : 4, photos.length);
       try {
         await Promise.all(Array.from({ length: concurrency }, worker));
       } catch (e) {
-        photoUploadUrlsRef.current = urls.map((u) => u || ""); // 성공분 보존 — 재시도 시 나머지만 올린다
+        photoUploadUrlsRef.current = [...urls]; // 성공분 보존 — 재시도 시 나머지만 올린다
         const okCount = urls.filter(Boolean).length;
         throw new Error(`${(e as Error).message}${okCount ? ` (${okCount}/${photos.length}장은 업로드 완료 — 다시 누르면 나머지만 올립니다)` : ""}`);
+      }
+      if (urls.some((u) => !u)) { // 안전망 — 빈 칸이 남은 채로는 앨범을 만들지 않는다
+        photoUploadUrlsRef.current = [...urls];
+        throw new Error(`사진 ${urls.filter((u) => !u).length}장이 올라가지 않았습니다 — 다시 눌러 나머지를 올려 주세요`);
       }
       photoUploadUrlsRef.current = urls;
     }

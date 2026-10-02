@@ -34,6 +34,19 @@ export function ssoRequiredCached(): boolean { try { return localStorage.getItem
 export function rememberSsoRequired(on: boolean) { try { localStorage.setItem(REQUIRED_KEY, on ? "1" : "0"); } catch { /* 무시 */ } }
 export const isOnValue = (v: string | undefined) => /^(true|1|on|y)$/i.test(v || "");
 
+/** 검증 기간엔 주소 뒤에 ?sso=test 를 붙여 연 기기에서만 로그인 단추가 보인다(팀장 지시: 검증 전엔 아무에게도 안 보이게). ?sso=off 로 해제 */
+const TEST_KEY = "cs_sso_test_v1";
+export function ssoTestDevice(): boolean { try { return localStorage.getItem(TEST_KEY) === "1"; } catch { return false; } }
+export function applySsoTestParam() {
+  const p = new URLSearchParams(window.location.search); const v = p.get("sso");
+  if (!v) return;
+  try { if (v === "test") localStorage.setItem(TEST_KEY, "1"); else if (v === "off") localStorage.removeItem(TEST_KEY); } catch { /* 무시 */ }
+  p.delete("sso"); const q = p.toString();
+  window.history.replaceState({}, "", window.location.pathname + (q ? `?${q}` : ""));
+}
+/** 로그인 단추를 보여도 되는가 — 잠금이 켜졌거나(모두) 검증 기기이거나 */
+export const ssoLoginVisible = () => ssoRequiredCached() || ssoTestDevice();
+
 const randomState = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
 
 /** 그룹웨어 로그인 화면으로 이동 — 돌아올 곳은 이 앱의 /auth/callback(https 필수) */

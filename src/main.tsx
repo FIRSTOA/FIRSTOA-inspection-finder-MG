@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import Boot from './Boot.tsx'
-import { handleSsoCallback, SSO_CALLBACK_PATH, SSO_ERROR_KEY } from './sso'
+import { applySsoTestParam, handleSsoCallback, SSO_CALLBACK_PATH, SSO_ERROR_KEY } from './sso'
 
 // 네이버 캘린더 최초 연동: 네이버 로그인 동의 후 ?code=..&state=firstoa 로 돌아오면
 // 코드를 서버(엣지 함수)로 넘겨 토큰 교환·보관까지 자동 처리 — 주소창 복사 불필요
@@ -40,6 +40,7 @@ const albumId = new URLSearchParams(window.location.search).get('album')
 const boot = async () => {
   const root = document.getElementById('root')!
   // 그룹웨어에서 돌아온 길(/auth/callback?token=&state=)이면 토큰을 확인해 세션을 만들고 원래 화면으로
+  applySsoTestParam() // ?sso=test → 이 기기를 검증 기기로
   if (window.location.pathname === SSO_CALLBACK_PATH) root.textContent = '그룹웨어 로그인 확인 중…'
   const sso = await handleSsoCallback()
   if (sso) {
