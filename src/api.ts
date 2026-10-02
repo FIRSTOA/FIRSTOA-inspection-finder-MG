@@ -202,29 +202,32 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   const serial = encodeURIComponent("시리얼넘버");
   const asset = encodeURIComponent("자산기번");
   const filter = `select=*&_hidden=not.is.true&or=(${serial}.ilike.*${encoded}*,${asset}.ilike.*${encoded}*)&limit=100`;
+  // 점검·AS뿐 아니라 초과료 원장(자산번호)·서비스접수(asset_no·serial)에도 기기 번호가 있다 — 기번만 치면 모든 이력이 나오게(2026-10-02)
   const sources = await Promise.all([
     selectRows<Record<string, unknown>>("jeomgeom", filter).then((rows) => ({ category: "점검", rows })).catch(() => ({ category: "점검", rows: [] })),
     selectRows<Record<string, unknown>>("as_records", filter).then((rows) => ({ category: "AS", rows })).catch(() => ({ category: "AS", rows: [] })),
+    selectRows<Record<string, unknown>>("overage", `select=*&_hidden=not.is.true&${encodeURIComponent("자산번호")}=ilike.*${encoded}*&limit=100`).then((rows) => ({ category: "초과", rows })).catch(() => ({ category: "초과", rows: [] })),
+    selectRows<Record<string, unknown>>("service_receptions", `select=*&deleted=is.false&or=(serial.ilike.*${encoded}*,asset_no.ilike.*${encoded}*)&limit=100`).then((rows) => ({ category: "접수", rows })).catch(() => ({ category: "접수", rows: [] })),
   ]);
   const hits = new Map<string, VendorHit>();
   sources.forEach(({ category, rows }) => rows.forEach((row) => {
-    const vendor = String(row._업체명 || row.업체명 || row.상호명 || "").trim();
+    const vendor = String(row._업체명 || row.업체명 || row.상호명 || row.vendor || "").trim();
     if (!vendor) return;
     const current = hits.get(vendor) || { vendor, counts: {}, meta: {} };
     current.counts[category] = (current.counts[category] || 0) + 1;
-    const date = String(row.작성일 || row.created_at || "").slice(0, 10);
+    const date = String(row.작성일 || row.날짜 || row.receipt_date || row.created_at || "").slice(0, 10);
     const previous = current.meta[category];
     if (!previous || date >= String(previous.d || "")) {
       current.meta[category] = {
         d: date,
-        r: String(row.지역 || ""),
-        model: String(row.모델명 || ""),
-        author: String(row.작성자 || ""),
+        r: String(row.지역 || row.region || ""),
+        model: String(row.모델명 || row.model || ""),
+        author: String(row.작성자 || row.author || ""),
         count: 1,
       };
     }
-    const serialValue = String(row.시리얼넘버 || "").toLowerCase();
-    const assetValue = String(row.자산기번 || "").toLowerCase();
+    const serialValue = String(row.시리얼넘버 || row.serial || "").toLowerCase();
+    const assetValue = String(row.자산기번 || row.자산번호 || row.asset_no || "").toLowerCase();
     const needle = query.toLowerCase();
     current.matchedBy = serialValue.includes(needle) ? "시리얼 일치" : assetValue.includes(needle) ? "자산기번 일치" : "기기번호 일치";
     hits.set(vendor, current);

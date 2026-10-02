@@ -133,7 +133,14 @@ type MapPreferences = {
   quarter: Quarter;
   kind: WorkKind | "ALL";
   labels: string[];
+  // 2026-10-02: 등급·정렬·특성 필터도 기억한다 — 다른 화면에 다녀오면 '전체'로 돌아가 다시 고르던 것
+  renewalGrade?: string;
+  renewalOrder?: "default" | "asc" | "desc";
+  monthlyOrder?: "default" | "closing";
+  quarterHas?: { renewal: boolean; misu: boolean; overage: boolean; bulman: boolean };
+  quarterGrades?: string[];
 };
+const GRADE_CODES = ["N", "NN", "S", "SS", "V"];
 
 function loadMapPreferences(key: string): MapPreferences {
   const currentQuarter = (Math.floor(new Date().getMonth() / 3) + 1) as Quarter;
@@ -145,6 +152,11 @@ function loadMapPreferences(key: string): MapPreferences {
       quarter: stored?.quarter && quarters.includes(stored.quarter) ? stored.quarter : currentQuarter,
       kind: storedKind === "ALL" || workKinds.some((item) => item.value === storedKind) ? storedKind as WorkKind | "ALL" : "ALL",
       labels: Array.isArray(stored?.labels) ? stored.labels.filter((code) => mapLabels.some((item) => item.code === code)) : [],
+      renewalGrade: ["ALL", ...GRADE_CODES].includes(String(stored?.renewalGrade)) ? String(stored?.renewalGrade) : "ALL",
+      renewalOrder: stored?.renewalOrder === "asc" || stored?.renewalOrder === "desc" ? stored.renewalOrder : "default",
+      monthlyOrder: stored?.monthlyOrder === "closing" ? "closing" : "default",
+      quarterHas: { renewal: !!stored?.quarterHas?.renewal, misu: !!stored?.quarterHas?.misu, overage: !!stored?.quarterHas?.overage, bulman: !!stored?.quarterHas?.bulman },
+      quarterGrades: Array.isArray(stored?.quarterGrades) ? stored.quarterGrades.map(String).filter((g) => GRADE_CODES.includes(g)) : [],
     };
   } catch {
     return { team: "C", quarter: currentQuarter, kind: "ALL", labels: [] };
@@ -1299,14 +1311,14 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [teamFilter, setTeamFilter] = useState<Team>(initialPreferences.team);
   const [quarterFilter, setQuarterFilter] = useState<Quarter>(initialPreferences.quarter);
   const [kindFilter, setKindFilter] = useState<WorkKind | "ALL">(initialPreferences.kind);
-  const [renewalOrder, setRenewalOrder] = useState<"default" | "asc" | "desc">("default");
-  const [renewalGradeFilter, setRenewalGradeFilter] = useState("ALL");
-  const [quarterHasRenewal, setQuarterHasRenewal] = useState(false);
-  const [quarterHasMisu, setQuarterHasMisu] = useState(false);
-  const [quarterHasOverage, setQuarterHasOverage] = useState(false);
-  const [quarterHasBulman, setQuarterHasBulman] = useState(false);
-  const [quarterGrades, setQuarterGrades] = useState<string[]>([]);
-  const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">("default");
+  const [renewalOrder, setRenewalOrder] = useState<"default" | "asc" | "desc">(initialPreferences.renewalOrder || "default");
+  const [renewalGradeFilter, setRenewalGradeFilter] = useState(initialPreferences.renewalGrade || "ALL");
+  const [quarterHasRenewal, setQuarterHasRenewal] = useState(!!initialPreferences.quarterHas?.renewal);
+  const [quarterHasMisu, setQuarterHasMisu] = useState(!!initialPreferences.quarterHas?.misu);
+  const [quarterHasOverage, setQuarterHasOverage] = useState(!!initialPreferences.quarterHas?.overage);
+  const [quarterHasBulman, setQuarterHasBulman] = useState(!!initialPreferences.quarterHas?.bulman);
+  const [quarterGrades, setQuarterGrades] = useState<string[]>(initialPreferences.quarterGrades || []);
+  const [monthlyOrder, setMonthlyOrder] = useState<"default" | "closing">(initialPreferences.monthlyOrder || "default");
   const [inspectionVisits, setInspectionVisits] = useState<VisitRow[]>([]);
   const [archiveVisits, setArchiveVisits] = useState<Array<VisitLike & { idKeys: string[] }>>([]);
   const [misuByVendor, setMisuByVendor] = useState<Map<string, { months: string; balance: string; date: string }>>(new Map());
@@ -1799,9 +1811,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   useEffect(() => {
     try {
-      localStorage.setItem(preferenceStorageKey, JSON.stringify({ team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters } satisfies MapPreferences));
+      localStorage.setItem(preferenceStorageKey, JSON.stringify({
+        team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters,
+        renewalGrade: renewalGradeFilter, renewalOrder, monthlyOrder,
+        quarterHas: { renewal: quarterHasRenewal, misu: quarterHasMisu, overage: quarterHasOverage, bulman: quarterHasBulman }, quarterGrades,
+      } satisfies MapPreferences));
     } catch { /* 저장 공간 부족·차단 환경 — 취향 저장은 없어도 동작한다 */ }
-  }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters]);
+  }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters, renewalGradeFilter, renewalOrder, monthlyOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades]);
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -2013,7 +2029,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
       // 분기점검 필터: 재계약 유무 / 미수 유무 / 등급(다중) — 모두 AND 조합.
-      if (kindFilter === "quarter") {
+      // 업무 '전체'에서 이 필터를 켜면 분기점검 건만 남긴다(2026-10-02: 폰은 보통 '전체'로 두는데 특성·등급이 안 보였다)
+      const quarterFilterOn = quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman || quarterGrades.length > 0;
+      if (kindFilter === "quarter" || (kindFilter === "ALL" && quarterFilterOn)) {
+        if (place.kind !== "quarter") return false;
         if (quarterHasRenewal && !renewalMatchByPlaceId.has(place.id)) return false;
         if (quarterHasMisu && flagFor(misuByCode, misuByVendor, place) === undefined) return false;
         if (quarterHasOverage && flagFor(overageByCode, overageByVendor, place) === undefined) return false;
@@ -2879,7 +2898,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <button type="button" onClick={() => { setKindFilter("ALL"); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
                 {workKinds.map((item) => <button key={item.value} type="button" onClick={() => { setKindFilter(item.value); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
               </div>
-              {kindFilter === "quarter" && (<>
+              {(kindFilter === "quarter" || kindFilter === "ALL") && (<>
                 <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>특성 <span className="font-bold text-slate-300">(있는 곳만)</span></span>{(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterHasBulman(false); }} className="text-[10px] font-black text-blue-600">해제</button>}</div>
                 <div className="mt-1.5 grid grid-cols-2 gap-1">
                   <button type="button" onClick={() => setQuarterHasRenewal((current) => !current)} className={`rounded px-2 py-1.5 text-xs font-black ${quarterHasRenewal ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600"}`}>재계약 있음</button>
@@ -2898,7 +2917,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`rounded px-1.5 py-1.5 text-xs font-black ${renewalGradeFilter === grade ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{grade === "ALL" ? "전체" : grade}</button>)}
                 </div>
               </>)}
-              {kindFilter === "ALL" && <div className="mt-3 text-[10px] font-bold text-slate-400">업무(분기·재계약)를 고르면 등급 필터가 나옵니다.</div>}
+              {kindFilter === "ALL" && <div className="mt-3 text-[10px] font-bold text-slate-400">특성·등급은 분기점검 건에 적용됩니다. 재계약 등급은 업무에서 재계약을 고르면 나옵니다.</div>}
             </div>
           )}
 

@@ -70,6 +70,13 @@ type Props = {
 };
 
 const CAT_ORDER = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
+// 기록이 특정 기기(자산기번·시리얼) 것인가 — 기기 칸이 아예 없는 기록(미수·불만 등)은 업체 단위라 그대로 둔다(2026-10-02: 기번만 치면 그 기기 이력 전부)
+const DEVICE_FIELDS = ["자산기번", "시리얼넘버", "자산번호", "기번", "asset_no", "serial"];
+function recordMatchesDevice(record: Record<string, unknown>, needle: string): boolean {
+  const values = DEVICE_FIELDS.map((f) => normalizeId(String(record[f] ?? ""))).filter(Boolean);
+  if (!values.length) return true;
+  return values.some((v) => v.includes(needle) || (v.length >= 4 && needle.includes(v)));
+}
 const ACTIVITY_CATS = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성"];
 const CAT_SHORT: Record<string, string> = {
   접수: "접수", 점검: "점검", AS: "AS", 초과: "초과", 미수: "미수", 불만: "불만",
@@ -247,6 +254,9 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   const [scopeOpen, setScopeOpen] = useState(false); // 조회 범위는 기본 접힘 — 처음 화면을 단순하게
 
   const [q, setQ] = useState("");
+  // 자산기번·시리얼로 찾아 들어온 경우 그 기기 기록만 먼저 보여 준다(토글로 업체 전체도)
+  const [deviceNeedle, setDeviceNeedle] = useState("");
+  const [deviceOnly, setDeviceOnly] = useState(true);
   const [hits, setHits] = useState<VendorHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showHits, setShowHits] = useState(false);
@@ -281,6 +291,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
       setScopeOpen(false);
       setShowHits(false);
       setReceptionType("전체"); // 이전 업체의 접수 유형 필터가 새 업체에 남지 않게
+      setDeviceNeedle("");
     });
     return () => { active = false; };
   }, [open, vendor]);
@@ -348,6 +359,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
     return rows.filter((record) => {
       // 업체정보는 지금 사용 중(임대중)인 기기만 — 종료·소송 이력은 통합이력에선 소음이다
       if (cat === "업체정보" && String(record["임대여부"] || "") !== "임대중") return false;
+      if (deviceOnly && deviceNeedle && !recordMatchesDevice(record, deviceNeedle)) return false;
       if (historyRegion !== "전체" && recordRegionCode(record, includedHits) !== historyRegion) return false;
       if (historyVendor !== "전체" && recordVendor(record) !== historyVendor) return false;
       return true;
@@ -620,6 +632,10 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
   }, [open, detail, queryVendor, includedHits]);
 
   const selectNewVendor = (nextVendor: string) => {
+    // 검색어가 한글 없는 4자 이상 영숫자(자산기번·시리얼)였으면 그 기기만 보기로 시작
+    const typed = q.trim();
+    setDeviceNeedle(!/[가-힣]/.test(typed) && /\d/.test(typed) && normalizeId(typed).length >= 4 && typed !== nextVendor ? normalizeId(typed) : "");
+    setDeviceOnly(true);
     setQueryVendor(nextVendor);
     setQ(nextVendor);
     setShowHits(false);
@@ -657,6 +673,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-slate-300">최근 <b className="font-black text-white">{latestDate}</b></span>
           {includedHits.length > 1 && <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-slate-300">통합 이름 <b className="font-black text-white">{includedHits.length}</b>개</span>}
           {broaderQuery && <button type="button" onClick={() => selectNewVendor(broaderQuery)} className="rounded-full border border-sky-400/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-black text-sky-300 transition hover:bg-sky-500/25" title="같은 이름을 쓰는 다른 법인·지점까지 함께 검색">"{broaderQuery}" 넓게 보기</button>}
+          {deviceNeedle && <button type="button" onClick={() => setDeviceOnly((v) => !v)} title="자산기번·시리얼로 찾아 들어왔습니다. 눌러서 이 기기만 / 업체 전체를 전환" className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-black transition ${deviceOnly ? "border-amber-400/60 bg-amber-400/15 text-amber-200" : "border-white/15 text-slate-300 hover:bg-white/10"}`}>{deviceOnly ? `이 기기만 · ${deviceNeedle.toUpperCase()}` : "업체 전체 보는 중"}</button>}
           {(includedHits.length > 1 || historyRegionTabs.length > 2) && (
             <button type="button" onClick={() => setScopeOpen(!scopeOpen)} className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-black text-slate-300 transition hover:bg-white/10">
               범위 · {historyRegion === "전체" ? "전체" : historyRegion}{historyVendor !== "전체" ? " · 이름 1개" : ""}

@@ -1,6 +1,39 @@
 import PortalSelect from "./PortalSelect";
 import { useEffect, useMemo, useState } from "react";
 import { selectAllRows, selectRows } from "./supabase";
+import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+
+// "이 미수·초과 업체가 이번 분기 점검·재계약 대상인가"를 바로 보려고(2026-10-02 요청) — 일정리스트 배지와 같은 기준(vendorFlags, 5분 캐시)
+type TargetFilter = "전체" | "분기점검" | "재계약";
+function useWorkinTargets(names: string[]) {
+  const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
+  const key = names.join("\n");
+  useEffect(() => {
+    if (!names.length) return;
+    let alive = true;
+    getVendorFlagsBatch(names).then((m) => { if (alive) setFlags(m); }).catch(() => {});
+    return () => { alive = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps -- names는 key로 비교
+  return flags;
+}
+const passesTarget = (flags: Map<string, VendorWorkFlags>, vendor: string, target: TargetFilter) => {
+  if (target === "전체") return true;
+  const f = flags.get(vendor.trim());
+  return target === "분기점검" ? !!f?.inspection : !!f?.renewal;
+};
+function TargetChips({ value, onChange }: { value: TargetFilter; onChange: (v: TargetFilter) => void }) {
+  return <>
+    <span className="mx-0.5 h-4 w-px bg-slate-200" />
+    {(["분기점검", "재계약"] as const).map((name) => <button key={name} type="button" onClick={() => onChange(value === name ? "전체" : name)} title={name === "분기점검" ? "이번 분기 워킨맵 점검 대상 업체만" : "재계약 워킨맵 대상 업체만"} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value === name ? (name === "분기점검" ? "bg-blue-600 text-white" : "bg-rose-600 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{name} 대상</button>)}
+  </>;
+}
+function TargetBadges({ f }: { f?: VendorWorkFlags }) {
+  if (!f || (!f.inspection && !f.renewal)) return null;
+  return <>
+    {f.inspection && <span className={`shrink-0 rounded px-1 py-0.5 text-[9.5px] font-black ${f.inspection.done ? "bg-slate-100 text-slate-400" : "bg-blue-50 text-blue-700"}`}>분기{f.inspection.done ? "✓" : ""}</span>}
+    {f.renewal && <span className={`shrink-0 rounded px-1 py-0.5 text-[9.5px] font-black ${f.renewal.done ? "bg-slate-100 text-slate-400" : "bg-rose-50 text-rose-700"}`}>재계약{f.renewal.due ? ` ${f.renewal.due.replace(/^\d+년 /, "")}` : ""}</span>}
+  </>;
+}
 
 /**
  * 미수·초과료 현황 보드 — 조회 탭이 렌더한다.
@@ -144,6 +177,7 @@ export function MisuBoard() {
   const [detail, setDetail] = useState<SheetRecord | null>(null);
   // 관리부가 시트에서 CS체크한 업체만 모아 보는 목록 (misu_cs_checks — GAS 1시간 동기화)
   const [boardView, setBoardView] = useState<"전체" | "CS체크">("전체");
+  const [target, setTarget] = useState<TargetFilter>("전체");
   // undefined = 불러오는 중(느린 회선에서 0으로 보이던 것 — 2026-09-18) · null = 표 없음/실패 · 배열 = 정상
   const [csChecks, setCsChecks] = useState<CsCheckRow[] | null | undefined>(undefined);
   useEffect(() => {
@@ -173,6 +207,8 @@ export function MisuBoard() {
     return () => { active = false; };
   }, []);
 
+  const vendorNames = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "_업체명").trim()).filter(Boolean))), [rows]);
+  const targets = useWorkinTargets(vendorNames);
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     const list = rows.filter((r) => {
@@ -181,6 +217,7 @@ export function MisuBoard() {
       if (monthsFilter === "1~2개월" && months >= 3) return false;
       if (monthsFilter === "3개월+" && months < 3) return false;
       if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword)) return false;
+      if (!passesTarget(targets, str(r, "_업체명"), target)) return false;
       return true;
     });
     const balanceOf = (r: SheetRecord) => Number(r["_balance"]) || 0;
@@ -189,7 +226,7 @@ export function MisuBoard() {
     if (sort === "잔액순") return [...list].sort((a, b) => (balanceOf(b) - balanceOf(a)) * flip);
     if (sort === "개월순") return [...list].sort((a, b) => (monthsOf(b) - monthsOf(a) || balanceOf(b) - balanceOf(a)) * flip);
     return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
-  }, [rows, team, monthsFilter, sort, sortDir, query]);
+  }, [rows, team, monthsFilter, sort, sortDir, query, targets, target]);
 
   const totalBalance = filtered.reduce((sum, r) => sum + (Number(r["_balance"]) || 0), 0);
 
@@ -273,6 +310,7 @@ export function MisuBoard() {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
           {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${monthsFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
+          <TargetChips value={target} onChange={setTarget} />
           <span className="ml-2 w-8 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
           <span className="flex rounded-full bg-slate-100 p-1">
             {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
@@ -289,7 +327,7 @@ export function MisuBoard() {
         <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.map((r) => (
             <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
-              <span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span>
+              <span className="flex min-w-0 items-center gap-1"><span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>
               <span className="hidden truncate font-bold text-slate-500 sm:block">{str(r, "지역") || "-"}</span>
               <span className={`text-right font-black ${(Number(r["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{Number(r["_months"]) ? `${r["_months"]}개월` : "-"}</span>
@@ -323,6 +361,7 @@ export function OverageBoard() {
   const [team, setTeam] = useState("전체");
   const [grade, setGrade] = useState("전체");
   const [yearMonth, setYearMonth] = useState("전체");
+  const [target, setTarget] = useState<TargetFilter>("전체");
   const [sort, setSort] = useState<"최신순" | "금액순">("최신순");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [query, setQuery] = useState("");
@@ -351,6 +390,8 @@ export function OverageBoard() {
   const yearMonths = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => String(r["_date"] || "").slice(0, 7)).filter(Boolean))).sort().reverse().slice(0, 18)], [rows]);
   const grades = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => str(r, "등급")).filter(Boolean))).sort()], [rows]);
 
+  const vendorNames = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "_업체명").trim()).filter(Boolean))), [rows]);
+  const targets = useWorkinTargets(vendorNames);
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     const list = rows.filter((r) => {
@@ -358,12 +399,13 @@ export function OverageBoard() {
       if (grade !== "전체" && str(r, "등급") !== grade) return false;
       if (yearMonth !== "전체" && String(r["_date"] || "").slice(0, 7) !== yearMonth) return false;
       if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword) && !str(r, "접수내용").toLowerCase().includes(keyword)) return false;
+      if (!passesTarget(targets, str(r, "_업체명"), target)) return false;
       return true;
     });
     const flip = sortDir === "asc" ? -1 : 1;
     if (sort === "금액순") return [...list].sort((a, b) => ((Number(b["_total"]) || 0) - (Number(a["_total"]) || 0)) * flip);
     return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
-  }, [rows, team, grade, yearMonth, sort, sortDir, query]);
+  }, [rows, team, grade, yearMonth, sort, sortDir, query, targets, target]);
 
   const totalSum = filtered.reduce((sum, r) => sum + (Number(r["_total"]) || 0), 0);
 
@@ -391,6 +433,7 @@ export function OverageBoard() {
           <PortalSelect width={110} value={yearMonth} onChange={setYearMonth}
             options={yearMonths.map((name) => ({ value: name, label: name === "전체" ? "전체 년월" : name }))} />
           <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          <TargetChips value={target} onChange={setTarget} />
           {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -411,7 +454,7 @@ export function OverageBoard() {
           {filtered.slice(0, 300).map((r) => (
             <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span>
+                <span className="flex min-w-0 items-center gap-1"><span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
                 {str(r, "접수내용") && <span className="block truncate text-[11px] font-semibold text-slate-500">{str(r, "접수내용")}</span>}
               </span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>

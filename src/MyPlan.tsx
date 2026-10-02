@@ -38,6 +38,8 @@ function planTypeLabel(t: MyPlanTicket): string {
 }
 
 type Geo = { lat: number; lng: number };
+// 한국 땅 안의 좌표만 믿는다 — 워킨맵 핀에 (0,0)·엉뚱한 좌표가 섞이면 지도가 바다 한가운데까지 펼쳐져 "깨져" 보였다(2026-10-02)
+const isKoreaGeo = (lat: unknown, lng: unknown): boolean => typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng) && lat > 33 && lat < 39.5 && lng > 124 && lng < 132;
 
 function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
@@ -86,7 +88,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       for (const row of rows) {
         const key = vendorMatchKey(row.name || "");
         if (!key) continue;
-        if (row.latitude != null && row.longitude != null && !map.has(key)) map.set(key, { lat: row.latitude, lng: row.longitude });
+        if (isKoreaGeo(row.latitude, row.longitude) && !map.has(key)) map.set(key, { lat: row.latitude as number, lng: row.longitude as number });
         if (!meta.has(key)) meta.set(key, {
           comment: String(row.comment || ""),
           phone: String(row.phone || ""),
@@ -167,7 +169,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         if (!address) { setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); continue; }
         const hit = await geocodeKR(addressCore(address)); // 층·건물·메모를 뗀 핵심 주소로(2026-09-29: 통째로 보내면 엉뚱한 곳)
         if (stop) return;
-        if (hit) setGeoFallback((cur) => new Map(cur).set(t.id, { lat: hit.lat, lng: hit.lng }));
+        if (hit && isKoreaGeo(hit.lat, hit.lng)) setGeoFallback((cur) => new Map(cur).set(t.id, { lat: hit.lat, lng: hit.lng }));
         else setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); // 재시도 방지 표식
       }
     })();
@@ -230,7 +232,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         setEngine("leaflet");
       }
     });
+    // 탭을 오가거나 목록 길이가 바뀌어 지도 상자 크기가 변하면 타일·마커가 어긋난다 — 크기가 바뀔 때마다 다시 맞춘다(2026-10-02)
+    const ro = typeof ResizeObserver !== "undefined" && mapElRef.current ? new ResizeObserver(() => {
+      mapRef.current?.invalidateSize();
+      (kakaoRef.current?.map as { relayout?: () => void } | undefined)?.relayout?.();
+    }) : null;
+    if (ro && mapElRef.current) ro.observe(mapElRef.current);
     return () => {
+      ro?.disconnect();
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; layerRef.current = null; }
       kakaoRef.current = null;
@@ -432,6 +441,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     return () => { stop = true; };
   }, [detail]);
 
+  // 카톡 스케줄방용 — "1 업체명 분기점검" 한 줄씩, 동선 순서 그대로(2026-10-02 요청)
+  const copyPlanText = async () => {
+    const short = (t: MyPlanTicket) => { const l = planTypeLabel(t); return l === "납품철수교체휴가교육" ? "납품" : l === "익일AS" ? "AS" : l; };
+    const text = ordered.map((t, i) => `${i + 1} ${fieldTicketVendor(t.vendor).vendor.trim() || t.vendor} ${short(t)}`).join("\n");
+    try { await navigator.clipboard.writeText(text); notify(`일정 ${ordered.length}건을 복사했습니다 — 카톡에 붙여 넣으세요`, "success"); }
+    catch { window.prompt("복사가 막혔습니다. 아래 글을 직접 복사하세요", text); }
+  };
+
   return (
     <div className="space-y-2 overflow-x-hidden">
       <div className="flex flex-wrap items-center gap-2">
@@ -447,6 +464,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
             className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
         )}
         {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">순서 초기화</button>}
+        {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1 업체명 분기점검 / 2 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
         <span className="ml-auto text-[10px] font-bold text-slate-400">[고정]을 누른 순서가 먼저, 나머지는 가까운 순 자동</span>
       </div>
 
