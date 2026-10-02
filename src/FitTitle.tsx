@@ -33,7 +33,7 @@ export default function FitTitle({ text, className = "", base = 14, min = base, 
     io?.observe(box);
     return () => { ro?.disconnect(); io?.disconnect(); };
   }, [text, base, min]);
-  const dur = Math.max(5, Math.round(shift / 22) + 4); // 넘친 만큼 천천히(초)
+  const dur = Math.max(2, Math.round((shift / 55) * 10) / 10); // 초속 약 55px — 멈춤 없이 바로 움직이되 읽히는 속도(짧은 넘침은 최소 2초)
   const moving = shift > 0 && seen;
   return (
     <div ref={boxRef} className={`min-w-0 overflow-hidden whitespace-nowrap ${className}`} title={title ?? text} style={{ height: `${base + 6}px`, lineHeight: `${base + 6}px` }}>

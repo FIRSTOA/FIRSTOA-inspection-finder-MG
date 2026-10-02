@@ -44,9 +44,9 @@ td:has(> div > [data-cell][data-selected]) {
 [data-cell][data-selected]:not(td > *):not(td > div > *) {
   box-shadow: inset 0 0 0 2px #3b82f6;
 }
-/* 긴 제목 흘려 보기(FitTitle) — 멈춤 → 끝까지(--shift) → 멈춤 → 되돌림. 모션 줄이기 설정이면 말줄임만 */
-.fit-marquee { animation: fit-marquee var(--dur, 6s) ease-in-out infinite alternate; will-change: transform; }
-@keyframes fit-marquee { 0%, 22% { transform: translateX(0); } 78%, 100% { transform: translateX(var(--shift, 0px)); } }
+/* 긴 제목 흘려 보기(FitTitle) — 멈춤 없이 일정한 속도로 끝까지(--shift) 갔다가 바로 되돌아온다(2026-10-02 사용자: 바로바로·조금 더 빠르게). 모션 줄이기 설정이면 말줄임만 */
+.fit-marquee { animation: fit-marquee var(--dur, 4s) linear infinite alternate; will-change: transform; }
+@keyframes fit-marquee { 0% { transform: translateX(0); } 100% { transform: translateX(var(--shift, 0px)); } }
 @media (prefers-reduced-motion: reduce) { .fit-marquee { animation: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } }
 /* 여러 칸 범위(Shift+클릭·Shift+화살표·드래그) — 연한 파랑 배경(2026-10-01, 엑셀처럼 복사·붙여넣기) */
 td:has(> [data-cell][data-range]),
