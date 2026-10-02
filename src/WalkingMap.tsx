@@ -567,10 +567,11 @@ function toDbPlace(place: MapPlace, userKey: string): Record<string, unknown> {
   };
 }
 
-function withLabelHistory(place: MapPlace, previousLabel?: string): MapPlace {
+function withLabelHistory(place: MapPlace, previousLabel?: string, reason = ""): MapPlace {
   if (place.label === previousLabel || (place.label !== "G5" && place.label !== "G12")) return place;
   const date = kstDate();
-  const entry = place.label === "G5" ? `[G5 완료] ${date}` : `[G12 이관] ${date}`;
+  const note = reason.trim() ? ` · 사유: ${reason.trim()}` : "";
+  const entry = place.label === "G5" ? `[G5 완료] ${date}` : `[G12 이관] ${date}${note}`;
   return place.memos.includes(entry) ? place : { ...place, memos: [...place.memos, entry] };
 }
 
@@ -2085,6 +2086,16 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [listLimit, setListLimit] = useState(LIST_PAGE);
   // 워킨맵에서 바로 내 일정에 넣기 — 자동일정까지 가지 않아도 되게(2026-08-28 요청)
   const [planTarget, setPlanTarget] = useState<MapPlace | null>(null);
+  // G12 이관 사유 팝업 — 빠른 색칠(목록 행·폰 하단 띠)에서 G12를 누르면 연다. 사유는 메모 이력 "[G12 이관] 날짜 · 사유: …"로 남는다
+  const [transferTarget, setTransferTarget] = useState<MapPlace | null>(null);
+  const [transferReason, setTransferReason] = useState("");
+  const openTransfer = (place: MapPlace) => { setTransferReason(""); setTransferTarget(place); };
+  const confirmTransfer = () => {
+    if (!transferTarget) return;
+    if (transferReason.trim().length < 2) { notify("이관 사유를 적어 주세요 (예: 담당자 부재, 다음 분기 방문 요청)", "info"); return; }
+    setPlaceLabel(transferTarget.id, "G12", transferReason);
+    setTransferTarget(null);
+  };
   const [planDate, setPlanDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일 — 저녁은 내일 동선을 짜는 시간
   const [planBusy, setPlanBusy] = useState(false);
   const registerPlan = async () => {
@@ -2340,10 +2351,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   };
 
   // 한 곳 라벨 바꾸기 — 하단 띠 "완료" 버튼용(감사 #2: 완료 색칠이 4탭이었다). 이력 메모·저장·실패 알림은 bulkSetLabel과 같다
-  const setPlaceLabel = (id: number, label: string) => {
+  const setPlaceLabel = (id: number, label: string, reason = "") => {
     const target = places.find((place) => place.id === id);
     if (!target || target.label === label) return;
-    const next = withLabelHistory({ ...target, label }, target.label);
+    const next = withLabelHistory({ ...target, label }, target.label, reason);
     if (sharedReady) {
       setSyncState("loading");
       void upsertRows("workin_map_places", [toDbPlace(next, userKey)], "id")
@@ -2725,7 +2736,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <span className="grid shrink-0 grid-cols-2 gap-1">
                   {QUICK_LABELS.map(({ code, name, color }) => { const on = place.label === code; return <button key={code} type="button" disabled={on}
                     title={on ? `지금 ${name}(${code})` : `${name}(${code})으로 바로 표시`} aria-label={`${name}으로 표시`}
-                    onClick={() => setPlaceLabel(place.id, code)}
+                    onClick={() => (code === "G12" ? openTransfer(place) : setPlaceLabel(place.id, code))}
                     className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[9px] font-black tracking-tight text-white ${on ? "border-slate-900" : "border-white lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: color }}>{code}</button>; })}
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
@@ -3018,7 +3029,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             {/* 빠른 색칠 — 목록 행과 같은 G5(점검 완료)·G12(이관) 두 개(2026-10-02: 폰 하단 띠는 '완료' 하나뿐이라 PC와 달랐다). 폰은 잘못 누르기 쉬워 확인창을 거친다 */}
             {!editMode && QUICK_LABELS.filter((item) => item.code !== place.label).map((item) => (
               <button key={item.code} type="button" aria-label={`${item.name}(${item.code})으로 표시`} title={`${item.name}(${item.code})으로 표시`}
-                onClick={() => { void askConfirm(`${workinVendorName(place.name) || place.name}\n${item.name}(${item.code})으로 표시할까요?`, { okLabel: item.code }).then((ok) => { if (ok) setPlaceLabel(place.id, item.code); }); }}
+                onClick={() => { if (item.code === "G12") { openTransfer(place); return; } void askConfirm(`${workinVendorName(place.name) || place.name}\n${item.name}(${item.code})으로 표시할까요?`, { okLabel: item.code }).then((ok) => { if (ok) setPlaceLabel(place.id, item.code); }); }}
                 className="grid w-11 shrink-0 place-items-center border-l border-slate-100 text-[11px] font-black text-white active:brightness-90" style={{ backgroundColor: item.color }}>{item.code}</button>
             ))}
             {!editMode && (
@@ -3365,6 +3376,23 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 );
               })}
               <div className="text-[10px] font-bold text-slate-400">워킨맵 색칠(G5 완료) 기준 · 매월점검은 G2×1·G3×2·G5×3로 환산. 과거 완료분은 완료일 기록이 없어 주차엔 안 잡히고, 지금부터 색칠하는 건 해당 주차에 자동 집계됩니다.</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {transferTarget && (
+        <div className="fixed inset-0 z-[2500] flex items-end bg-slate-950/50 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setTransferTarget(null)}>
+          <div className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-sm sm:rounded-3xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full text-[10px] font-black text-white" style={{ backgroundColor: labelMeta("G12").color }}>G12</span><div className="text-[18px] font-black tracking-tight text-slate-950">다음 분기로 이관</div></div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-500">{workinVendorName(transferTarget.name) || transferTarget.name}</div>
+            <label className="mt-4 block text-[11px] font-black text-slate-500">이관 사유 <span className="font-bold text-rose-500">*</span></label>
+            <textarea value={transferReason} onChange={(e) => setTransferReason(e.target.value)} rows={3} autoFocus placeholder="예: 담당자 부재로 다음 분기 방문 요청 / 사무실 이전 중 / 장비 교체 예정"
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirmTransfer(); } }}
+              className="mt-1 w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <div className="mt-1 text-[11px] font-semibold text-slate-400">메모 이력에 "[G12 이관] 오늘 날짜 · 사유: …"로 남습니다.</div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setTransferTarget(null)} className="rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-50">취소</button>
+              <button type="button" onClick={confirmTransfer} className="rounded-xl py-2.5 text-sm font-black text-white shadow-sm transition hover:brightness-110" style={{ backgroundColor: labelMeta("G12").color }}>G12로 이관</button>
             </div>
           </div>
         </div>
