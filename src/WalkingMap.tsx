@@ -3015,11 +3015,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 onClick={() => void markKeymanGreeted(keyman)}
                 className="grid w-11 shrink-0 place-items-center bg-amber-500 text-[15px] text-white active:bg-amber-600 disabled:opacity-50">🤝</button>
             )}
-            {!editMode && place.kind !== "renewal" && place.label !== "G5" && place.label !== "G12" && (
-              <button type="button" aria-label="점검 완료로 표시" title="점검 완료(G5)로 표시"
-                onClick={() => { void askConfirm(`${workinVendorName(place.name) || place.name}\n점검 완료(G5)로 표시할까요?`, { okLabel: "완료" }).then((ok) => { if (ok) setPlaceLabel(place.id, "G5"); }); }}
-                className="grid w-12 shrink-0 place-items-center border-l border-slate-100 bg-emerald-600 text-[11px] font-black text-white active:bg-emerald-700">완료</button>
-            )}
+            {/* 빠른 색칠 — 목록 행과 같은 G5(점검 완료)·G12(이관) 두 개(2026-10-02: 폰 하단 띠는 '완료' 하나뿐이라 PC와 달랐다). 폰은 잘못 누르기 쉬워 확인창을 거친다 */}
+            {!editMode && QUICK_LABELS.filter((item) => item.code !== place.label).map((item) => (
+              <button key={item.code} type="button" aria-label={`${item.name}(${item.code})으로 표시`} title={`${item.name}(${item.code})으로 표시`}
+                onClick={() => { void askConfirm(`${workinVendorName(place.name) || place.name}\n${item.name}(${item.code})으로 표시할까요?`, { okLabel: item.code }).then((ok) => { if (ok) setPlaceLabel(place.id, item.code); }); }}
+                className="grid w-11 shrink-0 place-items-center border-l border-slate-100 text-[11px] font-black text-white active:brightness-90" style={{ backgroundColor: item.color }}>{item.code}</button>
+            ))}
             {!editMode && (
               <button type="button" aria-label="내 일정에 넣기" title="이 업체를 내 일정에 넣기"
                 onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
