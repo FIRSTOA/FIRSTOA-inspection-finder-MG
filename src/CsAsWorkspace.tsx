@@ -278,6 +278,27 @@ function displayTitleOf(t: AsTicket) {
   const base = (t.calendarTitle || "").trim() || t.vendor || "일정";
   return `${t.assignee ? `${t.assignee}-` : ""}${base}`;
 }
+// 목록 표시용 — 업체명을 앞에 크게, 나머지 설명("★출고준비완료★납품(일반)/퍼스트/운영팀/증설/…")은 뒤에 작게.
+// 폰에서 긴 제목이 잘려 업체명이 안 보이고 한 번 더 눌러 확인해야 했다(2026-10-02). 업체명을 못 찾으면 제목 그대로.
+const NOTE_SEGMENT = /필수|확인서|요청|비고|주의|참고|서명|연락|전화|문의|메모/;
+function titleParts(t: AsTicket): { name: string; rest: string } {
+  const full = ((t.calendarTitle || "").trim() || t.vendor || "일정").replace(/\s+/g, " ").trim();
+  const isLogistics = t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류" || /납품|철수|교체/.test(full);
+  let vendor = (isLogistics ? logisticsTicketInfo(full).vendor : fieldTicketVendor(full).vendor || "").trim();
+  if (!vendor || vendor === full) {
+    // 슬래시 열차(머리말/발주처/영업구분/…/고객사)인데 품목 칸이 없으면 마지막 칸이 고객사 — 비고 같은 칸이면 그 앞
+    const segs = full.split(/\s*\/\s*/).map((x) => x.trim()).filter(Boolean);
+    if (segs.length >= 3) {
+      const tail = [...segs].reverse().find((seg) => /[가-힣]/.test(seg) && !NOTE_SEGMENT.test(seg) && !/^(퍼스트|운영팀|개인영업|법인영업|직송|증설|신규|교체|철수|납품)$/.test(seg)) || "";
+      vendor = tail;
+    } else vendor = "";
+  }
+  if (!vendor || vendor.length < 2 || vendor === full) return { name: full, rest: "" };
+  const idx = full.indexOf(vendor);
+  const rest = (idx >= 0 ? `${full.slice(0, idx)} ${full.slice(idx + vendor.length)}` : full)
+    .replace(/\s*\/\s*/g, " / ").replace(/^[\s/\-–—·,:]+|[\s/\-–—·,:]+$/g, "").replace(/\s+/g, " ").trim();
+  return { name: vendor, rest };
+}
 
 function toDbRow(t: AsTicket) {
   return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", naverUid: t.naverUid || "", calendarTitle: t.calendarTitle || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
@@ -1956,7 +1977,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
                   {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}
                 </div>
-                <div className={`mt-1.5 truncate text-sm font-black leading-snug ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div>
+                <div className="mt-1.5 leading-snug" title={displayTitleOf(ticket)}>
+                  <div className={`truncate text-sm font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`}>{titleParts(ticket).name}</div>
+                  {titleParts(ticket).rest && <div className="truncate text-[11px] font-semibold text-slate-400">{titleParts(ticket).rest}</div>}
+                </div>
                 {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
                 <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
                 <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
@@ -2031,7 +2055,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[560px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><span className="max-w-[560px] truncate" title={displayTitleOf(ticket)}>{titleParts(ticket).name}{titleParts(ticket).rest && <span className="ml-1.5 font-semibold text-slate-400">{titleParts(ticket).rest}</span>}</span>{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
                   </td>
                   <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ticket.issue || ""}>{ticket.issue || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
