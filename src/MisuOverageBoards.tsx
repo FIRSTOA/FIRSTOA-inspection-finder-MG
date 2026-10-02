@@ -21,6 +21,14 @@ const passesTarget = (flags: Map<string, VendorWorkFlags>, vendor: string, targe
   const f = flags.get(vendor.trim());
   return target === "분기점검" ? !!f?.inspection : !!f?.renewal;
 };
+function GradeChips({ all, value, onChange }: { all: string[]; value: string[]; onChange: (v: string[]) => void }) {
+  if (!all.length) return null;
+  return <>
+    <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">등급</span>
+    <button type="button" onClick={() => onChange([])} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${!value.length ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>전체</button>
+    {all.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => onChange(value.includes(name) ? value.filter((g) => g !== name) : [...value, name])} title="여러 등급을 함께 고를 수 있습니다" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.includes(name) ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
+  </>;
+}
 function TargetChips({ value, onChange }: { value: TargetFilter; onChange: (v: TargetFilter) => void }) {
   return <>
     <span className="mx-0.5 h-4 w-px bg-slate-200" />
@@ -171,6 +179,7 @@ export function MisuBoard() {
   const [error, setError] = useState("");
   const [team, setTeam] = useState("전체");
   const [monthsFilter, setMonthsFilter] = useState<"전체" | "1~2개월" | "3개월+">("전체");
+  const [gradeSel, setGradeSel] = useState<string[]>([]); // 등급 중복 선택 — 비면 전체
   const [sort, setSort] = useState<"잔액순" | "개월순" | "최신순">("잔액순");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [query, setQuery] = useState("");
@@ -209,10 +218,12 @@ export function MisuBoard() {
 
   const vendorNames = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "_업체명").trim()).filter(Boolean))), [rows]);
   const targets = useWorkinTargets(vendorNames);
+  const gradeAll = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "등급")).filter(Boolean))).sort(), [rows]);
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     const list = rows.filter((r) => {
       if (team !== "전체" && str(r, "_team") !== team) return false;
+      if (gradeSel.length && !gradeSel.includes(str(r, "등급"))) return false;
       const months = Number(r["_months"]) || 0;
       if (monthsFilter === "1~2개월" && months >= 3) return false;
       if (monthsFilter === "3개월+" && months < 3) return false;
@@ -226,7 +237,7 @@ export function MisuBoard() {
     if (sort === "잔액순") return [...list].sort((a, b) => (balanceOf(b) - balanceOf(a)) * flip);
     if (sort === "개월순") return [...list].sort((a, b) => (monthsOf(b) - monthsOf(a) || balanceOf(b) - balanceOf(a)) * flip);
     return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
-  }, [rows, team, monthsFilter, sort, sortDir, query, targets, target]);
+  }, [rows, team, monthsFilter, sort, sortDir, query, targets, target, gradeSel]);
 
   const totalBalance = filtered.reduce((sum, r) => sum + (Number(r["_balance"]) || 0), 0);
 
@@ -311,6 +322,9 @@ export function MisuBoard() {
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
           {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${monthsFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
           <TargetChips value={target} onChange={setTarget} />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <GradeChips all={gradeAll} value={gradeSel} onChange={setGradeSel} />
           <span className="ml-2 w-8 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
           <span className="flex rounded-full bg-slate-100 p-1">
             {(["잔액순", "개월순", "최신순"] as const).map((name) => <button key={name} type="button" onClick={() => { if (sort === name) setSortDir((d) => (d === "desc" ? "asc" : "desc")); else { setSort(name); setSortDir("desc"); } }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${sort === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{name}{sort === name ? (sortDir === "desc" ? " ↓" : " ↑") : ""}</button>)}
@@ -359,7 +373,7 @@ export function OverageBoard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [team, setTeam] = useState("전체");
-  const [grade, setGrade] = useState("전체");
+  const [gradeSel, setGradeSel] = useState<string[]>([]); // 등급 중복 선택(2026-10-02) — 비면 전체
   const [yearMonth, setYearMonth] = useState("전체");
   const [target, setTarget] = useState<TargetFilter>("전체");
   const [sort, setSort] = useState<"최신순" | "금액순">("최신순");
@@ -388,7 +402,7 @@ export function OverageBoard() {
   }, []);
 
   const yearMonths = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => String(r["_date"] || "").slice(0, 7)).filter(Boolean))).sort().reverse().slice(0, 18)], [rows]);
-  const grades = useMemo(() => ["전체", ...Array.from(new Set(rows.map((r) => str(r, "등급")).filter(Boolean))).sort()], [rows]);
+  const gradeAll = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "등급")).filter(Boolean))).sort(), [rows]);
 
   const vendorNames = useMemo(() => Array.from(new Set(rows.map((r) => str(r, "_업체명").trim()).filter(Boolean))), [rows]);
   const targets = useWorkinTargets(vendorNames);
@@ -396,7 +410,7 @@ export function OverageBoard() {
     const keyword = query.trim().toLowerCase();
     const list = rows.filter((r) => {
       if (team !== "전체" && str(r, "_team") !== team) return false;
-      if (grade !== "전체" && str(r, "등급") !== grade) return false;
+      if (gradeSel.length && !gradeSel.includes(str(r, "등급"))) return false;
       if (yearMonth !== "전체" && String(r["_date"] || "").slice(0, 7) !== yearMonth) return false;
       if (keyword && !str(r, "_업체명").toLowerCase().includes(keyword) && !str(r, "접수내용").toLowerCase().includes(keyword)) return false;
       if (!passesTarget(targets, str(r, "_업체명"), target)) return false;
@@ -405,7 +419,7 @@ export function OverageBoard() {
     const flip = sortDir === "asc" ? -1 : 1;
     if (sort === "금액순") return [...list].sort((a, b) => ((Number(b["_total"]) || 0) - (Number(a["_total"]) || 0)) * flip);
     return [...list].sort((a, b) => String(b["_date"]).localeCompare(String(a["_date"])) * flip);
-  }, [rows, team, grade, yearMonth, sort, sortDir, query, targets, target]);
+  }, [rows, team, gradeSel, yearMonth, sort, sortDir, query, targets, target]);
 
   const totalSum = filtered.reduce((sum, r) => sum + (Number(r["_total"]) || 0), 0);
 
@@ -434,7 +448,9 @@ export function OverageBoard() {
             options={yearMonths.map((name) => ({ value: name, label: name === "전체" ? "전체 년월" : name }))} />
           <span className="mx-0.5 h-4 w-px bg-slate-200" />
           <TargetChips value={target} onChange={setTarget} />
-          {grades.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => setGrade(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${grade === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <GradeChips all={gradeAll} value={gradeSel} onChange={setGradeSel} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">정렬</span>
