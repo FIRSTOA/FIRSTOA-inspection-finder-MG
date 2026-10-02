@@ -291,6 +291,9 @@ export type PhotoAlbumMeta = {
 };
 
 export async function createAlbum(urls: string[], vendor: string, meta: PhotoAlbumMeta = {}): Promise<string> {
+  // 빈 칸이 섞인 앨범은 만들지 않는다 — 구멍(null)이 그대로 저장돼 '사진 없는 앨범'이 되던 사고 방지(2026-10-02)
+  const blanks = Array.from({ length: urls.length }, (_, i) => urls[i]).filter((u) => !u).length;
+  if (blanks) throw new Error(`사진 ${blanks}장의 주소가 비어 있어 앨범을 만들 수 없습니다 — 다시 올려 주세요`);
   const albumId = await rpc<string>("create_photo_album", {
     p_urls: urls,
     p_vendor: vendor,

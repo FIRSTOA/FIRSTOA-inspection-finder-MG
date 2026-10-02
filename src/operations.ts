@@ -66,7 +66,7 @@ export function normalizeLogisticsKind(value: string): LogisticsKind {
 
 export function logisticsKindForEvent(event: ActivityEvent): LogisticsKind {
   const metadataValue = String(event.metadata?.logisticsCategory || "");
-  const sourceValue = event.sourceText?.match(/^구분\s*[:：]\s*(.+)$/m)?.[1] || "";
+  const sourceValue = event.sourceText?.match(/^[^\S\n]*구분[^\S\n]*[:：][^\S\n]*(.+)$/m)?.[1] || "";
   return normalizeLogisticsKind(metadataValue || sourceValue);
 }
 
