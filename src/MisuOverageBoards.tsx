@@ -4,7 +4,8 @@ import { selectAllRows, selectRows } from "./supabase";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 
 // "이 미수·초과 업체가 이번 분기 점검·재계약 대상인가"를 바로 보려고(2026-10-02 요청) — 일정리스트 배지와 같은 기준(vendorFlags, 5분 캐시)
-type TargetFilter = "전체" | "분기점검" | "재계약";
+type TargetSel = { quarter: boolean; renewal: boolean }; // 둘 다 켜면 둘 다 해당하는 업체만
+const NO_TARGET: TargetSel = { quarter: false, renewal: false };
 function useWorkinTargets(names: string[]) {
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const key = names.join("\n");
@@ -16,10 +17,12 @@ function useWorkinTargets(names: string[]) {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps -- names는 key로 비교
   return flags;
 }
-const passesTarget = (flags: Map<string, VendorWorkFlags>, vendor: string, target: TargetFilter) => {
-  if (target === "전체") return true;
+const passesTarget = (flags: Map<string, VendorWorkFlags>, vendor: string, sel: TargetSel) => {
+  if (!sel.quarter && !sel.renewal) return true;
   const f = flags.get(vendor.trim());
-  return target === "분기점검" ? !!f?.inspection : !!f?.renewal;
+  if (sel.quarter && !f?.inspection) return false;
+  if (sel.renewal && !f?.renewal) return false;
+  return true;
 };
 function GradeChips({ all, value, onChange }: { all: string[]; value: string[]; onChange: (v: string[]) => void }) {
   if (!all.length) return null;
@@ -29,10 +32,11 @@ function GradeChips({ all, value, onChange }: { all: string[]; value: string[]; 
     {all.slice(0, 8).map((name) => <button key={name} type="button" onClick={() => onChange(value.includes(name) ? value.filter((g) => g !== name) : [...value, name])} title="여러 등급을 함께 고를 수 있습니다" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.includes(name) ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
   </>;
 }
-function TargetChips({ value, onChange }: { value: TargetFilter; onChange: (v: TargetFilter) => void }) {
+function TargetChips({ value, onChange }: { value: TargetSel; onChange: (v: TargetSel) => void }) {
   return <>
     <span className="mx-0.5 h-4 w-px bg-slate-200" />
-    {(["분기점검", "재계약"] as const).map((name) => <button key={name} type="button" onClick={() => onChange(value === name ? "전체" : name)} title={name === "분기점검" ? "이번 분기 워킨맵 점검 대상 업체만" : "재계약 워킨맵 대상 업체만"} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value === name ? (name === "분기점검" ? "bg-blue-600 text-white" : "bg-rose-600 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{name} 대상</button>)}
+    <button type="button" onClick={() => onChange({ ...value, quarter: !value.quarter })} title="이번 분기 워킨맵 점검 대상 업체만 (재계약과 함께 켜면 둘 다 해당하는 곳만)" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.quarter ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>분기점검 대상</button>
+    <button type="button" onClick={() => onChange({ ...value, renewal: !value.renewal })} title="재계약 워킨맵 대상 업체만 (분기점검과 함께 켜면 둘 다 해당하는 곳만)" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.renewal ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>재계약 대상</button>
   </>;
 }
 function TargetBadges({ f }: { f?: VendorWorkFlags }) {
@@ -186,7 +190,7 @@ export function MisuBoard() {
   const [detail, setDetail] = useState<SheetRecord | null>(null);
   // 관리부가 시트에서 CS체크한 업체만 모아 보는 목록 (misu_cs_checks — GAS 1시간 동기화)
   const [boardView, setBoardView] = useState<"전체" | "CS체크">("전체");
-  const [target, setTarget] = useState<TargetFilter>("전체");
+  const [target, setTarget] = useState<TargetSel>(NO_TARGET);
   // undefined = 불러오는 중(느린 회선에서 0으로 보이던 것 — 2026-09-18) · null = 표 없음/실패 · 배열 = 정상
   const [csChecks, setCsChecks] = useState<CsCheckRow[] | null | undefined>(undefined);
   useEffect(() => {
@@ -338,7 +342,7 @@ export function MisuBoard() {
         <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
           <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
         </div>
-        <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
+        <div className="min-h-[40vh] max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.map((r) => (
             <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
               <span className="flex min-w-0 items-center gap-1"><span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
@@ -375,7 +379,7 @@ export function OverageBoard() {
   const [team, setTeam] = useState("전체");
   const [gradeSel, setGradeSel] = useState<string[]>([]); // 등급 중복 선택(2026-10-02) — 비면 전체
   const [yearMonth, setYearMonth] = useState("전체");
-  const [target, setTarget] = useState<TargetFilter>("전체");
+  const [target, setTarget] = useState<TargetSel>(NO_TARGET);
   const [sort, setSort] = useState<"최신순" | "금액순">("최신순");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [query, setQuery] = useState("");
@@ -466,7 +470,7 @@ export function OverageBoard() {
         <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
           <span>업체명 · 접수내용</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
         </div>
-        <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
+        <div className="min-h-[40vh] max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.slice(0, 300).map((r) => (
             <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
               <span className="min-w-0">
