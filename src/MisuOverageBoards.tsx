@@ -34,7 +34,7 @@ function GradeChips({ all, value, onChange }: { all: string[]; value: string[]; 
 }
 function TargetChips({ value, onChange }: { value: TargetSel; onChange: (v: TargetSel) => void }) {
   return <>
-    <span className="mx-0.5 h-4 w-px bg-slate-200" />
+    <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">대상</span>
     <button type="button" onClick={() => onChange({ ...value, quarter: !value.quarter })} title="이번 분기 워킨맵 점검 대상 업체만 (재계약과 함께 켜면 둘 다 해당하는 곳만)" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.quarter ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>분기점검 대상</button>
     <button type="button" onClick={() => onChange({ ...value, renewal: !value.renewal })} title="재계약 워킨맵 대상 업체만 (분기점검과 함께 켜면 둘 다 해당하는 곳만)" className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${value.renewal ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>재계약 대상</button>
   </>;
@@ -325,6 +325,8 @@ export function MisuBoard() {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="w-8 text-[10px] font-black text-slate-400">조건</span>
           {(["전체", "1~2개월", "3개월+"] as const).map((name) => <button key={name} type="button" onClick={() => setMonthsFilter(name)} className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${monthsFilter === name ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{name}</button>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <TargetChips value={target} onChange={setTarget} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -450,7 +452,8 @@ export function OverageBoard() {
           <span className="w-8 shrink-0 text-[10px] font-black text-slate-400">조건</span>
           <PortalSelect width={110} value={yearMonth} onChange={setYearMonth}
             options={yearMonths.map((name) => ({ value: name, label: name === "전체" ? "전체 년월" : name }))} />
-          <span className="mx-0.5 h-4 w-px bg-slate-200" />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <TargetChips value={target} onChange={setTarget} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
