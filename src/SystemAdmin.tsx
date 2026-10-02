@@ -29,6 +29,7 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 카카오톡 전송이 실제 방 대신 아래 테스트 카톡방으로만 갑니다.", danger: true },
   { key: "FIELD_SHEET_TEST_MODE", label: "시트 테스트 모드", desc: "켜면 시트 기입이 테스트 탭으로만 갑니다.", danger: true },
   { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
+  { key: "SSO_REQUIRED", label: "그룹웨어 로그인 필수", desc: "켜면 그룹웨어 계정으로 로그인한 기기만 FIELD가 열립니다(앨범·설명서 같은 공개 페이지는 예외). 그룹웨어 담당자가 우리 주소를 허용목록에 올려 로그인이 되는 걸 확인한 뒤 켜세요.", danger: true },
 ];
 
 const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기", "IT접수"]; // IT접수|* = 서비스접수 IT 건이 가는 방(2026-09-17)

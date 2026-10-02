@@ -16,6 +16,7 @@ import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
 import { ToastHost, notify } from "./toast";
+import { clearSsoSession, getSsoSession, ssoRequiredCached, startGroupwareLogin } from "./sso";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
 import SelfDevHub from "./SelfDev";
@@ -3158,6 +3159,33 @@ type AuthorPickerProps = {
 //  · 사람: 추가·이름 고치기·다른 소그룹으로 이동·삭제(퇴사 처리 — 과거 기록은 남는다).
 const EXTERNAL_GROUP = "외부 이관";
 type PickerRow = { name: string; member?: MemberRow };
+// 그룹웨어 통합 로그인 줄(2026-10-02) — 로그인하면 작성자가 그룹웨어 이름으로 맞춰진다. 잠금이 켜진 기기에서 로그아웃하면 로그인 문으로 돌아간다
+function SsoRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [session, setSession] = useState(() => getSsoSession());
+  if (!session) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-blue-50/70 px-4 py-2">
+        <div className="min-w-0 text-[11px] font-bold leading-snug text-slate-600">그룹웨어 계정으로 로그인하면 작성자가 자동으로 맞춰집니다 <span className="font-semibold text-slate-400">· 비밀번호는 그룹웨어 화면에서만 입력</span></div>
+        <button type="button" onClick={() => startGroupwareLogin()} className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-blue-700">그룹웨어로 로그인</button>
+      </div>
+    );
+  }
+  const u = session.user;
+  const differs = Boolean(value) && u.name !== value;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/70 px-4 py-2">
+      <div className="min-w-0 text-[11px] font-bold leading-snug text-emerald-800">
+        그룹웨어 로그인: <b>{u.name}</b>{u.department ? ` · ${u.department}` : ""}{u.position ? ` ${u.position}` : ""}
+        {differs && <span className="ml-1 font-black text-amber-700">(지금 작성자 선택과 다름)</span>}
+      </div>
+      <span className="flex shrink-0 items-center gap-1">
+        {differs && <button type="button" onClick={() => onChange(u.name)} className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-50">이 이름으로</button>}
+        <button type="button" onClick={() => { clearSsoSession(); if (ssoRequiredCached()) window.location.reload(); else setSession(null); }} className="rounded-full px-2.5 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-100">로그아웃</button>
+      </span>
+    </div>
+  );
+}
+
 function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerProps & { onClose: () => void }) {
   const members = useMembers();
   const { book } = useAuthorBook();
@@ -3285,6 +3313,7 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
           </div>
           <button type="button" onClick={onClose} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
         </div>
+        <SsoRow value={value} onChange={onChange} />
         {/* 1단: 그룹(부서) */}
         <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
           {[...depts, EXTERNAL_GROUP].map((d) => (

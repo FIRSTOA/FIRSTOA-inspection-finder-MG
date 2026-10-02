@@ -1,8 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
-import AlbumView from './AlbumView.tsx'
+import Boot from './Boot.tsx'
+import { handleSsoCallback, SSO_CALLBACK_PATH, SSO_ERROR_KEY } from './sso'
 
 // 네이버 캘린더 최초 연동: 네이버 로그인 동의 후 ?code=..&state=firstoa 로 돌아오면
 // 코드를 서버(엣지 함수)로 넘겨 토큰 교환·보관까지 자동 처리 — 주소창 복사 불필요
@@ -37,8 +37,20 @@ window.setInterval(() => void checkForNewBuild(), 5 * 60 * 1000)
 // 카톡 사진 링크(?album=id)로 진입하면 앨범 갤러리만 렌더
 const albumId = new URLSearchParams(window.location.search).get('album')
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {albumId ? <AlbumView id={albumId} /> : <App />}
-  </StrictMode>,
-)
+const boot = async () => {
+  const root = document.getElementById('root')!
+  // 그룹웨어에서 돌아온 길(/auth/callback?token=&state=)이면 토큰을 확인해 세션을 만들고 원래 화면으로
+  if (window.location.pathname === SSO_CALLBACK_PATH) root.textContent = '그룹웨어 로그인 확인 중…'
+  const sso = await handleSsoCallback()
+  if (sso) {
+    if (!sso.ok) { try { sessionStorage.setItem(SSO_ERROR_KEY, sso.error) } catch { /* 무시 */ } }
+    window.history.replaceState({}, '', sso.returnTo)
+    root.textContent = ''
+  }
+  createRoot(root).render(
+    <StrictMode>
+      <Boot albumId={albumId} />
+    </StrictMode>,
+  )
+}
+void boot()

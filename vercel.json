@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/auth/callback", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/",
