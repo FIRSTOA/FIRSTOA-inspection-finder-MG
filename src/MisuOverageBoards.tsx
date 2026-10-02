@@ -341,16 +341,16 @@ export function MisuBoard() {
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_64px_100px_70px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_44px_84px_56px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
           <span>업체명</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">지역</span><span className="text-right">개월</span><span className="text-right">잔액</span><span className="text-right">입력일</span>
         </div>
         <div className="min-h-[40vh] max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.map((r) => (
-            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_64px_100px_70px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
-              <span className="flex min-w-0 items-center gap-1"><span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_44px_84px_56px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_70px_120px_80px]">
+              <span className="min-w-0"><span className="block truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><span className="mt-0.5 flex flex-wrap gap-1 empty:hidden"><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span></span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>
               <span className="hidden truncate font-bold text-slate-500 sm:block">{str(r, "지역") || "-"}</span>
-              <span className={`text-right font-black ${(Number(r["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{Number(r["_months"]) ? `${r["_months"]}개월` : "-"}</span>
+              <span className={`text-right font-black ${(Number(r["_months"]) || 0) >= 3 ? "text-rose-600" : "text-slate-600"}`}>{Number(r["_months"]) ? <><span className="sm:hidden">{String(r["_months"])}</span><span className="hidden sm:inline">{String(r["_months"])}개월</span></> : "-"}</span>
               <span className="text-right font-black text-slate-800">{won(Number(r["_balance"]) || 0)}</span>
               <span className="text-right font-bold text-slate-400">{String(r["_date"] || "").slice(2) || "-"}</span>
             </button>
@@ -470,14 +470,15 @@ export function OverageBoard() {
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       {loading && <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
       {!loading && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_110px_80px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_92px_56px] gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-3 text-[11px] font-black text-slate-500 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
           <span>업체명 · 접수내용</span><span className="hidden sm:block">팀</span><span className="hidden sm:block">마감방식</span><span className="text-right">합계</span><span className="text-right">날짜</span>
         </div>
         <div className="min-h-[40vh] max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
           {filtered.slice(0, 300).map((r) => (
-            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_110px_80px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
+            <button key={String(r["id"])} type="button" onClick={() => setDetail(r)} className="grid w-full grid-cols-[minmax(0,1fr)_92px_56px] items-center gap-2 px-4 py-3 text-left text-xs transition hover:bg-blue-50/50 sm:grid-cols-[minmax(0,1fr)_50px_90px_120px_80px]">
               <span className="min-w-0">
-                <span className="flex min-w-0 items-center gap-1"><span className="truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
+                <span className="block truncate text-[13px] font-black text-slate-900">{str(r, "_업체명")}</span>
+                <span className="flex flex-wrap gap-1 empty:hidden"><TargetBadges f={targets.get(str(r, "_업체명").trim())} /></span>
                 {str(r, "접수내용") && <span className="block truncate text-[11px] font-semibold text-slate-500">{str(r, "접수내용")}</span>}
               </span>
               <span className="hidden font-bold text-slate-500 sm:block">{str(r, "_team") ? `${str(r, "_team")}팀` : "-"}</span>
