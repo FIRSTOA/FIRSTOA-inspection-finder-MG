@@ -1876,14 +1876,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </button>
                   );
                 })}
-                {/* 중간보고 — 12시·14시 카톡 보고 자동 생성 */}
-                <button type="button" onClick={() => openMidReport()}
-                  className="ml-auto shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
-                {/* 익일스케줄 보고 — 내일 일정 전부(미배정 포함), 퇴근 전 카톡 보고 */}
-                <button type="button" onClick={() => openMidReport("next")}
-                  className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">🌙 익일스케줄</button>
-                <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
-                  {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
+                {/* 중간보고(12시·14시)·익일스케줄(퇴근 전) 보고 단추는 한 묶음으로 — 폰에서 줄이 접혀도 둘이 같은 줄에 남는다(2026-10-02) */}
+                <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <button type="button" onClick={() => openMidReport()}
+                    className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
+                  <button type="button" onClick={() => openMidReport("next")}
+                    className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">🌙 익일스케줄</button>
+                  <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
+                    {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
+                  </span>
                 </span>
               </div>
               </>
