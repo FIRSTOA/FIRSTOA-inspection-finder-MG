@@ -70,7 +70,7 @@ function DetailModal({ row, title, onClose }: { row: ItRow; title: string; onClo
 }
 
 export default function ItLearningHistory({ author }: { author: string }) {
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("original");
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("integrated"); // 시트를 바로 읽으니 첫 화면은 지식 DB(원본 화면은 시트 링크 카드)
   const [view, setView] = useState<View>("knowledge");
   const [endpoint, setEndpoint] = useState(getItTechApiUrl());
   const [endpointDraft, setEndpointDraft] = useState(getItTechApiUrl());
