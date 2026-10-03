@@ -34,6 +34,8 @@ describe("상세 카드 — 글 쪼개기", () => {
     expect(splitSteps("1. 전원 분리 2. 메모리 재장착 3. 부팅 확인")).toEqual(["전원 분리", "메모리 재장착", "부팅 확인"]);
     expect(splitSteps("- 먼지 제거\n- 팬 RPM 확인")).toEqual(["먼지 제거", "팬 RPM 확인"]);
     expect(splitSteps("그냥 한 문장입니다.")).toEqual(["그냥 한 문장입니다."]);
+    expect(splitSteps("점검 마무리 인사에 이어 붙일 것 / '온 김에'가 부담을 없애준다")).toEqual(["점검 마무리 인사에 이어 붙일 것", "'온 김에'가 부담을 없애준다"]);
+    expect(splitSteps("윈도우 8/10 기능 변경")).toEqual(["윈도우 8/10 기능 변경"]);
   });
   it("키워드 칩과 설정 경로 조각", () => {
     expect(splitChips("B / 시리얼 SN1 / 도착 10:00")).toEqual(["B", "시리얼 SN1", "도착 10:00"]);

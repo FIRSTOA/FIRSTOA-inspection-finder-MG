@@ -5,6 +5,7 @@ export function splitSteps(text: string): string[] {
   const t = text.trim();
   if (!t) return [];
   if (t.includes("→")) return t.split(/\s*→\s*/).map((s) => s.trim()).filter(Boolean);
+  if (/\s\/\s/.test(t) && !t.includes("\n")) return t.split(/\s+\/\s+/).map((s) => s.trim()).filter(Boolean); // "A / B" (8/10처럼 붙은 빗금은 그대로)
   const lines = t.split(/\n+/).map((s) => s.trim()).filter(Boolean);
   if (lines.length > 1 && lines.filter((l) => /^(\d+[.)]|[-•·])\s*/.test(l)).length >= Math.ceil(lines.length / 2)) return lines.map((l) => l.replace(/^(\d+[.)]|[-•·])\s*/, ""));
   const numbered = t.split(/\s(?=\d+[.)]\s)/).map((s) => s.replace(/^\d+[.)]\s*/, "").trim()).filter(Boolean);

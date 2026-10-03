@@ -40,7 +40,7 @@ function Label({ children }: { children: ReactNode }) {
 
 function Hero({ tone, icon, chips, title, sub }: { tone: Tone; icon: ReactNode; chips: string[]; title: string; sub?: string }) {
   const t = TONE[tone];
-  return <div className={`-mx-4 -mt-4 mb-4 bg-gradient-to-br ${t.hero} px-5 py-4 text-white sm:-mx-6 sm:-mt-6 sm:px-6`}>
+  return <div className={`-mx-5 -mt-5 mb-4 bg-gradient-to-br ${t.hero} px-5 py-4 text-white`}>
     <div className="flex flex-wrap items-center gap-1.5">
       <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${t.chip}`}>{icon}</span>
       {chips.filter(Boolean).map((c, i) => <span key={i} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${t.chip}`}>{c}</span>)}
