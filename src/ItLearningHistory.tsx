@@ -15,15 +15,20 @@ import {
 } from "lucide-react";
 import FormModal from "./FormModal";
 import { getItTechApiUrl, itTechApi, saveItTechApiUrl, type ItRow, type QuizQuestion, valueByPrefix } from "./itTechApi";
+import { asItRows, buildQuiz, getTabRows, IT_SHEET_URL, IT_TABS, type ItTabKey, searchRows, sheetTabUrl } from "./itSheet";
 
-type View = "knowledge" | "history" | "inventory" | "quiz" | "register";
+// 2026-10-03: 조회·퀴즈는 Apps Script 없이 공개 구글 시트를 바로 읽는다(itSheet.ts). 재고 탭은 시트에 없어 뺐고 영업상담·교육자료 탭을 더했다.
+type View = "knowledge" | "history" | "sales" | "links" | "quiz" | "register";
+const LIST_VIEWS: View[] = ["knowledge", "history", "sales", "links"];
+const isListView = (v: View): v is ItTabKey => LIST_VIEWS.includes(v);
 type DisplayMode = "original" | "integrated";
 type Notice = { kind: "success" | "error"; text: string } | null;
 
 const VIEWS: Array<{ key: View; label: string; icon: typeof Search }> = [
   { key: "knowledge", label: "지식 DB", icon: BookOpen },
   { key: "history", label: "처리이력", icon: ClipboardList },
-  { key: "inventory", label: "IT 재고", icon: Boxes },
+  { key: "sales", label: "영업상담", icon: Boxes },
+  { key: "links", label: "교육자료", icon: BookOpen },
   { key: "quiz", label: "기술 퀴즈", icon: GraduationCap },
   { key: "register", label: "AS 등록", icon: Plus },
 ];
@@ -69,7 +74,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
   const [view, setView] = useState<View>("knowledge");
   const [endpoint, setEndpoint] = useState(getItTechApiUrl());
   const [endpointDraft, setEndpointDraft] = useState(getItTechApiUrl());
-  const [connectionOpen, setConnectionOpen] = useState(!getItTechApiUrl());
+  const [connectionOpen, setConnectionOpen] = useState(false); // Apps Script 주소는 선택 사항(원본 화면·AS 등록용)
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState("");
@@ -93,15 +98,6 @@ export default function ItLearningHistory({ author }: { author: string }) {
     window.setTimeout(() => setNotice(null), 3200);
   };
 
-  // Apps Script 응답이 느려서(호출마다 2~8초) 마지막 결과를 기기에 저장해 두고
-  // 재방문 시 즉시 보여준 뒤 뒤에서 최신본으로 갈아끼운다.
-  const cacheKey = (target: string, q: string) => `it_tech_cache_v1:${target}|${q.trim()}`;
-  const readCache = (target: string, q: string): ItRow[] | null => {
-    try { const raw = localStorage.getItem(cacheKey(target, q)); return raw ? (JSON.parse(raw).rows as ItRow[]) : null; } catch { return null; }
-  };
-  const writeCache = (target: string, q: string, rows: ItRow[]) => {
-    try { const json = JSON.stringify({ t: Date.now(), rows }); if (json.length < 2_000_000) localStorage.setItem(cacheKey(target, q), json); } catch { /* 용량 초과 등은 무시 */ }
-  };
   const runSeq = useRef(0);
   // 최근 검색어 (기기에 저장, 최대 8개) — 자주 찾는 부품·업체를 한 번에 재검색
   const [recentQueries, setRecentQueries] = useState<string[]>(() => {
@@ -117,59 +113,53 @@ export default function ItLearningHistory({ author }: { author: string }) {
     });
   };
   const run = async (target: View = view, searchQuery = query) => {
-    if (!connected) { setConnectionOpen(true); return; }
+    if (!isListView(target)) return;
     const seq = ++runSeq.current;
-    const cached = target === "knowledge" || target === "history" || target === "inventory" ? readCache(target, searchQuery) : null;
-    if (cached) setRows(cached);
-    setLoading(!cached);
+    setLoading(true);
     try {
-      const data = target === "knowledge" ? await itTechApi.knowledge(searchQuery)
-        : target === "history" ? await itTechApi.history(searchQuery)
-          : await itTechApi.inventory(searchQuery);
+      // 기기에 저장된 지난 결과가 있으면 0초에 먼저 보여주고, 새로 받은 시트로 조용히 갈아 끼운다
+      const { rows: base, stale } = await getTabRows(target, (fresh) => { if (seq === runSeq.current) setRows(asItRows(searchRows(fresh, searchQuery))); });
       if (seq !== runSeq.current) return; // 그 사이 다른 탭/검색으로 넘어감
-      const list = Array.isArray(data) ? data : [];
+      const list = asItRows(searchRows(base, searchQuery));
       setRows(list);
-      writeCache(target, searchQuery, list);
       if (searchQuery.trim() && list.length) rememberQuery(searchQuery);
+      if (stale && !list.length && searchQuery.trim()) { /* 새 시트가 오면 onUpdate가 다시 채운다 */ }
     } catch (error) {
-      if (seq === runSeq.current && !cached) notify("error", error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
+      if (seq === runSeq.current) notify("error", error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
     } finally { if (seq === runSeq.current) setLoading(false); }
   };
 
   useEffect(() => {
-    if (!endpoint) return;
     void run("knowledge", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint]);
+  }, []);
 
   const switchView = (next: View) => {
     setView(next);
     setQuery("");
     setRows([]);
     setSelected(null);
-    if ((next === "knowledge" || next === "history" || next === "inventory") && connected) void run(next, "");
+    if (isListView(next)) void run(next, "");
   };
 
   const saveEndpoint = async () => {
     const next = saveItTechApiUrl(endpointDraft);
     setEndpoint(next);
-    if (!next) { notify("error", "Apps Script 배포 주소를 입력해 주세요."); return; }
+    if (!next) { notify("success", "Apps Script 주소를 비웠습니다. 조회·퀴즈는 시트에서 바로 읽으니 그대로 쓰면 됩니다."); setConnectionOpen(false); return; }
     setLoading(true);
     try {
       await itTechApi.ping();
       setConnectionOpen(false);
-      notify("success", "기존 PC DB와 연결했습니다.");
+      notify("success", "Apps Script와 연결했습니다 — 원본 화면·AS 등록을 쓸 수 있습니다.");
     } catch (error) { notify("error", error instanceof Error ? error.message : "연결에 실패했습니다."); }
     finally { setLoading(false); }
   };
 
   const startQuiz = async () => {
-    if (!connected) { setConnectionOpen(true); return; }
     setLoading(true);
     try {
-      const data = await itTechApi.quiz(60);
-      const filtered = quizLevel === "전체" ? data : data.filter((item) => String(item.난이도) === quizLevel);
-      const picked = [...filtered].sort(() => Math.random() - 0.5).slice(0, quizCount);
+      const { rows: base } = await getTabRows("knowledge"); // IT기술력DB의 퀴즈문제·퀴즈답으로 4지선다를 만든다
+      const picked = buildQuiz(base, quizCount, quizLevel);
       if (!picked.length) { notify("error", "선택한 레벨의 문제가 없습니다."); return; }
       setQuizPool(picked); setQuizIndex(0); setQuizScore(0); setQuizChoices([]); setQuizSubmitted(false); setWrongNotes([]);
     } catch (error) { notify("error", error instanceof Error ? error.message : "퀴즈를 불러오지 못했습니다."); }
@@ -197,7 +187,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
 
   const submitForm = async () => {
     if (!String(form.증상 || "").trim()) { notify("error", "증상은 필수입니다."); return; }
-    if (!connected) { setConnectionOpen(true); return; }
+    if (!connected) { notify("error", "시트에 쓰려면 Apps Script 주소가 필요합니다(오른쪽 위 연결 버튼)."); setConnectionOpen(true); return; }
     setLoading(true);
     try {
       const result = await itTechApi.addRecord(form);
@@ -207,7 +197,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
     finally { setLoading(false); }
   };
 
-  const titleFor = (row: ItRow) => String(row.제목 || row.업체명 || valueByPrefix(row, "부품명", "부품") || row.자산번호 || "상세 정보");
+  const titleFor = (row: ItRow) => String(row.제목 || row.항목명 || row.업체명 || valueByPrefix(row, "부품명", "부품") || row.자산번호 || "상세 정보");
 
   return <div className="space-y-4">
     {notice && <div className={`fixed right-4 top-20 z-[5000] max-w-sm rounded-lg px-4 py-3 text-sm font-bold text-white shadow-xl ${notice.kind === "success" ? "bg-emerald-600" : "bg-rose-600"}`}>{notice.text}</div>}
@@ -216,9 +206,9 @@ export default function ItLearningHistory({ author }: { author: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
         <div>
           <h2 className="text-base font-black text-white lg:text-lg">IT 학습·처리이력</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기존 PC DB와 연결해 지식·처리이력·재고를 검색하고 퀴즈로 점검합니다.</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">퍼스트전산 PC DB 시트를 바로 읽습니다 — 지식·처리이력·영업상담·교육자료 검색과 기술 퀴즈. 설정 없이 바로 됩니다.</p>
         </div>
-        <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-black transition ${connected ? "bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25" : "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25"}`}><Settings2 size={15} />{connected ? "DB 연결됨" : "DB 연결 필요"}</button>
+        <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-black transition ${connected ? "bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25" : "bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"}`}><Settings2 size={15} />{connected ? "시트 + Apps Script 연결" : "시트 직접 연결"}</button>
       </div>
       <div className="flex overflow-x-auto">
         <button type="button" onClick={() => setDisplayMode("original")}
@@ -229,18 +219,20 @@ export default function ItLearningHistory({ author }: { author: string }) {
         ))}
       </div>
     </section>
-    {connectionOpen && <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row"><input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="Apps Script 웹 앱 /exec 주소" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => void saveEndpoint()} className="h-10 rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 text-sm font-black text-white">연결 확인</button></div><p className="mx-auto mt-2 max-w-3xl text-[11px] font-semibold text-slate-400">기존 PC DB Apps Script에 API 어댑터를 적용한 뒤 배포 주소를 한 번만 입력합니다.</p></section>}
+    {connectionOpen && <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row"><input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="(선택) Apps Script 웹 앱 /exec 주소 — 원본 화면·AS 등록용" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => void saveEndpoint()} className="h-10 rounded-full bg-slate-900 transition hover:bg-slate-800 px-4 text-sm font-black text-white">연결 확인</button></div><p className="mx-auto mt-2 max-w-3xl text-[11px] font-semibold text-slate-400">조회·퀴즈는 이 주소 없이 구글 시트를 바로 읽습니다. Apps Script 주소는 <b>원본 화면</b>과 <b>AS 등록(시트에 쓰기)</b>에만 쓰입니다 — 비워 두어도 됩니다.</p></section>}
 
     {displayMode === "original" && (connected ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <iframe title="퍼스트전산 PC DB 원본" src={endpoint} className="block h-[calc(100dvh-190px)] min-h-[680px] w-full border-0 bg-white" allow="clipboard-read; clipboard-write" />
-    </section> : <section className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-14 text-center shadow-sm">
-      <Settings2 size={30} className="mx-auto text-amber-600" />
-      <h3 className="mt-3 text-base font-black text-slate-900">원본 PC DB 연결이 필요합니다</h3>
-      <p className="mt-1 text-sm font-semibold text-slate-600">상단의 DB 연결 필요 버튼을 눌러 Apps Script 웹 앱 주소를 입력하세요.</p>
+    </section> : <section className="rounded-xl border border-slate-200 bg-white px-5 py-10 text-center shadow-sm">
+      <Database size={30} className="mx-auto text-blue-600" />
+      <h3 className="mt-3 text-base font-black text-slate-900">원본은 구글 시트입니다</h3>
+      <p className="mt-1 text-sm font-semibold text-slate-600">검색·퀴즈는 왼쪽 탭에서 바로 되고, 표 그대로 보거나 고치려면 시트를 엽니다.</p>
+      <a href={IT_SHEET_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex h-11 items-center rounded-full bg-blue-600 px-6 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">시트 열기 ↗</a>
+      <div className="mt-4 flex flex-wrap justify-center gap-1.5">{(Object.keys(IT_TABS) as ItTabKey[]).map((k) => <a key={k} href={sheetTabUrl(k)} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-50">{IT_TABS[k].name}</a>)}</div>
     </section>)}
 
-    {displayMode === "integrated" && (view === "knowledge" || view === "history" || view === "inventory") && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="bg-[#151A23] p-3.5"><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={view === "knowledge" ? "부품·증상·카테고리 검색" : view === "history" ? "업체명 또는 자산기번 검색" : "자산기번·CPU·메모리·사양 검색"} />
+    {displayMode === "integrated" && isListView(view) && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="bg-[#151A23] p-3.5"><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={view === "knowledge" ? "부품·증상·카테고리 검색" : view === "sales" ? "상황·멘트·항목 검색" : view === "links" ? "교육자료 검색" : view === "history" ? "업체명 또는 자산기번 검색" : "자산기번·CPU·메모리·사양 검색"} />
         {recentQueries.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1">
           <span className="text-[10px] font-black text-slate-500">최근</span>
           {recentQueries.map((item) => (
@@ -252,11 +244,12 @@ export default function ItLearningHistory({ author }: { author: string }) {
         <span className="tabular-nums">{loading ? "불러오는 중…" : `검색 결과 ${rows.length}건`}</span>
         {query && <button type="button" onClick={() => { setQuery(""); void run(view, ""); }} className="font-black text-blue-600">전체 보기</button>}
       </div>
-      {loading ? <div className="flex items-center justify-center py-20"><LoaderCircle className="animate-spin text-blue-600" /></div> : rows.length === 0 ? <Empty text={connected ? "검색 결과가 없습니다." : "DB를 연결하면 기존 자료를 확인할 수 있습니다."} /> : <div className="divide-y divide-slate-100">{rows.map((row, index) => {
+      {loading ? <div className="flex items-center justify-center py-20"><LoaderCircle className="animate-spin text-blue-600" /></div> : rows.length === 0 ? <Empty text="검색 결과가 없습니다." /> : <div className="divide-y divide-slate-100">{rows.map((row, index) => {
         const part = valueByPrefix(row, "부품명", "부품");
-        const title = view === "knowledge" ? part || "IT 지식" : view === "history" ? String(row.제목 || row.업체명 || "처리이력") : String(row.자산번호 || row.자산기번 || "재고 항목");
-        const summary = view === "knowledge" ? valueByPrefix(row, "설명", "AI설명", "증상") : view === "history" ? String(row.증상 || row.조치 || "") : [row.CPU, row.메모리, row.SSD, row.모델명].filter(Boolean).join(" · ");
-        return <button key={String(row.ID || row.id || index)} type="button" onClick={() => setSelected(row)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"><span className="flex h-9 min-w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 px-2 text-[10px] font-black text-slate-500">{view === "knowledge" ? String(row.카테고리 || "IT").slice(0, 4) : view === "history" ? String(row.분류 || "이력").slice(0, 4) : String(row._출처시트 || "재고").slice(0, 4)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-900">{title}</span><span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{summary || "세부 내용을 확인하세요."}</span><span className="mt-0.5 block text-[11px] font-semibold text-slate-400">{String(row.업체명 || row.제조사 || row.등록일 || "")}</span></span><ChevronRight size={17} className="text-slate-300" /></button>;
+        const title = view === "knowledge" ? part || "IT 지식" : view === "history" ? String(row.제목 || row.업체명 || "처리이력") : view === "sales" ? String(row.항목명 || "상담") : String(row.제목 || row.분류 || "교육자료");
+        const summary = view === "knowledge" ? valueByPrefix(row, "설명", "AI설명", "증상") : view === "history" ? String(row.증상 || row.조치 || "") : view === "sales" ? valueByPrefix(row, "업무특성", "고객 공감") : [row.갱신 ? `갱신 ${row.갱신}` : "", row.문항수 ? `${row.문항수}장` : ""].filter(Boolean).join(" · ");
+        if (view === "links") return <a key={String(row.링크 || index)} href={String(row.링크 || "#")} target="_blank" rel="noreferrer" className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"><span className="flex h-9 min-w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 px-2 text-[10px] font-black text-slate-500">{String(row.분류 || "자료").slice(0, 5)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-900">{title}</span><span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{summary || "열어 보기"}</span></span><ChevronRight size={17} className="text-slate-300" /></a>;
+        return <button key={String(row.ID || row.id || index)} type="button" onClick={() => setSelected(row)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"><span className="flex h-9 min-w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 px-2 text-[10px] font-black text-slate-500">{view === "knowledge" ? String(row.카테고리 || "IT").slice(0, 4) : view === "history" ? String(row.분류 || "이력").slice(0, 4) : String(row.구분 || "상담").slice(0, 4)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-900">{title}</span><span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{summary || "세부 내용을 확인하세요."}</span><span className="mt-0.5 block text-[11px] font-semibold text-slate-400">{String(row.업체명 || row.제조사 || row.등록일 || "")}</span></span><ChevronRight size={17} className="text-slate-300" /></button>;
       })}</div>}
     </section>}
 
@@ -266,7 +259,13 @@ export default function ItLearningHistory({ author }: { author: string }) {
       : currentQuiz && <div className="mx-auto max-w-2xl"><div className="flex items-center justify-between text-xs font-black tabular-nums text-slate-400"><span>{quizIndex + 1}/{quizPool.length}</span><span>점수 {quizScore}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${((quizIndex + (quizSubmitted ? 1 : 0)) / Math.max(1, quizPool.length)) * 100}%` }} /></div><div className="mt-3 rounded-lg bg-slate-50 p-4"><div className="text-xs font-black text-blue-600">{currentQuiz.카테고리} · Lv.{currentQuiz.난이도 || "-"}</div><h3 className="mt-2 text-lg font-black leading-7 text-slate-950">{currentQuiz.문제}</h3>{currentQuiz.isMulti && <div className="mt-2 text-xs font-bold text-amber-700">정답 2개를 선택하세요.</div>}</div><div className="mt-3 grid gap-2">{currentQuiz.보기.map((choice) => { const answer = currentQuiz.isMulti ? currentQuiz.multiAnswer || [] : [currentQuiz.정답]; const selectedChoice = quizChoices.includes(choice); const tone = quizSubmitted ? answer.includes(choice) ? "border-emerald-500 bg-emerald-50 text-emerald-800" : selectedChoice ? "border-rose-400 bg-rose-50 text-rose-800" : "border-slate-200 text-slate-400" : selectedChoice ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"; return <button key={choice} type="button" disabled={quizSubmitted} onClick={() => answerQuiz(choice)} className={`min-h-12 rounded-lg border px-4 py-3 text-left text-sm font-bold ${tone}`}>{choice}</button>; })}</div>{quizSubmitted && <div className="mt-3 space-y-2">{currentQuiz.AI해설 && <div className="rounded-lg bg-violet-50 p-3 text-sm font-semibold leading-6 text-violet-900">{currentQuiz.AI해설}</div>}{currentQuiz.주의사항 && <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900"><CircleAlert size={16} className="mr-1 inline" />{currentQuiz.주의사항}</div>}<button type="button" onClick={nextQuiz} className="h-11 w-full rounded-full bg-slate-900 text-sm font-black text-white transition hover:bg-slate-800">다음 문제</button></div>}</div>}
     </section>}
 
-    {displayMode === "integrated" && view === "register" && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-4"><h3 className="text-base font-black text-slate-950 lg:text-lg">IT AS 처리이력 등록</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 처리 내용을 PC DB에 바로 누적합니다. 증상만 필수입니다.</p></div><div className="grid gap-3 sm:grid-cols-2">{Object.keys(EMPTY_FORM).map((key) => { const long = ["증상","처리내용","특이사항"].includes(key); return <label key={key} className={long ? "sm:col-span-2" : ""}><span className="mb-1 block text-xs font-bold text-slate-500">{key}{key === "증상" && <b className="text-rose-500"> *</b>}</span>{long ? <textarea value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} rows={3} className="w-full resize-y rounded-lg border border-slate-300 p-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /> : key === "구분" || key === "레벨" ? <select value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{(key === "구분" ? ["AS","설치","점검","기타"] : ["","1","2","3"]).map((option) => <option key={option} value={option}>{option || "선택"}</option>)}</select> : <input value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-300 px-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}</label>; })}</div><button type="button" onClick={() => void submitForm()} disabled={loading} className="mt-5 h-12 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">처리이력 등록</button></section>}
+    {displayMode === "integrated" && view === "register" && !connected && <section className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-10 text-center shadow-sm">
+      <CircleAlert size={28} className="mx-auto text-amber-600" />
+      <h3 className="mt-3 text-base font-black text-slate-900">시트에 바로 쓰는 통로가 아직 없습니다</h3>
+      <p className="mx-auto mt-1 max-w-md text-sm font-semibold text-slate-600">읽기는 공개 시트로 바로 되지만, 쓰기는 시트 쪽 Apps Script가 있어야 합니다. 그때까지는 <b>PC DB 시트에 직접</b> 적거나, 현장 AS는 평소대로 AS 보고로 남겨 주세요.</p>
+      <div className="mt-5 flex flex-wrap justify-center gap-2"><a href={sheetTabUrl("history")} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center rounded-full bg-slate-900 px-5 text-sm font-black text-white transition hover:bg-slate-800">PC DB 시트 열기 ↗</a><button type="button" onClick={() => setConnectionOpen(true)} className="inline-flex h-10 items-center rounded-full border border-slate-300 bg-white px-4 text-sm font-black text-slate-600 hover:bg-slate-50">Apps Script 주소 넣기</button></div>
+    </section>}
+    {displayMode === "integrated" && view === "register" && connected && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-4"><h3 className="text-base font-black text-slate-950 lg:text-lg">IT AS 처리이력 등록</h3><p className="mt-0.5 text-[11px] font-semibold text-slate-400">현장 처리 내용을 PC DB에 바로 누적합니다. 증상만 필수입니다.</p></div><div className="grid gap-3 sm:grid-cols-2">{Object.keys(EMPTY_FORM).map((key) => { const long = ["증상","처리내용","특이사항"].includes(key); return <label key={key} className={long ? "sm:col-span-2" : ""}><span className="mb-1 block text-xs font-bold text-slate-500">{key}{key === "증상" && <b className="text-rose-500"> *</b>}</span>{long ? <textarea value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} rows={3} className="w-full resize-y rounded-lg border border-slate-300 p-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /> : key === "구분" || key === "레벨" ? <select value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{(key === "구분" ? ["AS","설치","점검","기타"] : ["","1","2","3"]).map((option) => <option key={option} value={option}>{option || "선택"}</option>)}</select> : <input value={String(form[key] || "")} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-300 px-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}</label>; })}</div><button type="button" onClick={() => void submitForm()} disabled={loading} className="mt-5 h-12 w-full rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 text-sm font-black text-white disabled:bg-slate-300">처리이력 등록</button></section>}
 
     {displayMode === "integrated" && selected && <DetailModal row={selected} title={titleFor(selected)} onClose={() => setSelected(null)} />}
   </div>;
