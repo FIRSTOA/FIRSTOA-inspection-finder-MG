@@ -1,9 +1,8 @@
 /**
- * IT 학습·처리이력 — 퍼스트전산 PC DB 구글 시트 읽기(2026-10-03).
+ * IT 학습·처리이력 — IT파트가 관리하는 PC DB 구글 시트 읽기(2026-10-03).
  *
- *  본 저장소는 Supabase(it_rows, itStore.ts)이고, 이 모듈은 두 가지 일을 한다.
- *   1) [시트에서 가져오기] — 시트 네 탭을 CSV로 읽어 Supabase에 넣는 원천
- *   2) Supabase 표가 아직 없을 때의 임시 읽기(설정 없이 공개 시트를 바로 읽음, CORS 허용 확인)
+ *  이 시트와 Apps Script는 IT 담당자 소유다. FIELD는 '보는 창'이라 공개 시트를 CSV로 그대로 읽기만 하고(설정 없음, CORS 허용 확인)
+ *  우리 DB로 복사하지 않는다. 쓰기(AS 등록)는 담당자의 Apps Script(itTechApi.ts)로만 보낸다.
  *  시트는 '링크가 있는 모든 사용자 보기'여야 한다. 탭(gid)이 바뀌면 여기만 고친다. 재고 탭은 시트에 없다.
  */
 export type ItRow = Record<string, unknown>;
