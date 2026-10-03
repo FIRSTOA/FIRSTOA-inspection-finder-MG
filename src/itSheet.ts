@@ -82,27 +82,38 @@ function shuffle<T>(list: T[], rand: () => number): T[] {
   return a;
 }
 
+/** 겹치는 낱말을 세기 위한 토막(2글자 이상, 한글·영문·숫자) */
+const quizTokens = (r: SheetRow) => new Set(
+  `${r.퀴즈문제 || ""} ${r["부품명/항목"] || ""} ${r.카테고리 || ""} ${r.설명 || ""}`.toLowerCase().split(/[^0-9a-z가-힣]+/).filter((t) => t.length >= 2),
+);
+
 /**
  * IT기술력DB 줄(퀴즈문제·퀴즈답·난이도)로 4지선다를 만든다.
- *  보기 = 정답 + 다른 줄의 답 3개(같은 카테고리 우선, 중복 답 제외). 답이 모자라면 보기가 4개보다 적을 수 있다.
+ *  보기 = 정답 + 다른 줄의 답 3개. 오답은 '문제와 낱말이 많이 겹치는 줄'(같은 주제)에서 먼저 고른다 — 카테고리가 비어 있는 줄이 211개라
+ *  카테고리만으로 고르면 "공개키 암호화" 문제에 "흰주황" 같은 보기가 섞였다(2026-10-03). 같은 답·너무 길이가 다른 답은 뒤로 민다.
  */
 export function buildQuiz(rows: SheetRow[], count: number, level: string = "전체", rand: () => number = Math.random): QuizQuestion[] {
   const pool = rows.filter((r) => (r.퀴즈문제 || "").trim() && (r.퀴즈답 || "").trim());
   const leveled = level === "전체" ? pool : pool.filter((r) => String(r.난이도 || "").trim() === level);
   const picked = shuffle(leveled, rand).slice(0, Math.max(1, count));
+  const tokenCache = new Map<SheetRow, Set<string>>();
+  const tokensOf = (r: SheetRow) => { let t = tokenCache.get(r); if (!t) { t = quizTokens(r); tokenCache.set(r, t); } return t; };
   return picked.map((r) => {
     const answer = r.퀴즈답.trim();
-    const others = pool.filter((o) => o !== r && o.퀴즈답.trim() && o.퀴즈답.trim() !== answer);
-    const same = shuffle(others.filter((o) => o.카테고리 === r.카테고리), rand);
-    const rest = shuffle(others.filter((o) => o.카테고리 !== r.카테고리), rand);
+    const mine = tokensOf(r);
+    const scored = shuffle(pool.filter((o) => o !== r && o.퀴즈답.trim() && o.퀴즈답.trim() !== answer), rand).map((o) => {
+      let overlap = 0; tokensOf(o).forEach((t) => { if (mine.has(t)) overlap++; });
+      const sameCat = r.카테고리 && o.카테고리 === r.카테고리 ? 1 : 0;
+      const lenGap = Math.abs(o.퀴즈답.trim().length - answer.length);
+      return { a: o.퀴즈답.trim(), score: overlap * 3 + sameCat * 2 - Math.min(3, lenGap / 8) };
+    }).sort((x, y) => y.score - x.score);
     const choices: string[] = [];
-    for (const o of [...same, ...rest]) {
-      const a = o.퀴즈답.trim();
+    for (const { a } of scored) {
       if (!choices.includes(a)) choices.push(a);
       if (choices.length >= 3) break;
     }
     return {
-      id: r.ID, 카테고리: r.카테고리 || "", 부품명: r["부품명/항목"] || "", 문제: r.퀴즈문제.trim(), 정답: answer,
+      id: r.ID, 카테고리: r.카테고리 || r["부품명/항목"] || "IT", 부품명: r["부품명/항목"] || "", 문제: r.퀴즈문제.trim(), 정답: answer,
       보기: shuffle([answer, ...choices], rand), 난이도: r.난이도 || "", 설명: r.설명 || "", 조치방법: r.조치방법 || "",
       AI해설: r.AI해설 || r.AI설명 || "", 소요시간: r.소요시간 || "", 주의사항: r.주의사항 || "",
     };
