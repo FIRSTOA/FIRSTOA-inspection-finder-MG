@@ -1,18 +1,41 @@
 /**
- * IT 학습·처리이력 — 퍼스트전산 PC DB 구글 시트를 '설정 없이' 바로 읽는다(2026-10-03).
+ * IT 학습·처리이력 — 퍼스트전산 PC DB 구글 시트 읽기(2026-10-03).
  *
- *  예전엔 시트 쪽 Apps Script(API 어댑터)를 배포하고 그 /exec 주소를 기기마다 넣어야 했다.
- *  시트가 '링크가 있는 모든 사용자 보기'로 공개돼 있어 CSV 내보내기 주소를 브라우저가 바로 읽을 수 있고(CORS 허용 확인),
- *  한 번 부르는 데 2~8초 걸리던 Apps Script보다 빠르다. 쓰기(AS 등록)만은 여전히 Apps Script 주소가 있어야 한다.
- *
- *  탭(gid)은 시트 구조가 바뀌면 여기만 고친다. 재고 탭은 시트에 없어 화면에서 뺐다.
+ *  본 저장소는 Supabase(it_rows, itStore.ts)이고, 이 모듈은 두 가지 일을 한다.
+ *   1) [시트에서 가져오기] — 시트 네 탭을 CSV로 읽어 Supabase에 넣는 원천
+ *   2) Supabase 표가 아직 없을 때의 임시 읽기(설정 없이 공개 시트를 바로 읽음, CORS 허용 확인)
+ *  시트는 '링크가 있는 모든 사용자 보기'여야 한다. 탭(gid)이 바뀌면 여기만 고친다. 재고 탭은 시트에 없다.
  */
-import type { ItRow, QuizQuestion } from "./itTechApi";
+export type ItRow = Record<string, unknown>;
+
+export type QuizQuestion = {
+  id?: string | number;
+  카테고리: string;
+  부품명: string;
+  문제: string;
+  정답: string;
+  multiAnswer?: string[];
+  isMulti?: boolean;
+  보기: string[];
+  난이도?: string | number;
+  설명?: string;
+  조치방법?: string;
+  AI해설?: string;
+  소요시간?: string;
+  주의사항?: string;
+};
+
+/** 앞글자가 맞는 첫 칸의 값("부품명/항목"처럼 머리글이 긴 칸을 짧은 이름으로 찾는다) */
+export function valueByPrefix(row: ItRow, ...prefixes: string[]) {
+  const key = Object.keys(row).find((candidate) => prefixes.some((prefix) => candidate.startsWith(prefix)));
+  return key ? String(row[key] ?? "").trim() : "";
+}
 
 export const IT_SHEET_ID = "17ADPVDbfrfXQhUTAM4OPLnkaCqJ-gWnq3UcgRscfxT4";
 export const IT_SHEET_URL = `https://docs.google.com/spreadsheets/d/${IT_SHEET_ID}/edit`;
 
 export type ItTabKey = "knowledge" | "history" | "sales" | "links";
+export const IT_TAB_KEYS: ItTabKey[] = ["knowledge", "history", "sales", "links"];
 export const IT_TABS: Record<ItTabKey, { gid: string; name: string; headers?: string[] }> = {
   knowledge: { gid: "911433900", name: "IT기술력DB" },
   history: { gid: "1901723905", name: "PC DB" },
@@ -66,6 +89,17 @@ export function rowsFromCsv(text: string, headers?: string[]): SheetRow[] {
   return out;
 }
 
+/** 교육자료링크 — 같은 분류가 여러 줄이면 가장 최근 갱신 줄만(옛 줄은 권한이 걸린 드라이브 파일이라 열리지 않았다, 2026-10-03) */
+export function dedupeLinks(rows: SheetRow[]): SheetRow[] {
+  const best = new Map<string, SheetRow>();
+  for (const r of rows) {
+    const key = (r.분류 || r.제목 || r.링크 || "").trim();
+    const prev = best.get(key);
+    if (!prev || (r.갱신 || "") >= (prev.갱신 || "")) best.set(key, r);
+  }
+  return [...best.values()];
+}
+
 /** 띄어쓰기로 나눈 낱말이 모두 들어 있는 줄만(대소문자 무시) */
 export function searchRows<T extends Record<string, unknown>>(rows: T[], query: string): T[] {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -82,9 +116,11 @@ function shuffle<T>(list: T[], rand: () => number): T[] {
   return a;
 }
 
+const partOf = (r: SheetRow) => r["부품명/항목"] || r.부품명 || "";
+
 /** 겹치는 낱말을 세기 위한 토막(2글자 이상, 한글·영문·숫자) */
 const quizTokens = (r: SheetRow) => new Set(
-  `${r.퀴즈문제 || ""} ${r["부품명/항목"] || ""} ${r.카테고리 || ""} ${r.설명 || ""}`.toLowerCase().split(/[^0-9a-z가-힣]+/).filter((t) => t.length >= 2),
+  `${r.퀴즈문제 || ""} ${partOf(r)} ${r.카테고리 || ""} ${r.설명 || ""}`.toLowerCase().split(/[^0-9a-z가-힣]+/).filter((t) => t.length >= 2),
 );
 
 /**
@@ -113,7 +149,7 @@ export function buildQuiz(rows: SheetRow[], count: number, level: string = "전�
       if (choices.length >= 3) break;
     }
     return {
-      id: r.ID, 카테고리: r.카테고리 || r["부품명/항목"] || "IT", 부품명: r["부품명/항목"] || "", 문제: r.퀴즈문제.trim(), 정답: answer,
+      id: r.ID, 카테고리: r.카테고리 || partOf(r) || "IT", 부품명: partOf(r), 문제: r.퀴즈문제.trim(), 정답: answer,
       보기: shuffle([answer, ...choices], rand), 난이도: r.난이도 || "", 설명: r.설명 || "", 조치방법: r.조치방법 || "",
       AI해설: r.AI해설 || r.AI설명 || "", 소요시간: r.소요시간 || "", 주의사항: r.주의사항 || "",
     };
@@ -130,20 +166,22 @@ const writeLs = (gid: string, rows: SheetRow[]) => {
   try { const json = JSON.stringify({ t: Date.now(), rows }); if (json.length < 3_000_000) localStorage.setItem(LS_PREFIX + gid, json); } catch { /* 용량 초과 등 무시 */ }
 };
 
-async function fetchTab(key: ItTabKey): Promise<SheetRow[]> {
+/** 시트에서 새로 읽는다(캐시 안 봄). 가져오기와 임시 읽기가 함께 쓴다 */
+export async function fetchTab(key: ItTabKey): Promise<SheetRow[]> {
   const { gid, headers } = IT_TABS[key];
   const res = await fetch(`https://docs.google.com/spreadsheets/d/${IT_SHEET_ID}/export?format=csv&gid=${gid}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`IT 시트를 읽지 못했습니다(${res.status}) — 시트 공유가 '링크가 있는 모든 사용자'인지 확인해 주세요`);
   const text = await res.text();
   if (/^\s*</.test(text)) throw new Error("IT 시트가 비공개로 바뀐 것 같습니다 — 공유를 '링크가 있는 모든 사용자(뷰어)'로 바꿔 주세요");
-  const rows = rowsFromCsv(text, headers);
+  let rows = rowsFromCsv(text, headers);
+  if (key === "links") rows = dedupeLinks(rows);
+  if (key === "knowledge") rows = rows.map((r) => (r["부품명/항목"] && !r.부품명 ? { ...r, 부품명: r["부품명/항목"] } : r)); // 짧은 이름도 함께(DB 조회용)
   mem.set(gid, rows); writeLs(gid, rows);
   return rows;
 }
 
 /**
- * 탭 전체 줄. 기기에 저장된 지난 결과가 있으면 그것을 바로 돌려주고 뒤에서 새로 받아 onUpdate로 알린다(화면이 0초에 뜬다).
- * 없으면 네트워크를 기다린다.
+ * 탭 전체 줄(임시 읽기용). 기기에 저장된 지난 결과가 있으면 바로 돌려주고 뒤에서 새로 받아 onUpdate로 알린다.
  */
 export async function getTabRows(key: ItTabKey, onUpdate?: (rows: SheetRow[]) => void): Promise<{ rows: SheetRow[]; stale: boolean }> {
   const { gid } = IT_TABS[key];
