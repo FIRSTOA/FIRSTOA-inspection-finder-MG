@@ -139,8 +139,8 @@ export default function CopierNotes({ author }: { author: string }) {
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try { const parsed = JSON.parse(localStorage.getItem("copier_recent_q_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 6) : []; } catch { return []; }
   });
-  const [view, setView] = useState<"jokbo" | "notes" | "guide">(() =>
-    (["jokbo", "notes", "guide"].includes(localStorage.getItem("copier_view_v1") || "") ? localStorage.getItem("copier_view_v1") : "jokbo") as "jokbo" | "notes" | "guide");
+  const [view, setView] = useState<"jokbo" | "notes" | "guide" | "principle">(() =>
+    (["jokbo", "notes", "guide", "principle"].includes(localStorage.getItem("copier_view_v1") || "") ? localStorage.getItem("copier_view_v1") : "jokbo") as "jokbo" | "notes" | "guide" | "principle");
   useEffect(() => { localStorage.setItem("copier_view_v1", view); }, [view]);
   // ── 족보: 시리즈×증상 카드 — 12,580건 처리이력을 정제한 "이것만 보면 되는" 층 ──
   const [playbook, setPlaybook] = useState<PlaybookCard[] | null>(null);
@@ -415,10 +415,10 @@ export default function CopierNotes({ author }: { author: string }) {
     <div className="flex flex-wrap items-center gap-3 bg-[#1E252F] px-5 pb-3.5 pt-4">
       <div className="min-w-0">
         <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법)</p>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법) → 구동원리(원리부터)</p>
       </div>
       <div className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-1">
-        {([["notes", "기록"], ["jokbo", "족보"], ["guide", "가이드"]] as const).map(([key, label]) => (
+        {([["notes", "기록"], ["jokbo", "족보"], ["guide", "가이드"], ["principle", "구동원리"]] as const).map(([key, label]) => (
           <button key={key} type="button" onClick={() => setView(key)}
             className={`rounded-full px-4 py-1.5 text-xs font-black transition ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
         ))}
@@ -832,6 +832,16 @@ export default function CopierNotes({ author }: { author: string }) {
         );
       })()}
 
+      {/* 구동원리(2026-10-08) — 다른 직원이 만든 교육가이드(Apeos 구동원리·급지·ADF, 애니메이션 8개)를 FIELD 옷으로 다시 입힌 정적 페이지. 글·그림·동작은 원본 그대로 */}
+      {view === "principle" && (
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] font-bold text-slate-500">
+            <span>종이 한 장이 나오기까지 — 화상 형성 7단계 · 용지 급지 · ADF 원고 급지. 그림은 단추로 단계를 넘기거나 자동 진행됩니다.</span>
+            <a href="/learn/copier-principle.html" target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 hover:bg-slate-100">새 창에서 크게 보기 ↗</a>
+          </div>
+          <iframe title="복합기 구동원리 교육가이드" src="/learn/copier-principle.html" className="block h-[calc(100dvh-200px)] min-h-[640px] w-full border-0 bg-[#F4F7FB]" />
+        </section>
+      )}
       {view === "notes" && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {headerTop}

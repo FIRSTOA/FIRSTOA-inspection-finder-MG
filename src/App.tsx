@@ -3306,31 +3306,42 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
 
   const chip = (on: boolean, extra = "") => `rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 ${on ? "text-white" : extra || "bg-slate-100 text-slate-700 hover:bg-slate-200"}`;
   const smallBtn = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50";
-  // 로그인 필수 + 그룹웨어 세션이면 작성자는 로그인 이름으로 고정 — 고르는 목록 대신 내 계정만 보여 준다(스위치를 끄면 예전 창 그대로)
+  // 로그인 필수 + 그룹웨어 세션이면 작성자는 로그인 이름으로 고정 — 고르는 목록 대신 내 계정 카드만(스위치를 끄면 예전 창 그대로). 2026-10-08 디자인 다듬음
   const sso = getSsoSession();
   if (ssoRequiredCached() && sso) {
     const u = sso.user;
+    const since = (() => { try { return new Date(sso.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }); } catch { return ""; } })();
+    const roleLabel = u.role === "ADMIN" ? "관리자" : u.role === "MANAGER" ? "매니저" : "직원";
     return (
-      <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
-        <div className="w-full rounded-t-2xl bg-white shadow-xl sm:max-w-sm sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-700">내 계정</div>
-              <div className="mt-0.5 text-[11px] font-bold leading-snug text-slate-400">그룹웨어 로그인 이름이 곧 작성자입니다 · 바꾸려면 다른 계정으로 다시 로그인</div>
+      <div className="fixed inset-0 z-[3100] flex items-end bg-black/45 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
+        <div className="w-full overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-w-sm sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-[#1E252F] px-5 pb-12 pt-4 text-white">
+            <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-blue-500/25 blur-2xl" />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">내 계정</span>
+              <button type="button" onClick={onClose} className="rounded-full px-2.5 py-1 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white">닫기</button>
             </div>
-            <button type="button" onClick={onClose} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
           </div>
-          <div className="px-4 py-4">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[15px] font-black text-white">{u.name.slice(0, 1)}</span>
-              <div className="min-w-0">
-                <div className="truncate text-[16px] font-black text-slate-900">{u.name}{u.position ? <span className="ml-1 text-[12px] font-bold text-slate-500">{u.position}</span> : null}</div>
-                <div className="truncate text-[12px] font-semibold text-slate-500">{[u.department, u.empNo && `사번 ${u.empNo}`].filter(Boolean).join(" · ")}</div>
-              </div>
+          <div className="relative -mt-9 px-5">
+            <span className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-[28px] font-black text-white shadow-[0_10px_24px_rgba(37,99,235,.4)] ring-4 ring-white">{u.name.slice(0, 1)}</span>
+          </div>
+          <div className="px-5 pb-5 pt-3">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-[22px] font-black tracking-tight text-slate-900">{u.name}</span>
+              {u.position && <span className="text-[13px] font-bold text-slate-500">{u.position}</span>}
+              <span className="ml-auto rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">그룹웨어 연결됨</span>
             </div>
-            {value && value !== u.name && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">작성자가 {value}로 남아 있어 {u.name}으로 맞춥니다.</div>}
-            <button type="button" onClick={() => logoutToGroupware()} className="mt-4 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
-            <p className="mt-2 text-center text-[11px] font-semibold leading-snug text-slate-400">그룹웨어 로그인이 살아 있으면 바로 다시 들어옵니다. 계정을 바꾸려면 그룹웨어에서 로그아웃한 뒤 다시 로그인하세요.</p>
+            <dl className="mt-3 grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+              {u.department && <><dt className="font-bold text-slate-400">부서</dt><dd className="font-bold text-slate-800">{u.department}</dd></>}
+              {u.empNo && <><dt className="font-bold text-slate-400">사번</dt><dd className="font-bold tabular-nums text-slate-800">{u.empNo}</dd></>}
+              <dt className="font-bold text-slate-400">권한</dt><dd className="font-bold text-slate-800">{roleLabel}</dd>
+              {since && <><dt className="font-bold text-slate-400">로그인</dt><dd className="font-bold tabular-nums text-slate-800">{since}</dd></>}
+            </dl>
+            <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-[11.5px] font-semibold leading-snug text-slate-500">
+              FIELD 작성자는 이 이름으로 고정됩니다.{value && value !== u.name ? ` (남아 있던 ${value} 대신 ${u.name}으로 맞춥니다.)` : ""} 계정을 바꾸려면 그룹웨어에서 로그아웃한 뒤 다시 로그인하세요.
+            </div>
+            <button type="button" onClick={() => logoutToGroupware()} className="mt-3 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
+            <p className="mt-2 text-center text-[11px] font-semibold text-slate-400">그룹웨어 로그인이 살아 있으면 바로 다시 들어옵니다.</p>
           </div>
         </div>
       </div>

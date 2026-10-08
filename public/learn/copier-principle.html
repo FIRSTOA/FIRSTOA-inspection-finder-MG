@@ -1,0 +1,3377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>복합기 구동원리 — FIELD 복합기 학습</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* FIELD 복합기 학습 — 구동원리 교육가이드. 원본(다른 직원 제작, IBM Plex 톤)을 FIELD 웹앱 컨셉(짙은 남색 머리띠·흰 카드·파란 강조·둥근 모서리)으로 다시 입힘(2026-10-08).
+   내용·그림·애니메이션 스크립트는 원본 그대로이고 겉옷(CSS)만 바꿨다. 클래스 이름은 스크립트가 쓰므로 유지. */
+:root{
+  --ink:#0f172a; --ink2:#334155; --ink3:#64748b;
+  --paper:#F4F7FB; --paper2:#F8FAFC; --card:#FFFFFF;
+  --line:#E2E8F0; --line2:#F1F5F9;
+  --k:#16181C; --c:#2563EB; --m:#C8005F; --y:#F59E0B;
+  --hv:#DC2626; --heat:#F97316; --ok:#059669;
+  --dark:#1E252F; --dark2:#151A23;
+  --mono:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif;
+  --sans:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif;
+  --r:14px; --r-sm:10px;
+  --sh:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.06);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-weight:500;line-height:1.7;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+
+/* ---------- 골격 ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.layout{display:grid;grid-template-columns:220px 1fr;gap:28px;align-items:start}
+
+/* ---------- 상단 (FIELD 다크 머리띠) ---------- */
+header.top{background:var(--dark);color:#fff;border-bottom:1px solid rgba(255,255,255,.06)}
+.top-in{max-width:1180px;margin:0 auto;padding:30px 20px 26px}
+.eyebrow{font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#94a3b8;margin:0 0 12px}
+h1{font-size:clamp(24px,4vw,38px);line-height:1.18;margin:0;font-weight:900;letter-spacing:-.03em;color:#fff}
+h1 em{font-style:normal;color:#93c5fd}
+.sub{margin:12px 0 0;color:#cbd5e1;font-size:14.5px;max-width:64ch;font-weight:600;line-height:1.65}
+.sub b{color:#fff;font-weight:800}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px}
+.chip{font-size:11px;font-weight:700;letter-spacing:0;padding:5px 11px;border:1px solid rgba(255,255,255,.14);
+  border-radius:999px;color:#cbd5e1;background:rgba(255,255,255,.06)}
+.chip b{color:#fff;font-weight:800}
+
+/* ---------- 목차 ---------- */
+nav.side{position:sticky;top:12px;padding:20px 0;font-size:13px}
+nav.side .nav-t{font-size:10.5px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);
+  padding:0 4px 10px;margin-bottom:6px}
+nav.side .navlist{display:flex;flex-direction:column;gap:3px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:8px;box-shadow:var(--sh)}
+nav.side a{display:flex;align-items:center;gap:9px;padding:8px 10px;color:var(--ink2);text-decoration:none;
+  border-radius:var(--r-sm);font-weight:700;transition:.15s;border-left:none;margin-left:0}
+nav.side a:hover{background:var(--paper2);color:var(--ink)}
+nav.side a.on{background:var(--ink);color:#fff;font-weight:800}
+nav.side a .n{font-size:11px;font-weight:900;color:var(--ink3);min-width:20px;font-variant-numeric:tabular-nums}
+nav.side a.on .n{color:#93c5fd}
+
+/* ---------- 섹션 ---------- */
+main{padding:20px 0 90px;min-width:0}
+section{margin-bottom:28px;scroll-margin-top:16px;background:var(--card);border:1px solid var(--line);
+  border-radius:18px;padding:22px 22px 10px;box-shadow:var(--sh)}
+.sec-h{display:flex;align-items:baseline;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line2);margin-bottom:18px}
+.sec-n{font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--c);padding-top:6px;font-variant-numeric:tabular-nums}
+h2{font-size:clamp(19px,2.4vw,24px);margin:0;font-weight:900;letter-spacing:-.03em;color:var(--ink)}
+h2 span{color:var(--ink3);font-weight:700;font-size:.62em;letter-spacing:0;margin-left:8px}
+h3{font-size:15.5px;margin:28px 0 10px;font-weight:900;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+h3::before{content:"";width:4px;height:16px;border-radius:2px;background:var(--c);flex:none}
+h4{font-size:14px;margin:20px 0 8px;font-weight:800;color:var(--ink2)}
+p{margin:0 0 12px}
+.lead{font-size:15px;color:var(--ink2);margin-bottom:18px;font-weight:600;line-height:1.7}
+.lead b,p b{font-weight:800;color:var(--ink)}
+
+/* ---------- 카드 / 박스 ---------- */
+.card{background:var(--paper2);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin:16px 0}
+.fig{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin:18px 0;overflow:hidden;box-shadow:var(--sh)}
+.fig-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;border-bottom:1px solid var(--line2);background:var(--paper2)}
+.fig-t{font-size:11.5px;font-weight:900;letter-spacing:0;text-transform:none;color:var(--ink2)}
+.fig-b{padding:12px 14px 16px}
+.cap{font-size:12.5px;color:var(--ink3);padding:0 14px 14px;margin:0;font-weight:600}
+
+.note{border-left:4px solid var(--c);background:#EFF6FF;padding:12px 15px;margin:16px 0;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:14px;color:#1e3a8a}
+.warn{border-left:4px solid var(--hv);background:#FEF2F2;padding:12px 15px;margin:16px 0;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:14px;color:#7f1d1d}
+.warn b,.note b{font-weight:800}
+.warn .tag,.note .tag{font-size:10.5px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:4px}
+.warn .tag{color:var(--hv)} .note .tag{color:var(--c)}
+
+/* ---------- 표 ---------- */
+.tw{overflow-x:auto;margin:14px 0;border:1px solid var(--line);border-radius:var(--r-sm)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);min-width:480px}
+th{background:#F1F5F9;color:var(--ink2);text-align:left;padding:9px 12px;font-weight:900;font-size:11.5px;letter-spacing:0;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top;font-weight:600;color:var(--ink2)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:#FAFBFD}
+td.pn{font-size:12.5px;font-weight:800;color:var(--ink);white-space:nowrap}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ---------- 애니메이션 컨트롤 ---------- */
+.ctrl{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+button.b{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:0;padding:7px 13px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;cursor:pointer;transition:.14s}
+button.b:hover{border-color:var(--c);color:var(--c)}
+button.b.on{background:var(--c);border-color:var(--c);color:#fff;box-shadow:0 3px 10px rgba(37,99,235,.3)}
+button.b:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+
+.steps{display:flex;gap:4px;flex-wrap:wrap;border:none;border-radius:999px;overflow:hidden;background:var(--paper2);padding:4px}
+.steps button{font-family:var(--sans);font-size:12px;font-weight:800;padding:7px 12px;border:none;border-right:none;
+  background:transparent;color:var(--ink3);cursor:pointer;transition:.14s;border-radius:999px}
+.steps button:hover{background:#fff;color:var(--ink)}
+.steps button.on{background:var(--ink);color:#fff}
+.steps button:focus-visible{outline:2px solid var(--c);outline-offset:-2px}
+
+svg{display:block;width:100%;height:auto;max-width:100%}
+.svg-cap{font-family:var(--sans);font-size:9.5px;fill:var(--ink3);letter-spacing:0;font-weight:700}
+.lbl{font-family:var(--sans);font-size:10.5px;fill:var(--ink2);font-weight:800}
+.lbl-s{font-family:var(--sans);font-size:9px;fill:var(--ink3);font-weight:700}
+.leader{stroke:var(--line);stroke-width:1}
+.hl{transition:opacity .3s,stroke-width .3s}
+
+/* 단계 설명 패널 */
+.panel{display:grid;grid-template-columns:1fr;gap:0;border-top:1px solid var(--line2);background:var(--paper2)}
+.panel-in{padding:14px 16px}
+.panel-k{font-size:10.5px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--c);margin-bottom:5px}
+.panel-t{font-size:16.5px;font-weight:900;margin:0 0 6px;letter-spacing:-.02em}
+.panel-d{font-size:14px;color:var(--ink2);margin:0;font-weight:600}
+.readout{display:flex;gap:0;border-top:1px solid var(--line2);flex-wrap:wrap;background:#fff}
+.ro{flex:1;min-width:112px;padding:10px 14px;border-right:1px solid var(--line2)}
+.ro:last-child{border-right:none}
+.ro-k{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.ro-v{font-size:14.5px;font-weight:900;margin-top:2px;color:var(--ink)}
+
+/* 그리드 */
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:12px;margin:16px 0}
+.mini{background:var(--paper2);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.mini-k{font-size:10.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.mini-t{font-weight:900;font-size:15px;margin:0 0 6px;letter-spacing:-.02em}
+.mini p{font-size:13.5px;color:var(--ink2);margin:0;font-weight:600}
+
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin-bottom:6px;font-size:14.5px;font-weight:600;color:var(--ink2)}
+li b{color:var(--ink);font-weight:800}
+ul.tight li{margin-bottom:3px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88em;background:var(--paper2);padding:1px 6px;
+  border-radius:6px;border:1px solid var(--line2);color:var(--ink)}
+.en{font-size:.94em;font-weight:800;color:var(--ink)}
+.v{font-weight:900;color:var(--ink);font-variant-numeric:tabular-nums}
+.v.neg{color:var(--hv)}
+
+/* 체크리스트(확인 문제) */
+.chk{list-style:none;padding:0;margin:12px 0}
+.chk li{display:flex;gap:11px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm);
+  font-size:14.5px;margin:0 0 8px;background:var(--paper2);font-weight:700;color:var(--ink)}
+.chk li:last-child{border-bottom:1px solid var(--line)}
+.chk .q{font-size:11px;color:#fff;background:var(--c);font-weight:900;min-width:24px;height:24px;border-radius:999px;
+  display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none;margin-top:1px}
+
+footer{border-top:1px solid var(--line);padding:22px 0 40px;font-size:12.5px;color:var(--ink3);font-weight:600}
+footer .mono{font-family:var(--sans)}
+
+@media (max-width:900px){
+  /* 목차를 가로 스크롤로 바꾸자 격자 칸의 최소 너비가 목차 전체 길이만큼 늘어나 폰 화면이 682px로 넓어졌다 → 칸 최소 너비 0 */
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .layout>*{min-width:0}
+  nav.side .navlist{max-width:100%}
+  nav.side{position:static;padding:14px 0 0;margin-bottom:6px}
+  nav.side .navlist{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none;padding:6px}
+  nav.side .navlist::-webkit-scrollbar{display:none}
+  nav.side a{border-left:none;padding:7px 11px;margin-left:0;white-space:nowrap;flex:none}
+  nav.side a.on{border-bottom:none}
+}
+@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} }
+
+/* ---- X-ray 투시 패널 (어두운 판 — FIELD 다크 톤) ---- */
+.xray{background:#0B1220;border:1px solid rgba(255,255,255,.1);border-radius:var(--r);margin:20px 0;overflow:hidden}
+.xray .xr-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);background:#111a2b}
+.xray .xr-t{font-size:11.5px;font-weight:900;letter-spacing:0;text-transform:none;color:#93c5fd}
+.xray .xr-b{padding:12px 14px 16px}
+.xray button.b{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#cbd5e1}
+.xray button.b:hover{border-color:#93c5fd;color:#93c5fd}
+.xray button.b.on{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.xray .steps{border-color:transparent;background:rgba(255,255,255,.06)}
+.xray .steps button{background:transparent;border-right-color:transparent;color:#94a3b8}
+.xray .steps button:hover{background:rgba(255,255,255,.1);color:#e2e8f0}
+.xray .steps button.on{background:#3b82f6;color:#fff}
+.xray .xr-p{border-top:1px solid rgba(255,255,255,.08);padding:14px 16px}
+.xray .xr-k{font-size:10.5px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#93c5fd;margin-bottom:5px}
+.xray .xr-tt{font-size:16.5px;font-weight:900;margin:0 0 6px;color:#f1f5f9;letter-spacing:-.02em}
+.xray .xr-d{font-size:14px;color:#cbd5e1;margin:0;font-weight:600}
+.xray .xr-cap{padding:0 16px 14px;margin:0;font-size:12.5px;color:#94a3b8;font-weight:600}
+.xray .xr-cap b{color:#e2e8f0}
+.xray svg{cursor:grab;touch-action:pan-y}
+.xray svg.drag{cursor:grabbing}
+.xray .xr-hint{font-size:10.5px;color:#64748b;padding:0 16px 12px;letter-spacing:0;font-weight:700}
+.xray .xr-legend{display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 16px 4px;border-top:1px solid rgba(255,255,255,.08)}
+.xray .xr-legend div{display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;padding:3px 0;font-weight:700}
+.xray .xr-legend i{width:11px;height:11px;border-radius:3px;flex:none;display:block}
+.xray .xr-seq{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:2px 20px}
+.xray .xr-seq li{font-size:13px;color:#cbd5e1;padding:4px 0;display:flex;gap:9px;align-items:baseline;font-weight:600}
+.xray .xr-seq .n{font-size:11px;font-weight:900;color:#93c5fd;flex:none;min-width:15px}
+.xray .xr-seq b{color:#f8fafc;font-weight:800}
+.xray .xr-zoom{font-size:11px;font-weight:800;color:#cbd5e1;border:1px solid rgba(255,255,255,.14);padding:4px 10px;border-radius:999px;white-space:nowrap}
+.xray .xr-b{position:relative}
+.xray .xr-tip{position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-130%);
+  background:#111a2b;border:1px solid #3b82f6;border-radius:8px;padding:6px 10px;
+  font-size:11.5px;font-weight:800;color:#f1f5f9;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:5;max-width:280px;transition:opacity .1s}
+.xray .xr-tip .d{display:block;font-size:11px;color:#cbd5e1;white-space:normal;margin-top:3px;font-weight:600}
+.xray .xr-colsel{display:inline-flex;gap:3px;margin-left:4px}
+.xray .xr-colsel .cb{font-size:11px;font-weight:900;width:28px;padding:6px 0;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.06);color:var(--cc);border-radius:999px;cursor:pointer}
+.xray .xr-colsel .cb:hover{border-color:var(--cc)}
+.xray .xr-colsel .cb.on{background:var(--cc);color:#08131A;border-color:var(--cc)}
+
+/* ---- 한눈에 보기 ---- */
+.q7 .fig-b{padding:10px 12px 4px}
+.q7 svg{cursor:pointer}
+.q7cell{transition:opacity .25s}
+.q7 .ro-v a{color:var(--c);text-decoration:none;border-bottom:1px solid #bfdbfe}
+.q7 .ro-v a:hover{border-bottom-color:var(--c)}
+
+/* ================= 모바일 ================= */
+.swipe{display:none;font-size:11px;font-weight:700;color:var(--ink3);padding:0 14px 10px;margin:0}
+@media (max-width:760px){
+  .wrap{padding:0 12px}
+  main{padding:12px 0 60px}
+  section{padding:16px 14px 6px;border-radius:16px;margin-bottom:16px}
+  .top-in{padding:22px 14px 20px}
+  h1{font-size:clamp(21px,6vw,27px)}
+  .sub{font-size:13.5px}
+  h2{font-size:19px}
+  h2 span{display:block;margin:2px 0 0;font-size:12px}
+  .lead{font-size:14.5px}
+  .fig-b,.xr-b{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 14px}
+  .fig-b>svg{min-width:760px}
+  .q7 .fig-b>svg{min-width:760px}
+  .xr-b>svg{min-width:900px}
+  .swipe{display:block}
+  button.b{font-size:12px;padding:9px 13px;min-height:38px}
+  .steps{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .steps button{white-space:nowrap;font-size:12px;padding:10px 13px;min-height:38px}
+  .xray .xr-colsel .cb{width:32px;min-height:38px}
+  .ctrl{gap:6px}
+  .ro{min-width:100%;border-right:none;border-bottom:1px solid var(--line2)}
+  .ro:last-child{border-bottom:none}
+  .panel-in{padding:13px 14px}
+  .panel-t{font-size:16px}
+  .panel-d{font-size:13.5px}
+  table{font-size:12.5px;min-width:420px}
+  th,td{padding:8px 10px}
+  .g2{grid-template-columns:1fr}
+  .seq,.xr-seq{grid-template-columns:1fr}
+  .chk li{font-size:14px}
+}
+@media (max-width:420px){ h1{font-size:20px} .top-in{padding:18px 12px 16px} }
+
+/* ---- 비유 상자 ---- */
+.easy{border-left:4px solid var(--y);background:#FFFBEB;padding:12px 15px;margin:16px 0;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:14.5px;color:#78350f;font-weight:600}
+.easy .tag{font-size:10.5px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:4px;color:#b45309}
+.easy b{font-weight:900;color:#451a03}
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0}
+.cmp .card2{background:var(--paper2);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.cmp .n2{font-size:22px;font-weight:900;color:var(--y);line-height:1}
+.cmp .t2{font-weight:900;font-size:15.5px;margin:8px 0 6px;letter-spacing:-.02em}
+.cmp .a2{font-size:14px;color:var(--ink2);margin:0 0 8px;font-weight:600}
+.cmp .r2{font-size:13px;color:var(--ink3);margin:0;padding-top:8px;border-top:1px dashed var(--line);font-weight:600}
+.cmp .r2 b{color:var(--ink2);font-weight:800}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <p class="eyebrow">FIELD · 복합기 학습 · 구동원리 기초</p>
+    <h1>종이 한 장이 나오기까지<br><em>Apeos C3061G / C3067G</em> 구동원리와 급지</h1>
+    <p class="sub">처음 보는 사람을 위한 자료입니다. 세 가지만 다룹니다 —
+      <b>화상을 만드는 원리</b>, <b>트레이에서 용지를 뽑는 원리</b>, <b>ADF에서 원고를 뽑는 원리</b>.
+      모두 애니메이션으로 눈으로 확인할 수 있습니다. 휴대폰에서도 그대로 동작하며, 그림은 좌우로 밀어서 보실 수 있습니다.</p>
+    <div class="meta">
+      <span class="chip">원본 <b>Training Material v1.1 (2024.10.02)</b></span>
+      <span class="chip">부품 명칭 <b>원어 유지</b></span>
+      <span class="chip">Fujifilm Internal Use Only</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap layout">
+
+<nav class="side">
+  <div class="nav-t">목차</div>
+  <div class="navlist">
+    <a href="#quick" class="on"><span class="n">01</span>한눈에 보기</a>
+    <a href="#easy"><span class="n">02</span>쉽게 말하면</a>
+    <a href="#engine"><span class="n">03</span>구동원리</a>
+    <a href="#paper"><span class="n">04</span>용지 급지</a>
+    <a href="#dadf"><span class="n">05</span>ADF 원고 급지</a>
+    <a href="#check"><span class="n">06</span>확인 문제</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ============ 01 한눈에 보기 ============ -->
+<section id="quick">
+  <div class="sec-h"><span class="sec-n">01</span><h2>한눈에 보기<span>7단계</span></h2></div>
+  <p class="lead"><b>먼저 이 그림부터 보십시오.</b> 7단계만 머리에 넣으면 나머지는 그 안을 들여다보는 이야기입니다.
+    복합기가 하는 일은 <b>전기로 그림을 그려 토너를 붙이고, 열로 굳히는 것</b>입니다.</p>
+
+  <div class="fig q7">
+    <div class="fig-h">
+      <span class="fig-t">그림 1 &nbsp;한눈에 보기 — 종이 한 장이 나오기까지 7단계</span>
+      <div class="ctrl">
+        <button class="b" id="q7Prev">◀ 이전</button>
+        <button class="b on" id="q7Play">자동 진행</button>
+        <button class="b" id="q7Next">다음 ▶</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <svg id="q7Svg" viewBox="0 0 740 178" role="img"
+           aria-label="급지, 대전, 노광, 현상, 1차 전사, 2차 전사, 정착 7단계를 좌에서 우로 나열한 요약 도해">
+        <g id="q7Cells"></g>
+      </svg>
+    </div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오</p>
+    <div class="panel">
+      <div class="panel-in">
+        <div class="panel-k" id="q7K">① 급지</div>
+        <p class="panel-t" id="q7T">트레이에서 종이를 한 장만 뽑습니다</p>
+        <p class="panel-d" id="q7D">롤 세 개가 협력합니다. Nudger Roll이 맨 위 종이를 밀어내고,
+          Feed Roll이 당기고, Retard Roll이 <b>반대로 돌면서</b> 두 장 이상 딸려오는 것을 막습니다.</p>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro-k">담당 부품</div><div class="ro-v" id="q7P" style="font-size:14px">Nudger · Feed · Retard Roll</div></div>
+        <div class="ro"><div class="ro-k">자세히 보기</div><div class="ro-v" id="q7L" style="font-size:14px">–</div></div>
+      </div>
+    </div>
+    <p class="cap">이 7단계가 이 자료의 전부입니다. <b>먼저 이 그림으로 큰 흐름을 잡고</b>,
+      아래의 상세 애니메이션과 각 장으로 들어가십시오.
+      단계를 누르면 해당 설명이 바뀌고, &ldquo;자세히 보기&rdquo;의 링크로 상세 장으로 이동합니다.</p>
+  </div>
+</section>
+
+<!-- ============ 02 쉽게 말하면 ============ -->
+<section id="easy">
+  <div class="sec-h"><span class="sec-n">02</span><h2>쉽게 말하면<span>비유로 이해하기</span></h2></div>
+
+  <p class="lead">부품 이름이 어려워도 <b>하는 일은 단순합니다.</b>
+    복합기가 하는 일을 한 문장으로 줄이면 이렇습니다 —
+    <b>정전기로 그림을 그려 가루를 붙이고, 다리미로 눌러 굳힌다.</b><br>
+    풍선을 머리에 문지르면 종이 조각이 달라붙습니다. 복합기도 똑같은 원리를 씁니다.</p>
+
+  <div class="easy"><span class="tag">전체를 한 문장으로</span>
+    드럼은 <b>도화지</b>, 정전기는 <b>연필선</b>, 토너는 <b>색가루</b>, 정착기는 <b>다리미</b>입니다.
+    도화지에 정전기로 그림을 그리고, 그 자리에만 색가루를 붙이고, 다리미로 눌러 종이에 고정합니다.
+  </div>
+
+  <h3>7단계를 비유로</h3>
+  <div class="cmp">
+    <div class="card2"><div class="n2">①</div>
+      <p class="t2">대전 — 도화지에 밑칠하기</p>
+      <p class="a2">겨울에 스웨터를 문지르면 온몸에 정전기가 생깁니다.
+        드럼 표면 전체에 그렇게 <b>정전기를 고르게 입힙니다.</b> 아직 그림은 없습니다.</p>
+      <p class="r2"><b>실제 이름</b> BCR · 표면을 −600V로 대전</p></div>
+    <div class="card2"><div class="n2">②</div>
+      <p class="t2">노광 — 빛으로 지우개질</p>
+      <p class="a2">칠판을 온통 검게 칠해 두고 <b>글씨 모양만 지우개로 지웁니다.</b>
+        지워진 자리가 곧 그림입니다. 여기서는 <b>빛이 지우개</b>입니다.</p>
+      <p class="r2"><b>실제 이름</b> LPH · 빛을 받은 곳만 −100V로 옅어짐 = 정전잠상</p></div>
+    <div class="card2"><div class="n2">③</div>
+      <p class="t2">현상 — 풍선에 종이가 붙듯</p>
+      <p class="a2">풍선을 머리에 문지른 뒤 종이 조각에 대면 달라붙습니다.
+        색가루도 <b>정전기가 옅어진 자리에만</b> 달라붙습니다.<br>
+        다만 색가루가 통에서 바로 날아오는 게 아닙니다.
+        <b>롤러가 붓처럼 색가루를 묻혀 와서 도화지에 대고 지나갑니다.</b>
+        붓이 닿는 <b>폭 전체</b>에 묻습니다.</p>
+      <p class="r2"><b>실제 이름</b> Developer Housing → Development Roll → 드럼 (닙에서 전달)</p></div>
+    <div class="card2"><div class="n2">④</div>
+      <p class="t2">1차 전사 — 도장 4개를 겹쳐 찍기</p>
+      <p class="a2">색이 다른 도장 4개(검정·하늘·분홍·노랑)를 <b>같은 자리에 차례로 겹쳐 찍습니다.</b>
+        찍히는 곳은 종이가 아니라 <b>움직이는 컨베이어 벨트</b>입니다.</p>
+      <p class="r2"><b>실제 이름</b> 1st BTR · IBT Belt · Y→M→C→K 순 적층</p></div>
+    <div class="card2"><div class="n2">⑤</div>
+      <p class="t2">2차 전사 — 손등의 반짝이를 옮기듯</p>
+      <p class="a2">손등에 묻은 반짝이 가루를 종이에 대고 누르면 그대로 옮겨집니다.
+        벨트에 쌓인 <b>색가루 4층을 종이로 한 번에</b> 옮깁니다. 아직 만지면 번집니다.</p>
+      <p class="r2"><b>실제 이름</b> 2nd BTR · BUR</p></div>
+    <div class="card2"><div class="n2">⑥</div>
+      <p class="t2">정착 — 다리미로 와펜 붙이기</p>
+      <p class="a2">옷에 열전사 스티커를 올리고 다리미로 누르면 녹아 붙습니다.
+        똑같습니다. <b>열과 압력으로 가루를 녹여</b> 종이에 스며들게 합니다.
+        이때서야 <b>색이 제대로 납니다.</b></p>
+      <p class="r2"><b>실제 이름</b> Heat Roll · NIP Belt</p></div>
+    <div class="card2"><div class="n2">⑦</div>
+      <p class="t2">클리닝 — 칠판 지우기</p>
+      <p class="a2">다음 장을 그리려면 칠판을 깨끗이 지워야 합니다.
+        드럼에 남은 가루를 <b>긁어내 통에 모읍니다.</b> 그리고 다시 ①로 돌아갑니다.</p>
+      <p class="r2"><b>실제 이름</b> Cleaning Blade · Waste Toner Bottle</p></div>
+  </div>
+
+  <div class="easy"><span class="tag">왜 정착 전에는 색이 안 나는가</span>
+    설탕가루를 수북이 쌓아 놓으면 <b>하얗게</b> 보입니다. 물에 녹이면 투명해집니다.
+    가루 상태에서는 <b>알갱이 사이 빈틈이 빛을 막기</b> 때문입니다.<br>
+    토너도 같습니다. 노랑 위에 하늘색을 얹어도 빈틈 때문에 빛이 아래층까지 못 가서
+    <b>초록이 안 보입니다.</b> 다리미로 눌러 빈틈을 메워야 빛이 전체를 통과해 초록이 됩니다.
+  </div>
+
+  <h3>급지와 ADF도 비유로</h3>
+  <div class="cmp">
+    <div class="card2"><div class="n2">종이<br>한 장</div>
+      <p class="t2">카드를 한 장씩 나눠주기</p>
+      <p class="a2">딜러가 카드를 한 장씩 밀어 줍니다. 아래 카드가 딸려 나오지 않도록
+        <b>손가락으로 살짝 눌러 둡니다.</b> 그 손가락이 <b>Retard Roll</b>입니다.
+        돌지 않고 <b>버티기만</b> 합니다.</p>
+      <p class="r2"><b>왜 되는가</b> 종이끼리는 잘 미끄러져서, 두 장이면 아래 장이 미끄러져 되돌아간다</p></div>
+    <div class="card2"><div class="n2">줄<br>맞추기</div>
+      <p class="t2">종이를 책상에 툭툭 쳐서 정렬</p>
+      <p class="a2">프린트물을 여러 장 들고 책상에 <b>툭툭 치면</b> 가장자리가 가지런해집니다.
+        복합기도 똑같이 <b>멈춰 있는 롤에 종이를 일부러 부딪혀</b> 비뚤어진 것을 잡습니다.</p>
+      <p class="r2"><b>실제 이름</b> Regi Roll · 루프 · Skew 보정</p></div>
+    <div class="card2"><div class="n2">스캔</div>
+      <p class="t2">마트 계산대 바코드 스캐너</p>
+      <p class="a2">계산대에서는 <b>스캐너가 가만히 있고 물건이 지나갑니다.</b>
+        ADF도 같습니다. 읽는 눈은 고정되어 있고 <b>종이가 등속으로 지나갑니다.</b></p>
+      <p class="r2"><b>실제 이름</b> CVT 방식 · IIT Carriage 고정</p></div>
+    <div class="card2"><div class="n2">양면<br>스캔</div>
+      <p class="t2">카메라 2대 vs 1대</p>
+      <p class="a2">앞뒤를 찍을 때 <b>카메라가 2대면 한 번에</b> 끝납니다.
+        1대면 <b>뒤집어서 두 번</b> 찍어야 합니다.
+        게다가 그대로 두면 순서가 거꾸로라 <b>한 번 더 뒤집어야</b> 합니다.</p>
+      <p class="r2"><b>실제 이름</b> DADF-130 = 2대 (One Pass) / DADF-110 = 1대 (3 Pass)</p></div>
+  </div>
+
+  <h3>이름이 어려운 부품, 쉬운 말로</h3>
+  <p>영문 약자는 그대로 쓰는 것이 맞습니다. 현장 자료와 매뉴얼이 다 영문이기 때문입니다.
+    다만 <b>처음에는 쉬운 말로 외우고, 이름은 나중에 붙이십시오.</b></p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>부품 이름</th><th>쉬운 말로</th><th>하는 일</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">Drum</td><td><b>도화지</b></td><td>그림이 그려지는 초록색 원통. 빛에 약해서 꺼내면 검은 종이로 덮어야 합니다</td></tr>
+        <tr><td class="pn">BCR</td><td><b>밑칠 롤</b></td><td>드럼 전체에 정전기를 고르게 입힙니다</td></tr>
+        <tr><td class="pn">LPH</td><td><b>빛 지우개</b></td><td>그림이 될 부분만 빛을 쏘아 정전기를 옅게 만듭니다</td></tr>
+        <tr><td class="pn">정전잠상</td><td><b>눈에 안 보이는 그림</b></td><td>정전기의 진하고 옅은 차이. 아직 색이 없어 눈에는 안 보입니다</td></tr>
+        <tr><td class="pn">Toner</td><td><b>색가루</b></td><td>아주 고운 플라스틱 가루. 열에 녹습니다</td></tr>
+        <tr><td class="pn">Development Roll</td><td><b>가루 붙이는 롤</b></td><td>색가루를 드럼의 그림 부분에만 붙입니다</td></tr>
+        <tr><td class="pn">IBT Belt</td><td><b>컨베이어 벨트</b></td><td>4색 가루를 차례로 받아 모으는 검은 띠</td></tr>
+        <tr><td class="pn">1st BTR</td><td><b>1차 옮김 롤</b></td><td>드럼의 가루를 벨트로 옮깁니다</td></tr>
+        <tr><td class="pn">2nd BTR</td><td><b>2차 옮김 롤</b></td><td>벨트의 가루를 종이로 옮깁니다</td></tr>
+        <tr><td class="pn">Heat Roll</td><td><b>다리미</b></td><td>뜨겁게 달궈 가루를 녹여 종이에 붙입니다. <b>분해 금지</b></td></tr>
+        <tr><td class="pn">Nudger Roll</td><td><b>밀어주는 롤</b></td><td>쌓인 종이 맨 위 한 장을 밀어냅니다</td></tr>
+        <tr><td class="pn">Feed Roll</td><td><b>당기는 롤</b></td><td>밀려 나온 종이를 붙잡아 끌고 갑니다</td></tr>
+        <tr><td class="pn">Retard Roll</td><td><b>버티는 롤</b></td><td>돌지 않고 버텨서 두 장 이상 못 지나가게 막습니다</td></tr>
+        <tr><td class="pn">Regi Roll</td><td><b>줄 맞추는 롤</b></td><td>멈춰서 종이를 받아 비뚤어진 것을 바로잡습니다</td></tr>
+        <tr><td class="pn">닙 (NIP)</td><td><b>맞물리는 자리</b></td><td>두 롤(또는 롤과 드럼)이 맞닿아 눌리는 부분. 폭 전체에 걸쳐 닿습니다</td></tr>
+        <tr><td class="pn">Skew</td><td><b>비뚤어짐</b></td><td>종이가 기울어져 들어가는 것</td></tr>
+        <tr><td class="pn">DADF</td><td><b>원고 자동 넘김 장치</b></td><td>원고를 한 장씩 뽑아 읽는 위로 보냅니다</td></tr>
+        <tr><td class="pn">CVT</td><td><b>지나가며 읽기</b></td><td>읽는 눈은 고정, 종이가 움직입니다</td></tr>
+        <tr><td class="pn">JAM</td><td><b>종이 걸림</b></td><td>종이가 경로에서 멈추거나 끼인 상태</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="easy"><span class="tag">외우는 요령</span>
+    <b>BTR</b>이 붙으면 &ldquo;<b>옮기는 롤</b>&rdquo;입니다. 1st는 드럼 → 벨트, 2nd는 벨트 → 종이.<br>
+    <b>Roll</b>이 붙으면 그냥 <b>굴러가는 바퀴</b>입니다. 앞의 단어가 역할을 말해 줍니다 —
+    Nudger(밀기) · Feed(먹이기) · Retard(늦추기) · Exit(내보내기).
+  </div>
+</section>
+
+<!-- ============ 03 구동원리 ============ -->
+<section id="engine">
+  <div class="sec-h"><span class="sec-n">03</span><h2>구동원리<span>화상이 만들어지는 과정</span></h2></div>
+
+  <p class="lead">드럼(광도체)은 계속 돌고 있습니다. 표면의 한 점이 한 바퀴 도는 동안
+    <b>대전 → 노광 → 현상 → 1차 전사 → 클리닝</b>을 차례로 겪습니다.
+    아래 그림에서 색이 바뀌는 것이 전기 상태의 변화입니다.</p>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 2 &nbsp;대전 → 2차 전사 Layout (원본 p.80 배치 기준)</span>
+      <div class="ctrl">
+        <button class="b on" id="drumPlay">일시정지</button>
+        <button class="b" id="drumSlow">저속</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <div class="steps" id="drumSteps" role="tablist" aria-label="프로세스 단계 선택">
+        <button class="on" data-s="0">전체</button>
+        <button data-s="1">① 대전</button>
+        <button data-s="2">② 노광</button>
+        <button data-s="3">③ 현상</button>
+        <button data-s="4">④ 1차 전사</button>
+        <button data-s="5">⑤ 2차 전사</button>
+        <button data-s="6">⑥ 클리닝</button>
+      </div>
+      <svg id="drumSvg" viewBox="0 0 760 470" role="img"
+           aria-label="드럼 상단에 1st BTR과 IBT Belt, 우측에 Development Roll, 우하단에 LPH, 좌하단에 BCR, 좌측에 Cleaning Blade가 배치된 단면 애니메이션. 벨트 좌단에서 2nd BTR이 용지로 전사한다">
+        <defs>
+          <marker id="ar" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#5A6E82"/></marker>
+          <marker id="arC" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#008FB3"/></marker>
+          <clipPath id="drumClip"><circle cx="430" cy="252" r="92"/></clipPath>
+        </defs>
+
+        <!-- ===== IBT Belt ===== -->
+        <g id="gBelt" class="hl">
+          <path d="M168 138 L 700 138 A 11 11 0 0 1 700 160 L 168 160 A 11 11 0 0 1 168 138 Z"
+                fill="#DCE3EA" stroke="#B4C0CC" stroke-width="1.2"/>
+          <circle cx="168" cy="149" r="14" fill="#EDF1F4" stroke="#28394B" stroke-width="1.5"/>
+          <text class="lbl" x="196" y="126">BUR</text>
+          <text class="lbl-s" x="196" y="112">−DC · Drive Roll</text>
+          <text class="lbl" x="640" y="132">IBT Belt</text>
+          <path d="M628 172 L 520 172" stroke="#5A6E82" stroke-width="1.4" marker-end="url(#ar)" opacity=".8"/>
+          <text class="lbl-s" x="536" y="188">벨트 진행 (좌향)</text>
+          <g id="beltToner"></g>
+        </g>
+
+        <!-- ===== 1st BTR (드럼 상단) ===== -->
+        <g id="g1btr" class="hl">
+          <circle cx="446" cy="141" r="17" fill="#F0F7FA" stroke="#008FB3" stroke-width="2"/>
+          <text class="lbl" x="470" y="112">1st BTR</text>
+          <text class="lbl-s" x="470" y="98">+DC 인가</text>
+          <path d="M466 118 L 452 130" class="leader"/>
+        </g>
+
+        <!-- ===== 2nd BTR + 용지 ===== -->
+        <g id="g2btr" class="hl">
+          <circle cx="106" cy="149" r="20" fill="#F0F3F6" stroke="#28394B" stroke-width="1.8"/>
+          <text class="lbl" x="18" y="120">2nd BTR</text>
+          <text class="lbl-s" x="18" y="106">우레탄 폼</text>
+          <rect x="300" y="406" width="176" height="20" rx="2" fill="#F7F9FB" stroke="#28394B" stroke-width="1.2"/>
+          <text class="lbl-s" x="388" y="420" text-anchor="middle">Tray</text>
+          <rect x="300" y="30" width="140" height="12" rx="2" fill="#EDF1F4" stroke="#C6D0DB"/>
+          <text class="lbl-s" x="448" y="40">→ 정착부 / Exit</text>
+        </g>
+        <path id="pPath2" d="M300 416 L 176 416 Q 138 416 138 382 L 138 74 Q 138 46 168 42 L 300 38"
+              fill="none" stroke="#008FB3" stroke-width="1.4" stroke-dasharray="5 4" opacity=".45"/>
+        <g id="sheet2">
+          <rect x="-14" y="-4" width="28" height="8" rx="1" fill="#fff" stroke="#28394B" stroke-width="1.2"/>
+          <rect id="sheetToner2" x="-10" y="-2.5" width="0" height="5" fill="#008FB3" opacity=".9"/>
+        </g>
+
+        <!-- ===== Drum ===== -->
+        <circle cx="430" cy="252" r="92" fill="#F7F9FB" stroke="#28394B" stroke-width="2"/>
+        <g id="drumRot">
+          <line x1="430" y1="252" x2="430" y2="170" stroke="#C6D0DB" stroke-width="1.5"/>
+          <line x1="430" y1="252" x2="512" y2="252" stroke="#C6D0DB" stroke-width="1.5"/>
+        </g>
+        <circle cx="430" cy="252" r="9" fill="#28394B"/>
+        <text class="lbl" x="430" y="286" text-anchor="middle">DRUM</text>
+        <text class="lbl-s" x="430" y="300" text-anchor="middle">광도체</text>
+        <path d="M348 300 A 105 105 0 0 0 500 336" fill="none" stroke="#008FB3"
+              stroke-width="1.4" marker-end="url(#arC)" opacity=".7"/>
+        <text class="lbl-s" x="404" y="352" fill="#008FB3">회전</text>
+        <g clip-path="url(#drumClip)">
+          <g id="chargeLayer"></g>
+          <g id="tonerLayer"></g>
+        </g>
+
+        <!-- ===== Cleaning Blade (좌측) ===== -->
+        <g id="gClean" class="hl">
+          <path d="M330 216 L 356 232 L 348 244 L 322 228 Z" fill="#28394B"/>
+          <text class="lbl" x="212" y="222">Cleaning Blade</text>
+          <text class="lbl-s" x="212" y="236">잔류 토너 제거</text>
+          <path d="M300 228 L 322 226" class="leader"/>
+        </g>
+
+        <!-- ===== BCR (좌하단) ===== -->
+        <g id="gBcr" class="hl">
+          <circle cx="334" cy="319" r="23" fill="#FCEDEA" stroke="#E8452A" stroke-width="2"/>
+          <circle cx="300" cy="354" r="12" fill="#EDF1F4" stroke="#5A6E82" stroke-width="1.3"/>
+          <text class="lbl" x="196" y="326" fill="#E8452A">BCR</text>
+          <text class="lbl-s" x="196" y="340">고압 인가 → 표면 −대전</text>
+          <text class="lbl-s" x="196" y="380">BCR Cleaner</text>
+          <path d="M264 376 L 290 362" class="leader"/>
+        </g>
+
+        <!-- ===== LPH (우하단) ===== -->
+        <g id="gLph" class="hl">
+          <g id="lphBeam" opacity="0">
+            <path d="M446 360 L 452 330" stroke="#E0AC00" stroke-width="2.4"/>
+            <path d="M462 358 L 464 328" stroke="#E0AC00" stroke-width="2.4"/>
+            <path d="M478 356 L 476 327" stroke="#E0AC00" stroke-width="2.4"/>
+          </g>
+          <rect x="422" y="359" width="80" height="26" rx="2" fill="#0E1822"/>
+          <text x="462" y="376" text-anchor="middle" font-family="'IBM Plex Mono','IBM Plex Sans KR','Malgun Gothic',ui-monospace,monospace"
+                font-size="10.5" fill="#7FC9DD" font-weight="600">LPH</text>
+          <text class="lbl-s" x="462" y="402" text-anchor="middle">빛 조사 → 노광부에 +전하 유도</text>
+        </g>
+
+        <!-- ===== Development Roll (우측) ===== -->
+        <g id="gDeve" class="hl">
+          <circle cx="557" cy="270" r="36" fill="#F0F3F6" stroke="#28394B" stroke-width="1.8"/>
+          <text class="lbl" x="602" y="258">Development Roll</text>
+          <text class="lbl-s" x="602" y="272">Deve Bias −400V</text>
+          <rect x="528" y="316" width="130" height="42" rx="2" fill="#EDF1F4" stroke="#C6D0DB"/>
+          <text class="lbl-s" x="593" y="341" text-anchor="middle">Developer Housing</text>
+        </g>
+
+        <text class="svg-cap" id="drumCap" x="742" y="458" text-anchor="end">원본 p.80 &ldquo;帯電から1次転写までの Layout&rdquo; 배치</text>
+      </svg>
+    </div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오</p>
+    <div class="panel">
+      <div class="panel-in">
+        <div class="panel-k" id="pk">Overview</div>
+        <p class="panel-t" id="pt">드럼 한 바퀴 + 벨트 + 용지</p>
+        <p class="panel-d" id="pd">드럼 표면의 한 지점을 눈으로 따라가 보세요. 좌하단 BCR에서 −600V로 대전되고,
+          우하단 LPH에서 빛을 받아 화상부만 −100V로 올라가고(플러스 전하 유도), 우측 Development Roll에서 토너를 받고,
+          상단 1st BTR에서 IBT Belt로 넘겨줍니다. 벨트는 좌측으로 진행해 좌단 2nd BTR에서 토너를 용지에 옮기고,
+          드럼 좌측 Cleaning Blade는 남은 토너를 긁어냅니다.</p>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro-k">드럼 표면전위</div><div class="ro-v" id="roV">−600 V</div></div>
+        <div class="ro"><div class="ro-k">위치</div><div class="ro-v" id="roL" style="font-size:14px">드럼 전체</div></div>
+        <div class="ro"><div class="ro-k">담당 부품</div><div class="ro-v" id="roP" style="font-size:14px">전체</div></div>
+        <div class="ro"><div class="ro-k">원본 章</div><div class="ro-v" id="roC" style="font-size:14px">10–13</div></div>
+      </div>
+    </div>
+    <p class="cap">부품 위치는 원본 p.80 <span class="en">10.3.2 Layout around DRUM Unit</span> 도해와 동일하게 배치했습니다.
+      전하 기호를 보십시오 — BCR 통과 후 <b style="color:#E8452A">−</b>로 채워지고,
+      LPH 통과 후 화상부만 <b style="color:#0E7A57">+</b>로 바뀝니다. 이 부호 전환이 정전잠상입니다.</p>
+  </div>
+
+  <div class="easy"><span class="tag">비유로 먼저</span>
+    드럼은 <b>계속 돌아가는 도화지</b>입니다. 표면의 한 점이 한 바퀴 도는 동안
+    <b>밑칠 → 지우개질 → 색가루 붙이기 → 벨트로 넘기기 → 지우기</b>를 차례로 겪습니다.
+    아래 그림에서 <b>빨강은 정전기가 있는 곳, 초록은 빛으로 지워진 곳</b>입니다.</div>
+
+  <h3>단계별로 무슨 일이 일어나는가</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>단계</th><th>부품</th><th>일어나는 일</th><th>표면 전기</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">① 대전</td><td class="pn">BCR</td>
+          <td>드럼 표면 전체에 전기를 <b>고르게</b> 입힙니다. 도화지에 밑칠을 하는 단계입니다.</td>
+          <td><span class="v neg">−600 V</span></td></tr>
+        <tr><td class="pn">② 노광</td><td class="pn">LPH</td>
+          <td>화상이 될 부분에만 <b>빛을 쏘아 전기를 옅게</b> 만듭니다. 이 진하고 옅은 차이가 곧 그림입니다.
+            이것을 <b>정전잠상</b>이라고 부릅니다.</td>
+          <td><span class="v" style="color:var(--ok)">−100 V</span></td></tr>
+        <tr><td class="pn">③ 현상</td><td class="pn">Development Roll</td>
+          <td>토너는 <b>Developer Housing → Development Roll 표면 → 드럼</b> 순으로 갑니다.
+            하우징에서 드럼으로 바로 튀는 것이 아닙니다.
+            롤이 <span class="v neg">−400V</span>를 띠고 있어서, 롤 표면에 실려 온 토너가
+            <b>전기가 옅어진 곳으로만</b> 옮겨갑니다. 진한 곳에는 가지 않습니다.</td>
+          <td><span class="v neg">−400 V</span> (Bias)</td></tr>
+        <tr><td class="pn">④ 1차 전사</td><td class="pn">1st BTR</td>
+          <td>드럼의 토너를 <b>IBT Belt로</b> 옮깁니다. 드럼이 4개(K·C·M·Y)라 벨트가 지나가며 색을 겹쳐 받습니다.</td>
+          <td>+DC</td></tr>
+        <tr><td class="pn">⑤ 2차 전사</td><td class="pn">2nd BTR</td>
+          <td>벨트에 쌓인 <b>토너 4층을 종이로 한꺼번에</b> 옮깁니다. 아직 가루라서 만지면 번집니다.</td>
+          <td>−DC (BUR)</td></tr>
+        <tr><td class="pn">⑥ 정착</td><td class="pn">Heat Roll<br>NIP Belt</td>
+          <td><b>열과 압력으로 녹여</b> 종이에 스며들게 합니다. 가루 사이 빈틈이 메워지면서 <b>비로소 색이 제대로 납니다.</b></td>
+          <td>열 · 압력</td></tr>
+        <tr><td class="pn">⑦ 클리닝</td><td class="pn">Cleaning Blade</td>
+          <td>드럼에 남은 토너를 긁어 회수 병으로 보냅니다. 그리고 다시 ①로 돌아갑니다.</td>
+          <td>제전</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><span class="tag">외우는 방법</span>
+    <b>대 · 노 · 현 · 전 · 정 · 클</b> — 앞 다섯 단계는 <b>전기</b>가 주역이고, <b>정착만 열</b>이 주역입니다.
+    이 한 줄만 기억해도 절반은 됩니다.</div>
+
+  <div class="easy"><span class="tag">비유로 먼저</span>
+    풍선을 머리에 문지르면 <b>정전기가 있는 쪽으로만</b> 종이 조각이 달라붙습니다.
+    색가루도 똑같이 <b>정전기 차이가 큰 쪽으로만</b> 끌려갑니다.
+    아래 그림의 화살표가 그 &ldquo;끌리는 방향&rdquo;입니다.</div>
+
+  <h3>왜 전기 차이로 토너가 골라 붙는가</h3>
+  <p>가장 헷갈리는 부분이라 그림으로 보겠습니다.
+    Development Roll(<span class="v neg">−400V</span>)에서 보면
+    빛을 받은 곳(<span class="v" style="color:var(--ok)">−100V</span>)은 <b>상대적으로 높고</b>,
+    받지 않은 곳(<span class="v neg">−600V</span>)은 <b>낮습니다.</b>
+    토너는 높은 쪽으로만 끌려가므로 그림 부분에만 붙습니다.</p>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 3 &nbsp;현상 원리 — 전위 사다리</span>
+      <div class="ctrl"><button class="b on" id="voltPlay">일시정지</button></div>
+    </div>
+    <div class="fig-b">
+      <svg id="voltSvg" viewBox="0 0 620 300" role="img" aria-label="드럼 노광부 -100V, Deve Bias -400V, 대전부 -600V의 전위 관계도">
+        <defs>
+          <marker id="arG" markerWidth="8" markerHeight="8" refX="6" refY="3.2" orient="auto">
+            <path d="M0,0 L6.5,3.2 L0,6.4 z" fill="#0E7A57"/>
+          </marker>
+          <marker id="arR" markerWidth="8" markerHeight="8" refX="6" refY="3.2" orient="auto">
+            <path d="M0,0 L6.5,3.2 L0,6.4 z" fill="#E8452A"/>
+          </marker>
+        </defs>
+        <!-- 축 -->
+        <line x1="72" y1="40" x2="72" y2="260" stroke="#C6D0DB" stroke-width="1"/>
+        <text class="lbl-s" x="66" y="32" text-anchor="end">전위 높음</text>
+        <text class="lbl-s" x="66" y="272" text-anchor="end">전위 낮음</text>
+
+        <!-- 노광부 -100V -->
+        <line x1="72" y1="70" x2="330" y2="70" stroke="#E1E7ED" stroke-dasharray="3 3"/>
+        <rect x="330" y="58" width="150" height="24" rx="2" fill="#E8F4E9" stroke="#0E7A57"/>
+        <text class="lbl" x="405" y="74" text-anchor="middle" fill="#0E7A57">노광부(잠상) −100V</text>
+        <!-- Deve Bias -400V -->
+        <line x1="72" y1="160" x2="330" y2="160" stroke="#E1E7ED" stroke-dasharray="3 3"/>
+        <rect x="150" y="148" width="160" height="24" rx="2" fill="#EDF1F4" stroke="#28394B"/>
+        <text class="lbl" x="230" y="164" text-anchor="middle">Deve Bias −400V</text>
+        <!-- 대전부 -600V -->
+        <line x1="72" y1="230" x2="330" y2="230" stroke="#E1E7ED" stroke-dasharray="3 3"/>
+        <rect x="330" y="218" width="150" height="24" rx="2" fill="#FCEDEA" stroke="#E8452A"/>
+        <text class="lbl" x="405" y="234" text-anchor="middle" fill="#E8452A">대전부(비노광) −600V</text>
+
+        <!-- 화살표 -->
+        <path d="M312 152 L 340 78" stroke="#0E7A57" stroke-width="2" marker-end="url(#arG)"/>
+        <text class="lbl" x="352" y="118" fill="#0E7A57">+300V 전위경사</text>
+        <text class="lbl-s" x="352" y="132" fill="#0E7A57">→ 토너가 잠상으로 이동</text>
+
+        <path d="M340 224 L 314 176" stroke="#E8452A" stroke-width="2" marker-end="url(#arR)"
+              stroke-dasharray="5 3"/>
+        <text class="lbl" x="120" y="204" fill="#E8452A">−200V 전위경사</text>
+        <text class="lbl-s" x="120" y="218" fill="#E8452A">→ 토너 이동 저지</text>
+
+        <!-- 토너 애니메이션 -->
+        <g id="voltToner"></g>
+        <text class="svg-cap" x="596" y="290" text-anchor="end">Development Roll 시점에서 본 상대 전위</text>
+      </svg>
+    </div>
+    <p class="cap">Development Roll 표면(−400V)에서 보면 잠상은 <b>+300V만큼 높고</b>, 비노광부는 <b>−200V만큼 낮습니다.</b>
+      토너는 높은 쪽으로만 끌려가므로 잠상에만 선택적으로 부착됩니다.</p>
+  </div>
+
+  <div class="easy"><span class="tag">토너가 가는 길 — 순서가 중요합니다</span>
+    <b>Toner Cartridge → Developer Housing → Development Roll → 드럼</b>입니다.
+    통에서 드럼으로 바로 튀지 않습니다. <b>롤러가 붓처럼 묻혀 와서 전달</b>합니다.<br>
+    그리고 드럼과 롤이 맞물리는 자리(<b>닙</b>)는 <b>용지 폭 전체</b>에 걸쳐 닿으므로,
+    토너도 한 줄이 아니라 <b>폭 전체에 묻습니다.</b>
+    3D 그림에서 <b>드럼 · 현상기</b>를 선택하고 돌려 보면 이 경로가 보입니다.</div>
+
+  <h3>4색이 겹쳐 컬러가 되는 과정</h3>
+  <p>드럼이 4개 있고, 벨트가 그 아래를 지나가며 색을 하나씩 받습니다.
+    <b>노랑 → 마젠타 → 시안 → 검정</b> 순서입니다.
+    4색이 다 쌓인 뒤 종이로 한 번에 옮기고, 정착부에서 녹여야 색이 완성됩니다.</p>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 4 &nbsp;4색 탠덤 → 2차 전사 → 정착 전체 흐름</span>
+      <div class="ctrl">
+        <button class="b on" id="t4Play">일시정지</button>
+        <button class="b" id="t4Slow">저속</button>
+        <button class="b" id="t4Mode">흑백(BW)으로</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <div class="steps" id="t4Steps" role="tablist" aria-label="4색 프로세스 단계 선택">
+        <button class="on" data-s="0">전체</button>
+        <button data-s="1">① Y</button>
+        <button data-s="2">② M</button>
+        <button data-s="3">③ C</button>
+        <button data-s="4">④ K</button>
+        <button data-s="5">⑤ 2차 전사</button>
+        <button data-s="6">⑥ 정착·발색</button>
+      </div>
+      <svg id="t4Svg" viewBox="0 0 800 470" role="img"
+           aria-label="K C M Y 4개 드럼이 IBT Belt 아래 나란히 배치되고, 벨트가 좌측으로 진행하며 Y M C K 순으로 토너를 겹쳐 받은 뒤, 좌단 2nd BTR에서 용지로 전사하고 정착부에서 용융되는 전체 흐름">
+        <defs>
+          <marker id="ar4" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#5A6E82"/></marker>
+          <marker id="ar4c" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#008FB3"/></marker>
+        </defs>
+
+        <!-- ===== IBT Belt ===== -->
+        <path d="M170 150 L 740 150 A 11 11 0 0 1 740 172 L 170 172 A 11 11 0 0 1 170 150 Z"
+              fill="#DCE3EA" stroke="#B4C0CC" stroke-width="1.2"/>
+        <g id="beltCells"></g>
+        <circle cx="170" cy="161" r="11" fill="#EDF1F4" stroke="#28394B" stroke-width="1.5"/>
+        <text class="lbl" x="700" y="143">IBT Belt</text>
+        <path d="M700 190 L 600 190" stroke="#5A6E82" stroke-width="1.4" marker-end="url(#ar4)" opacity=".85"/>
+        <text class="lbl-s" x="608" y="206">벨트 진행 (좌향)</text>
+
+        <!-- ===== 4색 드럼 (JS 생성) ===== -->
+        <g id="drums4"></g>
+
+        <!-- ===== BUR / 2nd BTR ===== -->
+        <g id="t4g2nd">
+          <text class="lbl" x="196" y="128">BUR</text>
+          <text class="lbl-s" x="196" y="114">−DC</text>
+          <circle cx="128" cy="161" r="16" fill="#F0F3F6" stroke="#28394B" stroke-width="1.8"/>
+          <text class="lbl" x="20" y="196">2nd BTR</text>
+          <path d="M64 190 L 114 172" class="leader"/>
+        </g>
+
+        <!-- ===== 정착부 ===== -->
+        <g id="t4gFuse">
+          <circle cx="172" cy="95" r="20" fill="#FDF0EB" stroke="#F2683C" stroke-width="2"/>
+          <circle cx="126" cy="95" r="14" fill="#EDF1F4" stroke="#5A6E82" stroke-width="1.5"/>
+          <text class="lbl" x="200" y="88" fill="#F2683C">Heat Roll</text>
+          <text class="lbl-s" x="200" y="102">NIP Belt · NIP 12.6mm</text>
+          <text class="lbl-s" x="200" y="116">Lamp (Main/Sub)</text>
+        </g>
+
+        <!-- ===== 용지 ===== -->
+        <rect x="470" y="418" width="190" height="20" rx="2" fill="#F7F9FB" stroke="#28394B" stroke-width="1.2"/>
+        <text class="lbl-s" x="565" y="432" text-anchor="middle">Tray</text>
+        <rect x="330" y="26" width="130" height="12" rx="2" fill="#EDF1F4" stroke="#C6D0DB"/>
+        <text class="lbl-s" x="468" y="36">→ Exit</text>
+        <path id="t4Path" d="M640 428 L 192 428 Q 149 428 149 390 L 149 58 Q 149 38 178 34 L 330 32"
+              fill="none" stroke="#008FB3" stroke-width="1.4" stroke-dasharray="5 4" opacity=".4"/>
+        <g id="t4Sheet">
+          <rect x="-17" y="-4" width="34" height="8" rx="1" fill="#fff" stroke="#28394B" stroke-width="1.2"/>
+          <g id="t4SheetToner"></g>
+        </g>
+
+        <!-- ===== 적층 순서 범례 ===== -->
+        <g id="t4Legend">
+          <text class="lbl" x="330" y="268">벨트 위 적층 순서 (좌향 진행)</text>
+          <text class="lbl-s" x="330" y="284">Y → M → C → K 순으로 겹쳐 올림. K가 가장 바깥(용지에 먼저 닿는 면)</text>
+          <g id="t4Stack"></g>
+          <text class="lbl-s" x="330" y="352">용지에 전사되면 순서가 뒤집혀 K가 용지 면에 접합니다</text>
+        </g>
+
+        <text class="svg-cap" x="782" y="458" text-anchor="end">원본 Ch.13 (Transfer) + Ch.15 (Fusing)</text>
+      </svg>
+    </div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오</p>
+    <div class="panel">
+      <div class="panel-in">
+        <div class="panel-k" id="t4k">Overview</div>
+        <p class="panel-t" id="t4t">4개 드럼이 벨트 하나에 색을 겹쳐 올립니다</p>
+        <p class="panel-d" id="t4d">각 색은 완전히 독립된 화상 형성 장치(BCR · LPH · Development Roll · 1st BTR)를 가집니다.
+          벨트는 좌측으로 진행하면서 Y → M → C → K 순으로 토너를 겹쳐 받고, 좌단 2nd BTR에서 4층을 한꺼번에 용지로 옮깁니다.
+          이 시점의 토너는 아직 가루 덩어리라 색이 나지 않습니다. 정착부에서 용융되어 내부 공극이 메워졌을 때 비로소 발색합니다.</p>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro-k">모드</div><div class="ro-v" id="t4roM" style="font-size:14px">FC (풀컬러)</div></div>
+        <div class="ro"><div class="ro-k">1st BTR</div><div class="ro-v" id="t4roB" style="font-size:14px">K C M Y 전 색 접촉</div></div>
+        <div class="ro"><div class="ro-k">용지 위 상태</div><div class="ro-v" id="t4roP" style="font-size:14px">–</div></div>
+      </div>
+    </div>
+    <p class="cap"><b>흑백(BW) 버튼을 눌러 보십시오.</b> C · M · Y의 1st BTR이 벨트에서 이탈해 K만 전사됩니다.
+      원본 Ch.13.4.1의 BW Position이 실제로 이렇게 동작하며, CMY 드럼의 마모를 억제하는 것이 목적입니다.</p>
+  </div>
+
+  <h3>기내에서 어디에 있는가</h3>
+  <p>지금까지의 부품이 기기 안 어디에 있는지 입체로 보겠습니다.
+    부품에 마우스를 올리면 이름과 역할이 나옵니다.</p>
+
+  <div class="xray">
+    <div class="xr-h">
+      <span class="xr-t">그림 5 &nbsp;3D 컷어웨이 투시</span>
+      <span class="xr-zoom" id="x3zro">×1.0</span>
+      <div class="ctrl">
+        <span class="ctrl" id="x3colsel" style="display:none">
+          <button class="b" data-c="K">K</button>
+          <button class="b" data-c="C">C</button>
+          <button class="b" data-c="M">M</button>
+          <button class="b on" data-c="Y">Y</button>
+        </span>
+        <button class="b on" id="x3shell">외장</button>
+        <button class="b on" id="x3anim">동작</button>
+        <button class="b" id="x3dup">양면</button>
+        <button class="b" id="x3zout">−</button>
+        <button class="b" id="x3zin">+</button>
+        <button class="b" id="x3reset">초기화</button>
+      </div>
+    </div>
+    <div class="xr-b" id="x3stage">
+      <div class="steps" id="x3steps" role="tablist" aria-label="부위 선택">
+        <button class="on" data-z="all">전체</button>
+        <button data-z="scan">스캔 · 배출</button>
+        <button data-z="fuse">정착</button>
+        <button data-z="engine">전사 엔진</button>
+        <button data-z="drum">드럼 · 현상기</button>
+        <button data-z="feed">급지부</button>
+      </div>
+      <svg id="x3v" viewBox="0 0 900 620" role="img"
+           aria-label="복합기의 전면과 좌측면을 절단해 내부를 보여주는 3차원 투시도. 회전·확대가 가능하고 부품을 클릭하면 명칭이 표시되며, 부위를 선택하면 전사 과정이나 급지 동작이 재생된다">
+        <g id="x3scene"></g>
+      </svg>
+      <div class="xr-tip" id="x3tip" aria-hidden="true"></div>
+    </div>
+    <div class="xr-legend" id="x3legend"></div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오 · 3D는 좌우로 끌어 회전</p>
+    <p class="xr-hint">드래그 = 회전 · 휠 / 핀치 = 확대 · Shift+드래그 = 이동 · 클릭 = 라벨 고정 · 빈 곳 클릭 = 해제</p>
+    <div class="xr-p">
+      <div class="xr-k" id="x3k">Overview</div>
+      <p class="xr-tt" id="x3t">기기는 세로 3층 구조입니다</p>
+      <p class="xr-d" id="x3d">최상단은 원고를 읽는 층, 중간은 화상을 만드는 층, 최하단은 용지를 공급하는 층입니다.</p>
+      <ul class="xr-seq" id="x3seq"></ul>
+    </div>
+    <p class="xr-cap"><b>교육 팁</b> — <b>드럼 · 현상기</b>에서 드럼 앞면의 색 고리를 보십시오.
+      빨강이 대전(−600V), 초록이 정전잠상(−100V), 색상이 부착된 토너입니다.
+      <b>K C M Y</b> 버튼으로 색을 바꿀 수 있습니다. <b>전체</b> 부위에서는 용지가 2차 전사를 지나며
+      <b>4색 토너가 묻고</b> 정착부를 통과하며 <b>한 덩어리로 융착</b>되는 과정을 볼 수 있습니다.
+      <b>급지부</b>에서는 트레이에 <b>용지가 적재된 모습</b>과 Nudger · Feed · Retard 3롤이 보입니다.
+      <b>×1.6 이상</b> 확대하면 BCR Cleaner · Trickle outlet 같은 세부 부품이 나타납니다.</p>
+  </div>
+
+  <div class="warn"><span class="tag">현장 필수 주의 — 이 세 가지만 기억</span>
+    <b>① 드럼을 빼서 놓아둘 때는 흑지로 덮으십시오.</b> 형광등 빛에도 광피로가 생깁니다.<br>
+    <b>② Fusing Unit은 분해 금지입니다.</b> 안전상의 이유로 실습에서도 허용되지 않습니다.<br>
+    <b>③ LPH는 Basic(5V)과 Advance(12V)가 호환되지 않습니다.</b>
+    Basic용을 Advance에 장착하면 <b>LPH와 Halftone PWB가 파손됩니다.</b></div>
+</section>
+
+<!-- ============ 04 용지 급지 ============ -->
+<section id="paper">
+  <div class="sec-h"><span class="sec-n">04</span><h2>용지 급지<span>트레이에서 한 장만 뽑기</span></h2></div>
+
+  <p class="lead">급지의 핵심은 딱 하나입니다 — <b>어떻게 한 장만 뽑는가.</b>
+    두 장이 딸려 나오면 JAM이고, 한 장도 안 나오면 비급지입니다.
+    답은 <b>Feed Roll이 당기고 Retard Roll이 버티는 것</b>입니다.</p>
+
+  <div class="easy"><span class="tag">비유로 먼저</span>
+    카드를 한 장씩 나눠주는 딜러를 떠올려 보십시오.
+    한 손으로 <b>맨 위 카드를 밀어내고</b>(Nudger), 다른 손으로 <b>당겨 가져가고</b>(Feed),
+    아래 카드가 딸려 나오지 않게 <b>손가락으로 눌러 둡니다</b>(Retard).
+    <b>Retard Roll은 돌지 않습니다.</b> 버티기만 합니다.</div>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 6 &nbsp;트레이 급지 동작 — 한 장만 뽑아내는 원리</span>
+      <div class="ctrl">
+        <button class="b on" id="fdPlay">일시정지</button>
+        <button class="b" id="fdSlow">저속</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <div class="steps" id="fdSteps" role="tablist" aria-label="급지 단계 선택">
+        <button class="on" data-s="0">전체</button>
+        <button data-s="1">① 사이즈 검출</button>
+        <button data-s="2">② Lift Up</button>
+        <button data-s="3">③ Nudger</button>
+        <button data-s="4">④ Feed + Retard</button>
+        <button data-s="5">⑤ T/A</button>
+        <button data-s="6">⑥ Regi · Skew</button>
+      </div>
+      <svg id="fdSvg" viewBox="0 0 700 330" role="img"
+           aria-label="트레이 단면. Bottom Plate가 용지 다발을 들어올리고 Nudger Roll이 최상단 한 장을 긁어내면 Feed Roll과 Retard Roll이 한 장만 통과시켜 T/A와 Regi로 보낸다">
+        <!-- 트레이 외곽 -->
+        <path d="M62 196 L 62 292 L 556 292 L 556 196" fill="none" stroke="#28394B" stroke-width="1.8"/>
+        <rect x="556" y="196" width="12" height="96" rx="2" fill="#EEF2F6" stroke="#8C9BAA"/>
+        <text class="lbl-s" x="668" y="300" text-anchor="end">Tray Assembly (단면)</text>
+
+        <!-- Bottom Plate + 적재 용지 (JS 이동) -->
+        <g id="fdStack">
+          <rect id="fdPlate" x="82" y="264" width="452" height="8" rx="1" fill="#B4C0CC" stroke="#28394B"/>
+          <rect id="fdPaper" x="86" y="232" width="446" height="32" rx="1" fill="#F4F7F9" stroke="#8C9BAA"/>
+          <g id="fdLines"></g>
+        </g>
+
+        <!-- End Guide (후단 가이드) -->
+        <rect x="534" y="222" width="10" height="44" rx="1" fill="#EDF1F4" stroke="#5A6E82" stroke-width="1.3"/>
+        <text class="lbl-s" x="556" y="216" text-anchor="end">End Guide</text>
+        <!-- Feed/Lift Up Motor (후면) -->
+        <rect x="22" y="222" width="30" height="26" rx="2" fill="#EDF4F8" stroke="#5A6E82"
+              stroke-width="1.2" stroke-dasharray="3 2"/>
+        <text class="lbl-s" x="37" y="262" text-anchor="middle">Feed/Lift Up</text>
+        <text class="lbl-s" x="37" y="274" text-anchor="middle">Motor (후면)</text>
+
+        <!-- 롤 -->
+        <path id="fdDoc" d="" fill="#fff" stroke="#28394B" stroke-width="1.3" stroke-linejoin="round"/>
+        <g id="fdRolls"></g>
+
+        <!-- 센서 -->
+        <g id="fdSens"></g>
+
+        <!-- 반송 경로 -->
+        <path id="fdPath"
+              d="M470 232 L 190 226 Q 132 220 106 198 L 76 194 Q 52 190 50 164 L 50 96 Q 50 64 80 58 L 320 52"
+              fill="none" stroke="#008FB3" stroke-width="1.6" stroke-dasharray="6 4" opacity=".45"/>
+        <text class="lbl-s" x="330" y="48">→ 전사부</text>
+
+        <!-- 루프 (Skew 보정) -->
+        <path id="fdLoop" d="M50 118 Q 74 104 50 90" fill="none" stroke="#C8005F"
+              stroke-width="2" opacity="0"/>
+        <text class="lbl-s" id="fdLoopL" x="84" y="106" fill="#C8005F" opacity="0">루프 → Skew 보정</text>
+
+        <!-- 이동 용지 (경로에 맞춰 휘어진다) -->
+        
+
+        <text class="svg-cap" x="678" y="322" text-anchor="end">붉은 롤 = 모터 구동 · 파란 롤 = 비구동</text>
+      </svg>
+    </div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오</p>
+    <div class="panel">
+      <div class="panel-in">
+        <div class="panel-k" id="fdK">Overview</div>
+        <p class="panel-t" id="fdT">왜 한 장만 나오는가</p>
+        <p class="panel-d" id="fdD">핵심은 <b>Feed Roll과 Retard Roll이 서로 반대로 도는 것</b>입니다.
+          Feed Roll은 용지를 끌어내는 방향, Retard Roll은 되돌리는 방향으로 돕니다.
+          한 장이면 Feed Roll의 마찰력이 이기고, 두 장이 겹쳐 들어오면
+          종이끼리는 잘 미끄러지므로 아래 장이 Retard Roll에 밀려 되돌아갑니다.</p>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro-k">현재 동작</div><div class="ro-v" id="fdPos" style="font-size:14px">대기</div></div>
+        <div class="ro"><div class="ro-k">담당 부품</div><div class="ro-v" id="fdP" style="font-size:14px">–</div></div>
+      </div>
+    </div>
+    <p class="cap">Bottom Plate가 올라가는 것과 <b>Retard Roll이 돌지 않는 것</b>을 함께 보십시오.
+      Nudger와 Feed Roll은 용지를 내보내는 방향으로 돌지만,
+      <b>Retard Roll은 비구동이라 멈춰 있으면서 저지력만 냅니다.</b>
+      한 장이면 Feed Roll의 마찰력이 이겨 통과하고, 두 장이면 아래 장이 이 저지력에 걸려 되돌아갑니다.
+      용지가 경로 곡선에 맞춰 휘어지는 모습도 함께 보십시오.</p>
+  </div>
+
+  <h3>급지 롤 3개의 역할 구분</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>롤</th><th>구동</th><th>회전 방향</th><th>역할</th><th>이 롤이 나쁘면</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">Nudger Roll</td><td class="pn">Feed Motor (CW)</td><td>급지 방향</td>
+          <td>적재 다발의 <b>최상단 한 장만</b> 긁어 Feed 부로 보냅니다. Feed Clutch로 하강(Lift Down)합니다.</td>
+          <td>급지 자체가 안 됨 (Non Feed JAM)</td></tr>
+        <tr><td class="pn">Feed Roll</td><td class="pn">Feed Motor (CW)</td><td>급지 방향</td>
+          <td><b>마찰력</b>으로 용지를 Take Away 방향으로 끌어냅니다.</td>
+          <td>급지 지연 · 미끄러짐</td></tr>
+        <tr><td class="pn">Retard Roll</td><td class="pn"><b>비구동</b></td><td><b>반대(저지) 방향</b></td>
+          <td><b>저지력</b>으로 2장 이상 통과를 차단합니다. 스프링으로 Feed Roll에 밀려 올라가 닙을 만듭니다.</td>
+          <td><b>중복 급지</b> (Multi Feed)</td></tr>
+        <tr><td class="pn">T/A Roll</td><td class="pn">Sub Motor (Clutch)</td><td>반송 방향</td>
+          <td>각 트레이에서 온 용지를 Regi 부로 반송합니다.</td>
+          <td>반송 지연 JAM</td></tr>
+        <tr><td class="pn">Regi Roll</td><td class="pn">Sub Motor (Clutch)</td><td>반송 방향 (일시 정지)</td>
+          <td>정지 상태로 용지를 받아 <b>루프</b>를 만들어 Skew를 잡고, Tacking Point 타이밍에 맞춰 보냅니다.</td>
+          <td>화상 위치 어긋남 · Skew</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><span class="tag">HFSI</span>
+    <span class="en">Tray Rolls</span>(Feed / Nudger / Retard)는 <b>600K</b>,
+    <span class="en">100 Sheets MSI Rolls</span>도 <b>600K</b>입니다.
+    3롤은 <b>한 세트로 함께 교환</b>합니다 — 하나만 새것으로 바꾸면 마찰력 균형이 깨져
+    중복 급지나 비급지가 오히려 늘어납니다.</div>
+
+  <div class="note"><span class="tag">트레이에서 알아둘 것 (17.4)</span>
+    <b>Tray1은 봉투 트레이로 쓸 수 있습니다.</b> 전용 <span class="en">attachment</span>를
+    <b>End Guide에 위에서 끼워</b> 넣고 가이드를 봉투 크기에 맞춥니다.
+    이 attachment는 <b><span class="en">Tray Front Cover</span> 안에 보관</b>되어 있습니다.<br>
+    <b>Tray 2~4의 Front Cover는 서로 호환되지 않습니다.</b>
+    Tray Assembly를 교환할 때는 Front Cover도 함께 교환해야 합니다.</div>
+
+  <h3>트레이를 나온 뒤의 경로</h3>
+  <p>급지된 용지는 기기 <b>좌측 벽면</b>을 타고 위로 올라갑니다.
+    올라가면서 2차 전사로 토너를 받고, 바로 위 정착부에서 녹여 붙인 뒤 상단으로 배출됩니다.</p>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 7 &nbsp;용지 반송 경로 애니메이션</span>
+      <div class="ctrl">
+        <button class="b on" id="paperPlay">일시정지</button>
+        <button class="b" id="paperDup">양면(Duplex)</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <svg id="paperSvg" viewBox="0 0 620 400" role="img"
+           aria-label="트레이에서 급지되어 Regi, 2차 전사, 정착을 거쳐 배출되는 용지 반송 경로 애니메이션">
+        <defs>
+          <marker id="arP" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#008FB3"/>
+          </marker>
+        </defs>
+
+        <!-- IBT Belt -->
+        <rect x="128" y="150" width="330" height="13" rx="2" fill="#DCE3EA" stroke="#B4C0CC"/>
+        <text class="lbl-s" x="464" y="160">IBT Belt</text>
+        <!-- 드럼 4개 -->
+        <g>
+          <circle cx="182" cy="128" r="18" fill="#F7F9FB" stroke="#28394B" stroke-width="1.3"/>
+          <text class="lbl-s" x="182" y="132" text-anchor="middle">K</text>
+          <circle cx="252" cy="128" r="18" fill="#F7F9FB" stroke="#008FB3" stroke-width="1.3"/>
+          <text class="lbl-s" x="252" y="132" text-anchor="middle" fill="#008FB3">C</text>
+          <circle cx="322" cy="128" r="18" fill="#F7F9FB" stroke="#C8005F" stroke-width="1.3"/>
+          <text class="lbl-s" x="322" y="132" text-anchor="middle" fill="#C8005F">M</text>
+          <circle cx="392" cy="128" r="18" fill="#F7F9FB" stroke="#E0AC00" stroke-width="1.3"/>
+          <text class="lbl-s" x="392" y="132" text-anchor="middle" fill="#E0AC00">Y</text>
+          <path d="M410 168 L 200 168" stroke="#8C9BAA" stroke-width="1.2" marker-end="url(#ar)" opacity=".7"/>
+          <text class="lbl-s" x="300" y="182" text-anchor="middle">벨트 진행 · Y→M→C→K 순 적층</text>
+        </g>
+
+        <path id="sheet" d="" fill="#fff" stroke="#28394B" stroke-width="1.3" stroke-linejoin="round"/>
+        <path id="sheetToner" d="" fill="none" stroke="#008FB3" stroke-width="3" opacity="0"/>
+
+        <!-- 2nd BTR -->
+        <circle cx="128" cy="157" r="16" fill="#F0F3F6" stroke="#28394B" stroke-width="1.6"/>
+        <text class="lbl" x="66" y="150" text-anchor="end">2nd BTR</text>
+        <text class="lbl-s" x="66" y="163" text-anchor="end">+ BUR</text>
+
+        <!-- Fusing -->
+        <circle cx="128" cy="90" r="19" fill="#FDF0EB" stroke="#F2683C" stroke-width="1.8"/>
+        <text class="lbl" x="154" y="86" fill="#F2683C">Heat Roll</text>
+        <text class="lbl-s" x="154" y="99">NIP Belt · NIP 12.6mm</text>
+
+        <!-- Exit -->
+        <rect x="196" y="42" width="96" height="12" rx="2" fill="#EDF1F4" stroke="#C6D0DB"/>
+        <text class="lbl" x="300" y="52">Exit 1</text>
+
+        <!-- Regi -->
+        <circle cx="128" cy="228" r="14" fill="#F0F3F6" stroke="#28394B" stroke-width="1.5"/>
+        <text class="lbl" x="66" y="224" text-anchor="end">Regi Roll</text>
+        <text class="lbl-s" x="66" y="237" text-anchor="end">Skew 보정</text>
+        <!-- T/A -->
+        <circle cx="128" cy="286" r="12" fill="#F0F3F6" stroke="#28394B" stroke-width="1.4"/>
+        <text class="lbl" x="66" y="290" text-anchor="end">T/A Roll</text>
+
+        <!-- Trays -->
+        <g>
+          <rect x="196" y="304" width="180" height="20" rx="2" fill="#F7F9FB" stroke="#28394B" stroke-width="1.3"/>
+          <text class="lbl-s" x="286" y="318" text-anchor="middle">Tray 1</text>
+          <rect x="196" y="332" width="180" height="20" rx="2" fill="#F7F9FB" stroke="#C6D0DB"/>
+          <text class="lbl-s" x="286" y="346" text-anchor="middle">Tray 2</text>
+          <rect x="196" y="360" width="180" height="20" rx="2" fill="#F7F9FB" stroke="#C6D0DB"/>
+          <text class="lbl-s" x="286" y="374" text-anchor="middle">Tray 3 / 4 (3TM)</text>
+          <!-- Feeder -->
+          <circle cx="188" cy="298" r="9" fill="#EDF1F4" stroke="#28394B" stroke-width="1.2"/>
+          <text class="lbl-s" x="392" y="310">Nudger / Feed / Retard Roll</text>
+          <path d="M388 314 L 376 310" class="leader"/>
+        </g>
+
+        <!-- MSI -->
+        <rect x="470" y="250" width="112" height="16" rx="2" fill="#F7F9FB" stroke="#C6D0DB"/>
+        <text class="lbl-s" x="526" y="262" text-anchor="middle">MSI (100 sheets)</text>
+
+        <!-- 경로 -->
+        <path id="pPath" d="M196 314 L 148 314 Q 128 314 128 292 L 128 234 L 128 164 L 128 96 Q 128 62 158 52 L 292 48"
+              fill="none" stroke="#008FB3" stroke-width="1.6" stroke-dasharray="5 4" opacity=".6"/>
+        <!-- 양면 : 바깥쪽 우회 경로 (보이기용) -->
+        <path id="pDupView"
+              d="M250 48 Q 278 50 272 64 L 160 68 Q 100 70 84 96 L 78 266 Q 78 296 106 300 L 128 292"
+              fill="none" stroke="#C8005F" stroke-width="1.8" stroke-dasharray="6 4" opacity="0"/>
+        <text class="lbl-s" id="dupLbl" x="72" y="182" text-anchor="end" fill="#C8005F" opacity="0">Duplex Path</text>
+        <text class="lbl-s" id="dupLbl2" x="72" y="195" text-anchor="end" fill="#C8005F" opacity="0">(바깥쪽 우회)</text>
+        <!-- 양면 : 실제 이동 경로 (전체 한 바퀴, 보이지 않음) -->
+        <path id="pPathDup"
+              d="M196 314 L 148 314 Q 128 314 128 292 L 128 234 L 128 164 L 128 96 Q 128 62 158 52 L 250 48
+                 Q 278 50 272 64 L 160 68 Q 100 70 84 96 L 78 266 Q 78 296 106 300 L 128 292
+                 L 128 234 L 128 164 L 128 96 Q 128 62 158 52 L 292 44"
+              fill="none" stroke="none" opacity="0"/>
+
+        <!-- 이동하는 용지 -->
+        
+        <text class="svg-cap" id="pStage" x="596" y="392" text-anchor="end">급지 대기</text>
+      </svg>
+    </div>
+    <p class="cap">용지가 <span class="en">2nd BTR</span>을 지나면 토너가 실리고(색 채워짐),
+      <span class="en">Heat Roll</span>을 지나면 정착이 완료됩니다(진한 색).</p>
+  </div>
+
+  <div class="easy"><span class="tag">비유로 먼저</span>
+    양면 인쇄는 <b>종이를 뒤집어 다시 넣는 것</b>입니다.
+    사람이 손으로 뒤집어 다시 넣는 대신, 기계가 <b>밖으로 반쯤 내보냈다가 되당겨</b>
+    <b>바깥쪽 통로</b>로 한 바퀴 돌려 다시 올려 보냅니다.</div>
+
+  <div class="note"><span class="tag">양면은 어떻게 도는가</span>
+    <b>양면(Duplex) 버튼</b>을 눌러 보십시오. 양면일 때는 이렇게 돕니다.<br>
+    앞면을 인쇄해 <b>Exit으로 일부 내보낸 뒤 멈추고</b> → <b>반전시켜 되돌리고</b> →
+    <b>기기 바깥쪽 Duplex Path로 우회해 내려가</b> → <b>Regi로 다시 올라가</b>
+    뒷면을 인쇄하고 Exit으로 배출합니다.<br>
+    우회 경로가 <b>기기 안쪽이 아니라 바깥쪽(외측)</b>이라는 점이 중요합니다.
+    그래서 양면 JAM은 <b>Left-Hand Cover를 열어</b> 처리합니다.</div>
+
+  <div class="note"><span class="tag">이해의 핵심</span>
+    <b>&ldquo;일부러 부딪히게 한다&rdquo;</b>가 Regi 부의 요점입니다.
+    정지한 Regi Roll에 용지를 밀어붙이면 선단에 <b>루프</b>가 생기고,
+    그 탄성으로 비뚤어진 선단이 롤과 평행하게 정렬됩니다. 이것이 <b>Skew 보정</b>입니다.</div>
+</section>
+
+<!-- ============ 05 ADF 원고 급지 ============ -->
+<section id="dadf">
+  <div class="sec-h"><span class="sec-n">05</span><h2>ADF 원고 급지<span>원고를 뽑고 읽는 원리</span></h2></div>
+
+  <p class="lead">DADF는 <b>원고를 뽑는 방식이 용지 급지와 똑같습니다.</b>
+    Nudger로 최상단 한 장을 긁고, Feed Roll이 당깁니다.
+    다른 점은 <b>읽기</b>가 들어간다는 것, 그리고 <b>양면일 때 두 기종이 완전히 다르게 동작한다</b>는 것입니다.</p>
+
+  <div class="fig">
+    <div class="fig-h">
+      <span class="fig-t">그림 8 &nbsp;DADF 원고 반송 경로</span>
+      <div class="ctrl">
+        <button class="b on" id="dfPlay">일시정지</button>
+        <button class="b" id="dfSlow">저속</button>
+        <button class="b" id="dfMode">DADF-110 보기</button>
+      </div>
+    </div>
+    <div class="fig-b">
+      <div class="steps" id="dfSteps" role="tablist" aria-label="DADF 단계 선택">
+        <button class="on" data-s="0">전체</button>
+        <button data-s="1">① 급지</button>
+        <button data-s="2">② 사이즈 검출</button>
+        <button data-s="3">③ 루프 · Skew</button>
+        <button data-s="4">④ 표면 읽기</button>
+        <button data-s="5">⑤ 이면 읽기</button>
+        <button data-s="6">⑥ 배출</button>
+      </div>
+      <svg id="dfSvg" viewBox="0 0 700 350" role="img"
+           aria-label="DADF 원고 반송 경로. 우측 원고 트레이에서 Nudger와 Feed Roll이 한 장을 뽑아 좌측으로 크게 돌아 Scan Position에서 표면을 읽고, Out Roll을 지나 Exit Roll로 배출된다">
+        <!-- DADF 외곽 -->
+        <path d="M120 150 Q 100 150 100 190 L 100 250 Q 100 292 146 296 L 690 300 L 690 250"
+              fill="none" stroke="#C6D0DB" stroke-width="1.4"/>
+
+        <!-- 원고 트레이 -->
+        <path d="M436 84 L 690 60 L 692 76 L 438 100 Z" fill="#E4EFE6" stroke="#8C9BAA"/>
+        <rect x="462" y="80" width="200" height="9" rx="1" fill="#fff" stroke="#B4C0CC"/>
+        <text class="lbl-s" x="692" y="48" text-anchor="end">원고 트레이 (130매 / 110매)</text>
+
+        <!-- 배출 트레이 -->
+        <path d="M540 214 L 690 194 L 692 210 L 542 230 Z" fill="#EEF2F6" stroke="#8C9BAA"/>
+        <text class="lbl-s" x="692" y="184" text-anchor="end">배출 트레이</text>
+
+        <!-- Set Gate -->
+        <path d="M424 92 L 424 112" stroke="#5A6E82" stroke-width="2.4"/>
+        <text class="lbl-s" x="424" y="84" text-anchor="middle">Set Gate</text>
+
+        <!-- Platen Glass · Scan Position -->
+        <rect x="224" y="284" width="118" height="9" rx="1" fill="#DCE3EA" stroke="#B4C0CC"/>
+        <rect x="252" y="300" width="66" height="19" rx="2" fill="#0E1822"/>
+        <text x="285" y="313" text-anchor="middle"
+              font-family="'IBM Plex Mono','IBM Plex Sans KR','Malgun Gothic',monospace"
+              font-size="9" fill="#7FC9DD">IIT Carriage</text>
+        <text class="lbl-s" x="285" y="334" text-anchor="middle">Scan Position — 캐리지 고정, 원고가 등속 이동 (CVT)</text>
+
+        <!-- CIS (DADF-130 이면 읽기) -->
+        <g id="dfCIS">
+          <rect x="424" y="252" width="34" height="10" rx="1" fill="#0E1822"/>
+          <rect x="424" y="286" width="34" height="7" rx="1" fill="#fff" stroke="#B4C0CC"/>
+          <text class="lbl" x="441" y="244" text-anchor="middle" fill="#C8005F">CIS</text>
+          <text class="lbl-s" x="466" y="298" text-anchor="start">White Ref. Plate</text>
+        </g>
+
+        <!-- Invert Gate + 반전 경로 (DADF-110) -->
+        <g id="dfInvG" opacity="0">
+          <path d="M470 268 L 486 282" stroke="#C8005F" stroke-width="2.4"/>
+          <text class="lbl-s" x="492" y="292" fill="#C8005F">Invert Gate</text>
+          <path id="dfInv" d="M492 262 Q 560 268 566 306 Q 564 336 500 334 L 250 330"
+                fill="none" stroke="#C8005F" stroke-width="1.6" stroke-dasharray="6 5"/>
+          <text class="lbl-s" x="330" y="346" fill="#C8005F">Invert — 원고를 뒤집어 다시 통지</text>
+        </g>
+
+        <!-- 반송 경로 -->
+        <path id="dfPath"
+              d="M 660 80 L 440 100 Q 404 106 372 122 L 306 128 Q 236 134 186 164
+                 Q 138 196 150 238 Q 166 272 212 276 L 402 278 Q 468 278 494 254 L 676 226"
+              fill="none" stroke="#008FB3" stroke-width="1.8" stroke-dasharray="6 4" opacity=".5"/>
+
+        <!-- 롤 · 센서 (JS 생성) -->
+        <path id="dfDoc" d="" fill="#fff" stroke="#28394B" stroke-width="1.3" stroke-linejoin="round"/>
+        <path id="dfDocF" d="" fill="none" stroke="#008FB3" stroke-width="2.6" opacity="0"/>
+        <path id="dfDocB" d="" fill="none" stroke="#C8005F" stroke-width="2.6" opacity="0"/>
+        <g id="dfRolls"></g>
+        <g id="dfSens"></g>
+
+        <!-- 원고 (경로에 맞춰 휘어진다) -->
+        
+
+        <text class="svg-cap" id="dfCap" x="678" y="344" text-anchor="end">DADF-130 · One Pass</text>
+      </svg>
+    </div>
+    <p class="swipe">그림이 잘려 보이면 좌우로 밀어서 보십시오</p>
+    <div class="panel">
+      <div class="panel-in">
+        <div class="panel-k" id="dfK">Overview</div>
+        <p class="panel-t" id="dfT">원고 한 장이 지나가는 길</p>
+        <p class="panel-d" id="dfD">트레이에서 Nudger Roll이 최상단 원고를 뽑고, Feed Roll이 당겨 좌측으로 크게 돌립니다.
+          바닥의 Scan Position을 등속으로 지나며 표면을 읽고, Out Roll을 거쳐 Exit Roll로 배출됩니다.
+          센서가 켜지는 순서를 눈으로 따라가 보십시오.</p>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro-k">현재 위치</div><div class="ro-v" id="dfPos" style="font-size:14px">급지 대기</div></div>
+        <div class="ro"><div class="ro-k">읽기 상태</div><div class="ro-v" id="dfRead" style="font-size:14px">–</div></div>
+        <div class="ro"><div class="ro-k">기종</div><div class="ro-v" id="dfMdl" style="font-size:14px">DADF-130</div></div>
+      </div>
+    </div>
+    <p class="cap">원고 아래 <b style="color:#008FB3">청록 띠</b>는 표면을 읽은 상태,
+      <b style="color:#C8005F">자홍 띠</b>는 이면을 읽은 상태입니다.
+      <b>DADF-110 보기</b>를 누르면 CIS가 사라지고 <b>Invert Gate와 반전 경로</b>가 나타나며,
+      원고가 <b>같은 길을 3번 지나갑니다.</b></p>
+  </div>
+
+  <div class="easy"><span class="tag">비유로 먼저</span>
+    원고 앞뒤를 읽는 것은 <b>사진을 앞뒤로 찍는 일</b>과 같습니다.
+    <b>카메라가 2대</b>면 한 번 지나가며 앞뒤를 다 찍습니다(DADF-130).
+    <b>1대</b>면 뒤집어서 두 번 찍어야 하고, 그대로 두면 순서가 거꾸로라
+    <b>한 번 더 뒤집어</b> 원래 순서로 돌려놓습니다(DADF-110, 3 Pass).</div>
+
+  <h3>양면일 때 두 기종이 완전히 다릅니다 (9.1)</h3>
+  <div class="g2">
+    <div class="mini"><div class="mini-k">Advance · IIT(CCD)</div><p class="mini-t">DADF-130 — One Pass</p>
+      <p>표면은 <span class="en">Scan Position</span>에서 <span class="en">IIT</span>가 읽고,
+        <b>이면은 DADF 안의 <span class="en">CIS</span>가 동시에 읽습니다.</b>
+        원고를 뒤집을 필요가 없어 <b>1회 통지로 양면이 끝납니다.</b><br>
+        → 양면 <b>160면/분</b></p></div>
+    <div class="mini"><div class="mini-k">Basic · IIT(CIS)</div><p class="mini-t">DADF-110 — 3 Pass</p>
+      <p>이면용 센서가 없어 <span class="en">IIT</span>의 <span class="en">CIS</span> 하나로 다 읽어야 합니다.
+        표면을 읽고(1st Pass) → 반전해 이면을 읽고(2nd Pass) →
+        <b>다시 반전해 원고 순서를 되돌립니다(3rd Pass).</b><br>
+        → 양면 <b>26면/분</b></p></div>
+  </div>
+  <div class="note"><span class="tag">왜 3번인가</span>
+    2번만 지나가면 <b>원고가 뒤집힌 채로 배출</b>되어 적재 순서가 뒤바뀝니다.
+    그래서 마지막 한 번은 <b>읽지 않고 순서만 되돌리기 위해</b> 지나갑니다.
+    이 3 Pass 때문에 양면 속도가 160 → 26면/분으로 떨어집니다.</div>
+
+  <h3>CVT 방식 — 스캐너가 안 움직입니다</h3>
+  <p>평판 유리에 원고를 올려 복사할 때는 <b>캐리지가 움직이며</b> 읽습니다.
+    그런데 DADF로 읽을 때는 반대입니다.
+    <span class="en">IIT Lamp Carriage</span>를 <span class="en">DADF Scan Position</span>에
+    <b>고정해 두고 원고를 등속으로 흘려보내며</b> 읽습니다.
+    이것을 <span class="en">CVT</span>(<span class="en">Constant Velocity Transport</span>) 방식이라고 합니다.</p>
+
+  <h3>센서 역할 (9.3 · DADF-110 기준)</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>센서</th><th>역할</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">Tray APS Sensor 1–4</td><td>원고의 <b>주주사 방향(폭)</b> 사이즈를 검출</td></tr>
+        <tr><td class="pn">Tray Size Sensor</td><td>트레이 가이드 위치로 원고 사이즈를 검출</td></tr>
+        <tr><td class="pn">Document Set Sensor</td><td>트레이의 <b>원고 유무</b>와 급지 완료를 검출</td></tr>
+        <tr><td class="pn">Feed Cover Interlock Switch</td><td>Feed Cover의 개폐 상태를 검출</td></tr>
+        <tr><td class="pn">Feed In Sensor</td><td><b>비급지 검출</b> (Off → On 이 안 되면 급지 실패)</td></tr>
+        <tr><td class="pn">Feed Out Sensor</td><td><b>루프 생성을 시작시키는</b> 트리거</td></tr>
+        <tr><td class="pn">APS Sensor 1–3</td><td>혼재 사이즈일 때 반송 중인 원고의 <b>주주사 방향 폭</b>을 판정</td></tr>
+        <tr><td class="pn">Pre Regi Sensor</td><td>앞 원고가 Pre Regi Roll을 <b>통과했는지</b> 검출</td></tr>
+        <tr><td class="pn">Regi Sensor</td><td><b>루프 양을 조절</b>(Loop Aligning)하고, 앞 원고의 정렬을 검출해
+          <span class="en">Document Ready</span> 신호의 트리거가 됩니다</td></tr>
+        <tr><td class="pn">Skew / Lead Regi / Out / Exit Sensor</td><td>원본 표에 역할 기재 없음 (–)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>구동 — 모터 하나로 다 합니다 (9.3 · DADF-110)</h3>
+  <p><span class="en">DADF-110</span>은 <b><span class="en">Feed Motor</span>(DC 모터) 하나</b>로
+    모든 롤을 구동합니다. <span class="en">Feed Clutch</span>와 <span class="en">T/A Clutch</span>,
+    <span class="en">Open Solenoid</span>를 조합해 어느 롤에 힘을 보낼지 바꿉니다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>구동원</th><th>방향</th><th>피구동 롤</th><th>기능</th></tr></thead>
+      <tbody>
+        <tr><td class="pn" rowspan="5">Feed Motor<br><span class="lbl-s">DC 모터</span></td>
+          <td class="pn" rowspan="5">CCW<br><span class="lbl-s">역회전</span></td>
+          <td class="pn">Nudger Roll</td><td>최상단 원고를 Feed Roll로 반송</td></tr>
+        <tr><td class="pn">Feed Roll</td><td>원고를 T/A Roll로 반송하고 <b>루프 정렬(Loop Aligning)</b>을 수행</td></tr>
+        <tr><td class="pn">T/A Roll</td><td>원고를 Regi Roll로 반송</td></tr>
+        <tr><td class="pn">Regi Roll</td><td>원고를 읽기 위치로 보내고, <b>Out Roll에 도달할 때까지</b> 계속 반송</td></tr>
+        <tr><td class="pn">Out Roll</td><td>읽기가 끝난 원고를 Exit Roll로 반송</td></tr>
+        <tr><td class="pn">Exit Roll</td><td class="pn">모드별</td><td class="pn">–</td>
+          <td><b>단면</b>: 읽기가 끝난 원고를 배출<br><b>양면</b>: 읽기가 끝난 원고를 <b>반전 경로로 반송</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><span class="tag">기억할 한 가지</span>
+    <b><span class="en">Exit Roll</span>만 단면과 양면에서 하는 일이 다릅니다.</b>
+    단면이면 그냥 내보내고, 양면이면 <b>반전 경로로 되돌려 보냅니다.</b>
+    양면 JAM이 배출부에서 잦은 이유가 여기 있습니다.</div>
+</section>
+
+<!-- ============ 06 확인 문제 ============ -->
+<section id="check">
+  <div class="sec-h"><span class="sec-n">06</span><h2>확인 문제<span>답은 위에 있습니다</span></h2></div>
+  <p class="lead">교육 마지막에 구두로 물어보는 용도입니다. 다섯 개만 답할 수 있으면 충분합니다.</p>
+  <div class="card">
+    <ul class="chk">
+      <li><span class="q">Q1</span><div>드럼 표면에 <b>빛을 쏘면</b> 전기가 진해집니까, 옅어집니까?
+        그리고 그 결과를 무엇이라고 부릅니까?</div></li>
+      <li><span class="q">Q2</span><div>토너는 전기가 <b>진한 곳</b>에 붙습니까, <b>옅은 곳</b>에 붙습니까?</div></li>
+      <li><span class="q">Q3</span><div>2차 전사를 막 지난 종이를 손으로 만지면 어떻게 됩니까? 왜 그렇습니까?</div></li>
+      <li><span class="q">Q4</span><div>급지 롤 3개 중 <b>모터로 돌지 않는</b> 롤은 무엇입니까? 그 롤의 역할은?</div></li>
+      <li><span class="q">Q5</span><div>Regi 부에서 용지를 <b>일부러 부딪히게 하는</b> 이유는 무엇입니까?</div></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <p class="mono">Apeos C3061 / C2561 / C2061 &amp; Apeos C3567 / C3067 / C2567 — Training Material v1.1 (2024.10.02) 기반</p>
+  <p>FUJIFILM Business Innovation Corp. 원본 자료의 한국어 교육용 재구성 (신입 기초편).
+    <b>Fujifilm Internal Use Only — FF &amp; FB Group / Authorized Partner 한정.</b>
+    부품 명칭(IBT, 1st/2nd BTR, BUR, HVPS, LPH, DADF, CVT 등)은 원어를 유지했습니다.</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+
+(function(){
+"use strict";
+var reduce = false;   /* 애니메이션은 학습 내용이므로 자동 정지하지 않음 (각 그림에 일시정지 버튼 제공) */
+
+/* ---------- 목차 하이라이트 ---------- */
+/* 화면에 보이는 그림만 계산한다 — 모바일에서 8개 애니메이션이 동시에 돌면 느려진다 */
+var VIS={};
+function watchVis(id){
+  var el=document.getElementById(id); if(!el) return;
+  if(!('IntersectionObserver' in window)){ VIS[id]=true; return; }
+  VIS[id]=true;          /* 관찰이 실패해도 멈추지 않도록 기본은 '보임' */
+  new IntersectionObserver(function(es){
+    es.forEach(function(en){ VIS[id]=en.isIntersecting; });
+  },{rootMargin:'200px'}).observe(el);
+}
+function isVis(id){ return VIS[id]!==false; }
+
+var links = Array.prototype.slice.call(document.querySelectorAll('nav.side a'));
+var secs  = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+function onScroll(){
+  var y = window.scrollY + 130, idx = 0;
+  for (var i=0;i<secs.length;i++){ if (secs[i] && secs[i].offsetTop <= y) idx = i; }
+  links.forEach(function(a,i){ a.classList.toggle('on', i===idx); });
+}
+window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+/* ================= Fig 00-0 : 한눈에 보기 7단계 ================= */
+(function(){
+var SV=document.getElementById('q7Svg');
+if(!SV) return;
+var NS='http://www.w3.org/2000/svg';
+function e(t,a,txt){ var x=document.createElementNS(NS,t);
+  for(var k in a) x.setAttribute(k,a[k]); if(txt!=null) x.textContent=txt; return x; }
+
+var K='#16181C', CY='#008FB3', MG='#C8005F', YL='#E0AC00', RD='#E8452A',
+    GR='#0E7A57', INK='#28394B', LN='#C6D0DB', PPR='#FFD166';
+
+var STEP=[
+ {n:'①',lb:'급지',t:'트레이에서 종이를 한 장만 뽑습니다',
+  d:'롤 세 개가 협력합니다. Nudger Roll이 맨 위 종이를 밀어내고, Feed Roll이 당기고, Retard Roll이 반대로 돌면서 두 장 이상 딸려오는 것을 막습니다.',
+  p:'Nudger · Feed · Retard Roll', l:'#paper', ln:'제17장 용지 반송'},
+ {n:'②',lb:'대전',t:'드럼 표면에 전기를 고르게 입힙니다',
+  d:'BCR이 드럼 표면 전체를 마이너스 −600V로 균일하게 만듭니다. 아직 그림은 없고, 도화지에 밑칠을 한 상태입니다.',
+  p:'BCR', l:'#charge', ln:'제10장 대전'},
+ {n:'③',lb:'노광',t:'빛을 쏘아 그림 부분만 전기를 지웁니다',
+  d:'LPH가 빛을 쏩니다. 빛을 받은 곳만 전기가 −100V로 옅어집니다. 이 전기의 진하고 옅은 차이가 곧 그림입니다. 이것을 정전잠상이라고 부릅니다.',
+  p:'LPH', l:'#exposure', ln:'제11장 노광'},
+ {n:'④',lb:'현상',t:'전기가 옅어진 곳에만 토너가 붙습니다',
+  d:'Development Roll이 −400V를 띠고 있어서, 옅어진 곳(−100V)에는 토너가 끌려가고 진한 곳(−600V)에는 가지 않습니다. 전기의 차이가 토너를 골라 붙입니다.',
+  p:'Development Roll', l:'#develop', ln:'제12장 현상'},
+ {n:'⑤',lb:'1차 전사',t:'드럼의 토너를 벨트로 옮깁니다',
+  d:'드럼이 4개(K·C·M·Y) 있고 그 위를 벨트가 지나갑니다. 벨트가 지나가면서 노랑 → 마젠타 → 시안 → 검정 순으로 토너를 겹쳐 받습니다.',
+  p:'1st BTR · IBT Belt', l:'#transfer', ln:'제13장 전사'},
+ {n:'⑥',lb:'2차 전사',t:'벨트의 토너 4층을 종이로 한꺼번에 옮깁니다',
+  d:'벨트에 4색이 다 쌓인 뒤, 2nd BTR이 종이에 통째로 옮깁니다. 이 시점의 토너는 아직 가루라서 손으로 만지면 번집니다.',
+  p:'2nd BTR · BUR', l:'#transfer', ln:'제13장 전사'},
+ {n:'⑦',lb:'정착',t:'열과 압력으로 녹여 붙입니다',
+  d:'Heat Roll의 열과 NIP Belt의 압력으로 토너를 녹여 종이에 스며들게 합니다. 이때 가루 사이의 빈틈이 메워지면서 비로소 색이 제대로 납니다.',
+  p:'Heat Roll · NIP Belt', l:'#fusing', ln:'제15장 정착'}
+];
+
+var G=document.getElementById('q7Cells'), cells=[];
+var CW=100, GAP=4, X0=6, IY=10, IH=112;
+
+function drum(g,cx,cy,r,stroke){
+  g.appendChild(e('circle',{cx:cx,cy:cy,r:r,fill:'#F7F9FB',stroke:stroke||INK,'stroke-width':1.6}));
+}
+function build(){
+  STEP.forEach(function(s,i){
+    var x=X0+i*(CW+GAP), cx=x+CW/2;
+    var g=e('g',{'class':'q7cell','data-i':i});
+    g.appendChild(e('rect',{x:x,y:IY,width:CW,height:IH,rx:4,
+      fill:'#FFFFFF',stroke:LN,'stroke-width':1.2,'class':'q7bg'}));
+    var ic=e('g',{});
+    var cy=IY+58;
+    if(i===0){                                     /* 급지 */
+      ic.appendChild(e('rect',{x:cx-30,y:cy+18,width:60,height:12,rx:2,fill:'#EEF2F6',stroke:INK}));
+      [0,4,8].forEach(function(d,k){
+        ic.appendChild(e('rect',{x:cx-26+k*2,y:cy+10-k*4,width:48,height:3,rx:1,
+          fill:'#fff',stroke:LN})); });
+      ic.appendChild(e('circle',{cx:cx-30,cy:cy+2,r:7,fill:'#F0F3F6',stroke:INK,'stroke-width':1.3}));
+      ic.appendChild(e('circle',{cx:cx-30,cy:cy+16,r:6,fill:'#EDF4F8',stroke:'#2F7FD8','stroke-width':1.3}));
+      ic.appendChild(e('path',{d:'M'+(cx+24)+' '+(cy-6)+'l12 0l-4 -4m4 4l-4 4',
+        fill:'none',stroke:CY,'stroke-width':1.6}));
+    } else if(i===1){                              /* 대전 */
+      drum(ic,cx,cy,24);
+      ic.appendChild(e('circle',{cx:cx-22,cy:cy+22,r:8,fill:'#FCEDEA',stroke:RD,'stroke-width':1.6}));
+      for(var a=0;a<7;a++){
+        var t=(200+a*22)*Math.PI/180;
+        ic.appendChild(e('text',{x:cx+18*Math.cos(t),y:cy-18*Math.sin(t)+4,
+          'text-anchor':'middle','font-size':11,'font-weight':700,fill:RD},'−'));
+      }
+    } else if(i===2){                              /* 노광 */
+      drum(ic,cx,cy,24);
+      ic.appendChild(e('rect',{x:cx-10,y:cy+30,width:26,height:8,rx:2,fill:'#0E1822'}));
+      [-6,0,6].forEach(function(o){
+        ic.appendChild(e('path',{d:'M'+(cx+o+3)+' '+(cy+29)+'L'+(cx+o+3)+' '+(cy+22),
+          stroke:YL,'stroke-width':2.4})); });
+      for(var b=0;b<3;b++){
+        var t2=(300+b*22)*Math.PI/180;
+        ic.appendChild(e('text',{x:cx+18*Math.cos(t2),y:cy-18*Math.sin(t2)+4,
+          'text-anchor':'middle','font-size':11,'font-weight':700,fill:GR},'+'));
+      }
+    } else if(i===3){                              /* 현상 */
+      drum(ic,cx,cy,24);
+      ic.appendChild(e('circle',{cx:cx+34,cy:cy+8,r:12,fill:'#F0F3F6',stroke:INK,'stroke-width':1.4}));
+      [0,1,2,3].forEach(function(kk){
+        ic.appendChild(e('circle',{cx:cx+24-kk*5,cy:cy+4-kk*2,r:2.6,fill:CY})); });
+    } else if(i===4){                              /* 1차 전사 */
+      ic.appendChild(e('rect',{x:cx-36,y:cy-40,width:72,height:10,rx:2,fill:'#DCE3EA',stroke:'#B4C0CC'}));
+      [[YL,-27],[MG,-13],[CY,1],[K,15]].forEach(function(c){
+        ic.appendChild(e('rect',{x:cx+c[1],y:cy-31,width:12,height:3.4,rx:1,fill:c[0]})); });
+      drum(ic,cx,cy-2,20);
+      ic.appendChild(e('circle',{cx:cx,cy:cy-27,r:6,fill:'#F0F7FA',stroke:CY,'stroke-width':1.8}));
+      ic.appendChild(e('path',{d:'M'+(cx+30)+' '+(cy-18)+'l-14 0l4 -4m-4 4l4 4',
+        fill:'none',stroke:'#8C9BAA','stroke-width':1.3}));
+    } else if(i===5){                              /* 2차 전사 */
+      ic.appendChild(e('rect',{x:cx-34,y:cy-30,width:68,height:9,rx:2,fill:'#DCE3EA',stroke:'#B4C0CC'}));
+      [[YL,-28],[MG,-14],[CY,0],[K,14]].forEach(function(c){
+        ic.appendChild(e('rect',{x:cx+c[1],y:cy-22,width:12,height:3.2,rx:1,fill:c[0]})); });
+      ic.appendChild(e('circle',{cx:cx-30,cy:cy+8,r:10,fill:'#F0F3F6',stroke:INK,'stroke-width':1.4}));
+      ic.appendChild(e('rect',{x:cx-24,y:cy+16,width:58,height:8,rx:1,fill:'#fff',stroke:INK}));
+      [[YL,-20],[MG,-6],[CY,8],[K,22]].forEach(function(c){
+        ic.appendChild(e('rect',{x:cx+c[1],y:cy+11,width:12,height:4,rx:1,fill:c[0]})); });
+    } else {                                       /* 정착 */
+      ic.appendChild(e('circle',{cx:cx,cy:cy-14,r:13,fill:'#FDF0EB',stroke:'#F2683C','stroke-width':1.8}));
+      ic.appendChild(e('circle',{cx:cx,cy:cy+18,r:11,fill:'#EDF1F4',stroke:INK,'stroke-width':1.4}));
+      ic.appendChild(e('rect',{x:cx-36,y:cy+2,width:34,height:7,rx:1,fill:'#fff',stroke:INK}));
+      [[YL,-33],[MG,-25],[CY,-17],[K,-9]].forEach(function(c){
+        ic.appendChild(e('rect',{x:cx+c[1],y:cy+3.5,width:6,height:4,rx:1,fill:c[0]})); });
+      ic.appendChild(e('rect',{x:cx+8,y:cy+2,width:30,height:7,rx:1,fill:'#fff',stroke:INK}));
+      ic.appendChild(e('rect',{x:cx+11,y:cy+3.5,width:24,height:4,rx:1,fill:'#2E2438'}));
+    }
+    g.appendChild(ic);
+    /* 번호 · 라벨 */
+    g.appendChild(e('circle',{cx:x+16,cy:IY+16,r:11,fill:'#0E1822'}));
+    g.appendChild(e('text',{x:x+16,y:IY+20,'text-anchor':'middle','font-size':11,
+      fill:'#7FC9DD','font-weight':700,'font-family':"'IBM Plex Mono',monospace"},s.n));
+    g.appendChild(e('text',{x:cx,y:IY+IH+22,'text-anchor':'middle','class':'lbl'},s.lb));
+    G.appendChild(g);
+    cells.push(g);
+    /* 진행 화살표 */
+    if(i<STEP.length-1){
+      G.appendChild(e('path',{d:'M'+(x+CW+1)+' '+(IY+IH/2)+'l'+(GAP)+' 0',
+        stroke:LN,'stroke-width':1.4}));
+    }
+  });
+}
+build();
+
+var cur=0, run=true, tick=0;
+function apply(i){
+  cur=(i+STEP.length)%STEP.length;
+  var s=STEP[cur];
+  document.getElementById('q7K').textContent=s.n+' '+s.lb;
+  document.getElementById('q7T').textContent=s.t;
+  document.getElementById('q7D').textContent=s.d;
+  document.getElementById('q7P').textContent=s.p;
+  document.getElementById('q7L').innerHTML='<a href="'+s.l+'">'+s.ln+' →</a>';
+  cells.forEach(function(g,k){
+    g.style.opacity=(k===cur)?'1':'0.34';
+    var bg=g.querySelector('.q7bg');
+    bg.setAttribute('stroke',(k===cur)?'#008FB3':LN);
+    bg.setAttribute('stroke-width',(k===cur)?'2.2':'1.2');
+  });
+  tick=0;
+}
+SV.addEventListener('click',function(ev){
+  var g=ev.target.closest('.q7cell'); if(!g) return;
+  run=false;
+  var pb=document.getElementById('q7Play');
+  pb.textContent='자동 진행'; pb.classList.remove('on');
+  apply(+g.dataset.i);
+});
+document.getElementById('q7Prev').addEventListener('click',function(){
+  run=false; var pb=document.getElementById('q7Play');
+  pb.textContent='자동 진행'; pb.classList.remove('on'); apply(cur-1);
+});
+document.getElementById('q7Next').addEventListener('click',function(){
+  run=false; var pb=document.getElementById('q7Play');
+  pb.textContent='자동 진행'; pb.classList.remove('on'); apply(cur+1);
+});
+document.getElementById('q7Play').addEventListener('click',function(){
+  run=!run; this.textContent=run?'일시정지':'자동 진행'; this.classList.toggle('on',run);
+});
+apply(0);
+if(reduce){ run=false;
+  document.getElementById('q7Play').textContent='자동 진행';
+  document.getElementById('q7Play').classList.remove('on'); }
+else { document.getElementById('q7Play').textContent='일시정지'; }
+watchVis('q7Svg');
+(function loop(){
+  if(!isVis('q7Svg')){ requestAnimationFrame(loop); return; }
+  if(run){ tick++; if(tick>200) apply(cur+1); }
+  requestAnimationFrame(loop);
+})();
+})();
+
+/* ================= Fig 00-1 대전→2차전사 (원본 p.80 배치) ================= */
+var DS = {
+  0:{k:'Overview', t:'드럼 한 바퀴 + 벨트 + 용지', pos:'드럼 전체',
+     d:'드럼 표면의 한 지점을 눈으로 따라가 보세요. 좌하단 BCR에서 −600V로 대전되고, 우하단 LPH에서 빛을 받아 화상부만 −100V로 올라가고(플러스 전하 유도), 우측 Development Roll에서 토너를 받고, 상단 1st BTR에서 IBT Belt로 넘겨줍니다. 벨트는 좌측으로 진행해 좌단 2nd BTR에서 토너를 용지에 옮기고, 드럼 좌측 Cleaning Blade는 남은 토너를 긁어냅니다.',
+     v:'−600 V', p:'전체', c:'10–13', hl:[]},
+  1:{k:'① 대전 / Charge', t:'BCR이 드럼 표면을 −600V로', pos:'드럼 좌하단',
+     d:'BCR에 고압을 걸어 드럼 표면 전체를 마이너스 −600V로 만듭니다. 도화지에 밑칠을 하는 단계로, 아직 그림은 없습니다. 이전 회전에서 남은 전기도 이때 지워집니다. BCR 표면은 그 아래 BCR Cleaner가 청소합니다.',
+     v:'−600 V', p:'BCR', c:'10', hl:['gBcr']},
+  2:{k:'② 노광 / Exposure', t:'LPH가 빛으로 부호를 뒤집습니다', pos:'드럼 우하단',
+     d:'LPH가 화상이 될 부분에만 빛을 쏩니다. 빛을 받은 곳은 전기가 −600V에서 −100V로 옅어집니다. 밑칠해 둔 마이너스를 빛이 부분적으로 지우는 것입니다. 이 진하고 옅은 차이가 곧 그림이며, 이것을 정전잠상이라고 부릅니다.',
+     v:'−100 V (노광부)', p:'LPH', c:'11', hl:['gLph']},
+  3:{k:'③ 현상 / Development', t:'Development Roll이 토너를 드럼으로', pos:'드럼 우측',
+     d:'Development Roll에는 −400V가 걸려 있습니다. 롤에서 보면 빛을 받은 곳(−100V)은 상대적으로 높고, 받지 않은 곳(−600V)은 낮습니다. 토너는 높은 쪽으로만 끌려가므로 그림 부분에만 붙습니다.',
+     v:'−400 V (Deve Bias)', p:'Development Roll', c:'12', hl:['gDeve']},
+  4:{k:'④ 1차 전사 / Primary Transfer', t:'1st BTR이 토너를 IBT Belt로', pos:'드럼 상단',
+     d:'1st BTR에 플러스 전기를 걸면, 마이너스인 토너가 끌려서 드럼에서 벨트로 옮겨갑니다. 드럼이 4개라 벨트가 지나가며 노랑 → 마젠타 → 시안 → 검정 순으로 색을 겹쳐 받습니다.',
+     v:'+DC (1st BTR)', p:'1st BTR', c:'13', hl:['g1btr','gBelt']},
+  5:{k:'⑤ 2차 전사 / Secondary Transfer', t:'2nd BTR이 토너를 용지로', pos:'벨트 좌단',
+     d:'BUR에 마이너스를 걸면 벨트가 토너를 붙잡는 힘이 약해집니다. 동시에 2nd BTR 쪽에 플러스가 생겨 토너를 용지로 끌어당깁니다. 벨트에 쌓인 4색이 한꺼번에 종이로 옮겨갑니다.',
+     v:'−DC (BUR)', p:'2nd BTR + BUR', c:'13', hl:['g2btr','gBelt']},
+  6:{k:'⑥ 클리닝 / Cleaning', t:'Cleaning Blade가 잔류 토너를 긁어냅니다', pos:'드럼 좌측',
+     d:'벨트로 옮겨가지 못하고 드럼에 남은 토너를 Cleaning Blade가 긁어냅니다. 긁어낸 폐토너는 회수 병으로 보냅니다. 여기까지 끝나면 표면은 다시 BCR로 돌아가 처음부터 반복합니다.',
+     v:'제전 · 0 V 근처', p:'Cleaning Blade', c:'10', hl:['gClean']}
+};
+var HLIDS = ['gBcr','gLph','gDeve','g1btr','gBelt','gClean','g2btr'];
+var stage = 0, drumRun = !reduce, drumSpeed = 1, t = 0;
+var drumRot = document.getElementById('drumRot');
+var chargeLayer = document.getElementById('chargeLayer');
+var tonerLayer = document.getElementById('tonerLayer');
+var beltTonerG = document.getElementById('beltToner');
+var lphBeam = document.getElementById('lphBeam');
+var CX = 430, CY = 252, R = 92;
+var NS = 'http://www.w3.org/2000/svg';
+
+/* 원본 p.80 배치 각도 (수학 좌표, 반시계 진행) */
+var A_BCR = 215, A_LPH = 285, A_DEVE = 352, A_BTR = 82, A_CLN = 168;
+function norm(a){ a %= 360; if (a < 0) a += 360; return a; }
+function phaseOf(ang){ return norm(ang - A_BCR) / 360; }
+function ptAt(ang, rr){
+  var r = ang * Math.PI / 180;
+  return [CX + rr * Math.cos(r), CY - rr * Math.sin(r)];
+}
+var P_LPH = phaseOf(A_LPH), P_DEVE = phaseOf(A_DEVE),
+    P_BTR = phaseOf(A_BTR), P_CLN = phaseOf(A_CLN);
+
+/* 표면 전하 기호 */
+var marks = [], NM = 34;
+for (var i = 0; i < NM; i++){
+  var g = document.createElementNS(NS, 'text');
+  g.setAttribute('font-family', "'IBM Plex Mono','IBM Plex Sans KR','Malgun Gothic',ui-monospace,monospace");
+  g.setAttribute('font-size', '12'); g.setAttribute('text-anchor', 'middle');
+  g.setAttribute('font-weight', '700');
+  chargeLayer.appendChild(g); marks.push(g);
+}
+/* 드럼 위 토너 */
+var dots = [], ND = 34;
+for (var j = 0; j < ND; j++){
+  var c = document.createElementNS(NS, 'circle');
+  c.setAttribute('r', '3.6'); tonerLayer.appendChild(c); dots.push(c);
+}
+/* 벨트 위 토너 */
+var bDots = [], NB = 16;
+for (var b = 0; b < NB; b++){
+  var bd = document.createElementNS(NS, 'rect');
+  bd.setAttribute('width', '13'); bd.setAttribute('height', '5');
+  bd.setAttribute('y', '155'); bd.setAttribute('rx', '1');
+  bd.setAttribute('fill', '#008FB3'); beltTonerG.appendChild(bd); bDots.push(bd);
+}
+/* 화상부 판정 — 인덱스 기반 패턴 (일정한 그림) */
+function isImage(i){ return (i % 5) !== 0 && (i % 7) !== 3; }
+
+function applyStage(s){
+  stage = s; var d = DS[s];
+  document.getElementById('pk').textContent = d.k;
+  document.getElementById('pt').textContent = d.t;
+  document.getElementById('pd').textContent = d.d;
+  document.getElementById('roV').textContent = d.v;
+  document.getElementById('roL').textContent = d.pos;
+  document.getElementById('roP').textContent = d.p;
+  document.getElementById('roC').textContent = d.c;
+  var any = d.hl.length > 0;
+  HLIDS.forEach(function(id){
+    var el = document.getElementById(id); if (!el) return;
+    el.style.opacity = (!any || d.hl.indexOf(id) >= 0) ? '1' : '0.2';
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#drumSteps button'), function(bt){
+    bt.classList.toggle('on', +bt.dataset.s === s);
+  });
+}
+document.getElementById('drumSteps').addEventListener('click', function(e){
+  var bt = e.target.closest('button'); if (!bt) return; applyStage(+bt.dataset.s);
+});
+
+/* 용지 */
+var pPath2 = document.getElementById('pPath2');
+var sheet2 = document.getElementById('sheet2');
+var sToner2 = document.getElementById('sheetToner2');
+var pLen2 = pPath2.getTotalLength();
+var pU2 = 0;
+
+watchVis('drumSvg');
+function frame(){
+  if (!isVis('drumSvg')){ requestAnimationFrame(frame); return; }
+  if (drumRun){ t += 0.42 * drumSpeed; pU2 += 0.0012 * drumSpeed; if (pU2 > 1) pU2 = 0; }
+  /* 표면 진행은 각도 증가 = 화면상 반시계 → SVG rotate 는 음수 */
+  drumRot.setAttribute('transform', 'rotate(' + (-t) + ' ' + CX + ' ' + CY + ')');
+
+  for (var i = 0; i < NM; i++){
+    var ang = norm(t + i * (360 / NM) + A_BCR);
+    var ph = phaseOf(ang);
+    var p = ptAt(ang, R - 14);
+    var m = marks[i];
+    if (ph < P_LPH){
+      m.textContent = '−'; m.setAttribute('fill', '#E8452A'); m.setAttribute('opacity', '0.95');
+    } else if (ph < P_DEVE){
+      if (isImage(i)){ m.textContent = '+'; m.setAttribute('fill', '#0E7A57'); m.setAttribute('opacity', '0.95'); }
+      else { m.textContent = '−'; m.setAttribute('fill', '#E8452A'); m.setAttribute('opacity', '0.55'); }
+    } else if (ph < P_BTR){
+      m.textContent = isImage(i) ? '+' : '−';
+      m.setAttribute('fill', isImage(i) ? '#0E7A57' : '#E8452A');
+      m.setAttribute('opacity', '0.35');
+    } else if (ph < P_CLN){
+      m.textContent = '·'; m.setAttribute('fill', '#A9BAC9'); m.setAttribute('opacity', '0.5');
+    } else { m.textContent = ''; }
+    m.setAttribute('x', p[0]); m.setAttribute('y', p[1] + 4);
+  }
+
+  /* 드럼 위 토너 : 현상(우측) → 1차 전사(상단) 구간, 화상부만 */
+  for (var j = 0; j < ND; j++){
+    var a2 = norm(t + j * (360 / ND) + A_BCR);
+    var ph2 = phaseOf(a2);
+    var dd = dots[j];
+    if (ph2 >= P_DEVE && ph2 < P_BTR && isImage(j)){
+      var p2 = ptAt(a2, R - 5);
+      dd.setAttribute('cx', p2[0]); dd.setAttribute('cy', p2[1]);
+      dd.setAttribute('fill', '#008FB3'); dd.setAttribute('opacity', '0.92');
+    } else { dd.setAttribute('opacity', '0'); }
+  }
+
+  /* 벨트 위 토너 : 1st BTR(x=446) → BUR(x=168) 좌향 이동 */
+  for (var b = 0; b < NB; b++){
+    var u = ((t / 240) + b / NB) % 1;
+    var x = 446 - (446 - 168) * u;
+    bDots[b].setAttribute('x', x - 6.5);
+    bDots[b].setAttribute('opacity', String(0.9 * Math.min(1, (1 - u) * 5)));
+  }
+
+  /* LPH 빔 */
+  lphBeam.setAttribute('opacity', (stage === 0 || stage === 2) ? '1' : '0.28');
+
+  /* 용지 */
+  var pp = pPath2.getPointAtLength(pU2 * pLen2);
+  var pn = pPath2.getPointAtLength(Math.min(pLen2, pU2 * pLen2 + 6));
+  var an = Math.atan2(pn.y - pp.y, pn.x - pp.x) * 180 / Math.PI;
+  sheet2.setAttribute('transform', 'translate(' + pp.x + ',' + pp.y + ') rotate(' + an + ')');
+  /* 닙(y≈149) 통과 후 토너 적재 */
+  sToner2.setAttribute('width', (pp.x < 200 && pp.y < 152) ? 20 : 0);
+
+  requestAnimationFrame(frame);
+}
+applyStage(0);
+if (reduce){ drumRun = false; document.getElementById('drumPlay').textContent = '재생'; }
+requestAnimationFrame(frame);
+
+document.getElementById('drumPlay').addEventListener('click', function(){
+  drumRun = !drumRun; this.textContent = drumRun ? '일시정지' : '재생';
+  this.classList.toggle('on', drumRun);
+});
+document.getElementById('drumSlow').addEventListener('click', function(){
+  drumSpeed = (drumSpeed === 1) ? 0.3 : 1;
+  this.textContent = (drumSpeed === 1) ? '저속' : '표준속도';
+  this.classList.toggle('on', drumSpeed !== 1);
+});
+
+
+/* ================= Fig 00-2 : 4색 탠덤 → 2차 전사 → 정착 ================= */
+var NSB = 'http://www.w3.org/2000/svg';
+var CO = [
+  {n:'K', x:250, c:'#16181C', kr:'Black'},
+  {n:'C', x:395, c:'#008FB3', kr:'Cyan'},
+  {n:'M', x:540, c:'#C8005F', kr:'Magenta'},
+  {n:'Y', x:685, c:'#E0AC00', kr:'Yellow'}
+];
+var DCY = 204, DR = 32;
+var t4Run = !reduce, t4Speed = 1, t4T = 0, t4Stage = 0, t4BW = false;
+var drums4 = document.getElementById('drums4');
+var beltCells = document.getElementById('beltCells');
+var t4Groups = {};
+
+/* --- 드럼 4조 생성 --- */
+function mk(tag, attrs){
+  var e = document.createElementNS(NSB, tag);
+  for (var k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+CO.forEach(function(col){
+  var cx = col.x, g = mk('g', {id:'t4d' + col.n, 'class':'hl'});
+  /* Cleaning Blade (좌) */
+  g.appendChild(mk('path', {d:'M' + (cx-44) + ' ' + (DCY-14) + ' L' + (cx-28) + ' ' + (DCY-4)
+    + ' L' + (cx-33) + ' ' + (DCY+4) + ' L' + (cx-49) + ' ' + (DCY-6) + ' Z', fill:'#28394B'}));
+  /* BCR (좌하) */
+  g.appendChild(mk('circle', {cx:cx-35, cy:DCY+25, r:10, fill:'#FCEDEA',
+    stroke:'#E8452A', 'stroke-width':1.6}));
+  /* LPH (우하) */
+  g.appendChild(mk('rect', {x:cx-10, y:DCY+36, width:44, height:16, rx:2, fill:'#0E1822'}));
+  var lt = mk('text', {x:cx+12, y:DCY+48, 'text-anchor':'middle',
+    'font-family':"'IBM Plex Mono','IBM Plex Sans KR','Malgun Gothic',ui-monospace,monospace", 'font-size':9,
+    fill:'#7FC9DD', 'font-weight':600});
+  lt.textContent = 'LPH'; g.appendChild(lt);
+  /* Development Roll (우) */
+  g.appendChild(mk('circle', {cx:cx+47, cy:DCY+7, r:15, fill:'#F0F3F6',
+    stroke:'#28394B', 'stroke-width':1.5}));
+  var dt = mk('text', {x:cx+47, y:DCY+30, 'text-anchor':'middle', 'class':'lbl-s'});
+  dt.textContent = 'Deve'; g.appendChild(dt);
+  /* Drum */
+  g.appendChild(mk('circle', {cx:cx, cy:DCY, r:DR, fill:'#F7F9FB',
+    stroke:col.c, 'stroke-width':2.2}));
+  var nt = mk('text', {x:cx, y:DCY+6, 'text-anchor':'middle',
+    'font-family':"'IBM Plex Mono','IBM Plex Sans KR','Malgun Gothic',ui-monospace,monospace", 'font-size':16,
+    fill:col.c, 'font-weight':700});
+  nt.textContent = col.n; g.appendChild(nt);
+  /* 1st BTR (상) — 접리 애니메이션 대상 */
+  var btr = mk('circle', {cx:cx+6, cy:DCY-42, r:9, fill:'#F0F7FA',
+    stroke:'#008FB3', 'stroke-width':2, id:'t4btr' + col.n});
+  g.appendChild(btr);
+  var bl = mk('text', {x:cx+6, y:DCY+72, 'text-anchor':'middle', 'class':'lbl-s',
+    id:'t4bl' + col.n});
+  bl.textContent = '1st BTR 접촉'; g.appendChild(bl);
+  drums4.appendChild(g);
+  t4Groups[col.n] = g;
+});
+
+/* --- 벨트 셀 (토너 적층) --- */
+var NC = 15, cells = [];
+for (var ci = 0; ci < NC; ci++){
+  var cg = mk('g', {});
+  var layers = [];
+  for (var li = 0; li < 4; li++){
+    var r = mk('rect', {width:22, height:2.4, rx:0.6, y:0, opacity:0});
+    cg.appendChild(r); layers.push(r);
+  }
+  beltCells.appendChild(cg);
+  cells.push({g:cg, l:layers});
+}
+/* 적층 y : 벨트 안쪽(150~172). Y가 벨트면, K가 바깥(용지쪽) */
+var LY = {Y:161.5, M:164, C:166.5, K:169};
+
+/* --- 용지 위 토너 (전사 후 순서 반전) --- */
+var t4SheetToner = document.getElementById('t4SheetToner');
+var sLayers = [];
+for (var si = 0; si < 4; si++){
+  var sr = mk('rect', {x:-13, width:26, height:1.6, rx:0.4, opacity:0});
+  t4SheetToner.appendChild(sr); sLayers.push(sr);
+}
+var sFused = mk('rect', {x:-13, y:-3, width:26, height:6, rx:1, opacity:0});
+t4SheetToner.appendChild(sFused);
+
+/* --- 범례 적층도 --- */
+var stackG = document.getElementById('t4Stack');
+(function(){
+  var order = ['Y','M','C','K'], y0 = 296;
+  order.forEach(function(n, i){
+    var col = CO.filter(function(c){ return c.n === n; })[0];
+    stackG.appendChild(mk('rect', {x:330, y:y0 + i*11, width:120, height:9, rx:1, fill:col.c}));
+    var tx = mk('text', {x:458, y:y0 + i*11 + 8, 'class':'lbl-s'});
+    tx.textContent = n + ' (' + col.kr + ')' + (i === 0 ? '  ← 벨트 면' : (i === 3 ? '  ← 용지 면' : ''));
+    stackG.appendChild(tx);
+  });
+  stackG.appendChild(mk('rect', {x:330, y:y0, width:120, height:44, rx:1,
+    fill:'none', stroke:'#28394B', 'stroke-width':1}));
+})();
+
+/* --- 단계 정의 --- */
+var T4 = {
+  0:{k:'Overview', t:'4개 드럼이 벨트 하나에 색을 겹쳐 올립니다',
+     d:'각 색은 완전히 독립된 화상 형성 장치(BCR · LPH · Development Roll · 1st BTR)를 가집니다. 벨트는 좌측으로 진행하면서 Y → M → C → K 순으로 토너를 겹쳐 받고, 좌단 2nd BTR에서 4층을 한꺼번에 용지로 옮깁니다. 이 시점의 토너는 아직 가루 덩어리라 색이 나지 않습니다. 정착부에서 용융되어 내부 공극이 메워졌을 때 비로소 발색합니다.',
+     hl:[]},
+  1:{k:'① Yellow 1차 전사', t:'벨트가 가장 먼저 만나는 색',
+     d:'벨트가 진행 방향으로 가장 먼저 만나는 드럼이 Y입니다. 그래서 노랑이 벨트에 직접 닿는 첫 층이 되고, 최종적으로 종이에서는 가장 위층이 됩니다.',
+     hl:['Y']},
+  2:{k:'② Magenta 1차 전사', t:'Y 위에 겹칩니다',
+     d:'이미 노랑이 실린 벨트 위에 마젠타가 겹칩니다. 4색의 위치가 어긋나면 색이 번져 보이므로, 기기가 각 색의 위치를 자동으로 맞춥니다.',
+     hl:['M']},
+  3:{k:'③ Cyan 1차 전사', t:'세 번째 층',
+     d:'시안이 노랑·마젠타 위에 겹칩니다. 이제 컬러의 3원색이 다 실렸습니다. 다만 아직 가루가 쌓여 있을 뿐이라 이 상태로는 제 색이 나오지 않습니다.',
+     hl:['C']},
+  4:{k:'④ Black 1차 전사', t:'마지막 층 — 가장 바깥면',
+     d:'검정이 마지막으로 실려 가장 바깥 층이 됩니다. 흑백 인쇄일 때는 C·M·Y 롤이 드럼에서 떨어지고 K만 접촉합니다 — 아래 흑백 버튼으로 확인해 보십시오.',
+     hl:['K']},
+  5:{k:'⑤ 2차 전사', t:'4층을 한꺼번에 용지로',
+     d:'벨트가 토너를 붙잡는 힘을 약하게 만들고, 2nd BTR이 4층을 통째로 용지로 끌어당깁니다. 이때 순서가 뒤집혀 마지막에 실린 검정이 종이 면에 먼저 닿습니다.',
+     hl:[]},
+  6:{k:'⑥ 정착 · 발색', t:'녹여서 공극을 메워야 색이 납니다',
+     d:'녹지 않은 토너는 아주 작은 가루 덩어리라서 사이사이에 빈틈이 많습니다. 빈틈이 있으면 빛이 안쪽 색까지 닿지 못합니다. 열과 압력으로 녹여 빈틈을 메우면 빛이 전체를 통과해 비로소 제 색이 납니다.',
+     hl:[]}
+};
+
+function t4Apply(s){
+  t4Stage = s; var d = T4[s];
+  document.getElementById('t4k').textContent = d.k;
+  document.getElementById('t4t').textContent = d.t;
+  document.getElementById('t4d').textContent = d.d;
+  var any = d.hl.length > 0;
+  CO.forEach(function(col){
+    t4Groups[col.n].style.opacity = (!any || d.hl.indexOf(col.n) >= 0) ? '1' : '0.2';
+  });
+  var f = document.getElementById('t4gFuse'), g2 = document.getElementById('t4g2nd');
+  f.style.opacity = (s === 0 || s === 6) ? '1' : '0.35';
+  g2.style.opacity = (s === 0 || s === 5 || s === 6) ? '1' : '0.35';
+  Array.prototype.forEach.call(document.querySelectorAll('#t4Steps button'), function(bt){
+    bt.classList.toggle('on', +bt.dataset.s === s);
+  });
+}
+document.getElementById('t4Steps').addEventListener('click', function(e){
+  var bt = e.target.closest('button'); if (!bt) return; t4Apply(+bt.dataset.s);
+});
+
+/* --- 모드 전환 (FC / BW) --- */
+function t4SetMode(bw){
+  t4BW = bw;
+  CO.forEach(function(col){
+    var on = (!bw || col.n === 'K');
+    var b = document.getElementById('t4btr' + col.n);
+    var l = document.getElementById('t4bl' + col.n);
+    b.setAttribute('cy', DCY - (on ? 42 : 56));
+    b.setAttribute('stroke', on ? '#008FB3' : '#A9BAC9');
+    b.setAttribute('stroke-width', on ? 2 : 1.2);
+    b.setAttribute('fill', on ? '#F0F7FA' : '#F0F3F6');
+    l.textContent = on ? '1st BTR 접촉' : '1st BTR 이탈';
+    l.setAttribute('fill', on ? '#008FB3' : '#A9BAC9');
+  });
+  document.getElementById('t4roM').textContent = bw ? 'BW (흑백)' : 'FC (풀컬러)';
+  document.getElementById('t4roB').textContent = bw ? 'K만 접촉 · CMY 이탈' : 'K C M Y 전 색 접촉';
+  var btn = document.getElementById('t4Mode');
+  btn.textContent = bw ? '컬러(FC)로' : '흑백(BW)으로';
+  btn.classList.toggle('on', bw);
+  /* 범례 갱신 */
+  stackG.style.opacity = bw ? '0.25' : '1';
+}
+t4SetMode(false);
+
+/* --- 용지 --- */
+var t4Path = document.getElementById('t4Path');
+var t4Sheet = document.getElementById('t4Sheet');
+var t4Len = t4Path.getTotalLength();
+var t4U = 0;
+
+var BX0 = 740, BX1 = 160;   /* 벨트 셀 이동 구간 */
+var NIP2 = 161, NIPF = 95;  /* 2차 전사 y, 정착 y */
+
+watchVis('t4Svg');
+function t4Frame(){
+  if (!isVis('t4Svg')){ requestAnimationFrame(t4Frame); return; }
+  if (t4Run){ t4T += 0.9 * t4Speed; t4U += 0.0013 * t4Speed; if (t4U > 1) t4U = 0; }
+
+  /* 벨트 셀 */
+  for (var i = 0; i < NC; i++){
+    var u = ((t4T / 900) + i / NC) % 1;
+    var x = BX0 - (BX0 - BX1) * u;
+    var cell = cells[i];
+    if (x < 168){ cell.g.setAttribute('opacity', 0); continue; }
+    cell.g.setAttribute('opacity', 1);
+    CO.forEach(function(col, ci2){
+      var lay = cell.l[ci2];
+      var picked = (x <= col.x) && (!t4BW || col.n === 'K');
+      lay.setAttribute('x', x - 11);
+      lay.setAttribute('y', LY[col.n]);
+      lay.setAttribute('fill', col.c);
+      lay.setAttribute('opacity', picked ? 0.95 : 0);
+    });
+  }
+
+  /* 용지 */
+  var pp = t4Path.getPointAtLength(t4U * t4Len);
+  var pn = t4Path.getPointAtLength(Math.min(t4Len, t4U * t4Len + 6));
+  var an = Math.atan2(pn.y - pp.y, pn.x - pp.x) * 180 / Math.PI;
+  t4Sheet.setAttribute('transform', 'translate(' + pp.x + ',' + pp.y + ') rotate(' + an + ')');
+
+  var onPaper = (pp.x < 210 && pp.y < NIP2 + 4);
+  var fused = (pp.x < 210 && pp.y < NIPF + 4);
+  var st;
+  if (!onPaper){ st = '급지 중 — 토너 없음'; }
+  else if (!fused){ st = '미정착 4층 — 공극 많음, 발색 전'; }
+  else { st = '정착 완료 — 용융·발색'; }
+  if (t4BW && onPaper) st = fused ? '정착 완료 — K 단색' : '미정착 K 단층';
+  document.getElementById('t4roP').textContent = st;
+
+  /* 용지 위 적층 : 순서 반전 (K가 용지 면) */
+  var rev = ['K','C','M','Y'];
+  for (var s2 = 0; s2 < 4; s2++){
+    var nm = rev[s2];
+    var colr = CO.filter(function(c){ return c.n === nm; })[0];
+    var vis = onPaper && !fused && (!t4BW || nm === 'K');
+    sLayers[s2].setAttribute('y', 2.2 - s2 * 1.8);
+    sLayers[s2].setAttribute('fill', colr.c);
+    sLayers[s2].setAttribute('opacity', vis ? 0.95 : 0);
+  }
+  sFused.setAttribute('fill', t4BW ? '#16181C' : '#2A2340');
+  sFused.setAttribute('opacity', fused ? 0.95 : 0);
+
+  requestAnimationFrame(t4Frame);
+}
+t4Apply(0);
+if (reduce){ t4Run = false; document.getElementById('t4Play').textContent = '재생'; }
+requestAnimationFrame(t4Frame);
+
+document.getElementById('t4Play').addEventListener('click', function(){
+  t4Run = !t4Run; this.textContent = t4Run ? '일시정지' : '재생';
+  this.classList.toggle('on', t4Run);
+});
+document.getElementById('t4Slow').addEventListener('click', function(){
+  t4Speed = (t4Speed === 1) ? 0.3 : 1;
+  this.textContent = (t4Speed === 1) ? '저속' : '표준속도';
+  this.classList.toggle('on', t4Speed !== 1);
+});
+document.getElementById('t4Mode').addEventListener('click', function(){ t4SetMode(!t4BW); });
+
+
+
+
+
+/* ================= Fig 00-3 : 3D 컷어웨이 투시 ================= */
+
+(function(){
+"use strict";
+var reduce = false;   /* 애니메이션은 학습 내용이므로 자동 정지하지 않음 (각 그림에 일시정지 버튼 제공) */
+var SVG=document.getElementById('x3v'), SCENE=document.getElementById('x3scene');
+var TIP=document.getElementById('x3tip'), STAGE=document.getElementById('x3stage');
+var BG=[10,20,28];
+
+/* ===== 색 ===== */
+var C={
+  shell:'#8497A4', panel:'#243646', cut:'#4FD1E8',
+  scan:'#4E93AC', platen:'#8FD8EC', tray2:'#4E8BA3',
+  heat:'#FF6B35', nip:'#C46A4A',
+  belt:'#7FD4E8', btr:'#2EA8C4', bur:'#5FB8D0', btr2:'#B8DCE8',
+  dK:'#3A424A', dC:'#0FA8C8', dM:'#D2277A', dY:'#E9B21C',
+  tK:'#8E9AA6', tC:'#22B8D6', tM:'#E0348A', tY:'#F0C22A',
+  bcr:'#FF8A4C', lph:'#2F7FD8', deve:'#8496A4', devh:'#5A6E7C',
+  tray:'#46606E', feeder:'#6C8593', roll:'#AEC4CE', stack:'#DCE6EC',
+  motor:'#2FC48A', board:'#8B6FD4', waste:'#7E8F9A',
+  paper:'#FFD166', chg:'#E8452A', exp:'#2ED47A', resid:'#6E8090', mark:'#0A141C'
+};
+function TC(n){ return n==='K'?C.tK:(n==='C'?C.tC:(n==='M'?C.tM:C.tY)); }
+
+/* ===== 지오메트리 ===== */
+var ST=[], LOD=0, NM='';
+function nrm(p,ct){
+  var ux=p[1][0]-p[0][0],uy=p[1][1]-p[0][1],uz=p[1][2]-p[0][2];
+  var vx=p[2][0]-p[0][0],vy=p[2][1]-p[0][1],vz=p[2][2]-p[0][2];
+  var nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+  var m=Math.sqrt(nx*nx+ny*ny+nz*nz)||1; nx/=m;ny/=m;nz/=m;
+  if(ct){
+    var fx=0,fy=0,fz=0,i;
+    for(i=0;i<p.length;i++){fx+=p[i][0];fy+=p[i][1];fz+=p[i][2];}
+    fx/=p.length;fy/=p.length;fz/=p.length;
+    if((fx-ct[0])*nx+(fy-ct[1])*ny+(fz-ct[2])*nz<0){nx=-nx;ny=-ny;nz=-nz;}
+  }
+  return [nx,ny,nz];
+}
+function box(A,x0,y0,z0,x1,y1,z1,col,zn,o,only){
+  var v=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],
+         [x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
+  var q=[[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[3,2,6,7],[4,5,1,0]];
+  var ct=[(x0+x1)/2,(y0+y1)/2,(z0+z1)/2];
+  q.forEach(function(f,i){
+    if(only && only.indexOf(i)<0) return;
+    var p=[v[f[0]],v[f[1]],v[f[2]],v[f[3]]];
+    A.push({p:p,c:col,z:zn,o:(o==null?1:o),n:nrm(p,ct),k:'s',l:LOD,nm:NM});
+  });
+}
+function cyl(A,cx,cy,z0,z1,r,col,zn,o,N){
+  N=N||12; var ct=[cx,cy,(z0+z1)/2],a=[],i;
+  for(i=0;i<N;i++)a.push(2*Math.PI*i/N);
+  for(i=0;i<N;i++){
+    var a1=a[i],a2=a[(i+1)%N];
+    var p=[[cx+r*Math.cos(a1),cy+r*Math.sin(a1),z0],[cx+r*Math.cos(a2),cy+r*Math.sin(a2),z0],
+           [cx+r*Math.cos(a2),cy+r*Math.sin(a2),z1],[cx+r*Math.cos(a1),cy+r*Math.sin(a1),z1]];
+    A.push({p:p,c:col,z:zn,o:(o==null?1:o),n:nrm(p,ct),k:'s',l:LOD,nm:NM});
+  }
+  var c0=[],c1=[];
+  for(i=0;i<N;i++){
+    c0.push([cx+r*Math.cos(a[N-1-i]),cy+r*Math.sin(a[N-1-i]),z0]);
+    c1.push([cx+r*Math.cos(a[i]),cy+r*Math.sin(a[i]),z1]);
+  }
+  A.push({p:c0,c:col,z:zn,o:(o==null?1:o),n:nrm(c0,ct),k:'s',l:LOD,nm:NM});
+  A.push({p:c1,c:col,z:zn,o:(o==null?1:o),n:nrm(c1,ct),k:'s',l:LOD,nm:NM});
+}
+function quad(A,p,col,zn,o){
+  A.push({p:p,c:col,z:zn,o:(o==null?1:o),n:nrm(p,null),k:'f',l:LOD,nm:NM});
+}
+/* 토너 입자 : 화면을 향한 구슬 */
+function dot(A,x,y,z,r,col,zn,o){
+  A.push({p:[[x,y,z]],c:col,z:zn,o:(o==null?1:o),n:null,k:'dot',r:r,l:LOD,nm:NM});
+}
+/* 전하 기호 : − / + */
+function sym(A,x,y,z,t,sz,col,zn){
+  A.push({p:[[x,y,z]],c:col,z:zn,o:1,n:null,k:'sym',r:sz,t:t,l:LOD,nm:''});
+}
+function edge(A,a,b){ A.push({p:[a,b],c:C.cut,z:'shell',o:1,n:null,k:'e',l:0,nm:''}); }
+
+var W=600,H=770,D=600,ZF=95,ZB=505;
+var DRUM=[{n:'K',x:140,c:C.dK},{n:'C',x:244,c:C.dC},{n:'M',x:348,c:C.dM},{n:'Y',x:452,c:C.dY}];
+var DCY=434, DRR=32, TY=[252,190,128,66];
+var A_BCR=214,A_LPH=285,A_DEVE=352,A_BTR=82,A_CLN=185;
+
+/* --- 외장 (컷어웨이) --- */
+NM='본체 프레임';   box(ST,0,26,0,W,660,D, C.shell,'shell',0.88,[0,3,5]);
+NM='대차 베이스';   box(ST,0,0,0,W,26,D, C.shell,'shell',0.88,[0,3,4]);
+NM='IIT 하우징';    box(ST,10,660,30,W-10,706,D-30, C.shell,'shell',0.88,[0,3,4]);
+NM='DADF';         box(ST,20,706,30,W-20,748,D-30, C.panel,'shell',0.88,[0,3,4]);
+[[[0,26,D],[W,26,D]],[[0,660,D],[W,660,D]],[[0,26,D],[0,660,D]],
+ [[W,26,D],[W,660,D]],[[0,26,0],[0,26,D]],[[0,660,0],[0,660,D]]]
+ .forEach(function(e){ edge(ST,e[0],e[1]); });
+
+/* --- 스캔 · 배출 --- */
+NM='DADF 반송 롤';  cyl(ST,200,726,170,430,13,C.scan,'scan',1);
+NM='DADF 반송 롤';  cyl(ST,420,726,170,430,13,C.scan,'scan',1);
+NM='Platen Glass'; box(ST,40,668,60,560,676,D-60, C.platen,'scan',0.45);
+NM='IIT (CCD) 캐리지'; box(ST,60,644,150,220,664,300, C.scan,'scan',1);
+NM='Inner Tray (배출)'; box(ST,60,610,110,420,624,490, C.tray2,'scan',1);
+NM='Exit Roll 1';  cyl(ST,90,636,120,480,12,C.roll,'scan',1);
+
+/* --- 정착 --- */
+NM='Heat Roll';    cyl(ST,64,556,ZF,ZB,20,C.heat,'fuse',1,16);
+NM='NIP Belt Roll';cyl(ST,24,556,ZF,ZB,13,C.nip,'fuse',1);
+
+/* --- 전사 (벨트) --- */
+NM='IBT Belt';     box(ST,52,472,ZF,470,498,ZB, C.belt,'belt',0.34);
+NM='BUR (Drive Roll)'; cyl(ST,64,483,ZF,ZB,14,C.bur,'belt',1);
+NM='2nd BTR';      cyl(ST,30,483,ZF,ZB,16,C.btr2,'belt',1,14);
+
+/* --- 드럼 · 현상기 (4색) --- */
+DRUM.forEach(function(d){
+  NM='Drum '+d.n+' (광도체)';      cyl(ST,d.x,DCY,ZF,ZB,DRR,d.c,'drum',1,18);
+  NM='1st BTR ('+d.n+')';          cyl(ST,d.x+6,479,ZF,ZB,9,C.btr,'drum',1);
+  NM='BCR ('+d.n+')';              cyl(ST,d.x-33,412,ZF,ZB,10,C.bcr,'drum',1);
+  NM='LPH ('+d.n+')';              box(ST,d.x-8,386,ZF,d.x+30,400,ZB, C.lph,'drum',1);
+  NM='Development Roll ('+d.n+')'; cyl(ST,d.x+45,428,ZF,ZB,15,C.deve,'drum',1);
+  NM='Developer Housing ('+d.n+')';box(ST,d.x+26,378,ZF,d.x+74,422,ZB, C.devh,'drum',0.5);
+  NM='Developer (현상제 '+d.n+')'; box(ST,d.x+29,381,ZF+6,d.x+71,401,ZB-6, TC(d.n),'drum',1);
+  NM='Toner Cartridge ('+d.n+')';  box(ST,d.x-14,508,ZB-76,d.x+34,554,ZB-26, TC(d.n),'drum',1);
+});
+
+/* --- 엔진 기타 --- */
+NM='Waste Toner Bottle'; box(ST,80,300,ZF+20,240,356,ZF+90, C.waste,'engine',1);
+NM='ESS / Controller PWB'; box(ST,504,190,ZB-26,556,320,ZB, C.board,'engine',1);
+NM='Regi Roll';    cyl(ST,40,392,ZF,ZB,11,C.roll,'engine',1);
+
+/* --- 급지부 --- */
+NM='T/A Roll';     cyl(ST,40,320,ZF,ZB,10,C.roll,'feed',1);
+/* 양면 우회 슈트 (기기 바깥쪽) */
+NM='Duplex Path (바깥쪽 우회)';
+box(ST,10,320,ZF+40,26,566,ZB-40, C.tray,'feed',0.30);
+NM='Duplex Roll';  cyl(ST,22,540,ZF+60,ZB-60,9,C.roll,'feed',1);
+NM='Duplex Roll';  cyl(ST,22,430,ZF+60,ZB-60,9,C.roll,'feed',1);
+NM='Duplex Roll';  cyl(ST,22,350,ZF+60,ZB-60,9,C.roll,'feed',1);
+NM='MSI (100 sheets)'; box(ST,W-6,364,160,W+90,386,440, C.tray,'feed',1);
+TY.forEach(function(ty,i){
+  /* 전면(1)을 열어 내부의 용지 적재와 급지 롤이 보이게 한다 */
+  NM='Tray '+(i+1);   box(ST,44,ty,60,556,ty+46,D-60, C.tray,'feed',0.88,[0,3,5,2]);
+  NM='Feeder 프레임'; box(ST,34,ty+42,100,100,ty+54,D-100, C.feeder,'feed',1);
+});
+
+/* --- 확대 시 나타나는 세부 (LOD 1) --- */
+LOD=1;
+DRUM.forEach(function(d){
+  NM='BCR Cleaner ('+d.n+')';   cyl(ST,d.x-41,392,ZF+12,ZB-12,7,C.roll,'drum',1,10);
+  NM='Cleaning Blade ('+d.n+')';box(ST,d.x-58,424,ZF+10,d.x-40,438,ZB-10, C.devh,'drum',1);
+  NM='Drum CLN Auger ('+d.n+')';cyl(ST,d.x-54,452,ZF+12,ZB-12,6,C.roll,'drum',1,10);
+  NM='Trickle outlet ('+d.n+')';box(ST,d.x+70,376,ZF+14,d.x+80,388,ZF+40, C.devh,'drum',1);
+});
+NM='ATC Sensor (K 전용)'; box(ST,184,376,ZB-56,198,388,ZB-26, C.board,'drum',1);
+NM='IBT Belt Cleaner';   box(ST,70,498,ZF+8,124,522,ZB-8, C.devh,'belt',1);
+NM='Cleaner Auger Pipe'; cyl(ST,97,512,ZF+12,ZB-12,7,C.roll,'belt',1,10);
+NM='Thermostat';   box(ST,44,580,ZF+14,60,592,ZF+42, C.board,'fuse',1);
+NM='STS-Rear';     box(ST,80,578,ZF+16,94,588,ZF+44, C.board,'fuse',1);
+NM='NCS-Centre';   box(ST,80,578,286,94,588,314, C.board,'fuse',1);
+NM='Exit Sensor';  box(ST,90,596,ZB-46,106,608,ZB-18, C.board,'scan',1);
+NM='Exit Gate';    box(ST,110,626,ZF+24,150,634,ZB-24, C.devh,'scan',1);
+TY.forEach(function(ty){
+  NM='No Paper Sensor';   box(ST,86,ty+30,D-92,102,ty+42,D-72, C.board,'feed',1);
+  NM='Tray Level Sensor'; box(ST,86,ty+8,D-92,102,ty+20,D-72, C.board,'feed',1);
+  NM='Tray Size Sensor';  box(ST,520,ty+16,D-96,542,ty+30,D-70, C.board,'feed',1);
+});
+LOD=0;
+
+/* ===== 부품 역할 ===== */
+var DESC={
+ 'BCR':'고압 인가로 광도체 표면을 −600V로 균일 대전',
+ 'BCR Cleaner':'BCR 표면을 청소',
+ 'LPH':'SLED 약 15,000 dot · 1200×2400 dpi. 화상부를 노광해 −100V 정전잠상 생성',
+ 'Development Roll':'Deve Bias −400V. 전위차로 잠상에만 토너를 부착',
+ 'Developer Housing':'Auger 교반으로 토너와 Carrier를 혼합',
+ 'Developer':'현상제. 토너(비자성) + Carrier(자성) 혼합체',
+ 'Trickle outlet':'잉여 Carrier를 소량씩 배출 — 현상제 교환이 불필요한 이유',
+ 'ATC Sensor':'투자율로 T/C 검출. 출력이 높으면 토너 부족 (부의 상관). K 전용',
+ 'Toner Cartridge':'소량의 Fresh Carrier 동봉. 내부에 Auger 없음',
+ 'Cleaning Blade':'1차 전사되지 않은 잔류 토너를 광도체에서 제거',
+ 'Drum CLN Auger':'회수한 폐토너를 Waste Toner Bottle로 이송',
+ 'Drum':'광도체. 대전 → 노광 → 현상 → 1차 전사 → 클리닝이 한 바퀴로 진행',
+ '드럼 표면 전위':'빨강 −600V 대전 · 초록 −100V 정전잠상 · 색상 부착 토너 · 회색 잔류',
+ '1st BTR':'+DC로 IBT Belt 이면을 대전시켜 토너를 벨트로. FC / BW / Changing 3 포지션',
+ 'IBT Belt':'중간 전사 벨트. Y→M→C→K 순으로 4색을 겹쳐 받음',
+ 'IBT Belt 토너':'1차 전사로 벨트에 실린 토너',
+ 'IBT Belt Cleaner':'벨트 잔류 토너를 Cleaning Blade로 제거',
+ 'Cleaner Auger Pipe':'벨트 폐토너를 회수 병으로 이송',
+ 'BUR (Drive Roll)':'−DC로 벨트 이면 전하를 중화. 벨트 구동 겸용',
+ '2nd BTR':'우레탄 폼 단층. 정전유도로 벨트의 토너를 용지로. 전용 클리너 없음',
+ 'Heat Roll':'Lamp의 열을 용지에 전달해 토너를 융착. NIP 폭 12.6mm',
+ 'NIP Belt Roll':'Spring 압력으로 토너 화상과 용지를 가압',
+ 'Thermostat':'일정 온도까지 상승하면 회로를 차단',
+ 'STS-Rear':'Heat Roll Rear 측 온도 및 단선 검출',
+ 'NCS-Centre':'비접촉 온도 검출',
+ 'Inner Tray (배출)':'정착부를 통과한 용지가 배출되는 상부 트레이',
+ 'Exit Roll 1':'적정 타이밍에 용지를 Inner Tray로 배출',
+ 'Exit Sensor':'정착부에서의 용지 배출을 검출',
+ 'Exit Gate':'용지를 목적 방향으로 분기',
+ 'Waste Toner Bottle':'현상·전사 폐토너를 회수. 55.0k PV',
+ 'ESS / Controller PWB':'화상 처리 및 제어 기판',
+ 'Regi Roll':'부딪혀 루프를 만들어 Skew 보정 후 Tacking Point로 이송',
+ 'T/A Roll':'각 트레이에서 급지된 용지를 Regi 부로 반송',
+ 'Nudger Roll':'적재 다발의 최상단 용지만 긁어 Feed 부로 보냄. Feed Clutch로 Lift Up/Down 됨',
+ '적재 용지':'트레이에 적재된 용지 다발. Bottom Plate가 급지 높이까지 들어올린다',
+ 'Feeder 프레임':'Nudger · Feed · Retard 롤을 지지하는 프레임',
+ 'LPH 노광 빔':'화상부에만 빛을 쏘아 −100V 정전잠상을 만든다',
+ '토너 (현상 → 드럼)':'Deve Bias −400V와 잠상(−100V)의 전위차로 토너가 드럼으로 이동',
+ '토너 보급 경로':'Toner Cartridge에서 Developer Housing으로 토너가 보급되는 경로',
+ 'Feed Roll':'마찰력으로 용지를 Take Away 방향으로 이송',
+ 'Retard Roll':'역방향 저지력으로 2장 이상 통과를 차단',
+ 'Feed/Lift Up Motor':'양방향 스테핑. CCW로 Bottom Plate 리프트업, CW로 롤 구동',
+ 'Bottom Plate':'용지를 급지 가능 높이까지 들어올리는 바닥판',
+ '용지 스택':'적재된 용지',
+ 'No Paper Sensor':'트레이 용지 없음을 검출',
+ 'Tray Level Sensor':'급지 가능 위치까지 올라왔음을 검출',
+ 'Tray Size Sensor':'용지 사이즈 및 트레이 장착을 검출',
+ 'Tray':'용지 급지 트레이. Tray 2~4의 Front Cover는 상호 호환되지 않음',
+ 'MSI (100 sheets)':'수동 급지 트레이. 별도 경로로 T/A Roll에 합류',
+ 'DADF 반송 롤':'원고를 반송',
+ 'Platen Glass':'원고 재치 유리',
+ 'IIT (CCD) 캐리지':'원고를 읽는 캐리지 (Advance는 CCD, Basic은 CIS)',
+ 'DADF':'자동 원고 반송 장치',
+ '본체 프레임':'IOT 본체 외장',
+ '대차 베이스':'하부 베이스',
+ 'IIT 하우징':'스캐너 하우징',
+ '용지':'반송 중인 용지',
+ '토너 (현상제 · Developer Housing)':'Developer Housing 안의 토너와 Carrier 혼합체. Auger 가 교반한다',
+ '토너 (Development Roll 표면)':'Magnet Roll 의 자력으로 롤 표면에 실린 현상제 산. 닙까지 실려 올라간다',
+ '토너 (닙 · 폭 전체 접촉)':'드럼과 Development Roll 이 맞물리는 면. 용지 폭 전체에 걸쳐 접촉하므로 토너도 폭 전체에 묻는다',
+ '토너 (드럼 표면 화상)':'전기가 옅어진 부분(+)에만 얇게 깔린 토너층. 드럼을 타고 1st BTR 로 올라간다',
+ '토너 (1차 전사 후 잔류)':'벨트로 옮겨가지 못하고 드럼에 남은 토너. Cleaning Blade 가 긁어 회수한다',
+ 'Duplex Path (바깥쪽 우회)':'양면 인쇄 시 용지가 되돌아 내려가는 경로. 기기 바깥쪽(외측)에 있어 양면 JAM은 Left-Hand Cover 를 열어 처리한다',
+ 'Duplex Roll':'양면 경로에서 용지를 Regi 부까지 반송',
+ '미정착 토너':'2차 전사로 용지에 옮겨진 4층 토너. 아직 가루 상태로 공극이 많아 발색되지 않음',
+ '정착된 토너 화상':'Heat Roll의 열과 NIP 압력으로 용융되어 공극이 메워진 상태. 이때 비로소 발색' 
+};
+function desc(n){
+  if(DESC[n]) return DESC[n];
+  var b=n.replace(/\s*\([^)]*\)\s*$/,'').trim();
+  if(DESC[b]) return DESC[b];
+  b=b.replace(/\s+\d+$/,'').trim();
+  if(DESC[b]) return DESC[b];
+  b=b.replace(/\s+[KCMY]$/,'').trim();
+  return DESC[b]||'';
+}
+
+/* ===== 용지 경로 ===== */
+/* 단면 경로 */
+var PP=[[300,272],[86,272],[42,306],[42,466],[42,556],[70,612],[300,618]];
+/* 양면 경로 : Exit 으로 나갔다가 반전 → 기기 바깥쪽(x 더 작음)으로 우회 하강 → Regi 재진입 → Exit */
+var PPD=[[300,272],[86,272],[42,306],[42,466],[42,556],[70,612],[240,618],
+         [96,606],[26,566],[18,330],[30,296],[42,306],
+         [42,466],[42,556],[70,612],[300,618]];
+function mkSeg(P){
+  var S=[],T=0,i;
+  for(i=0;i<P.length-1;i++){
+    var dx=P[i+1][0]-P[i][0],dy=P[i+1][1]-P[i][1],L=Math.sqrt(dx*dx+dy*dy);
+    S.push({a:P[i],b:P[i+1],L:L,s:T}); T+=L;
+  }
+  return {S:S,T:T};
+}
+var S1=mkSeg(PP), S2=mkSeg(PPD), duplex=false;
+var SEG=S1.S, TOT=S1.T;
+var U_BTR2=(S1.S[2].s+S1.S[2].L)/S1.T, U_FUSE=(S1.S[3].s+S1.S[3].L)/S1.T;
+/* 양면 : 1면 전사·정착 / 2면 전사·정착 경계 */
+var D2_BTR1=(S2.S[2].s+S2.S[2].L)/S2.T, D2_FUSE1=(S2.S[3].s+S2.S[3].L)/S2.T,
+    D2_REV=(S2.S[6].s+S2.S[6].L)/S2.T, D2_REJOIN=(S2.S[10].s+S2.S[10].L)/S2.T,
+    D2_BTR2=(S2.S[11].s+S2.S[11].L)/S2.T, D2_FUSE2=(S2.S[12].s+S2.S[12].L)/S2.T;
+function setDuplex(v){
+  duplex=v;
+  SEG=v?S2.S:S1.S; TOT=v?S2.T:S1.T;
+  U_BTR2=v?D2_BTR2:(S1.S[2].s+S1.S[2].L)/S1.T;
+  U_FUSE=v?D2_FUSE2:(S1.S[3].s+S1.S[3].L)/S1.T;
+  pu=0;
+}
+function pathAt(u){
+  var t=u*TOT,sg=SEG[SEG.length-1];
+  for(var i=0;i<SEG.length;i++){ if(t<=SEG[i].s+SEG[i].L){ sg=SEG[i]; break; } }
+  var k=(t-sg.s)/sg.L;
+  return {x:sg.a[0]+(sg.b[0]-sg.a[0])*k,y:sg.a[1]+(sg.b[1]-sg.a[1])*k,
+          dx:(sg.b[0]-sg.a[0])/sg.L,dy:(sg.b[1]-sg.a[1])/sg.L};
+}
+
+/* ===== 카메라 ===== */
+var yaw=0.62,pitch=0.13,yawT=0.62,pitchT=0.13;
+var cam={x:300,y:345,z:300,s:0.5},camT={x:300,y:345,z:300,s:0.5};
+var ORX=450,ORY=320,zoom=1,fitS=0.5,panX=0,panY=0;
+var GL=222,GR=678;
+function lod(){ return zoom>=1.6?1:0; }
+var CAM={ all:{shell:true,yw:0.62,pt:0.13}, scan:{shell:false,yw:0.68,pt:0.24},
+  fuse:{shell:false,yw:0.40,pt:0.10}, engine:{shell:false,yw:0.58,pt:0.12},
+  drum:{shell:false,yw:0.28,pt:0.08}, feed:{shell:false,yw:0.56,pt:0.16} };
+var MATCH={ all:null, scan:['scan'], fuse:['fuse'],
+  engine:['belt','drum','engine'], drum:['dcut'], feed:['feed'] };
+var PAPERZ=['all','scan','fuse','engine','feed'];
+function proj(p){
+  var x=p[0]-cam.x,y=p[1]-cam.y,z=p[2]-cam.z;
+  var cy=Math.cos(yaw),sy=Math.sin(yaw);
+  var x1=x*cy+z*sy,z1=-x*sy+z*cy;
+  var cp=Math.cos(pitch),sp=Math.sin(pitch);
+  return [ORX+panX+x1*cam.s, ORY+panY-(y*cp-z1*sp)*cam.s, y*sp+z1*cp];
+}
+function rotN(n){
+  var cy=Math.cos(yaw),sy=Math.sin(yaw),z1=-n[0]*sy+n[2]*cy;
+  return n[1]*Math.sin(pitch)+z1*Math.cos(pitch);
+}
+var LT=(function(){ var v=[-0.40,0.82,0.41],m=Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  return [v[0]/m,v[1]/m,v[2]/m]; })();
+var RGB={};
+function rgb(hx){ if(RGB[hx])return RGB[hx];
+  return (RGB[hx]=[parseInt(hx.substr(1,2),16),parseInt(hx.substr(3,2),16),parseInt(hx.substr(5,2),16)]); }
+function col(hx,sh,near){
+  var c=rgb(hx),f=(1-near)*0.40,r=c[0]*sh,g=c[1]*sh,b=c[2]*sh;
+  r+=(BG[0]-r)*f; g+=(BG[1]-g)*f; b+=(BG[2]-b)*f;
+  return 'rgb('+Math.round(r)+','+Math.round(g)+','+Math.round(b)+')';
+}
+
+/* ===== 동작 ===== */
+var tt=0,pu=0,anim=!reduce,zone='all',showShell=true,drumSel='Y';
+var lastList=[],pinned=[],hoverPr=null,hoverNm='';
+function n360(a){ a%=360; if(a<0)a+=360; return a; }
+function ph(a){ return n360(a-A_BCR)/360; }
+var P_LPH=ph(A_LPH),P_DEVE=ph(A_DEVE),P_BTR=ph(A_BTR),P_CLN=ph(A_CLN);
+function isImg(i){ return (i%5)!==0 && (i%7)!==3; }
+function arc(cx,cy,z0,z1,r,a1,a2){
+  var r1=a1*Math.PI/180,r2=a2*Math.PI/180;
+  return [[cx+r*Math.cos(r1),cy+r*Math.sin(r1),z0],[cx+r*Math.cos(r2),cy+r*Math.sin(r2),z0],
+          [cx+r*Math.cos(r2),cy+r*Math.sin(r2),z1],[cx+r*Math.cos(r1),cy+r*Math.sin(r1),z1]];
+}
+function ann(A,cx,cy,z,r0,r1,a1,a2,c2,zn,o){
+  var t1=a1*Math.PI/180,t2=a2*Math.PI/180;
+  quad(A,[[cx+r0*Math.cos(t1),cy+r0*Math.sin(t1),z],[cx+r1*Math.cos(t1),cy+r1*Math.sin(t1),z],
+          [cx+r1*Math.cos(t2),cy+r1*Math.sin(t2),z],[cx+r0*Math.cos(t2),cy+r0*Math.sin(t2),z]],c2,zn,o);
+}
+function spoke(A,cx,cy,z1,r,a,zn){ ann(A,cx,cy,z1+2,r*0.22,r*0.92,a,a+16,C.mark,zn,0.9); }
+
+function dyn(zn){
+  var A=[],i,base=anim?tt*0.55:0;
+  /* 드럼 · 현상기 절단 모형 */
+  if(zn==='drum'){
+    var d0=DRUM.filter(function(q){return q.n===drumSel;})[0]||DRUM[0];
+    var Z0=300,Z1=502,dx=d0.x,T='dcut',DT=TC(d0.n),N=(lod()>=1?34:22);
+    NM='Drum '+d0.n+' (광도체)';   cyl(A,dx,DCY,Z0,Z1,DRR,d0.c,T,0.55,N);
+    NM='1st BTR';                  cyl(A,dx+6,479,Z0,Z1,9,C.btr,T,1,12);
+    NM='BCR';                      cyl(A,dx-33,412,Z0,Z1,10,C.bcr,T,1,12);
+    NM='Cleaning Blade';           cyl(A,dx-46,431,Z0,Z1,5,C.roll,T,1,10);
+    NM='LPH';                      box(A,dx-8,386,Z0,dx+30,400,Z1, C.lph,T,1);
+    NM='Development Roll';         cyl(A,dx+45,428,Z0,Z1,15,C.deve,T,1,14);
+    NM='Developer Housing';        box(A,dx+26,378,Z0,dx+74,422,Z1, C.devh,T,0.30);
+    NM='Developer (현상제 '+d0.n+')'; box(A,dx+29,381,Z0+6,dx+71,401,Z1-6, DT,T,1);
+    NM='Toner Cartridge ('+d0.n+')';  box(A,dx-14,508,Z1-68,dx+34,552,Z1-20, DT,T,1);
+    NM='IBT Belt';                 box(A,dx-52,472,Z0,dx+92,498,Z1, C.belt,T,0.34);
+    /* ② 노광 빔 */
+    NM='LPH 노광 빔';
+    quad(A,[[dx+8,401,Z0+18],[dx+13,401,Z0+18],[dx+13,401,Z1-18],[dx+8,401,Z1-18]],'#FFE08A',T,0.5);
+    quad(A,[[dx+9,401,Z1-10],[dx+13,401,Z1-10],[dx+12,DCY-DRR+2,Z1-10],[dx+10,DCY-DRR+2,Z1-10]],'#FFE08A',T,0.75);
+
+    /* 전하 기호 : 대전부 − , 노광부 + */
+    var NSY=13, kk2;
+    for(kk2=0;kk2<NSY;kk2++){
+      var sa=n360(base+kk2*(360/NSY)+A_BCR), sp2=ph(sa);
+      var sr=sa*Math.PI/180, sx2=dx+(DRR+11)*Math.cos(sr), sy2=DCY+(DRR+11)*Math.sin(sr);
+      if(sp2<P_LPH)       sym(A,sx2,sy2,Z1+8,'−',13,C.chg,T);
+      else if(sp2<P_DEVE) sym(A,sx2,sy2,Z1+8, isImg(kk2)?'+':'−',13, isImg(kk2)?C.exp:C.chg, T);
+    }
+    /* ── 토너 경로 : Cartridge → Developer Housing → Development Roll → 닙 → Drum ──
+       하우징에서 드럼으로 바로 튀지 않는다. 반드시 Development Roll 표면에 실려 닙까지 간다.
+       닙(드럼·Deve 맞물림)은 용지 폭 전체에 걸쳐 접촉하므로 한 줄이 아니라 면으로 그린다. */
+    var DVX=dx+45, DVY=428, DVR=15;
+    var A_PICK=300, A_NIP=172.4, SPAN=A_PICK-A_NIP;   /* 하우징 픽업 → 닙 (128°) */
+    function zc(k,cnt,pad){ return Z0+pad+(Z1-Z0-pad*2)*k/(cnt-1); }
+
+    /* ① Developer Housing 안의 현상제 (폭 전체) */
+    NM='토너 (현상제 · Developer Housing)';
+    for(var hx=0;hx<6;hx++) for(var hr=0;hr<2;hr++) for(var hz=0;hz<3;hz++)
+      dot(A, dx+34+hx*7, 386+hr*7, zc(hz,3,34), 4.2, DT, T, 1);
+
+    /* ② Development Roll 표면에 실려 올라가는 현상제 산 (폭 전체).
+       Deve 롤은 드럼과 반대 방향(시계)으로 돌아 닙에서 표면이 같은 방향으로 움직인다. */
+    NM='토너 (Development Roll 표면)';
+    var NA2=7;
+    for(var ia=0;ia<NA2;ia++){
+      var tv=((anim?tt/50:0.35)+ia/NA2)%1;
+      var aa=(A_PICK-SPAN*tv)*Math.PI/180;
+      var rx=DVX+(DVR+3.2)*Math.cos(aa), ry=DVY+(DVR+3.2)*Math.sin(aa);
+      for(var kz=0;kz<4;kz++) dot(A, rx, ry, zc(kz,4,32), 4.0, DT, T, 1);
+    }
+
+    /* ③ 닙 — 드럼과 Development Roll 이 맞물리는 면 전체 */
+    NM='토너 (닙 · 폭 전체 접촉)';
+    for(var nz=0;nz<6;nz++){
+      dot(A, dx+31.7, 429.8, zc(nz,6,28), 4.6, DT, T, 1);
+      dot(A, dx+27.5, 430.6, zc(nz,6,28), 4.2, DT, T, 0.9);
+    }
+
+    /* ④ 드럼 표면으로 옮겨진 토너 화상
+       입자를 얇고 촘촘하게 깔아 「얇은 토너층」으로 보이게 한다.
+       각도 48분할 × 폭 9열 → 현상부터 1차 전사까지 면 전체에 고르게 분포. */
+    NM='토너 (드럼 표면 화상)';
+    var ND2=48, NZD=9;
+    for(var td=0;td<ND2;td++){
+      var da=n360(base+td*(360/ND2)+A_BCR), dp2=ph(da);
+      var dr2=da*Math.PI/180;
+      var sx2=dx+(DRR+2.0)*Math.cos(dr2), sy2=DCY+(DRR+2.0)*Math.sin(dr2);
+      if(dp2>=P_DEVE && dp2<P_BTR){
+        if(!isImg(td)) continue;                       /* 화상부에만 */
+        for(var kz2=0;kz2<NZD;kz2++)
+          dot(A, sx2, sy2, zc(kz2,NZD,24), 1.9, DT, T, 1);
+      } else if(dp2>=P_BTR && dp2<P_CLN && td%3===0){
+        /* 1차 전사 후 남은 잔류 토너 — Cleaning Blade 가 긁어낸다 */
+        NM='토너 (1차 전사 후 잔류)';
+        for(var kz3=0;kz3<5;kz3++)
+          dot(A, sx2, sy2, zc(kz3,5,40), 1.5, C.resid, T, 0.75);
+        NM='토너 (드럼 표면 화상)';
+      }
+    }
+    /* Toner Cartridge → Developer Housing 보급 */
+    NM='토너 보급 경로';
+    for(var tc2=0;tc2<7;tc2++){
+      var cv=((anim?tt/120:0.4)+tc2/7)%1;
+      dot(A, dx+22, 504-(504-424)*cv, Z1-46, 3.8, DT, T, 1);
+    }
+    if(lod()>=1){
+      NM='드럼 구동 기어';
+      for(var gt=0;gt<12;gt++){
+        var gA=gt*(360/12)*Math.PI/180, gx=dx+Math.cos(gA)*34, gy=DCY+Math.sin(gA)*34;
+        box(A,gx-2.6,gy-2.6,Z0-16,gx+2.6,gy+2.6,Z0-6, C.motor,T,1);
+      }
+      cyl(A,dx,DCY,Z0-14,Z0-8,30,C.motor,T,1,16);
+      NM='BCR Cleaner';    cyl(A,dx-41,392,Z0+6,Z1-6,7,C.roll,T,1,10);
+      NM='Drum CLN Auger'; cyl(A,dx-54,452,Z0+6,Z1-6,6,C.roll,T,1,10);
+      NM='Trickle outlet'; box(A,dx+70,376,Z0+8,dx+80,388,Z0+38, C.devh,T,1);
+    }
+    /* 표면 전위 : 원통 밴드 + 앞면 고리 */
+    var NS=(lod()>=1?32:24);
+    NM='드럼 표면 전위';
+    for(i=0;i<NS;i++){
+      var a1=n360(base+i*(360/NS)+A_BCR),a2=a1+(360/NS)-1.2;
+      var p2=ph(a1),cc,oo=0.95;
+      if(p2<P_LPH){ cc=C.chg; }
+      else if(p2<P_DEVE){ cc=isImg(i)?C.exp:C.chg; oo=isImg(i)?0.95:0.45; }
+      else if(p2<P_BTR){ if(!isImg(i)) continue; cc=DT; oo=1; }
+      else if(p2<P_CLN){ cc=C.resid; oo=0.7; }
+      else continue;
+      quad(A,arc(dx,DCY,Z0+2,Z1-2,DRR+1.2,a1,a2),cc,T,oo);
+      ann(A,dx,DCY,Z1+1.4,DRR*0.64,DRR+1.5,a1,a2,cc,T,oo);
+    }
+    for(i=0;i<8;i++) ann(A,dx,DCY,Z1+0.6,0,DRR*0.60,i*45,(i+1)*45+0.4,'#0F1A22',T,0.66);
+    NM=''; spoke(A,dx,DCY,Z1,DRR,base,T);
+    /* 드럼과 맞물리는 롤들은 반대 방향(시계)으로 돈다 — 닙에서 표면이 같은 방향으로 움직이게 */
+    NM=''; spoke(A,dx+45,428,Z1,15,-base*2.1,T);
+    NM=''; spoke(A,dx-33,412,Z1,10,-base*3.2,T);
+    NM='IBT Belt 토너 ('+d0.n+')';
+    for(i=0;i<5;i++){
+      var u2=((anim?tt/170:0.4)+i/5)%1, tx=(dx+86)-((dx+86)-(dx-48))*u2;
+      quad(A,[[tx-9,470.5,Z0+16],[tx+9,470.5,Z0+16],[tx+9,470.5,Z1-16],[tx-9,470.5,Z1-16]],DT,T,0.95);
+    }
+  }
+  /* 벨트 위 4색 적층 */
+  if(zn==='engine'||zn==='all'){
+    var LY={Y:463.5,M:465.7,C:467.9,K:470.1};
+    for(i=0;i<10;i++){
+      var u3=((anim?tt/260:0.35)+i/10)%1, bx=452-(452-64)*u3;
+      if(bx<70) continue;
+      DRUM.forEach(function(d){
+        if(bx>d.x) return;
+        NM='IBT Belt 토너 ('+d.n+')';
+        quad(A,[[bx-9,LY[d.n],ZF+30],[bx+9,LY[d.n],ZF+30],
+                [bx+9,LY[d.n],ZB-30],[bx-9,LY[d.n],ZB-30]],TC(d.n),'belt',0.95);
+      });
+    }
+  }
+  /* 급지 : 리프트업 · 롤 회전 */
+  var lift=(zn==='feed'&&anim)?5*(0.5+0.5*Math.sin(tt*0.045)):0;
+  TY.forEach(function(ty,ti){
+    var l=(ti===0)?lift:0;
+    NM='Bottom Plate'; box(A,98,ty+5+l,72,546,ty+12+l,D-72, C.tray,'feed',1);
+    /* 적재된 용지 다발 */
+    NM='적재 용지';
+    box(A,102,ty+12+l,76,542,ty+34+l,D-76, C.stack,'feed',1);
+    for(var sk=0;sk<4;sk++)   /* 다발 결 표시 */
+      quad(A,[[104,ty+16+l+sk*4.5,78],[540,ty+16+l+sk*4.5,78],
+              [540,ty+16+l+sk*4.5,D-78],[104,ty+16+l+sk*4.5,D-78]],'#B9C7D0','feed',0.5);
+    NM='Nudger Roll';  cyl(A,84,ty+30,252,348,9,C.roll,'feed',1,12);
+    NM='Feed Roll';    cyl(A,56,ty+30,252,348,10,C.roll,'feed',1,12);
+    NM='Retard Roll';  cyl(A,56,ty+10,252,348,10,C.roll,'feed',1,12);
+    if(zn==='feed'){
+      NM='';
+      spoke(A,84,ty+30,348,9,-tt*(anim?2.4:0),'feed');
+      spoke(A,56,ty+30,348,10,-tt*(anim?2.4:0),'feed');
+      spoke(A,56,ty+10,348,10,tt*(anim?1.6:0),'feed');
+    }
+  });
+  if(zn==='fuse'){ NM=''; spoke(A,64,556,ZB,20,-tt*(anim?1.4:0),'fuse'); }
+  /* ── 용지 : 경로 곡선에 맞춰 휘어지는 띠로 그린다 ──
+     예전에는 딱딱한 한 장의 판이어서 코너에서 방향만 바뀌었다.
+     이제 진행 방향을 여러 조각으로 나눠 각 조각이 경로를 따라가므로 자연스럽게 휜다. */
+  var ns=(zn==='feed')?3:1;
+  var SLEN3=210, NSG=9, PZ0=152, PW=74;   /* A4 LEF : 길이 210 · 폭 296 */
+  for(i=0;i<ns;i++){
+    var uu=(zn==='feed')?((pu*0.34)+i*0.115)%0.34:(pu+i/ns)%1;
+    /* 꼬리 ~ 머리 구간을 NSG 조각으로 샘플링 */
+    var head=uu*TOT, tail=Math.max(0,head-SLEN3), PT=[], kk;
+    for(kk=0;kk<=NSG;kk++){
+      var dd=tail+(head-tail)*kk/NSG;
+      PT.push(pathAt(Math.min(1,dd/TOT)));
+    }
+    var si,sg;
+    /* 종이면 : 폭 4분할 × 길이 NSG 조각 */
+    NM='용지';
+    for(si=0;si<4;si++){
+      var za=PZ0+si*PW, zb=PZ0+(si+1)*PW;
+      for(sg=0;sg<NSG;sg++){
+        var p1=PT[sg], p2=PT[sg+1];
+        quad(A,[[p1.x,p1.y,za],[p2.x,p2.y,za],[p2.x,p2.y,zb],[p1.x,p1.y,zb]],C.paper,'paper',1);
+      }
+    }
+    /* 2차 전사 후 토너가 묻고, 정착부를 지나면 융착된다 */
+    function band3(off,za,zb,cc,nm2){
+      NM=nm2;
+      for(var s2=0;s2<NSG;s2++){
+        var q1=PT[s2], q2=PT[s2+1];
+        var tx=q2.x-q1.x, ty=q2.y-q1.y, m2=Math.sqrt(tx*tx+ty*ty)||1;
+        var ox=-ty/m2*off, oy=tx/m2*off;
+        quad(A,[[q1.x+ox,q1.y+oy,za],[q2.x+ox,q2.y+oy,za],
+                [q2.x+ox,q2.y+oy,zb],[q1.x+ox,q1.y+oy,zb]],cc,'paper',0.98);
+      }
+    }
+    if(uu>=U_FUSE){
+      for(si=0;si<4;si++)
+        band3(3.2, PZ0+si*PW+2, PZ0+(si+1)*PW-2, '#2E2438', '정착된 토너 화상');
+    } else if(uu>=U_BTR2){
+      ['K','C','M','Y'].forEach(function(n2,li){
+        band3(3.2, PZ0+li*PW+4, PZ0+(li+1)*PW-4, TC(n2), '미정착 토너 ('+n2+')');
+      });
+    }
+  }
+  NM='';
+  return A;
+}
+
+var ZI={
+ all:{k:'Overview',t:'기기는 세로 3층 구조입니다',
+  d:'최상단은 원고를 읽는 층, 중간은 화상을 만드는 층(정착 · IBT Belt · 4색 드럼 · 현상부), 최하단은 용지를 공급하는 층입니다. 양면 버튼을 누르면 Exit 으로 나갔다가 바깥쪽으로 우회해 되돌아오는 경로를 볼 수 있습니다. 노란 시트가 용지입니다. 하단 트레이에서 나와 기기 좌측 벽면을 타고 올라가는데, 2차 전사를 지나면 K · C · M · Y 4색 토너가 묻어 나오고, 정착부를 통과하면 한 덩어리로 융착됩니다. 용지 위 색 패치가 어느 지점에서 나타나고 어두워지는지 보십시오.',s:[]},
+ scan:{k:'① 최상단',t:'스캔 · 배출',
+  d:'DADF 반송 롤이 원고를 이송하고, 그 아래 Platen Glass와 IIT 캐리지가 화상을 읽습니다. 인쇄된 용지는 좌측에서 올라와 Exit Roll 1을 거쳐 Inner Tray로 배출됩니다. 스캔 계통과 인쇄 엔진이 물리적으로 분리되어 있어, 스캔 불량과 인쇄 불량의 구분이 위치만으로 가능합니다.',s:[]},
+ fuse:{k:'② 정착',t:'좌측 상부 — 전사부 바로 위',
+  d:'굵은 Heat Roll과 좌측 NIP Belt Roll이 짝을 이룹니다(NIP 폭 12.6mm). 용지는 2차 전사를 받은 직후 곧바로 정착부로 진입하므로, 정착 온도 이상이 전사 직후 화상에 바로 나타납니다. 구동은 Fusing Motor이고 1st BTR 접리도 같은 계통입니다. 안전상 분해 금지 유닛입니다.',s:[]},
+ engine:{k:'③ 전사 엔진',t:'IBT Belt와 4색 드럼',
+  d:'IBT Belt가 수평으로 놓이고 그 아래 K · C · M · Y 드럼이 깊이 방향 원통으로 나란히 매달립니다. 벨트는 좌측으로 진행하며 Y → M → C → K 순으로 토너를 겹쳐 받고, 좌단의 BUR과 2nd BTR이 좌측 벽면을 올라오는 용지에 4층을 통째로 옮깁니다. 벨트 아래 색 층이 쌓이는 모습을 보십시오.',s:[]},
+ drum:{k:'④ 드럼 · 현상기',t:'전사 과정 — 드럼 한 바퀴',
+  d:'유닛 하나를 절단해 확대했습니다. 드래그로 돌리고 휠로 더 확대해 자세히 보십시오. 드럼 주위에 떠 있는 − 는 대전된 전기, + 는 빛을 받아 뒤집힌 전기(정전잠상)입니다. 노란 구슬이 토너입니다. 경로를 순서대로 보십시오 — Toner Cartridge 에서 Developer Housing 으로 내려오고, Development Roll 표면에 실려 올라가고, 드럼과 맞물리는 닙에서 드럼으로 건너갑니다. 하우징에서 드럼으로 바로 튀는 것이 아닙니다. 닙은 용지 폭 전체에 걸쳐 접촉하므로 토너도 폭 전체에 묻습니다. 붙은 토너는 드럼을 타고 올라가 위쪽 IBT Belt로 옮겨집니다. K C M Y 버튼으로 색을 바꿀 수 있습니다.',
+  s:[['①','대전 · BCR','드럼 표면을 −600V로 균일 대전 (빨강)'],
+     ['②','노광 · LPH','화상부에 +전하 유도 → −100V 정전잠상 (초록)'],
+     ['③','현상 · Development Roll','하우징 → Deve Roll 표면 → 닙에서 드럼으로. 잠상(+)에만 부착'],
+     ['④','1차 전사 · 1st BTR','+DC로 벨트 이면을 대전시켜 토너를 IBT Belt로'],
+     ['⑤','클리닝 · Cleaning Blade','잔류 토너를 긁어 회수 (회색)']]},
+ feed:{k:'⑤ 최하단',t:'급지 동작 — 한 장만 뽑아내기',
+  d:'Bottom Plate가 올라가고 3롤이 회전합니다. Retard Roll만 반대로 도는 것을 보십시오. 이 역방향 저지력이 중복 급지를 막는 핵심입니다.',
+  s:[['①','Lift Up · Bottom Plate','Feed/Lift Up Motor 역회전(CCW)으로 바닥판을 급지 위치까지'],
+     ['②','Nudger Roll','최상단 용지를 두드려 Feed 부로'],
+     ['③','Feed Roll','마찰력으로 Take Away 방향 이송'],
+     ['④','Retard Roll','역방향 저지력으로 2장 이상 차단'],
+     ['⑤','T/A → Regi','Regi Roll에 부딪혀 루프 형성 (Skew 보정)']]}
+};
+
+(function(){
+  var L=[['드럼 K/C/M/Y',C.dC],['BCR',C.bcr],['LPH',C.lph],['현상부',C.deve],
+    ['전사 롤 · 벨트',C.btr],['정착',C.heat],['토너 입자',C.tM],['용지',C.paper],
+    ['대전 (−)',C.chg],['정전잠상 (+)',C.exp]];
+  var g=document.getElementById('x3legend');
+  L.forEach(function(it){
+    var d=document.createElement('div'),i=document.createElement('i'),s=document.createElement('span');
+    i.style.background=it[1]; s.textContent=it[0];
+    d.appendChild(i); d.appendChild(s); g.appendChild(d);
+  });
+})();
+
+/* ===== 렌더 ===== */
+function vis(zn,tag){
+  if(tag==='shell') return showShell && CAM[zn].shell!==false;
+  if(tag==='paper') return PAPERZ.indexOf(zn)>=0;
+  var m=MATCH[zn]; return m===null?true:m.indexOf(tag)>=0;
+}
+function fit(zn){
+  var mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9],all=ST.concat(dyn(zn)),i,j,k;
+  for(i=0;i<all.length;i++){
+    var f=all[i];
+    if(!vis(zn,f.z)||f.l>0||f.z==='paper'||f.k==='dot'||f.k==='sym') continue;
+    if(f.z==='shell'&&zn!=='all') continue;
+    for(j=0;j<f.p.length;j++) for(k=0;k<3;k++){
+      if(f.p[j][k]<mn[k])mn[k]=f.p[j][k]; if(f.p[j][k]>mx[k])mx[k]=f.p[j][k]; }
+  }
+  var ct=[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2];
+  var c=CAM[zn],cy=Math.cos(c.yw),sy=Math.sin(c.yw),cp=Math.cos(c.pt),sp=Math.sin(c.pt);
+  var hw=0,hh=0;
+  for(i=0;i<all.length;i++){
+    var f2=all[i];
+    if(!vis(zn,f2.z)||f2.l>0||f2.z==='paper'||f2.k==='dot'||f2.k==='sym') continue;
+    if(f2.z==='shell'&&zn!=='all') continue;
+    for(j=0;j<f2.p.length;j++){
+      var q=f2.p[j],x=q[0]-ct[0],y=q[1]-ct[1],z=q[2]-ct[2];
+      var x1=x*cy+z*sy,z1=-x*sy+z*cy,y1=y*cp-z1*sp;
+      if(Math.abs(x1)>hw)hw=Math.abs(x1); if(Math.abs(y1)>hh)hh=Math.abs(y1);
+    }
+  }
+  fitS=Math.min(Math.min(214/(hw||1),268/(hh||1)),2.2);
+  return {x:ct[0],y:ct[1],z:ct[2],s:fitS*zoom};
+}
+function render(){
+  var all=ST.concat(dyn(zone)),list=[],i,j,lv=lod();
+  for(i=0;i<all.length;i++){
+    var f=all[i];
+    if(!vis(zone,f.z)) continue;
+    if(f.l>lv) continue;
+    if(f.k==='s'&&f.o>=0.9&&f.n&&rotN(f.n)<=0) continue;
+    var pr=[],ds=0;
+    for(j=0;j<f.p.length;j++){ var q=proj(f.p[j]); pr.push(q); ds+=q[2]; }
+    list.push({pr:pr,d:ds/f.p.length,f:f});
+  }
+  list.sort(function(a,b){return a.d-b.d;});
+  var dmin=1e9,dmax=-1e9;
+  for(i=0;i<list.length;i++){ if(list[i].d<dmin)dmin=list[i].d; if(list[i].d>dmax)dmax=list[i].d; }
+  var sp=(dmax-dmin)||1,out=[];
+  for(i=0;i<list.length;i++){
+    var it=list[i],f2=it.f,near=(it.d-dmin)/sp;
+    if(f2.k==='dot'){
+      var q0=it.pr[0], rr=Math.max(1.2,(f2.r||3)*cam.s);
+      out.push('<circle cx="'+q0[0].toFixed(1)+'" cy="'+q0[1].toFixed(1)+'" r="'+rr.toFixed(1)
+        +'" fill="'+col(f2.c,1.18,near)+'" stroke="'+col(f2.c,1.8,near)
+        +'" stroke-width="'+Math.max(0.5,rr*0.20).toFixed(2)+'"/>');
+      continue;
+    }
+    if(f2.k==='sym'){
+      var q1=it.pr[0], fs=Math.max(6,(f2.r||10)*cam.s);
+      out.push('<text x="'+q1[0].toFixed(1)+'" y="'+(q1[1]+fs*0.36).toFixed(1)
+        +'" text-anchor="middle" font-size="'+fs.toFixed(1)+'" font-weight="700" fill="'
+        +col(f2.c,1.1,near)+'">'+f2.t+'</text>');
+      continue;
+    }
+    var d='M'+it.pr.map(function(q){return q[0].toFixed(1)+' '+q[1].toFixed(1);}).join('L');
+    if(f2.k==='e'){
+      out.push('<path d="'+d+'" fill="none" stroke="'+f2.c+'" stroke-opacity="0.7" stroke-width="1.3"/>');
+      continue;
+    }
+    var sh=1;
+    if(f2.n){ var dd=Math.abs(f2.n[0]*LT[0]+f2.n[1]*LT[1]+f2.n[2]*LT[2]); sh=0.42+0.72*dd; }
+    var so=(f2.z==='shell'&&zone!=='all')?0.3:1;
+    out.push('<path d="'+d+'Z" fill="'+col(f2.c,sh,near)+'" fill-opacity="'+(f2.o*so).toFixed(3)
+      +'" stroke="'+col(f2.c,sh*0.42,near)+'" stroke-width="0.7" stroke-linejoin="round"/>');
+  }
+  lastList=list;
+  SCENE.innerHTML=out.join('')+labels()+hi();
+}
+function labels(){
+  var show=pinned.map(function(p){ var q=proj(p.pos);
+    return {t:p.t,px:q[0],py:q[1],left:(q[0]<ORX),ly:q[1]}; });
+  ['L','R'].forEach(function(sd){
+    var arr=show.filter(function(s){return sd==='L'?s.left:!s.left;});
+    arr.sort(function(a,b){return a.ly-b.ly;});
+    var i;
+    for(i=0;i<arr.length;i++){
+      if(i>0&&arr[i].ly-arr[i-1].ly<16) arr[i].ly=arr[i-1].ly+16;
+      arr[i].ly=Math.max(22,Math.min(602,arr[i].ly));
+    }
+    for(i=arr.length-1;i>0;i--){ if(arr[i].ly-arr[i-1].ly<16) arr[i-1].ly=arr[i].ly-16; }
+  });
+  return show.map(function(s){
+    var gx=s.left?GL:GR,el=s.left?gx+14:gx-14;
+    return '<circle cx="'+s.px.toFixed(1)+'" cy="'+s.py.toFixed(1)
+      +'" r="2.8" fill="#4FD1E8" stroke="#0A141C" stroke-width="1"/>'
+      +'<path d="M'+s.px.toFixed(1)+' '+s.py.toFixed(1)+'L'+el.toFixed(1)+' '+s.ly.toFixed(1)
+      +'L'+gx.toFixed(1)+' '+s.ly.toFixed(1)+'" fill="none" stroke="#4FD1E8"'
+      +' stroke-opacity="0.55" stroke-width="0.9"/>'
+      +'<text x="'+(gx+(s.left?-6:6)).toFixed(1)+'" y="'+(s.ly+3.6).toFixed(1)
+      +'" text-anchor="'+(s.left?'end':'start')
+      +'" font-family="\'IBM Plex Mono\',\'IBM Plex Sans KR\',\'Malgun Gothic\',monospace"'
+      +' font-size="11.5" fill="#DCEAF2">'+s.t+'</text>';
+  }).join('');
+}
+function hi(){
+  if(!hoverPr) return '';
+  return '<path d="M'+hoverPr.map(function(q){return q[0].toFixed(1)+' '+q[1].toFixed(1);}).join('L')
+    +'Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="1.8"/>';
+}
+
+/* ===== 히트 테스트 ===== */
+function sp2(ev){
+  var m=SVG.getScreenCTM(); if(!m) return null;
+  var p=SVG.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY;
+  return p.matrixTransform(m.inverse());
+}
+function inPoly(pts,x,y){
+  var c=false,n=pts.length,i,j;
+  for(i=0,j=n-1;i<n;j=i++){
+    var xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c;
+  }
+  return c;
+}
+function pick(ev){
+  var p=sp2(ev); if(!p) return null;
+  for(var i=lastList.length-1;i>=0;i--){
+    var it=lastList[i],f=it.f;
+    if(!f.nm||f.k==='e'||f.o<0.25) continue;
+    if(inPoly(it.pr,p.x,p.y)) return {f:f,pr:it.pr};
+  }
+  return null;
+}
+function ctr(f){
+  var x=0,y=0,z=0,i;
+  for(i=0;i<f.p.length;i++){x+=f.p[i][0];y+=f.p[i][1];z+=f.p[i][2];}
+  return [x/f.p.length,y/f.p.length,z/f.p.length];
+}
+SVG.addEventListener('mousemove',function(ev){
+  if(drag){ TIP.style.opacity='0'; return; }
+  var h2=pick(ev);
+  if(h2){
+    SVG.style.cursor='pointer';
+    if(h2.f.nm!==hoverNm||hoverPr!==h2.pr){ hoverNm=h2.f.nm; hoverPr=h2.pr; render(); }
+    var r=STAGE.getBoundingClientRect();
+    TIP.style.left=(ev.clientX-r.left)+'px';
+    TIP.style.top=(ev.clientY-r.top)+'px';
+    var de=desc(h2.f.nm);
+    TIP.innerHTML=h2.f.nm+(de?'<span class="d">'+de+'</span>':'');
+    TIP.style.opacity='1';
+  } else {
+    SVG.style.cursor='grab';
+    if(hoverNm){ hoverNm=''; hoverPr=null; render(); }
+    TIP.style.opacity='0';
+  }
+});
+SVG.addEventListener('mouseleave',function(){
+  TIP.style.opacity='0';
+  if(hoverNm){ hoverNm=''; hoverPr=null; render(); }
+});
+
+/* ===== 컨트롤 ===== */
+function setZone(z){
+  zone=z; var d=ZI[z];
+  document.getElementById('x3k').textContent=d.k;
+  document.getElementById('x3t').textContent=d.t;
+  document.getElementById('x3d').textContent=d.d;
+  document.getElementById('x3seq').innerHTML=(d.s||[]).map(function(r){
+    return '<li><span class="n">'+r[0]+'</span><span><b>'+r[1]+'</b> — '+r[2]+'</span></li>';
+  }).join('');
+  document.getElementById('x3colsel').style.display=(z==='drum')?'inline-flex':'none';
+  Array.prototype.forEach.call(document.querySelectorAll('#x3steps button'),function(b){
+    b.classList.toggle('on',b.dataset.z===z);
+  });
+  pinned=[]; panX=0; panY=0; zoom=1;
+  camT=fit(z); yawT=CAM[z].yw; pitchT=CAM[z].pt;
+  var sb=document.getElementById('x3shell'),on=(z==='all')&&showShell;
+  sb.classList.toggle('on',on);
+  document.getElementById('x3zro').textContent='×1.0';
+  render();
+}
+document.getElementById('x3steps').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return; setZone(b.dataset.z);
+});
+document.getElementById('x3colsel').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  drumSel=b.dataset.c;
+  Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){
+    x.classList.toggle('on',x.dataset.c===drumSel); });
+  camT=fit('drum'); render();
+});
+document.getElementById('x3shell').addEventListener('click',function(){
+  showShell=!showShell; this.classList.toggle('on',showShell); render();
+});
+document.getElementById('x3anim').addEventListener('click',function(){
+  anim=!anim; this.classList.toggle('on',anim); render();
+});
+document.getElementById('x3dup').addEventListener('click',function(){
+  setDuplex(!duplex); this.classList.toggle('on',duplex);
+  this.textContent=duplex?'단면':'양면';
+  document.getElementById('x3d').textContent = duplex
+    ? '양면(Duplex)입니다. 앞면을 인쇄해 Exit 으로 일부 내보낸 뒤 멈추고, 반전시켜 되돌린 다음 기기 바깥쪽 Duplex Path 로 우회해 내려갑니다. 그리고 Regi 로 다시 올라가 뒷면을 인쇄하고 Exit 으로 배출합니다. 우회 경로가 기기 안쪽이 아니라 바깥쪽이라는 점이 중요합니다.'
+    : ZI[zone].d;
+  render();
+});
+function setZoom(m){
+  zoom=Math.max(0.7,Math.min(6,m)); camT.s=fitS*zoom;
+  if(zoom<=1.02){ panX=0; panY=0; }
+  document.getElementById('x3zro').textContent='×'+zoom.toFixed(1)+(lod()>=1?' · 세부':'');
+  render();
+}
+document.getElementById('x3zin').addEventListener('click',function(){ setZoom(zoom*1.4); });
+document.getElementById('x3zout').addEventListener('click',function(){ setZoom(zoom/1.4); });
+SVG.addEventListener('wheel',function(e){ e.preventDefault();
+  setZoom(zoom*(e.deltaY<0?1.13:1/1.13)); },{passive:false});
+document.getElementById('x3reset').addEventListener('click',function(){ setZone(zone); });
+
+var drag=false,pan=false,lx=0,ly=0,mv=0,dx0=0,dy0=0,pz=0,z0=1;
+function down(e){
+  if(e.touches&&e.touches.length===2){
+    var a=e.touches[0],b=e.touches[1];
+    pz=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); z0=zoom; pan=true; drag=false;
+    lx=(a.clientX+b.clientX)/2; ly=(a.clientY+b.clientY)/2; return;
+  }
+  drag=true; pan=(e.shiftKey||e.button===2); SVG.classList.add('drag');
+  var p=e.touches?e.touches[0]:e; lx=p.clientX; ly=p.clientY; dx0=p.clientX; dy0=p.clientY; mv=0;
+}
+function move(e){
+  if(e.touches&&e.touches.length===2&&pan){
+    var a=e.touches[0],b=e.touches[1];
+    var ds=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    if(pz>0) setZoom(z0*ds/pz);
+    var mx=(a.clientX+b.clientX)/2,my=(a.clientY+b.clientY)/2;
+    panX+=(mx-lx); panY+=(my-ly); lx=mx; ly=my;
+    if(e.cancelable) e.preventDefault(); render(); return;
+  }
+  if(!drag) return;
+  var p=e.touches?e.touches[0]:e;
+  /* 터치에서 세로 제스처가 우세하면 회전하지 않고 페이지 스크롤에 양보 */
+  if(e.touches && !pan){
+    var tdx=Math.abs(p.clientX-dx0), tdy=Math.abs(p.clientY-dy0);
+    if(tdy>10 && tdy>tdx*1.3){ drag=false; return; }
+  }
+  if(pan){ panX+=(p.clientX-lx); panY+=(p.clientY-ly); }
+  else {
+    yaw+=(p.clientX-lx)*0.008;
+    pitch=Math.max(-0.5,Math.min(1.1,pitch+(p.clientY-ly)*0.006));
+    yawT=yaw; pitchT=pitch;
+  }
+  lx=p.clientX; ly=p.clientY;
+  mv=Math.abs(p.clientX-dx0)+Math.abs(p.clientY-dy0);
+  if(e.cancelable) e.preventDefault();
+  render();
+}
+function up(e){
+  if(drag&&mv<5&&!pan&&e){
+    var ev=e.changedTouches?e.changedTouches[0]:e;
+    if(ev&&ev.clientX!==undefined){
+      var h2=pick(ev);
+      if(!h2) pinned=[];
+      else {
+        var nm=h2.f.nm,k=-1,i;
+        for(i=0;i<pinned.length;i++) if(pinned[i].t===nm) k=i;
+        if(k>=0) pinned.splice(k,1);
+        else { if(pinned.length>=8) pinned.shift(); pinned.push({t:nm,pos:ctr(h2.f)}); }
+      }
+      render();
+    }
+  }
+  drag=false; pan=false; pz=0; SVG.classList.remove('drag');
+}
+SVG.addEventListener('mousedown',down);
+SVG.addEventListener('contextmenu',function(e){ e.preventDefault(); });
+window.addEventListener('mousemove',move);
+window.addEventListener('mouseup',up);
+SVG.addEventListener('touchstart',down,{passive:true});
+SVG.addEventListener('touchmove',move,{passive:false});
+SVG.addEventListener('touchend',up);
+
+var last=0;
+function loop(ts){
+  if(ts-last>28){
+    last=ts; var need=false;
+    var ax=camT.x-cam.x,ay=camT.y-cam.y,az=camT.z-cam.z,as=camT.s-cam.s;
+    if(Math.abs(ax)+Math.abs(ay)+Math.abs(az)>0.4||Math.abs(as)>0.002){
+      cam.x+=ax*0.12; cam.y+=ay*0.12; cam.z+=az*0.12; cam.s+=as*0.12; need=true;
+    }
+    var ay2=yawT-yaw,ap=pitchT-pitch;
+    if(Math.abs(ay2)>0.004||Math.abs(ap)>0.004){ yaw+=ay2*0.12; pitch+=ap*0.12; need=true; }
+    if(anim){ tt+=0.8; pu+=(duplex?0.0008:0.0017); if(pu>1)pu=0; need=true; }
+    if(need) render();
+  }
+  requestAnimationFrame(loop);
+}
+setZone('all');
+cam={x:camT.x,y:camT.y,z:camT.z,s:camT.s};
+if(reduce){ anim=false; document.getElementById('x3anim').classList.remove('on'); }
+render();
+requestAnimationFrame(loop);
+window.__T3={setZone:setZone,render:render,zoom:setZoom,ST:ST,dyn:dyn,proj:proj,desc:desc,
+  set:function(y,p){yaw=y;pitch=p;yawT=y;pitchT=p;},
+  jump:function(){cam={x:camT.x,y:camT.y,z:camT.z,s:camT.s};},
+  tick:function(n){tt=n;},pu:function(n){pu=n;},lod:lod,col:function(c){drumSel=c;camT=fit('drum');render();},
+  hit:function(x,y){for(var i=lastList.length-1;i>=0;i--){var it=lastList[i],f=it.f;
+    if(!f.nm||f.k==='e'||f.o<0.25)continue; if(inPoly(it.pr,x,y))return f.nm;} return null;},
+  labN:function(){return (SCENE.innerHTML.match(/<text/g)||[]).length;}};
+})();
+
+/* ================= Fig 03-1 전위 사다리 토너 ================= */
+var vt = document.getElementById('voltToner'), vRun = !reduce, vT = 0, vDots = [];
+for (var k=0;k<7;k++){
+  var vc = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  vc.setAttribute('r','4'); vc.setAttribute('fill','#008FB3'); vt.appendChild(vc); vDots.push(vc);
+}
+watchVis('voltSvg');
+function vFrame(){
+  if (!isVis('voltSvg')){ requestAnimationFrame(vFrame); return; }
+  if (vRun) vT += 0.008;
+  for (var k=0;k<vDots.length;k++){
+    var u = (vT + k/vDots.length) % 1;
+    var x = 312 + (340-312)*u, y = 152 + (78-152)*u;
+    vDots[k].setAttribute('cx', x); vDots[k].setAttribute('cy', y);
+    vDots[k].setAttribute('opacity', String(0.35 + 0.6*Math.sin(Math.PI*u)));
+  }
+  requestAnimationFrame(vFrame);
+}
+if (reduce){ vRun=false; document.getElementById('voltPlay').textContent='재생'; }
+requestAnimationFrame(vFrame);
+document.getElementById('voltPlay').addEventListener('click', function(){
+  vRun = !vRun; this.textContent = vRun ? '일시정지' : '재생'; this.classList.toggle('on', vRun);
+});
+
+/* ================= Fig 17-0 : 트레이 급지 동작 ================= */
+(function(){
+var SV=document.getElementById('fdSvg');
+if(!SV) return;
+var NS='http://www.w3.org/2000/svg';
+function e(t,a,txt){ var x=document.createElementNS(NS,t);
+  for(var k in a) x.setAttribute(k,a[k]); if(txt!=null) x.textContent=txt; return x; }
+
+var P=document.getElementById('fdPath'), LEN=P.getTotalLength();
+function at(u){ return P.getPointAtLength(Math.max(0,Math.min(1,u))*LEN); }
+
+/* 롤 : [cx, cy, r, 이름, 구동, 라벨위치, 회전배속] */
+/* 회전 부호 : + 면 화면상 시계 방향.
+   용지는 좌측으로 진행하므로 용지에 위에서 닿는 Nudger·Feed 는 시계 방향이어야 한다.
+   Retard 는 비구동이므로 0 (정지) — 저지력만 낸다.
+   T/A·Regi 는 좌측 벽면에서 용지를 위로 올리므로 반시계 방향. */
+var ROLLS=[
+  [152,212,14,'Nudger Roll',1,'right',2.4],
+  [104,183,15,'Feed Roll',1,'right',2.4],
+  [104,212,14,'Retard Roll',0,'left',0],
+  [50,164,13,'T/A Roll',1,'right',-2.0],
+  [50,96,14,'Regi Roll',1,'right',-1.6]
+];
+var SENS=[
+  [176,230,'No Paper Sensor',114,84,'middle'],
+  [128,258,'Tray Level Sensor',22,56,'middle'],
+  [536,262,'Tray Size Sensor',-66,52,'middle'],
+  [56,124,'Regi Sensor',18,4,'start']
+];
+var RG=document.getElementById('fdRolls'), SG=document.getElementById('fdSens');
+var marks=[], sensEls=[];
+ROLLS.forEach(function(r){
+  RG.appendChild(e('circle',{cx:r[0],cy:r[1],r:r[2],
+    fill:r[4]?'#FCEDEA':'#EDF4F8', stroke:r[4]?'#C8382A':'#2F7FD8','stroke-width':1.7}));
+  var m=e('path',{d:'M'+r[0]+' '+r[1]+'L'+(r[0]+r[2]*0.8)+' '+r[1],
+    stroke:'#28394B','stroke-width':2,'stroke-linecap':'round'});
+  RG.appendChild(m); marks.push({el:m,r:r});
+  var lx,ly,anc;
+  if(r[5]==='right'){ lx=r[0]+r[2]+8; ly=r[1]-4; anc='start'; }
+  else if(r[5]==='rup'){ lx=r[0]+r[2]+8; ly=r[1]-12; anc='start'; }
+  else if(r[5]==='rdown'){ lx=r[0]+r[2]+8; ly=r[1]+24; anc='start'; }
+  else if(r[5]==='left'){ lx=r[0]-r[2]-9; ly=r[1]+4; anc='end'; }
+  else { lx=r[0]; ly=r[1]-r[2]-8; anc='middle'; }
+  RG.appendChild(e('text',{x:lx,y:ly,'text-anchor':anc,'class':'lbl',
+    fill:r[4]?'#C8382A':'#2F7FD8'},r[3]));
+  if(!r[4]) RG.appendChild(e('text',{x:lx,y:ly+13,'text-anchor':anc,'class':'lbl-s'},'정지 · 저지력만'));
+});
+SENS.forEach(function(s){
+  var g=e('g',{});
+  g.appendChild(e('path',{d:'M'+s[0]+' '+s[1]+'L'+(s[0]+s[3])+' '+(s[1]+s[4]-(s[4]<0?-4:4)),
+    fill:'none',stroke:'#C6D0DB','stroke-width':0.9}));
+  var b=e('rect',{x:s[0]-4,y:s[1]-4,width:8,height:8,rx:1,fill:'#5A6E82',stroke:'#28394B'});
+  g.appendChild(b);
+  g.appendChild(e('text',{x:s[0]+s[3],y:s[1]+s[4],'text-anchor':s[5],'class':'lbl-s'},s[2]));
+  SG.appendChild(g); sensEls.push({box:b,x:s[0],y:s[1],n:s[2]});
+});
+/* 적재 다발 결 */
+var LG=document.getElementById('fdLines');
+for(var i=0;i<5;i++) LG.appendChild(e('rect',{x:90,y:237+i*6,width:438,height:1.4,fill:'#C6D0DB'}));
+
+var DS={
+ 0:{k:'Overview',t:'왜 한 장만 나오는가',
+  d:'핵심은 Feed Roll과 Retard Roll이 서로 반대로 도는 것입니다. Feed Roll은 용지를 끌어내는 방향, Retard Roll은 되돌리는 방향으로 돕니다. 한 장이면 Feed Roll의 마찰력이 이기고, 두 장이 겹쳐 들어오면 종이끼리는 잘 미끄러지므로 아래 장이 Retard Roll에 밀려 되돌아갑니다.',
+  p:'–',u:null},
+ 1:{k:'① 사이즈 검출',t:'트레이를 밀어 넣는 순간',
+  d:'Tray Size Sensor가 트레이 장착과 용지 사이즈를 검출합니다. 가이드의 위치 조합으로 사이즈를 읽습니다. 동시에 No Paper Sensor가 용지 유무를 확인합니다.',
+  p:'Tray Size Sensor · No Paper Sensor',u:0.05},
+ 2:{k:'② Lift Up',t:'Bottom Plate가 급지 높이까지',
+  d:'Feed/Lift Up Motor가 역회전(CCW)하면 기어를 통해 축이 돌아 Bottom Plate를 들어올립니다. Tray Level Sensor가 급지 가능한 높이에 도달한 것을 검출하면 상승을 멈춥니다. 이 모터는 양방향 스테핑이라 정회전(CW)에서는 롤을 구동합니다.',
+  p:'Feed/Lift Up Motor · Tray Level Sensor',u:0.16},
+ 3:{k:'③ Nudger',t:'최상단 한 장만 긁어냅니다',
+  d:'Feed Clutch가 연결되면 Nudger Roll이 하강(Lift Down)하며 급지 방향으로 회전해, 다발의 맨 위 한 장을 Feed 부로 밀어 보냅니다. 이때 용지가 미끄러져 선단 위치가 흔들리는 것을 막기 위해 Feed Motor 펄스 수를 측정해 피드백합니다.',
+  p:'Nudger Roll · Feed Clutch',u:0.397},
+ 4:{k:'④ Feed + Retard',t:'두 장이 오면 아래 장을 되돌립니다',
+  d:'Feed Roll은 마찰력으로 끌어내고, 비구동인 Retard Roll은 스프링에 밀려 올라가 닙을 이루며 저지력을 냅니다. 한 장이면 통과하고, 두 장이면 종이끼리 미끄러져 아래 장이 되돌아갑니다. Retard Roll의 회전 방향이 반대인 것을 보십시오.',
+  p:'Feed Roll · Retard Roll',u:0.459},
+ 5:{k:'⑤ T/A',t:'Regi 부로 올려 보냅니다',
+  d:'Take Away Roll이 Sub Motor의 동력을 Clutch로 받아 용지를 Regi 부로 반송합니다. 여러 트레이에서 온 용지가 모두 이 경로로 합류합니다.',
+  p:'T/A Roll · Take Away Clutch',u:0.551},
+ 6:{k:'⑥ Regi · Skew 보정',t:'일부러 부딪히게 합니다',
+  d:'Regi Roll은 정지한 상태로 용지를 받습니다. 용지가 롤에 부딪히면서 선단에 루프가 생기고, 그 탄성으로 비뚤어진 선단이 롤과 평행하게 정렬됩니다. 이것이 Skew 보정입니다. 그다음 Tacking Point 타이밍에 맞춰 전사부로 보냅니다.',
+  p:'Regi Roll · Regi Clutch · Regi Sensor',u:0.635}
+};
+
+var doc=document.getElementById('fdDoc');
+var plate=document.getElementById('fdPlate'), paper=document.getElementById('fdPaper');
+/* 용지를 경로 곡선에 맞춰 휘어진 띠로 그린다 */
+var SLEN=126, THK=4.6;
+function sheetD(uHead,len,thk){
+  var head=uHead*LEN, tail=Math.max(0,head-len), N=16, A=[], B=[], i;
+  for(i=0;i<=N;i++){
+    var d=tail+(head-tail)*i/N;
+    var p1=P.getPointAtLength(d), p2=P.getPointAtLength(Math.min(LEN,d+1.4));
+    var tx=p2.x-p1.x, ty=p2.y-p1.y, m=Math.sqrt(tx*tx+ty*ty)||1;
+    var nx=-ty/m*thk, ny=tx/m*thk;
+    A.push((p1.x+nx).toFixed(1)+' '+(p1.y+ny).toFixed(1));
+    B.unshift((p1.x-nx).toFixed(1)+' '+(p1.y-ny).toFixed(1));
+  }
+  return 'M'+A.join('L')+'L'+B.join('L')+'Z';
+}
+var lines=document.getElementById('fdLines');
+var loop=document.getElementById('fdLoop'), loopL=document.getElementById('fdLoopL');
+var run=!reduce, spd=1, stage=0, u=0, tt=0;
+
+function apply(s){
+  stage=s; var d=DS[s];
+  document.getElementById('fdK').textContent=d.k;
+  document.getElementById('fdT').textContent=d.t;
+  document.getElementById('fdD').textContent=d.d;
+  document.getElementById('fdP').textContent=d.p;
+  Array.prototype.forEach.call(document.querySelectorAll('#fdSteps button'),function(b){
+    b.classList.toggle('on',+b.dataset.s===s);
+  });
+  if(d.u!=null){ u=d.u; run=false;
+    var pb=document.getElementById('fdPlay');
+    pb.textContent='재생'; pb.classList.remove('on'); }
+  frame(true);
+}
+document.getElementById('fdSteps').addEventListener('click',function(ev){
+  var b=ev.target.closest('button'); if(!b) return; apply(+b.dataset.s);
+});
+document.getElementById('fdPlay').addEventListener('click',function(){
+  run=!run; this.textContent=run?'일시정지':'재생'; this.classList.toggle('on',run);
+});
+document.getElementById('fdSlow').addEventListener('click',function(){
+  spd=(spd===1)?0.3:1;
+  this.textContent=(spd===1)?'저속':'표준속도'; this.classList.toggle('on',spd!==1);
+});
+
+watchVis('fdSvg');
+function frame(once){
+  if(!once && !isVis('fdSvg')){ requestAnimationFrame(function(){ frame(false); }); return; }
+  if(run && !once){ u+=0.0020*spd; tt+=1.4*spd; }
+  if(u>1) u=0;
+  var p=at(u);
+  doc.setAttribute('d', sheetD(u,SLEN,THK));
+
+  /* Bottom Plate · 다발 상승 */
+  var lift=6*(0.5+0.5*Math.sin(tt*0.035));
+  plate.setAttribute('y',264-lift);
+  paper.setAttribute('y',232-lift);
+  lines.setAttribute('transform','translate(0,'+(-lift).toFixed(1)+')');
+
+  /* 롤 회전 마커 */
+  marks.forEach(function(m){
+    var a=tt*m.r[6];
+    m.el.setAttribute('d','M'+m.r[0]+' '+m.r[1]
+      +'L'+(m.r[0]+m.r[2]*0.8*Math.cos(a*Math.PI/180)).toFixed(1)
+      +' '+(m.r[1]+m.r[2]*0.8*Math.sin(a*Math.PI/180)).toFixed(1));
+  });
+
+  /* Regi 루프 */
+  var lp=(u>0.60&&u<0.70);
+  loop.setAttribute('opacity',lp?'0.95':'0');
+  loopL.setAttribute('opacity',lp?'1':'0');
+
+  /* 센서 점등 */
+  sensEls.forEach(function(s){
+    var on=(Math.abs(p.x-s.x)+Math.abs(p.y-s.y))<40;
+    if(s.n==='Tray Level Sensor') on=(lift>4);
+    if(s.n==='Tray Size Sensor') on=true;
+    s.box.setAttribute('fill',on?'#008FB3':'#5A6E82');
+  });
+
+  var pos;
+  if(u<0.20) pos='적재 · Lift Up';
+  else if(u<0.43) pos='Nudger Roll';
+  else if(u<0.50) pos='Feed / Retard 닙 (한 장만)';
+  else if(u<0.60) pos='T/A Roll 반송';
+  else if(u<0.72) pos='Regi 루프 · Skew 보정';
+  else pos='전사부로';
+  document.getElementById('fdPos').textContent=pos;
+
+  if(!once) requestAnimationFrame(function(){ frame(false); });
+}
+apply(0);
+if(reduce){ run=false; document.getElementById('fdPlay').textContent='재생'; }
+else run=true;
+requestAnimationFrame(function(){ frame(false); });
+})();
+
+/* ================= 그림 8 : DADF 원고 반송 (원본 p.64/65/70/71) ================= */
+(function(){
+var SV=document.getElementById('dfSvg');
+if(!SV) return;
+var NSD='http://www.w3.org/2000/svg';
+function el(t,a,txt){ var e=document.createElementNS(NSD,t);
+  for(var k in a) e.setAttribute(k,a[k]); if(txt!=null) e.textContent=txt; return e; }
+
+var P=document.getElementById('dfPath'), LEN=P.getTotalLength();
+function at(u){ return P.getPointAtLength(Math.max(0,Math.min(1,u))*LEN); }
+
+/* 롤 : [u, 이름, 반경, 라벨위치, 구동] — 원본 p.70 Front view 순서 */
+var ROLLS=[
+  [0.224,'Nudger Roll',13,'up',1],
+  [0.261,'Feed Roll',14,'up',1],
+  [0.272,'Retard',11,'down',0],
+  [0.359,'T/A Roll',14,'up',1],
+  [0.497,'Regi Roll',15,'left',1],
+  [0.739,'Out Roll',13,'down',1],
+  [0.832,'Exit Roll',12,'up',1]
+];
+/* 센서 : [u, 이름, dx, dy, anchor] — 원본 p.70 배치 */
+var SENS=[
+  [0.075,'Tray APS SNR 1-4',0,26,'middle'],
+  [0.130,'Tray Size SNR',0,46,'middle'],
+  [0.170,'Document Set SNR',0,66,'middle'],
+  [0.240,'Feed Cover SNR',10,-58,'start'],
+  [0.283,'Feed In SNR',-6,-58,'end'],
+  [0.298,'APS SNR 1-3',-6,-38,'end'],
+  [0.320,'Pre Regi SNR',-6,-18,'end'],
+  [0.525,'Regi SNR',16,10,'start'],
+  [0.760,'Out SNR',-14,-26,'end'],
+  [0.860,'Exit SNR',14,26,'start']
+];
+var RG=document.getElementById('dfRolls'), SG=document.getElementById('dfSens');
+var sensEls=[];
+ROLLS.forEach(function(r){
+  var p=at(r[0]);
+  var cy=(r[3]==='down')? p.y+r[2]-1 : p.y-r[2]+1;
+  var cx=(r[3]==='left')? p.x-r[2]+2 : p.x;
+  RG.appendChild(el('circle',{cx:cx,cy:cy,r:r[2],
+    fill:r[4]?'#FCEDEA':'#EDF4F8', stroke:r[4]?'#C8382A':'#2F7FD8','stroke-width':1.7}));
+  var lx,ly,anc;
+  if(r[3]==='down'){ lx=cx; ly=cy+r[2]+15; anc='middle'; }
+  else if(r[3]==='left'){ lx=cx-r[2]-9; ly=cy+4; anc='end'; }
+  else { lx=cx; ly=cy-r[2]-8; anc='middle'; }
+  RG.appendChild(el('text',{x:lx,y:ly,'text-anchor':anc,'class':'lbl',
+    fill:r[4]?'#C8382A':'#2F7FD8'},r[1]));
+  if(!r[4]) RG.appendChild(el('text',{x:lx,y:ly+13,'text-anchor':anc,'class':'lbl-s'},'비구동'));
+});
+SENS.forEach(function(s){
+  var p=at(s[0]), lx=p.x+s[2], ly=p.y+s[3];
+  var g=el('g',{});
+  g.appendChild(el('path',{d:'M'+p.x.toFixed(1)+' '+p.y.toFixed(1)
+    +'L'+lx.toFixed(1)+' '+(ly-(s[3]<0?-4:4)).toFixed(1),
+    fill:'none',stroke:'#C6D0DB','stroke-width':0.9}));
+  var b=el('rect',{x:p.x-4,y:p.y-4,width:8,height:8,rx:1,fill:'#5A6E82',stroke:'#28394B'});
+  g.appendChild(b);
+  g.appendChild(el('text',{x:lx,y:ly,'text-anchor':s[4],'class':'lbl-s'},s[1]));
+  SG.appendChild(g);
+  sensEls.push({box:b,p:p});
+});
+
+var U_SCAN0=0.596, U_SCAN1=0.685, U_CIS=0.783;
+var DS={
+ 0:{k:'Overview',t:'원고 한 장이 지나가는 길',
+    d:'트레이에서 Nudger Roll이 최상단 원고를 뽑고, Feed Roll이 당겨 좌측으로 크게 돌립니다. 바닥의 Scan Position을 등속으로 지나며 표면을 읽고, Out Roll을 거쳐 Exit Roll로 배출됩니다. 센서가 켜지는 순서를 눈으로 따라가 보십시오.',u:null},
+ 1:{k:'① 급지',t:'Nudger가 맨 위 한 장만',
+    d:'Feed Motor가 CCW로 돌고 Feed Clutch가 연결되면 Nudger Roll이 트레이 최상단 원고를 Feed Roll로 보냅니다. Feed Roll은 원고를 T/A Roll 쪽으로 당깁니다. Set Gate가 뒤따르는 원고를 막아 한 장씩만 들어가게 합니다.',u:0.24},
+ 2:{k:'② 사이즈 검출',t:'폭을 두 번 잰다',
+    d:'먼저 트레이의 Tray APS Sensor와 Tray Size Sensor가 원고 가이드 위치로 다발의 폭을 읽습니다. 그다음 반송 중에 APS Sensor 1-3이 지금 지나가는 그 한 장의 폭을 판정합니다. 이렇게 두 번 재기 때문에 서로 다른 사이즈를 섞어 넣을 수 있습니다. Feed In Sensor는 급지 실패(비급지)를 감시합니다.',u:0.30},
+ 3:{k:'③ 루프 · Skew 보정',t:'일부러 부딪히게 한다',
+    d:'Feed Out Sensor가 루프 생성을 시작시키고, Feed Roll이 원고를 밀어 선단에 루프를 만듭니다. 그 탄성으로 비뚤어진 선단이 롤과 평행하게 정렬됩니다. Regi Sensor가 루프 양을 조절하고, 정렬이 끝나면 Document Ready 신호의 트리거가 됩니다.',u:0.50},
+ 4:{k:'④ 표면 읽기',t:'CVT — 캐리지는 고정, 원고가 움직인다',
+    d:'IIT Lamp Carriage를 Scan Position에 고정해 두고 원고를 등속으로 흘려보내며 읽습니다. 평판 스캔과 반대입니다. 이것이 CVT(Constant Velocity Transport) 방식입니다.',u:0.64},
+ 5:{k:'⑤ 이면 읽기',t:'여기서 두 기종이 갈린다',
+    d:'DADF-130은 Out Roll과 Exit Roll 사이에 CIS가 있어 이면을 그 자리에서 읽습니다. 원고를 뒤집을 필요가 없어 1회 통지로 양면이 끝납니다. DADF-110은 이 CIS가 없어, Exit Roll이 원고를 반전 경로로 되돌려 보내 IIT의 CIS로 다시 읽습니다.',u:0.79},
+ 6:{k:'⑥ 배출',t:'단면과 양면에서 하는 일이 다르다',
+    d:'Exit Roll은 단면이면 원고를 그대로 배출 트레이로 내보냅니다. 양면(DADF-110)이면 배출하지 않고 반전 경로로 되돌려 보냅니다. Exit Sensor가 배출을 검출합니다.',u:0.90}
+};
+
+var doc=document.getElementById('dfDoc');
+var fF=document.getElementById('dfDocF'), fB=document.getElementById('dfDocB');
+/* 원고를 경로 곡선에 맞춰 휘어진 띠로 그린다 */
+var SLEN=140, THK=5.2;
+function ribbon(uHead,len,off){
+  var head=uHead*LEN, tail=Math.max(0,head-len), N=18, A=[], i;
+  for(i=0;i<=N;i++){
+    var d=tail+(head-tail)*i/N;
+    var p1=P.getPointAtLength(d), p2=P.getPointAtLength(Math.min(LEN,d+1.4));
+    var tx=p2.x-p1.x, ty=p2.y-p1.y, m=Math.sqrt(tx*tx+ty*ty)||1;
+    A.push((p1.x-ty/m*off).toFixed(1)+' '+(p1.y+tx/m*off).toFixed(1));
+  }
+  return 'M'+A.join('L');
+}
+function sheetD(uHead,len,thk){
+  var head=uHead*LEN, tail=Math.max(0,head-len), N=18, A=[], B=[], i;
+  for(i=0;i<=N;i++){
+    var d=tail+(head-tail)*i/N;
+    var p1=P.getPointAtLength(d), p2=P.getPointAtLength(Math.min(LEN,d+1.4));
+    var tx=p2.x-p1.x, ty=p2.y-p1.y, m=Math.sqrt(tx*tx+ty*ty)||1;
+    var nx=-ty/m*thk, ny=tx/m*thk;
+    A.push((p1.x+nx).toFixed(1)+' '+(p1.y+ny).toFixed(1));
+    B.unshift((p1.x-nx).toFixed(1)+' '+(p1.y-ny).toFixed(1));
+  }
+  return 'M'+A.join('L')+'L'+B.join('L')+'Z';
+}
+var invG=document.getElementById('dfInvG'), cisG=document.getElementById('dfCIS');
+var run=!reduce, spd=1, stage=0, m110=false, u=0, pass=1;
+
+function apply(s){
+  stage=s; var d=DS[s];
+  document.getElementById('dfK').textContent=d.k;
+  document.getElementById('dfT').textContent=d.t;
+  document.getElementById('dfD').textContent=d.d;
+  Array.prototype.forEach.call(document.querySelectorAll('#dfSteps button'),function(b){
+    b.classList.toggle('on', +b.dataset.s===s);
+  });
+  if(d.u!=null){ u=d.u; run=false;
+    var pb=document.getElementById('dfPlay');
+    pb.textContent='재생'; pb.classList.remove('on'); }
+  frame(true);
+}
+document.getElementById('dfSteps').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return; apply(+b.dataset.s);
+});
+document.getElementById('dfPlay').addEventListener('click',function(){
+  run=!run; this.textContent=run?'일시정지':'재생'; this.classList.toggle('on',run);
+});
+document.getElementById('dfSlow').addEventListener('click',function(){
+  spd=(spd===1)?0.32:1;
+  this.textContent=(spd===1)?'저속':'표준속도'; this.classList.toggle('on',spd!==1);
+});
+document.getElementById('dfMode').addEventListener('click',function(){
+  m110=!m110; pass=1; u=0;
+  this.textContent=m110?'DADF-130 보기':'DADF-110 보기';
+  this.classList.toggle('on',m110);
+  invG.setAttribute('opacity',m110?'1':'0');
+  cisG.setAttribute('opacity',m110?'0':'1');
+  document.getElementById('dfMdl').textContent=m110?'DADF-110':'DADF-130';
+  document.getElementById('dfCap').textContent=m110?'DADF-110 · 3 Pass (반전)':'DADF-130 · One Pass';
+  frame(true);
+});
+
+watchVis('dfSvg');
+function frame(once){
+  if(!once && !isVis('dfSvg')){ requestAnimationFrame(function(){ frame(false); }); return; }
+  if(run && !once){ u+=0.0021*spd; }
+  if(u>1){ u=0; if(m110) pass=(pass>=3?1:pass+1); }
+  var p=at(u);
+  doc.setAttribute('d', sheetD(u,SLEN,THK));
+
+  /* 읽기 상태 : 130 은 표면(Scan)+이면(CIS), 110 은 Pass 별로 한 면씩 */
+  var readF,readB;
+  if(m110){
+    readF=(pass>=1 && u>U_SCAN1) || pass>=2;
+    readB=(pass>=2 && u>U_SCAN1) || pass>=3;
+  } else {
+    readF=(u>U_SCAN1);
+    readB=(u>U_CIS+0.02);
+  }
+  fF.setAttribute('d', ribbon(u,SLEN,-2.2));
+  fB.setAttribute('d', ribbon(u,SLEN, 2.2));
+  fF.setAttribute('opacity', readF?1:0);
+  fB.setAttribute('opacity', readB?1:0);
+
+  var pos,rd;
+  if(u<0.20) pos='원고 트레이 · Set Gate';
+  else if(u<0.28) pos='Nudger → Feed Roll';
+  else if(u<0.34) pos='APS · Feed In 검출';
+  else if(u<0.45) pos='T/A Roll 반송';
+  else if(u<0.58) pos='Regi 루프 · Skew 보정';
+  else if(u<U_SCAN1) pos='Scan Position (CVT · 표면)';
+  else if(u<0.80) pos=m110?'Out Roll':'Out Roll · CIS 이면 읽기';
+  else pos=(m110&&pass<3)?'Exit Roll → 반전 경로':'Exit Roll · 배출';
+  if(!readF && !readB) rd='읽기 전';
+  else if(readF && !readB) rd=m110?('표면 완료 · '+pass+' Pass'):'표면 완료';
+  else rd=m110?('양면 완료 · '+pass+' Pass'):'양면 완료';
+  document.getElementById('dfPos').textContent=pos;
+  document.getElementById('dfRead').textContent=rd;
+
+  sensEls.forEach(function(s){
+    var on=(Math.abs(p.x-s.p.x)+Math.abs(p.y-s.p.y))<24;
+    s.box.setAttribute('fill', on?'#008FB3':'#5A6E82');
+  });
+  if(!once) requestAnimationFrame(function(){ frame(false); });
+}
+apply(0);
+if(reduce){ run=false; document.getElementById('dfPlay').textContent='재생'; }
+else run=true;
+requestAnimationFrame(function(){ frame(false); });
+})();
+
+/* ================= Fig 07-1 용지 반송 ================= */
+var pPath = document.getElementById('pPath');
+var pDup  = document.getElementById('pPathDup');      /* 양면 전체 경로 (이동용) */
+var pDupV = document.getElementById('pDupView');      /* 양면 우회 구간 (표시용) */
+var dupLbl2 = document.getElementById('dupLbl2');
+var pDupLen = pDup.getTotalLength();
+/* 양면 경로 단계 경계 (경로 길이로 산출) */
+var D_BTR1=0.169, D_FUSE1=0.221, D_EXIT=0.332, D_REV=0.358,
+    D_OUT=0.576, D_REJOIN=0.699, D_BTR2=0.803;
+var sheet = document.getElementById('sheet');
+var sToner = document.getElementById('sheetToner');
+var pStage = document.getElementById('pStage');
+var dupLbl = document.getElementById('dupLbl');
+var pLen = pPath.getTotalLength();
+var pRun = !reduce, pU = 0, dupOn = false;
+/* 용지를 경로 곡선에 맞춰 휘어진 띠로 그린다 */
+var PSLEN = 118, PTHK = 4.8;
+function curPath(){ return dupOn ? pDup : pPath; }
+function curLen(){ return dupOn ? pDupLen : pLen; }
+function pSheet(uHead, len, thk, offOnly){
+  var PP=curPath(), LL=curLen();
+  var head=uHead*LL, tail=Math.max(0,head-len), N=16, A=[], B=[], i;
+  for(i=0;i<=N;i++){
+    var d=tail+(head-tail)*i/N;
+    var q1=PP.getPointAtLength(d), q2=PP.getPointAtLength(Math.min(LL,d+1.4));
+    var tx=q2.x-q1.x, ty=q2.y-q1.y, m=Math.sqrt(tx*tx+ty*ty)||1;
+    if(offOnly!=null){
+      A.push((q1.x-ty/m*offOnly).toFixed(1)+' '+(q1.y+tx/m*offOnly).toFixed(1));
+    } else {
+      var nx=-ty/m*thk, ny=tx/m*thk;
+      A.push((q1.x+nx).toFixed(1)+' '+(q1.y+ny).toFixed(1));
+      B.unshift((q1.x-nx).toFixed(1)+' '+(q1.y-ny).toFixed(1));
+    }
+  }
+  return offOnly!=null ? 'M'+A.join('L') : 'M'+A.join('L')+'L'+B.join('L')+'Z';
+}
+
+watchVis('paperSvg');
+function pFrame(){
+  if (!isVis('paperSvg')){ requestAnimationFrame(pFrame); return; }
+  if (pRun) pU += (dupOn ? 0.0007 : 0.0016);
+  if (pU > 1) pU = 0;
+  var p = curPath().getPointAtLength(pU*curLen());
+  sheet.setAttribute('d', pSheet(pU, PSLEN, PTHK));
+
+  /* 진행률 기준 구간 판정 (경로상 y좌표로 판단) */
+  var lbl, tw = 0, tcol = '#008FB3';
+  if (dupOn){
+    if (pU < D_BTR1)        { lbl = '① 급지 → T/A → Regi (Skew 보정)'; }
+    else if (pU < D_FUSE1)  { lbl = '② 2차 전사 — 앞면에 토너 (1면)'; tw = 18; }
+    else if (pU < D_EXIT)   { lbl = '③ 정착 — 앞면 완료'; tw = 18; tcol='#16181C'; }
+    else if (pU < D_REV)    { lbl = '④ Exit 으로 일부 배출 → 여기서 멈춘다'; tw = 18; tcol='#16181C'; }
+    else if (pU < D_OUT)    { lbl = '⑤ 반전 — 되돌려 바깥쪽 Duplex Path 로'; tw = 18; tcol='#16181C'; }
+    else if (pU < D_REJOIN) { lbl = '⑥ 바깥쪽 우회 하강 — 기기 외측을 타고 내려간다'; tw = 18; tcol='#16181C'; }
+    else if (pU < D_BTR2)   { lbl = '⑦ Regi 재진입 → 2차 전사 (뒷면 인쇄)'; tw = 18; tcol='#C8005F'; }
+    else                    { lbl = '⑧ 정착 → Exit 배출 (양면 완료)'; tw = 18; tcol='#2E2438'; }
+  } else {
+    if (p.y > 292)      { lbl = '① 급지 — Nudger / Feed / Retard Roll (중복 급지 방지)'; }
+    else if (p.y > 236) { lbl = '② Take Away — T/A Roll로 반송'; }
+    else if (p.y > 168) { lbl = '③ Regi — Regi Roll에 부딪혀 루프 형성 · Skew 보정'; }
+    else if (p.y > 100) { lbl = '④ 2차 전사 — 2nd BTR이 벨트의 토너를 용지로'; tw = 18; }
+    else if (p.y > 60)  { lbl = '⑤ 정착 — Heat Roll + NIP Belt (NIP 12.6mm)'; tw = 18; tcol='#16181C'; }
+    else                { lbl = '⑥ 배출 — Exit Sensor 검출 후 Exit 1로'; tw = 18; tcol='#16181C'; }
+  }
+  pStage.textContent = lbl;
+  sToner.setAttribute('d', pSheet(pU, PSLEN, 0, -2.4));
+  sToner.setAttribute('opacity', tw>0 ? 0.95 : 0);
+  sToner.setAttribute('stroke', tcol);
+  requestAnimationFrame(pFrame);
+}
+if (reduce){ pRun=false; document.getElementById('paperPlay').textContent='재생'; }
+requestAnimationFrame(pFrame);
+document.getElementById('paperPlay').addEventListener('click', function(){
+  pRun = !pRun; this.textContent = pRun ? '일시정지' : '재생'; this.classList.toggle('on', pRun);
+});
+document.getElementById('paperDup').addEventListener('click', function(){
+  dupOn = !dupOn; pU = 0;
+  pDupV.setAttribute('opacity', dupOn ? '0.9' : '0');
+  dupLbl.setAttribute('opacity', dupOn ? '1' : '0');
+  dupLbl2.setAttribute('opacity', dupOn ? '1' : '0');
+  pPath.setAttribute('opacity', dupOn ? '0.25' : '0.6');
+  this.classList.toggle('on', dupOn);
+});
+})();
+
+</script>
+</body>
+</html>
