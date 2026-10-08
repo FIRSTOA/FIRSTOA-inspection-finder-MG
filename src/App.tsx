@@ -16,7 +16,7 @@ import WorkDashboard from "./WorkDashboard";
 import AdminHub from "./AdminHub";
 import LookupHub from "./LookupHub";
 import { ToastHost, notify } from "./toast";
-import { clearSsoSession, getSsoSession, markLoggedOut, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
+import { clearSsoSession, getSsoSession, logoutToGroupware, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
 import { extractVendorFromText, pickLabelValue } from "./vendorLine";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
@@ -3182,7 +3182,7 @@ function SsoRow({ value, onChange }: { value: string; onChange: (v: string) => v
       </div>
       <span className="flex shrink-0 items-center gap-1">
         {differs && <button type="button" onClick={() => onChange(u.name)} className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-50">이 이름으로</button>}
-        <button type="button" onClick={() => { clearSsoSession(); markLoggedOut(); if (ssoRequiredCached()) window.location.reload(); else setSession(null); }} className="rounded-full px-2.5 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-100">로그아웃</button>
+        <button type="button" onClick={() => { if (ssoRequiredCached()) logoutToGroupware(); else { clearSsoSession(); setSession(null); } }} className="rounded-full px-2.5 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-100">로그아웃</button>
       </span>
     </div>
   );
@@ -3328,7 +3328,7 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
               </div>
             </div>
             {value && value !== u.name && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">작성자가 {value}로 남아 있어 {u.name}으로 맞춥니다.</div>}
-            <button type="button" onClick={() => { clearSsoSession(); markLoggedOut(); window.location.reload(); }} className="mt-4 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
+            <button type="button" onClick={() => logoutToGroupware()} className="mt-4 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
           </div>
         </div>
       </div>

@@ -28,10 +28,7 @@ export function getSsoSession(): SsoSession | null {
   } catch { return null; }
 }
 export function clearSsoSession() { try { localStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ } }
-/** 방금 로그아웃했다는 표시(이 탭에서만) — 바로 그룹웨어로 다시 보내면 그룹웨어 쪽 로그인이 살아 있어 곧장 재로그인돼 버린다(2026-10-08) */
-const LOGGED_OUT_KEY = "cs_sso_logged_out_v1";
-export function markLoggedOut() { try { sessionStorage.setItem(LOGGED_OUT_KEY, "1"); } catch { /* 무시 */ } }
-export function consumeLoggedOut(): boolean { try { const v = sessionStorage.getItem(LOGGED_OUT_KEY) === "1"; sessionStorage.removeItem(LOGGED_OUT_KEY); return v; } catch { return false; } }
+
 
 /** 잠금 스위치는 app_config에 있지만 첫 화면을 늦추지 않으려고 마지막으로 본 값을 기기에 적어 둔다 */
 export function ssoRequiredCached(): boolean { try { return localStorage.getItem(REQUIRED_KEY) === "1"; } catch { return false; } }
@@ -54,12 +51,16 @@ export const ssoLoginVisible = () => ssoRequiredCached() || ssoTestDevice();
 const randomState = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
 
 /** 그룹웨어 로그인 화면으로 이동 — 돌아올 곳은 이 앱의 /auth/callback(https 필수) */
-export function startGroupwareLogin(returnTo = window.location.pathname + window.location.search) {
+export function startGroupwareLogin(returnTo = window.location.pathname + window.location.search, opts: { viaLoginPage?: boolean } = {}) {
   const state = randomState();
   try { sessionStorage.setItem(STATE_KEY, JSON.stringify({ state, returnTo })); } catch { /* 무시 */ }
   const redirect = `${window.location.origin}${SSO_CALLBACK_PATH}`;
-  window.location.assign(`${GROUPWARE_URL}/sso/authorize?redirect_uri=${encodeURIComponent(redirect)}&state=${encodeURIComponent(state)}`);
+  const authorize = `/sso/authorize?redirect_uri=${encodeURIComponent(redirect)}&state=${encodeURIComponent(state)}`;
+  // 로그아웃 뒤에는 그룹웨어 로그인 화면(/worklog/login)으로 바로 보낸다 — 그룹웨어가 그 화면에서 로그인을 요구하면 계정을 바꿀 수 있다
+  window.location.assign(opts.viaLoginPage ? `${GROUPWARE_URL}/worklog/login?next=${encodeURIComponent(authorize)}` : `${GROUPWARE_URL}${authorize}`);
 }
+/** 로그아웃 — FIELD 세션을 지우고 곧장 그룹웨어 로그인 화면으로(2026-10-08 사용자: 로그아웃하면 그룹웨어 로그인 화면이 바로 떠야) */
+export function logoutToGroupware() { clearSsoSession(); startGroupwareLogin("/", { viaLoginPage: true }); }
 
 export type CallbackCheck = { kind: "none" } | { kind: "error"; error: string; returnTo: string } | { kind: "ok"; token: string; returnTo: string };
 
