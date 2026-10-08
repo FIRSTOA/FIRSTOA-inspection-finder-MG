@@ -3305,6 +3305,35 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
 
   const chip = (on: boolean, extra = "") => `rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 ${on ? "text-white" : extra || "bg-slate-100 text-slate-700 hover:bg-slate-200"}`;
   const smallBtn = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50";
+  // 로그인 필수 + 그룹웨어 세션이면 작성자는 로그인 이름으로 고정 — 고르는 목록 대신 내 계정만 보여 준다(스위치를 끄면 예전 창 그대로)
+  const sso = getSsoSession();
+  if (ssoRequiredCached() && sso) {
+    const u = sso.user;
+    return (
+      <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
+        <div className="w-full rounded-t-2xl bg-white shadow-xl sm:max-w-sm sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-700">내 계정</div>
+              <div className="mt-0.5 text-[11px] font-bold leading-snug text-slate-400">그룹웨어 로그인 이름이 곧 작성자입니다 · 바꾸려면 다른 계정으로 다시 로그인</div>
+            </div>
+            <button type="button" onClick={onClose} className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-100">닫기</button>
+          </div>
+          <div className="px-4 py-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[15px] font-black text-white">{u.name.slice(0, 1)}</span>
+              <div className="min-w-0">
+                <div className="truncate text-[16px] font-black text-slate-900">{u.name}{u.position ? <span className="ml-1 text-[12px] font-bold text-slate-500">{u.position}</span> : null}</div>
+                <div className="truncate text-[12px] font-semibold text-slate-500">{[u.department, u.empNo && `사번 ${u.empNo}`].filter(Boolean).join(" · ")}</div>
+              </div>
+            </div>
+            {value && value !== u.name && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">작성자가 {value}로 남아 있어 {u.name}으로 맞춥니다.</div>}
+            <button type="button" onClick={() => { clearSsoSession(); window.location.reload(); }} className="mt-4 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-[3100] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose} role="dialog">
       <div className="flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl" style={{ maxHeight: "86vh" }} onClick={(e) => e.stopPropagation()}>
@@ -4171,6 +4200,11 @@ export default function App() {
     try { localStorage.setItem("author", author); } catch {
       // ignore quota / private mode errors
     }
+  }, [author]);
+  // 그룹웨어 로그인 필수(관리 탭 스위치)일 땐 '사용자' 개념 없이 로그인한 이름이 곧 작성자 — 어디서 바꿔도 되돌린다(2026-10-08 사용자 목표)
+  useEffect(() => {
+    const s = getSsoSession();
+    if (ssoRequiredCached() && s?.user?.name && author !== s.user.name) setAuthor(s.user.name);
   }, [author]);
 
   // 웹푸시: 켜둔 기기라면 구독을 살리고 작성자 이름 연동을 최신화 (알림 대상 매칭의 기준)
