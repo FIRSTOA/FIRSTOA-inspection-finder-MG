@@ -45,7 +45,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer, onAddManual }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void; onAddManual?: (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer, onAddManual, onAddress }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void; onAddManual?: (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => void; onAddress?: (ticket: MyPlanTicket, address: string) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -53,13 +53,28 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const [manual, setManual] = useState<{ text: string; team: string } | null>(null);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const storageKey = `cs_myplan_order_${date}_${author}`;
+  // 고정 순서는 기기(localStorage)에 먼저 쓰고, DB(plan_memos 의 특수 키 __order__:날짜)에도 둔다 — PC 에서 누른 고정이 폰에서 풀려 있었다(2026-10-08)
+  const orderKey = `__order__:${date}`;
   const [pinned, setPinned] = useState<string[]>([]);
   useEffect(() => {
     try { setPinned(JSON.parse(localStorage.getItem(storageKey) || "[]")); } catch { setPinned([]); }
-  }, [storageKey]);
+    if (!author.trim()) return;
+    let alive = true;
+    selectRows<{ memo: string }>("plan_memos", `select=memo&author=eq.${encodeURIComponent(author)}&ticket_id=eq.${encodeURIComponent(orderKey)}&limit=1`)
+      .then((rows) => {
+        if (!alive || !rows.length) return;
+        try {
+          const ids = JSON.parse(rows[0].memo || "[]");
+          if (Array.isArray(ids)) { setPinned(ids.map(String)); localStorage.setItem(storageKey, JSON.stringify(ids)); }
+        } catch { /* 깨진 값은 무시 */ }
+      })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [storageKey, author, orderKey]);
   const savePinned = (next: string[]) => {
     setPinned(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* 무시 */ }
+    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: orderKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
   };
 
   // 일정별 개인 메모 — "까먹지 않게" 적어두는 것이라 폰·PC 어디서든 보여야 한다 → DB(plan_memos)
@@ -68,7 +83,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     if (!author.trim()) return;
     let alive = true;
     selectRows<{ ticket_id: string; memo: string }>("plan_memos", `select=ticket_id,memo&author=eq.${encodeURIComponent(author)}`)
-      .then((rows) => { if (alive) setMemos(new Map(rows.filter((r) => r.memo.trim()).map((r) => [r.ticket_id, r.memo]))); })
+      .then((rows) => { if (alive) setMemos(new Map(rows.filter((r) => r.memo.trim() && !r.ticket_id.startsWith("__")).map((r) => [r.ticket_id, r.memo]))); }) // __order__: 는 고정 순서 저장용
       .catch(() => undefined);
     return () => { alive = false; };
   }, [author]);
@@ -430,6 +445,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   // 상세 모달 — 워킨맵 정보 + AS 접수내용 + 최근 점검을 한 화면에 (워킨맵 안 봐도 되게)
   const [detail, setDetail] = useState<MyPlanTicket | null>(null);
+  const [addrEdit, setAddrEdit] = useState<string | null>(null); // 주소 수정 칸(2026-10-08) — null 이면 보기
+  useEffect(() => { setAddrEdit(null); }, [detail?.id]);
+  const saveAddress = (t: MyPlanTicket, next: string) => {
+    const address = next.trim();
+    onAddress?.(t, address);
+    setDetail((cur) => (cur && cur.id === t.id ? { ...cur, address } : cur));
+    setGeoFallback((cur) => { const n = new Map(cur); n.delete(t.id); return n; }); // 새 주소로 좌표를 다시 잡게
+    setAddrEdit(null);
+    notify(address ? "주소를 바꿨습니다 — 지도 핀도 새 주소로 옮깁니다" : "주소를 비웠습니다 — 업체명으로 위치를 찾습니다", "success");
+  };
   const [detailSnaps, setDetailSnaps] = useState<InspectionSnapshot[] | null>(null);
   useEffect(() => {
     if (!detail) { setDetailSnaps(null); return; }
@@ -441,10 +466,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     return () => { stop = true; };
   }, [detail]);
 
-  // 카톡 스케줄방용 — "1 업체명 분기점검" 한 줄씩, 동선 순서 그대로(2026-10-02 요청)
+  // 카톡 스케줄방용 — "1. 업체명 분기점검" 한 줄씩, 동선 순서 그대로(2026-10-02 요청 · 번호 뒤 점은 2026-10-08)
   const copyPlanText = async () => {
     const short = (t: MyPlanTicket) => { const l = planTypeLabel(t); return l === "납품철수교체휴가교육" ? "납품" : l === "익일AS" ? "AS" : l; };
-    const text = ordered.map((t, i) => `${i + 1} ${fieldTicketVendor(t.vendor).vendor.trim() || t.vendor} ${short(t)}`).join("\n");
+    const text = ordered.map((t, i) => `${i + 1}. ${fieldTicketVendor(t.vendor).vendor.trim() || t.vendor} ${short(t)}`).join("\n");
     try { await navigator.clipboard.writeText(text); notify(`일정 ${ordered.length}건을 복사했습니다 — 카톡에 붙여 넣으세요`, "success"); }
     catch { window.prompt("복사가 막혔습니다. 아래 글을 직접 복사하세요", text); }
   };
@@ -464,7 +489,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
             className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
         )}
         {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">순서 초기화</button>}
-        {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1 업체명 분기점검 / 2 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
+        {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1. 업체명 분기점검 / 2. 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
         <span className="ml-auto text-[10px] font-bold text-slate-400">[고정]을 누른 순서가 먼저, 나머지는 가까운 순 자동</span>
       </div>
 
@@ -588,7 +613,6 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           ["접수내용", detail.issue || ""],
           ["기종", [detail.model, detail.serial && `S/N ${detail.serial}`, detail.asset && `자산 ${detail.asset}`].filter(Boolean).join(" · ")],
           ["담당자", [detail.keyman, detail.contact].filter(Boolean).join(" · ")],
-          ["주소", detail.address || ""],
           ["메모", detail.note || ""],
         ];
         return (
@@ -606,6 +630,23 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 <button type="button" onClick={() => setDetail(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                {/* 주소 — 틀렸으면 여기서 바로 고친다. 일정에 저장되고 지도 핀도 새 주소로(2026-10-08) */}
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-black text-slate-400">주소</span>
+                    {onAddress && addrEdit === null && <button type="button" onClick={() => setAddrEdit(detail.address || "")} className="rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-black text-slate-600 hover:bg-slate-50">수정</button>}
+                  </div>
+                  {addrEdit === null
+                    ? <div className="mt-1 whitespace-pre-wrap break-words text-[13px] font-bold leading-5 text-slate-800">{detail.address || <span className="text-slate-400">주소 없음 — 업체명으로 위치를 찾습니다</span>}</div>
+                    : <div className="mt-1.5">
+                      <input autoFocus value={addrEdit} onChange={(e) => setAddrEdit(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveAddress(detail, addrEdit); if (e.key === "Escape") setAddrEdit(null); }} placeholder="도로명 주소 (예: 서울 강남구 테헤란로 123)"
+                        className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-[13px] font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                      <div className="mt-1.5 flex gap-1.5">
+                        <button type="button" onClick={() => saveAddress(detail, addrEdit)} className="flex-1 rounded-full bg-blue-600 py-1.5 text-[12px] font-black text-white hover:bg-blue-700">저장</button>
+                        <button type="button" onClick={() => setAddrEdit(null)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600 hover:bg-slate-50">취소</button>
+                      </div>
+                    </div>}
+                </div>
                 <div className="rounded-xl border border-slate-200 p-3">
                   {infoRows.filter(([, v]) => v).map(([k, v]) => (
                     <div key={k} className="flex items-start gap-3 border-b border-slate-50 py-1.5 last:border-0">

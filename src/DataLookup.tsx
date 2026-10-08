@@ -1,9 +1,9 @@
-import { teamLabel } from "./authors";
+import { teamLabel, useMembers } from "./authors";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "./toast";
 import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
-import { selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
+import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
 import { setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
@@ -51,6 +51,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [period, setPeriod] = useState<PeriodKey>("3m");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
   const [team, setTeam] = useState("전체");
+  // 팀 아래 인원 필터(2026-10-08) — 팀을 고르면 그 팀 사람 단추가 나오고 사람별 건수가 같이 보인다(PC확장성 개인별 실적)
+  const [member, setMember] = useState("");
+  const roster = useMembers();
+  const teamMembers = useMemo(() => team === "전체" ? [] : roster.filter((m) => m.active && (m.team === team || m.team.split(/[·/,]/).map((x) => x.trim()).includes(team))), [roster, team]);
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -88,7 +93,8 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   useEffect(() => { window.localStorage.setItem("cs_lookup_category_v1", categoryKey); }, [categoryKey]);
   // 분류를 바꾸면 검색어도 비운다 — 표마다 검색 대상 컬럼이 달라, 남은 검색어가 엉뚱한 표에 적용됐다
   // (거래처 특이사항에서 '오전'을 찾고 미수로 옮기면 미수가 '오전' 기준으로 걸러지던 버그, 2026-08-19)
-  useEffect(() => { setRows([]); setReachedEnd(false); setChip(""); setQuery(""); setQueryDraft(""); }, [categoryKey, team]);
+  useEffect(() => { setRows([]); setReachedEnd(false); setChip(""); setQuery(""); setQueryDraft(""); setMember(""); }, [categoryKey, team]);
+  useEffect(() => { setRows([]); setReachedEnd(false); }, [member]);
 
   // 조회 한 번에 필요한 쿼리를 만든다. offset만 바꿔 "더 보기"에 재사용.
   const buildQuery = useCallback((offset: number) => {
@@ -107,6 +113,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       const needle = query.trim().replace(/[(),*"]/g, " ").trim();
       parts.push(`or=(${category.searchFields.map((field) => `"${field}".ilike.*${needle}*`).join(",")})`);
     }
+    if (member && category.searchFields.includes("작성자")) parts.push(`${encodeURIComponent("작성자")}=ilike.*${encodeURIComponent(member)}*`);
     if (team !== "전체" && (category.teamField || category.teamSourceParen)) {
       // 팀 컬럼('수도권C'·'C'·'C,D')과 출처 라벨의 괄호("카톡:재계약(A)")를 함께 본다 —
       // 시트 동기화분은 지역 칸이 빈 경우가 많아(재계약은 100%) 컬럼만으로는 다 빠진다.
@@ -118,7 +125,18 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     parts.push(`order=${encodeURIComponent(category.orderField)}.${sortDir}`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query, team, HIDEABLE, showHidden, chip, sortDir]);
+  }, [category, period, query, team, member, HIDEABLE, showHidden, chip, sortDir]);
+
+  // 사람별 건수 — 지금 조건(기간·유형·검색어·팀)에서 작성자만 바꿔 가며 세어 단추 옆에 보여 준다
+  const canMember = Boolean(category.teamField) && category.searchFields.includes("작성자");
+  useEffect(() => {
+    if (!canMember || !teamMembers.length) { setMemberCounts({}); return; }
+    let alive = true;
+    const base = buildQuery(0).split("&").filter((part) => !/^(select|order|limit|offset)=/.test(part) && !part.startsWith(`${encodeURIComponent("작성자")}=`));
+    Promise.all(teamMembers.map((m) => countRows(category.table, [...base, `${encodeURIComponent("작성자")}=ilike.*${encodeURIComponent(m.name)}*`].join("&")).then((n) => [m.name, n] as const).catch(() => [m.name, -1] as const)))
+      .then((pairs) => { if (alive) setMemberCounts(Object.fromEntries(pairs)); });
+    return () => { alive = false; };
+  }, [canMember, teamMembers, buildQuery, category.table]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -268,6 +286,19 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                 <button key={value} type="button" onClick={() => setTeam(value)}
                   className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
                   {value === "전체" ? "전체" : teamLabel(value)}
+                </button>
+              ))}
+            </div>
+          )}
+          {canMember && team !== "전체" && teamMembers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">인원</span>
+              <button type="button" onClick={() => setMember("")}
+                className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${member === "" ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{teamLabel(team)} 전체</button>
+              {teamMembers.map((m) => (
+                <button key={m.name} type="button" onClick={() => setMember(member === m.name ? "" : m.name)} title={`${m.name}이(가) 작성자인 기록만`}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${member === m.name ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+                  {m.name}<span className={`ml-1 tabular-nums ${member === m.name ? "text-blue-100" : "text-slate-400"}`}>{memberCounts[m.name] === undefined ? "…" : memberCounts[m.name] < 0 ? "?" : memberCounts[m.name]}</span>
                 </button>
               ))}
             </div>

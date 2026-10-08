@@ -448,6 +448,22 @@ export default function OkrHub({ author }: { author: string }) {
       setMessage(`${prevCycleLabel} 달성기준 ${entries.length}개를 그대로 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
     } catch (e) { setMessage(`불러오기 실패: ${(e as Error).message}`); }
   };
+  // 전주 실제결과 불러오기(2026-10-08): 전주에 이 칸(파트 종합/팀원)에 적힌 실제결과·판정·사유·개선계획·근거를 그대로 가져온다 — 이어지는 일을 다시 안 적게
+  const loadPrevResults = async (team: OkrTeam, who: string) => {
+    if (!prevCycleId) return;
+    const scope = who && who !== "__sum__" ? who : "";
+    try {
+      const prevRows = await getOkrReports(prevCycleId);
+      const prev = findReport(prevRows, team, scope);
+      const filled = (r: OkrResultRow) => Boolean(r.actual.trim() || r.judgment || r.reason.trim() || r.plan.trim() || r.evidence.trim());
+      const entries = (prev?.rows || []).filter(filled);
+      if (!entries.length) { setMessage(`${prevCycleLabel}에 적힌 실제결과가 없어요`); return; }
+      const mineFilled = (findReport(reports, team, scope)?.rows || []).filter(filled).length;
+      if (mineFilled && !(await askConfirm(`이 주차의 실제결과 ${mineFilled}칸을 ${prevCycleLabel} 것(${entries.length}칸)으로 덮어씁니다. 달성기준은 그대로 둡니다.`, { okLabel: "가져오기" }))) return;
+      patchReport(team, scope, (r) => ({ ...r, rows: [...entries.map((e) => ({ ...e })), ...r.rows.filter((x) => !entries.some((e) => e.no === x.no))].sort((a, b) => a.no - b.no) }));
+      setMessage(`${prevCycleLabel} 실제결과 ${entries.length}칸을 그대로 가져왔어요 — 이번 주에 달라진 부분만 고치면 됩니다`);
+    } catch (e) { setMessage(`불러오기 실패: ${(e as Error).message}`); }
+  };
   const updateResult = (team: string, who: string, no: number, patch: Partial<OkrResultRow>) => patchReport(team, who, (r) => {
     const has = r.rows.some((x) => x.no === no);
     const rows = has ? r.rows.map((x) => (x.no === no ? { ...x, ...patch } : x)) : [...r.rows, { ...emptyResultRow(no), ...patch }];
@@ -679,7 +695,7 @@ export default function OkrHub({ author }: { author: string }) {
               onResult={(no, patch) => updateResult(tab, member, no, patch)}
               onMerge={(no) => void mergeMembers(tab, no)} onAiMerge={(no) => void aiMerge(tab, no)} onAiFormat={(no) => void aiFormat(tab, member, no)}
               onTeamFeedback={(no, memo, memoHtml) => setTeamFeedback(tab, no, memo, memoHtml)} onAiTeamFeedback={(no) => void aiTeamFeedback(tab, no)}
-              onCriteria={(no, text, html) => setCriteria(tab, member, no, text, html)} onLoadPrev={() => void loadPrevCriteria(tab, member)} prevLabel={prevCycleLabel} />}
+              onCriteria={(no, text, html) => setCriteria(tab, member, no, text, html)} onLoadPrev={() => void loadPrevCriteria(tab, member)} onLoadPrevResults={() => void loadPrevResults(tab, member)} prevLabel={prevCycleLabel} />}
     </>}
   </div>;
 }
@@ -705,11 +721,11 @@ const COLS: Array<[string, number, "read" | "write"]> = [
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
 
-function TeamView({ team, cycle, goals, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onCriteria, onLoadPrev, prevLabel }: {
+function TeamView({ team, cycle, goals, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onCriteria, onLoadPrev, onLoadPrevResults, prevLabel }: {
   team: OkrTeam; cycle: OkrCycle; goals: OkrGoal[]; reports: OkrReport[]; member: string; onMember: (m: string) => void; onRemoveMember: (name: string) => void; roster: string[]; author: string; aiBusy: string;
   onHeader: (patch: Partial<OkrReport["header"]>) => void; onResult: (no: number, patch: Partial<OkrResultRow>) => void; onMerge: (no: number) => void; onAiMerge: (no: number) => void; onAiFormat: (no: number) => void;
   onTeamFeedback: (no: number, memo: string, memoHtml?: string) => void; onAiTeamFeedback: (no: number) => void;
-  onCriteria: (no: number, criteria: string, html?: string) => void; onLoadPrev: () => void; prevLabel: string;
+  onCriteria: (no: number, criteria: string, html?: string) => void; onLoadPrev: () => void; onLoadPrevResults: () => void; prevLabel: string;
 }) {
   const partReport = findReport(reports, team, "") || emptyReport(cycle.id, team, "");
   const members = memberReports(reports, team);
@@ -744,7 +760,10 @@ function TeamView({ team, cycle, goals, reports, member, onMember, onRemoveMembe
     {/* 달성기준 안내 + 전주 불러오기(2026-10-01) — 목표는 통합집계 하나, 달성기준은 이 주차 파트 종합 것이 팀원에게 기본으로 보이고 팀원이 고친 건 본인 칸에만 */}
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
       <span>{member ? `${member}의 달성기준 — 파트 종합 것이 기본으로 보이고, 여기서 고친 건 ${member} 칸에만 남습니다` : `${teamName(team)} 달성기준 — 여기서 고치면 팀원 모두에게 기본으로 보입니다 (목표는 통합집계에서만)`}</span>
-      {prevLabel && <button type="button" onClick={onLoadPrev} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">↩ {prevLabel} 달성기준 불러오기</button>}
+      {prevLabel && <span className="flex flex-wrap gap-1.5">
+        <button type="button" onClick={onLoadPrev} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">↩ {prevLabel} 달성기준 불러오기</button>
+        <button type="button" onClick={onLoadPrevResults} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">↩ {prevLabel} 실제결과 불러오기</button>
+      </span>}
     </div>
     {/* 제출 정보 — 엑셀 머리 칸처럼(파트 종합에서만) */}
     {!member && <div className="grid grid-cols-2 border-b border-slate-200 text-[12px] lg:grid-cols-4">

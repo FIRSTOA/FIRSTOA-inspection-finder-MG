@@ -430,6 +430,7 @@ function GatherModal({ subject, year: y0, quarter: q0, onClose }: { subject: str
   const [key, setKey] = useState<WeeklyTextKey>("learning");
   const [year, setYear] = useState(y0);
   const [quarter, setQuarter] = useState(q0); // 0 = 한 해 전체
+  const [byWeek, setByWeek] = useState(false); // 기본은 분기 전체 한 목록(2026-10-08: 주차별로 끊겨 불편) — 주차별 보기는 단추로
   const loadKey = `${subject}|${year}|${quarter}`;
   const [loaded, setLoaded] = useState<{ key: string; rows: WeeklyNoteRow[] } | null>(null);
   const rows = loaded && loaded.key === loadKey ? loaded.rows : null; // 기간·사람이 바뀌면 다시 불러올 때까지 '불러오는 중'
@@ -467,6 +468,7 @@ function GatherModal({ subject, year: y0, quarter: q0, onClose }: { subject: str
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
         <div className="flex flex-wrap gap-1">{GATHER_KEYS.map(([k, l]) => <button key={k} type="button" onClick={() => setKey(k)} className={`rounded-full px-3 py-1 text-[12px] font-black transition ${key === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{l}</button>)}</div>
         <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => setByWeek((v) => !v)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${byWeek ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{byWeek ? "주차별 보기" : "한 목록"}</button>
           <PortalSelect width={90} value={String(year)} onChange={(v) => setYear(Number(v))} options={[y0, y0 - 1].map((y) => ({ value: String(y), label: `${y}년` }))} />
           <PortalSelect width={110} value={String(quarter)} onChange={(v) => setQuarter(Number(v))} options={[{ value: "0", label: "한 해 전체" }, ...[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))]} />
         </div>
@@ -474,16 +476,17 @@ function GatherModal({ subject, year: y0, quarter: q0, onClose }: { subject: str
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {rows === null ? <div className="py-10 text-center text-sm font-bold text-slate-400">불러오는 중…</div>
           : !items.length ? <div className="py-10 text-center text-sm font-bold text-slate-400">이 기간에 적은 {label}이 없습니다</div>
-          : items.map((x) => <div key={x.weekStart} className="mb-4 last:mb-0">
+          : byWeek ? items.map((x) => <div key={x.weekStart} className="mb-4 last:mb-0">
             <div className="mb-1 text-[12px] font-black text-slate-500">■ {x.head}</div>
             <ul className="space-y-0.5 text-[13px] leading-relaxed text-slate-800">{x.lines.map((l, i) => <li key={i} className="flex gap-2"><span className="text-slate-300">-</span><span className="whitespace-pre-wrap">{l}</span></li>)}</ul>
-          </div>)}
+          </div>)
+          : <ol className="space-y-1 text-[13px] leading-relaxed text-slate-800">{items.flatMap((x) => x.lines.map((l, i) => ({ key: `${x.weekStart}-${i}`, l }))).map((row, n) => <li key={row.key} className="flex gap-2"><span className="w-6 shrink-0 text-right tabular-nums text-slate-400">{n + 1}.</span><span className="whitespace-pre-wrap">{row.l}</span></li>)}</ol>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
         <span className="text-[12px] font-bold text-slate-500">{items.length}주 · {total}줄</span>
         <div className="flex gap-2">
-          <button type="button" disabled={!total} onClick={() => void copy(false)} className="rounded-full border border-slate-300 bg-white px-3.5 py-2 text-[12px] font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40">목록만 복사</button>
-          <button type="button" disabled={!total} onClick={() => void copy(true)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">주차별로 복사</button>
+          <button type="button" disabled={!total} onClick={() => void copy(true)} className="rounded-full border border-slate-300 bg-white px-3.5 py-2 text-[12px] font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40">주차별로 복사</button>
+          <button type="button" disabled={!total} onClick={() => void copy(false)} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">한 목록으로 복사</button>
         </div>
       </div>
     </div>

@@ -21,25 +21,36 @@ export function colorKey(raw: string): RichColorKey {
 }
 
 // contentEditable 내용 → 허용 태그만 남긴 html
+// 브라우저는 Enter 를 누르면 "첫 줄" + <div>둘째 줄</div> 처럼 첫 줄만 맨바닥 글로 두고 다음 줄부터 <div> 로 감싼다.
+// 예전엔 <div> 뒤에만 <br> 을 붙여 첫 줄과 둘째 줄 사이 줄바꿈이 사라졌다(2026-10-08: "다른 화면 갔다 오면 줄바꿈이 안 돼 있어").
+// 이제 덩어리(div·p·li) 앞에 글이 이어져 있으면 <br> 을 넣고, 뒤에도 <br> 을 둔다. 끝의 빈 줄만 지운다.
 export function sanitizeRich(root: Node): string {
-  const walk = (node: Node, inherited: RichColorKey): string => {
-    if (node.nodeType === 3) { // TEXT_NODE
-      const t = escapeHtml(node.textContent || "");
-      return inherited === "black" || !t ? t : `<span style="color:${RICH_COLORS[inherited]}">${t}</span>`;
+  const walkChildren = (parent: Node, inherited: RichColorKey): string => {
+    let out = "";
+    for (const node of Array.from(parent.childNodes)) {
+      if (node.nodeType === 3) { // TEXT_NODE
+        const t = escapeHtml(node.textContent || "");
+        out += inherited === "black" || !t ? t : `<span style="color:${RICH_COLORS[inherited]}">${t}</span>`;
+        continue;
+      }
+      if (node.nodeType !== 1) continue; // ELEMENT_NODE 외에는 버림
+      const el = node as HTMLElement;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "br") { out += "<br>"; continue; }
+      let color = inherited;
+      const cm = (el.getAttribute("style") || "").match(/color\s*:\s*([^;]+)/i);
+      if (cm) color = colorKey(cm[1]);
+      else if (tag === "font" && el.getAttribute("color")) color = colorKey(el.getAttribute("color") || "");
+      const inner = walkChildren(el, color);
+      const block = tag === "div" || tag === "p" || tag === "li";
+      if (block) {
+        if (out && !out.endsWith("<br>")) out += "<br>";
+        out += inner.replace(/(<br>)+$/g, "") + "<br>";
+      } else out += inner;
     }
-    if (node.nodeType !== 1) return ""; // ELEMENT_NODE 외에는 버림
-    const el = node as HTMLElement;
-    const tag = el.tagName.toLowerCase();
-    if (tag === "br") return "<br>";
-    let color = inherited;
-    const cm = (el.getAttribute("style") || "").match(/color\s*:\s*([^;]+)/i);
-    if (cm) color = colorKey(cm[1]);
-    else if (tag === "font" && el.getAttribute("color")) color = colorKey(el.getAttribute("color") || "");
-    const inner = Array.from(el.childNodes).map((c) => walk(c, color)).join("");
-    const block = tag === "div" || tag === "p" || tag === "li";
-    return block ? `${inner}<br>` : inner;
+    return out;
   };
-  return Array.from(root.childNodes).map((c) => walk(c, "black")).join("").replace(/(<br>)+$/g, ""); // 끝의 빈 줄 제거(브라우저가 붙이는 여분 <br>)
+  return walkChildren(root, "black").replace(/(<br>)+$/g, ""); // 끝의 빈 줄 제거(브라우저가 붙이는 여분 <br>)
 }
 
 // html → 평문(줄바꿈 유지)
