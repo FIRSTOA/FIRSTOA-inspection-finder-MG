@@ -28,6 +28,10 @@ export function getSsoSession(): SsoSession | null {
   } catch { return null; }
 }
 export function clearSsoSession() { try { localStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ } }
+/** 방금 로그아웃했다는 표시(이 탭에서만) — 바로 그룹웨어로 다시 보내면 그룹웨어 쪽 로그인이 살아 있어 곧장 재로그인돼 버린다(2026-10-08) */
+const LOGGED_OUT_KEY = "cs_sso_logged_out_v1";
+export function markLoggedOut() { try { sessionStorage.setItem(LOGGED_OUT_KEY, "1"); } catch { /* 무시 */ } }
+export function consumeLoggedOut(): boolean { try { const v = sessionStorage.getItem(LOGGED_OUT_KEY) === "1"; sessionStorage.removeItem(LOGGED_OUT_KEY); return v; } catch { return false; } }
 
 /** 잠금 스위치는 app_config에 있지만 첫 화면을 늦추지 않으려고 마지막으로 본 값을 기기에 적어 둔다 */
 export function ssoRequiredCached(): boolean { try { return localStorage.getItem(REQUIRED_KEY) === "1"; } catch { return false; } }

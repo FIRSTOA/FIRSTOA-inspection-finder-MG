@@ -21,7 +21,7 @@ function greeting(): string {
   return "오늘 하루 고생 많으셨습니다";
 }
 
-export default function SsoGate({ error }: { error?: string }) {
+export default function SsoGate({ error, notice }: { error?: string; notice?: string }) {
   const today = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long", timeZone: "Asia/Seoul" });
   return (
     <div className="sso-gate relative min-h-[100dvh] overflow-hidden bg-[#070d1a] text-white">
@@ -77,6 +77,7 @@ export default function SsoGate({ error }: { error?: string }) {
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400"><ShieldCheck size={14} className="text-emerald-300" />사내 전용</div>
               <h2 className="mt-2 text-[22px] font-black tracking-tight">그룹웨어 계정으로 로그인</h2>
               <p className="mt-1.5 text-[13px] font-semibold leading-relaxed text-slate-300">비밀번호는 그룹웨어 화면에서만 입력합니다. 로그인하면 작성자 이름이 자동으로 맞춰집니다.</p>
+              {notice && <div className="mt-4 rounded-xl border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs font-bold leading-relaxed text-blue-100">{notice}</div>}
               {error && <div className="mt-4 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">{error}</div>}
               <button type="button" onClick={() => startGroupwareLogin("/")} className="shine mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(37,99,235,.45)] transition hover:from-blue-500 hover:to-indigo-500 active:scale-[.99]">그룹웨어로 로그인 →</button>
               <a href={GROUPWARE_URL} className="mt-3 block text-center text-[11.5px] font-bold text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">비밀번호가 없거나 잊었다면 그룹웨어에서 먼저 설정</a>

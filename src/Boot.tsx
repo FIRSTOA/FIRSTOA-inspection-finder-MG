@@ -9,13 +9,14 @@ import App from "./App";
 import AlbumView from "./AlbumView";
 import SsoGate from "./SsoGate";
 import { getConfig } from "./supabase";
-import { getSsoSession, isOnValue, rememberSsoRequired, SSO_ERROR_KEY, ssoRequiredCached, startGroupwareLogin } from "./sso";
+import { consumeLoggedOut, getSsoSession, isOnValue, rememberSsoRequired, SSO_ERROR_KEY, ssoRequiredCached, startGroupwareLogin } from "./sso";
 
 export default function Boot({ albumId }: { albumId: string | null }) {
   const [required, setRequired] = useState<boolean>(() => ssoRequiredCached());
   const [ssoError] = useState<string>(() => {
     try { const e = sessionStorage.getItem(SSO_ERROR_KEY) || ""; sessionStorage.removeItem(SSO_ERROR_KEY); return e; } catch { return ""; }
   });
+  const [loggedOut] = useState<boolean>(() => consumeLoggedOut()); // 방금 로그아웃한 탭 — 자동 재로그인 대신 문을 보여 준다
   useEffect(() => {
     getConfig().then((cfg) => { const on = isOnValue(cfg.SSO_REQUIRED); rememberSsoRequired(on); setRequired(on); }).catch(() => { /* 오프라인이면 마지막 값 유지 */ });
   }, []);
@@ -23,13 +24,14 @@ export default function Boot({ albumId }: { albumId: string | null }) {
   const sent = useRef(false);
   const needLogin = !albumId && required && !getSsoSession();
   useEffect(() => {
-    if (!needLogin || ssoError || sent.current) return;
+    if (!needLogin || ssoError || loggedOut || sent.current) return;
     sent.current = true;
     startGroupwareLogin("/");
-  }, [needLogin, ssoError]);
+  }, [needLogin, ssoError, loggedOut]);
   if (albumId) return <AlbumView id={albumId} />;
   if (needLogin) {
     if (ssoError) return <SsoGate error={ssoError} />;
+    if (loggedOut) return <SsoGate notice="로그아웃했습니다. 그룹웨어 쪽 로그인은 그대로라 아래 단추를 누르면 바로 들어갑니다. 다른 계정으로 바꾸려면 그룹웨어에서 먼저 로그아웃해 주세요." />;
     return <div className="flex min-h-[100dvh] items-center justify-center bg-[#070d1a] text-sm font-bold text-slate-300">그룹웨어 로그인으로 이동 중…</div>;
   }
   return <App />;
