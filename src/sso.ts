@@ -59,8 +59,9 @@ export function startGroupwareLogin(returnTo = window.location.pathname + window
   // 로그아웃 뒤에는 그룹웨어 로그인 화면(/worklog/login)으로 바로 보낸다 — 그룹웨어가 그 화면에서 로그인을 요구하면 계정을 바꿀 수 있다
   window.location.assign(opts.viaLoginPage ? `${GROUPWARE_URL}/worklog/login?next=${encodeURIComponent(authorize)}` : `${GROUPWARE_URL}${authorize}`);
 }
-/** 로그아웃 — FIELD 세션을 지우고 곧장 그룹웨어 로그인 화면으로(2026-10-08 사용자: 로그아웃하면 그룹웨어 로그인 화면이 바로 떠야) */
-export function logoutToGroupware() { clearSsoSession(); startGroupwareLogin("/", { viaLoginPage: true }); }
+/** 로그아웃 — FIELD 세션만 지우고 첫 화면으로. 그룹웨어 로그인이 살아 있으면 자동으로 다시 들어온다(사용자가 그 동작을 받아들임, 2026-10-08).
+ *  그룹웨어 화면에 떨궈 두는 건 불편하다고 해서 그쪽으로 보내지 않는다. 그룹웨어 로그인이 끝난 상태면 그룹웨어 로그인 화면이 뜬다. */
+export function logoutToGroupware() { clearSsoSession(); window.location.assign("/"); }
 
 export type CallbackCheck = { kind: "none" } | { kind: "error"; error: string; returnTo: string } | { kind: "ok"; token: string; returnTo: string };
 

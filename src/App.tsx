@@ -3330,6 +3330,7 @@ function AuthorPickerModal({ value, onChange, accent, onClose }: AuthorPickerPro
             </div>
             {value && value !== u.name && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">작성자가 {value}로 남아 있어 {u.name}으로 맞춥니다.</div>}
             <button type="button" onClick={() => logoutToGroupware()} className="mt-4 w-full rounded-full border border-slate-300 bg-white py-2.5 text-[13px] font-black text-slate-700 transition hover:bg-slate-50">로그아웃</button>
+            <p className="mt-2 text-center text-[11px] font-semibold leading-snug text-slate-400">그룹웨어 로그인이 살아 있으면 바로 다시 들어옵니다. 계정을 바꾸려면 그룹웨어에서 로그아웃한 뒤 다시 로그인하세요.</p>
           </div>
         </div>
       </div>
