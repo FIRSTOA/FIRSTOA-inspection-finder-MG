@@ -6163,11 +6163,16 @@ export default function App() {
                 })}
               </div>
             </nav>
-            <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3">
+            {/* 폰 메뉴 맨 아래 이름 — 누르면 사용자 선택 창(그룹웨어 로그아웃도 여기). PC 사이드바와 달리 글자만 있어 눌러도 아무 일이 없었다(2026-10-08) */}
+            <button type="button" onClick={() => { setMenuOpen(false); setUserPickOpen(true); }}
+              className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/[0.06] active:bg-white/[0.1]">
               <UserRound size={16} className="text-slate-400" />
-              <span className="text-[12px] font-bold text-slate-200">{author || "작성자 미선택"}</span>
-              <span className="text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span>
-            </div>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-bold text-slate-200">{author || "작성자 미선택"} <span className="text-[10px] font-semibold text-slate-500">{authorTeamLabel}</span></span>
+                <span className="block text-[10px] font-semibold text-slate-500">사용자 변경 · 로그아웃</span>
+              </span>
+              <span className="text-[11px] font-black text-slate-500">›</span>
+            </button>
           </div>
           <div className="flex-1 bg-black/30" />
         </div>
