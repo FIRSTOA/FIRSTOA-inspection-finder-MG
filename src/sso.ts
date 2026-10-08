@@ -46,7 +46,7 @@ export function applySsoTestParam() {
   window.history.replaceState({}, "", window.location.pathname + (q ? `?${q}` : ""));
 }
 /** 로그인 단추를 보여도 되는가 — 잠금이 켜졌거나(모두) 검증 기기이거나 */
-export const ssoLoginVisible = () => ssoRequiredCached() || ssoTestDevice();
+export const ssoLoginVisible = () => ssoRequiredCached(); // 2026-10-08: 검증 끝 — 스위치가 켜졌을 때만(?sso=test 기기 예외 없음)
 
 const randomState = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
 

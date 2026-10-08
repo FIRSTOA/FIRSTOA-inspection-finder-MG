@@ -3163,6 +3163,7 @@ type PickerRow = { name: string; member?: MemberRow };
 // 그룹웨어 통합 로그인 줄(2026-10-02) — 로그인하면 작성자가 그룹웨어 이름으로 맞춰진다. 잠금이 켜진 기기에서 로그아웃하면 로그인 문으로 돌아간다
 function SsoRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [session, setSession] = useState(() => getSsoSession());
+  if (!ssoRequiredCached()) return null; // 스위치가 꺼져 있으면 그룹웨어 로그인은 어디에도 안 보인다(2026-10-08) — 예전 방식 그대로
   if (!session) {
     if (!ssoLoginVisible()) return null; // 검증 전엔 숨김 — ?sso=test 기기 또는 잠금이 켜진 뒤에만
     return (
