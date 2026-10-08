@@ -10,6 +10,7 @@ import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColum
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
 import { kstDate } from "./visits";
+import { okrWeeksInMonth } from "./okr";
 
 type Row = Record<string, unknown>;
 
@@ -62,6 +63,12 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [period, setPeriod] = useState<PeriodKey>("3m");
   const [weekStart, setWeekStart] = useState(() => weekOf(kstDate()).start); // 주 단위 조회의 월요일
   const week = useMemo(() => weekOf(weekStart), [weekStart]);
+  // "10월 1주차" — OKR·주간현황판과 같은 셈법(월요일이 든 달 기준, 그 달에 시작하는 주를 1·2·3…)
+  const weekLabel = useMemo(() => {
+    const y = Number(week.start.slice(0, 4)), m = Number(week.start.slice(5, 7));
+    const no = okrWeeksInMonth(y, m).find((w) => w.start === week.start)?.weekNo;
+    return no ? `${m}월 ${no}주차` : `${m}월`;
+  }, [week]);
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
   const [team, setTeam] = useState("전체");
   // 팀 아래 인원 필터(2026-10-08) — 팀을 고르면 그 팀 사람 단추가 나오고 사람별 건수가 같이 보인다(PC확장성 개인별 실적)
@@ -252,7 +259,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {!category.custom && (
         <div className="grid grid-cols-3 gap-2">
           {([
-            [totalCount != null ? totalCount.toLocaleString() + "건" : "…", period === "week" ? `${md(week.start)}~${md(week.end)} 한 주 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+            [totalCount != null ? totalCount.toLocaleString() + "건" : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
             [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
             [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
           ] as [string, string][]).map(([value, label]) => (
@@ -280,7 +287,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             {period === "week" && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1 py-0.5">
                 <button type="button" onClick={() => setWeekStart(shiftDays(week.start, -7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="지난 주">◀</button>
-                <span className="min-w-[86px] text-center text-[11px] font-black tabular-nums text-slate-800">{md(week.start)}~{md(week.end)}</span>
+                <span className="min-w-[132px] text-center text-[11px] font-black tabular-nums text-slate-800">{weekLabel} <span className="font-bold text-slate-500">{md(week.start)}~{md(week.end)}</span></span>
                 <button type="button" onClick={() => setWeekStart(shiftDays(week.start, 7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="다음 주">▶</button>
                 {week.start !== weekOf(kstDate()).start && <button type="button" onClick={() => setWeekStart(weekOf(kstDate()).start)} className="rounded-full px-2 py-1 text-[10px] font-black text-blue-600 hover:bg-white">이번 주</button>}
               </span>
