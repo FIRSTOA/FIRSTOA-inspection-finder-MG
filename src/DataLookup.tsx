@@ -17,7 +17,18 @@ const PAGE = 300;
 const PERIODS = [
   ["1m", "최근 1개월"], ["3m", "최근 3개월"], ["6m", "최근 6개월"], ["1y", "최근 1년"], ["all", "전체"],
 ] as const;
-type PeriodKey = typeof PERIODS[number][0];
+type PeriodKey = typeof PERIODS[number][0] | "week"; // "week" = 월~일 한 주(PC 확장성만, 2026-10-08)
+
+// 월요일 기준 한 주 — 어느 날짜를 주든 그 주의 월요일과 일요일
+function weekOf(date: string): { start: string; end: string } {
+  const d = new Date(`${date}T12:00:00+09:00`);
+  const dow = (d.getUTCDay() + 6) % 7; // 월=0 … 일=6
+  const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - dow);
+  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+  return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+}
+const shiftDays = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 
 function shiftMonths(date: string, months: number) {
   const base = new Date(`${date}T12:00:00+09:00`);
@@ -49,6 +60,8 @@ function csvCell(value: string) {
 export default function DataLookup({ author = "" }: { author?: string }) {
   const [categoryKey, setCategoryKey] = useState<string>(() => window.localStorage.getItem("cs_lookup_category_v1") || "jeomgeom");
   const [period, setPeriod] = useState<PeriodKey>("3m");
+  const [weekStart, setWeekStart] = useState(() => weekOf(kstDate()).start); // 주 단위 조회의 월요일
+  const week = useMemo(() => weekOf(weekStart), [weekStart]);
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
   const [team, setTeam] = useState("전체");
   // 팀 아래 인원 필터(2026-10-08) — 팀을 고르면 그 팀 사람 단추가 나오고 사람별 건수가 같이 보인다(PC확장성 개인별 실적)
@@ -102,7 +115,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     if (HIDEABLE.has(category.table)) parts.push(`_hidden=${showHidden ? "is.true" : "not.is.true"}`);
     if (category.filterQuery) parts.push(category.filterQuery);
     if (category.chipFilter && chip) parts.push(`${encodeURIComponent(category.chipFilter.field)}=eq.${encodeURIComponent(chip)}`);
-    if (period !== "all") {
+    if (period === "week") {
+      parts.push(`${encodeURIComponent(category.dateField)}=gte.${week.start}`, `${encodeURIComponent(category.dateField)}=lte.${week.end}T23:59:59`);
+    } else if (period !== "all") {
       const months = period === "1m" ? -1 : period === "3m" ? -3 : period === "6m" ? -6 : -12;
       parts.push(`${encodeURIComponent(category.dateField)}=gte.${shiftMonths(kstDate(), months)}`);
     }
@@ -125,7 +140,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     parts.push(`order=${encodeURIComponent(category.orderField)}.${sortDir}`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, query, team, member, HIDEABLE, showHidden, chip, sortDir]);
+  }, [category, period, week, query, team, member, HIDEABLE, showHidden, chip, sortDir]);
+  // 주 단위는 PC 확장성에서만 — 다른 표로 옮기면 3개월로 돌아간다
+  useEffect(() => { if (period === "week" && category.key !== "pc") setPeriod("3m"); }, [category.key, period]);
 
   // 사람별 건수 — 지금 조건(기간·유형·검색어·팀)에서 작성자만 바꿔 가며 세어 단추 옆에 보여 준다
   const canMember = Boolean(category.teamField) && category.searchFields.includes("작성자");
@@ -235,7 +252,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {!category.custom && (
         <div className="grid grid-cols-3 gap-2">
           {([
-            [totalCount != null ? totalCount.toLocaleString() + "건" : "…", `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+            [totalCount != null ? totalCount.toLocaleString() + "건" : "…", period === "week" ? `${md(week.start)}~${md(week.end)} 한 주 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
             [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
             [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
           ] as [string, string][]).map(([value, label]) => (
@@ -252,10 +269,22 @@ export default function DataLookup({ author = "" }: { author?: string }) {
         <div className="space-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">기간</span>
+            {category.key === "pc" && (
+              <button type="button" onClick={() => setPeriod("week")}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === "week" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>주</button>
+            )}
             {PERIODS.map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label.replace("최근 ", "")}</button>
             ))}
+            {period === "week" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1 py-0.5">
+                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, -7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="지난 주">◀</button>
+                <span className="min-w-[86px] text-center text-[11px] font-black tabular-nums text-slate-800">{md(week.start)}~{md(week.end)}</span>
+                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, 7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="다음 주">▶</button>
+                {week.start !== weekOf(kstDate()).start && <button type="button" onClick={() => setWeekStart(weekOf(kstDate()).start)} className="rounded-full px-2 py-1 text-[10px] font-black text-blue-600 hover:bg-white">이번 주</button>}
+              </span>
+            )}
             <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:inline-block" />
             {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setSortDir(value)} title={`${category.orderField} 기준`}
