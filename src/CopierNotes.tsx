@@ -2,8 +2,10 @@
  * 복합기 학습·처리이력 — 브랜드/기종별 수리 노하우와 처리 사례를 쌓는 팀 지식 베이스.
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import CopierPrinciple from "./CopierPrinciple";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, ClipboardList, GraduationCap, Wrench } from "lucide-react";
+import CopierLearning from "./CopierLearning";
+import MdView from "./MdView";
 import { askConfirm } from "./confirmModal";
 import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import FormModal from "./FormModal";
@@ -39,49 +41,6 @@ const SHARE_STYLE: Record<string, string> = { 높음: "bg-rose-100 text-rose-700
 
 type KnowledgeDoc = { id: string; category: string; brand: string; title: string; content: string; content_clean: string; summary: string; models: string[]; parts: string[]; symptoms?: string[]; difficulty: string; author: string; created_at: string };
 
-// 노션식 미니 렌더러 — 제목(##/###) · 목록(-, 1.) · 구분선(---) · 토글(::: 제목 ~ :::) · 이미지 · 파일링크
-function mdLine(line: string, key: number): ReactNode {
-  const trimmed = line.trim();
-  const image = trimmed.match(/^!\[[^\]]*\]\(([^)]+)\)$/);
-  if (image) return <a key={key} href={image[1]} target="_blank" rel="noreferrer"><img src={image[1]} alt="" loading="lazy" className="max-h-[420px] rounded-lg border border-slate-200" /></a>;
-  const file = trimmed.match(/^\[([^\]]+)\]\((https?:[^)]+)\)$/);
-  if (file) return <a key={key} href={file[2]} target="_blank" rel="noreferrer" className="inline-block rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-blue-700">📎 {file[1]}</a>;
-  if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) return <hr key={key} className="my-3 border-slate-200" />;
-  if (/^\d+[.)]\s/.test(trimmed)) return <li key={key} className="ml-5 list-decimal text-sm leading-6 text-slate-800">{trimmed.replace(/^\d+[.)]\s*/, "")}</li>;
-  if (/^[-•]\s/.test(trimmed)) return <li key={key} className="ml-5 list-disc text-sm leading-6 text-slate-800">{trimmed.replace(/^[-•]\s*/, "")}</li>;
-  if (/^###/.test(trimmed)) return <h4 key={key} className="pt-1.5 text-[15px] font-black text-slate-800">{trimmed.replace(/^###\s*/, "")}</h4>;
-  if (/^##/.test(trimmed)) return <h3 key={key} className="border-b border-slate-100 pb-1 pt-2.5 text-lg font-black text-slate-950">{trimmed.replace(/^##\s*/, "")}</h3>;
-  if (!trimmed) return null;
-  return <p key={key} className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{line}</p>;
-}
-
-function MdView({ text }: { text: string }) {
-  const lines = String(text || "").split("\n");
-  const out: ReactNode[] = [];
-  let index = 0;
-  while (index < lines.length) {
-    const trimmed = lines[index].trim();
-    // ::: 제목 ~ ::: → 접었다 펴는 토글
-    if (/^:::\s*\S/.test(trimmed)) {
-      const title = trimmed.replace(/^:::\s*/, "");
-      const body: string[] = [];
-      index += 1;
-      while (index < lines.length && lines[index].trim() !== ":::") { body.push(lines[index]); index += 1; }
-      index += 1; // 닫는 ::: 건너뛰기
-      out.push(
-        <details key={`toggle-${out.length}`} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5">
-          <summary className="cursor-pointer select-none text-sm font-black text-slate-800">{title}</summary>
-          <div className="mt-2"><MdView text={body.join("\n")} /></div>
-        </details>,
-      );
-      continue;
-    }
-    out.push(mdLine(lines[index], out.length));
-    index += 1;
-  }
-  return <div className="space-y-2">{out}</div>;
-}
-
 // content("증상: …\n처리: …\n지역: …" 형식)를 구조화 — 형식이 아니면 raw로 표시
 function parseNoteContent(content: string) {
   const fields: Record<string, string> = {};
@@ -114,6 +73,21 @@ function NoteBody({ note }: { note: CopierNote }) {
 }
 
 
+// 탭(2026-10-09: IT 학습·처리이력과 같은 하단 목록 문법). 예전 "principle" 저장값은 학습자료 탭으로 보낸다
+const VIEW_KEYS = ["notes", "jokbo", "guide", "learn"] as const;
+type View = typeof VIEW_KEYS[number];
+const VIEW_TABS: Array<{ key: View; label: string; icon: typeof BookOpen }> = [
+  { key: "notes", label: "기록", icon: ClipboardList },
+  { key: "jokbo", label: "족보", icon: BookOpen },
+  { key: "guide", label: "가이드", icon: Wrench },
+  { key: "learn", label: "학습자료", icon: GraduationCap },
+];
+const initialView = (): View => {
+  const saved = localStorage.getItem("copier_view_v1") || "";
+  if (saved === "principle") return "learn";
+  return (VIEW_KEYS as readonly string[]).includes(saved) ? saved as View : "jokbo";
+};
+
 export default function CopierNotes({ author }: { author: string }) {
   const [notes, setNotes] = useState<CopierNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,8 +114,7 @@ export default function CopierNotes({ author }: { author: string }) {
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try { const parsed = JSON.parse(localStorage.getItem("copier_recent_q_v1") || "[]"); return Array.isArray(parsed) ? parsed.slice(0, 6) : []; } catch { return []; }
   });
-  const [view, setView] = useState<"jokbo" | "notes" | "guide" | "principle">(() =>
-    (["jokbo", "notes", "guide", "principle"].includes(localStorage.getItem("copier_view_v1") || "") ? localStorage.getItem("copier_view_v1") : "jokbo") as "jokbo" | "notes" | "guide" | "principle");
+  const [view, setView] = useState<View>(initialView);
   useEffect(() => { localStorage.setItem("copier_view_v1", view); }, [view]);
   // ── 족보: 시리즈×증상 카드 — 12,580건 처리이력을 정제한 "이것만 보면 되는" 층 ──
   const [playbook, setPlaybook] = useState<PlaybookCard[] | null>(null);
@@ -411,20 +384,22 @@ export default function CopierNotes({ author }: { author: string }) {
   };
 
 
-  // 상단 다크 헤더 공통부 — 제목 + 기록/가이드 전환 (두 뷰가 같은 지붕을 쓴다)
+  // 상단 공통부 — 제목 카드 + 아래쪽 탭 목록(IT 학습·처리이력과 같은 문법). 각 탭의 검색·필터·목록은 그 아래 별도 카드
   const headerTop = (
-    <div className="flex flex-wrap items-center gap-3 bg-[#1E252F] px-5 pb-3.5 pt-4">
-      <div className="min-w-0">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="bg-[#1E252F] px-5 py-4">
         <h2 className="text-base font-black text-white lg:text-lg">복합기 학습·처리이력</h2>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법) → 구동원리(원리부터)</p>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">기록(전체 사례) → 족보(간추린 정답) → 가이드(실제 작업 방법) → 학습자료(구동원리·교육 자료 게시판)</p>
       </div>
-      <div className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-1">
-        {([["notes", "기록"], ["jokbo", "족보"], ["guide", "가이드"], ["principle", "구동원리"]] as const).map(([key, label]) => (
+      <div className="flex overflow-x-auto">
+        {VIEW_TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} type="button" onClick={() => setView(key)}
-            className={`rounded-full px-4 py-1.5 text-xs font-black transition ${view === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"}`}>{label}</button>
+            className={`relative flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-3.5 text-sm font-black transition sm:flex-none sm:justify-start ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:text-slate-700"}`}>
+            <Icon size={15} />{label}
+          </button>
         ))}
       </div>
-    </div>
+    </section>
   );
   // 다크 헤더용 드롭다운 — 칩 수십 개 대신 접힌 필터. 선택되면 파란 배경으로 "걸려 있음"을 표시
   const darkSelect = (active: boolean) =>
@@ -445,8 +420,8 @@ export default function CopierNotes({ author }: { author: string }) {
         const published = cards.filter((c) => confirmersOf(c).length > 0).length;
         return (
           <div className="space-y-3">
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              {headerTop}
+            {headerTop}
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="bg-[#151A23] px-5 pb-4 pt-3.5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <label className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-full bg-white/10 px-5 py-3 transition focus-within:bg-white/[0.16] lg:max-w-2xl">
@@ -680,8 +655,8 @@ export default function CopierNotes({ author }: { author: string }) {
         const brandCount = (name: string) => name === "전체" ? list.length : list.filter((d) => d.brand === name).length;
         return (
           <div className="space-y-3">
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              {headerTop}
+            {headerTop}
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               {/* 다크 필터부 — 칩 무더기 대신 접힌 드롭다운, 상단이 한 덩어리로 읽히게 */}
               <div className="bg-[#151A23] px-5 pb-4 pt-3.5">
                 {/* 기록 탭과 같은 문법 — 윗줄: 검색(좌)+건수(우), 아랫줄: 필터(좌)+작성(우) */}
@@ -833,17 +808,14 @@ export default function CopierNotes({ author }: { author: string }) {
         );
       })()}
 
-      {/* 구동원리(2026-10-08) — 다른 직원이 만든 교육가이드(Apeos 구동원리·급지·ADF, 애니메이션 8개)를 FIELD 옷으로 다시 입혀 이 화면 안에 그대로 그린다(새 창·iframe 없음, 2026-10-09) */}
-      {view === "principle" && <>
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {headerTop}
-          <div className="border-t border-white/10 bg-[#1E252F] px-5 pb-3 text-[11px] font-semibold text-slate-400">종이 한 장이 나오기까지 — 화상 형성 7단계 · 용지 급지 · ADF 원고 급지. 그림은 단추로 단계를 넘기거나 자동으로 진행됩니다.</div>
-        </section>
-        <CopierPrinciple />
+      {/* 학습자료(2026-10-09) — 누구나 글을 올리는 게시판. 다른 직원이 만든 "구동원리" 교육가이드는 맨 위 고정 글로 이 안에 있다 */}
+      {view === "learn" && <>
+        {headerTop}
+        <CopierLearning author={author} />
       </>}
       {view === "notes" && <>
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {headerTop}
+      {headerTop}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 다크 히어로 — 통계·검색·필터가 한 블록. 칩 무더기는 드롭다운으로 접었다 */}
         <div className="bg-[#151A23] px-5 pb-4 pt-4">
           {/* 검색(좌) + 통계(우) 한 줄 — 가운데 정렬은 이 레이아웃에서 붕 떠 보인다 */}
