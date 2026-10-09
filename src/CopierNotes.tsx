@@ -3,6 +3,7 @@
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import CopierPrinciple from "./CopierPrinciple";
 import { askConfirm } from "./confirmModal";
 import { countRows, deleteRows, insertRow, selectRows, updateRows, uploadPublicFile } from "./supabase";
 import FormModal from "./FormModal";
@@ -832,16 +833,14 @@ export default function CopierNotes({ author }: { author: string }) {
         );
       })()}
 
-      {/* 구동원리(2026-10-08) — 다른 직원이 만든 교육가이드(Apeos 구동원리·급지·ADF, 애니메이션 8개)를 FIELD 옷으로 다시 입힌 정적 페이지. 글·그림·동작은 원본 그대로 */}
-      {view === "principle" && (
+      {/* 구동원리(2026-10-08) — 다른 직원이 만든 교육가이드(Apeos 구동원리·급지·ADF, 애니메이션 8개)를 FIELD 옷으로 다시 입혀 이 화면 안에 그대로 그린다(새 창·iframe 없음, 2026-10-09) */}
+      {view === "principle" && <>
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] font-bold text-slate-500">
-            <span>종이 한 장이 나오기까지 — 화상 형성 7단계 · 용지 급지 · ADF 원고 급지. 그림은 단추로 단계를 넘기거나 자동 진행됩니다.</span>
-            <a href="/learn/copier-principle.html" target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 hover:bg-slate-100">새 창에서 크게 보기 ↗</a>
-          </div>
-          <iframe title="복합기 구동원리 교육가이드" src="/learn/copier-principle.html" className="block h-[calc(100dvh-200px)] min-h-[640px] w-full border-0 bg-[#F4F7FB]" />
+          {headerTop}
+          <div className="border-t border-white/10 bg-[#1E252F] px-5 pb-3 text-[11px] font-semibold text-slate-400">종이 한 장이 나오기까지 — 화상 형성 7단계 · 용지 급지 · ADF 원고 급지. 그림은 단추로 단계를 넘기거나 자동으로 진행됩니다.</div>
         </section>
-      )}
+        <CopierPrinciple />
+      </>}
       {view === "notes" && <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {headerTop}
