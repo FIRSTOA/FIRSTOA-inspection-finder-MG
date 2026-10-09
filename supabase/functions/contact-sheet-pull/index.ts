@@ -257,7 +257,10 @@ Deno.serve(async (req) => {
       const rawDate = at(row, idx.date);
       if (/예시|샘플/.test(rawDate) || /예시|샘플/.test(company)) { skippedEmpty += 1; continue; } // 안내용 예시 줄
       const date = toYmd(rawDate) || "";
-      if (date && date < cutoff) { skippedOld += 1; continue; }
+      // 날짜 없는 행은 미완성으로 보고 가져오지 않는다 — 예전엔 '오늘' 날짜를 붙여 저장했는데, 그러면 dupKey가 날마다 달라져
+      // 같은 행이 매일 새 건으로 들어왔다(실사고 2026-10-09: 청현세무회계컨설팅, 담당자 '프로', 날짜 빈칸 → 38일 연속 중복)
+      if (!date) { skippedEmpty += 1; continue; }
+      if (date < cutoff) { skippedOld += 1; continue; }
       const author = at(row, idx.author);
       // 직원이 시트를 채우는 도중에 3분 크론이 반쯤 된 행을 읽으면, 나중에 완성된 행과
       // dupKey가 달라져 같은 변경이 두 번 들어간다(실사고 2026-09-08 베이커리텍스타일).
@@ -277,7 +280,7 @@ Deno.serve(async (req) => {
       // 앱의 완료 표시로는 쓰지 않고, 참고 정보로만 남긴다("영업 인사: 통화완료" 형태).
       const greetingRaw = at(row, idx.greeting);
       payload.push({
-        change_date: date || new Date().toISOString().slice(0, 10),
+        change_date: date,
         author, company, region: at(row, idx.region), category, reason,
         grade: at(row, idx.grade), before_text: before, after_text: after,
         notes: [

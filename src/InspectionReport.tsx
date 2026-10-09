@@ -40,10 +40,19 @@ const validMobile = (v: string) => /^01\d{8,9}$/.test(v);
 const dashPhone = (v: string) => v.replace(/(\d{3})(\d{3,4})(\d{4})/, "$1-$2-$3");
 const workLinesOf = (d: ReportDevice) => String(d.work || "").split(/\n|\s\/\s/).map((l) => l.replace(/^\d+[.)]\s*/, "").trim()).filter(Boolean);
 const linesOf = (text: string) => String(text || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
-// 양식의 처리내용 → 고객용 기본 문구. 정기점검만 적혔으면 표준 문구, 아니면 원문을 넣어 두고 사람이 고친다
+// 양식만 저장되고 작업 내용이 없는 행 — 점검은 매수·토너가 전부 빈칸, AS는 처리내용이 빈칸. 리포트 대상이 아니다
+// (2026-10-09: 자동 배정 직후 전송된 빈 정기점검 양식(레인컴퍼니)과 접수·부품신청만 한 AS 양식(세무법인 건영)이 목록에 올라와 "점검 안 했는데 왜 뜨지"가 됐다)
+const isUnfinishedForm = (kind: Kind, raw: string): boolean => {
+  const p = parseInspectionForm(raw);
+  if (!p.devices.length) return true;
+  if (kind === "as") return p.devices.every((d) => !workLinesOf(d).length);
+  return p.devices.every((d) => d.total == null && d.mono == null && d.color == null && Object.values(d.toner || {}).every((v) => v == null));
+};
+// 양식의 처리내용 → 고객용 기본 문구. 정기점검만 적혔으면 표준 문구, 아니면 원문을 넣어 두고 사람이 고친다.
+// AS 처리내용이 비어 있으면 비워 둔다 — 기본 문장으로 채우면 "처리도 안 했는데 지멋대로"가 된다(2026-10-09)
 const defaultNote = (kind: Kind, d: ReportDevice) => {
   const lines = workLinesOf(d);
-  if (kind === "as") return lines.length ? lines.join("\n") : SIMPLE_NOTE.as;
+  if (kind === "as") return lines.length ? lines.join("\n") : "";
   if (!lines.length || /^정기점검$/.test(lines.join(""))) return SIMPLE_NOTE.inspection;
   return `${lines.join("\n")}\n카운터 확인 및 여분 재고 점검`;
 };
@@ -233,6 +242,11 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   useEffect(() => { setSelectedId(null); void load(); }, [kind, mine, days, author]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => { const k = q.trim().toLowerCase(); return k ? rows.filter((r) => `${r.업체명} ${r.모델명} ${r.작성자}`.toLowerCase().includes(k)) : rows; }, [rows, q]);
+  // 작업 내용이 없는 양식은 아래 '미작성' 묶음으로 — 목록 건수에도 안 센다
+  const unfinished = useMemo(() => new Set(rows.filter((r) => isUnfinishedForm(kind, r._원문)).map((r) => r.id)), [rows, kind]);
+  const ready = useMemo(() => filtered.filter((r) => !unfinished.has(r.id)), [filtered, unfinished]);
+  const pending = useMemo(() => filtered.filter((r) => unfinished.has(r.id)), [filtered, unfinished]);
+  const [showPending, setShowPending] = useState(false);
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
   const parsed = useMemo(() => (selected ? parseInspectionForm(selected._원문) : null), [selected]);
   const data = useMemo(() => (parsed ? { ...parsed, keymanName: keymanName.trim(), vendor: vendorName.trim() || parsed.vendor } : null), [parsed, keymanName, vendorName]);
@@ -300,6 +314,7 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
   // 고객 발송 — 확인창 → 이미지 → MMS → 기록
   const send = async () => {
     if (!selected || !data) return;
+    if (unfinished.has(selected.id)) { notify(kind === "as" ? "처리내용이 비어 있는 AS 양식(접수만 된 건)입니다 — 처리 양식이 올라온 뒤 보내 주세요" : "매수·토너가 모두 비어 있는 점검 양식입니다 — 점검 결과가 적힌 양식만 보낼 수 있습니다", "error"); return; }
     const to = phone.replace(/[^\d]/g, "");
     if (!validMobile(to)) { notify("받는 휴대폰 번호를 확인해 주세요 (양식의 키맨 번호가 없으면 직접 입력)", "error"); return; }
     if (sentAt && !(await askConfirm(`이 리포트는 ${sentAt.slice(0, 16).replace("T", " ")}에 이미 보냈습니다. 다시 보낼까요?`, { okLabel: "다시 보내기" }))) return;
@@ -349,20 +364,24 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
 
     <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
       <section className={`${selected && mobileView === "report" ? "hidden lg:block " : ""}overflow-hidden rounded-xl border border-slate-200 bg-white`}>
-        <div className="border-b border-slate-100 px-4 py-2.5 text-[11px] font-black text-slate-400">{kindLabel} {filtered.length}건{loading ? " · 불러오는 중…" : ""}</div>
+        <div className="border-b border-slate-100 px-4 py-2.5 text-[11px] font-black text-slate-400">{kindLabel} {ready.length}건{loading ? " · 불러오는 중…" : ""}</div>
         <div className="divide-y divide-slate-100 lg:max-h-[70vh] lg:overflow-y-auto">
-          {!loading && !filtered.length && <div className="px-4 py-10 text-center text-[12px] font-semibold text-slate-400">기간 안에 {kindLabel} 기록이 없습니다</div>}
-          {filtered.map((r) => { const on = r.id === selectedId; const s = sent.get(sourceIdOf(kind, r.id)); return <button key={r.id} type="button" onClick={() => { setSelectedId(r.id); setMobileView("report"); }} className={`block w-full px-4 py-2.5 text-left transition ${on ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}>
+          {!loading && !ready.length && <div className="px-4 py-10 text-center text-[12px] font-semibold text-slate-400">기간 안에 {kindLabel} 기록이 없습니다</div>}
+          {(showPending ? [...ready, ...pending] : ready).map((r) => { const on = r.id === selectedId; const s = sent.get(sourceIdOf(kind, r.id)); return <button key={r.id} type="button" onClick={() => { setSelectedId(r.id); setMobileView("report"); }} className={`block w-full px-4 py-2.5 text-left transition ${on ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}>
             <div className="flex items-center justify-between gap-2"><span className={`text-[11px] font-bold tabular-nums ${on ? "text-slate-300" : "text-slate-400"}`}>{r.작성일}{!mine && r.작성자 ? ` · ${r.작성자}` : ""}</span>{s && <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${on ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"}`}>발송됨 {shortDate(s.slice(0, 10))}</span>}</div>
-            <div className="mt-0.5 truncate text-[13px] font-black">{r.업체명}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 truncate text-[13px] font-black"><span className="truncate">{r.업체명}</span>{unfinished.has(r.id) && <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9.5px] font-black text-amber-700">{kind === "as" ? "미처리" : "미작성"}</span>}</div>
             <div className={`truncate text-[11px] font-semibold ${on ? "text-slate-300" : "text-slate-500"}`}>{r.모델명 || "기종 미기재"}{r.자산기번 ? ` · ${r.자산기번}` : ""}</div>
           </button>; })}
+          {pending.length > 0 && <button type="button" onClick={() => setShowPending((v) => !v)} className="block w-full bg-amber-50/60 px-4 py-2.5 text-left text-[11px] font-black text-amber-800 transition hover:bg-amber-50">
+            {showPending ? "▾" : "▸"} {kind === "as" ? "처리내용 없는 접수 양식" : "매수·토너 없는 빈 양식"} {pending.length}건 — 리포트 대상 아님{showPending ? " (위 목록 끝에 표시)" : " · 누르면 보기"}
+          </button>}
         </div>
       </section>
 
       <section className={`${!selected || mobileView === "list" ? "hidden lg:block " : ""}min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white`}>
         {!selected || !data ? <div className="px-4 py-16 text-center text-[13px] font-semibold text-slate-400">왼쪽에서 간 곳을 고르면 리포트가 여기 만들어집니다</div> : <>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 lg:hidden"><button type="button" onClick={() => setMobileView("list")} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-black text-slate-700">← 목록</button><div className="min-w-0 truncate text-[12px] font-bold text-slate-600">{selected.업체명} · {selected.작성일}</div></div>
+          {unfinished.has(selected.id) && <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] font-bold text-amber-800">{kind === "as" ? "처리내용이 비어 있는 접수 양식입니다. 처리 양식이 따로 올라오면 그 건으로 보내 주세요." : "매수·토너가 비어 있는 양식입니다(점검 전 미리 만든 양식). 점검 결과가 적힌 양식만 보낼 수 있습니다."}</div>}
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
             <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">받는 번호<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="키맨 휴대폰" className="w-40 rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-semibold tabular-nums outline-none focus:border-slate-400" /></label>
             <label className="flex w-full items-center gap-2 text-[12px] font-bold text-slate-600 sm:w-auto">업체명<input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="리포트에 찍히는 업체명" className="min-w-0 flex-1 rounded-full sm:w-52 sm:flex-none border border-slate-200 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-slate-400" /></label>
