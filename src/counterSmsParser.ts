@@ -171,6 +171,19 @@ export function matchMachine(block: string, machineKeys: string[]): string {
   return "기본 기종";
 }
 
+/**
+ * 관리부 마감 목록 머리글 — "【수도권C】" 팀, 그 아래 "26-10" 달.
+ * 팀은 A~E 글자(【CSS】·【지방】은 E). 둘 다 없으면 undefined — 호출부가 고른 팀·이번 달을 그대로 쓴다. (2026-10-10)
+ */
+export function parseListHeader(rawText: string): { team?: string; ym?: string; monthLabel?: string } {
+  const head = String(rawText || "").slice(0, 400);
+  const teamMatch = head.match(/【\s*(?:수도권\s*)?([A-Ea-e])\s*】|【\s*(CSS|지방)\s*】/);
+  const team = teamMatch ? (teamMatch[1] ? teamMatch[1].toUpperCase() : "E") : undefined;
+  const ymMatch = head.match(/(?:^|\n)\s*(\d{2}|\d{4})\s*[-./]\s*(\d{1,2})\s*(?:\r?\n|$)/);
+  const ym = ymMatch ? `${ymMatch[1].length === 2 ? `20${ymMatch[1]}` : ymMatch[1]}-${ymMatch[2].padStart(2, "0")}` : undefined;
+  return { team, ym, monthLabel: ym ? `${Number(ym.slice(5))}월 마감` : undefined };
+}
+
 /** 원문을 업체 블록으로 분리 (원본: 숫자+콤마로 시작하는 줄이 새 블록) */
 export function splitBlocks(rawText: string): string[] {
   const lines = rawText.split("\n");

@@ -14,12 +14,13 @@ import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-rea
 import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
-import { buildMessage, formatPhone, mergeTargets, parseBlocks, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
+import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
-type BatchLogEntry = { at: string; by: string; added: number; skipped: string[] };
+// dropped·kept·mode 는 2026-10-10 "목록 맞추기"부터 — 관리부가 완료분을 빼고 다시 올린 목록에 맞춰 빠진 업체를 자동 완료한 기록
+type BatchLogEntry = { at: string; by: string; added: number; skipped: string[]; dropped?: string[]; kept?: number; mode?: "sync" | "merge" };
 type BatchRow = { id: string; team: string; title: string; raw: string; created_by: string; created_at: string; log?: BatchLogEntry[] | null };
 type TargetRow = {
   id: string; batch_id: string; team: string; vendor: string; grade_group: "s_group" | "v_group";
@@ -91,7 +92,11 @@ export default function CounterSms({ author }: { author: string }) {
   const [uploadRaw, setUploadRaw] = useState("");
   const [uploadBlocks, setUploadBlocks] = useState<ParsedBlock[] | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadMode, setUploadMode] = useState<"merge" | "replace">("merge"); // 기본은 기존 목록에 없는 업체만 추가 — 전송·완료 표시가 날아가지 않게
+  // 올리는 방식 — sync(기본, 2026-10-10): 관리부는 완료된 업체를 빼고 목록을 다시 올리므로, 붙여넣은 목록을 "지금 열린 전체"로 보고
+  //   없는 업체는 추가·이번 목록에 빠진 열린 업체는 자동 완료·있는 업체는 전송·완료 표시 유지 → 완료를 또 누르거나 지난 건이 쌓이지 않는다.
+  //   merge: 없는 업체만 추가(빠진 업체 그대로) · replace: 새 목록(달이 바뀔 때)
+  const [uploadMode, setUploadMode] = useState<"sync" | "merge" | "replace">("sync");
+  const [showDone, setShowDone] = useState(false); // 완료된 카드는 접어 둔다 — 열린 업체만 보이게
   // 완료·추가 이력 컬럼이 있는지(supabase/counter-sms-done.sql 실행 여부) — 없으면 그 기능만 안내하고 나머지는 예전처럼
   const [extended, setExtended] = useState<boolean | null>(null);
   useEffect(() => {
@@ -192,24 +197,59 @@ export default function CounterSms({ author }: { author: string }) {
   // 마감 목록 올리기 — 붙여넣기 → 변환 미리보기(수정 가능) → 팀에 등록
   const uploadConvert = () => {
     if (!uploadRaw.trim()) { setNotice("마감 목록을 붙여넣어 주세요."); return; }
-    const regionName = regionForTeam(team);
+    // 머리글 【수도권C】·26-10 을 읽어 팀·제목을 맞춘다 — 다른 팀 목록을 내 팀에 올리는 실수 방지(2026-10-10)
+    const header = parseListHeader(uploadRaw);
+    const notes: string[] = [];
+    let targetTeam = team;
+    if (header.team && (TEAMS as readonly string[]).includes(header.team) && header.team !== team) {
+      targetTeam = header.team; setTeam(header.team); notes.push(`머리글 【${header.team}】에 맞춰 ${header.team}팀으로 바꿨습니다`);
+    }
+    if (header.monthLabel && !uploadTitle.trim()) setUploadTitle(header.monthLabel);
+    // 달이 바뀐 목록(9월 → 10월)은 새 목록으로 — 지난달 목록은 기록으로 남고, 지난달 미완료가 10월 목록에 또 있으면 새 목록에서 다시 보낸다
+    if (header.ym && batch && batch.team === targetTeam && targetTeam === team) {
+      const batchMonth = Number(batch.title.match(/(\d{1,2})월/)?.[1] || batch.created_at.slice(5, 7));
+      if (batchMonth && Number(header.ym.slice(5)) !== batchMonth) { setUploadMode("replace"); notes.push(`지금 목록(${batchMonth}월)과 다른 달이라 새 목록으로 등록합니다`); }
+    }
+    const regionName = regionForTeam(targetTeam);
     const profile = profiles.find((p) => p.region === regionName);
     const keys = Object.keys(mergeFormats(profile?.machines));
     const parsed = parseBlocks(uploadRaw, keys);
     setUploadBlocks(parsed);
-    setNotice(parsed.length ? `${parsed.length}개 블록을 인식했습니다 — 확인 후 [${team}팀에 등록]을 누르세요.` : "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요.");
+    setNotice(parsed.length ? `${parsed.length}개 블록을 인식했습니다${notes.length ? ` · ${notes.join(" · ")}` : ""} — 확인 후 아래 버튼을 누르세요.` : "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요.");
   };
   const patchUploadBlock = (index: number, patch: Partial<ParsedBlock>) =>
     setUploadBlocks((cur) => (cur ? cur.map((b) => (b.index === index ? { ...b, ...patch } : b)) : cur));
   const publishBatch = async () => {
     if (!uploadBlocks?.length) return;
     const merged = mergeTargets(uploadBlocks);
-    // 기존 목록에 추가(기본): 이미 있는 업체는 건너뛰고 전송·완료 표시를 그대로 둔다. 언제 누가 몇 곳 추가했고 무엇이 중복이었는지 목록 머리에 남긴다(2026-09-24)
-    if (uploadMode === "merge" && batch && batch.team === team) {
-      const existing = new Set(batchTargets.map((t) => contactVendorKey(t.vendor)));
-      const fresh = merged.filter((t) => !existing.has(contactVendorKey(t.vendor)));
-      const dupes = merged.filter((t) => existing.has(contactVendorKey(t.vendor)));
-      if (!await askConfirm(`${team}팀 기존 목록에 추가할까요?\n\n새로 추가 ${fresh.length}곳${dupes.length ? `\n이미 있어 건너뜀 ${dupes.length}곳: ${dupes.slice(0, 5).map((t) => t.vendor).join(", ")}${dupes.length > 5 ? " 외" : ""}` : ""}\n\n기존 업체의 전송·완료 표시는 그대로 둡니다.`)) return;
+    const by = author || "미지정";
+    // 기존 목록이 있으면 — sync(기본): 붙여넣은 목록을 "지금 열린 전체"로 보고 맞춘다 / merge: 없는 업체만 추가.
+    // 있는 업체는 전송·완료 표시 그대로. 언제 누가 몇 곳을 추가·완료했는지 목록 머리에 남긴다(2026-09-24 추가 이력, 2026-10-10 맞추기)
+    if (uploadMode !== "replace" && batch && batch.team === team) {
+      const keyOf = (vendor: string) => contactVendorKey(vendor);
+      const existing = new Set(batchTargets.map((t) => keyOf(t.vendor)));
+      const incoming = new Set(merged.map((t) => keyOf(t.vendor)));
+      const fresh = merged.filter((t) => !existing.has(keyOf(t.vendor)));
+      const dupes = merged.filter((t) => existing.has(keyOf(t.vendor)));
+      // 관리부는 마감(카운터 회신)이 끝난 업체를 빼고 다시 올린다 → 열린 업체 중 이번 목록에 없는 곳은 완료로.
+      // 이미 완료된 카드는 건드리지 않는다. 완료 컬럼이 없으면(SQL 미실행) 추가만 한다.
+      const sync = uploadMode === "sync" && !!extended;
+      const open = batchTargets.filter((t) => !t.done_at);
+      const dropped = sync ? open.filter((t) => !incoming.has(keyOf(t.vendor))) : [];
+      const droppedUnsent = dropped.filter((t) => !t.sent_at);
+      const kept = open.length - dropped.length;
+      // 관리부가 일부(한 구역·추가분)만 보낸 목록을 전체로 오해하면 멀쩡한 업체가 완료돼 버린다 — 절반 넘게 빠지면 경고
+      const tooMany = dropped.length > 0 && dropped.length * 2 >= open.length && merged.length * 2 < open.length;
+      const lines = [
+        sync ? `${team}팀 목록을 이 목록에 맞출까요?` : `${team}팀 기존 목록에 추가할까요?`,
+        "",
+        `새로 추가 ${fresh.length}곳`,
+        `그대로 유지 ${sync ? kept : dupes.length}곳 (전송·완료 표시 유지)`,
+        ...(sync ? [`목록에서 빠짐 → 완료 처리 ${dropped.length}곳${dropped.length ? `: ${dropped.slice(0, 8).map((t) => t.vendor).join(", ")}${dropped.length > 8 ? " 외" : ""}` : ""}${droppedUnsent.length ? `\n  (문자를 안 보낸 곳 ${droppedUnsent.length}곳 포함 — 관리부 쪽에서 끝난 것으로 봅니다)` : ""}`] : []),
+        ...(tooMany ? ["", "⚠ 열린 업체의 절반 넘게 빠집니다. 관리부가 일부만 보낸 목록이면 [추가만]으로 올리세요."] : []),
+        ...(uploadMode === "sync" && !extended ? ["", "※ 완료 컬럼이 아직 없어(supabase/counter-sms-done.sql 미실행) 빠진 업체 완료 처리는 건너뜁니다."] : []),
+      ];
+      if (!await askConfirm(lines.join("\n"), { okLabel: sync ? "목록 맞추기" : "추가" })) return;
       setBusy(true);
       try {
         const stamp = new Date().toISOString();
@@ -218,18 +258,25 @@ export default function CounterSms({ author }: { author: string }) {
           await insertRow("counter_sms_targets", {
             id: `${batch.id}-a${Date.now().toString(36)}-${String(i).padStart(3, "0")}`, batch_id: batch.id, team,
             vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels, machines: t.machines, vendor_names: t.vendorNames,
-            ...(extended ? { added_at: stamp, added_by: author || "미지정" } : {}),
+            ...(extended ? { added_at: stamp, added_by: by } : {}),
           });
         }
+        // 빠진 업체 자동 완료 — done_by 에 사유를 남겨 손으로 누른 완료와 구분한다. 잘못됐으면 카드의 [완료 취소]
+        for (let i = 0; i < dropped.length; i += 40) {
+          const ids = dropped.slice(i, i + 40).map((t) => encodeURIComponent(t.id)).join(",");
+          await updateRows("counter_sms_targets", `id=in.(${ids})`, { done_at: stamp, done_by: `${by} · 목록에서 빠짐` });
+        }
         if (extended) {
-          const entry: BatchLogEntry = { at: stamp, by: author || "미지정", added: fresh.length, skipped: dupes.map((t) => t.vendor) };
+          const entry: BatchLogEntry = { at: stamp, by, added: fresh.length, skipped: sync ? [] : dupes.map((t) => t.vendor), dropped: dropped.map((t) => t.vendor), kept, mode: sync ? "sync" : "merge" };
           await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: [...(batch.log || []), entry] }).catch(() => undefined);
         }
         setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
-        setNotice(`${team}팀 목록에 ${fresh.length}곳을 추가했습니다${dupes.length ? ` · 이미 있어 건너뜀 ${dupes.length}곳(${dupes.map((t) => t.vendor).join(", ")})` : ""}.`);
+        setNotice(sync
+          ? `${team}팀 목록을 맞췄습니다 — 새로 ${fresh.length}곳 · 유지 ${kept}곳 · 목록에서 빠져 완료 ${dropped.length}곳${dropped.length ? `(${dropped.slice(0, 6).map((t) => t.vendor).join(", ")}${dropped.length > 6 ? " 외" : ""})` : ""}`
+          : `${team}팀 목록에 ${fresh.length}곳을 추가했습니다${dupes.length ? ` · 이미 있어 건너뜀 ${dupes.length}곳(${dupes.map((t) => t.vendor).join(", ")})` : ""}.`);
         await loadBatch(team);
       } catch (e) {
-        setNotice(`추가 실패: ${(e as Error).message}`);
+        setNotice(`${sync ? "맞추기" : "추가"} 실패: ${(e as Error).message}`);
       } finally { setBusy(false); }
       return;
     }
@@ -323,13 +370,13 @@ export default function CounterSms({ author }: { author: string }) {
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
             <div className="text-[15px] font-black text-white">카운터 문자전송</div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">카톡 마감 목록을 붙여넣으면 업체별 요청 문자를 만들어 내 휴대폰 문자앱으로 보냅니다.</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">관리부가 마감방에 올린 목록을 그대로 붙여넣으면 팀 목록이 그 목록에 맞춰집니다(빠진 업체는 자동 완료). 카드를 누르면 내 휴대폰 문자앱으로 보냅니다.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setRulesOpen(true)} title="🚫 보내지 말 것 · ⭐ 새 담당 기록 전체 보기"
               className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-2 text-[12px] font-black text-amber-800 transition hover:bg-amber-100">
               📒 연락처 기록{contactRules.length ? ` ${contactRules.length}` : ""}</button>
-            <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); }}
+            <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("sync"); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-2 text-xs font-black text-white transition hover:bg-blue-700">
               <Upload size={14} />마감 목록 올리기
             </button>
@@ -371,9 +418,12 @@ export default function CounterSms({ author }: { author: string }) {
             const doneCount = batchTargets.filter((t) => t.done_at).length;
             const stage = (t: TargetRow) => (t.done_at ? 2 : t.sent_at ? 1 : 0); // 안 보낸 것 → 보냄 → 완료 순
             const addedTag = (t: TargetRow) => (t.added_at && batch && new Date(t.added_at).getTime() - new Date(batch.created_at).getTime() > 5 * 60_000 ? `＋${Number(t.added_at.slice(5, 7))}/${Number(t.added_at.slice(8, 10))}` : "");
-            const shownRows = batchTargets
+            const groupRows = batchTargets
               .filter((t) => t.grade_group === gradeTab)
               .sort((a, b) => stage(a) - stage(b));
+            const doneRows = groupRows.filter((t) => t.done_at);
+            // 완료는 접어 둔다 — 관리부 목록에서 빠진 업체가 자동 완료되면 카드가 쌓이는데, 할 일은 열린 업체뿐(2026-10-10)
+            const shownRows = showDone ? groupRows : groupRows.filter((t) => !t.done_at);
             return (
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
@@ -389,7 +439,7 @@ export default function CounterSms({ author }: { author: string }) {
                     {(batch.log || []).length > 0 && (
                       <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
                         {(batch.log || []).slice(-3).reverse().map((entry, i) => (
-                          <div key={`${entry.at}-${i}`}>＋ {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.added}곳 추가{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
+                          <div key={`${entry.at}-${i}`}>{entry.mode === "sync" ? "⇄" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "sync" ? "목록 맞춤 — " : ""}{entry.added}곳 추가{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
                         ))}
                       </div>
                     )}
@@ -436,7 +486,12 @@ export default function CounterSms({ author }: { author: string }) {
                       )}
                     </div>
                   ))}
-                  {!shownRows.length && <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400">이 등급군에 업체가 없습니다.</div>}
+                  {!shownRows.length && <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400">{doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
+                  {doneRows.length > 0 && (
+                    <button type="button" onClick={() => setShowDone((v) => !v)} className="col-span-full rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 py-2 text-[11px] font-black text-indigo-600 transition hover:bg-indigo-50">
+                      {showDone ? `✓✓ 완료 ${doneRows.length}곳 접기` : `✓✓ 완료 ${doneRows.length}곳 보기 (관리부 목록에서 빠진 업체는 자동 완료)`}
+                    </button>
+                  )}
                 </div>
               </section>
             );
@@ -547,15 +602,18 @@ export default function CounterSms({ author }: { author: string }) {
             {batch && batch.team === team && (
               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-500">
                 <span>올리는 방식</span>
-                <button type="button" onClick={() => setUploadMode("merge")} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "merge" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>기존 목록에 추가 (전송·완료 표시 유지, 중복은 건너뜀)</button>
-                <button type="button" onClick={() => setUploadMode("replace")} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "replace" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>새 목록으로 교체</button>
+                <button type="button" onClick={() => setUploadMode("sync")} title="관리부는 끝난 업체를 빼고 다시 올립니다 — 이 목록에 없는 열린 업체는 자동 완료, 새 업체는 추가, 있는 업체는 전송·완료 표시 유지" className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "sync" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>목록 맞추기 — 빠진 업체 자동 완료 (권장)</button>
+                <button type="button" onClick={() => setUploadMode("merge")} title="관리부가 일부(한 구역·추가분)만 보낸 목록일 때" className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "merge" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>추가만 (빠진 업체 그대로)</button>
+                <button type="button" onClick={() => setUploadMode("replace")} title="달이 바뀐 목록 — 지금 목록은 기록으로 남고 새 목록이 올라갑니다" className={`rounded-full px-3 py-1 text-[11px] font-black transition ${uploadMode === "replace" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>새 목록으로 교체</button>
               </div>
             )}
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
               <button type="button" onClick={uploadConvert} className="rounded-full border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700">🔍 변환 미리보기</button>
               <button type="button" disabled={busy || !uploadBlocks?.length} onClick={() => void publishBatch()}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">
-                {busy ? "등록 중…" : uploadMode === "merge" && batch && batch.team === team ? `${team}팀 목록에 추가 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳 검사)` : `${team}팀에 등록 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳)`}
+                {busy ? "등록 중…" : uploadMode !== "replace" && batch && batch.team === team
+                  ? (uploadMode === "sync" ? `${team}팀 목록 맞추기 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳 기준)` : `${team}팀 목록에 추가 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳 검사)`)
+                  : `${team}팀에 등록 (${uploadBlocks ? mergeTargets(uploadBlocks).length : 0}곳)`}
               </button>
             </div>
           </div>
