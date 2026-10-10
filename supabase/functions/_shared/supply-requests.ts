@@ -1,0 +1,99 @@
+/**
+ * 부품 신청·자가 신청(여분) 읽기 — 점검·AS 양식 글의 ※부품신청※ / ※자가신청※ 칸을 품목 단위 행으로 (2026-10-11)
+ *
+ * 왜: 그동안 이 칸은 보고 원문 속 글로만 저장돼 "이 기기 드럼 언제 갈았지", "여분 몇 개 신청했어"를 통합검색이 못 찾았다.
+ *     양식이 고정이라 확실히 읽힌다. 앱(src)과 엣지 함수가 같이 쓰므로 순수 함수만(브라우저·Deno 공용).
+ * 나중에 자가 반납·부품 반납·사용 후 부품 관리와 잇기 위해 행마다 returned_at·return_note 자리를 둔다(표 쪽).
+ *
+ * 양식 예(AS 보고 2026-10-08):
+ *   ※부품신청※ / 보증기간 내 여부 : 무 / 교체 전 카운터 누적 사용매수 : 305091 / 사용 부품 예상 사용매수 : 305091 / ▶ 신청 부품 / 물품명: 드럼1,현상기1 / 수량: / 출고여부: 선출고완료
+ *   ※자가신청※ / 물품: K2 / 수량: / 출고여부: 출고부탁드립니다
+ */
+export type SupplyKind = "부품" | "자가";
+export type SupplyItem = {
+  kind: SupplyKind;
+  item: string;        // 품목(드럼, 현상기, 토너 K …)
+  qty: string;         // 수량 — 품목 끝에 붙은 숫자("드럼1") 또는 수량 칸
+  status: string;      // 출고여부
+  warranty: string;    // 보증기간 내 여부(부품만)
+  counter: string;     // 교체 전 카운터(부품만)
+  expected: string;    // 사용 부품 예상 사용매수(부품만)
+  raw: string;         // 그 칸 원문
+};
+export type DeviceRef = { model: string; serial: string; asset: string };
+
+const clean = (s: string) => String(s || "").replace(/_x000d_|\r/g, "").trim();
+const DIVIDER = /^[ㅡ―—=_-]{3,}\s*$/;
+
+/** 글에서 "※부품신청※" 또는 "※자가신청※" 칸만 잘라낸다(다음 구분선·다음 ※칸·끝까지) */
+export function sectionOf(text: string, head: "※부품신청※" | "※자가신청※"): string {
+  const lines = clean(text).split("\n");
+  const start = lines.findIndex((l) => l.trim().startsWith(head));
+  if (start < 0) return "";
+  const out: string[] = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const l = lines[i].trim();
+    if (DIVIDER.test(l) || /^※.+※/.test(l) || /^도착 시간\s*:/.test(l)) break;
+    out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+const field = (section: string, label: RegExp): string => {
+  for (const line of section.split("\n")) {
+    const m = line.match(label);
+    if (m) return clean(line.slice(m[0].length)).replace(/^[:：]\s*/, "");
+  }
+  return "";
+};
+
+/** "드럼1,현상기1" / "픽업롤러1,롤러2,부싱2,클러치1" / "K2" / "토너 K 2개, 폐토너통 1" → 품목·수량 */
+export function splitItems(value: string): Array<{ item: string; qty: string }> {
+  const raw = clean(value);
+  if (!raw || /^(없음|무|x|-)$/i.test(raw)) return [];
+  return raw.split(/[,，·\/]+|\s{2,}/).map((p) => p.trim()).filter(Boolean).map((p) => {
+    // 끝의 숫자(+개/EA)가 수량 — "드럼1", "현상기 2개", "K2", "폐토너통1EA"
+    const m = p.match(/^(.*?)[\s]*(\d+)\s*(개|ea|EA|장|통|본)?$/);
+    if (m && m[1].trim()) return { item: m[1].trim(), qty: m[2] };
+    return { item: p, qty: "" };
+  });
+}
+
+/** 보고 글 하나 → 신청 행들. 물품이 비어 있으면(양식만 있는 것) 아무것도 돌려주지 않는다 */
+export function parseSupplyRequests(text: string): SupplyItem[] {
+  const out: SupplyItem[] = [];
+  const parts = sectionOf(text, "※부품신청※");
+  if (parts) {
+    const items = splitItems(field(parts, /^\s*물품명\s*[:：]/));
+    const qty = field(parts, /^\s*수량\s*[:：]/);
+    const status = field(parts, /^\s*출고\s*여부\s*[:：]/);
+    const warranty = field(parts, /^\s*보증기간\s*내\s*여부\s*[:：]?/);
+    const counter = field(parts, /^\s*교체\s*전\s*카운터[^:：]*[:：]/);
+    const expected = field(parts, /^\s*사용\s*부품\s*예상[^:：]*[:：]/);
+    for (const it of items) out.push({ kind: "부품", item: it.item, qty: it.qty || qty, status, warranty, counter, expected, raw: parts.trim() });
+  }
+  const self = sectionOf(text, "※자가신청※");
+  if (self) {
+    const items = splitItems(field(self, /^\s*물품\s*[:：]/));
+    const qty = field(self, /^\s*수량\s*[:：]/);
+    const status = field(self, /^\s*출고\s*여부\s*[:：]/);
+    for (const it of items) out.push({ kind: "자가", item: it.item, qty: it.qty || qty, status, warranty: "", counter: "", expected: "", raw: self.trim() });
+  }
+  return out;
+}
+
+/** 보고 글의 첫 기기(1. 모델명/시리얼넘버/자산기번) — 신청을 어느 기기에 붙일지 */
+export function firstDeviceOf(text: string): DeviceRef {
+  const t = clean(text);
+  const pick = (re: RegExp) => { const m = t.match(re); return m ? clean(m[1]) : ""; };
+  return {
+    model: pick(/모델명\s*[:：]\s*([^\n]*)/),
+    serial: pick(/시리얼\s*(?:넘버|번호)\s*[:：]\s*([^\n]*)/),
+    asset: pick(/자산\s*기번\s*[:：]\s*([^\n]*)/),
+  };
+}
+
+/** 같은 보고·같은 품목은 어느 길로 넣어도 한 번만 — 전송 때(앱)와 지난 기록 채우기(원문)가 같은 키를 쓴다 */
+export function supplyDupSource(sourceTable: string, date: string, author: string, vendor: string, s: SupplyItem): string {
+  return [sourceTable, date, author, clean(vendor), s.kind, s.item, s.qty].join("|");
+}

@@ -401,6 +401,7 @@ export default function Search360({ author }: { author: string }) {
               <Field label="마지막 점검" value={state.lastInspect ? `${state.lastInspect} (${fmtDays(state.lastInspect)})` : "기록 없음"} tone={state.lastInspect && (daysSince(state.lastInspect) || 0) > 90 ? "text-amber-700" : ""} />
               <Field label="마지막 AS" value={state.lastAs ? `${state.lastAs} (${fmtDays(state.lastAs)})` : "기록 없음"} from={state.lastAsFrom === "AS 보고" ? "" : state.lastAsFrom === "접수" || state.lastAsFrom === "일정" ? `${state.lastAsFrom} 기준 · 처리 보고 없음` : state.lastAsFrom} />
               <Field label="마지막 방문기록" value={state.lastVisit ? `${state.lastVisit} (${fmtDays(state.lastVisit)})` : "기록 없음"} />
+              <Field label="부품·자가 신청" value={state.supplies.length ? state.supplies.map((s) => `${s.kind} ${s.count}건 · 최근 ${s.last.slice(5).replace("-", "/")} ${s.items.slice(0, 3).join(", ")}`).join("  |  ") : "기록 없음"} wide />
             </div>
             {/* 현장 메모 — 특이사항(출근·점심·주의)·워킨맵 메모·임대 조건. 가기 전에 꼭 봐야 하는 것이라 상태 카드 안에 */}
             {state.notes.length > 0 && (

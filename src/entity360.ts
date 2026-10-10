@@ -68,6 +68,10 @@ export const SOURCES: SourceDef[] = [
   { table: "activity_events", label: "활동", group: "현장 기록", tone: T.visit, nameCols: ["vendor"], deviceCols: [], rawCols: ["source_text"], hidden: "status=neq.cancelled",
     dateKeys: ["activity_date"], titleKeys: ["category"], snippetKeys: ["quantity", "machine_count"], authorKeys: ["author"], teamKeys: ["team"], modelKeys: [], serialKeys: [], assetKeys: [],
     titleFn: (row) => (ACTIVITY_LABELS as Record<string, string>)[str(row, "category")] || str(row, "category") },
+  // 부품·자가 신청(2026-10-11) — 점검·AS 양식의 신청 칸을 품목 단위로 쌓은 표. "이 기기 드럼 언제 갈았지"가 바로 나온다
+  { table: "supply_requests", label: "부품·자가 신청", group: "현장 기록", tone: T.visit, nameCols: ["vendor"], deviceCols: ["serial", "asset"], rawCols: ["raw"],
+    dateKeys: ["request_date"], titleKeys: ["kind"], snippetKeys: ["status", "warranty", "author"], authorKeys: ["author"], teamKeys: ["team"], modelKeys: ["model"], serialKeys: ["serial"], assetKeys: ["asset"],
+    titleFn: (row) => `${str(row, "kind")} 신청 — ${str(row, "item")}${str(row, "qty") ? ` ×${str(row, "qty")}` : ""}` },
   { table: "logistics_records", label: "물류", group: "현장 기록", tone: T.logi, nameCols: ["_업체명", "거래처명"], deviceCols: [], rawCols: ["_원문"], hidden: "_hidden=not.is.true",
     dateKeys: ["작성일"], titleKeys: ["구분"], snippetKeys: ["품목", "수량", "특이사항"], authorKeys: ["작성자"], teamKeys: [], modelKeys: ["품목"], serialKeys: [], assetKeys: [] },
   { table: "contact_changes", label: "담당자·주소 변경", group: "고객 소통", tone: T.contact, nameCols: ["company"], deviceCols: [], rawCols: ["source_text"], hidden: "_hidden=not.is.true",
@@ -476,11 +480,24 @@ export type State = {
   openReceptions: number; upcomingTickets: number; changes: number; photos: number;
   /** 워킨맵 등록 — (팀·분기·종류·라벨)별로 묶어 개수와 함께. 기기 1대=장소 1개라 웍스피어처럼 34개가 나란히 뜨던 것(2026-10-10) */
   workin: { team: string; quarter: string; kind: string; label: string; count: number }[];
+  /** 부품·자가 신청 요약 — 종류별 건수와 최근 품목(2026-10-11) */
+  supplies: { kind: string; count: number; items: string[]; last: string }[];
   /** 현장 메모 — 특이사항(출근·점심·주의), 워킨맵 메모 줄, 임대리스트 추가조건. 상태 카드에 바로 보인다(2026-10-10 "출근시간·특이사항 안 나오나") */
   notes: { kind: "연락금지" | "특이사항" | "워킨맵" | "임대조건"; text: string; from: string; pinned: boolean }[];
   counts: { label: string; group: Group; exact: number; loose: number; ok: boolean; rawSkipped: boolean }[];
   total: number; oldest: string; newest: string;
 };
+
+/** 부품·자가 신청 요약 — 종류별 건수, 최근 품목 6개("드럼 ×1"), 마지막 날짜 */
+export function summarizeSupplies(rows: Row[]): { kind: string; count: number; items: string[]; last: string }[] {
+  const by = new Map<string, Row[]>();
+  for (const r of rows) { const k = str(r, "kind") || "부품"; by.set(k, [...(by.get(k) || []), r]); }
+  return Array.from(by.entries()).map(([kind, list]) => {
+    const sorted = [...list].sort((a, b) => str(b, "request_date").localeCompare(str(a, "request_date")));
+    const items = uniq(sorted.map((r) => `${str(r, "item")}${str(r, "qty") ? ` ×${str(r, "qty")}` : ""}`)).slice(0, 6);
+    return { kind, count: list.length, items, last: str(sorted[0], "request_date") };
+  }).sort((a, b) => (a.kind === "부품" ? -1 : 1) - (b.kind === "부품" ? -1 : 1));
+}
 
 // ── 워킨맵 묶기 — 기기 1대 = 장소 1개라 그대로 보여 주면 웍스피어는 34줄이 된다(2026-10-10) ──
 const KIND_KO: Record<string, string> = { quarter: "분기점검", monthly: "매월점검", renewal: "재계약" };
@@ -606,6 +623,7 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
     changes: changes.length,
     photos: exact.filter((ev) => ev.source.table === "photo_albums").reduce((n, ev) => n + (Array.isArray(ev.row.urls) ? (ev.row.urls as unknown[]).length : 0), 0),
     workin: summarizeWorkin(exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ev.row)),
+    supplies: summarizeSupplies(exact.filter((ev) => ev.source.table === "supply_requests").map((ev) => ev.row)),
     notes: [
       // 🚫 보내지 말 것(마감 문자 연락처 규칙) — 누구에게 연락하면 안 되는지는 가장 먼저 보여야 한다(2026-10-10)
       ...exact.filter((ev) => ev.source.table === "counter_sms_contact_rules" && str(ev.row, "kind") === "block").map((ev) => ({
