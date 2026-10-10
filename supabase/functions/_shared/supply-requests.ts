@@ -97,3 +97,76 @@ export function firstDeviceOf(text: string): DeviceRef {
 export function supplyDupSource(sourceTable: string, date: string, author: string, vendor: string, s: SupplyItem): string {
   return [sourceTable, date, author, clean(vendor), s.kind, s.item, s.qty].join("|");
 }
+
+// ── 표준화(2026-10-11): 재고 표의 품목 사전(별칭·쓰는 기종·색)으로 이름을 맞추고 "1세트"를 색별로 푼다 ──
+export type CatalogItem = { id: string; kind: string; name: string; category: string; color: string; aliases: string[]; models: string[] };
+export type NormalizedItem = SupplyItem & { itemStd: string; category: string; color: string; stockItemId: string; setLabel: string };
+
+const squash = (s: string) => String(s || "").toLowerCase().replace(/[\s\-_/·.()\[\]]/g, "");
+const COLOR_WORDS: Array<[RegExp, string]> = [
+  [/^(k|bk|black|검정|블랙|흑백)$/i, "K"], [/^(c|cyan|시안|사이안|청색|파랑)$/i, "C"], [/^(m|magenta|마젠타|마젠다|빨강|적색)$/i, "M"], [/^(y|yellow|옐로우|옐로|노랑|황색)$/i, "Y"],
+];
+const colorOf = (word: string): string => { const w = String(word || "").replace(/토너/g, "").trim(); for (const [re, c] of COLOR_WORDS) if (re.test(w)) return c; return ""; };
+
+/** 컬러기인지 — 사전의 기종표가 있으면 그걸로, 없으면 기종명으로 짐작(컬러 계열: CLX·X7·C22xx·C25xx·Apeos C·MFC-L8900CDW·CLP…) */
+export function isColorModel(model: string, catalog: CatalogItem[] = []): boolean {
+  const key = squash(model);
+  if (key) {
+    const toners = catalog.filter((c) => c.category === "토너" && c.models.some((m) => squash(m) === key));
+    if (toners.length) return toners.some((c) => c.color && c.color !== "K");
+  }
+  return /clx|clp|x7|x4|c2[0-9]{3}|c3[0-9]{3}|c4[0-9]{3}|apeosc|docucentrevc|cdw|cdn|mfcl8|mfcl9|컬러/i.test(key);
+}
+
+/** 사전에서 이름 찾기 — 이름·별칭을 공백 없이 비교, 못 찾으면 글 안에 든 가장 긴 별칭 */
+export function matchCatalog(raw: string, catalog: CatalogItem[], kind?: SupplyKind): CatalogItem | null {
+  const key = squash(raw);
+  if (!key) return null;
+  const pool = catalog.filter((c) => c.kind !== "기기" && (!kind || c.kind === kind || c.category === "토너" || c.category === "폐토너통"));
+  for (const c of pool) if (squash(c.name) === key || c.aliases.some((a) => squash(a) === key)) return c;
+  let best: { c: CatalogItem; len: number } | null = null;
+  for (const c of pool) for (const a of [c.name, ...c.aliases]) { const ak = squash(a); if (ak.length >= 2 && key.includes(ak) && (!best || ak.length > best.len)) best = { c, len: ak.length }; }
+  return best?.c || null;
+}
+
+const tonerStd = (color: string, catalog: CatalogItem[]): { name: string; id: string } => {
+  const hit = catalog.find((c) => c.category === "토너" && c.color === color);
+  return { name: hit?.name || `토너 ${color}`, id: hit?.id || "" };
+};
+
+/** 읽은 품목들을 표준화·세트 풀기 — 결과 행 수는 늘어날 수 있다(세트 → 색별, "K2 C1" → 2행, "KCMY 각1" → 4행) */
+export function normalizeItems(items: SupplyItem[], catalog: CatalogItem[], model: string): NormalizedItem[] {
+  const out: NormalizedItem[] = [];
+  const base = (s: SupplyItem): NormalizedItem => ({ ...s, itemStd: "", category: "", color: "", stockItemId: "", setLabel: "" });
+  for (const s of items) {
+    const text = `${s.item}${s.qty ? ` ${s.qty}` : ""}`.trim();
+    // "1세트" / "세트 1" / "1set" / "풀세트" / "토너 1세트"
+    const setM = text.match(/(?:^|\s)(?:토너\s*)?(?:(\d+)\s*)?(세트|셋트|set)(?:\s*(\d+))?(?:\s|$)/i) || (/풀\s*세트/i.test(text) ? ["", "1", "세트", ""] as unknown as RegExpMatchArray : null);
+    if (setM && s.kind === "자가") {
+      const n = String(setM[1] || setM[3] || "1");
+      const colors = isColorModel(model, catalog) ? ["K", "C", "M", "Y"] : ["K"];
+      for (const c of colors) { const t = tonerStd(c, catalog); out.push({ ...base(s), item: t.name, qty: n, itemStd: t.name, category: "토너", color: c, stockItemId: t.id, setLabel: text }); }
+      continue;
+    }
+    // "KCMY 각1" / "kcmy 1개씩"
+    const eachM = text.match(/^\s*(?:토너\s*)?([kcmy]{2,4})\s*(?:각|각각|씩)?\s*(\d+)?\s*(?:개|씩|개씩)?\s*$/i);
+    if (eachM && s.kind === "자가") {
+      for (const ch of eachM[1].toUpperCase().split("")) { const t = tonerStd(ch, catalog); out.push({ ...base(s), item: t.name, qty: eachM[2] || "1", itemStd: t.name, category: "토너", color: ch, stockItemId: t.id }); }
+      continue;
+    }
+    // "K2 C1 M1" 처럼 색+숫자 토큰이 여럿
+    const tokens = text.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2 && tokens.every((tk) => /^[kcmy]\d*$/i.test(tk))) {
+      for (const tk of tokens) { const c = tk[0].toUpperCase(); const t = tonerStd(c, catalog); out.push({ ...base(s), item: t.name, qty: tk.slice(1) || "1", itemStd: t.name, category: "토너", color: c, stockItemId: t.id }); }
+      continue;
+    }
+    // 색 낱말 하나("K", "검정토너", "토너 Y")
+    const c1 = colorOf(s.item);
+    if (c1) { const t = tonerStd(c1, catalog); out.push({ ...base(s), item: t.name, qty: s.qty || "1", itemStd: t.name, category: "토너", color: c1, stockItemId: t.id }); continue; }
+    // 사전
+    const hit = matchCatalog(s.item, catalog, s.kind);
+    if (hit) { out.push({ ...base(s), itemStd: hit.name, category: hit.category, color: hit.color, stockItemId: hit.id }); continue; }
+    out.push(base(s));   // 미정의 품목 — 관리 탭에서 별칭을 지정하면 다음부터 맞는다
+  }
+  return out;
+}

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { selectRows } from "./supabase";
-import { backfillSupplyMonth, recentMonths } from "./supplyRequests";
+import { backfillSupplyMonth, recentMonths, renormalizeUndefined } from "./supplyRequests";
 
 export default function SupplyBackfill() {
   const [ready, setReady] = useState<boolean | null>(null);
@@ -14,12 +14,19 @@ export default function SupplyBackfill() {
   const [months, setMonths] = useState(6);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [undefinedItems, setUndefinedItems] = useState<Array<{ item: string; kind: string; n: number }>>([]);
+  const [renorm, setRenorm] = useState(false);
 
   const refresh = async () => {
     try {
       const rows = await selectRows<{ id: number }>("supply_requests", "select=id&order=id.desc&limit=1");
       setReady(true);
       setCount(rows[0]?.id || 0);
+      // 미정의 품목 — 사전에 없는 이름. 재고 탭에서 별칭을 넣고 [다시 맞추기]
+      const und = await selectRows<{ item: string; kind: string }>("supply_requests", "select=item,kind&item_std=eq.&limit=2000").catch(() => [] as Array<{ item: string; kind: string }>);
+      const m = new Map<string, { item: string; kind: string; n: number }>();
+      und.forEach((r) => { const k = `${r.kind}|${r.item}`; m.set(k, { item: r.item, kind: r.kind, n: (m.get(k)?.n || 0) + 1 }); });
+      setUndefinedItems(Array.from(m.values()).sort((a, b) => b.n - a.n).slice(0, 40));
     } catch { setReady(false); }
   };
   useEffect(() => { void refresh(); }, []);
@@ -57,6 +64,14 @@ export default function SupplyBackfill() {
         <button type="button" disabled={!ready || busy} onClick={() => void run()} className="rounded-full bg-blue-600 px-4 py-2 text-[12px] font-black text-white disabled:opacity-40">{busy ? "채우는 중…" : "지난 기록 채우기"}</button>
       </div>
       {log.length > 0 && <div className="border-t border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-600">{log.map((l, i) => <div key={i}>{l}</div>)}</div>}
+      {ready && undefinedItems.length > 0 && (
+        <div className="border-t border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 text-[12px] font-black text-slate-800">미정의 품목 {undefinedItems.length}종 <span className="font-bold text-slate-400">· 재고 탭(부품·자가)에서 품목의 "품목 정보 → 별칭"에 이 이름을 넣은 뒤 다시 맞추기</span>
+            <button type="button" disabled={renorm} onClick={() => void (async () => { setRenorm(true); try { const r = await renormalizeUndefined(); notify(`${r.checked}행 확인 · ${r.fixed}행 맞춤`, "success"); await refresh(); } catch (e) { notify(`다시 맞추기 실패: ${(e as Error).message}`, "error"); } finally { setRenorm(false); } })()} className="ml-auto rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{renorm ? "맞추는 중…" : "다시 맞추기"}</button>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">{undefinedItems.map((u) => <span key={`${u.kind}|${u.item}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700"><span className="mr-1 text-[9px] font-black text-slate-400">{u.kind}</span>{u.item} <span className="text-slate-400">×{u.n}</span></span>)}</div>
+        </div>
+      )}
     </section>
   );
 }

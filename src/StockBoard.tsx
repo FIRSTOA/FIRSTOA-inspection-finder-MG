@@ -10,9 +10,13 @@ import { notify } from "./toast";
 
 type StockItem = {
   id: string; created_at: string; updated_at: string; updated_by: string;
-  kind: "기기" | "부품"; brand: string; name: string;
+  kind: "기기" | "부품" | "자가"; brand: string; name: string;
   condition: "" | "새기기" | "리퍼"; qty: number; note: string;
+  // 품목 사전(2026-10-11): 양식 글의 이름을 표준에 맞추고(별칭), 어느 기종이 쓰는지(자가표), 토너 색
+  category?: string; color?: string; aliases?: string[]; models?: string[]; unit?: string;
 };
+const CATEGORIES = ["토너", "폐토너통", "드럼", "현상기", "롤러", "정착기", "전사벨트", "기타"];
+const splitList = (v: string) => String(v || "").split(/[,，\n]/).map((x) => x.trim()).filter(Boolean);
 
 // 기종 카탈로그(modelCatalog.ts)와 같은 제조사 체계를 쓴다
 const BRAND_NAMES = [...CATALOG_BRANDS, "기타"];
@@ -30,14 +34,16 @@ export default function StockBoard({ author }: { author: string }) {
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [kind, setKind] = useState<"기기" | "부품">("기기");
+  const [kind, setKind] = useState<"기기" | "부품" | "자가">("기기");
+  const [infoId, setInfoId] = useState<string>("");
+  const [info, setInfo] = useState({ category: "", color: "", aliases: "", models: "" });
   const [brand, setBrand] = useState("전체");
   const [query, setQuery] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
   const [condition, setCondition] = useState<"전체" | "새기기" | "리퍼">("전체");
   const [sortMode, setSortMode] = useState<"name" | "qty">("name");
   const [addOpen, setAddOpen] = useState(false);
-  const [draft, setDraft] = useState({ brand: "삼성", name: "", condition: "새기기" as "새기기" | "리퍼" | "", qty: 0, note: "" });
+  const [draft, setDraft] = useState({ brand: "삼성", name: "", condition: "새기기" as "새기기" | "리퍼" | "", qty: 0, note: "", category: "", color: "", aliases: "", models: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -83,7 +89,7 @@ export default function StockBoard({ author }: { author: string }) {
     return map;
   }, [filtered]);
 
-  const totalOf = (targetKind: "기기" | "부품") => items.filter((i) => i.kind === targetKind).reduce((sum, i) => sum + i.qty, 0);
+  const totalOf = (targetKind: "기기" | "부품" | "자가") => items.filter((i) => i.kind === targetKind).reduce((sum, i) => sum + i.qty, 0);
   const kindItems = items.filter((i) => i.kind === kind);
   const summary = {
     qty: kindItems.reduce((sum, i) => sum + i.qty, 0),
@@ -121,8 +127,9 @@ export default function StockBoard({ author }: { author: string }) {
         kind, brand: kind === "기기" ? draft.brand : (draft.brand || ""), name: draft.name.trim(),
         condition: kind === "기기" ? draft.condition : "", qty: Math.max(0, Number(draft.qty) || 0),
         note: draft.note.trim(), updated_by: author || "미지정",
+        ...(kind !== "기기" ? { category: draft.category || (kind === "자가" ? "토너" : "기타"), color: draft.color, aliases: splitList(draft.aliases), models: splitList(draft.models) } : {}),
       });
-      setDraft({ ...draft, name: "", qty: 0, note: "" });
+      setDraft({ ...draft, name: "", qty: 0, note: "", category: "", color: "", aliases: "", models: "" });
       setAddOpen(false);
       await load();
     } catch (e) {
@@ -141,7 +148,27 @@ export default function StockBoard({ author }: { author: string }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[14px] font-black text-slate-900">{item.name}</span>
           {item.condition && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${item.condition === "새기기" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-700"}`}>{item.condition}</span>}
+          {item.kind !== "기기" && item.category && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600">{item.category}{item.color ? ` ${item.color}` : ""}</span>}
+          {item.kind !== "기기" && (item.models || []).length > 0 && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">기종 {(item.models || []).length}</span>}
+          {item.kind !== "기기" && <button type="button" onClick={() => { setInfoId(infoId === item.id ? "" : item.id); setInfo({ category: item.category || "", color: item.color || "", aliases: (item.aliases || []).join(", "), models: (item.models || []).join(", ") }); }} className="text-[10.5px] font-black text-blue-600">{infoId === item.id ? "닫기" : "품목 정보"}</button>}
         </div>
+        {infoId === item.id && (
+          <div className="mt-2 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+            <label className="text-[11px] font-black text-slate-500">분류
+              <select value={info.category} onChange={(e) => setInfo({ ...info, category: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[12px] font-bold"><option value="">(없음)</option>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+            </label>
+            <label className="text-[11px] font-black text-slate-500">토너 색
+              <select value={info.color} onChange={(e) => setInfo({ ...info, color: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[12px] font-bold"><option value="">(해당 없음)</option>{["K", "C", "M", "Y"].map((c) => <option key={c}>{c}</option>)}</select>
+            </label>
+            <label className="text-[11px] font-black text-slate-500 sm:col-span-2">별칭 <span className="font-bold text-slate-400">· 양식 글에서 이 품목을 부르는 다른 이름, 쉼표로</span>
+              <input value={info.aliases} onChange={(e) => setInfo({ ...info, aliases: e.target.value })} placeholder="예: 검정토너, BK, K토너" className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[12px] font-semibold" />
+            </label>
+            <label className="text-[11px] font-black text-slate-500 sm:col-span-2">쓰는 기종(자가표) <span className="font-bold text-slate-400">· 쉼표로. "1세트"를 색별로 풀 때 이 기종표를 본다</span>
+              <input value={info.models} onChange={(e) => setInfo({ ...info, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[12px] font-semibold" />
+            </label>
+            <div className="sm:col-span-2"><button type="button" onClick={() => void (async () => { try { await updateRows("stock_items", `id=eq.${item.id}`, { category: info.category, color: info.color, aliases: splitList(info.aliases), models: splitList(info.models), updated_by: author || "미지정" }); notify("품목 정보를 저장했습니다", "success"); setInfoId(""); await load(); } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); } })()} className="rounded-full bg-slate-900 px-4 py-1.5 text-[12px] font-black text-white">저장</button></div>
+          </div>
+        )}
         {item.note && <div className="mt-0.5 text-xs font-semibold text-slate-500">{item.note}</div>}
         <div className="mt-0.5 text-[10px] font-bold text-slate-300">{item.updated_by || "-"} · {timeAgo(item.updated_at)}</div>
       </div>
@@ -158,7 +185,7 @@ export default function StockBoard({ author }: { author: string }) {
     <div className="space-y-4 pb-16">
       <div className="flex items-stretch justify-between gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex">
-          {(["기기", "부품"] as const).map((value) => (
+          {(["기기", "부품", "자가"] as const).map((value) => (
             <button key={value} type="button" onClick={() => setKind(value)}
               className={`relative px-6 py-3.5 text-sm font-black transition ${kind === value ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
               {value} <span className={`ml-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${kind === value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"}`}>{totalOf(value)}</span>
@@ -244,14 +271,22 @@ export default function StockBoard({ author }: { author: string }) {
                   </select>
                 </label>
               </div>}
-              <label className="block text-xs font-bold text-slate-500">{kind === "기기" ? "기종명 (입력하면 브랜드 자동 선택)" : "부품명"}
+              {kind !== "기기" && <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-bold text-slate-500">분류
+                  <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"><option value="">(선택)</option>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+                </label>
+                <label className="text-xs font-bold text-slate-500">토너 색
+                  <select value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"><option value="">(해당 없음)</option>{["K", "C", "M", "Y"].map((c) => <option key={c}>{c}</option>)}</select>
+                </label>
+              </div>}
+              <label className="block text-xs font-bold text-slate-500">{kind === "기기" ? "기종명 (입력하면 브랜드 자동 선택)" : kind === "자가" ? "품목명 (예: 토너 K, 폐토너통)" : "부품명"}
                 <input value={draft.name} list={kind === "기기" ? "stock-model-catalog" : undefined}
                   onChange={(e) => {
                     const name = e.target.value;
                     const detected = kind === "기기" ? brandOfModel(name) : "";
                     setDraft({ ...draft, name, ...(detected ? { brand: detected } : {}) });
                   }}
-                  placeholder={kind === "기기" ? "예: SL-X3220NR" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  placeholder={kind === "기기" ? "예: SL-X3220NR" : kind === "자가" ? "예: 토너 K (CLT-K808S)" : "예: X3220 픽업롤러"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 {kind === "기기" && <datalist id="stock-model-catalog">{ALL_MODEL_NAMES.map((name) => <option key={name} value={name} />)}</datalist>}
               </label>
               <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-2">
@@ -259,9 +294,19 @@ export default function StockBoard({ author }: { author: string }) {
                   <input type="number" min={0} value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
                 <label className="text-xs font-bold text-slate-500">메모 (선택)
-                  <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder={kind === "부품" ? "적용 기종 등" : "위치·상태 등"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder={kind !== "기기" ? "위치·상태 등" : "위치·상태 등"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
               </div>
+              {kind !== "기기" && (
+                <>
+                  <label className="block text-xs font-bold text-slate-500">별칭 (쉼표로) <span className="font-semibold text-slate-400">· 양식 글에서 부르는 다른 이름</span>
+                    <input value={draft.aliases} onChange={(e) => setDraft({ ...draft, aliases: e.target.value })} placeholder="예: 검정토너, BK, K토너" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none" />
+                  </label>
+                  <label className="block text-xs font-bold text-slate-500">쓰는 기종 (쉼표로) <span className="font-semibold text-slate-400">· 자가표</span>
+                    <input value={draft.models} onChange={(e) => setDraft({ ...draft, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none" />
+                  </label>
+                </>
+              )}
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setAddOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
