@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -208,6 +209,7 @@ Deno.serve(async (req) => {
     }
 
     const data = await openaiRes.json();
+    void recordOpenAiUsage("golden-card-transform", model, data, { author: String(payload.author || "") });
     const outputText =
       data.output_text ||
       data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") ||

@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 // 분기결과표 AI 수치 정리 (2026-09-24)
 // 목표별로 대략 적어 둔 결과 내용을 받아, 원문 설명은 살리고 아래에 [성과] 블록을 붙여
 // 수치·날짜·횟수·시간·달성률 중심으로 다시 쓴다. 근거 없는 숫자는 만들지 않는다.
@@ -95,6 +96,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: detail.slice(0, 500), model }), { status: 502, headers: jsonHeaders });
     }
     const data = await openaiRes.json();
+    void recordOpenAiUsage("quarter-result-quantify", model, data, { author: String(body.author || "") });
     const outputText = data.output_text
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";

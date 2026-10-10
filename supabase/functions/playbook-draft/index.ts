@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 /**
  * 족보 초안 생성 — 시리즈×증상 클러스터의 실제 처리 기록을 종합해 족보 카드 초안(JSON)을 만든다.
  * 요청: { brand, series, symptom, caseCount, cases: [{title, content}] (표본 ≤60건) }
@@ -67,6 +68,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: detail.slice(0, 400), model }, { status: 502, headers: jsonHeaders });
     }
     const data = await openaiRes.json();
+    void recordOpenAiUsage("playbook-draft", model, data);
     const outputText = data.output_text
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";

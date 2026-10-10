@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -150,6 +151,7 @@ Deno.serve(async (req) => {
     }
 
     const data = await openaiRes.json();
+    void recordOpenAiUsage("growth-note-transform", Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini", data);
     const outputText =
       data.output_text ||
       data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") ||

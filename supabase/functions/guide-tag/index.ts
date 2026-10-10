@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 /**
  * 가이드 문서 태깅 — 제목·본문을 읽어 기종·부품·증상·난이도·한 줄 요약을 뽑는다.
  *
@@ -73,6 +74,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: detail.slice(0, 300), model }, { status: 502, headers: jsonHeaders });
     }
     const data = await res.json();
+    void recordOpenAiUsage("guide-tag", model, data);
     const outputText = data.output_text
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";

@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 /**
  * 중간보고 다듬기 — 일정 원문(업체·기종·내용)을 사람이 쓰던 보고 줄로 압축한다.
  *
@@ -69,6 +70,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: detail.slice(0, 300), model }, { status: 502, headers: jsonHeaders });
     }
     const data = await openaiRes.json();
+    void recordOpenAiUsage("report-polish", model, data);
     const outputText = data.output_text
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";

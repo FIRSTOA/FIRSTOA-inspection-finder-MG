@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 // OKR AI 보조 (2026-09-24)
 // 세 가지 일을 한다. 근거 없는 숫자는 절대 만들지 않는다(없으면 "(수치 없음)"으로 표시).
 //  - format  : 팀원이 대충 적은 실제결과 메모 → 작성가이드 양식 "항목 : n건 중 m건 (x%, 등급)" 줄 + 종합판정(가장 나쁜 등급) + 사유·개선계획·근거자료 초안
@@ -90,6 +91,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: detail.slice(0, 500), model }), { status: 502, headers: jsonHeaders });
     }
     const data = await openaiRes.json();
+    void recordOpenAiUsage("okr-assist", model, data);
     const outputText = data.output_text
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";
