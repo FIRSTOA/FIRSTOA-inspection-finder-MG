@@ -111,8 +111,8 @@ async function loadSources(): Promise<Sources> {
   const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes, noteRows, changeRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
     selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
-    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter},${nextQuarter})`),
-    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}`),
+    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter},${nextQuarter})&order=id.asc`),
+    selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}&order=id.asc`),
     selectAllRows<Record<string, unknown>>("overage", `select=${encodeURIComponent("_업체명,합계,날짜")}&order=id.asc`),
     selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
     getAliasCodeMap().catch(() => new Map<string, string | null>()),

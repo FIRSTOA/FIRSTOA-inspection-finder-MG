@@ -98,7 +98,8 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     const mine = rows.filter((row) => !row.requester_ack && (row.requester || "").split(/\s+/).includes(author));
     if (!mine.length) return;
     setFreshUpdates((current) => new Set([...current, ...mine.map((row) => row.id)]));
-    void updateRows("dept_requests", `requester_ack=eq.false&requester=ilike.${encodeURIComponent(`*${author}*`)}`, { requester_ack: true }).then(() => pingInbox()).catch(() => {});
+    // 서버 갱신도 화면 판정(토큰 완전일치)과 같은 행만 — ilike 부분일치는 "조윤"이 "조윤호"의 요청까지 확인 처리했다(2026-10-10 점검)
+    void updateRows("dept_requests", `requester_ack=eq.false&id=in.(${mine.map((row) => row.id).join(",")})`, { requester_ack: true }).then(() => pingInbox()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, author]);
 

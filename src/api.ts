@@ -8,7 +8,7 @@
 
 import { buildRecords, type Row } from "./inspectParser";
 import { md5 } from "./md5";
-import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, isTestModeValue, rpc, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
+import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertRecord, insertRow, insertRowReturning, invokeEdgeFunction, isTestModeValue, rpc, selectAllRowsFast, selectRows, updateRows, type FieldSheetSyncCategory } from "./supabase";
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
@@ -393,10 +393,11 @@ export async function saveServiceReception(row: Omit<ServiceReceptionRow, "id" |
 }
 export async function getServiceReceptions(start: string, end: string): Promise<ServiceReceptionRow[]> {
   const base = `select=*&receipt_date=gte.${start}&receipt_date=lte.${end}&order=created_at.desc,id.desc`;
+  // 월 450건대라 분기 보기는 1,000행을 넘는다 — 한 번에 받으면 조용히 잘려 접수가 빠지고 통계가 틀린다(2026-10-10 점검) → 전부 페이지로
   try {
-    return await selectRows<ServiceReceptionRow>("service_receptions", `${base}&deleted=eq.false`);
+    return await selectAllRowsFast<ServiceReceptionRow>("service_receptions", `${base}&deleted=eq.false`);
   } catch {
-    return selectRows<ServiceReceptionRow>("service_receptions", base); // deleted 컬럼 SQL 실행 전 호환
+    return selectAllRowsFast<ServiceReceptionRow>("service_receptions", base); // deleted 컬럼 SQL 실행 전 호환
   }
 }
 export async function getServiceReceptionById(id: string): Promise<ServiceReceptionRow | null> {

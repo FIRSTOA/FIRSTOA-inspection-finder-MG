@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.parse
 from datetime import timedelta
 
 from config import HOST, KAKAO_PC_DIR, LOG_DIR, RestError, kst_now, load_state, log, rest, save_state
@@ -98,8 +99,19 @@ HANDLERS = {"ping": job_ping, "backup": job_backup, "relay": job_relay, "poster"
 
 def claim_and_run_jobs() -> int:
     """queued 일감을 잡아 처리. 잡기는 status=queued 조건부 PATCH 라 두 실행기가 겹쳐도 한쪽만 가져간다."""
-    now = kst_now().isoformat()
-    jobs = rest(f"/worker_jobs?select=id,kind,payload&status=eq.queued&run_at=lte.{now}&order=run_at.asc&limit=5") or []
+    now_dt = kst_now()
+    now = now_dt.isoformat()
+    q = lambda v: urllib.parse.quote(v, safe="")  # "+09:00" 의 + 가 쿼리스트링에서 공백이 돼 400 이 나던 것(2026-10-10 점검) — 반드시 인코딩
+    # 10분 넘게 running 인 일감 = 이전 실행이 정전·재시작으로 죽은 것. 한 번은 다시 줄 세우고, 또 멈추면 failed 로 끝낸다
+    stale = q((now_dt - timedelta(minutes=10)).isoformat())
+    try:
+        rest(f"/worker_jobs?status=eq.running&claimed_at=lt.{stale}&error=is.null", "PATCH",
+             {"status": "queued", "claimed_at": None, "claimed_by": None, "error": "재시도: 이전 실행이 중단됨"}, prefer="return=minimal")
+        rest(f"/worker_jobs?status=eq.running&claimed_at=lt.{stale}&error=not.is.null", "PATCH",
+             {"status": "failed", "finished_at": now, "error": "두 번 중단됨 — 실행기 로그 확인"}, prefer="return=minimal")
+    except RestError as e:
+        log(f"멈춘 일감 정리 실패 — {e}")
+    jobs = rest(f"/worker_jobs?select=id,kind,payload&status=eq.queued&run_at=lte.{q(now)}&order=run_at.asc&limit=5") or []
     done = 0
     for job in jobs:
         got = rest(f"/worker_jobs?id=eq.{job['id']}&status=eq.queued", "PATCH",
@@ -118,6 +130,13 @@ def claim_and_run_jobs() -> int:
         except Exception as e:  # 한 일감의 실패가 실행기를 세우면 안 된다
             rest(f"/worker_jobs?id=eq.{job['id']}", "PATCH", {"status": "failed", "finished_at": kst_now().isoformat(), "error": str(e)[:1000]}, prefer="return=minimal")
             log(f"일감 #{job['id']} {kind} 실패 — {e}")
+            if kind == "kakao_photo":  # 앱은 이미 카드를 완료로 표시했다 — 사진이 안 가면 안 되니 봇 글+링크로 폴백(유실 없음)
+                p = job.get("payload") or {}
+                try:
+                    rest("/outbox", "POST", {"room": str(p.get("room") or ""), "text": f"{p.get('caption') or ''}\n사진: {p.get('image_url') or ''}"}, prefer="return=minimal")
+                    log(f"일감 #{job['id']} 봇 글+링크로 폴백")
+                except Exception as e2:
+                    log(f"일감 #{job['id']} 폴백도 실패 — {e2}")
         done += 1
     return done
 
@@ -180,13 +199,15 @@ def cycle(state: dict) -> None:
         if e.status in (404, 401, 403):
             log("worker_jobs 표가 없거나 권한이 없음 — supabase/worker-heartbeat.sql 을 실행해야 일감·심박이 동작합니다")
         else:
-            raise
+            log(f"일감 조회 실패 — {e}")  # 심박은 그래도 찍는다 — 일감 오류가 "실행기 죽음" 알림으로 번지지 않게
+    except Exception as e:
+        log(f"일감 처리 오류 — {e}")
     note = f"backup {state.get('backup_date', '-')} · {str(state.get('backup_last', ''))[:80]}"
     try:
         heartbeat(note)
     except RestError as e:
         if e.status not in (404, 401, 403):
-            raise
+            log(f"심박 실패 — {e}")
     if ran or n:
         save_state(state)
 

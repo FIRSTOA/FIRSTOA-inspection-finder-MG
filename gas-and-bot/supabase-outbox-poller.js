@@ -62,7 +62,8 @@ function joinStr(arr, sep) { var s = ""; for (var i = 0; i < arr.length; i++) s 
 function withLock(fn) {
   var got = false;
   try { got = _lock.tryLock(3000, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (e) {}
-  try { return fn(); } finally { if (got) { try { _lock.unlock(); } catch (e) {} } }
+  if (!got) return undefined; // 못 얻으면 자물쇠 없이 돌리지 않는다 — 호출부는 모두 undefined 를 '이번엔 건너뜀'으로 다룬다(2026-10-10 점검)
+  try { return fn(); } finally { try { _lock.unlock(); } catch (e) {} }
 }
 
 var _wakeLock = null;

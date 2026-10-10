@@ -54,7 +54,7 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
     void (async () => {
       try {
         const [rows, log] = await Promise.all([
-          selectAllRows<Place>("workin_map_places", `select=id,name,phone,team,label&kind=eq.quarter&quarter=eq.${quarterNum}&visible=not.is.false`),
+          selectAllRows<Place>("workin_map_places", `select=id,name,phone,team,label&kind=eq.quarter&quarter=eq.${quarterNum}&visible=not.is.false&order=id.asc`),
           selectRows<{ phone: string }>("quarter_notice_log", `select=phone&quarter=eq.${encodeURIComponent(quarterKey)}&limit=3000`).catch(() => [] as Array<{ phone: string }>),
         ]);
         if (!active) return;

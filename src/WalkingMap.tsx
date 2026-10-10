@@ -2460,7 +2460,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       if (!ok) return;
     }
     const imported = pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind }));
-    if (sharedReady && importMode === "replace") {
+    // 교체: 새 목록을 먼저 넣고, 그 다음 "새 목록에 없는" 옛 행만 지운다 — 먼저 지우다 LTE 가 끊기면 팀 목록이 반쯤 사라지던 것(2026-10-10 점검).
+    // 새 목록이 비었을 때(전부 지우기)만 예전처럼 바로 지운다
+    if (sharedReady && importMode === "replace" && !imported.length) {
       try {
         await deleteRows("workin_map_places", `team=eq.${importTeam}&quarter=eq.${importQuarter}&kind=eq.${importKind}`);
       } catch (error) {
@@ -2473,6 +2475,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       try {
         for (let index = 0; index < imported.length; index += 250) {
           await upsertRows("workin_map_places", imported.slice(index, index + 250).map((place) => toDbPlace(place, userKey)), "id");
+        }
+        if (importMode === "replace") {
+          const keep = imported.map((place) => encodeURIComponent(String(toDbPlace(place, userKey).id)));
+          await deleteRows("workin_map_places", `team=eq.${importTeam}&quarter=eq.${importQuarter}&kind=eq.${importKind}&id=not.in.(${keep.join(",")})`);
         }
         await loadSharedPlaces();
         setSyncState("saved");

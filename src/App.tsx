@@ -4807,7 +4807,7 @@ export default function App() {
           return rows;
         });
       void Promise.all([
-        selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}&kind=eq.quarter`),
+        selectAllRows<FieldWorkinMapRow>("workin_map_places", `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=eq.${quarter}&kind=eq.quarter&order=id.asc`),
         visitsPromise,
         // 방문기록에 없어도 점검 원본(jeomgeom)에 있으면 마지막 점검일로 잡는다 (예: 엘디카본 5월 점검)
         vendor ? getRecentInspections(vendor, rawSerial, rawAsset).then((recent) => recent.snapshots[0]?.date || "").catch(() => "") : Promise.resolve(""),
@@ -5265,7 +5265,7 @@ export default function App() {
     const nextQuarter = quarter === 4 ? 1 : quarter + 1;
     const rows = await selectAllRows<FieldWorkinMapRow>(
       "workin_map_places",
-      `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=in.(${quarter},${nextQuarter})`,
+      `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=in.(${quarter},${nextQuarter})&order=id.asc`,
     );
     const searchableRows = rows
       .filter((row) => row.kind === "quarter" || row.kind === "monthly")

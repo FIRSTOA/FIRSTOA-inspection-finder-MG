@@ -96,7 +96,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const [workinMeta, setWorkinMeta] = useState<Map<string, { comment: string; phone: string; memos: string[]; address: string }>>(new Map());
   useEffect(() => {
     void selectAllRows<{ name: string; latitude: number | null; longitude: number | null; comment: string | null; phone: string | null; memos: unknown; address: string | null; address_detail: string | null }>(
-      "workin_map_places", "select=name,latitude,longitude,comment,phone,memos,address,address_detail",
+      "workin_map_places", "select=name,latitude,longitude,comment,phone,memos,address,address_detail&order=id.asc",
     ).then((rows) => {
       const map = new Map<string, Geo>();
       const meta = new Map<string, { comment: string; phone: string; memos: string[]; address: string }>();

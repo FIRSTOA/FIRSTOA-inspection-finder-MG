@@ -1250,7 +1250,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       let mapCount = 0;
       const key = vendorMatchKey(row.vendor);
       if (key) {
-        const places = await selectAllRows<{ id: number; name: string; memos: string[] | null }>("workin_map_places", "select=id,name,memos");
+        const places = await selectAllRows<{ id: number; name: string; memos: string[] | null }>("workin_map_places", "select=id,name,memos&order=id.asc");
         const matches = places.filter((place) => {
           const placeKey = vendorMatchKey(place.name || "");
           return placeKey && (placeKey === key || (placeKey.length >= 5 && key.length >= 5 && (placeKey.includes(key) || key.includes(placeKey))));

@@ -18,6 +18,11 @@ if ($Uninstall) {
   exit 0
 }
 
+# older standalone tasks (relay every 5 min / Monday poster) would run the same outbox twice next to the worker - remove them
+foreach ($old in @('FIRSTOA Outbox Relay', 'FIRSTOA Weekly Keyman Poster')) {
+  if (Get-ScheduledTask -TaskName $old -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $old -Confirm:$false; Write-Host "removed old task: $old" }
+}
+
 # python: prefer the launcher, then PATH
 $py = $null
 foreach ($cand in @("$env:LOCALAPPDATA\Programs\Python\Python313\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe")) {

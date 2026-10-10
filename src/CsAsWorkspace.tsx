@@ -407,7 +407,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (pendingWritesRef.current > 0) return; // 저장/삭제 반영 중 — 다음 주기에 새로고침
     try {
       const windowStart = ticketWindowStart(getTodayYmd());
-      const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${windowStart}&order=date.asc,time.asc`);
+      const rows = await selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${windowStart}&order=date.asc,time.asc,id.asc`);
       let normalized = rows.map((row) => normalizeTicketSchedule(row));
       // 매월 반복 그룹을 오늘+11개월까지 자동 연장 (부족분만 생성 — 반복이 무기한 이어짐)
       const extension = buildSeriesExtensionRows(normalized, getTodayYmd());
@@ -557,7 +557,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const from = [`${ym}-01`, addDays(getTodayYmd(), -7)].sort()[0];
     const to = [`${ym}-31`, addDays(getTodayYmd(), 60)].sort()[1];
     void selectRows<NaverEventRow>(
-      "naver_calendar_events", `select=uid,date,time,title,location,description,calendar_id,completed&date=gte.${from}&date=lte.${to}&order=date.asc,time.asc`,
+      "naver_calendar_events", `select=uid,date,time,title,location,description,calendar_id,completed&date=gte.${from}&date=lte.${to}&order=date.asc,time.asc,id.asc`,
     ).then(setNaverEvents).catch(() => setNaverEvents([]));
   }, [currentMonth, naverReloadTick]);
   // 동기화 결과가 화면에 바로 따라오도록 — 45초마다 재조회 + 창 복귀 시 네이버를 즉시 당겨온다
@@ -1559,7 +1559,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const ym = currentMonth.slice(0, 7);
     if (`${ym}-01` >= ticketWindowStart(getTodayYmd()) || loadedOldMonthsRef.current.has(ym)) return;
     loadedOldMonthsRef.current.add(ym);
-    void selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${ym}-01&date=lte.${ym}-31&order=date.asc,time.asc`)
+    void selectAllRows<AsTicket>("as_tickets", `select=${TICKET_COLUMNS}&date=gte.${ym}-01&date=lte.${ym}-31&order=date.asc,time.asc,id.asc`)
       .then((rows) => setTicketsState((current) => {
         const ids = new Set(current.map((row) => row.id));
         return [...rows.filter((row) => !ids.has(row.id)).map((row) => normalizeTicketSchedule(row)), ...current];

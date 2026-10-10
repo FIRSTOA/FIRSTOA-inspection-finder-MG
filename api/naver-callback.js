@@ -6,6 +6,8 @@
 const NAVER_CLIENT_ID = (process.env.NAVER_CLIENT_ID || "").trim();
 const NAVER_CLIENT_SECRET = (process.env.NAVER_CLIENT_SECRET || "").trim();
 
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); // 쿼리 값을 HTML 에 그대로 넣지 않는다(2026-10-10 점검)
+
 export default async function handler(req, res) {
   const query = req.query || {};
   const send = (body) => {
@@ -15,7 +17,7 @@ export default async function handler(req, res) {
       + body + "</body>",
     );
   };
-  if (query.error) return send(`<h2>연결 실패</h2><p>${query.error}: ${query.error_description || ""}</p>`);
+  if (query.error) return send(`<h2>연결 실패</h2><p>${esc(query.error)}: ${esc(query.error_description || "")}</p>`);
   if (!query.code) return send("<h2>잘못된 접근</h2><p>인가코드가 없습니다.</p>");
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) return send("<h2>설정 필요</h2><p>NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 환경변수를 먼저 등록하세요.</p>");
   try {
@@ -26,10 +28,10 @@ export default async function handler(req, res) {
       + `&state=${encodeURIComponent(query.state || "")}`;
     const response = await fetch(url);
     const data = await response.json();
-    if (!data.refresh_token) return send(`<h2>실패</h2><pre>${JSON.stringify(data, null, 2)}</pre>`);
+    if (!data.refresh_token) return send(`<h2>실패</h2><pre>${esc(JSON.stringify(data, null, 2))}</pre>`);
     return send('<h2>연결 성공</h2><p>아래 연결코드를 복사해 Vercel 환경변수 <b>NAVER_REFRESH_TOKEN</b>에 넣고 재배포하세요.</p>'
-      + `<textarea readonly onclick="this.select()" style="width:100%;height:96px;">${data.refresh_token}</textarea>`);
+      + `<textarea readonly onclick="this.select()" style="width:100%;height:96px;">${esc(data.refresh_token)}</textarea>`);
   } catch (error) {
-    return send(`<h2>오류</h2><p>${error.message}</p>`);
+    return send(`<h2>오류</h2><p>${esc(error.message)}</p>`);
   }
 }
